@@ -60,10 +60,7 @@
 
   function handleApproveWithEdits() {
     emitUpdate()
-    // Small tick to allow emitUpdate to propagate before approve
-    setTimeout(() => {
-      onApprove()
-    }, 0)
+    onApprove()
   }
 
   /** Save lorebook edits directly to the vault store */

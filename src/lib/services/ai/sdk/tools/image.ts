@@ -197,7 +197,6 @@ export function createImageTools(context: ImageToolContext) {
 
             const base64 = await sdkGeneratePortrait(portraitPrompt)
             const dataUrl = `data:image/png;base64,${base64}`
-            console.log('base64', base64)
             generatedImages.set(imageId, dataUrl)
           }
 
