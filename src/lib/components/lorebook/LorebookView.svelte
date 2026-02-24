@@ -129,7 +129,12 @@
   <div class="relative flex min-h-0 flex-1">
     <!-- List panel -->
     {#if showList}
-      <div class={cn('flex flex-col border-r', isMobile ? 'w-full' : 'w-72 flex-shrink-0 lg:w-80')}>
+      <div
+        class={cn(
+          'flex min-h-0 flex-col border-r',
+          isMobile ? 'w-full' : 'w-72 flex-shrink-0 lg:w-80',
+        )}
+      >
         <!-- Back to Story Header -->
         <div class="px-2 pt-0 sm:pt-3">
           <Button
@@ -150,7 +155,7 @@
     {#if showDetail}
       <div
         class={cn(
-          'bg-background flex flex-1 flex-col',
+          'bg-background flex min-h-0 flex-1 flex-col',
           isMobile && 'absolute top-0 right-0 bottom-0 left-0 z-10 w-full',
         )}
       >
@@ -168,7 +173,7 @@
               </div>
               <h2 class="text-foreground font-semibold">New Entry</h2>
             </div>
-            <div class="flex-1 overflow-y-auto p-4">
+            <div class="touch-scroll flex-1 overflow-y-auto p-4">
               <LorebookEntryForm onSave={handleSaveNew} onCancel={handleCancelNew} />
             </div>
           </div>

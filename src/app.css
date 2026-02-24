@@ -110,6 +110,17 @@
 }
 
 /* =============================================
+   MOBILE SCROLL FIX (Android WebView)
+   ============================================= */
+@layer utilities {
+  .touch-scroll {
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* =============================================
    STORY TEXT STYLING
    ============================================= */
 @layer utilities {

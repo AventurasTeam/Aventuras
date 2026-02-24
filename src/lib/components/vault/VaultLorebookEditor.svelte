@@ -288,7 +288,7 @@
       <div class="bg-background relative flex flex-1 overflow-hidden">
         <!-- Tab Contents Wrapper -->
         <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <Tabs.Content value="settings" class="m-0 flex-1 overflow-y-auto p-6">
+          <Tabs.Content value="settings" class="touch-scroll m-0 flex-1 overflow-y-auto p-6">
             <div class="mx-auto max-w-2xl space-y-6">
               <div class="space-y-4">
                 <div class="space-y-2">
@@ -341,7 +341,7 @@
             <!-- Sidebar (List) -->
             <div
               class={cn(
-                'sm:bg-muted/10 flex w-full flex-col sm:w-80 sm:border-r',
+                'sm:bg-muted/10 flex min-h-0 w-full flex-col sm:w-80 sm:border-r',
                 selectedIndex !== null && 'hidden sm:flex', // Hide on mobile if selected
               )}
             >
@@ -359,7 +359,7 @@
                 </Button>
               </div>
 
-              <div class="flex flex-1 flex-col space-y-1 overflow-y-auto p-2">
+              <div class="touch-scroll flex flex-1 flex-col space-y-1 overflow-y-auto p-2">
                 {#if filteredEntries.length === 0}
                   <div
                     class="text-muted-foreground flex min-h-[200px] flex-1 flex-col items-center justify-center text-center text-sm"
@@ -410,7 +410,7 @@
             <!-- Editor Area -->
             <div
               class={cn(
-                'bg-background flex flex-1 flex-col overflow-hidden',
+                'bg-background flex min-h-0 flex-1 flex-col overflow-hidden',
                 selectedIndex === null && 'hidden sm:flex',
               )}
             >
@@ -450,7 +450,7 @@
                   </div>
                 </div>
 
-                <div class="flex-1 overflow-y-auto p-6">
+                <div class="touch-scroll flex-1 overflow-y-auto p-6">
                   <div class="mx-auto max-w-3xl space-y-6">
                     <div class="space-y-2">
                       <Label>Entry Type</Label>

@@ -167,7 +167,7 @@
   </div>
 
   <!-- Content -->
-  <div class="flex-1 overflow-y-auto p-4">
+  <div class="touch-scroll flex-1 overflow-y-auto p-4">
     {#if ui.lorebookEditMode}
       <LorebookEntryForm
         {entry}
