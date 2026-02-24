@@ -1042,6 +1042,8 @@ class SettingsStore {
     disableSuggestions: false,
     disableActionPrefixes: false,
     showReasoning: true,
+    autoScroll: true,
+    showScrollToTop: false,
     sidebarWidth: 288,
   })
 
@@ -1342,6 +1344,12 @@ class SettingsStore {
 
       const showReasoning = await database.getSetting('show_reasoning')
       if (showReasoning !== null) this.uiSettings.showReasoning = showReasoning === 'true'
+
+      const autoScroll = await database.getSetting('auto_scroll')
+      if (autoScroll !== null) this.uiSettings.autoScroll = autoScroll === 'true'
+
+      const showScrollToTop = await database.getSetting('show_scroll_to_top')
+      if (showScrollToTop !== null) this.uiSettings.showScrollToTop = showScrollToTop === 'true'
 
       const debugMode = await database.getSetting('debug_mode')
       if (debugMode !== null) this.uiSettings.debugMode = debugMode === 'true'
@@ -2325,6 +2333,16 @@ class SettingsStore {
     await database.setSetting('show_reasoning', show.toString())
   }
 
+  async setAutoScroll(enabled: boolean) {
+    this.uiSettings.autoScroll = enabled
+    await database.setSetting('auto_scroll', enabled.toString())
+  }
+
+  async setShowScrollToTop(enabled: boolean) {
+    this.uiSettings.showScrollToTop = enabled
+    await database.setSetting('show_scroll_to_top', enabled.toString())
+  }
+
   async setSidebarWidth(width: number) {
     this.uiSettings.sidebarWidth = width
     await database.setSetting('sidebar_width', width.toString())
@@ -2715,6 +2733,8 @@ class SettingsStore {
       disableSuggestions: false,
       disableActionPrefixes: false,
       showReasoning: false,
+      autoScroll: true,
+      showScrollToTop: false,
       sidebarWidth: 288,
     }
 
@@ -2750,6 +2770,8 @@ class SettingsStore {
       'disable_action_prefixes',
       this.uiSettings.disableActionPrefixes.toString(),
     )
+    await database.setSetting('auto_scroll', this.uiSettings.autoScroll.toString())
+    await database.setSetting('show_scroll_to_top', this.uiSettings.showScrollToTop.toString())
     await database.setSetting(
       'advanced_manual_mode',
       this.advancedRequestSettings.manualMode.toString(),

@@ -2,7 +2,7 @@
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings } from '$lib/stores/settings.svelte'
-  import { Loader2, BookOpen, ChevronDown } from 'lucide-svelte'
+  import { Loader2, BookOpen, ChevronDown, ChevronUp } from 'lucide-svelte'
   import { fade } from 'svelte/transition'
   import StoryEntry from './StoryEntry.svelte'
   import StreamingEntry from './StreamingEntry.svelte'
@@ -79,6 +79,9 @@
     })
   }
 
+  // Track whether the user has scrolled away from the top
+  let isScrolledFromTop = $state(false)
+
   // Check if container is scrolled near bottom
   function isNearBottom(): boolean {
     if (!storyContainer) return true
@@ -88,6 +91,12 @@
       threshold
     )
   }
+
+  function isNearTop(): boolean {
+    if (!storyContainer) return true
+    return storyContainer.scrollTop < 100
+  }
+
   // Handle scroll events during streaming
   function handleScroll() {
     if (!storyContainer) return
@@ -104,6 +113,22 @@
     } else {
       if (!ui.userScrolledUp) ui.setScrollBreak(true)
     }
+
+    // Track scroll-from-top for the scroll-to-top button
+    isScrolledFromTop = !isNearTop()
+  }
+
+  function scrollToTop() {
+    // Load all entries first so the user can see the full history
+    if (displayedEntries.hiddenCount > 0) {
+      showAllEntries()
+    }
+
+    requestAnimationFrame(() => {
+      if (storyContainer) {
+        storyContainer.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    })
   }
 
   // Auto-scroll to bottom when new entries are added or streaming content changes
@@ -122,12 +147,11 @@
     prevEntryCount = currentCount
 
     // Detect if we should scroll:
-    // 1. We are NOT user-scrolled-up (pinned mode)
-    // 2. OR on user action send message/retry
+    // 1. Auto-scroll is enabled AND we are NOT user-scrolled-up (pinned mode)
+    // 2. OR on user action send message/retry (always scroll for user's own actions)
     const lastEntry = story.entries[story.entries.length - 1]
-    const shouldScroll =
-      !ui.userScrolledUp ||
-      (wasAdded && lastEntry && ['user_action', 'retry'].includes(lastEntry.type))
+    const isUserAction = wasAdded && lastEntry && ['user_action', 'retry'].includes(lastEntry.type)
+    const shouldScroll = (settings.uiSettings.autoScroll && !ui.userScrolledUp) || isUserAction
 
     if (!shouldScroll) return
 
@@ -136,7 +160,7 @@
 
   // Scroll to bottom when returning from gallery or other panels
   $effect(() => {
-    if (ui.activePanel === 'story' && storyContainer) {
+    if (settings.uiSettings.autoScroll && ui.activePanel === 'story' && storyContainer) {
       scrollToBottom()
     }
   })
@@ -228,18 +252,33 @@
       {/if}
     </div>
 
-    <!-- Scroll to bottom button -->
-    {#if ui.userScrolledUp}
+    <!-- Scroll navigation buttons -->
+    {#if ui.userScrolledUp || (settings.uiSettings.showScrollToTop && isScrolledFromTop)}
       <div class="pointer-events-none sticky bottom-2 flex w-full justify-center pb-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          class="border-border bg-background/80 hover:bg-accent animate-in fade-in slide-in-from-bottom-2 pointer-events-auto h-9 w-9 rounded-full border shadow-lg backdrop-blur-sm"
-          onclick={scrollToBottom}
-          aria-label="Scroll to bottom"
-        >
-          <ChevronDown class="h-5 w-5" />
-        </Button>
+        <div class="animate-in fade-in slide-in-from-bottom-2 pointer-events-auto flex gap-2">
+          {#if settings.uiSettings.showScrollToTop && isScrolledFromTop}
+            <Button
+              variant="secondary"
+              size="sm"
+              class="border-border bg-background/80 hover:bg-accent h-9 w-9 rounded-full border shadow-lg backdrop-blur-sm"
+              onclick={scrollToTop}
+              aria-label="Scroll to top"
+            >
+              <ChevronUp class="h-5 w-5" />
+            </Button>
+          {/if}
+          {#if ui.userScrolledUp}
+            <Button
+              variant="secondary"
+              size="sm"
+              class="border-border bg-background/80 hover:bg-accent h-9 w-9 rounded-full border shadow-lg backdrop-blur-sm"
+              onclick={scrollToBottom}
+              aria-label="Scroll to bottom"
+            >
+              <ChevronDown class="h-5 w-5" />
+            </Button>
+          {/if}
+        </div>
       </div>
     {/if}
   </div>

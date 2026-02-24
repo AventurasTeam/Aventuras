@@ -730,6 +730,8 @@ export interface UISettings {
   disableSuggestions: boolean
   disableActionPrefixes: boolean
   showReasoning: boolean
+  autoScroll: boolean
+  showScrollToTop: boolean
   sidebarWidth: number
 }
 
