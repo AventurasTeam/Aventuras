@@ -38,6 +38,14 @@
     }
   })
 
+  /** Inject a portrait data URL into the local form state (called externally) */
+  export function setPortrait(dataUrl: string) {
+    if (charData) {
+      charData = { ...charData, portrait: dataUrl }
+      emitUpdate()
+    }
+  }
+
   /** Push local edits to the store so "Approve" uses the edited version */
   function emitUpdate() {
     if (change.entityType === 'character' && charData) {

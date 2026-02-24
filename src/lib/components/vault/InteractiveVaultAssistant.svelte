@@ -36,6 +36,7 @@
     ListChecks,
     ImageIcon,
     CornerDownLeft,
+    CircleUser,
   } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
   import { Textarea } from '$lib/components/ui/textarea'
@@ -95,6 +96,16 @@
 
   let enlargedImageUrl = $state<string | null>(null)
 
+  // Tracks the most recently viewed character via show_entity (fallback when no focusedEntity)
+  let viewedEntity = $state<FocusedEntity | null>(null)
+  const activeCharacterEntity = $derived<FocusedEntity | null>(
+    focusedEntity?.entityType === 'character'
+      ? focusedEntity
+      : viewedEntity?.entityType === 'character'
+        ? viewedEntity
+        : null,
+  )
+
   const entityIcons = {
     character: User,
     'lorebook-entry': BookOpen,
@@ -129,6 +140,33 @@
   onMount(() => {
     initializeService()
     loadConversationsList()
+
+    // Auto-open focused entity if provided
+    if (focusedEntity && !isMobile.current) {
+      let entityData: any = null
+      if (focusedEntity.entityType === 'character') {
+        entityData = characterVault.getById(focusedEntity.entityId)
+      } else if (focusedEntity.entityType === 'lorebook') {
+        entityData = lorebookVault.getById(focusedEntity.entityId)
+      } else if (focusedEntity.entityType === 'scenario') {
+        entityData = scenarioVault.getById(focusedEntity.entityId)
+      }
+
+      if (entityData) {
+        // Construct a dummy change to satisfy the viewer store requirement
+        const dummyChange = {
+          id: `view-${focusedEntity.entityId}`,
+          toolCallId: 'init',
+          entityType: focusedEntity.entityType,
+          action: 'update',
+          status: 'pending',
+          entityId: focusedEntity.entityId,
+          data: JSON.parse(JSON.stringify(entityData)),
+        } as unknown as VaultPendingChange
+
+        vaultEditor.openViewer(dummyChange, focusedEntity.entityId, focusedEntity.entityType)
+      }
+    }
   })
 
   // Clean up on unmount
@@ -249,6 +287,17 @@
   function handleReferenceImage(imageId: string) {
     const ref = `[Image: ${imageId}]`
     inputValue = inputValue.trim() ? `${inputValue.trim()}\n${ref}` : ref
+  }
+
+  let editPanelRef = $state<ReturnType<typeof VaultEntityEditPanel> | null>(null)
+  let editPanelMobileRef = $state<ReturnType<typeof VaultEntityEditPanel> | null>(null)
+
+  function handleSetPortrait(imageId: string) {
+    if (!activeCharacterEntity || !service) return
+    const dataUrl = service.generatedImages.get(imageId)
+    if (!dataUrl) return
+    const panel = editPanelRef ?? editPanelMobileRef
+    panel?.setPortrait(dataUrl)
   }
 
   async function handleSend() {
@@ -372,6 +421,16 @@
             // Open entity in view mode (no approval workflow)
             if (!isMobile.current) {
               vaultEditor.openViewer(event.change, event.entityId, event.entityType)
+            }
+            // Track which character is currently being viewed so the Set Portrait button appears
+            if (event.entityType === 'character') {
+              viewedEntity = {
+                entityType: 'character',
+                entityId: event.entityId,
+                entityName:
+                  ('data' in event.change && (event.change.data as { name?: string }).name) ||
+                  event.entityId,
+              }
             }
             break
 
@@ -543,6 +602,7 @@
             transition:fade={{ duration: 100 }}
           >
             <VaultEntityEditPanel
+              bind:this={editPanelRef}
               change={vaultEditor.activeChange}
               onApprove={(specificChange) =>
                 handleApprove(specificChange ?? vaultEditor.activeChange!)}
@@ -870,6 +930,19 @@
                                   <CornerDownLeft class="h-2.5 w-2.5" />
                                   Use
                                 </button>
+                                {#if activeCharacterEntity}
+                                  <button
+                                    class="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/90"
+                                    onclick={(e) => {
+                                      e.stopPropagation()
+                                      handleSetPortrait(toolCall.imageId!)
+                                    }}
+                                    title="Set as portrait for {activeCharacterEntity.entityName}"
+                                  >
+                                    <CircleUser class="h-2.5 w-2.5" />
+                                    Set Portrait
+                                  </button>
+                                {/if}
                               {/if}
                             </div>
                           {/if}
@@ -1028,6 +1101,7 @@
     <Sheet.Content side="bottom" class="flex h-[85dvh] flex-col p-0">
       {#if vaultEditor.activeChange}
         <VaultEntityEditPanel
+          bind:this={editPanelMobileRef}
           change={vaultEditor.activeChange}
           onApprove={(specificChange) => handleApprove(specificChange ?? vaultEditor.activeChange!)}
           onReject={(change) => handleReject(change)}
