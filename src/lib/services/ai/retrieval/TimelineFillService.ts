@@ -226,28 +226,28 @@ export class TimelineFillService {
       return { queries: [], responses: [] }
     }
 
-    // Step 2: Answer each query
-    const responses: TimelineQueryResult[] = []
-
-    for (const q of queries) {
-      // Determine which chapters to query
-      let chapterNumbers: number[] = []
-      if (q.chapters && q.chapters.length > 0) {
-        chapterNumbers = q.chapters
-      } else if (q.startChapter !== undefined && q.endChapter !== undefined) {
-        for (let i = q.startChapter; i <= q.endChapter; i++) {
-          chapterNumbers.push(i)
+    // Step 2: Answer each query in parallel
+    const responses = await Promise.all(
+      queries.map(async (q) => {
+        // Determine which chapters to query
+        let chapterNumbers: number[] = []
+        if (q.chapters && q.chapters.length > 0) {
+          chapterNumbers = q.chapters
+        } else if (q.startChapter !== undefined && q.endChapter !== undefined) {
+          for (let i = q.startChapter; i <= q.endChapter; i++) {
+            chapterNumbers.push(i)
+          }
         }
-      }
 
-      const answer = await this.answerQuestion(q.query, chapters, chapterNumbers, getChapterEntries)
+        const answer = await this.answerQuestion(q.query, chapters, chapterNumbers, getChapterEntries)
 
-      responses.push({
-        query: q.query,
-        answer: answer.answer,
-        chapterNumbers,
-      })
-    }
+        return {
+          query: q.query,
+          answer: answer.answer,
+          chapterNumbers,
+        }
+      }),
+    )
 
     log('Timeline fill complete', {
       queriesGenerated: queries.length,
