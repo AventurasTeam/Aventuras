@@ -1005,6 +1005,26 @@ export function getPresetDefaults(provider: ProviderType, presetId: string): Gen
   return preset
 }
 
+export function getDefaultUISettings(): UISettings {
+  return {
+    theme: 'dark',
+    fontSize: 'medium',
+    fontFamily: 'default',
+    fontSource: 'default',
+    showWordCount: true,
+    autoSave: true,
+    spellcheckEnabled: true,
+    debugMode: false,
+    disableSuggestions: false,
+    disableActionPrefixes: false,
+    showReasoning: true,
+    sidebarWidth: 288,
+    autoScroll: true,
+    showScrollToTop: false,
+    showScrollToBottom: true,
+  }
+}
+
 // Settings Store using Svelte 5 runes
 class SettingsStore {
   // Provider preset - which provider's defaults to use
@@ -1030,20 +1050,7 @@ class SettingsStore {
     useNativeTimeout: false,
   })
 
-  uiSettings = $state<UISettings>({
-    theme: 'dark',
-    fontSize: 'medium',
-    fontFamily: 'default',
-    fontSource: 'default',
-    showWordCount: true,
-    autoSave: true,
-    spellcheckEnabled: true,
-    debugMode: false,
-    disableSuggestions: false,
-    disableActionPrefixes: false,
-    showReasoning: true,
-    sidebarWidth: 288,
-  })
+  uiSettings = $state<UISettings>(getDefaultUISettings())
 
   advancedRequestSettings = $state<AdvancedRequestSettings>(getDefaultAdvancedRequestSettings())
 
@@ -1342,6 +1349,16 @@ class SettingsStore {
 
       const showReasoning = await database.getSetting('show_reasoning')
       if (showReasoning !== null) this.uiSettings.showReasoning = showReasoning === 'true'
+
+      const autoScroll = await database.getSetting('auto_scroll')
+      if (autoScroll !== null) this.uiSettings.autoScroll = autoScroll === 'true'
+
+      const showScrollToTop = await database.getSetting('show_scroll_to_top')
+      if (showScrollToTop !== null) this.uiSettings.showScrollToTop = showScrollToTop === 'true'
+
+      const showScrollToBottom = await database.getSetting('show_scroll_to_bottom')
+      if (showScrollToBottom !== null)
+        this.uiSettings.showScrollToBottom = showScrollToBottom === 'true'
 
       const debugMode = await database.getSetting('debug_mode')
       if (debugMode !== null) this.uiSettings.debugMode = debugMode === 'true'
@@ -2328,6 +2345,21 @@ class SettingsStore {
     await database.setSetting('show_reasoning', show.toString())
   }
 
+  async setAutoScroll(enabled: boolean) {
+    this.uiSettings.autoScroll = enabled
+    await database.setSetting('auto_scroll', enabled.toString())
+  }
+
+  async setShowScrollToTop(enabled: boolean) {
+    this.uiSettings.showScrollToTop = enabled
+    await database.setSetting('show_scroll_to_top', enabled.toString())
+  }
+
+  async setShowScrollToBottom(enabled: boolean) {
+    this.uiSettings.showScrollToBottom = enabled
+    await database.setSetting('show_scroll_to_bottom', enabled.toString())
+  }
+
   async setSidebarWidth(width: number) {
     this.uiSettings.sidebarWidth = width
     await database.setSetting('sidebar_width', width.toString())
@@ -2707,20 +2739,7 @@ class SettingsStore {
     }
 
     // Reset UI settings
-    this.uiSettings = {
-      theme: 'dark',
-      fontSize: 'medium',
-      fontFamily: 'default',
-      fontSource: 'default',
-      showWordCount: true,
-      autoSave: true,
-      spellcheckEnabled: true,
-      debugMode: false,
-      disableSuggestions: false,
-      disableActionPrefixes: false,
-      showReasoning: false,
-      sidebarWidth: 288,
-    }
+    this.uiSettings = getDefaultUISettings()
 
     // Reset font to default
     this.applyFontFamily('default', 'default')
@@ -2753,6 +2772,12 @@ class SettingsStore {
     await database.setSetting(
       'disable_action_prefixes',
       this.uiSettings.disableActionPrefixes.toString(),
+    )
+    await database.setSetting('auto_scroll', this.uiSettings.autoScroll.toString())
+    await database.setSetting('show_scroll_to_top', this.uiSettings.showScrollToTop.toString())
+    await database.setSetting(
+      'show_scroll_to_bottom',
+      this.uiSettings.showScrollToBottom.toString(),
     )
     await database.setSetting(
       'advanced_manual_mode',

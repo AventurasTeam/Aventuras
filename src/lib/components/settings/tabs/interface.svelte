@@ -152,6 +152,48 @@
     />
   </div>
 
+  <!-- Auto Scroll Toggle -->
+  <div class="flex items-center justify-between">
+    <div>
+      <Label>Auto Scroll</Label>
+      <p class="text-muted-foreground text-xs">
+        Automatically scroll to the latest message during generation
+      </p>
+    </div>
+    <Switch
+      checked={settings.uiSettings.autoScroll}
+      onCheckedChange={(v) => settings.setAutoScroll(v)}
+    />
+  </div>
+
+  <!-- Scroll to Top Toggle -->
+  <div class="flex items-center justify-between">
+    <div>
+      <Label>Floating Scroll to Top Button</Label>
+      <p class="text-muted-foreground text-xs">
+        Show a floating button to jump to the first story entry
+      </p>
+    </div>
+    <Switch
+      checked={settings.uiSettings.showScrollToTop}
+      onCheckedChange={(v) => settings.setShowScrollToTop(v)}
+    />
+  </div>
+
+  <!-- Scroll to Bottom Toggle -->
+  <div class="flex items-center justify-between">
+    <div>
+      <Label>Floating Scroll to Bottom Button</Label>
+      <p class="text-muted-foreground text-xs">
+        Show a floating button to jump to the latest story entry
+      </p>
+    </div>
+    <Switch
+      checked={settings.uiSettings.showScrollToBottom}
+      onCheckedChange={(v) => settings.setShowScrollToBottom(v)}
+    />
+  </div>
+
   <!-- Translation Section -->
   <div class="space-y-3">
     <div class="flex items-center gap-2">

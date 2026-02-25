@@ -731,6 +731,9 @@ export interface UISettings {
   disableActionPrefixes: boolean
   showReasoning: boolean
   sidebarWidth: number
+  autoScroll: boolean
+  showScrollToTop: boolean
+  showScrollToBottom: boolean
 }
 
 export interface UpdateSettings {
