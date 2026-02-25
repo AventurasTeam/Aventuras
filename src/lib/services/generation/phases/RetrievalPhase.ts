@@ -11,7 +11,7 @@ import type {
   RetrievalResult,
   AbortedEvent,
 } from '../types'
-import type { StoryMode, POV, Tense } from '$lib/services/prompts'
+import type { StoryMode, POV, Tense } from '$lib/types'
 import type { TimelineFillResult } from '$lib/services/ai/retrieval/TimelineFillService'
 import type { AgenticRetrievalResult } from '$lib/services/ai/retrieval/AgenticRetrievalService'
 import type {

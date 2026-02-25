@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { ProviderType } from '$lib/types'
   import { getProviderList } from '$lib/services/ai/sdk/providers/config'
-  import * as Select from '$lib/components/ui/select'
+  import Autocomplete from '$lib/components/ui/autocomplete/Autocomplete.svelte'
   import { Label } from '$lib/components/ui/label'
 
   interface Props {
@@ -14,12 +14,6 @@
 
   const providers = getProviderList()
 
-  function handleChange(newValue: string | undefined) {
-    if (newValue && newValue !== value) {
-      onchange(newValue as ProviderType)
-    }
-  }
-
   let currentProvider = $derived(providers.find((p) => p.value === value))
 </script>
 
@@ -27,23 +21,28 @@
   {#if label}
     <Label>{label}</Label>
   {/if}
-  <Select.Root type="single" {value} onValueChange={handleChange}>
-    <Select.Trigger class="w-full">
-      {#if currentProvider}
-        <span>{currentProvider.label}</span>
-      {:else}
-        <span class="text-muted-foreground">Select provider</span>
-      {/if}
-    </Select.Trigger>
-    <Select.Content>
-      {#each providers as provider (provider.value)}
-        <Select.Item value={provider.value} label={provider.label}>
-          <div class="flex flex-col py-1">
-            <span class="font-medium">{provider.label}</span>
-            <span class="text-muted-foreground text-xs">{provider.description}</span>
-          </div>
-        </Select.Item>
-      {/each}
-    </Select.Content>
-  </Select.Root>
+  <Autocomplete
+    items={providers}
+    selected={currentProvider}
+    onSelect={(v) => {
+      if (v) {
+        const provider = v as { value: ProviderType }
+        if (provider.value !== value) {
+          onchange(provider.value)
+        }
+      }
+    }}
+    itemLabel={(p) => p.label}
+    itemValue={(p) => p.value}
+    placeholder="Select provider"
+    searchPlaceholder="Search providers..."
+    itemHeight={48}
+  >
+    {#snippet itemSnippet(provider)}
+      <div class="flex flex-col">
+        <span class="text-sm font-medium">{provider.label}</span>
+        <span class="text-muted-foreground text-xs leading-tight">{provider.description}</span>
+      </div>
+    {/snippet}
+  </Autocomplete>
 </div>

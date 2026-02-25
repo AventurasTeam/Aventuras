@@ -13,6 +13,9 @@ import { replaceUserPlaceholders } from '$lib/components/wizard/wizardTypes'
 import type { VaultScenario } from '$lib/types'
 import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
 import { stringToDescriptors } from '$lib/utils/visualDescriptors'
+import { packService } from '$lib/services/packs/pack-service'
+import { database } from '$lib/services/database'
+import type { PresetPack, CustomVariable } from '$lib/services/packs/types'
 
 // Import Modular Stores
 import { NarrativeStore } from './narrativeStore.svelte'
@@ -30,7 +33,14 @@ export class WizardStore {
 
   // Wizard State
   currentStep = $state(1)
-  totalSteps = 8 // Reduced from 9
+  totalSteps = 9
+
+  // Pack selection state
+  selectedPackId = $state<string>('default-pack')
+  availablePacks = $state<PresetPack[]>([])
+  packVariables = $state<CustomVariable[]>([])
+  customVariableValues = $state<Record<string, string>>({})
+  packsLoaded = $state(false)
 
   // Track auto-linked lorebook IDs so they can be removed when source is cleared
   private _scenarioLinkedLorebookVaultId = $state<string | null>(null)
@@ -47,19 +57,21 @@ export class WizardStore {
     switch (this.currentStep) {
       case 1: // Mode
         return true
-      case 2: // World & Setting
+      case 2: // Pack Selection
+        return this.allVariablesFilled()
+      case 3: // World & Setting
         return this.setting.settingSeed.trim().length > 0
-      case 3: // Character (required - must have protagonist)
+      case 4: // Character (required - must have protagonist)
         return this.character.protagonist !== null
-      case 4: // Supporting Cast (optional)
+      case 5: // Supporting Cast (optional)
         return true
-      case 5: // Lorebook (optional)
+      case 6: // Lorebook (optional)
         return true
-      case 6: // Portraits (optional)
+      case 7: // Portraits (optional)
         return true
-      case 7: // Writing Style
+      case 8: // Writing Style
         return true
-      case 8: // Opening
+      case 9: // Opening
         return this.narrative.storyTitle.trim().length > 0
       default:
         return false
@@ -79,6 +91,41 @@ export class WizardStore {
     if (this.currentStep > 1) {
       this.currentStep--
     }
+  }
+
+  // Pack selection methods
+
+  async loadPacks(): Promise<void> {
+    if (this.packsLoaded) return
+    this.availablePacks = await packService.getAllPacks()
+    this.packsLoaded = true
+    await this.loadPackVariables(this.selectedPackId)
+  }
+
+  async loadPackVariables(packId: string): Promise<void> {
+    this.packVariables = await database.getPackVariables(packId)
+    const newValues: Record<string, string> = {}
+    for (const v of this.packVariables) {
+      newValues[v.variableName] = v.defaultValue ?? ''
+    }
+    this.customVariableValues = newValues
+  }
+
+  async selectPack(packId: string): Promise<void> {
+    this.selectedPackId = packId
+    await this.loadPackVariables(packId)
+  }
+
+  setVariableValue(variableName: string, value: string): void {
+    this.customVariableValues = { ...this.customVariableValues, [variableName]: value }
+  }
+
+  allVariablesFilled(): boolean {
+    return this.packVariables.every((v) => {
+      const val = this.customVariableValues[v.variableName]
+      if (v.variableType === 'boolean') return true
+      return val !== undefined && val !== ''
+    })
   }
 
   // Orchestrations
@@ -374,7 +421,7 @@ export class WizardStore {
           : undefined,
     }
 
-    const storyData = scenarioService.prepareStoryData(wizardData, processedOpening)
+    const storyData = await scenarioService.prepareStoryData(wizardData, processedOpening)
 
     if (storyData.protagonist) {
       storyData.protagonist.portrait = this.image.protagonistPortrait ?? undefined
@@ -531,6 +578,12 @@ export class WizardStore {
       importedEntries: processedEntries.length > 0 ? processedEntries : undefined,
       translations,
     })
+
+    // Assign pack and save custom variable values
+    await database.setStoryPack(newStory.id, this.selectedPackId)
+    if (Object.keys(this.customVariableValues).length > 0) {
+      await database.setStoryCustomVariables(newStory.id, this.customVariableValues)
+    }
 
     await story.loadStory(newStory.id)
     ui.setActivePanel('story')

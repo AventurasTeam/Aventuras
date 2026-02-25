@@ -33,7 +33,7 @@ export function createProviderFromProfile(profile: APIProfile, presetId: string,
       return createOpenRouter({
         apiKey: profile.apiKey,
         baseURL: baseURL ?? PROVIDERS.openrouter.baseUrl,
-        headers: { 'HTTP-Referer': 'https://aventuras.ai', 'X-Title': 'Aventura' },
+        headers: { 'HTTP-Referer': 'https://aventura.camp', 'X-Title': 'Aventura' },
         fetch,
       })
 

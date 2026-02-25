@@ -2,8 +2,6 @@
  * Service Factory
  *
  * Factory for creating AI service instances.
- * Provider-related methods have been removed during SDK migration.
- * Services are being migrated to use Vercel AI SDK directly.
  */
 
 import { settings } from '$lib/stores/settings.svelte'
@@ -13,7 +11,7 @@ import { MemoryService } from '../generation/MemoryService'
 import { SuggestionsService } from '../generation/SuggestionsService'
 import { ActionChoicesService } from '../generation/ActionChoicesService'
 import { StyleReviewerService } from '../generation/StyleReviewerService'
-import { ContextBuilder, type ContextConfig } from '../generation/ContextBuilder'
+import { EntryInjector, type ContextConfig } from '../generation/EntryInjector'
 import { LoreManagementService } from '../lorebook/LoreManagementService'
 import { AgenticRetrievalService } from '../retrieval/AgenticRetrievalService'
 import { TimelineFillService } from '../retrieval/TimelineFillService'
@@ -27,7 +25,6 @@ import { BackgroundImageService } from '../image/BackgroundImageService'
 
 /**
  * Factory class for creating AI services.
- * Note: Provider methods removed during SDK migration.
  */
 export class ServiceFactory {
   // ===== Service Instance Creators =====
@@ -86,10 +83,10 @@ export class ServiceFactory {
   }
 
   /**
-   * Create a context builder instance.
+   * Create an entry injector instance.
    */
-  createContextBuilder(config?: Partial<ContextConfig>): ContextBuilder {
-    return new ContextBuilder(config)
+  createEntryInjector(config?: Partial<ContextConfig>): EntryInjector {
+    return new EntryInjector(config)
   }
 
   /**

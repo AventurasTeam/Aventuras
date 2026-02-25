@@ -6,7 +6,7 @@
  */
 
 import type { Chapter, StoryEntry } from '$lib/types'
-import { promptService, type PromptContext } from '$lib/services/prompts'
+import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '../core/config'
 import { generateStructured, generatePlainText } from '../sdk/generate'
 import { timelineQueriesResultSchema, type TimelineQuery } from '../sdk/schemas/timeline'
@@ -97,18 +97,9 @@ export class TimelineFillService {
       .map((c) => `Chapter ${c.number}: ${c.summary?.substring(0, 200) ?? 'No summary'}...`)
       .join('\n')
 
-    const promptContext: PromptContext = {
-      mode: 'adventure',
-      pov: 'second',
-      tense: 'present',
-      protagonistName: '',
-    }
-
-    const system = promptService.renderPrompt('timeline-fill', promptContext)
-    const prompt = promptService.renderUserPrompt('timeline-fill', promptContext, {
-      chapterHistory,
-      timeline,
-    })
+    const ctx = new ContextBuilder()
+    ctx.add({ chapterHistory, timeline })
+    const { system, user: prompt } = await ctx.render('timeline-fill')
 
     try {
       const result = await generateStructured(
@@ -180,18 +171,9 @@ export class TimelineFillService {
       })
       .join('\n\n')
 
-    const promptContext: PromptContext = {
-      mode: 'adventure',
-      pov: 'second',
-      tense: 'present',
-      protagonistName: '',
-    }
-
-    const system = promptService.renderPrompt('timeline-fill-answer', promptContext)
-    const prompt = promptService.renderUserPrompt('timeline-fill-answer', promptContext, {
-      chapterContent,
-      query,
-    })
+    const ctx = new ContextBuilder()
+    ctx.add({ chapterContent, query })
+    const { system, user: prompt } = await ctx.render('timeline-fill-answer')
 
     try {
       const answer = await generatePlainText(
@@ -244,28 +226,33 @@ export class TimelineFillService {
       return { queries: [], responses: [] }
     }
 
-    // Step 2: Answer each query
-    const responses: TimelineQueryResult[] = []
-
-    for (const q of queries) {
-      // Determine which chapters to query
-      let chapterNumbers: number[] = []
-      if (q.chapters && q.chapters.length > 0) {
-        chapterNumbers = q.chapters
-      } else if (q.startChapter !== undefined && q.endChapter !== undefined) {
-        for (let i = q.startChapter; i <= q.endChapter; i++) {
-          chapterNumbers.push(i)
+    // Step 2: Answer each query in parallel
+    const responses = await Promise.all(
+      queries.map(async (q) => {
+        // Determine which chapters to query
+        let chapterNumbers: number[] = []
+        if (q.chapters && q.chapters.length > 0) {
+          chapterNumbers = q.chapters
+        } else if (q.startChapter !== undefined && q.endChapter !== undefined) {
+          for (let i = q.startChapter; i <= q.endChapter; i++) {
+            chapterNumbers.push(i)
+          }
         }
-      }
 
-      const answer = await this.answerQuestion(q.query, chapters, chapterNumbers, getChapterEntries)
+        const answer = await this.answerQuestion(
+          q.query,
+          chapters,
+          chapterNumbers,
+          getChapterEntries,
+        )
 
-      responses.push({
-        query: q.query,
-        answer: answer.answer,
-        chapterNumbers,
-      })
-    }
+        return {
+          query: q.query,
+          answer: answer.answer,
+          chapterNumbers,
+        }
+      }),
+    )
 
     log('Timeline fill complete', {
       queriesGenerated: queries.length,

@@ -1,6 +1,6 @@
 {
   "name": "aventura",
-  "version": "0.7.0-pre.1",
+  "version": "0.7.0-pre.3",
   "description": "AI-powered adventure and creative writing frontend",
   "type": "module",
   "scripts": {
@@ -26,7 +26,12 @@
     "@ai-sdk/openai-compatible": "^2.0.26",
     "@ai-sdk/xai": "^3.0.46",
     "@chutes-ai/ai-sdk-provider": "^0.1.2",
+    "@codemirror/commands": "^6.10.2",
+    "@codemirror/lang-liquid": "^6.3.1",
+    "@codemirror/state": "^6.5.4",
+    "@codemirror/view": "^6.39.14",
     "@openrouter/ai-sdk-provider": "^2.1.1",
+    "@saintno/comfyui-sdk": "^0.2.49",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-fs": "^2",
@@ -39,16 +44,20 @@
     "ai": "^6.0.67",
     "ai-sdk-pollinations": "^0.0.1",
     "clsx": "^2.1.1",
+    "codemirror": "^6.0.2",
     "gpt-tokenizer": "^3.4.0",
     "harper.js": "^1.2.0",
     "html5-qrcode": "^2.3.8",
     "jsonrepair": "^3.13.2",
     "jszip": "^3.10.1",
+    "liquidjs": "^10.24.0",
     "lucide-svelte": "^0.468.0",
     "marked": "^17.0.1",
     "ollama-ai-provider": "^1.2.0",
+    "svelte-codemirror-editor": "^2.1.0",
     "tailwind-merge": "^3.4.0",
-    "zhipu-ai-provider": "^0.2.2"
+    "zhipu-ai-provider": "^0.2.2",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@lucide/svelte": "^0.482.0",

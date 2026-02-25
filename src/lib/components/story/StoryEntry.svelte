@@ -30,7 +30,6 @@
     processVisualProseWithInlineImages,
     getPlacedImageIds,
   } from '$lib/services/image'
-  import { database } from '$lib/services/database'
   import {
     eventBus,
     type ImageReadyEvent,
@@ -39,7 +38,7 @@
     type TTSQueuedEvent,
   } from '$lib/services/events'
   import { inlineImageService, retryImageGeneration } from '$lib/services/ai/image'
-  import { promptService } from '$lib/services/prompts'
+  import { database } from '$lib/services/database'
   import { onMount } from 'svelte'
   import ReasoningBlock from './ReasoningBlock.svelte'
   import { countTokens } from '$lib/services/tokenizer'
@@ -682,13 +681,8 @@
         const styleId = imageSettings.styleId
         let stylePrompt = ''
         try {
-          const promptContext = {
-            mode: 'adventure' as const,
-            pov: 'second' as const,
-            tense: 'present' as const,
-            protagonistName: '',
-          }
-          stylePrompt = promptService.getPrompt(styleId, promptContext) || ''
+          const template = await database.getPackTemplate('default-pack', styleId)
+          stylePrompt = template?.content || ''
         } catch {
           stylePrompt = DEFAULT_FALLBACK_STYLE_PROMPT
         }
@@ -725,13 +719,8 @@
     const styleId = imageSettings.styleId
     let stylePrompt = ''
     try {
-      const promptContext = {
-        mode: 'adventure' as const,
-        pov: 'second' as const,
-        tense: 'present' as const,
-        protagonistName: '',
-      }
-      stylePrompt = promptService.getPrompt(styleId, promptContext) || ''
+      const template = await database.getPackTemplate('default-pack', styleId)
+      stylePrompt = template?.content || ''
     } catch {
       stylePrompt = DEFAULT_FALLBACK_STYLE_PROMPT
     }

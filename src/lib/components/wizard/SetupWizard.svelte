@@ -13,6 +13,7 @@
   // Step components
   import {
     Step1Mode,
+    StepPackSelection,
     Step2Lorebook,
     Step3Setting,
     Step4Characters,
@@ -64,6 +65,7 @@
   // Step Titles
   const stepTitles = [
     'Choose Your Mode',
+    'Prompt Pack',
     'World & Setting',
     'Create Your Character',
     'Supporting Cast (Optional)',
@@ -72,6 +74,13 @@
     'Writing Style',
     'Generate Opening',
   ]
+
+  // Load packs when entering step 2
+  $effect(() => {
+    if (wizard.currentStep === 2) {
+      wizard.loadPacks()
+    }
+  })
 </script>
 
 <ResponsiveModal.Root open={true} onOpenChange={(open) => !open && onClose()}>
@@ -131,6 +140,15 @@
           onModeChange={(mode) => (wizard.narrative.selectedMode = mode)}
         />
       {:else if wizard.currentStep === 2}
+        <StepPackSelection
+          availablePacks={wizard.availablePacks}
+          selectedPackId={wizard.selectedPackId}
+          packVariables={wizard.packVariables}
+          variableValues={wizard.customVariableValues}
+          onSelectPack={(packId) => wizard.selectPack(packId)}
+          onVariableChange={(name, value) => wizard.setVariableValue(name, value)}
+        />
+      {:else if wizard.currentStep === 3}
         <Step3Setting
           settingSeed={wizard.setting.settingSeed}
           expandedSetting={wizard.setting.expandedSettingDisplay}
@@ -191,7 +209,7 @@
             onClose()
           }}
         />
-      {:else if wizard.currentStep === 3}
+      {:else if wizard.currentStep === 4}
         <Step4Characters
           selectedMode={wizard.narrative.selectedMode}
           expandedSetting={wizard.setting.expandedSettingDisplay}
@@ -253,7 +271,7 @@
             onClose()
           }}
         />
-      {:else if wizard.currentStep === 4}
+      {:else if wizard.currentStep === 5}
         <Step5SupportingCast
           protagonist={wizard.character.protagonistDisplay}
           supportingCharacters={wizard.character.supportingCharactersDisplay}
@@ -313,7 +331,7 @@
             onClose()
           }}
         />
-      {:else if wizard.currentStep === 5}
+      {:else if wizard.currentStep === 6}
         <Step2Lorebook
           importedLorebooks={wizard.narrative.importedLorebooks}
           importError={wizard.narrative.importError}
@@ -327,7 +345,7 @@
             onClose()
           }}
         />
-      {:else if wizard.currentStep === 6}
+      {:else if wizard.currentStep === 7}
         <Step6Portraits
           protagonist={wizard.character.protagonist}
           supportingCharacters={wizard.character.supportingCharacters}
@@ -363,7 +381,7 @@
           onSupportingPortraitUpload={(e, name) =>
             wizard.image.handleSupportingCharacterPortraitUpload(e, name)}
         />
-      {:else if wizard.currentStep === 7}
+      {:else if wizard.currentStep === 8}
         <Step7WritingStyle
           selectedPOV={wizard.narrative.selectedPOV}
           selectedTense={wizard.narrative.selectedTense}
@@ -381,7 +399,7 @@
           onBackgroundImagesEnabledChange={(v) => (wizard.narrative.backgroundImagesEnabled = v)}
           onReferenceModeChange={(v) => (wizard.narrative.referenceMode = v)}
         />
-      {:else if wizard.currentStep === 8}
+      {:else if wizard.currentStep === 9}
         <Step8Opening
           storyTitle={wizard.narrative.storyTitle}
           openingGuidance={wizard.narrative.openingGuidance}

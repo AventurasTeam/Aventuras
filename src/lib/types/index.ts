@@ -740,6 +740,28 @@ export interface UpdateSettings {
   lastChecked: number | null // Timestamp of last check
 }
 
+// ===== Image Provider & Profile System =====
+
+export type ImageProviderType =
+  | 'nanogpt'
+  | 'openai'
+  | 'chutes'
+  | 'pollinations'
+  | 'google'
+  | 'zhipu'
+  | 'comfyui'
+
+export interface ImageProfile {
+  id: string
+  name: string
+  providerType: ImageProviderType
+  apiKey: string
+  baseUrl?: string
+  model: string
+  providerOptions: Record<string, unknown>
+  createdAt: number
+}
+
 // ===== Image Generation System =====
 
 export type EmbeddedImageStatus = 'pending' | 'generating' | 'complete' | 'failed'
@@ -818,66 +840,6 @@ export interface GenerationPreset {
   manualBody: string
 }
 
-// ===== Prompt Export/Import Types =====
-
-/**
- * Exported Generation Preset - excludes sensitive profileId
- * On import, user must reconnect each preset to an API profile
- */
-export interface ExportedGenerationPreset {
-  id: string
-  name: string
-  description: string | null
-  model: string
-  temperature: number
-  maxTokens: number
-  reasoningEffort: ReasoningEffort
-  manualBody: string
-  // profileId is EXCLUDED - will be reconnected on import
-}
-
-/**
- * Main export structure for prompts, macros, presets, and assignments
- */
-export interface PromptExportData {
-  version: string
-  exportedAt: number
-  appVersion?: string
-
-  promptSettings: {
-    customMacros: import('$lib/services/prompts/types').Macro[]
-    macroOverrides: import('$lib/services/prompts/types').MacroOverride[]
-    templateOverrides: import('$lib/services/prompts/types').PromptOverride[]
-  }
-
-  generationPresets: ExportedGenerationPreset[]
-  servicePresetAssignments: Record<string, string>
-}
-
-/**
- * Parsed import data with validation state
- */
-export interface ParsedPromptImport {
-  success: boolean
-  data: PromptExportData | null
-  errors: string[]
-  warnings: string[]
-}
-
-/**
- * Profile assignment for import - allows customizing preset parameters
- */
-export interface ImportPresetConfig {
-  presetId: string
-  presetName: string
-  profileId: string
-  model: string
-  temperature: number
-  maxTokens: number
-  reasoningEffort: ReasoningEffort
-  manualBody: string
-}
-
 // ===== Translation System Types =====
 
 /**
@@ -916,6 +878,8 @@ export interface CharacterBeforeState {
   relationship: string | null
   traits: string[]
   visualDescriptors: VisualDescriptors
+  /** Metadata snapshot for rollback (includes runtimeVars from pack runtime variables) */
+  metadata?: Record<string, unknown> | null
 }
 
 /** Snapshot of a location's mutable fields before a classification update */
@@ -925,6 +889,8 @@ export interface LocationBeforeState {
   visited: boolean
   current: boolean
   description: string | null
+  /** Metadata snapshot for rollback (includes runtimeVars from pack runtime variables) */
+  metadata?: Record<string, unknown> | null
 }
 
 /** Snapshot of an item's mutable fields before a classification update */
@@ -934,6 +900,8 @@ export interface ItemBeforeState {
   quantity: number
   equipped: boolean
   location: string
+  /** Metadata snapshot for rollback (includes runtimeVars from pack runtime variables) */
+  metadata?: Record<string, unknown> | null
 }
 
 /** Snapshot of a story beat's mutable fields before a classification update */
@@ -943,6 +911,8 @@ export interface StoryBeatBeforeState {
   status: string
   description: string | null
   resolvedAt: number | null
+  /** Metadata snapshot for rollback (includes runtimeVars from pack runtime variables) */
+  metadata?: Record<string, unknown> | null
 }
 
 /**
@@ -1003,4 +973,14 @@ export interface VaultTag {
   type: VaultType
   color: string
   createdAt: number
+}
+
+export interface VaultConversation {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  messages: string // JSON blob — AI SDK ModelMessage[]
+  chatMessages: string // JSON blob — ChatMessage[] (UI display state with diff cards, images, reasoning)
+  pendingChanges: string // JSON blob — VaultPendingChange[] (full list including status)
 }

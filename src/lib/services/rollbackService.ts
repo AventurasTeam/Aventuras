@@ -210,6 +210,7 @@ class RollbackService {
           relationship: charBefore.relationship,
           traits: charBefore.traits,
           visualDescriptors: charBefore.visualDescriptors,
+          ...(charBefore.metadata !== undefined ? { metadata: charBefore.metadata } : {}),
         })
         summary.restoredCharacters++
       } catch (error) {
@@ -223,6 +224,7 @@ class RollbackService {
           visited: locBefore.visited,
           current: locBefore.current,
           description: locBefore.description,
+          ...(locBefore.metadata !== undefined ? { metadata: locBefore.metadata } : {}),
         })
         summary.restoredLocations++
       } catch (error) {
@@ -236,6 +238,7 @@ class RollbackService {
           quantity: itemBefore.quantity,
           equipped: itemBefore.equipped,
           location: itemBefore.location,
+          ...(itemBefore.metadata !== undefined ? { metadata: itemBefore.metadata } : {}),
         })
         summary.restoredItems++
       } catch (error) {
@@ -249,6 +252,7 @@ class RollbackService {
           status: beatBefore.status as 'pending' | 'active' | 'completed' | 'failed',
           description: beatBefore.description,
           resolvedAt: beatBefore.resolvedAt,
+          ...(beatBefore.metadata !== undefined ? { metadata: beatBefore.metadata } : {}),
         })
         summary.restoredStoryBeats++
       } catch (error) {

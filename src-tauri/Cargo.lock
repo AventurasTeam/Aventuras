@@ -282,16 +282,18 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "aventura"
-version = "0.7.0-pre.1"
+version = "0.7.0-pre.3"
 dependencies = [
  "axum 0.8.8",
  "base64 0.22.1",
+ "hex",
  "image",
  "local-ip-address 0.6.8",
  "qrcode",
  "reqwest",
  "serde",
  "serde_json",
+ "sqlx",
  "tauri",
  "tauri-build",
  "tauri-plugin-devtools",

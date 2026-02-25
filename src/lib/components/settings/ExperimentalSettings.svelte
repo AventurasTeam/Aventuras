@@ -564,7 +564,11 @@
     </Dialog.Header>
     <Dialog.Footer class="mt-4 justify-between sm:justify-between">
       <Button variant="outline" onclick={() => (showRestoreConfirm = false)}>Cancel</Button>
-      <Button variant="outline" onclick={handleRestoreConfirmed} class="gap-2 border-destructive text-destructive hover:bg-destructive/10">
+      <Button
+        variant="outline"
+        onclick={handleRestoreConfirmed}
+        class="border-destructive text-destructive hover:bg-destructive/10 gap-2"
+      >
         <Upload class="h-4 w-4" />
         Restore & Close App
       </Button>

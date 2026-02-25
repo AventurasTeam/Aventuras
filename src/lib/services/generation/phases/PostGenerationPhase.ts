@@ -56,6 +56,7 @@ export interface PostGenerationDependencies {
     activeThreads: StoryBeat[],
     lorebookEntries?: Entry[],
     promptContext?: PromptContext,
+    latestNarrativeResponse?: string,
   ) => Promise<{ suggestions: Suggestion[] }>
   translateSuggestions: (suggestions: Suggestion[], targetLanguage: string) => Promise<Suggestion[]>
   generateActionChoices: (
@@ -136,12 +137,20 @@ export class PostGenerationPhase {
   }
 
   private async generateSuggestions(input: PostGenerationInput): Promise<Suggestion[]> {
-    const { entries, activeThreads, lorebookEntries, promptContext, translationSettings } = input
+    const {
+      entries,
+      activeThreads,
+      lorebookEntries,
+      promptContext,
+      narrativeResponse,
+      translationSettings,
+    } = input
     const { suggestions } = await this.deps.generateSuggestions(
       entries,
       activeThreads,
       lorebookEntries,
       promptContext,
+      narrativeResponse,
     )
 
     if (TranslationService.shouldTranslate(translationSettings)) {

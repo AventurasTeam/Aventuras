@@ -7,7 +7,7 @@
 
 import type { StoryMode, VisualDescriptors } from '$lib/types'
 import type { Genre } from '$lib/services/ai/wizard/ScenarioService'
-import { promptService, type PromptContext } from '$lib/services/prompts'
+import { ContextBuilder } from '$lib/services/context'
 import { generateStructured } from './ai/sdk/generate'
 import { cardImportResultSchema, vaultCharacterImportSchema } from './ai/sdk/schemas/cardimport'
 import { createLogger } from './ai/core/config'
@@ -77,7 +77,12 @@ export function extractCharacterCardFromPng(data: ArrayBuffer | Uint8Array): str
           const base64String = new TextDecoder('latin1').decode(textData)
 
           try {
-            const jsonString = atob(base64String)
+            const binaryString = atob(base64String)
+            const bytes = new Uint8Array(binaryString.length)
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i)
+            }
+            const jsonString = new TextDecoder('utf-8').decode(bytes)
             log('Found character data in PNG tEXt chunk')
             return jsonString
           } catch (e) {
@@ -309,20 +314,18 @@ export async function convertCardToScenario(
   // Build card content for LLM
   const cardContent = buildCardContext(card)
 
-  // Minimal context for prompt rendering
-  const promptContext: PromptContext = {
+  // Render prompts via ContextBuilder pipeline
+  const ctx = new ContextBuilder()
+  ctx.add({
     mode,
     pov: 'second',
     tense: 'present',
     protagonistName: '',
-  }
-
-  const system = promptService.renderPrompt('character-card-import', promptContext)
-  const prompt = promptService.renderUserPrompt('character-card-import', promptContext, {
     genre,
     title: cardTitle,
     cardContent,
   })
+  const { system, user: prompt } = await ctx.render('character-card-import')
 
   const result = await generateStructured(
     {
@@ -385,18 +388,16 @@ export async function sanitizeCharacterCard(
   // Build card content for LLM
   const cardContent = buildCardContext(card)
 
-  // Minimal context for prompt rendering
-  const promptContext: PromptContext = {
+  // Render prompts via ContextBuilder pipeline
+  const ctx = new ContextBuilder()
+  ctx.add({
     mode: 'adventure',
     pov: 'second',
     tense: 'present',
     protagonistName: '',
-  }
-
-  const system = promptService.renderPrompt('vault-character-import', promptContext)
-  const prompt = promptService.renderUserPrompt('vault-character-import', promptContext, {
     cardContent,
   })
+  const { system, user: prompt } = await ctx.render('vault-character-import')
 
   const result = await generateStructured(
     {

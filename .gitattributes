@@ -1,2 +1,8 @@
 # Force LF line endings for all text files
 * text=auto eol=lf
+
+# Migrations SQL in particular must have uniform line endings in all scenarios.
+# SQLx relies on consistent checksums (SHA384 hashes at the time of writing)
+# to verify that migrations have not changed.  This ensures that line endings
+# stay consistent between platforms and systems regardless of autocrlf setup.
+src-tauri/migrations/*.sql text eol=lf

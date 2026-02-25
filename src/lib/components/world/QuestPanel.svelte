@@ -13,6 +13,7 @@
     X,
   } from 'lucide-svelte'
   import type { StoryBeat } from '$lib/types'
+  import type { RuntimeVariable, RuntimeVarsMap } from '$lib/services/packs/types'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import { Textarea } from '$lib/components/ui/textarea'
@@ -21,6 +22,8 @@
   import * as Select from '$lib/components/ui/select'
   import IconRow from '$lib/components/ui/icon-row.svelte'
   import { cn } from '$lib/utils/cn'
+  import { database } from '$lib/services/database'
+  import RuntimeVariableDisplay from './RuntimeVariableDisplay.svelte'
 
   let showAddForm = $state(false)
   let newTitle = $state('')
@@ -31,6 +34,41 @@
   let editDescription = $state('')
   let editType = $state<StoryBeat['type']>('quest')
   let editStatus = $state<StoryBeat['status']>('pending')
+
+  // Runtime variables
+  let runtimeVarDefs = $state<RuntimeVariable[]>([])
+  let editRuntimeVars = $state<RuntimeVarsMap>({})
+
+  $effect(() => {
+    if (story.currentStory) {
+      loadRuntimeVarDefs()
+    }
+  })
+
+  async function loadRuntimeVarDefs() {
+    if (!story.currentStory) return
+    try {
+      const packId = await database.getStoryPackId(story.currentStory.id)
+      if (packId) {
+        runtimeVarDefs = await database.getRuntimeVariablesByEntityType(packId, 'story_beat')
+      } else {
+        runtimeVarDefs = []
+      }
+    } catch {
+      runtimeVarDefs = []
+    }
+  }
+
+  function updateEditRuntimeVar(
+    defId: string,
+    variableName: string,
+    value: string | number | null,
+  ) {
+    editRuntimeVars = {
+      ...editRuntimeVars,
+      [defId]: { variableName, v: value },
+    }
+  }
 
   function toggleCollapse(beatId: string) {
     const isCollapsed = ui.isEntityCollapsed(beatId)
@@ -52,6 +90,9 @@
     editDescription = beat.description ?? ''
     editType = beat.type
     editStatus = beat.status
+    // Initialize runtime vars from entity metadata
+    const rv = (beat.metadata as Record<string, unknown> | null)?.runtimeVars
+    editRuntimeVars = rv && typeof rv === 'object' ? { ...(rv as RuntimeVarsMap) } : {}
   }
 
   function cancelEdit() {
@@ -60,16 +101,32 @@
     editDescription = ''
     editType = 'quest'
     editStatus = 'pending'
+    editRuntimeVars = {}
   }
 
   async function saveEdit(beat: StoryBeat) {
     const title = editTitle.trim()
     if (!title) return
+
+    // Merge runtime vars into metadata
+    const existingMeta = (beat.metadata as Record<string, unknown>) ?? {}
+    const hasRuntimeVarEdits = Object.keys(editRuntimeVars).length > 0
+    const updatedMetadata = hasRuntimeVarEdits
+      ? {
+          ...existingMeta,
+          runtimeVars: {
+            ...((existingMeta.runtimeVars as RuntimeVarsMap) ?? {}),
+            ...editRuntimeVars,
+          },
+        }
+      : beat.metadata
+
     await story.updateStoryBeat(beat.id, {
       title,
       description: editDescription.trim() || null,
       type: editType,
       status: editStatus,
+      metadata: updatedMetadata,
     })
     cancelEdit()
   }
@@ -267,6 +324,19 @@
                     class="min-h-[60px] resize-none text-xs"
                   />
                 </div>
+
+                <!-- Runtime Variables (Edit - Active) -->
+                {#if runtimeVarDefs.length > 0}
+                  <RuntimeVariableDisplay
+                    definitions={runtimeVarDefs}
+                    values={editRuntimeVars}
+                    editMode={true}
+                    onValueChange={(defId, value) => {
+                      const def = runtimeVarDefs.find((d) => d.id === defId)
+                      if (def) updateEditRuntimeVar(defId, def.variableName, value)
+                    }}
+                  />
+                {/if}
               </div>
 
               <div class="border-border flex justify-end gap-2 border-t pt-2">
@@ -316,6 +386,26 @@
               <div class="text-muted-foreground mt-2 text-xs">
                 <p class="leading-relaxed whitespace-pre-wrap">{description}</p>
               </div>
+
+              <!-- Runtime Variables (Non-pinned, collapsible - Active) -->
+              {#if runtimeVarDefs.length > 0}
+                <RuntimeVariableDisplay
+                  definitions={runtimeVarDefs}
+                  values={beat.metadata?.runtimeVars as RuntimeVarsMap | undefined}
+                  pinnedOnly={false}
+                  class="mt-1.5"
+                />
+              {/if}
+            {/if}
+
+            <!-- Runtime Variables (Pinned, always visible - Active) -->
+            {#if runtimeVarDefs.length > 0}
+              <RuntimeVariableDisplay
+                definitions={runtimeVarDefs}
+                values={beat.metadata?.runtimeVars as RuntimeVarsMap | undefined}
+                pinnedOnly={true}
+                class={isCollapsed ? 'mt-2' : 'mt-1'}
+              />
             {/if}
 
             <!-- Footer Actions -->
@@ -468,6 +558,19 @@
                       class="min-h-[60px] resize-none text-xs"
                     />
                   </div>
+
+                  <!-- Runtime Variables (Edit - History) -->
+                  {#if runtimeVarDefs.length > 0}
+                    <RuntimeVariableDisplay
+                      definitions={runtimeVarDefs}
+                      values={editRuntimeVars}
+                      editMode={true}
+                      onValueChange={(defId, value) => {
+                        const def = runtimeVarDefs.find((d) => d.id === defId)
+                        if (def) updateEditRuntimeVar(defId, def.variableName, value)
+                      }}
+                    />
+                  {/if}
                 </div>
 
                 <div class="border-border flex justify-end gap-2 border-t pt-2">
@@ -523,6 +626,26 @@
                 <div class="text-muted-foreground mt-2 text-xs">
                   <p class="leading-relaxed whitespace-pre-wrap">{description}</p>
                 </div>
+
+                <!-- Runtime Variables (Non-pinned, collapsible - History) -->
+                {#if runtimeVarDefs.length > 0}
+                  <RuntimeVariableDisplay
+                    definitions={runtimeVarDefs}
+                    values={beat.metadata?.runtimeVars as RuntimeVarsMap | undefined}
+                    pinnedOnly={false}
+                    class="mt-1.5"
+                  />
+                {/if}
+              {/if}
+
+              <!-- Runtime Variables (Pinned, always visible - History) -->
+              {#if runtimeVarDefs.length > 0}
+                <RuntimeVariableDisplay
+                  definitions={runtimeVarDefs}
+                  values={beat.metadata?.runtimeVars as RuntimeVarsMap | undefined}
+                  pinnedOnly={true}
+                  class={isCollapsed ? 'mt-2' : 'mt-1'}
+                />
               {/if}
 
               <!-- Footer Actions -->

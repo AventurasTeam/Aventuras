@@ -11,8 +11,8 @@ import type {
   EntryCreator,
   VaultLorebookEntry,
 } from '$lib/types'
-import type { StoryMode } from '$lib/services/prompts'
-import { promptService, type PromptContext } from '$lib/services/prompts'
+import type { StoryMode } from '$lib/types'
+import { ContextBuilder } from '$lib/services/context'
 import { generateStructured } from './ai/sdk/generate'
 import { lorebookClassificationResultSchema } from './ai/sdk/schemas/lorebook'
 import { createLogger } from './ai/core/config'
@@ -255,16 +255,6 @@ export async function classifyEntriesWithLLM(
   const result = [...entries]
   let classified = 0
 
-  // Minimal context for prompt rendering
-  const promptContext: PromptContext = {
-    mode,
-    pov: 'second',
-    tense: 'present',
-    protagonistName: '',
-  }
-
-  const system = promptService.renderPrompt('lorebook-classifier', promptContext)
-
   // Build all batch indices
   const batchStarts: number[] = []
   for (let i = 0; i < entries.length; i += BATCH_SIZE) {
@@ -290,9 +280,16 @@ export async function classifyEntriesWithLLM(
         2,
       )
 
-      const prompt = promptService.renderUserPrompt('lorebook-classifier', promptContext, {
+      // Render prompts via ContextBuilder pipeline
+      const ctx = new ContextBuilder()
+      ctx.add({
+        mode,
+        pov: 'second',
+        tense: 'present',
+        protagonistName: '',
         entriesJson,
       })
+      const { system, user: prompt } = await ctx.render('lorebook-classifier')
 
       const classifications = await generateStructured(
         {

@@ -38,7 +38,14 @@ export default [
     },
   },
   {
-    ignores: ['build/', '.svelte-kit/', 'dist/', 'node_modules/', 'src-tauri/'],
+    ignores: [
+      'build/',
+      '.svelte-kit/',
+      'dist/',
+      'node_modules/',
+      'src-tauri/',
+      '.release-pre3-check/',
+    ],
   },
   {
     plugins: {

@@ -1,12 +1,10 @@
 /**
  * Image Generation Utilities
  *
- * Helper functions for image generation that work with the SDK-based system.
- * Provides backwards-compatible functions for components that need them.
+ * Helper functions for image generation using the standalone provider registry.
  */
 
-import { generateImage } from '$lib/services/ai/sdk/generate'
-import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
+import { generateImage, supportsImageGeneration } from './providers/registry'
 import { database } from '$lib/services/database'
 import { settings } from '$lib/stores/settings.svelte'
 import type { StorySettings } from '$lib/types'
@@ -17,7 +15,7 @@ const log = createLogger('ImageUtils')
 
 /**
  * Check if image generation is enabled and has valid configuration.
- * Returns true if a valid image-capable profile is selected.
+ * Now checks Image Profiles instead of API Profiles.
  */
 export function isImageGenerationEnabled(
   storySettings?: StorySettings,
@@ -25,15 +23,9 @@ export function isImageGenerationEnabled(
 ): boolean {
   const imageSettings = settings.systemServicesSettings.imageGeneration
 
-  // If story settings are provided, use them to check if generation is enabled for this story
   if (storySettings) {
-    // Only 'none' mode blocks standard/reference/portrait images.
-    // Background images have their own toggle (backgroundImagesEnabled).
     if (type !== 'background' && storySettings.imageGenerationMode === 'none') return false
   } else {
-    // Falls back to global enabled if no story context (e.g. initial setup or legacy check)
-    // NOTE: User wants overall toggle to not exist, so we might want to default this to true
-    // if a profile is configured.
     if (!imageSettings?.profileId) return false
   }
 
@@ -45,11 +37,10 @@ export function isImageGenerationEnabled(
 
   if (!profileId) return false
 
-  const profile = settings.getProfile(profileId)
+  const profile = settings.getImageProfile(profileId)
   if (!profile) return false
 
-  const capabilities = PROVIDERS[profile.providerType].capabilities
-  return capabilities?.imageGeneration ?? false
+  return supportsImageGeneration(profile.providerType)
 }
 
 /**
@@ -58,19 +49,18 @@ export function isImageGenerationEnabled(
 export function hasRequiredCredentials(): boolean {
   const imageSettings = settings.systemServicesSettings.imageGeneration
   const profileId = imageSettings?.profileId
-
   if (!profileId) return false
 
-  const profile = settings.getProfile(profileId)
+  const profile = settings.getImageProfile(profileId)
   if (!profile) return false
 
-  // Check if provider supports image generation
-  const capabilities = PROVIDERS[profile.providerType].capabilities
-  if (!capabilities?.imageGeneration) return false
+  if (!supportsImageGeneration(profile.providerType)) return false
 
-  // All profile-based providers have credentials if the profile exists
-  // (API key is part of the profile)
-  return !!profile.apiKey
+  return (
+    !!profile.apiKey ||
+    profile.providerType === 'pollinations' ||
+    profile.providerType === 'comfyui'
+  )
 }
 
 /**
@@ -79,10 +69,9 @@ export function hasRequiredCredentials(): boolean {
 export function getProviderDisplayName(): string {
   const imageSettings = settings.systemServicesSettings.imageGeneration
   const profileId = imageSettings?.profileId
-
   if (!profileId) return 'No provider'
 
-  const profile = settings.getProfile(profileId)
+  const profile = settings.getImageProfile(profileId)
   if (!profile) return 'Unknown'
 
   const names: Record<string, string> = {
@@ -91,8 +80,8 @@ export function getProviderDisplayName(): string {
     chutes: 'Chutes',
     pollinations: 'Pollinations.ai',
     google: 'Google',
-    anthropic: 'Anthropic',
-    openrouter: 'OpenRouter',
+    zhipu: 'Zhipu',
+    comfyui: 'ComfyUI',
   }
 
   return names[profile.providerType] || profile.providerType
@@ -116,7 +105,6 @@ export function parseImageSize(size: string): { width: number; height: number } 
     log('Failed to parse image size', { size, error: e })
   }
 
-  // Common fallbacks for simple literals if parsing fails
   if (size === '512x512') return { width: 512, height: 512 }
   if (size === '2048x2048') return { width: 2048, height: 2048 }
 
@@ -125,7 +113,6 @@ export function parseImageSize(size: string): { width: number; height: number } 
 
 /**
  * Retry image generation for a failed/existing image using current settings.
- * This regenerates an image with the given prompt using the current profile configuration.
  */
 export async function retryImageGeneration(imageId: string, prompt: string): Promise<void> {
   if (!isImageGenerationEnabled()) {
@@ -147,11 +134,11 @@ export async function retryImageGeneration(imageId: string, prompt: string): Pro
     return
   }
 
-  const model = imageSettings.model
+  const profile = settings.getImageProfile(profileId)
+  const model = profile?.model ?? ''
   const size = imageSettings.size
   const { width, height } = parseImageSize(size)
 
-  // Update image status to generating and save the new prompt
   await database.updateEmbeddedImage(imageId, {
     prompt,
     model,
@@ -161,20 +148,10 @@ export async function retryImageGeneration(imageId: string, prompt: string): Pro
     height,
   })
 
-  log('Retrying image generation', {
-    imageId,
-    profileId,
-    model,
-    size,
-  })
+  log('Retrying image generation', { imageId, profileId, model, size })
 
   try {
-    const result = await generateImage({
-      profileId,
-      model,
-      prompt,
-      size,
-    })
+    const result = await generateImage({ profileId, model, prompt, size })
 
     if (!result.base64) {
       throw new Error('No image data returned')
@@ -208,34 +185,22 @@ export async function retryImageGeneration(imageId: string, prompt: string): Pro
 export async function generatePortrait(prompt: string): Promise<string> {
   const imageSettings = settings.systemServicesSettings.imageGeneration
 
-  // Determine which profile/model to use
   const profileId = imageSettings.portraitProfileId
-
   if (!profileId) {
     throw new Error('No image generation profile configured')
   }
 
-  const model = imageSettings.portraitModel
-
+  const profile = settings.getImageProfile(profileId)
+  const model = profile?.model ?? ''
   if (!model) {
     throw new Error('No image model configured')
   }
 
   const size = imageSettings.portraitSize || '1024x1024'
 
-  log('Generating portrait', {
-    profileId,
-    model,
-    size,
-    promptLength: prompt.length,
-  })
+  log('Generating portrait', { profileId, model, size, promptLength: prompt.length })
 
-  const result = await generateImage({
-    profileId,
-    model,
-    prompt,
-    size,
-  })
+  const result = await generateImage({ profileId, model, prompt, size })
 
   if (!result.base64) {
     throw new Error('No image data returned from provider')

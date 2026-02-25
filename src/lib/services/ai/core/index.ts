@@ -5,9 +5,6 @@
  * - Configuration: Centralized config constants and logging
  * - Types: All API types and interfaces
  * - Request utilities: Extra body building, provider config
- *
- * Note: OpenAIProvider and BaseAIService have been removed.
- * Services are being migrated to use Vercel AI SDK directly.
  */
 
 // Configuration and logging

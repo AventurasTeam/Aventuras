@@ -13,7 +13,7 @@ import type {
   TranslationSettings,
 } from '$lib/types'
 import type { Suggestion, SuggestionsResult } from '$lib/services/ai/sdk/schemas/suggestions'
-import type { PromptContext } from '$lib/services/prompts'
+import type { PromptContext } from '$lib/services/generation/phases/PostGenerationPhase'
 import type { RetrievedEntry } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 

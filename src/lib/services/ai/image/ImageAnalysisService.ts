@@ -9,7 +9,7 @@
  */
 
 import type { VisualDescriptors } from '$lib/types'
-import { promptService, type PromptContext } from '$lib/services/prompts'
+import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '../core/config'
 import { generateStructured } from '../sdk/generate'
 import { sceneAnalysisResultSchema, type ImageableScene } from '../sdk/schemas/imageanalysis'
@@ -99,36 +99,26 @@ export class ImageAnalysisService {
 ${context.translatedNarrative}`
     }
 
-    // Build prompt context
-    const promptContext: PromptContext = {
-      mode: 'adventure',
-      pov: 'second',
-      tense: 'present',
-      protagonistName: '',
-    }
-
     // Select template based on portrait mode
     const templateId = context.referenceMode
       ? 'image-prompt-analysis-reference'
       : 'image-prompt-analysis'
 
-    // Render system prompt
-    const system = promptService.renderPrompt(templateId, promptContext, {
+    // Build context and render
+    const ctx = new ContextBuilder()
+    ctx.add({
       imageStylePrompt: context.stylePrompt,
       characterDescriptors: characterDescriptors || 'No character visual descriptors available.',
       charactersWithPortraits: charactersWithPortraitsStr,
       charactersWithoutPortraits: charactersWithoutPortraitsStr,
       maxImages: context.maxImages === 0 ? '0 (unlimited)' : String(context.maxImages),
-    })
-
-    // Render user prompt
-    const prompt = promptService.renderUserPrompt(templateId, promptContext, {
       narrativeResponse: context.narrativeResponse,
       userAction: context.userAction,
       chatHistory: context.chatHistory || '',
       lorebookContext: context.lorebookContext || '',
       translatedNarrativeBlock,
     })
+    const { system, user: prompt } = await ctx.render(templateId)
 
     try {
       const result = await generateStructured(

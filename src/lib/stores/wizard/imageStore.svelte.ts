@@ -4,12 +4,51 @@ import {
   getProviderDisplayName,
   generatePortrait as sdkGeneratePortrait,
 } from '$lib/services/ai/image'
-import { promptService } from '$lib/services/prompts'
+import { database } from '$lib/services/database'
+import { ContextBuilder } from '$lib/services/context'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from '$lib/services/ai/image/constants'
 import { createLogger } from '$lib/services/ai/core/config'
 import type { GeneratedCharacter, GeneratedProtagonist } from '$lib/services/ai/sdk'
 
 const log = createLogger('WizardPortrait')
+
+/**
+ * Get the style prompt for the selected style ID.
+ * Image style templates are external (raw text) -- fetched directly from the database.
+ */
+async function getStylePrompt(styleId: string): Promise<string> {
+  try {
+    const template = await database.getPackTemplate('default-pack', styleId)
+    if (template?.content) {
+      return template.content
+    }
+  } catch {
+    // Template not found, use fallback
+  }
+  return DEFAULT_FALLBACK_STYLE_PROMPT
+}
+
+/**
+ * Build a portrait generation prompt using ContextBuilder pipeline.
+ */
+async function buildPortraitPrompt(
+  stylePrompt: string,
+  visualDescriptors: string,
+  characterName: string,
+): Promise<string> {
+  const ctx = new ContextBuilder()
+  ctx.add({
+    mode: 'adventure',
+    pov: 'second',
+    tense: 'present',
+    protagonistName: '',
+    imageStylePrompt: stylePrompt,
+    visualDescriptors,
+    characterName,
+  })
+  const { system } = await ctx.render('image-portrait-generation')
+  return system
+}
 
 export class ImageStore {
   protagonistVisualDescriptors = $state('')
@@ -31,7 +70,7 @@ export class ImageStore {
 
     log('Starting protagonist portrait generation', {
       protagonistName: protagonist.name,
-      model: imageSettings.portraitModel,
+      model: settings.getImageProfile(imageSettings.portraitProfileId ?? '')?.model ?? '',
       styleId: imageSettings.portraitStyleId,
     })
 
@@ -53,36 +92,8 @@ export class ImageStore {
     this.portraitError = null
 
     try {
-      const styleId = imageSettings.styleId
-      let stylePrompt = ''
-      try {
-        const promptContext = {
-          mode: 'adventure' as const,
-          pov: 'second' as const,
-          tense: 'present' as const,
-          protagonistName: '',
-        }
-        stylePrompt = promptService.getPrompt(styleId, promptContext) || ''
-      } catch {
-        stylePrompt = DEFAULT_FALLBACK_STYLE_PROMPT
-      }
-
-      const promptContext = {
-        mode: 'adventure' as const,
-        pov: 'second' as const,
-        tense: 'present' as const,
-        protagonistName: '',
-      }
-
-      const portraitPrompt = promptService.renderPrompt(
-        'image-portrait-generation',
-        promptContext,
-        {
-          imageStylePrompt: stylePrompt,
-          visualDescriptors: descriptors,
-          characterName: protagonist.name,
-        },
-      )
+      const stylePrompt = await getStylePrompt(imageSettings.styleId)
+      const portraitPrompt = await buildPortraitPrompt(stylePrompt, descriptors, protagonist.name)
 
       log('Sending protagonist portrait request', {
         promptLength: portraitPrompt.length,
@@ -118,7 +129,7 @@ export class ImageStore {
 
     log('Starting supporting character portrait generation', {
       characterName: charName,
-      model: imageSettings.portraitModel,
+      model: settings.getImageProfile(imageSettings.portraitProfileId ?? '')?.model ?? '',
       styleId: imageSettings.portraitStyleId,
     })
 
@@ -140,36 +151,8 @@ export class ImageStore {
     this.portraitError = null
 
     try {
-      const styleId = imageSettings.portraitStyleId
-      let stylePrompt = ''
-      try {
-        const promptContext = {
-          mode: 'adventure' as const,
-          pov: 'second' as const,
-          tense: 'present' as const,
-          protagonistName: '',
-        }
-        stylePrompt = promptService.getPrompt(styleId, promptContext) || ''
-      } catch {
-        stylePrompt = DEFAULT_FALLBACK_STYLE_PROMPT
-      }
-
-      const promptContext = {
-        mode: 'adventure' as const,
-        pov: 'second' as const,
-        tense: 'present' as const,
-        protagonistName: '',
-      }
-
-      const portraitPrompt = promptService.renderPrompt(
-        'image-portrait-generation',
-        promptContext,
-        {
-          imageStylePrompt: stylePrompt,
-          visualDescriptors: descriptors,
-          characterName: char.name,
-        },
-      )
+      const stylePrompt = await getStylePrompt(imageSettings.portraitStyleId)
+      const portraitPrompt = await buildPortraitPrompt(stylePrompt, descriptors, char.name)
 
       log('Sending supporting character portrait request', {
         characterName: charName,

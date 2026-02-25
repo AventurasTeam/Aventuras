@@ -1,22 +1,11 @@
-/**
- * Translation Prompt Templates
- *
- * Templates for translating narrative content, user input,
- * and UI elements between languages.
- */
-
 import type { PromptTemplate } from '../types'
 
-/**
- * Translate Narration prompt template
- * Translates narrative content to target language
- */
-export const translateNarrationTemplate: PromptTemplate = {
+const translateNarrationTemplate: PromptTemplate = {
   id: 'translate-narration',
   name: 'Translate Narration',
   category: 'service',
   description: 'Translates narrative content to target language',
-  content: `You are a professional literary translator. Translate the following narrative text to {{targetLanguage}}.
+  content: `You are a professional literary translator. Translate the following narrative text to {{ targetLanguage }}.
 
 Rules:
 1. Preserve the original meaning, tone, and literary style
@@ -28,19 +17,15 @@ Rules:
    - These tags contain English image prompts that must NOT be translated
 
 Respond with ONLY the translated text, no explanations or notes.`,
-  userContent: `{{content}}`,
+  userContent: `{{ content }}`,
 }
 
-/**
- * Translate User Input prompt template
- * Translates user input to English for AI processing
- */
-export const translateInputTemplate: PromptTemplate = {
+const translateInputTemplate: PromptTemplate = {
   id: 'translate-input',
   name: 'Translate User Input',
   category: 'service',
   description: 'Translates user input to English for AI processing',
-  content: `You are a translator for interactive fiction. Translate the user's input from {{sourceLanguage}} to English.
+  content: `You are a translator for interactive fiction. Translate the user's input from {{ sourceLanguage }} to English.
 
 Rules:
 1. Preserve the action intent (what the user wants to do/say/think)
@@ -49,75 +34,59 @@ Rules:
 4. Do not add interpretation or expansion
 
 Respond with ONLY the English translation, no explanations.`,
-  userContent: `{{content}}`,
+  userContent: `{{ content }}`,
 }
 
-/**
- * Translate UI Elements prompt template
- * Batch translates world state elements
- */
-export const translateUITemplate: PromptTemplate = {
+const translateUITemplate: PromptTemplate = {
   id: 'translate-ui',
   name: 'Translate UI Elements',
   category: 'service',
   description: 'Batch translates world state elements',
-  content: `You are translating game UI elements to {{targetLanguage}}.
+  content: `You are translating game UI elements to {{ targetLanguage }}.
 
 Translate each item in the JSON array below. For each item:
 - Translate the "text" field
 - Keep "id" unchanged
 - Preserve proper nouns and character names`,
-  userContent: `{{elementsJson}}`,
+  userContent: `{{ elementsJson }}`,
 }
 
-/**
- * Translate Suggestions prompt template
- * Translates creative writing plot suggestions
- */
-export const translateSuggestionsTemplate: PromptTemplate = {
+const translateSuggestionsTemplate: PromptTemplate = {
   id: 'translate-suggestions',
   name: 'Translate Suggestions',
   category: 'service',
   description: 'Translates creative writing plot suggestions',
-  content: `You are translating plot suggestions for interactive fiction to {{targetLanguage}}.
+  content: `You are translating plot suggestions for interactive fiction to {{ targetLanguage }}.
 
 Translate the JSON array of suggestions below. For each item:
 - Translate the "text" field (the suggestion content)
 - Keep the "type" field unchanged (action, dialogue, revelation, twist)
 - Preserve character names and proper nouns
 - Maintain the tone and creative intent`,
-  userContent: `{{suggestionsJson}}`,
+  userContent: `{{ suggestionsJson }}`,
 }
 
-/**
- * Translate Action Choices prompt template
- * Translates adventure mode action choices
- */
-export const translateActionChoicesTemplate: PromptTemplate = {
+const translateActionChoicesTemplate: PromptTemplate = {
   id: 'translate-action-choices',
   name: 'Translate Action Choices',
   category: 'service',
   description: 'Translates adventure mode action choices',
-  content: `You are translating action choices for an interactive adventure game to {{targetLanguage}}.
+  content: `You are translating action choices for an interactive adventure game to {{ targetLanguage }}.
 
 Translate the JSON array of action choices below. For each item:
 - Translate the "text" field (the action description)
 - Keep the "type" field unchanged (do, say, think, or custom)
 - Preserve character names and proper nouns
 - Match the tone and style (casual, urgent, dramatic, etc.)`,
-  userContent: `{{choicesJson}}`,
+  userContent: `{{ choicesJson }}`,
 }
 
-/**
- * Translate Wizard Content prompt template
- * Translates story wizard generated content
- */
-export const translateWizardContentTemplate: PromptTemplate = {
+const translateWizardContentTemplate: PromptTemplate = {
   id: 'translate-wizard-content',
   name: 'Translate Wizard Content',
   category: 'service',
   description: 'Translates story wizard generated content',
-  content: `You are translating story content for a creative writing wizard to {{targetLanguage}}.
+  content: `You are translating story content for a creative writing wizard to {{ targetLanguage }}.
 
 The content may include:
 - Setting descriptions and world-building details
@@ -132,12 +101,9 @@ Rules:
 4. Do not add, remove, or interpret content
 
 Respond with ONLY the translated text, no explanations.`,
-  userContent: `{{content}}`,
+  userContent: `{{ content }}`,
 }
 
-/**
- * Translation templates array for registration
- */
 export const translationTemplates: PromptTemplate[] = [
   translateNarrationTemplate,
   translateInputTemplate,

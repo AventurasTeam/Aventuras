@@ -23,7 +23,7 @@ import { buildExtraBody } from '../core/requestOverrides'
 import { createLogger } from '../core/config'
 import { generateStructured } from '../sdk/generate'
 import { entitySelectionSchema } from '../sdk/schemas/context'
-import { promptService } from '$lib/services/prompts'
+import { ContextBuilder } from '$lib/services/context'
 
 const log = createLogger('EntryRetrieval')
 
@@ -602,27 +602,9 @@ export class EntryRetrievalService {
       .map((e) => e.content)
       .join('\n\n')
 
-    const system = promptService.renderPrompt('tier3-entry-selection', {
-      mode: 'adventure',
-      pov: 'second',
-      tense: 'present',
-      protagonistName: '',
-    })
-
-    const prompt = promptService.renderUserPrompt(
-      'tier3-entry-selection',
-      {
-        mode: 'adventure',
-        pov: 'second',
-        tense: 'present',
-        protagonistName: '',
-      },
-      {
-        recentContent,
-        userInput,
-        entrySummaries,
-      },
-    )
+    const ctx = new ContextBuilder()
+    ctx.add({ recentContent, userInput, entrySummaries })
+    const { system, user: prompt } = await ctx.render('tier3-entry-selection')
 
     try {
       const result = await generateStructured(

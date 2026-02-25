@@ -11,13 +11,10 @@ import {
   generateText,
   streamText,
   Output,
-  generateImage as sdkGenerateImage,
   wrapLanguageModel,
 } from 'ai'
 import type { LanguageModelV3, LanguageModelV3Middleware } from '@ai-sdk/provider'
 import type { ProviderOptions } from '@ai-sdk/provider-utils'
-import { createOpenAI } from '@ai-sdk/openai'
-import { createChutes } from '@chutes-ai/ai-sdk-provider'
 import { jsonrepair } from 'jsonrepair'
 import type { z } from 'zod'
 
@@ -452,85 +449,4 @@ export async function generateNarrative(options: NarrativeGenerateOptions): Prom
   })
 
   return text
-}
-
-// ============================================================================
-// Image Generation
-// ============================================================================
-
-export interface GenerateImageOptions {
-  profileId: string
-  model: string
-  prompt: string
-  size?: string
-  referenceImages?: string[]
-  signal?: AbortSignal
-}
-
-export interface GenerateImageResult {
-  base64: string
-  revisedPrompt?: string
-}
-
-function getImageModel(
-  provider: ReturnType<typeof createProviderFromProfile>,
-  providerType: ProviderType,
-  modelId: string,
-) {
-  if ('imageModel' in provider && typeof provider.imageModel === 'function') {
-    return (provider as ReturnType<typeof createChutes>).imageModel(modelId)
-  }
-  if ('image' in provider && typeof provider.image === 'function') {
-    return (provider as unknown as ReturnType<typeof createOpenAI>).image(modelId)
-  }
-  throw new Error(`Provider ${providerType} does not support image generation`)
-}
-
-function ensureDataUrl(img: string): string {
-  if (img.startsWith('data:')) {
-    return img
-  }
-  return `data:image/png;base64,${img}`
-}
-
-export async function generateImage(options: GenerateImageOptions): Promise<GenerateImageResult> {
-  const { profileId, model, prompt, size = '1024x1024', referenceImages, signal } = options
-
-  const profile = settings.getProfile(profileId)
-  if (!profile) {
-    throw new Error(`Profile not found: ${profileId}`)
-  }
-
-  const capabilities = PROVIDERS[profile.providerType].capabilities
-  if (!capabilities?.imageGeneration) {
-    throw new Error(`Provider ${profile.providerType} does not support image generation`)
-  }
-
-  log('generateImage', {
-    profileId,
-    model,
-    providerType: profile.providerType,
-    hasReferences: !!referenceImages?.length,
-  })
-
-  const provider = createProviderFromProfile(profile, 'image')
-  const imageModel = getImageModel(provider, profile.providerType, model)
-
-  const promptValue = referenceImages?.length
-    ? { text: prompt, images: referenceImages.map(ensureDataUrl) }
-    : prompt
-
-  const result = await sdkGenerateImage({
-    model: imageModel,
-    size: size as `${number}x${number}`,
-    abortSignal: signal,
-    prompt: promptValue,
-  })
-
-  const image = result.images?.[0] ?? result.image
-  if (!image) {
-    throw new Error('No image data returned from provider')
-  }
-
-  return { base64: image.base64 }
 }

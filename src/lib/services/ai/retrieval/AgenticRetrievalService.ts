@@ -9,7 +9,7 @@ import type { Entry, Chapter } from '$lib/types'
 import { createLogger } from '../core/config'
 import { createAgentFromPreset, extractTerminalToolResult, stopOnTerminalTool } from '../sdk/agents'
 import { createRetrievalTools, type RetrievalToolContext } from '../sdk/tools'
-import { promptService } from '$lib/services/prompts'
+import { ContextBuilder } from '$lib/services/context'
 
 const log = createLogger('AgenticRetrieval')
 
@@ -149,17 +149,9 @@ export class AgenticRetrievalService {
         .map((e, i) => `${i}. [${e.type}] ${e.name}`)
         .join('\n') || 'No entries available.'
 
-    // Get prompts from prompt service
-    const dummyContext = {
-      mode: 'adventure' as const,
-      pov: 'second' as const,
-      tense: 'present' as const,
-      protagonistName: '',
-    }
-
-    const systemPrompt = promptService.renderPrompt('agentic-retrieval', dummyContext)
-
-    const userPrompt = promptService.renderUserPrompt('agentic-retrieval', dummyContext, {
+    // Render prompts through unified pipeline
+    const ctx = new ContextBuilder()
+    ctx.add({
       userInput: context.userInput,
       recentContext: context.recentNarrative.slice(0, 2000),
       chaptersCount: context.chapters?.length ?? 0,
@@ -167,6 +159,7 @@ export class AgenticRetrievalService {
       entriesCount: context.availableEntries.length,
       entryList,
     })
+    const { system: systemPrompt, user: userPrompt } = await ctx.render('agentic-retrieval')
 
     // Create the agent
     const agent = createAgentFromPreset(

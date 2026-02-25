@@ -21,16 +21,22 @@ npm run check:watch     # Watch mode type checking
 npx svelte-check --tsconfig ./tsconfig.json    # Direct type check
 ```
 
+
 ### Testing
 
 **Current Status**: No test suite is currently configured in `package.json`.
 
-If/when tests are added (e.g., using Vitest), the standard commands would be:
+### Linting & Formatting
 
 ```bash
-npm test                # Run all tests
-npm test -- -t "test name" # Run a single test (if using Vitest/Jest)
+npm run lint            # Run ESLint
+npm run lint:fix        # Fix ESLint issues
+npm run format          # Format code
 ```
+
+### Testing
+
+**Current Status**: No test suite is currently configured.
 
 ## Project Architecture
 
@@ -99,7 +105,7 @@ Services updated to accept `presetId` and use `settings.getPresetConfig(presetId
 8. AgenticRetrievalService ✅
 9. EntryRetrievalService ✅
 10. ImageGenerationService ✅
-11. InteractiveLorebookService ✅
+11. InteractiveVaultService ✅
 
 ### Completed (Phase 2: Service-Specific Settings)
 

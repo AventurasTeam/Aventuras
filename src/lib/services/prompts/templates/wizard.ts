@@ -1,17 +1,6 @@
-/**
- * Wizard Prompt Templates
- *
- * Templates for the story wizard including setting expansion,
- * character generation, and opening scene creation.
- */
-
 import type { PromptTemplate } from '../types'
 
-/**
- * Setting Expansion prompt template
- * Generates rich, evocative settings for interactive fiction
- */
-export const settingExpansionPromptTemplate: PromptTemplate = {
+const settingExpansionPromptTemplate: PromptTemplate = {
   id: 'setting-expansion',
   name: 'Setting Expansion',
   category: 'wizard',
@@ -19,20 +8,16 @@ export const settingExpansionPromptTemplate: PromptTemplate = {
   content: `You are a world-building expert creating settings for interactive fiction. Generate rich, evocative settings that inspire creative storytelling.
 
 Be creative but grounded. Make the setting feel lived-in and full of story potential.
-{{customInstruction}}`,
-  userContent: `Create a {{genreLabel}} setting based on this seed idea:
+{{ customInstruction }}`,
+  userContent: `Create a {{ genreLabel }} setting based on this seed idea:
 
-"{{seed}}"
-{{lorebookContext}}
+"{{ seed }}"
+{{ lorebookContext }}
 
 Expand this into a rich, detailed world that could sustain an interactive story.`,
 }
 
-/**
- * Setting Refinement prompt template
- * Refines an existing setting using current details and guidance
- */
-export const settingRefinementPromptTemplate: PromptTemplate = {
+const settingRefinementPromptTemplate: PromptTemplate = {
   id: 'setting-refinement',
   name: 'Setting Refinement',
   category: 'wizard',
@@ -43,19 +28,15 @@ Rules:
 - Preserve existing details unless the guidance explicitly asks to change them
 - Keep the genre and tone consistent
 - Ensure tags (themes, conflicts, key locations, atmosphere) match the description
-{{customInstruction}}`,
-  userContent: `Refine this {{genreLabel}} setting. Use the current setting data as canon and improve it where helpful.
+{{ customInstruction }}`,
+  userContent: `Refine this {{ genreLabel }} setting. Use the current setting data as canon and improve it where helpful.
 
 CURRENT SETTING:
-{{currentSetting}}
-{{lorebookContext}}`,
+{{ currentSetting }}
+{{ lorebookContext }}`,
 }
 
-/**
- * Protagonist Generation prompt template
- * Creates compelling protagonists for interactive fiction
- */
-export const protagonistGenerationPromptTemplate: PromptTemplate = {
+const protagonistGenerationPromptTemplate: PromptTemplate = {
   id: 'protagonist-generation',
   name: 'Protagonist Generation',
   category: 'wizard',
@@ -63,21 +44,17 @@ export const protagonistGenerationPromptTemplate: PromptTemplate = {
   content: `You are a character creation expert for interactive fiction. Create compelling protagonists that readers will want to embody or follow.
 
 Create a protagonist that fits naturally into the setting and has interesting story potential.`,
-  userContent: `Create a protagonist for this {{genreLabel}} setting:
+  userContent: `Create a protagonist for this {{ genreLabel }} setting:
 
-SETTING: {{settingName}}
-{{settingDescription}}
+SETTING: {{ settingName }}
+{{ settingDescription }}
 
-{{povInstruction}}
+{{ povInstruction }}
 
 Create a compelling protagonist who fits naturally into this world.`,
 }
 
-/**
- * Character Elaboration prompt template
- * Enriches user-provided character details
- */
-export const characterElaborationPromptTemplate: PromptTemplate = {
+const characterElaborationPromptTemplate: PromptTemplate = {
   id: 'character-elaboration',
   name: 'Character Elaboration',
   category: 'wizard',
@@ -88,24 +65,20 @@ Rules:
 - Preserve everything the user specified - don't contradict or replace their ideas
 - Add depth and detail to flesh out what they provided
 - Fill in gaps they left blank with fitting suggestions
-{{toneInstruction}}
-{{settingInstruction}}
-{{customInstruction}}`,
-  userContent: `Elaborate on this character for a {{genreLabel}} story:
+{{ toneInstruction }}
+{{ settingInstruction }}
+{{ customInstruction }}`,
+  userContent: `Elaborate on this character for a {{ genreLabel }} story:
 
-{{characterName}}
-{{characterDescription}}
-{{characterBackground}}
-{{settingContext}}
+{{ characterName }}
+{{ characterDescription }}
+{{ characterBackground }}
+{{ settingContext }}
 
 Expand on these details while preserving everything the user specified.`,
 }
 
-/**
- * Character Refinement prompt template
- * Refines an existing character using current details and guidance
- */
-export const characterRefinementPromptTemplate: PromptTemplate = {
+const characterRefinementPromptTemplate: PromptTemplate = {
   id: 'character-refinement',
   name: 'Character Refinement',
   category: 'wizard',
@@ -115,21 +88,17 @@ export const characterRefinementPromptTemplate: PromptTemplate = {
 Rules:
 - Preserve existing details unless the guidance explicitly asks to change them
 - Improve coherence and depth without replacing core traits
-{{toneInstruction}}
-{{settingInstruction}}
-{{customInstruction}}`,
-  userContent: `Refine this character for a {{genreLabel}} story. Use the current character data as canon.
+{{ toneInstruction }}
+{{ settingInstruction }}
+{{ customInstruction }}`,
+  userContent: `Refine this character for a {{ genreLabel }} story. Use the current character data as canon.
 
 CURRENT CHARACTER:
-{{currentCharacter}}
-{{settingContext}}`,
+{{ currentCharacter }}
+{{ settingContext }}`,
 }
 
-/**
- * Supporting Characters prompt template
- * Creates compelling supporting characters
- */
-export const supportingCharactersPromptTemplate: PromptTemplate = {
+const supportingCharactersPromptTemplate: PromptTemplate = {
   id: 'supporting-characters',
   name: 'Supporting Characters',
   category: 'wizard',
@@ -137,35 +106,31 @@ export const supportingCharactersPromptTemplate: PromptTemplate = {
   content: `You are a character creation expert. Create compelling supporting characters that complement the protagonist and drive story conflict.
 
 Create diverse characters with different roles and personalities.`,
-  userContent: `Create {{count}} supporting characters for this {{genreLabel}} story:
+  userContent: `Create {{ count }} supporting characters for this {{ genreLabel }} story:
 
-SETTING: {{settingName}}
-{{settingDescription}}
+SETTING: {{ settingName }}
+{{ settingDescription }}
 
-PROTAGONIST: {{protagonistName}}
-{{protagonistDescription}}
+PROTAGONIST: {{ protagonistName }}
+{{ protagonistDescription }}
 
 Create diverse characters with different roles (ally, antagonist, mentor, etc.) who can drive story conflict and complement the protagonist.`,
 }
 
-/**
- * Opening Generation (Adventure) prompt template
- * Crafts the opening scene for adventure mode (player controls the protagonist)
- */
-export const openingGenerationAdventurePromptTemplate: PromptTemplate = {
+const openingGenerationAdventurePromptTemplate: PromptTemplate = {
   id: 'opening-generation-adventure',
   name: 'Opening Generation (Adventure)',
   category: 'wizard',
   description: 'Crafts the opening scene for adventure mode (player controls the protagonist)',
-  content: `You are crafting the opening scene of an interactive {{genreLabel}} adventure.
+  content: `You are crafting the opening scene of an interactive {{ genreLabel }} adventure.
 
 <critical_constraints>
 # ABSOLUTE RULES - VIOLATION IS FAILURE
-1. **NEVER write what {{protagonistName}} does** - no actions, movements, or gestures
-2. **NEVER write what {{protagonistName}} says** - no dialogue or speech
-3. **NEVER write what {{protagonistName}} thinks or feels** - no internal states, emotions, or reactions
-4. **NEVER write what {{protagonistName}} perceives** - avoid "you see", "you notice", "you hear" constructions
-5. **Only describe the environment, NPCs, and situation** - let {{protagonistName}} decide how to engage
+1. **NEVER write what {{ protagonistName }} does** - no actions, movements, or gestures
+2. **NEVER write what {{ protagonistName }} says** - no dialogue or speech
+3. **NEVER write what {{ protagonistName }} thinks or feels** - no internal states, emotions, or reactions
+4. **NEVER write what {{ protagonistName }} perceives** - avoid "you see", "you notice", "you hear" constructions
+5. **Only describe the environment, NPCs, and situation** - let {{ protagonistName }} decide how to engage
 </critical_constraints>
 
 <what_to_write>
@@ -177,17 +142,17 @@ Write ONLY:
 - Build toward one crystallizing moment—the image or detail that anchors the scene
 
 Do NOT write:
-- "{{protagonistName}} walks into..." / "{{protagonistName}} looks at..." / "{{protagonistName}} feels..."
+- "{{ protagonistName }} walks into..." / "{{ protagonistName }} looks at..." / "{{ protagonistName }} feels..."
 - "You notice..." / "You see..." / "You sense..."
-- Any action, perception, or internal state belonging to {{protagonistName}}
+- Any action, perception, or internal state belonging to {{ protagonistName }}
 </what_to_write>
 
 <style>
-- {{tenseInstruction}}
-- Tone: {{tone}}
+- {{ tenseInstruction }}
+- Tone: {{ tone }}
 - 2-3 paragraphs of environmental and situational detail
 - Concrete sensory details, not abstractions
-- Reach past the first cliché; favor specific, grounded imagery
+- Reach past the first cliche; favor specific, grounded imagery
 </style>
 
 <npc_dialogue>
@@ -202,7 +167,7 @@ If NPCs speak:
 </npc_dialogue>
 
 <ending>
-End by presenting a situation that naturally invites {{protagonistName}} to act:
+End by presenting a situation that naturally invites {{ protagonistName }} to act:
 - An NPC looking expectantly, mid-conversation
 - A door ajar, a sound from within
 - An object of interest within reach
@@ -212,7 +177,7 @@ NO questions. NO "What do you do?" Just the pregnant moment.
 </ending>
 
 <prohibited_patterns>
-Avoid cliché phrases: "like a physical blow," "dust motes dancing," "silence stretched," "metallic tang," "for the first time in years"
+Avoid cliche phrases: "like a physical blow," "dust motes dancing," "silence stretched," "metallic tang," "for the first time in years"
 
 Banned words: ozone, orbs (for eyes), tresses, alabaster, porcelain
 
@@ -224,48 +189,44 @@ Also avoid:
 - Dialogue tag overload: "said" is invisible; use fancy tags sparingly
 </prohibited_patterns>
 
-{{outputFormat}}`,
+{{ outputFormat }}`,
   userContent: `Create the opening scene:
 
-TITLE: {{title}}
-GENRE: {{genreLabel}}
-SETTING: {{settingName}} - {{settingDescription}}
-{{atmosphereSection}}
-PROTAGONIST: {{protagonistName}}{{protagonistDescription}}
-{{supportingCharactersSection}}
-{{povInstruction}}
-{{guidanceSection}}{{lorebookContext}}{{openingInstruction}}
+TITLE: {{ title }}
+GENRE: {{ genreLabel }}
+SETTING: {{ settingName }} - {{ settingDescription }}
+{{ atmosphereSection }}
+PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
+{{ supportingCharactersSection }}
+{{ povInstruction }}
+{{ guidanceSection }}{{ lorebookContext }}{{ openingInstruction }}
 
 Write an immersive opening that drops the reader into the story. Remember: describe only the environment and NPCs, NOT the protagonist's actions, dialogue, or thoughts.`,
 }
 
-/**
- * Opening Generation (Creative Writing) prompt template
- * Crafts the opening scene for creative writing mode (author directs the story)
- */
-export const openingGenerationCreativePromptTemplate: PromptTemplate = {
+const openingGenerationCreativePromptTemplate: PromptTemplate = {
   id: 'opening-generation-creative',
   name: 'Opening Generation (Creative Writing)',
   category: 'wizard',
   description: 'Crafts the opening scene for creative writing mode (author directs the story)',
-  content: `You are crafting the opening scene of a {{genreLabel}} story in collaboration with an author.
+  content: `You are crafting the opening scene of a {{ genreLabel }} story in collaboration with an author.
 
 <critical_understanding>
-The person reading this opening is the AUTHOR, not a character. They sit outside the story, directing what happens. The protagonist ({{protagonistName}}) is a fictional character you write—not a stand-in for the author.
+The person reading this opening is the AUTHOR, not a character. They sit outside the story, directing what happens. The protagonist ({{ protagonistName }}) is a fictional character you write—not a stand-in for the author.
 </critical_understanding>
 
 <style>
-- POV: {{povInstruction}}
-- {{tenseInstruction}}
-- Tone: {{tone}}
+- POV: {{ povInstruction }}
+- {{ tenseInstruction }}
+- Tone: {{ tone }}
 - 2-3 paragraphs of literary prose
 - Concrete sensory details grounded in character perception
-- Reach past the first cliché; invisible prose serves the story better than showy prose
+- Reach past the first cliche; invisible prose serves the story better than showy prose
 </style>
 
 <what_to_write>
 Write a compelling opening that:
-- Establishes the scene through {{povPerspective}}
+- Establishes the scene through {{ povPerspective }}
 - Engages the reader with vivid, immersive prose
 - Introduces tension, stakes, or interesting elements
 - Includes other characters if appropriate, with their own actions and dialogue
@@ -274,13 +235,13 @@ Write a compelling opening that:
 </what_to_write>
 
 <protagonist_as_character>
-{{protagonistName}} is a character you control. Write their:
+{{ protagonistName }} is a character you control. Write their:
 - Actions and movements
 - Dialogue (if appropriate)
 - Thoughts and perceptions
 - Reactions to the environment and other characters
 
-{{povPerspectiveInstructions}}
+{{ povPerspectiveInstructions }}
 </protagonist_as_character>
 
 <dialogue_craft>
@@ -295,7 +256,7 @@ If dialogue appears:
 </dialogue_craft>
 
 <prohibited_patterns>
-Avoid cliché phrases: "like a physical blow," "ribs like a trapped bird," "heart hammering against ribs," "dust motes dancing," "silence stretched," "metallic tang," "voice dropping an octave," "for the first time in years"
+Avoid cliche phrases: "like a physical blow," "ribs like a trapped bird," "heart hammering against ribs," "dust motes dancing," "silence stretched," "metallic tang," "voice dropping an octave," "for the first time in years"
 
 Banned words: ozone, orbs (for eyes), tresses, alabaster, porcelain
 
@@ -308,39 +269,35 @@ Also avoid:
 - Narrative bows: tying scenes with conclusions or realizations
 </prohibited_patterns>
 
-{{outputFormat}}`,
+{{ outputFormat }}`,
   userContent: `Create the opening scene:
 
-TITLE: {{title}}
-GENRE: {{genreLabel}}
-SETTING: {{settingName}} - {{settingDescription}}
-{{atmosphereSection}}
-PROTAGONIST: {{protagonistName}}{{protagonistDescription}}
-{{supportingCharactersSection}}
-{{povInstruction}}
-{{guidanceSection}}{{lorebookContext}}{{openingInstruction}}
+TITLE: {{ title }}
+GENRE: {{ genreLabel }}
+SETTING: {{ settingName }} - {{ settingDescription }}
+{{ atmosphereSection }}
+PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
+{{ supportingCharactersSection }}
+{{ povInstruction }}
+{{ guidanceSection }}{{ lorebookContext }}{{ openingInstruction }}
 
 Write an immersive opening that drops the reader into the story. Remember: the author directs the story, so write the protagonist's actions, dialogue, and thoughts as needed.`,
 }
 
-/**
- * Opening Refinement (Adventure) prompt template
- * Refines the opening scene for adventure mode (player controls the protagonist)
- */
-export const openingRefinementAdventurePromptTemplate: PromptTemplate = {
+const openingRefinementAdventurePromptTemplate: PromptTemplate = {
   id: 'opening-refinement-adventure',
   name: 'Opening Refinement (Adventure)',
   category: 'wizard',
   description: 'Refines the opening scene for adventure mode (player controls the protagonist)',
-  content: `You are refining the opening scene of an interactive {{genreLabel}} adventure.
+  content: `You are refining the opening scene of an interactive {{ genreLabel }} adventure.
 
 <critical_constraints>
 # ABSOLUTE RULES - VIOLATION IS FAILURE
-1. **NEVER write what {{protagonistName}} does** - no actions, movements, or gestures
-2. **NEVER write what {{protagonistName}} says** - no dialogue or speech
-3. **NEVER write what {{protagonistName}} thinks or feels** - no internal states, emotions, or reactions
-4. **NEVER write what {{protagonistName}} perceives** - avoid "you see", "you notice", "you hear" constructions
-5. **Only describe the environment, NPCs, and situation** - let {{protagonistName}} decide how to engage
+1. **NEVER write what {{ protagonistName }} does** - no actions, movements, or gestures
+2. **NEVER write what {{ protagonistName }} says** - no dialogue or speech
+3. **NEVER write what {{ protagonistName }} thinks or feels** - no internal states, emotions, or reactions
+4. **NEVER write what {{ protagonistName }} perceives** - avoid "you see", "you notice", "you hear" constructions
+5. **Only describe the environment, NPCs, and situation** - let {{ protagonistName }} decide how to engage
 </critical_constraints>
 
 <what_to_write>
@@ -352,11 +309,11 @@ Refine the existing opening by:
 </what_to_write>
 
 <style>
-- {{tenseInstruction}}
-- Tone: {{tone}}
+- {{ tenseInstruction }}
+- Tone: {{ tone }}
 - 2-3 paragraphs of environmental and situational detail
 - Concrete sensory details, not abstractions
-- Reach past the first cliché; favor specific, grounded imagery
+- Reach past the first cliche; favor specific, grounded imagery
 </style>
 
 <npc_dialogue>
@@ -371,7 +328,7 @@ If NPCs speak:
 </npc_dialogue>
 
 <ending>
-End by presenting a situation that naturally invites {{protagonistName}} to act:
+End by presenting a situation that naturally invites {{ protagonistName }} to act:
 - An NPC looking expectantly, mid-conversation
 - A door ajar, a sound from within
 - An object of interest within reach
@@ -381,7 +338,7 @@ NO questions. NO "What do you do?" Just the pregnant moment.
 </ending>
 
 <prohibited_patterns>
-Avoid cliché phrases: "like a physical blow," "dust motes dancing," "silence stretched," "metallic tang," "for the first time in years"
+Avoid cliche phrases: "like a physical blow," "dust motes dancing," "silence stretched," "metallic tang," "for the first time in years"
 
 Banned words: ozone, orbs (for eyes), tresses, alabaster, porcelain
 
@@ -393,44 +350,40 @@ Also avoid:
 - Dialogue tag overload: "said" is invisible; use fancy tags sparingly
 </prohibited_patterns>
 
-{{outputFormat}}`,
+{{ outputFormat }}`,
   userContent: `Refine the opening scene using the current draft. Preserve continuity and constraints.
 
 CURRENT OPENING:
-{{currentOpening}}
+{{ currentOpening }}
 
-TITLE: {{title}}
-GENRE: {{genreLabel}}
-SETTING: {{settingName}} - {{settingDescription}}
-{{atmosphereSection}}
-PROTAGONIST: {{protagonistName}}{{protagonistDescription}}
-{{supportingCharactersSection}}
-{{povInstruction}}
-{{guidanceSection}}{{lorebookContext}}{{openingInstruction}}`,
+TITLE: {{ title }}
+GENRE: {{ genreLabel }}
+SETTING: {{ settingName }} - {{ settingDescription }}
+{{ atmosphereSection }}
+PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
+{{ supportingCharactersSection }}
+{{ povInstruction }}
+{{ guidanceSection }}{{ lorebookContext }}{{ openingInstruction }}`,
 }
 
-/**
- * Opening Refinement (Creative Writing) prompt template
- * Refines the opening scene for creative writing mode (author directs the story)
- */
-export const openingRefinementCreativePromptTemplate: PromptTemplate = {
+const openingRefinementCreativePromptTemplate: PromptTemplate = {
   id: 'opening-refinement-creative',
   name: 'Opening Refinement (Creative Writing)',
   category: 'wizard',
   description: 'Refines the opening scene for creative writing mode (author directs the story)',
-  content: `You are refining the opening scene of a {{genreLabel}} story in collaboration with an author.
+  content: `You are refining the opening scene of a {{ genreLabel }} story in collaboration with an author.
 
 <critical_understanding>
-The person reading this opening is the AUTHOR, not a character. They sit outside the story, directing what happens. The protagonist ({{protagonistName}}) is a fictional character you write—not a stand-in for the author.
+The person reading this opening is the AUTHOR, not a character. They sit outside the story, directing what happens. The protagonist ({{ protagonistName }}) is a fictional character you write—not a stand-in for the author.
 </critical_understanding>
 
 <style>
-- POV: {{povInstruction}}
-- {{tenseInstruction}}
-- Tone: {{tone}}
+- POV: {{ povInstruction }}
+- {{ tenseInstruction }}
+- Tone: {{ tone }}
 - 2-3 paragraphs of literary prose
 - Concrete sensory details grounded in character perception
-- Reach past the first cliché; invisible prose serves the story better than showy prose
+- Reach past the first cliche; invisible prose serves the story better than showy prose
 </style>
 
 <what_to_write>
@@ -442,13 +395,13 @@ Refine the existing opening by:
 </what_to_write>
 
 <protagonist_as_character>
-{{protagonistName}} is a character you control. Write their:
+{{ protagonistName }} is a character you control. Write their:
 - Actions and movements
 - Dialogue (if appropriate)
 - Thoughts and perceptions
 - Reactions to the environment and other characters
 
-{{povPerspectiveInstructions}}
+{{ povPerspectiveInstructions }}
 </protagonist_as_character>
 
 <dialogue_craft>
@@ -463,7 +416,7 @@ If dialogue appears:
 </dialogue_craft>
 
 <prohibited_patterns>
-Avoid cliché phrases: "like a physical blow," "ribs like a trapped bird," "heart hammering against ribs," "dust motes dancing," "silence stretched," "metallic tang," "voice dropping an octave," "for the first time in years"
+Avoid cliche phrases: "like a physical blow," "ribs like a trapped bird," "heart hammering against ribs," "dust motes dancing," "silence stretched," "metallic tang," "voice dropping an octave," "for the first time in years"
 
 Banned words: ozone, orbs (for eyes), tresses, alabaster, porcelain
 
@@ -476,27 +429,23 @@ Also avoid:
 - Narrative bows: tying scenes with conclusions or realizations
 </prohibited_patterns>
 
-{{outputFormat}}`,
+{{ outputFormat }}`,
   userContent: `Refine the opening scene using the current draft. Preserve continuity while improving prose and flow.
 
 CURRENT OPENING:
-{{currentOpening}}
+{{ currentOpening }}
 
-TITLE: {{title}}
-GENRE: {{genreLabel}}
-SETTING: {{settingName}} - {{settingDescription}}
-{{atmosphereSection}}
-PROTAGONIST: {{protagonistName}}{{protagonistDescription}}
-{{supportingCharactersSection}}
-{{povInstruction}}
-{{guidanceSection}}{{lorebookContext}}{{openingInstruction}}`,
+TITLE: {{ title }}
+GENRE: {{ genreLabel }}
+SETTING: {{ settingName }} - {{ settingDescription }}
+{{ atmosphereSection }}
+PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
+{{ supportingCharactersSection }}
+{{ povInstruction }}
+{{ guidanceSection }}{{ lorebookContext }}{{ openingInstruction }}`,
 }
 
-/**
- * Character Card Import prompt template
- * Cleans SillyTavern character cards and converts them to Aventura scenario settings
- */
-export const characterCardImportPromptTemplate: PromptTemplate = {
+const characterCardImportPromptTemplate: PromptTemplate = {
   id: 'character-card-import',
   name: 'Character Card Import',
   category: 'wizard',
@@ -568,11 +517,7 @@ IMPORTANT:
 Clean the above content. Identify all NPCs, replace {{char}} with the actual name, keep {{user}} as-is, and remove meta-content.`,
 }
 
-/**
- * Vault Character Import prompt template
- * Cleans SillyTavern character cards and extracts structured character data for the vault
- */
-export const vaultCharacterImportPromptTemplate: PromptTemplate = {
+const vaultCharacterImportPromptTemplate: PromptTemplate = {
   id: 'vault-character-import',
   name: 'Vault Character Import',
   category: 'service',
@@ -633,9 +578,6 @@ export const vaultCharacterImportPromptTemplate: PromptTemplate = {
 Extract the character information. Remove all meta-instructions and roleplay formatting.`,
 }
 
-/**
- * Wizard templates array for registration
- */
 export const wizardTemplates: PromptTemplate[] = [
   settingExpansionPromptTemplate,
   settingRefinementPromptTemplate,

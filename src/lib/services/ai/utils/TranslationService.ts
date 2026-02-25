@@ -8,7 +8,7 @@
 import type { TranslationSettings } from '$lib/types'
 import { createLogger } from '../core/config'
 import { generatePlainText, generateStructured } from '../sdk/generate'
-import { promptService, type PromptContext } from '$lib/services/prompts'
+import { ContextBuilder } from '$lib/services/context'
 import {
   translatedUIResultSchema,
   translatedSuggestionsResultSchema,
@@ -76,14 +76,6 @@ export interface UITranslationItem {
   type: 'name' | 'description' | 'title'
 }
 
-// Minimal prompt context for translation (not story-dependent)
-const TRANSLATION_CONTEXT: PromptContext = {
-  mode: 'creative-writing',
-  pov: 'third',
-  tense: 'past',
-  protagonistName: '',
-}
-
 /**
  * Service that handles translation of narrative and UI content.
  */
@@ -121,12 +113,9 @@ export class TranslationService {
     }
 
     try {
-      const system = promptService.renderPrompt('translate-narration', TRANSLATION_CONTEXT, {
-        targetLanguage: this.getLanguageName(targetLanguage),
-      })
-      const prompt = promptService.renderUserPrompt('translate-narration', TRANSLATION_CONTEXT, {
-        content,
-      })
+      const ctx = new ContextBuilder()
+      ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), content })
+      const { system, user: prompt } = await ctx.render('translate-narration')
 
       const translatedContent = await generatePlainText(
         {
@@ -155,12 +144,9 @@ export class TranslationService {
     }
 
     try {
-      const system = promptService.renderPrompt('translate-input', TRANSLATION_CONTEXT, {
-        sourceLanguage: this.getLanguageName(sourceLanguage),
-      })
-      const prompt = promptService.renderUserPrompt('translate-input', TRANSLATION_CONTEXT, {
-        content,
-      })
+      const ctx = new ContextBuilder()
+      ctx.add({ sourceLanguage: this.getLanguageName(sourceLanguage), content })
+      const { system, user: prompt } = await ctx.render('translate-input')
 
       const translatedContent = await generatePlainText(
         {
@@ -190,9 +176,6 @@ export class TranslationService {
     if (targetLanguage === 'en') return items
 
     try {
-      const system = promptService.renderPrompt('translate-ui', TRANSLATION_CONTEXT, {
-        targetLanguage: this.getLanguageName(targetLanguage),
-      })
       const elementsJson = JSON.stringify(
         items.map((item) => ({
           id: item.id,
@@ -200,9 +183,9 @@ export class TranslationService {
           type: item.type,
         })),
       )
-      const prompt = promptService.renderUserPrompt('translate-ui', TRANSLATION_CONTEXT, {
-        elementsJson,
-      })
+      const ctx = new ContextBuilder()
+      ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), elementsJson })
+      const { system, user: prompt } = await ctx.render('translate-ui')
 
       const result = await generateStructured(
         {
@@ -238,18 +221,15 @@ export class TranslationService {
     if (targetLanguage === 'en') return suggestions
 
     try {
-      const system = promptService.renderPrompt('translate-suggestions', TRANSLATION_CONTEXT, {
-        targetLanguage: this.getLanguageName(targetLanguage),
-      })
       const suggestionsJson = JSON.stringify(
         suggestions.map((s) => ({
           text: s.text,
           type: s.type,
         })),
       )
-      const prompt = promptService.renderUserPrompt('translate-suggestions', TRANSLATION_CONTEXT, {
-        suggestionsJson,
-      })
+      const ctx = new ContextBuilder()
+      ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), suggestionsJson })
+      const { system, user: prompt } = await ctx.render('translate-suggestions')
 
       const result = await generateStructured(
         {
@@ -285,22 +265,15 @@ export class TranslationService {
     if (targetLanguage === 'en') return choices
 
     try {
-      const system = promptService.renderPrompt('translate-action-choices', TRANSLATION_CONTEXT, {
-        targetLanguage: this.getLanguageName(targetLanguage),
-      })
       const choicesJson = JSON.stringify(
         choices.map((c) => ({
           text: c.text,
           type: c.type,
         })),
       )
-      const prompt = promptService.renderUserPrompt(
-        'translate-action-choices',
-        TRANSLATION_CONTEXT,
-        {
-          choicesJson,
-        },
-      )
+      const ctx = new ContextBuilder()
+      ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), choicesJson })
+      const { system, user: prompt } = await ctx.render('translate-action-choices')
 
       const result = await generateStructured(
         {
@@ -336,16 +309,9 @@ export class TranslationService {
     }
 
     try {
-      const system = promptService.renderPrompt('translate-wizard-content', TRANSLATION_CONTEXT, {
-        targetLanguage: this.getLanguageName(targetLanguage),
-      })
-      const prompt = promptService.renderUserPrompt(
-        'translate-wizard-content',
-        TRANSLATION_CONTEXT,
-        {
-          content,
-        },
-      )
+      const ctx = new ContextBuilder()
+      ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), content })
+      const { system, user: prompt } = await ctx.render('translate-wizard-content')
 
       const translatedContent = await generatePlainText(
         {
@@ -381,13 +347,12 @@ export class TranslationService {
     }
 
     try {
-      // Build a prompt that instructs the model to translate each field value
-      const system = promptService.renderPrompt('translate-wizard-content', TRANSLATION_CONTEXT, {
-        targetLanguage: this.getLanguageName(targetLanguage),
-      })
-
       // Format as JSON object with field keys
       const fieldsJson = JSON.stringify(fields)
+      const ctx = new ContextBuilder()
+      ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), content: fieldsJson })
+      const { system } = await ctx.render('translate-wizard-content')
+
       const prompt = `Translate each value in this JSON object to ${this.getLanguageName(targetLanguage)}. Keep the keys unchanged. Return a JSON object with the same keys and translated values.
 
 ${fieldsJson}`

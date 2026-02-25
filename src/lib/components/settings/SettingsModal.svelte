@@ -10,7 +10,6 @@
     Key,
     Cpu,
     Palette,
-    Scroll,
     Image,
     Volume2,
     Settings as SettingsIcon,
@@ -31,17 +30,13 @@
   import GenerationTab from './tabs/generation.svelte'
   import InterfaceTab from './tabs/interface.svelte'
   import ImagesTab from './tabs/images.svelte'
-  import PromptsTab from './tabs/prompts.svelte'
   import TTSSettings from './TTSSettings.svelte'
   import AdvancedSettings from './AdvancedSettings.svelte'
   import ExperimentalSettings from './ExperimentalSettings.svelte'
-  import PromptImportModal from './PromptImportModal.svelte'
-
   const tabs = [
     { id: 'api', label: 'API', icon: Key },
     { id: 'generation', label: 'Generation', icon: Cpu },
     { id: 'interface', label: 'Interface', icon: Palette },
-    { id: 'prompts', label: 'Prompts', icon: Scroll },
     { id: 'images', label: 'Images', icon: Image },
     { id: 'tts', label: 'TTS', icon: Volume2 },
     { id: 'advanced', label: 'Advanced', icon: SettingsIcon },
@@ -52,7 +47,6 @@
     | 'api'
     | 'generation'
     | 'interface'
-    | 'prompts'
     | 'images'
     | 'tts'
     | 'advanced'
@@ -67,8 +61,6 @@
       activeTab = ui.settingsTab as SettingsTab
     }
   })
-
-  let promptImportModalOpen = $state(false)
 
   let manualBodyEditorOpen = $state(false)
   let manualBodyEditorTitle = $state('Manual Request Body')
@@ -275,8 +267,6 @@
                       <GenerationTab onOpenManualBodyEditor={openManualBodyEditor} />
                     {:else if tab.id === 'interface'}
                       <InterfaceTab />
-                    {:else if tab.id === 'prompts'}
-                      <PromptsTab openImportModal={() => (promptImportModalOpen = true)} />
                     {:else if tab.id === 'images'}
                       <ImagesTab />
                     {:else if tab.id === 'tts'}
@@ -376,8 +366,6 @@
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
-
-<PromptImportModal open={promptImportModalOpen} onClose={() => (promptImportModalOpen = false)} />
 
 <style>
   .slide-in-right {

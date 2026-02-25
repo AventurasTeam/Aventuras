@@ -3,12 +3,15 @@
   import { ui } from '$lib/stores/ui.svelte'
   import { Plus, MapPin, Navigation, Pencil, ChevronDown, Save, X } from 'lucide-svelte'
   import type { Location } from '$lib/types'
+  import type { RuntimeVariable, RuntimeVarsMap } from '$lib/services/packs/types'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import { Textarea } from '$lib/components/ui/textarea'
   import { Label } from '$lib/components/ui/label'
   import { cn } from '$lib/utils/cn'
   import IconRow from '$lib/components/ui/icon-row.svelte'
+  import { database } from '$lib/services/database'
+  import RuntimeVariableDisplay from './RuntimeVariableDisplay.svelte'
 
   let showAddForm = $state(false)
   let newName = $state('')
@@ -16,6 +19,41 @@
   let editingId = $state<string | null>(null)
   let editName = $state('')
   let editDescription = $state('')
+
+  // Runtime variables
+  let runtimeVarDefs = $state<RuntimeVariable[]>([])
+  let editRuntimeVars = $state<RuntimeVarsMap>({})
+
+  $effect(() => {
+    if (story.currentStory) {
+      loadRuntimeVarDefs()
+    }
+  })
+
+  async function loadRuntimeVarDefs() {
+    if (!story.currentStory) return
+    try {
+      const packId = await database.getStoryPackId(story.currentStory.id)
+      if (packId) {
+        runtimeVarDefs = await database.getRuntimeVariablesByEntityType(packId, 'location')
+      } else {
+        runtimeVarDefs = []
+      }
+    } catch {
+      runtimeVarDefs = []
+    }
+  }
+
+  function updateEditRuntimeVar(
+    defId: string,
+    variableName: string,
+    value: string | number | null,
+  ) {
+    editRuntimeVars = {
+      ...editRuntimeVars,
+      [defId]: { variableName, v: value },
+    }
+  }
 
   function toggleCollapse(locationId: string) {
     const isCollapsed = ui.isEntityCollapsed(locationId)
@@ -47,20 +85,39 @@
     editingId = location.id
     editName = location.name
     editDescription = location.description ?? ''
+    // Initialize runtime vars from entity metadata
+    const rv = (location.metadata as Record<string, unknown> | null)?.runtimeVars
+    editRuntimeVars = rv && typeof rv === 'object' ? { ...(rv as RuntimeVarsMap) } : {}
   }
 
   function cancelEdit() {
     editingId = null
     editName = ''
     editDescription = ''
+    editRuntimeVars = {}
   }
 
   async function saveEdit(location: Location) {
     const name = editName.trim()
     if (!name) return
+
+    // Merge runtime vars into metadata
+    const existingMeta = (location.metadata as Record<string, unknown>) ?? {}
+    const hasRuntimeVarEdits = Object.keys(editRuntimeVars).length > 0
+    const updatedMetadata = hasRuntimeVarEdits
+      ? {
+          ...existingMeta,
+          runtimeVars: {
+            ...((existingMeta.runtimeVars as RuntimeVarsMap) ?? {}),
+            ...editRuntimeVars,
+          },
+        }
+      : location.metadata
+
     await story.updateLocation(location.id, {
       name,
       description: editDescription.trim() || null,
+      metadata: updatedMetadata,
     })
     cancelEdit()
   }
@@ -143,6 +200,19 @@
             />
           </div>
 
+          <!-- Runtime Variables (Edit - Current) -->
+          {#if runtimeVarDefs.length > 0}
+            <RuntimeVariableDisplay
+              definitions={runtimeVarDefs}
+              values={editRuntimeVars}
+              editMode={true}
+              onValueChange={(defId, value) => {
+                const def = runtimeVarDefs.find((d) => d.id === defId)
+                if (def) updateEditRuntimeVar(defId, def.variableName, value)
+              }}
+            />
+          {/if}
+
           <div class="border-accent-500/30 flex justify-end gap-2 border-t pt-2">
             <Button variant="text" size="sm" class="h-7 text-xs" onclick={cancelEdit}>
               Cancel
@@ -186,6 +256,26 @@
               {currentLocation.translatedDescription ?? currentLocation.description}
             </p>
           </div>
+
+          <!-- Runtime Variables (Non-pinned, collapsible - Current) -->
+          {#if runtimeVarDefs.length > 0}
+            <RuntimeVariableDisplay
+              definitions={runtimeVarDefs}
+              values={currentLocation.metadata?.runtimeVars as RuntimeVarsMap | undefined}
+              pinnedOnly={false}
+              class="mt-1.5"
+            />
+          {/if}
+        {/if}
+
+        <!-- Runtime Variables (Pinned, always visible - Current) -->
+        {#if runtimeVarDefs.length > 0}
+          <RuntimeVariableDisplay
+            definitions={runtimeVarDefs}
+            values={currentLocation.metadata?.runtimeVars as RuntimeVarsMap | undefined}
+            pinnedOnly={true}
+            class={isCollapsed ? 'mt-2' : 'mt-1'}
+          />
         {/if}
 
         <!-- Footer Actions -->
@@ -288,6 +378,19 @@
                 />
               </div>
 
+              <!-- Runtime Variables (Edit) -->
+              {#if runtimeVarDefs.length > 0}
+                <RuntimeVariableDisplay
+                  definitions={runtimeVarDefs}
+                  values={editRuntimeVars}
+                  editMode={true}
+                  onValueChange={(defId, value) => {
+                    const def = runtimeVarDefs.find((d) => d.id === defId)
+                    if (def) updateEditRuntimeVar(defId, def.variableName, value)
+                  }}
+                />
+              {/if}
+
               <div class="border-border flex justify-end gap-2 border-t pt-2">
                 <Button variant="text" size="sm" class="h-7 text-xs" onclick={cancelEdit}>
                   Cancel
@@ -347,6 +450,26 @@
                   {location.translatedDescription ?? location.description}
                 </p>
               </div>
+
+              <!-- Runtime Variables (Non-pinned, collapsible) -->
+              {#if runtimeVarDefs.length > 0}
+                <RuntimeVariableDisplay
+                  definitions={runtimeVarDefs}
+                  values={location.metadata?.runtimeVars as RuntimeVarsMap | undefined}
+                  pinnedOnly={false}
+                  class="mt-1.5"
+                />
+              {/if}
+            {/if}
+
+            <!-- Runtime Variables (Pinned, always visible) -->
+            {#if runtimeVarDefs.length > 0}
+              <RuntimeVariableDisplay
+                definitions={runtimeVarDefs}
+                values={location.metadata?.runtimeVars as RuntimeVarsMap | undefined}
+                pinnedOnly={true}
+                class={isCollapsed ? 'mt-2' : 'mt-1'}
+              />
             {/if}
 
             <!-- Footer Actions -->

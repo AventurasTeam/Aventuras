@@ -49,9 +49,26 @@ export function parseInlineMarkdown(text: string): string {
 }
 
 /**
- * Escape HTML special characters.
- * Used as fallback when markdown parsing fails.
+ * Render a description that may be HTML or Markdown.
+ * If content starts with an HTML tag, render directly (bypasses marked
+ * which mangles raw HTML with its breaks/paragraph wrapping).
+ * Otherwise parse as markdown.
  */
+export function renderDescription(text: string): string {
+  if (!text) return ''
+  if (text.trimStart().startsWith('<')) return text
+  return parseMarkdown(text)
+}
+
+/** Strip HTML/Markdown to plain text. Used for card previews where rich rendering isn't appropriate. */
+export function stripToPlainText(text: string): string {
+  if (!text) return ''
+  const html = renderDescription(text)
+  const div = document.createElement('div')
+  div.innerHTML = html
+  return div.textContent ?? ''
+}
+
 function escapeHtml(text: string): string {
   const div = document.createElement('div')
   div.textContent = text

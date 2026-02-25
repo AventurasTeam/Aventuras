@@ -1,5 +1,7 @@
+use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+mod migration_patch;
 mod sync;
 
 use sync::commands::{
@@ -183,17 +185,39 @@ pub fn run() {
             description: "branch_entity_snapshots",
             sql: include_str!("../migrations/029_branch_entity_snapshots.sql"),
             kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 30,
+            description: "preset_packs",
+            sql: include_str!("../migrations/030_preset_packs.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 31,
+            description: "pack_variable_extensions",
+            sql: include_str!("../migrations/031_pack_variable_extensions.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 32,
+            description: "runtime_variables",
+            sql: include_str!("../migrations/032_runtime_variables.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 33,
+            description: "vault_assistant_conversations",
+            sql: include_str!("../migrations/033_vault_assistant_conversations.sql"),
+            kind: MigrationKind::Up,
         }
     ];
 
-    #[cfg(debug_assertions)] // only enable instrumentation in development builds
-    let devtools = tauri_plugin_devtools::init();
+    let mut builder = tauri::Builder::default();
 
-    let mut builder = tauri::Builder::default();    
-
-    #[cfg(debug_assertions)]
+    #[cfg(all(debug_assertions, feature = "devtools"))]
+    // only enable instrumentation in development builds
     {
-        builder = builder.plugin(devtools);
+        builder = builder.plugin(tauri_plugin_devtools::init());
     }
 
     builder
@@ -204,6 +228,19 @@ pub fn run() {
                 .add_migrations("sqlite:aventura.db", migrations)
                 .build(),
         )
+        .setup(|app| {
+            let db_path = app
+                .path()
+                .app_data_dir()
+                .expect("failed to get app data dir")
+                .join("aventura.db");
+
+            if db_path.try_exists().expect("failed to check db path") {
+                tauri::async_runtime::block_on(migration_patch::apply_checksum_patch(&db_path));
+            }
+
+            Ok(())
+        })
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
