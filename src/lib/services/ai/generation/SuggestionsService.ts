@@ -40,30 +40,47 @@ export class SuggestionsService {
    * @param activeThreads - Active story beats/threads
    * @param lorebookEntries - Optional lorebook entries for world context
    * @param storyId - Story ID for ContextBuilder (optional, falls back to manual context)
+   * @param latestNarrativeResponse - Latest generated narration (optional, used when entries are stale)
    */
   async generateSuggestions(
     recentEntries: StoryEntry[],
     activeThreads: StoryBeat[],
     lorebookEntries?: Entry[],
     storyId?: string,
+    latestNarrativeResponse?: string,
   ): Promise<SuggestionsResult> {
     log('generateSuggestions called', {
       recentEntriesCount: recentEntries.length,
       activeThreadsCount: activeThreads.length,
       hasStoryId: !!storyId,
       lorebookEntriesCount: lorebookEntries?.length ?? 0,
+      hasLatestNarrativeResponse: !!latestNarrativeResponse?.trim(),
     })
 
     // Get the last few entries for context
     const contextConfig = getContextConfig()
     const lorebookConfig = getLorebookConfig()
     const lastEntries = recentEntries.slice(-contextConfig.recentEntriesForRetrieval)
-    const recentContent = lastEntries
+    let recentContent = lastEntries
       .map((e) => {
         const prefix = e.type === 'user_action' ? '[DIRECTION]' : '[NARRATIVE]'
         return `${prefix} ${e.content}`
       })
       .join('\n\n')
+
+    const latestNarrative = latestNarrativeResponse?.trim()
+    if (latestNarrative) {
+      const lastNarrativeInEntries = [...lastEntries]
+        .reverse()
+        .find((e) => e.type === 'narration')
+        ?.content?.trim()
+
+      if (lastNarrativeInEntries !== latestNarrative) {
+        recentContent = recentContent
+          ? `${recentContent}\n\n[NARRATIVE] ${latestNarrative}`
+          : `[NARRATIVE] ${latestNarrative}`
+      }
+    }
 
     // Format active threads
     const activeThreadsStr =
