@@ -152,15 +152,14 @@
     })
   }
 
-  function scrollToTop() {
+  async function scrollToTop() {
     ui.setScrollBreak(true)
     suppressScrollHandler = true
     anchorToTop(story.entries.length)
+    await tick()
+    performScroll(0)
     requestAnimationFrame(() => {
-      performScroll(0)
-      requestAnimationFrame(() => {
-        suppressScrollHandler = false
-      })
+      suppressScrollHandler = false
     })
   }
 
