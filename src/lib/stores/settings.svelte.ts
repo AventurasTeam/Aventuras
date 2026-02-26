@@ -18,6 +18,7 @@ import {
   getDefaultAdvancedSettings,
   getDefaultAdvancedSettingsForProvider,
 } from '$lib/services/ai/wizard/ScenarioService'
+import { grammarService } from '$lib/services/grammar'
 import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
 import type { ReasoningEffort } from '$lib/types'
 import { ui } from '$lib/stores/ui.svelte'
@@ -2754,6 +2755,7 @@ class SettingsStore {
 
     // Reset update settings
     this.updateSettings = getDefaultUpdateSettings()
+    await grammarService.clearCustomWords()
 
     // Save all to database
     await database.setSetting('default_model', this.apiSettings.defaultModel)

@@ -1,18 +1,120 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import { settings } from '$lib/stores/settings.svelte'
+  import { ui } from '$lib/stores/ui.svelte'
   import { database } from '$lib/services/database'
+  import { grammarService } from '$lib/services/grammar'
   import { THEMES } from '../../../../themes/themes'
   import { Switch } from '$lib/components/ui/switch'
   import { Label } from '$lib/components/ui/label'
   import * as Select from '$lib/components/ui/select'
   import { Button } from '$lib/components/ui/button'
+  import { Input } from '$lib/components/ui/input'
+  import { Badge } from '$lib/components/ui/badge'
+  import { ScrollArea } from '$lib/components/ui/scroll-area'
   import { Separator } from '$lib/components/ui/separator'
   import { getSupportedLanguages } from '$lib/services/ai/utils/TranslationService'
   import { updaterService } from '$lib/services/updater'
-  import { RefreshCw, Loader2, Languages } from 'lucide-svelte'
+  import { RefreshCw, Loader2, Languages, Plus, X, Trash2 } from 'lucide-svelte'
 
   let isCheckingUpdates = $state(false)
   let updateMessage = $state<string | null>(null)
+  let customDictionaryWords = $state<string[]>([])
+  let customDictionaryInput = $state('')
+  let loadingCustomDictionary = $state(false)
+  let customDictionaryBusy = $state(false)
+
+  onMount(() => {
+    void loadCustomDictionary()
+  })
+
+  async function loadCustomDictionary() {
+    loadingCustomDictionary = true
+    try {
+      customDictionaryWords = await grammarService.getCustomWords()
+    } catch (error) {
+      console.error('[Interface] Failed to load custom dictionary:', error)
+      ui.showToast('Failed to load custom dictionary', 'error')
+    } finally {
+      loadingCustomDictionary = false
+    }
+  }
+
+  async function handleAddCustomWord() {
+    const input = customDictionaryInput
+    if (!input.trim()) return
+
+    customDictionaryBusy = true
+    try {
+      const result = await grammarService.addWord(input)
+      if (result === 'added') {
+        customDictionaryInput = ''
+        customDictionaryWords = await grammarService.getCustomWords()
+        ui.showToast('Word added to custom dictionary', 'info')
+        return
+      }
+
+      if (result === 'exists') {
+        ui.showToast('Word is already in your custom dictionary', 'warning')
+        return
+      }
+
+      ui.showToast('Only single words can be added to the dictionary', 'warning')
+    } catch (error) {
+      console.error('[Interface] Failed to add custom dictionary word:', error)
+      ui.showToast('Failed to add word to dictionary', 'error')
+    } finally {
+      customDictionaryBusy = false
+    }
+  }
+
+  function handleCustomDictionaryInputKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    void handleAddCustomWord()
+  }
+
+  async function handleRemoveCustomWord(word: string) {
+    customDictionaryBusy = true
+    try {
+      const result = await grammarService.removeWord(word)
+      if (result === 'removed') {
+        customDictionaryWords = await grammarService.getCustomWords()
+        return
+      }
+
+      if (result === 'not_found') {
+        customDictionaryWords = await grammarService.getCustomWords()
+        ui.showToast('Word not found in custom dictionary', 'warning')
+        return
+      }
+
+      ui.showToast('Invalid dictionary word', 'warning')
+    } catch (error) {
+      console.error('[Interface] Failed to remove custom dictionary word:', error)
+      ui.showToast('Failed to remove word from dictionary', 'error')
+    } finally {
+      customDictionaryBusy = false
+    }
+  }
+
+  async function handleClearCustomDictionary() {
+    if (customDictionaryWords.length === 0) return
+    const confirmed = confirm('Clear all custom dictionary words? This cannot be undone.')
+    if (!confirmed) return
+
+    customDictionaryBusy = true
+    try {
+      await grammarService.clearCustomWords()
+      customDictionaryWords = []
+      ui.showToast('Custom dictionary cleared', 'info')
+    } catch (error) {
+      console.error('[Interface] Failed to clear custom dictionary:', error)
+      ui.showToast('Failed to clear custom dictionary', 'error')
+    } finally {
+      customDictionaryBusy = false
+    }
+  }
 
   async function handleCheckForUpdates() {
     isCheckingUpdates = true
@@ -112,6 +214,68 @@
       checked={settings.uiSettings.spellcheckEnabled}
       onCheckedChange={(v) => settings.setSpellcheckEnabled(v)}
     />
+  </div>
+
+  <!-- Custom Dictionary -->
+  <div class="space-y-3 rounded-lg border p-3">
+    <div class="flex flex-wrap items-start justify-between gap-2">
+      <div>
+        <Label>Custom Dictionary</Label>
+        <p class="text-muted-foreground text-xs">
+          Permanently ignore these spellings ({customDictionaryWords.length} words)
+        </p>
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        onclick={handleClearCustomDictionary}
+        disabled={customDictionaryBusy || customDictionaryWords.length === 0}
+      >
+        <Trash2 class="mr-1.5 h-3.5 w-3.5" />
+        Clear all
+      </Button>
+    </div>
+
+    <div class="flex gap-2">
+      <Input
+        placeholder="Add custom word..."
+        bind:value={customDictionaryInput}
+        onkeydown={handleCustomDictionaryInputKeydown}
+      />
+      <Button
+        variant="outline"
+        size="icon"
+        onclick={handleAddCustomWord}
+        disabled={customDictionaryBusy || !customDictionaryInput.trim()}
+        title="Add custom word"
+      >
+        <Plus class="h-4 w-4" />
+      </Button>
+    </div>
+
+    {#if loadingCustomDictionary}
+      <p class="text-muted-foreground text-xs">Loading dictionary...</p>
+    {:else if customDictionaryWords.length === 0}
+      <p class="text-muted-foreground text-xs">No custom words saved yet.</p>
+    {:else}
+      <ScrollArea class="h-24 w-full rounded-md border">
+        <div class="flex flex-wrap gap-1 p-2">
+          {#each customDictionaryWords as word (word)}
+            <Badge variant="secondary" class="gap-1 pr-1">
+              <span class="max-w-36 truncate">{word}</span>
+              <button
+                class="hover:text-destructive text-muted-foreground p-0 transition-colors"
+                onclick={() => handleRemoveCustomWord(word)}
+                title="Remove word"
+                disabled={customDictionaryBusy}
+              >
+                <X class="h-3 w-3" />
+              </button>
+            </Badge>
+          {/each}
+        </div>
+      </ScrollArea>
+    {/if}
   </div>
 
   <!-- Suggestions Toggle -->
