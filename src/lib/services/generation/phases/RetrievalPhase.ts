@@ -88,6 +88,7 @@ export class RetrievalPhase {
 
     let chapterContext: string | null = null
     let lorebookContext: string | null = null
+    let lorebookRetrievalResult: EntryRetrievalResult | null = null
     let timelineFillResult: TimelineFillResult | null = null
 
     const tasks: Promise<void>[] = []
@@ -126,6 +127,7 @@ export class RetrievalPhase {
             abortSignal,
           )
           .then((result) => {
+            lorebookRetrievalResult = result
             lorebookContext = result.contextBlock
           })
           .catch((err) => {
@@ -142,6 +144,7 @@ export class RetrievalPhase {
       return {
         chapterContext: null,
         lorebookContext: null,
+        lorebookRetrievalResult: null,
         timelineFillResult: null,
         combinedContext: null,
       }
@@ -151,6 +154,7 @@ export class RetrievalPhase {
     const result: RetrievalResult = {
       chapterContext,
       lorebookContext,
+      lorebookRetrievalResult,
       timelineFillResult,
       combinedContext,
     }

@@ -45,6 +45,7 @@
     type PipelineDependencies,
     type PipelineConfig,
     type GenerationContext,
+    type RetrievalResult,
     type BackgroundTaskDependencies,
     type BackgroundTaskInput,
     type PipelineUICallbacks,
@@ -501,6 +502,11 @@
         }
 
         handleEvent(event, eventState, eventCallbacks)
+
+        if (event.type === 'phase_complete' && event.phase === 'retrieval') {
+          const retrievalResult = event.result as RetrievalResult | undefined
+          ui.setLastLorebookRetrieval(retrievalResult?.lorebookRetrievalResult ?? null)
+        }
 
         if (event.type === 'narrative_chunk') {
           fullResponse += event.content
