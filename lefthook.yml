@@ -1,3 +1,9 @@
+pre-commit:
+  commands:
+    check_migrations:
+      glob: "src-tauri/migrations/*.sql"
+      run: node scripts/check_migrations.js {staged_files}
+
 pre-push:
   commands:
     lint:

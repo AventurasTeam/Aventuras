@@ -16,18 +16,22 @@
     Globe,
     MapPin,
     Tags,
+    Bot,
     FileCode,
     Download,
   } from 'lucide-svelte'
   import UniversalVaultCard from './UniversalVaultCard.svelte'
+  import InteractiveVaultAssistant from './InteractiveVaultAssistant.svelte'
   import VaultCharacterForm from './VaultCharacterForm.svelte'
   import VaultLorebookEditor from './VaultLorebookEditor.svelte'
   import VaultScenarioEditor from './VaultScenarioEditor.svelte'
+  import type { FocusedEntity } from '$lib/services/ai/vault/InteractiveVaultService'
   import DiscoveryModal from '$lib/components/discovery/DiscoveryModal.svelte'
   import TagFilter from './TagFilter.svelte'
   import TagManager from '$lib/components/tags/TagManager.svelte'
   import { tagStore } from '$lib/stores/tags.svelte'
   import { fade } from 'svelte/transition'
+  import { tick } from 'svelte'
   import PromptPackList from './prompts/PromptPackList.svelte'
   import PromptPackEditor from './prompts/PromptPackEditor.svelte'
   import ImportPreviewDialog from './prompts/ImportPreviewDialog.svelte'
@@ -83,6 +87,31 @@
 
   let showDiscoveryModal = $state(false)
   let discoveryMode = $state<VaultType>('character')
+  let showVaultAssistant = $state(false)
+  let assistantFocusedEntity = $state<FocusedEntity | null>(null)
+
+  async function openAssistantWithEntity(entity: FocusedEntity) {
+    showCharForm = false
+    editingCharacter = null
+    editingLorebook = null
+    editingScenario = null
+    // Two-phase wait to avoid a race with bits-ui's deferred scroll lock cleanup.
+    //
+    // When the entity editor unmounts, bits-ui schedules `resetBodyStyle()` via
+    // requestAnimationFrame — NOT synchronously and NOT in the same microtask as
+    // tick(). If we mount the assistant immediately after tick(), the assistant's
+    // useBodyScrollLock captures `initialBodyStyle` while the body still has the
+    // entity editor's pointer-events:none/overflow:hidden applied. Later when the
+    // assistant closes, `resetBodyStyle()` restores that dirty style, freezing the UI.
+    //
+    // Fix: tick() lets Svelte unmount the entity editor and schedule the rAF.
+    // The second await (a new rAF) runs AFTER the entity editor's rAF, which runs
+    // first (FIFO). By the time we set showVaultAssistant = true, the body is clean.
+    await tick()
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    assistantFocusedEntity = entity
+    showVaultAssistant = true
+  }
 
   // Configuration
   interface VaultSectionConfig {
@@ -142,7 +171,8 @@
       emptyIcon: MapPin,
       emptyTitle: 'No scenarios in vault yet',
       emptyDesc: 'Import character cards to extract scenario settings.',
-      // No create action for scenarios currently
+      createLabel: 'New Scenario',
+      createAction: handleCreateScenario,
       importLabel: 'Import Card',
       importAction: handleImportScenario,
     },
@@ -256,6 +286,24 @@
       },
     })
     editingLorebook = newLorebook
+  }
+
+  async function handleCreateScenario() {
+    const newScenario = await scenarioVault.add({
+      name: '',
+      description: null,
+      settingSeed: '',
+      npcs: [],
+      primaryCharacterName: '',
+      firstMessage: null,
+      alternateGreetings: [],
+      tags: [],
+      favorite: false,
+      source: 'manual',
+      originalFilename: null,
+      metadata: null,
+    })
+    editingScenario = newScenario
   }
 
   function handleImportScenario(event: Event) {
@@ -379,6 +427,23 @@
 
       <!-- Right Side Actions -->
       <div class="flex items-center gap-2">
+        <Button
+          icon={Bot}
+          label="Vault Assistant"
+          variant="outline"
+          size="sm"
+          class="h-9"
+          onclick={() => (showVaultAssistant = true)}
+        />
+
+        <Button
+          icon={Tags}
+          label="Tags"
+          variant="outline"
+          size="sm"
+          class="h-9"
+          onclick={() => (showTagManager = true)}
+        />
         {#if activeTab === 'prompts' && promptsViewState.mode === 'browsing'}
           <Button
             icon={Download}
@@ -616,17 +681,26 @@
       showCharForm = false
       editingCharacter = null
     }}
+    onOpenAssistant={openAssistantWithEntity}
   />
 {/if}
 
 <!-- Lorebook Editor Modal -->
 {#if editingLorebook}
-  <VaultLorebookEditor lorebook={editingLorebook} onClose={() => (editingLorebook = null)} />
+  <VaultLorebookEditor
+    lorebook={editingLorebook}
+    onClose={() => (editingLorebook = null)}
+    onOpenAssistant={openAssistantWithEntity}
+  />
 {/if}
 
 <!-- Scenario Editor Modal -->
 {#if editingScenario}
-  <VaultScenarioEditor scenario={editingScenario} onClose={() => (editingScenario = null)} />
+  <VaultScenarioEditor
+    scenario={editingScenario}
+    onClose={() => (editingScenario = null)}
+    onOpenAssistant={openAssistantWithEntity}
+  />
 {/if}
 
 <!-- Discovery Modal -->
@@ -641,6 +715,16 @@
   <TagManager open={showTagManager} onOpenChange={(v) => (showTagManager = v)} />
 {/if}
 
+<!-- Vault Assistant Overlay -->
+{#if showVaultAssistant}
+  <InteractiveVaultAssistant
+    focusedEntity={assistantFocusedEntity}
+    onClose={() => {
+      showVaultAssistant = false
+      assistantFocusedEntity = null
+    }}
+  />
+{/if}
 <!-- Import Preview Dialog -->
 <ImportPreviewDialog
   open={importDialogOpen}

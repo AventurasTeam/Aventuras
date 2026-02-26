@@ -731,6 +731,9 @@ export interface UISettings {
   disableActionPrefixes: boolean
   showReasoning: boolean
   sidebarWidth: number
+  autoScroll: boolean
+  showScrollToTop: boolean
+  showScrollToBottom: boolean
 }
 
 export interface UpdateSettings {
@@ -973,4 +976,14 @@ export interface VaultTag {
   type: VaultType
   color: string
   createdAt: number
+}
+
+export interface VaultConversation {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  messages: string // JSON blob — AI SDK ModelMessage[]
+  chatMessages: string // JSON blob — ChatMessage[] (UI display state with diff cards, images, reasoning)
+  pendingChanges: string // JSON blob — VaultPendingChange[] (full list including status)
 }

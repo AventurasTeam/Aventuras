@@ -884,19 +884,33 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
   },
 
-  // === Interactive Lorebook (external template) ===
+  // === Interactive Vault (external template) ===
   {
-    name: 'userMessage',
+    name: 'characterCount',
     type: 'text',
     category: 'runtime',
-    description: 'User message for interactive lorebook chat',
+    description: 'Number of characters in the vault',
     required: false,
   },
   {
-    name: 'conversationHistory',
+    name: 'lorebookCount',
     type: 'text',
     category: 'runtime',
-    description: 'Conversation history for interactive lorebook',
+    description: 'Number of lorebooks in the vault',
+    required: false,
+  },
+  {
+    name: 'totalEntryCount',
+    type: 'text',
+    category: 'runtime',
+    description: 'Total number of lorebook entries in the vault',
+    required: false,
+  },
+  {
+    name: 'scenarioCount',
+    type: 'text',
+    category: 'runtime',
+    description: 'Number of scenarios in the vault',
     required: false,
   },
 

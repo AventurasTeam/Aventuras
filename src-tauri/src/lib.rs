@@ -1,5 +1,7 @@
+use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+mod migration_patch;
 mod sync;
 
 use sync::commands::{
@@ -202,11 +204,18 @@ pub fn run() {
             sql: include_str!("../migrations/032_runtime_variables.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 33,
+            description: "vault_assistant_conversations",
+            sql: include_str!("../migrations/033_vault_assistant_conversations.sql"),
+            kind: MigrationKind::Up,
+        }
     ];
 
     let mut builder = tauri::Builder::default();
 
-    #[cfg(all(debug_assertions, feature = "devtools"))] // only enable instrumentation in development builds
+    #[cfg(all(debug_assertions, feature = "devtools"))]
+    // only enable instrumentation in development builds
     {
         builder = builder.plugin(tauri_plugin_devtools::init());
     }
@@ -219,6 +228,19 @@ pub fn run() {
                 .add_migrations("sqlite:aventura.db", migrations)
                 .build(),
         )
+        .setup(|app| {
+            let db_path = app
+                .path()
+                .app_data_dir()
+                .expect("failed to get app data dir")
+                .join("aventura.db");
+
+            if db_path.try_exists().expect("failed to check db path") {
+                tauri::async_runtime::block_on(migration_patch::apply_checksum_patch(&db_path));
+            }
+
+            Ok(())
+        })
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())

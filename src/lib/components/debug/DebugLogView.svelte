@@ -64,6 +64,8 @@
 
   const jsonCache = new SvelteMap<string, string>()
 
+  const MAX_DISPLAY_CHARS = 200_000
+
   function formatJson(entry: DebugLogEntry): string {
     const cacheKey = `${entry.id}-${renderNewlines}`
     const cached = jsonCache.get(cacheKey)
@@ -73,6 +75,11 @@
       let json = JSON.stringify(entry.data, null, 2)
       if (renderNewlines) {
         json = json.replace(/\\n/g, '\n')
+      }
+      if (json.length > MAX_DISPLAY_CHARS) {
+        json =
+          json.slice(0, MAX_DISPLAY_CHARS) +
+          `\n\n... [truncated — ${json.length.toLocaleString()} total chars] ...`
       }
       if (jsonCache.size > 200) {
         const firstKey = jsonCache.keys().next().value
@@ -259,7 +266,7 @@
       </div>
     {:else}
       <div class="space-y-4 pb-4">
-        {#each pagedLogs as group (group.request?.id)}
+        {#each pagedLogs as group, i (`${group.request?.id ?? group.response?.id ?? i}-${i}`)}
           <div class="border-border bg-card overflow-hidden rounded-lg border">
             <!-- Request -->
             {#if group.request}

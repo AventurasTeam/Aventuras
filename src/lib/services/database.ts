@@ -22,6 +22,7 @@ import type {
   VaultScenario,
   VaultTag,
   VaultType,
+  VaultConversation,
   VisualDescriptors,
   WorldStateSnapshot,
 } from '$lib/types'
@@ -3107,6 +3108,91 @@ class DatabaseService {
     await processTable('scenario_vault', 'scenario')
 
     console.log('[Database] Tag migration complete')
+  }
+
+  // Vault assistant conversation operations
+
+  async createVaultConversation(conversation: VaultConversation): Promise<void> {
+    const db = await this.getDb()
+    await db.execute(
+      `INSERT INTO vault_assistant_conversations (id, title, created_at, updated_at, messages, chat_messages, pending_changes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        conversation.id,
+        conversation.title,
+        conversation.createdAt,
+        conversation.updatedAt,
+        conversation.messages,
+        conversation.chatMessages,
+        conversation.pendingChanges,
+      ],
+    )
+  }
+
+  async listVaultConversations(): Promise<VaultConversation[]> {
+    const db = await this.getDb()
+    const results = await db.select<any[]>(
+      'SELECT * FROM vault_assistant_conversations ORDER BY updated_at DESC',
+    )
+    return results.map(this.mapVaultConversation)
+  }
+
+  async loadVaultConversation(id: string): Promise<VaultConversation | null> {
+    const db = await this.getDb()
+    const results = await db.select<any[]>(
+      'SELECT * FROM vault_assistant_conversations WHERE id = ?',
+      [id],
+    )
+    return results.length > 0 ? this.mapVaultConversation(results[0]) : null
+  }
+
+  async saveVaultConversation(
+    id: string,
+    updates: { title?: string; messages?: string; chatMessages?: string; pendingChanges?: string },
+  ): Promise<void> {
+    const db = await this.getDb()
+    const setClauses: string[] = ['updated_at = ?']
+    const values: unknown[] = [new Date().toISOString()]
+
+    if (updates.title !== undefined) {
+      setClauses.push('title = ?')
+      values.push(updates.title)
+    }
+    if (updates.messages !== undefined) {
+      setClauses.push('messages = ?')
+      values.push(updates.messages)
+    }
+    if (updates.chatMessages !== undefined) {
+      setClauses.push('chat_messages = ?')
+      values.push(updates.chatMessages)
+    }
+    if (updates.pendingChanges !== undefined) {
+      setClauses.push('pending_changes = ?')
+      values.push(updates.pendingChanges)
+    }
+
+    values.push(id)
+    await db.execute(
+      `UPDATE vault_assistant_conversations SET ${setClauses.join(', ')} WHERE id = ?`,
+      values,
+    )
+  }
+
+  async deleteVaultConversation(id: string): Promise<void> {
+    const db = await this.getDb()
+    await db.execute('DELETE FROM vault_assistant_conversations WHERE id = ?', [id])
+  }
+
+  private mapVaultConversation(row: any): VaultConversation {
+    return {
+      id: row.id,
+      title: row.title,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      messages: row.messages,
+      chatMessages: row.chat_messages ?? '[]',
+      pendingChanges: row.pending_changes ?? '[]',
+    }
   }
 
   // ===== Preset Pack Operations =====

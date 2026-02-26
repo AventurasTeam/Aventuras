@@ -38,3 +38,5 @@ local-ip-address = "0.6"
 uuid = { version = "1", features = ["v4"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tauri-plugin-devtools = { version = "2", optional = true }
+sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio"] }
+hex = "0.4.3"

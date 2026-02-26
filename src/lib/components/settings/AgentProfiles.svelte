@@ -140,10 +140,10 @@
       description: 'Active context search',
     },
     {
-      id: 'interactiveLorebook',
-      label: 'Interactive Lore',
+      id: 'interactiveVault',
+      label: 'Vault Assistant',
       icon: BookOpen,
-      description: 'Assists creating entries',
+      description: 'AI vault assistant',
     },
     // Wizard tasks
     {
@@ -259,7 +259,7 @@
     // Agentic
     loreManagement: 'agentic',
     agenticRetrieval: 'agentic',
-    interactiveLorebook: 'agentic',
+    interactiveVault: 'agentic',
     // Wizard
     'wizard:settingExpansion': 'wizard',
     'wizard:settingRefinement': 'wizard',

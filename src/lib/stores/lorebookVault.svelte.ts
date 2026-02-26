@@ -41,11 +41,13 @@ class LorebookVaultStore {
     }
   }
 
-  async add(input: Omit<VaultLorebook, 'id' | 'createdAt' | 'updatedAt'>): Promise<VaultLorebook> {
+  async add(
+    input: Omit<VaultLorebook, 'id' | 'createdAt' | 'updatedAt'> & { id?: string },
+  ): Promise<VaultLorebook> {
     const now = Date.now()
     const lorebook: VaultLorebook = {
       ...input,
-      id: crypto.randomUUID(),
+      id: input.id || crypto.randomUUID(),
       createdAt: now,
       updatedAt: now,
     }

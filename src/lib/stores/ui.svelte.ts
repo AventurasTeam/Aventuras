@@ -1489,11 +1489,35 @@ class UIStore {
 
   // Debug log methods
 
+  /** Max IPC payload size for external window events (~500KB). */
+  private static readonly DEBUG_IPC_LIMIT = 500_000
+
+  /**
+   * Returns a version of the entry safe to send over Tauri IPC.
+   * If the serialized size exceeds the limit, replaces data with a truncation notice.
+   */
+  private safeIpcEntry(entry: DebugLogEntry): object {
+    try {
+      const json = JSON.stringify(entry)
+      if (json.length <= UIStore.DEBUG_IPC_LIMIT) return JSON.parse(json)
+      return {
+        ...entry,
+        data: { _truncated: true, _originalSize: json.length, _note: 'Payload too large for IPC' },
+      }
+    } catch {
+      return { ...entry, data: { _serializeError: true } }
+    }
+  }
+
   /**
    * Add a request log entry. Returns the entry ID for pairing with response.
    */
   addDebugRequest(serviceName: string, data: Record<string, unknown>, debugId?: string): string {
-    const id = debugId || `debug-${++this.debugLogIdCounter}-${Date.now()}`
+    let id = debugId || `debug-${++this.debugLogIdCounter}-${Date.now()}`
+    // Multi-step streamText reuses the same debugId for each fetch call — deduplicate
+    if (debugId && this.debugLogs.some((e) => e.id === id)) {
+      id = `${debugId}-${++this.debugLogIdCounter}`
+    }
     const entry: DebugLogEntry = {
       id,
       timestamp: Date.now(),
@@ -1510,7 +1534,7 @@ class UIStore {
     // Notify external window if active
     if (this.debugWindowActive) {
       console.log('[UI] Emitting debug-log-added', entry.id)
-      emit('debug-log-added', JSON.parse(JSON.stringify(entry))).catch((err) => {
+      emit('debug-log-added', this.safeIpcEntry(entry)).catch((err) => {
         console.warn('[UI] Failed to emit debug-log-added:', err)
       })
     }
@@ -1548,7 +1572,7 @@ class UIStore {
     // Notify external window if active
     if (this.debugWindowActive) {
       console.log('[UI] Emitting debug-log-added', entry.id)
-      emit('debug-log-added', JSON.parse(JSON.stringify(entry))).catch((err) => {
+      emit('debug-log-added', this.safeIpcEntry(entry)).catch((err) => {
         console.warn('[UI] Failed to emit debug-log-added:', err)
       })
     }
@@ -1652,7 +1676,7 @@ class UIStore {
       this.unlistenRequestLogs = await listen('request-initial-debug-logs', () => {
         console.log('[UI] Received request-initial-debug-logs')
         emit('initial-debug-logs', {
-          logs: JSON.parse(JSON.stringify(this.debugLogs)),
+          logs: this.debugLogs.map((e) => this.safeIpcEntry(e) as DebugLogEntry),
           renderNewlines: this.debugRenderNewlines,
         }).catch((err) => {
           console.warn('[UI] Failed to emit initial-debug-logs:', err)
@@ -1790,6 +1814,10 @@ class UIStore {
    */
   setSettingsTab(tab: string) {
     this.settingsActiveTab = tab
+  }
+
+  set settingsTab(v: string) {
+    this.settingsActiveTab = v
   }
 }
 

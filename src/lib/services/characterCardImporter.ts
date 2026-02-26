@@ -74,7 +74,12 @@ export function extractCharacterCardFromPng(data: ArrayBuffer | Uint8Array): str
           const base64String = new TextDecoder('latin1').decode(textData)
 
           try {
-            const jsonString = atob(base64String)
+            const binaryString = atob(base64String)
+            const bytes = new Uint8Array(binaryString.length)
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i)
+            }
+            const jsonString = new TextDecoder('utf-8').decode(bytes)
             log('Found character data in PNG tEXt chunk')
             return jsonString
           } catch (e) {

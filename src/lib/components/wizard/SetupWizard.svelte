@@ -166,7 +166,7 @@
           customGenre={wizard.narrative.customGenre}
           onSettingSeedChange={(v) => (wizard.setting.settingSeed = v)}
           onGuidanceChange={(v) => (wizard.setting.settingElaborationGuidance = v)}
-          onCustomGenreChange={(v) => (wizard.narrative.customGenre = v)}
+          onCustomGenreChange={(v) => wizard.narrative.setCustomGenre(v)}
           onUseAsIs={() => wizard.setting.useSettingAsIs()}
           onExpandSetting={() =>
             wizard.setting.expandSetting(

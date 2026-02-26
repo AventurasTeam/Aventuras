@@ -1,6 +1,7 @@
 <script lang="ts">
   import { grammarService, type GrammarIssue } from '$lib/services/grammar'
   import { settings } from '$lib/stores/settings.svelte'
+  import { ui } from '$lib/stores/ui.svelte'
   import { AlertCircle, Check, X, Plus } from 'lucide-svelte'
   import { slide } from 'svelte/transition'
 
@@ -64,10 +65,22 @@
   }
 
   async function handleAddToDictionary(issue: GrammarIssue) {
-    await grammarService.addWord(issue.problemText)
-    // Re-lint to remove the issue
-    issues = await grammarService.lint(text)
-    expandedIssue = null
+    const result = await grammarService.addWord(issue.problemText)
+    if (result === 'added') {
+      // Re-lint to remove the issue
+      issues = await grammarService.lint(text)
+      expandedIssue = null
+      return
+    }
+
+    if (result === 'exists') {
+      ui.showToast('Word is already in your custom dictionary', 'warning')
+      issues = await grammarService.lint(text)
+      expandedIssue = null
+      return
+    }
+
+    ui.showToast('Only single words can be added to the dictionary', 'warning')
   }
 
   function handleDismiss(index: number) {

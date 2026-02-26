@@ -42,15 +42,28 @@ export {
 } from './agents'
 
 // Tool factories
-export { createLorebookTools, createFandomTools, createRetrievalTools } from './tools'
+export {
+  createLoreManagementTools,
+  createInteractiveVaultLorebookTools,
+  createFandomTools,
+  createRetrievalTools,
+} from './tools'
 
 // Types
 export type { ProviderType, APIProfile } from '$lib/types'
 export type { ProviderConfig, ServiceModelDefaults } from './providers'
 export type { ResolvedAgentConfig, CreateAgentOptions, AgentResult } from './agents'
 export type {
-  LorebookToolContext,
-  LorebookTools,
+  LorebookEntryToolContext,
+  StoryToolContext,
+  VaultLorebookToolContext,
+  ChapterInfo,
+  VaultLorebookPendingChangeSchema,
+  LorebookEntryTools,
+  StoryTools,
+  VaultLorebookTools,
+  LoreManagementTools,
+  InteractiveVaultLorebookTools,
   FandomToolContext,
   FandomTools,
   RetrievalToolContext,

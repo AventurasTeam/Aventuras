@@ -9,9 +9,13 @@ import type { Entry, VaultLorebookEntry } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '../core/config'
 import { createAgentFromPreset, extractTerminalToolResult, stopOnTerminalTool } from '../sdk/agents'
-import { createLorebookTools, type LorebookToolContext } from '../sdk/tools'
-import type { PendingChangeSchema, FinishLoreManagementSchema } from '../sdk/schemas/lorebook'
+import { createLoreManagementTools } from '../sdk/tools'
+import type {
+  FinishLoreManagementSchema,
+  LorebookEntryPendingChangeSchema,
+} from '../sdk/schemas/lorebook'
 import { ContextBuilder } from '$lib/services/context'
+import type { LoreManagementToolContext } from '../sdk/tools/lorebook'
 
 const log = createLogger('LoreManagement')
 
@@ -109,7 +113,7 @@ export class LoreManagementService extends BaseAIService {
     })
 
     // Track pending changes - in autonomous mode, we auto-approve everything
-    const pendingChanges: PendingChangeSchema[] = []
+    const pendingChanges: LorebookEntryPendingChangeSchema[] = []
     const createdEntries: Entry[] = []
     const updatedEntries: Entry[] = []
     let changeIdCounter = 0
@@ -122,7 +126,7 @@ export class LoreManagementService extends BaseAIService {
       : undefined
 
     // Create tool context with chapter querying
-    const toolContext: LorebookToolContext = {
+    const toolContext: LoreManagementToolContext = {
       entries: vaultEntries,
       onPendingChange: (change) => {
         // Auto-approve in autonomous mode
@@ -136,7 +140,7 @@ export class LoreManagementService extends BaseAIService {
     }
 
     // Create tools
-    const tools = createLorebookTools(toolContext)
+    const tools = createLoreManagementTools(toolContext)
 
     // Build entry summaries for user prompt (use 0-based indices to match tool expectations)
     const entrySummary =

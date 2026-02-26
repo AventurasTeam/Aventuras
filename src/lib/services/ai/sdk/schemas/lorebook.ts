@@ -59,10 +59,11 @@ export type PendingChangeTypeSchema = z.infer<typeof pendingChangeTypeSchema>
  * Pending change structure for the approval workflow.
  * Represents a proposed change to a lorebook entry.
  */
-export const pendingChangeSchema = z.object({
+export const lorebookEntryPendingChangeSchema = z.object({
   id: z.string().describe('Unique identifier for this pending change'),
   type: pendingChangeTypeSchema.describe('Type of change being proposed'),
   toolCallId: z.string().describe('ID of the tool call that created this change'),
+  lorebookId: z.string().optional().describe('ID of the lorebook this entry belongs to'),
   entry: vaultLorebookEntrySchema.optional().describe('New entry for create/merge operations'),
   index: z.number().optional().describe('Target entry index for update/delete operations'),
   indices: z.array(z.number()).optional().describe('Entry indices for merge operations'),
@@ -78,7 +79,23 @@ export const pendingChangeSchema = z.object({
   status: z.enum(['pending', 'approved', 'rejected']).describe('Approval status'),
 })
 
-export type PendingChangeSchema = z.infer<typeof pendingChangeSchema>
+export type LorebookEntryPendingChangeSchema = z.infer<typeof lorebookEntryPendingChangeSchema>
+
+/**
+ * Pending change structure for vault-level lorebook operations.
+ */
+export const vaultLorebookPendingChangeSchema = z.object({
+  id: z.string().describe('Unique identifier for this pending change'),
+  lorebookId: z.string().describe('ID of the lorebook'),
+  type: z.enum(['create', 'update', 'delete']).describe('Type of change'),
+  toolCallId: z.string().describe('ID of the tool call'),
+  name: z.string().optional().describe('Lorebook name'),
+  description: z.string().nullable().optional().describe('Lorebook description'),
+  tags: z.array(z.string()).optional().describe('Lorebook tags'),
+  status: z.enum(['pending', 'approved', 'rejected']).describe('Approval status'),
+})
+
+export type VaultLorebookPendingChangeSchema = z.infer<typeof vaultLorebookPendingChangeSchema>
 
 /**
  * Tool result schemas for lorebook operations.
@@ -104,7 +121,7 @@ export const entryReadResultSchema = z.object({
 
 export const entryChangeResultSchema = z.object({
   success: z.boolean(),
-  pendingChange: pendingChangeSchema.optional(),
+  pendingChange: lorebookEntryPendingChangeSchema.optional(),
   error: z.string().optional(),
 })
 
