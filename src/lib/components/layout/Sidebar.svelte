@@ -109,10 +109,12 @@
   </Tabs.Root>
 
   <!-- Bottom Context Navigation -->
-  <div class="border-border bg-muted flex flex-shrink-0 items-center gap-1 border-t p-2">
+  <div
+    class="bottom-context-nav border-border bg-muted flex flex-shrink-0 items-center gap-1 border-t p-2"
+  >
     <Button
       variant="ghost"
-      class="text-muted-foreground hover:bg-muted/40 hover:text-foreground h-auto flex-1 flex-col gap-1 py-2 text-xs {ui.activePanel ===
+      class="text-muted-foreground hover:bg-muted/40 hover:text-foreground h-auto min-h-12 flex-1 flex-col gap-1 py-2 text-xs {ui.activePanel ===
       'story'
         ? '!bg-primary/10 !text-primary'
         : ''}"
@@ -124,7 +126,7 @@
     </Button>
     <Button
       variant="ghost"
-      class="text-muted-foreground hover:bg-muted/40 hover:text-foreground h-auto flex-1 flex-col gap-1 py-2 text-xs {ui.activePanel ===
+      class="text-muted-foreground hover:bg-muted/40 hover:text-foreground h-auto min-h-12 flex-1 flex-col gap-1 py-2 text-xs {ui.activePanel ===
       'lorebook'
         ? '!bg-primary/10 !text-primary'
         : ''}"
@@ -136,7 +138,7 @@
     </Button>
     <Button
       variant="ghost"
-      class="text-muted-foreground hover:bg-muted/40 hover:text-foreground h-auto flex-1 flex-col gap-1 py-2 text-xs {ui.activePanel ===
+      class="text-muted-foreground hover:bg-muted/40 hover:text-foreground h-auto min-h-12 flex-1 flex-col gap-1 py-2 text-xs {ui.activePanel ===
       'memory'
         ? '!bg-primary/10 !text-primary'
         : ''}"
@@ -148,3 +150,15 @@
     </Button>
   </div>
 </aside>
+
+<style>
+  .bottom-context-nav {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  @media (min-width: 769px) {
+    .bottom-context-nav {
+      padding-bottom: 0.5rem;
+    }
+  }
+</style>
