@@ -9,7 +9,7 @@
   import type { VaultPendingChange } from '$lib/services/ai/sdk/schemas/vault'
   import type { VaultConversation } from '$lib/types'
   import { database } from '$lib/services/database'
-  import { settings } from '$lib/stores/settings.svelte'
+
   import { characterVault } from '$lib/stores/characterVault.svelte'
   import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
   import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
@@ -180,8 +180,7 @@
 
   function initializeService() {
     try {
-      const presetId = settings.getServicePresetId('interactiveVault')
-      service = new InteractiveVaultService(presetId)
+      service = new InteractiveVaultService('interactiveVault')
 
       const allLorebooks = lorebookVault.items
       service.initialize(

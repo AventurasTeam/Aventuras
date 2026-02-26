@@ -9,6 +9,7 @@
 import type { VaultCharacter, VaultLorebook, VaultLorebookEntry, VaultScenario } from '$lib/types'
 import type { ModelMessage, TextPart, ToolSet } from 'ai'
 import { settings } from '$lib/stores/settings.svelte'
+import { BaseAIService } from '../BaseAIService'
 import { characterVault } from '$lib/stores/characterVault.svelte'
 import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
 import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
@@ -124,9 +125,8 @@ export interface SendMessageResult {
  * Service that provides interactive vault management via chat.
  * Composes all vault tool sets and handles streaming AI conversation.
  */
-export class InteractiveVaultService {
+export class InteractiveVaultService extends BaseAIService {
   private initialized: boolean = false
-  private presetId: string
   private fandomService: FandomService
   private conversationHistory: ModelMessage[] = []
   private systemPrompt: string = ''
@@ -142,8 +142,8 @@ export class InteractiveVaultService {
    */
   readonly generatedPortraitIds: Map<string, string> = new Map()
 
-  constructor(presetId: string) {
-    this.presetId = presetId
+  constructor(serviceId: string) {
+    super(serviceId)
     this.fandomService = new FandomService()
   }
 

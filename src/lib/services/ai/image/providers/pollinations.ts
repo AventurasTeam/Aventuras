@@ -60,7 +60,12 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
       // Response is the image directly
       const blob = await response.blob()
       const buffer = await blob.arrayBuffer()
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)))
+      const bytes = new Uint8Array(buffer)
+      let binary = ''
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i])
+      }
+      const base64 = btoa(binary)
 
       return { base64 }
     },

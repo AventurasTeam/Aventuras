@@ -55,7 +55,12 @@ export function createZhipuProvider(config: ImageProviderConfig): ImageProvider 
         const imgResponse = await fetch(imageData.url)
         const blob = await imgResponse.blob()
         const buffer = await blob.arrayBuffer()
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)))
+        const bytes = new Uint8Array(buffer)
+        let binary = ''
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i])
+        }
+        const base64 = btoa(binary)
         return { base64 }
       }
 
