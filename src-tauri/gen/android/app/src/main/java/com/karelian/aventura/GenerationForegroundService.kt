@@ -42,6 +42,7 @@ class GenerationForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        createWakeLock()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -98,14 +99,14 @@ class GenerationForegroundService : Service() {
 
     // -- Wake Lock -------------------------------------------------------------
 
-    private fun acquireWakeLock() {
-        if (wakeLock == null) {
-            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
-        }
+    private fun createWakeLock() {
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
+    }
 
-        if (wakeLock?.isHeld == false) {
-            wakeLock?.acquire(WAKE_LOCK_TIMEOUT_MS)
+    private fun acquireWakeLock() {
+        wakeLock?.let {
+            if (!it.isHeld) it.acquire(WAKE_LOCK_TIMEOUT_MS)
         }
     }
 
