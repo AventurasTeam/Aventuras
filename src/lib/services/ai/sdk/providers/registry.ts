@@ -98,7 +98,7 @@ export function createProviderFromProfile(profile: APIProfile, presetId: string,
       }
       return createOpenAICompatible({
         name: 'openai-compatible',
-        apiKey: profile.apiKey,
+        apiKey: profile.apiKey ?? "openai-compatible",
         baseURL,
         fetch,
       })
