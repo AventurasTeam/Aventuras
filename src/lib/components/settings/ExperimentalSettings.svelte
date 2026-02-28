@@ -219,6 +219,7 @@
         }
       } catch (e) {
         console.warn('[ExperimentalSettings] Notification permission check failed:', e)
+        return
       }
     } else {
       // Turning off notifications cascades to disable preview (single write)
