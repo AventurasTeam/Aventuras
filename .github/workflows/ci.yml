@@ -120,17 +120,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Initialize Android
-        env:
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: npx tauri android init
-
-      - name: Add Android permissions
-        run: |
-          MANIFEST="src-tauri/gen/android/app/src/main/AndroidManifest.xml"
-          sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <!-- Camera permission for QR code scanning -->\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />|' "$MANIFEST"
-
       - name: Generate app icons
         run: npx tauri icon sun2022.png
 

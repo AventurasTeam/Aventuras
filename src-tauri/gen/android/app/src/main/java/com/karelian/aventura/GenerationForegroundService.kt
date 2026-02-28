@@ -99,9 +99,13 @@ class GenerationForegroundService : Service() {
     // -- Wake Lock -------------------------------------------------------------
 
     private fun acquireWakeLock() {
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply {
-            acquire(WAKE_LOCK_TIMEOUT_MS)
+        if (wakeLock == null) {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
+        }
+
+        if (wakeLock?.isHeld == false) {
+            wakeLock?.acquire(WAKE_LOCK_TIMEOUT_MS)
         }
     }
 
