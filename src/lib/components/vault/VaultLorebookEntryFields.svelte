@@ -109,7 +109,7 @@
   <div class="bg-muted/30 space-y-4 rounded-lg border p-4">
     <h4 class="text-sm font-medium">Injection Settings</h4>
 
-    <div class="grid grid-cols-1 items-center gap-4 md:grid-cols-2">
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
       <div class="space-y-2 {changed('injectionMode')}">
         <Label class="text-xs">Injection Mode</Label>
         <Select
