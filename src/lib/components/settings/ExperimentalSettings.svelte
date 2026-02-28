@@ -24,6 +24,9 @@
     Play,
     Copy,
     Upload,
+    Smartphone,
+    Bell,
+    Eye,
   } from 'lucide-svelte'
   import { Switch } from '$lib/components/ui/switch'
   import { Label } from '$lib/components/ui/label'
@@ -32,6 +35,7 @@
   import { Separator } from '$lib/components/ui/separator'
   import * as Dialog from '$lib/components/ui/dialog'
   import { database } from '$lib/services/database'
+  import { isAndroid } from '$lib/utils/platform'
 
   let isBackingUp = $state(false)
   let backupResult = $state<{ success: boolean; message: string } | null>(null)
@@ -179,6 +183,50 @@
 
   async function handleSnapshotIntervalChange(value: number) {
     await settings.updateExperimentalFeatures({ autoSnapshotInterval: value })
+  }
+
+  // -- Android background generation handlers --
+
+  const showAndroidSection = isAndroid()
+
+  async function handleBackgroundGenerationToggle(checked: boolean) {
+    await settings.updateExperimentalFeatures({ backgroundGeneration: checked })
+    // Turning off master toggle cascades to disable sub-toggles
+    if (!checked) {
+      await settings.updateExperimentalFeatures({
+        generationNotifications: false,
+        notificationPreview: false,
+      })
+    }
+  }
+
+  async function handleGenerationNotificationsToggle(checked: boolean) {
+    if (checked) {
+      // Request notification permission on Android 13+
+      try {
+        const { isPermissionGranted, requestPermission } =
+          await import('@tauri-apps/plugin-notification')
+        let granted = await isPermissionGranted()
+        if (!granted) {
+          const result = await requestPermission()
+          granted = result === 'granted'
+        }
+        if (!granted) {
+          // Permission denied — don't enable the toggle
+          return
+        }
+      } catch (e) {
+        console.warn('[ExperimentalSettings] Notification permission check failed:', e)
+      }
+    } else {
+      // Turning off notifications cascades to disable preview
+      await settings.updateExperimentalFeatures({ notificationPreview: false })
+    }
+    await settings.updateExperimentalFeatures({ generationNotifications: checked })
+  }
+
+  async function handleNotificationPreviewToggle(checked: boolean) {
+    await settings.updateExperimentalFeatures({ notificationPreview: checked })
   }
 
   async function handleResetAll() {
@@ -383,6 +431,103 @@
   </div>
 
   <Separator />
+
+  <!-- Android Background Generation (only shown on Android) -->
+  {#if showAndroidSection}
+    <div class="space-y-5">
+      <div class="flex items-center gap-2">
+        <Smartphone class="text-muted-foreground h-4 w-4" />
+        <Label class="text-sm font-medium">Android Background Generation</Label>
+      </div>
+
+      <!-- Background Generation toggle -->
+      <div class="flex flex-row items-center justify-between">
+        <div class="space-y-0.5">
+          <div class="flex items-center gap-2">
+            <Smartphone class="text-muted-foreground h-4 w-4" />
+            <Label>Background Generation</Label>
+          </div>
+          <p class="text-muted-foreground text-xs">
+            Keeps the app alive during text generation when you switch apps or lock your screen.
+            Uses a foreground service and wake lock — may use slightly more battery.
+          </p>
+          {#if settings.experimentalFeatures.backgroundGeneration}
+            <p class="pt-1 text-xs font-medium text-amber-500">
+              Active — generation will continue when the app is backgrounded.
+            </p>
+          {/if}
+        </div>
+        <Switch
+          checked={settings.experimentalFeatures.backgroundGeneration}
+          onCheckedChange={handleBackgroundGenerationToggle}
+        />
+      </div>
+
+      <!-- Generation Notifications toggle -->
+      <div
+        class="flex flex-row items-center justify-between {!settings.experimentalFeatures
+          .backgroundGeneration
+          ? 'opacity-50'
+          : ''}"
+      >
+        <div class="space-y-0.5">
+          <div class="flex items-center gap-2">
+            <Bell class="text-muted-foreground h-4 w-4" />
+            <Label>Completion Notifications</Label>
+          </div>
+          <p class="text-muted-foreground text-xs">
+            Send a notification when text generation finishes while the app is in the background.
+          </p>
+          {#if !settings.experimentalFeatures.backgroundGeneration}
+            <p class="text-muted-foreground pt-1 text-xs italic">
+              Requires Background Generation to be enabled.
+            </p>
+          {/if}
+        </div>
+        <Switch
+          checked={settings.experimentalFeatures.generationNotifications}
+          onCheckedChange={handleGenerationNotificationsToggle}
+          disabled={!settings.experimentalFeatures.backgroundGeneration}
+        />
+      </div>
+
+      <!-- Notification Preview toggle -->
+      <div
+        class="flex flex-row items-center justify-between {!settings.experimentalFeatures
+          .generationNotifications
+          ? 'opacity-50'
+          : ''}"
+      >
+        <div class="space-y-0.5">
+          <div class="flex items-center gap-2">
+            <Eye class="text-muted-foreground h-4 w-4" />
+            <Label>Include Preview</Label>
+          </div>
+          <p class="text-muted-foreground text-xs">
+            Show the first few lines of generated text in the notification body.
+          </p>
+          {#if !settings.experimentalFeatures.generationNotifications}
+            <p class="text-muted-foreground pt-1 text-xs italic">
+              Requires Completion Notifications to be enabled.
+            </p>
+          {/if}
+        </div>
+        <Switch
+          checked={settings.experimentalFeatures.notificationPreview}
+          onCheckedChange={handleNotificationPreviewToggle}
+          disabled={!settings.experimentalFeatures.generationNotifications}
+        />
+      </div>
+
+      <p class="text-muted-foreground text-xs italic">
+        Note: Some phone manufacturers (Xiaomi, Huawei, Samsung, etc.) have aggressive battery
+        optimization that may still interrupt generation. You may need to exempt Aventura from
+        battery optimization in your device settings.
+      </p>
+    </div>
+
+    <Separator />
+  {/if}
 
   <!-- Reset Button -->
   <div class="flex items-center justify-between">

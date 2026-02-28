@@ -10,7 +10,14 @@
   const BACK_EXIT_WINDOW_MS = 2000
 
   onMount(() => {
-    if (!/Android/i.test(navigator.userAgent)) return
+    // Start tracking visibility changes for background generation detection
+    ui.initVisibilityTracking()
+
+    if (!/Android/i.test(navigator.userAgent)) {
+      return () => {
+        ui.destroyVisibilityTracking()
+      }
+    }
 
     let lastBackAttemptAt = 0
 
@@ -57,6 +64,7 @@
     }
 
     return () => {
+      ui.destroyVisibilityTracking()
       delete (window as any).__aventuraBackHandler
     }
   })

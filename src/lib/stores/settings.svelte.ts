@@ -718,6 +718,9 @@ export function getDefaultExperimentalFeatures(): ExperimentalFeatures {
     rollbackOnDelete: false,
     lightweightBranches: false,
     autoSnapshotInterval: 20,
+    backgroundGeneration: false,
+    generationNotifications: false,
+    notificationPreview: false,
   }
 }
 

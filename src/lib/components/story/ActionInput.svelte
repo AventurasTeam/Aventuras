@@ -35,6 +35,8 @@
     type ClassificationCompleteEvent,
   } from '$lib/services/events'
   import { isTouchDevice } from '$lib/utils/swipe'
+  import { isAndroid } from '$lib/utils/platform'
+  import '$lib/types/android.d.ts'
   import {
     GenerationPipeline,
     retryService,
@@ -346,6 +348,34 @@
   // Core Generation
   // ============================================================================
 
+  /**
+   * Send an OS notification when generation completes/fails while the app is backgrounded.
+   * Only called on Android when the generationNotifications experimental feature is enabled.
+   */
+  async function sendGenerationNotification(responseText: string, success: boolean) {
+    try {
+      const { sendNotification, isPermissionGranted } =
+        await import('@tauri-apps/plugin-notification')
+      const permitted = await isPermissionGranted()
+      if (!permitted) return
+
+      if (success) {
+        const body =
+          settings.experimentalFeatures.notificationPreview && responseText.length > 0
+            ? responseText.slice(0, 120) + (responseText.length > 120 ? '…' : '')
+            : 'Tap to return to your story.'
+        sendNotification({ title: 'Story generation complete', body })
+      } else {
+        sendNotification({
+          title: 'Story generation failed',
+          body: 'Tap to return and retry.',
+        })
+      }
+    } catch (e) {
+      console.warn('[ActionInput] Failed to send notification:', e)
+    }
+  }
+
   async function generateResponse(
     userActionEntryId: string,
     userActionContent: string,
@@ -380,6 +410,17 @@
         () => story.characters,
       )
     }
+
+    // Android: start foreground service to keep process alive when backgrounded
+    const useBackgroundService = isAndroid() && settings.experimentalFeatures.backgroundGeneration
+    if (useBackgroundService) {
+      try {
+        window.AndroidBridge?.startGenerationService()
+      } catch (e) {
+        console.warn('[ActionInput] Failed to start generation foreground service:', e)
+      }
+    }
+    ui.resetBackgroundedFlag()
 
     try {
       const worldState = {
@@ -651,11 +692,24 @@
       coordinator
         .runBackgroundTasks(input)
         .catch((err) => log('Background tasks failed (non-fatal)', err))
+
+      // Android: notify user that generation completed while app was backgrounded
+      if (
+        ui.wasBackgroundedDuringGeneration &&
+        ui.isAppBackgrounded &&
+        settings.experimentalFeatures.generationNotifications &&
+        fullResponse.trim()
+      ) {
+        sendGenerationNotification(fullResponse, true)
+      }
     } catch (error) {
       if (stopRequested || (error instanceof Error && error.name === 'AbortError')) return
       console.error('[ActionInput] Generation error:', error)
-      const errorMessage =
+      const baseMessage =
         error instanceof Error ? error.message : 'Failed to generate response. Please try again.'
+      const errorMessage = ui.wasBackgroundedDuringGeneration
+        ? `Generation may have been interrupted while the app was in the background. ${baseMessage}`
+        : baseMessage
       const errorEntry = await story.addEntry('system', `Generation failed: ${errorMessage}`)
       ui.setGenerationError({
         message: errorMessage,
@@ -663,12 +717,30 @@
         userActionEntryId,
         timestamp: Date.now(),
       })
+
+      // Android: notify user that generation failed while backgrounded
+      if (
+        ui.wasBackgroundedDuringGeneration &&
+        ui.isAppBackgrounded &&
+        settings.experimentalFeatures.generationNotifications
+      ) {
+        sendGenerationNotification('', false)
+      }
     } finally {
       ui.endStreaming()
       ui.setGenerating(false)
       ui.setGenerationStatus('')
       activeAbortController = null
       stopRequested = false
+
+      // Android: always stop the foreground service when generation ends
+      if (useBackgroundService) {
+        try {
+          window.AndroidBridge?.stopGenerationService()
+        } catch (e) {
+          console.warn('[ActionInput] Failed to stop generation foreground service:', e)
+        }
+      }
     }
   }
 

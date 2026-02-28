@@ -869,6 +869,12 @@ export interface ExperimentalFeatures {
   lightweightBranches: boolean
   /** Number of entries between automatic world state snapshots (for fast rollback) */
   autoSnapshotInterval: number
+  /** Android: Keep generation alive when app is backgrounded or screen is locked */
+  backgroundGeneration: boolean
+  /** Android: Send OS notification when generation completes while app is backgrounded */
+  generationNotifications: boolean
+  /** Android: Include preview of generated text in the completion notification */
+  notificationPreview: boolean
 }
 
 // ===== World State Delta Tracking (Phase 1) =====

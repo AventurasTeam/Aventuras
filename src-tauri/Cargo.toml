@@ -27,6 +27,7 @@ serde_json = "1"
 tauri-plugin-updater = "2.9.0"
 tauri-plugin-process = "2.3.1"
 tauri-plugin-http = "2"
+tauri-plugin-notification = "2"
 
 # Local network sync
 axum = "0.8"
