@@ -115,9 +115,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate app icons
-        run: npx tauri icon sun2022.png
-
       - name: Build Android APK
         env:
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
