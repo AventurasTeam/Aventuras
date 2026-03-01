@@ -86,7 +86,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       reasoningExtraction: 'think-tag',
     },
     fallbackModels: [
-      'moonshotai/kimi-k2.5',
+      'z-ai/glm-5',
       'stepfun/step-3.5-flash:free',
       'google/gemini-3-flash-preview',
       'deepseek/deepseek-v3.2',
@@ -94,7 +94,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     ],
     services: {
       narrative: {
-        model: 'moonshotai/kimi-k2.5',
+        model: 'z-ai/glm-5',
         temperature: 1.0,
         maxTokens: 8192,
         reasoningEffort: 'high',
@@ -118,7 +118,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
         reasoningEffort: 'off',
       },
       agentic: {
-        model: 'moonshotai/kimi-k2.5',
+        model: 'z-ai/glm-5',
         temperature: 1.0,
         maxTokens: 8192,
         reasoningEffort: 'high',
@@ -157,13 +157,13 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     },
     fallbackModels: [
       'deepseek/deepseek-v3.2',
-      'moonshotai/kimi-k2.5:thinking',
+      'zai-org/glm-5:thinking',
       'stepfun-ai/step-3.5-flash:thinking',
       'openai/gpt-oss-120b',
     ],
     services: {
       narrative: {
-        model: 'moonshotai/kimi-k2.5:thinking',
+        model: 'zai-org/glm-5:thinking',
         temperature: 0.8,
         maxTokens: 8192,
         reasoningEffort: 'high',
@@ -187,7 +187,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
         reasoningEffort: 'off',
       },
       agentic: {
-        model: 'moonshotai/kimi-k2.5:thinking',
+        model: 'zai-org/glm-5:thinking',
         temperature: 1.0,
         maxTokens: 8192,
         reasoningEffort: 'high',
