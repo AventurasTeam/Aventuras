@@ -20,7 +20,7 @@ fn is_nvidia_wayland() -> bool {
             .unwrap_or(false);
     let is_nvidia = std::path::Path::new("/proc/driver/nvidia").exists()
         || std::fs::read_to_string("/proc/modules")
-            .map(|m| m.contains("nvidia"))
+            .map(|m| m.lines().any(|line| line.starts_with("nvidia")))
             .unwrap_or(false);
     is_wayland && is_nvidia
 }
