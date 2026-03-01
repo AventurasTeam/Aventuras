@@ -51,7 +51,7 @@ export const AI_CONFIG = {
   /** Memory/chapter system defaults */
   memory: {
     /** Default token threshold for chapter creation */
-    defaultTokenThreshold: 16384,
+    defaultTokenThreshold: 16000,
     /** Default chapter buffer (entries protected from summarization) */
     defaultChapterBuffer: 10,
   },
