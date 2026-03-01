@@ -2,7 +2,7 @@
 
 # Android environment must come from the host machine/CI.
 # Prefer ANDROID_HOME, but allow ANDROID_SDK_ROOT as a fallback.
-if [ -z "${ANDROID_HOME:-}" ] && [ -n "${ANDROID_SDK_ROOT:-}" ]; then
+if [[ -z "${ANDROID_HOME:-}" && -n "${ANDROID_SDK_ROOT:-}" ]]; then
     export ANDROID_HOME="$ANDROID_SDK_ROOT"
 fi
 
