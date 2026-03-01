@@ -305,12 +305,12 @@
           Restore from Backup
         {/if}
       </Button>
-      {#if backupResult}
-        <p class="text-xs {backupResult.success ? 'text-green-500' : 'text-destructive'}">
-          {backupResult.message}
-        </p>
-      {/if}
     </div>
+    {#if backupResult}
+      <p class="text-xs {backupResult.success ? 'text-green-500' : 'text-destructive'}">
+        {backupResult.message}
+      </p>
+    {/if}
     {#if restoreError}
       <div class="bg-destructive/10 border-destructive/30 rounded-md border p-3">
         <p class="text-destructive text-xs">{restoreError}</p>
