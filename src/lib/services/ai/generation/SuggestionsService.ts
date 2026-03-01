@@ -3,12 +3,14 @@
  *
  * Generates story direction suggestions for creative writing mode.
  * Uses the Vercel AI SDK for structured output with Zod schema validation.
+ *
+ * Prompt generation flows through ContextBuilder + Liquid templates.
  */
 
 import type { StoryEntry, StoryBeat, Entry } from '$lib/types'
-import { promptService, type PromptContext } from '$lib/services/prompts'
+import { BaseAIService } from '../BaseAIService'
+import { ContextBuilder } from '$lib/services/context'
 import { createLogger, getContextConfig, getLorebookConfig } from '../core/config'
-import { generateStructured } from '../sdk/generate'
 import { suggestionsResultSchema, type SuggestionsResult } from '../sdk/schemas/suggestions'
 
 const log = createLogger('Suggestions')
@@ -19,15 +21,13 @@ const log = createLogger('Suggestions')
  * This service has been refactored to use the Vercel AI SDK with Zod schemas
  * for automatic output validation. The constructor no longer requires a provider.
  */
-export class SuggestionsService {
-  private presetId: string
-
+export class SuggestionsService extends BaseAIService {
   /**
    * Create a new SuggestionsService.
-   * @param presetId - The preset ID to use for generation settings (default: 'suggestions')
+   * @param serviceId - The service ID used to resolve the preset dynamically
    */
-  constructor(presetId: string = 'suggestions') {
-    this.presetId = presetId
+  constructor(serviceId: string) {
+    super(serviceId)
   }
 
   /**
@@ -37,34 +37,51 @@ export class SuggestionsService {
    * @param recentEntries - Recent story entries for context
    * @param activeThreads - Active story beats/threads
    * @param lorebookEntries - Optional lorebook entries for world context
-   * @param promptContext - Complete story context for macro expansion
+   * @param storyId - Story ID for ContextBuilder (optional, falls back to manual context)
+   * @param latestNarrativeResponse - Latest generated narration (optional, used when entries are stale)
    */
   async generateSuggestions(
     recentEntries: StoryEntry[],
     activeThreads: StoryBeat[],
     lorebookEntries?: Entry[],
-    promptContext?: PromptContext,
+    storyId?: string,
+    latestNarrativeResponse?: string,
   ): Promise<SuggestionsResult> {
     log('generateSuggestions called', {
       recentEntriesCount: recentEntries.length,
       activeThreadsCount: activeThreads.length,
-      hasPromptContext: !!promptContext,
+      hasStoryId: !!storyId,
       lorebookEntriesCount: lorebookEntries?.length ?? 0,
+      hasLatestNarrativeResponse: !!latestNarrativeResponse?.trim(),
     })
 
     // Get the last few entries for context
     const contextConfig = getContextConfig()
     const lorebookConfig = getLorebookConfig()
     const lastEntries = recentEntries.slice(-contextConfig.recentEntriesForRetrieval)
-    const lastContent = lastEntries
+    let recentContent = lastEntries
       .map((e) => {
         const prefix = e.type === 'user_action' ? '[DIRECTION]' : '[NARRATIVE]'
         return `${prefix} ${e.content}`
       })
       .join('\n\n')
 
+    const latestNarrative = latestNarrativeResponse?.trim()
+    if (latestNarrative) {
+      const lastNarrativeInEntries = [...lastEntries]
+        .reverse()
+        .find((e) => e.type === 'narration')
+        ?.content?.trim()
+
+      if (lastNarrativeInEntries !== latestNarrative) {
+        recentContent = recentContent
+          ? `${recentContent}\n\n[NARRATIVE] ${latestNarrative}`
+          : `[NARRATIVE] ${latestNarrative}`
+      }
+    }
+
     // Format active threads
-    const threadsContext =
+    const activeThreadsStr =
       activeThreads.length > 0
         ? activeThreads
             .map((t) => `• ${t.title}${t.description ? `: ${t.description}` : ''}`)
@@ -87,37 +104,38 @@ export class SuggestionsService {
       lorebookContext = `\n## Lorebook/World Elements\nThe following characters, locations, and concepts exist in this world and can be incorporated into suggestions:\n${entryDescriptions}`
     }
 
-    // Use provided context or build minimal fallback
-    const context: PromptContext = promptContext ?? {
-      mode: 'creative-writing',
-      pov: 'third',
-      tense: 'past',
-      protagonistName: 'the protagonist',
+    // Create ContextBuilder -- use forStory when storyId available
+    let ctx: ContextBuilder
+    if (storyId) {
+      ctx = await ContextBuilder.forStory(storyId)
+    } else {
+      ctx = new ContextBuilder()
+      ctx.add({
+        mode: 'creative-writing',
+        pov: 'third',
+        tense: 'past',
+        protagonistName: 'the protagonist',
+      })
     }
 
-    // Build genre string from context if available
-    const genreStr = context.genre ? `## Genre: ${context.genre}\n` : ''
+    // Build genre string from context
+    const ctxData = ctx.getContext()
+    const genreStr = ctxData.genre ? `## Genre: ${ctxData.genre}\n` : ''
 
-    // Get prompts from PromptService
-    const system = promptService.renderPrompt('suggestions', context)
-    const prompt = promptService.renderUserPrompt('suggestions', context, {
-      recentContent: lastContent,
-      activeThreads: threadsContext,
+    // Add runtime variables for template rendering
+    ctx.add({
+      recentContent,
+      activeThreads: activeThreadsStr,
       genre: genreStr,
       lorebookContext,
     })
 
+    // Render through the suggestions template
+    const { system, user: prompt } = await ctx.render('suggestions')
+
     try {
       // Use SDK's generateStructured - all boilerplate handled automatically
-      const result = await generateStructured(
-        {
-          presetId: this.presetId,
-          schema: suggestionsResultSchema,
-          system,
-          prompt,
-        },
-        'suggestions',
-      )
+      const result = await this.generate(suggestionsResultSchema, system, prompt, 'suggestions')
 
       log('Suggestions generated:', result.suggestions.length)
       return result

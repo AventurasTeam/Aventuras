@@ -11,15 +11,16 @@ const currentVersion = pkg.version
 function bumpVersion(version, type) {
   const [v, pre] = version.split('-')
   const parts = v.split('.').map(Number)
+  const increment = pre ? 0 : 1
 
   if (type === 'major') {
-    return `${parts[0] + 1}.0.0`
+    return `${parts[0] + increment}.0.0`
   }
   if (type === 'minor') {
-    return `${parts[0]}.${parts[1] + 1}.0`
+    return `${parts[0]}.${parts[1] + increment}.0`
   }
   if (type === 'patch') {
-    return `${parts[0]}.${parts[1]}.${parts[2] + 1}`
+    return `${parts[0]}.${parts[1]}.${parts[2] + increment}`
   }
   if (type === 'prerelease') {
     if (!pre) return `${v}-pre.1`
@@ -32,7 +33,7 @@ function bumpVersion(version, type) {
 
 const inputArg = process.argv[2]
 const newVersion = bumpVersion(currentVersion, inputArg)
-const REMOTE = 'https://github.com/unkarelian/Aventuras.git'
+const REMOTE = 'https://github.com/AventurasTeam/Aventuras.git'
 
 // Files to update manually
 const manualFiles = [

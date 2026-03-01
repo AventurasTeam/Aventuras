@@ -3,17 +3,20 @@
  *
  * Generates action choices for adventure mode gameplay.
  * Uses the Vercel AI SDK for structured output with Zod schema validation.
+ *
+ * Prompt generation flows through ContextBuilder + Liquid templates.
  */
 
 import type { StoryEntry, Entry, Character, Location, Item, StoryBeat } from '$lib/types'
-import { promptService, type PromptContext, type POV } from '$lib/services/prompts'
+import { BaseAIService } from '../BaseAIService'
+import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '../core/config'
-import { generateStructured } from '../sdk/generate'
 import { actionChoicesResultSchema, type ActionChoice } from '../sdk/schemas/actionchoices'
 
 const log = createLogger('ActionChoices')
 
 export interface ActionChoicesContext {
+  storyId?: string
   narrativeResponse: string
   userAction: string
   recentEntries: StoryEntry[]
@@ -32,11 +35,9 @@ export interface ActionChoicesContext {
 /**
  * Service that generates action choices for adventure mode.
  */
-export class ActionChoicesService {
-  private presetId: string
-
-  constructor(presetId: string = 'actionChoices') {
-    this.presetId = presetId
+export class ActionChoicesService extends BaseAIService {
+  constructor(serviceId: string) {
+    super(serviceId)
   }
 
   /**
@@ -47,15 +48,8 @@ export class ActionChoicesService {
       narrativeLength: context.narrativeResponse.length,
       recentEntriesCount: context.recentEntries.length,
       protagonist: context.protagonistName,
+      hasStoryId: !!context.storyId,
     })
-
-    // Build prompt context
-    const promptContext: PromptContext = {
-      mode: context.mode as 'adventure' | 'creative-writing',
-      pov: context.pov as POV,
-      tense: context.tense as 'past' | 'present',
-      protagonistName: context.protagonistName,
-    }
 
     // Format recent context
     const recentContext = context.recentEntries
@@ -130,9 +124,22 @@ export class ActionChoicesService {
     // Length instruction
     const lengthInstruction = 'Keep each choice concise but specific - typically 5-15 words.'
 
-    // Build prompts
-    const system = promptService.renderPrompt('action-choices', promptContext)
-    const prompt = promptService.renderUserPrompt('action-choices', promptContext, {
+    // Create ContextBuilder -- use forStory when storyId available
+    let ctx: ContextBuilder
+    if (context.storyId) {
+      ctx = await ContextBuilder.forStory(context.storyId)
+    } else {
+      ctx = new ContextBuilder()
+      ctx.add({
+        mode: context.mode,
+        pov: context.pov,
+        tense: context.tense,
+        protagonistName: context.protagonistName,
+      })
+    }
+
+    // Add runtime variables for template rendering
+    ctx.add({
       narrativeResponse: context.narrativeResponse,
       recentContext,
       currentLocation,
@@ -146,14 +153,14 @@ export class ActionChoicesService {
       lengthInstruction,
     })
 
+    // Render through the action-choices template
+    const { system, user: prompt } = await ctx.render('action-choices')
+
     try {
-      const result = await generateStructured(
-        {
-          presetId: this.presetId,
-          schema: actionChoicesResultSchema,
-          system,
-          prompt,
-        },
+      const result = await this.generate(
+        actionChoicesResultSchema,
+        system,
+        prompt,
         'action-choices',
       )
 

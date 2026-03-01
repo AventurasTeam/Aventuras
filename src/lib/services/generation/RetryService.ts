@@ -188,8 +188,12 @@ export class RetryService {
     callbacks.lockRetryInProgress()
 
     try {
-      // Clear activation data
-      callbacks.clearActivationData()
+      // Restore activation data (lorebook stickiness) from backup
+      if (backup.activationData && Object.keys(backup.activationData).length > 0) {
+        callbacks.restoreActivationData(backup.activationData, backup.storyPosition)
+      } else {
+        callbacks.clearActivationData()
+      }
 
       // Delete entries from the backup position onward
       log('Deleting entries from position', backup.entryCountBeforeAction)

@@ -17,17 +17,17 @@
     GitBranch,
     Bookmark,
     Volume2,
+    Image as ImageIcon,
   } from 'lucide-svelte'
+  import { aiService } from '$lib/services/ai'
   import { aiTTSService } from '$lib/services/ai/utils/TTSService'
   import { parseMarkdown } from '$lib/utils/markdown'
   import { sanitizeTextForTTS } from '$lib/utils/htmlSanitize'
   import {
-    processContentWithImages,
-    processVisualProseWithImages,
-    processContentWithInlineImages,
-    processVisualProseWithInlineImages,
+    processStoryContent,
+    processVisualProseStoryContent,
+    getPlacedImageIds,
   } from '$lib/services/image'
-  import { database } from '$lib/services/database'
   import {
     eventBus,
     type ImageReadyEvent,
@@ -36,7 +36,7 @@
     type TTSQueuedEvent,
   } from '$lib/services/events'
   import { inlineImageService, retryImageGeneration } from '$lib/services/ai/image'
-  import { promptService } from '$lib/services/prompts'
+  import { database } from '$lib/services/database'
   import { onMount } from 'svelte'
   import ReasoningBlock from './ReasoningBlock.svelte'
   import { countTokens } from '$lib/services/tokenizer'
@@ -49,6 +49,7 @@
     DEFAULT_FALLBACK_STYLE_PROMPT,
   } from '$lib/services/ai/image/constants'
   import { SvelteSet } from 'svelte/reactivity'
+  import { escapeRegex, extractSentenceAt, expandRangeBidirectional } from '$lib/utils/text'
 
   let { entry }: { entry: StoryEntry } = $props()
 
@@ -75,9 +76,6 @@
   // Check if Visual Prose mode is enabled for this story
   const visualProseMode = $derived(story.currentStory?.settings?.visualProseMode ?? false)
 
-  // Check if Inline Image mode is enabled for this story
-  const inlineImageMode = $derived(story.currentStory?.settings?.imageGenerationMode === 'inline')
-
   // Check if this is the latest narration entry (for retry button)
   const isLatestNarration = $derived.by(() => {
     if (entry.type !== 'narration') return false
@@ -95,6 +93,16 @@
       !ui.isGenerating &&
       !ui.lastGenerationError,
   )
+
+  /**
+   * Dismiss/delete this error entry from the story.
+   */
+  async function handleDismissError() {
+    if (ui.lastGenerationError?.errorEntryId === entry.id) {
+      ui.clearGenerationError()
+    }
+    await story.deleteEntry(entry.id)
+  }
 
   /**
    * Retry generation for this error entry.
@@ -183,7 +191,9 @@
     const interval = setInterval(() => {
       now = Date.now()
     }, 1000)
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+    }
   })
 
   // Helper to get which branch a checkpoint belongs to (by checking its last entry's branchId)
@@ -266,11 +276,6 @@
     }
   }
 
-  // Escape special regex characters (used in TTS sanitization)
-  function escapeRegex(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  }
-
   // Handle creating missing inline images (stuck/lost records)
   async function handleCreateMissingImage() {
     if (!story.currentStory) return
@@ -297,6 +302,261 @@
   // Track images currently being regenerated (for loading overlay)
   let regeneratingImageIds = $state<Set<string>>(new Set())
 
+  // Derive orphaned images (agentic images whose sourceText is not found or placed in content)
+  const orphanedImages = $derived.by(() => {
+    const content = entry.translatedContent ?? entry.content
+    if (!content) return []
+
+    // Get the set of IDs that the rendering engine will actually place as links
+    const placedImageIds = getPlacedImageIds(content, embeddedImages)
+
+    return embeddedImages.filter((img) => {
+      // Inline images are handled differently via tags
+      if (img.generationMode === 'inline') return false
+      // If status is not complete/generating/pending, don't show it
+      if (img.status === 'failed') return false
+
+      // An image is orphaned if the rendering engine didn't find a place for it
+      return !placedImageIds.has(img.id)
+    })
+  })
+
+  // State for drag and drop
+  let draggingImageId = $state<string | null>(null)
+  let lastDropTarget = $state<HTMLElement | null>(null)
+
+  // Mobile linking state
+  let selectedOrphanId = $state<string | null>(null)
+
+  function clearDropTarget() {
+    if (lastDropTarget) {
+      lastDropTarget.classList.remove('drop-target')
+      lastDropTarget = null
+    }
+  }
+
+  /**
+   * Link an orphaned image to a specific piece of text or paragraph.
+   */
+  async function linkImageToText(
+    imageId: string,
+    targetElement: HTMLElement,
+    clientX?: number,
+    clientY?: number,
+  ) {
+    // Try sentence-level extraction if we have coordinates
+    let newSourceText =
+      clientX !== undefined && clientY !== undefined
+        ? (getSentenceAtPoint(targetElement, clientX, clientY)?.text ?? '')
+        : ''
+
+    // Fallback to full element text
+    if (!newSourceText) {
+      newSourceText = targetElement.innerText.trim()
+    }
+    if (!newSourceText) return
+
+    try {
+      await database.updateEmbeddedImage(imageId, { sourceText: newSourceText })
+      await loadEmbeddedImages()
+      selectedOrphanId = null
+      draggingImageId = null
+      clearDropTarget()
+    } catch (err) {
+      console.error('[StoryEntry] Failed to link image:', err)
+      ui.showToast('Failed to link image', 'error')
+    }
+  }
+
+  /**
+   * Find the character boundaries around an offset that don't contain existing links.
+   */
+  function getParagraphBoundaries(
+    container: HTMLElement,
+    offset: number,
+  ): { boundaryStart: number; boundaryEnd: number } {
+    const fullText = container.innerText
+    let boundaryStart = 0
+    let boundaryEnd = fullText.length
+
+    // Find all existing links in this paragraph
+    const links = Array.from(container.querySelectorAll('.embedded-image-link'))
+
+    for (const link of links) {
+      const linkText = (link as HTMLElement).innerText
+      // Find the position of this link's text in the full text
+      const linkPos = fullText.indexOf(linkText)
+      if (linkPos === -1) continue
+
+      const linkEnd = linkPos + linkText.length
+
+      if (linkEnd <= offset && linkEnd > boundaryStart) {
+        boundaryStart = linkEnd
+      } else if (linkPos >= offset && linkPos < boundaryEnd) {
+        boundaryEnd = linkPos
+      }
+    }
+
+    return { boundaryStart, boundaryEnd }
+  }
+
+  /**
+   * Helper to get the character offset of a point within an HTMLElement's text content.
+   */
+  function getCharOffsetInElement(
+    container: HTMLElement,
+    targetNode: Node,
+    offsetInNode: number,
+  ): number {
+    let offset = 0
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+
+    let currentNode = walker.nextNode()
+    while (currentNode && currentNode !== targetNode) {
+      offset += currentNode.textContent?.length ?? 0
+      currentNode = walker.nextNode()
+    }
+
+    return offset + (targetNode.nodeType === Node.TEXT_NODE ? offsetInNode : 0)
+  }
+
+  /**
+   * Helper to create a DOM Range from character offsets within an element.
+   */
+  function getRangeFromOffsets(container: HTMLElement, start: number, end: number): Range {
+    const range = document.createRange()
+    let currentOffset = 0
+    let startNode: Node | null = null
+    let startOffsetInNode = 0
+    let endNode: Node | null = null
+    let endOffsetInNode = 0
+
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+    let node = walker.nextNode()
+
+    while (node) {
+      const length = node.textContent?.length ?? 0
+      if (!startNode && currentOffset + length >= start) {
+        startNode = node
+        startOffsetInNode = start - currentOffset
+      }
+      if (!endNode && currentOffset + length >= end) {
+        endNode = node
+        endOffsetInNode = end - currentOffset
+      }
+      currentOffset += length
+      node = walker.nextNode()
+    }
+
+    if (startNode) range.setStart(startNode, startOffsetInNode)
+    if (endNode) range.setEnd(endNode, endOffsetInNode)
+    else if (startNode) range.setEndAfter(container.lastChild!)
+
+    return range
+  }
+
+  /**
+   * Extract the expanded sentence range at a screen coordinate within a container element.
+   */
+  function getSentenceAtPoint(
+    container: HTMLElement,
+    clientX: number,
+    clientY: number,
+  ): { text: string; start: number; end: number } | null {
+    const range = document.caretRangeFromPoint(clientX, clientY)
+    if (!range || !container.contains(range.startContainer)) return null
+    const fullText = container.innerText
+    const offset = getCharOffsetInElement(container, range.startContainer, range.startOffset)
+    const { start, end } = extractSentenceAt(fullText, offset)
+    const { boundaryStart, boundaryEnd } = getParagraphBoundaries(container, offset)
+    return expandRangeBidirectional(fullText, start, end, 20, boundaryStart, boundaryEnd)
+  }
+
+  // State for visual sentence highlight
+  let sentenceHighlightRects = $state<DOMRect[]>([])
+  let containerRect = $state<DOMRect | null>(null)
+  let storyTextContainer = $state<HTMLElement | null>(null)
+  let dragOverRafId: number | null = null
+  let lastX = 0
+  let lastY = 0
+
+  function updateSentenceHighlight(p: HTMLElement, clientX: number, clientY: number) {
+    dragOverRafId = null
+    if (!storyTextContainer) return
+    const sentence = getSentenceAtPoint(p, clientX, clientY)
+    if (sentence) {
+      const sentenceRange = getRangeFromOffsets(p, sentence.start, sentence.end)
+      sentenceHighlightRects = Array.from(sentenceRange.getClientRects())
+      containerRect = storyTextContainer.getBoundingClientRect()
+    }
+  }
+
+  function handleDragOver(e: DragEvent) {
+    if (!draggingImageId || !storyTextContainer) return
+    e.preventDefault()
+
+    // Skip calculations if movement is minimal to save CPU
+    if (Math.abs(e.clientX - lastX) < 4 && Math.abs(e.clientY - lastY) < 4) return
+    lastX = e.clientX
+    lastY = e.clientY
+
+    const target = e.target as HTMLElement
+    const p = target.closest('p, li, blockquote') as HTMLElement
+
+    if (!p) {
+      clearDropTarget()
+      cancelDragHighlight()
+      return
+    }
+
+    // Paragraph changed: update drop target immediately
+    if (p !== lastDropTarget) {
+      clearDropTarget()
+      p.classList.add('drop-target')
+      lastDropTarget = p
+    }
+
+    // Sentence highlight: throttle to one rAF and capture coordinates
+    if (!dragOverRafId) {
+      const cx = e.clientX
+      const cy = e.clientY
+      dragOverRafId = requestAnimationFrame(() => updateSentenceHighlight(p, cx, cy))
+    }
+  }
+
+  function cancelDragHighlight() {
+    if (dragOverRafId) {
+      cancelAnimationFrame(dragOverRafId)
+      dragOverRafId = null
+    }
+    sentenceHighlightRects = []
+  }
+
+  function handleDragLeave(e: DragEvent) {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    if (
+      e.clientX <= rect.left ||
+      e.clientX >= rect.right ||
+      e.clientY <= rect.top ||
+      e.clientY >= rect.bottom
+    ) {
+      clearDropTarget()
+      cancelDragHighlight()
+    }
+  }
+
+  async function handleDrop(e: DragEvent) {
+    cancelDragHighlight()
+    if (draggingImageId) {
+      e.preventDefault()
+      if (lastDropTarget) {
+        const target = lastDropTarget
+        clearDropTarget()
+        await linkImageToText(draggingImageId, target, e.clientX, e.clientY)
+      }
+    }
+  }
+
   // Open the image view/edit modal
   function openImageViewModal(image: (typeof embeddedImages)[0]) {
     viewingImage = image
@@ -308,6 +568,17 @@
   // Handle click on embedded image link
   function handleContentClick(event: MouseEvent | KeyboardEvent) {
     const target = event.target as HTMLElement
+
+    // Handle linking an orphaned image via tap (Mobile fallback)
+    if (selectedOrphanId) {
+      const p = target.closest('p, li, blockquote') as HTMLElement
+      if (p) {
+        event.preventDefault()
+        event.stopPropagation()
+        linkImageToText(selectedOrphanId, p)
+        return
+      }
+    }
 
     // Check for clicking on inline generated image (opens view modal)
     const inlineImage = target.closest('.inline-generated-image') as HTMLElement | null
@@ -405,13 +676,8 @@
         const styleId = imageSettings.styleId
         let stylePrompt = ''
         try {
-          const promptContext = {
-            mode: 'adventure' as const,
-            pov: 'second' as const,
-            tense: 'present' as const,
-            protagonistName: '',
-          }
-          stylePrompt = promptService.getPrompt(styleId, promptContext) || ''
+          const template = await database.getPackTemplate('default-pack', styleId)
+          stylePrompt = template?.content || ''
         } catch {
           stylePrompt = DEFAULT_FALLBACK_STYLE_PROMPT
         }
@@ -448,13 +714,8 @@
     const styleId = imageSettings.styleId
     let stylePrompt = ''
     try {
-      const promptContext = {
-        mode: 'adventure' as const,
-        pov: 'second' as const,
-        tense: 'present' as const,
-        protagonistName: '',
-      }
-      stylePrompt = promptService.getPrompt(styleId, promptContext) || ''
+      const template = await database.getPackTemplate('default-pack', styleId)
+      stylePrompt = template?.content || ''
     } catch {
       stylePrompt = DEFAULT_FALLBACK_STYLE_PROMPT
     }
@@ -759,6 +1020,30 @@
     }
   }
 
+  let isGeneratingStoryImages = $state(false)
+
+  async function handleGenerateStoryImages() {
+    if (!story.currentStory || isGeneratingStoryImages) return
+    isGeneratingStoryImages = true
+    try {
+      const context = {
+        storyId: story.currentStory.id,
+        entryId: entry.id,
+        narrativeResponse: entry.content,
+        userAction: '',
+        presentCharacters: story.characters,
+        referenceMode: story.currentStory.settings?.referenceMode ?? false,
+        translatedNarrative: entry.translatedContent ?? undefined,
+      }
+      await aiService.generateImagesForNarrative(context)
+    } catch (error) {
+      console.error('[StoryEntry] Image generation failed:', error)
+      ui.showToast('Image generation failed', 'error')
+    } finally {
+      isGeneratingStoryImages = false
+    }
+  }
+
   function cancelEdit() {
     isEditing = false
     editContent = ''
@@ -884,6 +1169,22 @@
             <Volume2 class="h-4 w-4" />
           {/if}
         </Button>
+        {#if isLatestNarration && story.currentStory?.settings?.imageGenerationMode === 'agentic'}
+          <Button
+            variant="text"
+            size="icon"
+            onclick={handleGenerateStoryImages}
+            disabled={ui.isGenerating || isGeneratingStoryImages || embeddedImages.length > 0}
+            class="text-muted-foreground hover:text-foreground h-7 w-7"
+            title={embeddedImages.length > 0 ? 'Images already generated' : 'Generate story images'}
+          >
+            {#if isGeneratingStoryImages}
+              <Loader2 class="h-4 w-4 animate-spin" />
+            {:else}
+              <ImageIcon class="h-4 w-4" />
+            {/if}
+          </Button>
+        {/if}
         <Button
           variant="text"
           size="icon"
@@ -1027,9 +1328,14 @@
       {/if}
 
       <div
-        class="story-text prose-content"
+        bind:this={storyTextContainer}
+        class="story-text prose-content relative"
         class:visual-prose-container={visualProseMode && entry.type === 'narration'}
+        class:linking-mode={!!selectedOrphanId || !!draggingImageId}
         onclick={handleContentClick}
+        ondragover={handleDragOver}
+        ondragleave={handleDragLeave}
+        ondrop={handleDrop}
         onkeydown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') handleContentClick(e)
         }}
@@ -1037,34 +1343,33 @@
         role="button"
         aria-label="Expand embedded image or interact with story content"
       >
+        {#if sentenceHighlightRects.length > 0 && containerRect}
+          {#each sentenceHighlightRects as rect, i (i)}
+            <div
+              class="sentence-drop-highlight bg-primary/30 ring-primary/50 pointer-events-none absolute z-50 rounded ring-1 transition-all duration-75"
+              style="
+                left: {rect.left - containerRect.left}px;
+                top: {rect.top - containerRect.top}px;
+                width: {rect.width}px;
+                height: {rect.height}px;
+              "
+            ></div>
+          {/each}
+        {/if}
+
         {#if entry.type === 'narration'}
           {@const displayContent = entry.translatedContent ?? entry.content}
-          {#if visualProseMode && inlineImageMode}
-            <!-- Both Visual Prose and Inline Image mode -->
-            {@html processVisualProseWithInlineImages(
+          {#if visualProseMode}
+            <!-- Visual Prose mode (handles both agentic and inline images) -->
+            {@html processVisualProseStoryContent(
               displayContent,
               embeddedImages,
               entry.id,
-              regeneratingImageIds,
-            )}
-          {:else if visualProseMode}
-            <!-- Visual Prose mode only -->
-            {@html processVisualProseWithImages(
-              displayContent,
-              embeddedImages,
-              entry.id,
-              regeneratingImageIds,
-            )}
-          {:else if inlineImageMode}
-            <!-- Inline Image mode only -->
-            {@html processContentWithInlineImages(
-              displayContent,
-              embeddedImages,
               regeneratingImageIds,
             )}
           {:else}
-            <!-- Standard mode with analyzed images -->
-            {@html processContentWithImages(displayContent, embeddedImages, regeneratingImageIds)}
+            <!-- Standard mode (handles both agentic and inline images) -->
+            {@html processStoryContent(displayContent, embeddedImages, regeneratingImageIds)}
           {/if}
         {:else if entry.type === 'user_action'}
           <!-- User action: show original input (before translation) -->
@@ -1072,19 +1377,113 @@
         {:else}
           {@html parseMarkdown(entry.content)}
         {/if}
+
+        {#if selectedOrphanId}
+          <div
+            class="bg-primary/5 pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
+          >
+            <div
+              class="bg-primary/90 animate-bounce rounded-full px-3 py-1.5 text-xs font-medium text-white"
+            >
+              Tap a paragraph to link image
+            </div>
+          </div>
+        {/if}
       </div>
 
+      <!-- Orphaned Images Gallery (Unplaced Illustrations) -->
+      {#if orphanedImages.length > 0}
+        <div class="border-border/50 mt-4 border-t pt-3">
+          <div class="mb-2 flex items-center gap-2">
+            <ImageIcon class="text-muted-foreground h-3.5 w-3.5" />
+            <span class="text-muted-foreground text-[10px] font-bold tracking-wider uppercase">
+              Unplaced Illustrations
+            </span>
+            <span class="text-muted-foreground/60 text-[10px] italic">
+              (Drag to a paragraph to link)
+            </span>
+          </div>
+          <div
+            class="scrollbar-hide flex gap-3 overflow-x-auto pb-2"
+            role="list"
+            aria-label="Unplaced illustrations gallery"
+          >
+            {#each orphanedImages as img (img.id)}
+              <div
+                class="group relative"
+                draggable="true"
+                role="listitem"
+                ondragstart={(e) => {
+                  draggingImageId = img.id
+                  if (e.dataTransfer) {
+                    e.dataTransfer.setData('text/plain', img.id)
+                    e.dataTransfer.dropEffect = 'link'
+                  }
+                }}
+                ondragend={() => {
+                  draggingImageId = null
+                  clearDropTarget()
+                }}
+              >
+                <button
+                  onclick={() => {
+                    if (selectedOrphanId === img.id) {
+                      selectedOrphanId = null
+                    } else {
+                      selectedOrphanId = img.id
+                    }
+                  }}
+                  class="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border-2 transition-all duration-200
+                                {selectedOrphanId === img.id
+                    ? 'border-primary ring-primary/20 scale-105 ring-2'
+                    : 'border-border/50 hover:border-primary/50'}"
+                >
+                  <img
+                    src="data:image/png;base64,{img.imageData}"
+                    alt="Unplaced illustration"
+                    class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                  />
+                  <div
+                    class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100"
+                  ></div>
+                </button>
+
+                {#if selectedOrphanId === img.id}
+                  <div
+                    class="bg-primary absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full shadow-sm"
+                  >
+                    <Check class="h-2.5 w-2.5 text-white" />
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
       {#if isErrorEntry}
-        <Button
-          variant="text"
-          size="sm"
-          onclick={handleRetryFromEntry}
-          disabled={ui.isGenerating}
-          class="mt-1 h-8 p-0 text-red-500 hover:text-red-400"
-        >
-          <RefreshCw class="h-3.5 w-3.5" />
-          Retry
-        </Button>
+        <div class="mt-2 flex gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onclick={handleRetryFromEntry}
+            disabled={ui.isGenerating}
+            class="h-8 border-red-500/30 px-3 text-red-500 hover:border-red-400/50 hover:bg-red-500/10 hover:text-red-400"
+          >
+            <RefreshCw class="h-3.5 w-3.5" />
+            Retry
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onclick={handleDismissError}
+            disabled={ui.isGenerating}
+            class="text-muted-foreground border-border h-8 px-3 hover:border-red-400/50 hover:bg-red-500/10 hover:text-red-400"
+          >
+            <Trash2 class="h-3.5 w-3.5" />
+            Dismiss
+          </Button>
+        </div>
       {/if}
     {/if}
   </div>
@@ -1641,5 +2040,42 @@
   :global(.inline-image-regenerate-btn svg) {
     width: 14px;
     height: 14px;
+  }
+
+  /* Linking & Drag-and-Drop Styles */
+  .story-text.linking-mode :global(p),
+  .story-text.linking-mode :global(li),
+  .story-text.linking-mode :global(blockquote) {
+    cursor: copy;
+    transition: all 0.2s ease;
+    border-radius: 0.25rem;
+    padding: 2px 4px;
+    margin-left: -4px;
+    margin-right: -4px;
+  }
+
+  .story-text.linking-mode :global(p:hover),
+  .story-text.linking-mode :global(li:hover),
+  .story-text.linking-mode :global(blockquote:hover) {
+    background-color: var(--primary-500/10);
+    box-shadow: 0 0 0 1px var(--primary-500/30);
+  }
+
+  :global(.drop-target) {
+    background-color: color-mix(in srgb, var(--color-primary), transparent 85%) !important;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary), transparent 60%) !important;
+    transform: scale(1.005);
+    transition: all 0.2s ease;
+    z-index: 1;
+    position: relative;
+  }
+
+  /* Hide scrollbar for gallery */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 </style>

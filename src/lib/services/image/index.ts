@@ -6,8 +6,11 @@
 
 export {
   imageEmbeddingService,
+  processStoryContent,
+  processVisualProseStoryContent,
   processContentWithImages,
   processVisualProseWithImages,
   processContentWithInlineImages,
   processVisualProseWithInlineImages,
+  getPlacedImageIds,
 } from './ImageEmbeddingService'

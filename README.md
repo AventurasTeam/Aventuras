@@ -5,12 +5,14 @@ AI-powered interactive fiction and creative writing application built with Tauri
 ## Features
 
 ### Story Modes
+
 - **Adventure Mode** - Interactive fiction with multiple-choice actions and world tracking
 - **Creative Writing Mode** - Freeform collaborative writing with AI-generated suggestions
 - **POV Options** - First, second, or third person perspective
 - **Tense Control** - Past or present tense narrative style
 
 ### AI Integration
+
 - OpenRouter API integration for 70+ LLM providers and models
 - Streaming responses with real-time text generation
 - Configurable models, temperature, and token limits
@@ -19,6 +21,7 @@ AI-powered interactive fiction and creative writing application built with Tauri
 - API profiles for saving multiple configurations
 
 ### Memory System
+
 - Automatic chapter summarization to manage context windows
 - Configurable token thresholds and chapter buffers
 - Manual chapter creation and resummarization
@@ -27,6 +30,7 @@ AI-powered interactive fiction and creative writing application built with Tauri
 - In-story time tracking per chapter
 
 ### Lorebook
+
 - Unified entry system for characters, locations, items, factions, concepts, and events
 - Dynamic state tracking (relationships, inventory, discoveries)
 - Keyword-based and relevance-based context injection
@@ -37,12 +41,14 @@ AI-powered interactive fiction and creative writing application built with Tauri
 - AI-assisted autonomous lore management agent
 
 ### Writing Tools
+
 - Local grammar checking powered by Harper.js (WebAssembly)
 - AI-powered style analysis for repetitive words and phrases
 - Action suggestions that match player writing style
 - Persistent action suggestions between sessions
 
 ### World Tracking
+
 - Character relationships and dispositions with portrait support
 - Location visits and changes with automatic discovery
 - Inventory management with equipment tracking
@@ -51,12 +57,14 @@ AI-powered interactive fiction and creative writing application built with Tauri
 - Collapsible UI cards for all world elements
 
 ### Templates
+
 - Built-in genre templates (fantasy, sci-fi, mystery, horror, slice of life)
 - Custom template creation with system prompts
 - Initial state configuration (protagonist, locations, items)
 - Opening scene text support
 
 ### Image Generation
+
 - Embedded image generation in story entries
 - AI-powered imageable scene detection
 - NanoGPT provider integration
@@ -64,23 +72,27 @@ AI-powered interactive fiction and creative writing application built with Tauri
 - Configurable image size (512x512 or 1024x1024)
 
 ### Save and Restore
+
 - Named checkpoints with full state snapshots
 - Retry system for undoing actions and generating alternatives
 - Character and time state preservation on retry
 
 ### Network Sync
+
 - Local network sync between devices
 - QR code connection for easy pairing
 - Push/pull stories between devices
 - Server mode for sharing stories
 
 ### UI Customization
+
 - Multiple themes (dark, light, light solarized, retro console)
 - Custom font selection (system or Google fonts)
 - Adjustable text size (small, medium, large)
 - Word count display toggle
 
 ### Cross-Platform
+
 - Desktop (Windows, macOS, Linux)
 - Android (APK)
 - iOS (planned)
@@ -100,12 +112,12 @@ AI-powered interactive fiction and creative writing application built with Tauri
 
 Pre-compiled binaries are available on the [Releases](https://github.com/unkarelian/Aventuras/releases) page:
 
-| Platform | Download |
-|----------|----------|
-| Windows | `aventuras_x.x.x_x64-setup.exe` |
-| macOS | `aventuras_x.x.x_x64.dmg` |
-| Linux | `aventuras_x.x.x_amd64.deb` / `.AppImage` |
-| Android | `aventuras_x.x.x.apk` |
+| Platform | Download                                  |
+| -------- | ----------------------------------------- |
+| Windows  | `aventuras_x.x.x_x64-setup.exe`           |
+| macOS    | `aventuras_x.x.x_x64.dmg`                 |
+| Linux    | `aventuras_x.x.x_amd64.deb` / `.AppImage` |
+| Android  | `aventuras_x.x.x.apk`                     |
 
 Simply download the appropriate file for your platform and install.
 
@@ -154,6 +166,7 @@ npm run tauri android build -- --apk true
 ```
 
 The unsigned APK will be at:
+
 ```
 src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
 ```
@@ -210,6 +223,7 @@ aventuras/
 ### Memory Configuration
 
 Per-story memory settings:
+
 - **Token Threshold**: Context size before auto-summarization (default: 24,000)
 - **Chapter Buffer**: Recent messages protected from chapter boundaries (default: 10)
 - **Auto-Summarize**: Enable/disable automatic chapter creation
@@ -229,7 +243,6 @@ npm run build
 # Preview built frontend
 npm run preview
 ```
-
 
 ## Acknowledgments
 

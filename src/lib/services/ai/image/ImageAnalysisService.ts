@@ -9,9 +9,9 @@
  */
 
 import type { VisualDescriptors } from '$lib/types'
-import { promptService, type PromptContext } from '$lib/services/prompts'
+import { BaseAIService } from '../BaseAIService'
+import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '../core/config'
-import { generateStructured } from '../sdk/generate'
 import { sceneAnalysisResultSchema, type ImageableScene } from '../sdk/schemas/imageanalysis'
 
 const log = createLogger('ImageAnalysis')
@@ -55,15 +55,13 @@ export interface ImageAnalysisContext {
 /**
  * Service that identifies imageable scenes in narrative text using the Vercel AI SDK.
  */
-export class ImageAnalysisService {
-  private presetId: string
-
+export class ImageAnalysisService extends BaseAIService {
   /**
    * Create a new ImageAnalysisService.
-   * @param presetId - The preset ID to use for generation settings (default: 'imageAnalysis')
+   * @param serviceId - The service ID used to resolve the preset dynamically
    */
-  constructor(presetId: string = 'imageAnalysis') {
-    this.presetId = presetId
+  constructor(serviceId: string) {
+    super(serviceId)
   }
 
   /**
@@ -99,47 +97,29 @@ export class ImageAnalysisService {
 ${context.translatedNarrative}`
     }
 
-    // Build prompt context
-    const promptContext: PromptContext = {
-      mode: 'adventure',
-      pov: 'second',
-      tense: 'present',
-      protagonistName: '',
-    }
-
     // Select template based on portrait mode
     const templateId = context.referenceMode
       ? 'image-prompt-analysis-reference'
       : 'image-prompt-analysis'
 
-    // Render system prompt
-    const system = promptService.renderPrompt(templateId, promptContext, {
+    // Build context and render
+    const ctx = new ContextBuilder()
+    ctx.add({
       imageStylePrompt: context.stylePrompt,
       characterDescriptors: characterDescriptors || 'No character visual descriptors available.',
       charactersWithPortraits: charactersWithPortraitsStr,
       charactersWithoutPortraits: charactersWithoutPortraitsStr,
       maxImages: context.maxImages === 0 ? '0 (unlimited)' : String(context.maxImages),
-    })
-
-    // Render user prompt
-    const prompt = promptService.renderUserPrompt(templateId, promptContext, {
       narrativeResponse: context.narrativeResponse,
       userAction: context.userAction,
       chatHistory: context.chatHistory || '',
       lorebookContext: context.lorebookContext || '',
       translatedNarrativeBlock,
     })
+    const { system, user: prompt } = await ctx.render(templateId)
 
     try {
-      const result = await generateStructured(
-        {
-          presetId: this.presetId,
-          schema: sceneAnalysisResultSchema,
-          system,
-          prompt,
-        },
-        templateId,
-      )
+      const result = await this.generate(sceneAnalysisResultSchema, system, prompt, templateId)
 
       // Sort by priority (highest first)
       const sortedScenes = result.scenes.sort((a, b) => b.priority - a.priority)
@@ -149,7 +129,7 @@ ${context.translatedNarrative}`
         priorities: sortedScenes.map((s) => s.priority),
       })
 
-      return sortedScenes
+      return sortedScenes as ImageableScene[]
     } catch (error) {
       log('identifyScenes failed', error)
       return []

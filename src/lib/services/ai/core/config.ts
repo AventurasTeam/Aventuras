@@ -25,7 +25,7 @@ export const AI_CONFIG = {
     /** Number of recent entries for classification/retrieval operations */
     recentEntriesForRetrieval: 5,
     /** Number of recent entries for action choices context */
-    recentEntriesForChoices: 3,
+    recentEntriesForChoices: 5,
     /** Number of user actions to analyze for style matching */
     userActionsForStyle: 6,
     /** Number of recent entries for lore management context */
@@ -45,13 +45,13 @@ export const AI_CONFIG = {
     /** Threshold for switching to LLM-based selection */
     llmThreshold: 30,
     /** Max entries per tier in context building */
-    maxEntriesPerTier: 10,
+    maxEntriesPerTier: 20,
   },
 
   /** Memory/chapter system defaults */
   memory: {
     /** Default token threshold for chapter creation */
-    defaultTokenThreshold: 24000,
+    defaultTokenThreshold: 16000,
     /** Default chapter buffer (entries protected from summarization) */
     defaultChapterBuffer: 10,
   },

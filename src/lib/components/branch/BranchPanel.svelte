@@ -310,12 +310,16 @@
           </button>
           {#if !isCurrent(branch.id)}
             <button
-              class="text-surface-500 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity hover:text-red-400 sm:min-h-0 sm:min-w-0 sm:p-0.5 sm:opacity-0 sm:group-hover:opacity-100"
+              class="text-surface-500 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity sm:min-h-0 sm:min-w-0 sm:p-0.5 {children.length >
+              0
+                ? 'cursor-not-allowed opacity-30'
+                : 'hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100'}"
               onclick={(e) => {
                 e.stopPropagation()
                 handleDeleteBranch(branch.id)
               }}
-              title="Delete"
+              disabled={children.length > 0}
+              title={children.length > 0 ? 'Cannot delete: has child branches' : 'Delete'}
             >
               <Trash2 class="h-4 w-4 sm:h-3 sm:w-3" />
             </button>

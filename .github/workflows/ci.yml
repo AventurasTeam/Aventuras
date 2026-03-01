@@ -63,58 +63,25 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Get clean version
-        id: get_version
-        shell: bash
-        run: |
-          VERSION="${{ github.ref_name }}"
-          # Remove 'v' prefix and strip anything after '-'
-          CLEAN=$(echo $VERSION | sed 's/^v//' | cut -d'-' -f1)
-          echo "clean_version=$CLEAN" >> $GITHUB_OUTPUT
-
-      - name: Build Tauri app
-        shell: bash
+      - name: Build and release Tauri app
+        uses: tauri-apps/tauri-action@v0
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          npx tauri build --target ${{ matrix.target }} --config '{"version":"${{ steps.get_version.outputs.clean_version }}"}'
-
-      - name: Rename artifacts
-        shell: bash
-        run: |
-          VERSION_CLEAN="${{ steps.get_version.outputs.clean_version }}"
-          VERSION_FULL=$(echo "${{ github.ref_name }}" | sed 's/^v//')
-          if [ "$VERSION_CLEAN" != "$VERSION_FULL" ]; then
-            echo "Renaming artifacts from $VERSION_CLEAN to $VERSION_FULL"
-            find src-tauri/target/${{ matrix.target }}/release/bundle -type f -name "*$VERSION_CLEAN*" | while read f; do
-              NEW_F="${f//$VERSION_CLEAN/$VERSION_FULL}"
-              echo "Moving $f to $NEW_F"
-              mv "$f" "$NEW_F"
-            done
-          fi
-
-      - name: Upload to Release
-        uses: softprops/action-gh-release@v2
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Aventura ${{ github.ref_name }}'
-          body: |
+          tagName: v__VERSION__
+          releaseName: 'Aventura v__VERSION__'
+          releaseBody: |
             **Pre-release build**
 
             This is a test/preview release. Use at your own risk.
-          draft: false
+          releaseDraft: false
           prerelease: true
-          files: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.rpm
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.sig
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          includeUpdaterJson: false
+          updaterJsonPreferNsis: true
+          assetNamePattern: '[name]_${{ github.ref_name }}_[arch][setup][ext]'
+          args: --target ${{ matrix.target }}
 
   build-android:
     name: Build Android
@@ -152,20 +119,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Initialize Android
-        env:
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: npx tauri android init
-
-      - name: Add Android permissions
-        run: |
-          MANIFEST="src-tauri/gen/android/app/src/main/AndroidManifest.xml"
-          sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <!-- Camera permission for QR code scanning -->\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />|' "$MANIFEST"
-
-      - name: Generate app icons
-        run: npx tauri icon sun2022.png
 
       - name: Build Android APK
         env:

@@ -35,6 +35,7 @@
     type ClassificationCompleteEvent,
   } from '$lib/services/events'
   import { isTouchDevice } from '$lib/utils/swipe'
+  import { isAndroid } from '$lib/utils/platform'
   import {
     GenerationPipeline,
     retryService,
@@ -45,6 +46,7 @@
     type PipelineDependencies,
     type PipelineConfig,
     type GenerationContext,
+    type RetrievalResult,
     type BackgroundTaskDependencies,
     type BackgroundTaskInput,
     type PipelineUICallbacks,
@@ -215,6 +217,14 @@
     }
   })
 
+  // Auto-regenerate suggestions/actions after time-travel delete when no saved actions found
+  $effect(() => {
+    if (ui.suggestionsRegenerationNeeded && !ui.isGenerating && story.entries.length > 0) {
+      ui.suggestionsRegenerationNeeded = false
+      regenerateActionsAfterDelete()
+    }
+  })
+
   // ============================================================================
   // Builder Functions
   // ============================================================================
@@ -337,6 +347,35 @@
   // Core Generation
   // ============================================================================
 
+  /**
+   * Send an OS notification when generation completes/fails while the app is backgrounded.
+   * Only called on Android when the generationNotifications experimental feature is enabled.
+   */
+  async function sendGenerationNotification(responseText: string, success: boolean) {
+    try {
+      const { sendNotification, isPermissionGranted } =
+        await import('@tauri-apps/plugin-notification')
+      const permitted = await isPermissionGranted()
+      if (!permitted) return
+
+      if (success) {
+        const body =
+          settings.experimentalFeatures.notificationPreview && responseText.length > 0
+            ? responseText.slice(0, 120).replace(/[<>]/g, '') +
+              (responseText.length > 120 ? '…' : '')
+            : 'Tap to return to your story.'
+        sendNotification({ title: 'Story generation complete', body })
+      } else {
+        sendNotification({
+          title: 'Story generation failed',
+          body: 'Tap to return and retry.',
+        })
+      }
+    } catch (e) {
+      console.warn('[ActionInput] Failed to send notification:', e)
+    }
+  }
+
   async function generateResponse(
     userActionEntryId: string,
     userActionContent: string,
@@ -371,6 +410,17 @@
         () => story.characters,
       )
     }
+
+    // Android: start foreground service to keep process alive when backgrounded
+    const useBackgroundService = isAndroid() && settings.experimentalFeatures.backgroundGeneration
+    if (useBackgroundService) {
+      try {
+        window.AndroidBridge?.startGenerationService()
+      } catch (e) {
+        console.warn('[ActionInput] Failed to start generation foreground service:', e)
+      }
+    }
+    ui.resetBackgroundedFlag()
 
     try {
       const worldState = {
@@ -453,6 +503,18 @@
           storyId: currentStoryRef.id,
         }
 
+        const persistSuggestedActions = (actions: unknown[], type: 'suggestions' | 'choices') => {
+          if (narrationEntry && actions.length > 0) {
+            database
+              .updateStoryEntry(narrationEntry.id, {
+                suggestedActions: JSON.stringify(actions),
+              })
+              .catch((err) =>
+                console.warn(`[ActionInput] Failed to save suggested ${type} to entry:`, err),
+              )
+          }
+        }
+
         const eventCallbacks: PipelineUICallbacks = {
           startStreaming: ui.startStreaming.bind(ui),
           appendStreamContent: ui.appendStreamContent.bind(ui),
@@ -460,8 +522,14 @@
           setGenerationStatus: ui.setGenerationStatus.bind(ui),
           setSuggestionsLoading: ui.setSuggestionsLoading.bind(ui),
           setActionChoicesLoading: ui.setActionChoicesLoading.bind(ui),
-          setSuggestions: ui.setSuggestions.bind(ui),
-          setActionChoices: ui.setActionChoices.bind(ui),
+          setSuggestions: (suggestions, storyId) => {
+            ui.setSuggestions(suggestions, storyId)
+            persistSuggestedActions(suggestions, 'suggestions')
+          },
+          setActionChoices: (choices, storyId) => {
+            ui.setActionChoices(choices, storyId)
+            persistSuggestedActions(choices, 'choices')
+          },
           emitResponseStreaming: (chunk, accumulated) => {
             eventBus.emit<ResponseStreamingEvent>({
               type: 'ResponseStreaming',
@@ -475,6 +543,11 @@
         }
 
         handleEvent(event, eventState, eventCallbacks)
+
+        if (event.type === 'phase_complete' && event.phase === 'retrieval') {
+          const retrievalResult = event.result as RetrievalResult | undefined
+          ui.setLastLorebookRetrieval(retrievalResult?.lorebookRetrievalResult ?? null)
+        }
 
         if (event.type === 'narrative_chunk') {
           fullResponse += event.content
@@ -505,7 +578,7 @@
             messageId: narrationEntry.id,
             result: event.result,
           })
-          await story.applyClassificationResult(event.result)
+          await story.applyClassificationResult(event.result, narrationEntry.id)
           await story.updateEntryTimeEnd(narrationEntry.id)
 
           if (currentStoryRef.settings?.imageGenerationMode !== 'none') {
@@ -584,7 +657,10 @@
           }
         }
 
-        if (event.type === 'error' && event.fatal) break
+        if (event.type === 'error' && event.fatal) {
+          console.error('[ActionInput] Fatal pipeline error:', event.error)
+          break
+        }
       }
 
       ui.updateActivationData(activationTracker, currentStoryRef.id)
@@ -616,10 +692,24 @@
       coordinator
         .runBackgroundTasks(input)
         .catch((err) => log('Background tasks failed (non-fatal)', err))
+
+      // Android: notify user that generation completed while app was backgrounded
+      if (
+        ui.wasBackgroundedDuringGeneration &&
+        ui.isAppBackgrounded &&
+        settings.experimentalFeatures.generationNotifications &&
+        fullResponse.trim()
+      ) {
+        sendGenerationNotification(fullResponse, true)
+      }
     } catch (error) {
       if (stopRequested || (error instanceof Error && error.name === 'AbortError')) return
-      const errorMessage =
+      console.error('[ActionInput] Generation error:', error)
+      const baseMessage =
         error instanceof Error ? error.message : 'Failed to generate response. Please try again.'
+      const errorMessage = ui.wasBackgroundedDuringGeneration
+        ? `Generation may have been interrupted while the app was in the background. ${baseMessage}`
+        : baseMessage
       const errorEntry = await story.addEntry('system', `Generation failed: ${errorMessage}`)
       ui.setGenerationError({
         message: errorMessage,
@@ -627,18 +717,109 @@
         userActionEntryId,
         timestamp: Date.now(),
       })
+
+      // Android: notify user that generation failed while backgrounded
+      if (
+        ui.wasBackgroundedDuringGeneration &&
+        ui.isAppBackgrounded &&
+        settings.experimentalFeatures.generationNotifications
+      ) {
+        sendGenerationNotification('', false)
+      }
     } finally {
       ui.endStreaming()
       ui.setGenerating(false)
       ui.setGenerationStatus('')
       activeAbortController = null
       stopRequested = false
+
+      // Android: always stop the foreground service when generation ends
+      if (useBackgroundService) {
+        try {
+          window.AndroidBridge?.stopGenerationService()
+        } catch (e) {
+          console.warn('[ActionInput] Failed to stop generation foreground service:', e)
+        }
+      }
     }
   }
 
   // ============================================================================
   // Event Handlers
   // ============================================================================
+
+  /**
+   * Regenerate suggestions or action choices after a time-travel delete
+   * when no previously saved actions were found on the restored entry.
+   */
+  async function regenerateActionsAfterDelete() {
+    if (!story.currentStory || story.entries.length === 0) return
+
+    const storyMode = story.storyMode
+
+    if (storyMode === 'creative-writing') {
+      // For creative-writing mode, use the existing refresh mechanism
+      await refreshSuggestions()
+    } else if (storyMode === 'adventure') {
+      // For adventure mode, generate new action choices
+      if (settings.uiSettings.disableSuggestions) return
+
+      ui.setActionChoicesLoading(true)
+      try {
+        const lastNarration = [...story.entries].reverse().find((e) => e.type === 'narration')
+        if (!lastNarration) {
+          ui.setActionChoicesLoading(false)
+          return
+        }
+
+        const protagonist = story.characters.find((c) => c.relationship === 'self')
+        const promptContext: import('$lib/services/generation/phases/PostGenerationPhase').PromptContext =
+          {
+            mode: 'adventure',
+            pov: story.pov,
+            tense: story.tense,
+            protagonistName: protagonist?.name || 'the protagonist',
+            genre: story.currentStory.genre ?? undefined,
+            settingDescription: story.currentStory.description ?? undefined,
+            tone: story.currentStory.settings?.tone ?? undefined,
+            themes: story.currentStory.settings?.themes ?? undefined,
+          }
+
+        const worldState = {
+          characters: story.characters,
+          locations: story.locations,
+          items: story.items,
+          storyBeats: story.storyBeats,
+        }
+
+        const lorebookEntries = story.lorebookEntries
+        const result = await aiService.generateActionChoices(
+          story.entries,
+          worldState,
+          lastNarration.content,
+          lorebookEntries,
+          promptContext,
+          story.pov,
+        )
+
+        if (result.choices.length > 0) {
+          ui.setActionChoices(result.choices, story.currentStory!.id)
+          // Also save to the last narration entry for future time-travel
+          database
+            .updateStoryEntry(lastNarration.id, {
+              suggestedActions: JSON.stringify(result.choices),
+            })
+            .catch((err) =>
+              console.warn('[ActionInput] Failed to save regenerated action choices:', err),
+            )
+        }
+      } catch (error) {
+        console.warn('[ActionInput] Failed to regenerate action choices after delete:', error)
+      } finally {
+        ui.setActionChoicesLoading(false)
+      }
+    }
+  }
 
   async function refreshSuggestions() {
     if (!story.currentStory) return
@@ -671,6 +852,17 @@
       })
       ui.setSuggestions(result.suggestions, story.currentStory.id)
       emitSuggestionsReady(result.suggestions.map((s) => ({ text: s.text, type: s.type })))
+      // Persist refreshed suggestions to the latest narration entry for time-travel restore
+      const lastNarration = [...story.entries].reverse().find((e) => e.type === 'narration')
+      if (lastNarration && result.suggestions.length > 0) {
+        database
+          .updateStoryEntry(lastNarration.id, {
+            suggestedActions: JSON.stringify(result.suggestions),
+          })
+          .catch((err) =>
+            console.warn('[ActionInput] Failed to save refreshed suggestions to entry:', err),
+          )
+      }
     } catch (error) {
       log('Failed to generate suggestions:', error)
       ui.clearSuggestions(story.currentStory.id)

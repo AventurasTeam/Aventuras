@@ -1,17 +1,6 @@
-/**
- * Analysis Prompt Templates
- *
- * Templates for analysis and classification services including
- * world state extraction, style review, and lorebook classification.
- */
-
 import type { PromptTemplate } from '../types'
 
-/**
- * World State Classifier prompt template
- * Extracts characters, locations, items, and story beats from narrative responses
- */
-export const classifierPromptTemplate: PromptTemplate = {
+const classifierPromptTemplate: PromptTemplate = {
   id: 'classifier',
   name: 'World State Classifier',
   category: 'service',
@@ -141,26 +130,30 @@ Determine how much narrative time elapsed during this passage. Consider what act
   userContent: `Analyze this narrative passage and extract world state changes.
 
 ## Context
-{{genre}}
-Mode: {{mode}}
-Already tracking: {{entityCounts}}
-{{currentTimeInfo}}
-{{chatHistoryBlock}}
-## {{inputLabel}}
-"{{userAction}}"
+{{ genre }}
+Mode: {{ mode }}
+Already tracking: {{ entityCounts }}
+{{ currentTimeInfo }}
+{{ chatHistoryBlock }}
+## {{ inputLabel }}
+"{{ userAction }}"
 
 ## The Narrative Response (to classify)
 """
-{{narrativeResponse}}
+{{ narrativeResponse }}
 """
 
 ## Already Known Entities (check before adding duplicates)
-Characters: {{existingCharacters}}
-Locations: {{existingLocations}}
-Items: {{existingItems}}
+Characters: {{ existingCharacters }}
+Locations: {{ existingLocations }}
+Items: {{ existingItems }}
 
 ## Active Story Beats (update these when resolved!)
-{{existingBeats}}
+{{ existingBeats }}
+
+{% if customVariableInstructions != '' %}
+{{ customVariableInstructions }}
+{% endif %}
 
 ## Your Task
 1. Check if any EXISTING entities need updates (status change, new info learned, etc.)
@@ -171,11 +164,7 @@ Items: {{existingItems}}
 Empty arrays are fine - don't invent entities that aren't clearly in the text.`,
 }
 
-/**
- * Style Reviewer prompt template
- * Identifies overused phrases and style issues in narrative text
- */
-export const styleReviewerPromptTemplate: PromptTemplate = {
+const styleReviewerPromptTemplate: PromptTemplate = {
   id: 'style-reviewer',
   name: 'Style Reviewer',
   category: 'service',
@@ -211,16 +200,12 @@ Identify overused phrases, sentence patterns, structural repetition, and stylist
 - For structural issues, describe the pattern clearly (e.g., "5 of 7 passages begin with ambient sound descriptions")
 - Provide context-appropriate alternatives
 - Focus on actionable improvements`,
-  userContent: `Analyze these {{passageCount}} passages for repetitive phrases, structural patterns, and style issues. Each passage is a separate AI-generated narrative response.
+  userContent: `Analyze these {{ passageCount }} passages for repetitive phrases, structural patterns, and style issues. Each passage is a separate AI-generated narrative response.
 
-{{passages}}`,
+{{ passages }}`,
 }
 
-/**
- * Lorebook Classifier prompt template
- * Classifies lorebook entries into appropriate categories
- */
-export const lorebookClassifierPromptTemplate: PromptTemplate = {
+const lorebookClassifierPromptTemplate: PromptTemplate = {
   id: 'lorebook-classifier',
   name: 'Lorebook Classifier',
   category: 'service',
@@ -238,11 +223,7 @@ Entries to classify:
 {{entriesJson}}`,
 }
 
-/**
- * Tier 3 Entry Selection prompt template
- * LLM-based selection of relevant lorebook entries for narrative context
- */
-export const tier3EntrySelectionPromptTemplate: PromptTemplate = {
+const tier3EntrySelectionPromptTemplate: PromptTemplate = {
   id: 'tier3-entry-selection',
   name: 'Tier 3 Entry Selection',
   category: 'service',
@@ -262,20 +243,17 @@ Consider:
 
 Only include entries that have a clear connection to the current scene or user's intended action. Do not include entries just because they exist in the world.`,
   userContent: `# Current Scene
-{{recentContent}}
+{{ recentContent }}
 
 # User's Input
-"{{userInput}}"
+"{{ userInput }}"
 
 # Available Entries
-{{entrySummaries}}
+{{ entrySummaries }}
 
 Which entries (by number) are relevant to the current scene and user input?`,
 }
 
-/**
- * Analysis templates array for registration
- */
 export const analysisTemplates: PromptTemplate[] = [
   classifierPromptTemplate,
   styleReviewerPromptTemplate,

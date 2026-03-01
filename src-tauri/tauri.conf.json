@@ -1,13 +1,14 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Aventuras",
-  "version": "0.7.0-pre.1",
+  "version": "0.7.0-pre.3",
   "identifier": "com.karelian.aventura",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
-    "frontendDist": "../build"
+    "frontendDist": "../build",
+    "features": ["devtools"]
   },
   "app": {
     "windows": [
@@ -43,7 +44,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/unkarelian/Aventuras/releases/latest/download/latest.json"
+        "https://github.com/AventurasTeam/Aventuras/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJCNUQyM0I1NzM5MEQ2MDgKUldRSTFwQnp0U05kSzdwVUV5dEYvc3ZaaS9ZWGJDcytQaERmWDhNSGJ0OTdHVlE1UkttUW5NTy8K"
     }

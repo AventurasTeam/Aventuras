@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { getVersion } from '@tauri-apps/api/app'
+  import { ask } from '@tauri-apps/plugin-dialog'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings } from '$lib/stores/settings.svelte'
+  import { story } from '$lib/stores/story.svelte'
   import {
     Settings2,
     RotateCcw,
@@ -10,10 +12,11 @@
     Key,
     Cpu,
     Palette,
-    Scroll,
     Image,
     Volume2,
     Settings as SettingsIcon,
+    FlaskConical,
+    BookOpen,
   } from 'lucide-svelte'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
@@ -30,34 +33,31 @@
   import GenerationTab from './tabs/generation.svelte'
   import InterfaceTab from './tabs/interface.svelte'
   import ImagesTab from './tabs/images.svelte'
-  import PromptsTab from './tabs/prompts.svelte'
   import TTSSettings from './TTSSettings.svelte'
   import AdvancedSettings from './AdvancedSettings.svelte'
-  import PromptImportModal from './PromptImportModal.svelte'
+  import ExperimentalSettings from './ExperimentalSettings.svelte'
+  import StorySettingsTab from './tabs/story-settings.svelte'
 
-  const tabs = [
-    { id: 'api', label: 'API', icon: Key },
-    { id: 'generation', label: 'Generation', icon: Cpu },
-    { id: 'interface', label: 'Interface', icon: Palette },
-    { id: 'prompts', label: 'Prompts', icon: Scroll },
-    { id: 'images', label: 'Images', icon: Image },
-    { id: 'tts', label: 'TTS', icon: Volume2 },
-    { id: 'advanced', label: 'Advanced', icon: SettingsIcon },
-  ] as const
+  const baseTabs = [
+    { id: 'api' as const, label: 'API', icon: Key },
+    { id: 'generation' as const, label: 'Generation', icon: Cpu },
+    { id: 'interface' as const, label: 'Interface', icon: Palette },
+    { id: 'images' as const, label: 'Images', icon: Image },
+    { id: 'tts' as const, label: 'TTS', icon: Volume2 },
+    { id: 'advanced' as const, label: 'Advanced', icon: SettingsIcon },
+    { id: 'experimental' as const, label: 'Labs', icon: FlaskConical },
+  ]
 
-  type SettingsTab = 'api' | 'generation' | 'interface' | 'prompts' | 'images' | 'tts' | 'advanced'
+  const storyTab = { id: 'story-settings' as const, label: 'Story', icon: BookOpen }
 
-  // Use the tab from UI store (allows navigation from outside, e.g., profile warning banner)
-  let activeTab = $state<SettingsTab>(ui.settingsTab as SettingsTab)
+  let tabs = $derived(story.currentStory ? [storyTab, ...baseTabs] : baseTabs)
 
-  // Sync activeTab when modal opens with a specific tab requested
+  // Fall back to 'api' if story tab is active but story is unloaded
   $effect(() => {
-    if (ui.settingsModalOpen && ui.settingsTab !== activeTab) {
-      activeTab = ui.settingsTab as SettingsTab
+    if (ui.settingsTab === 'story-settings' && !story.currentStory) {
+      ui.setSettingsTab('api')
     }
   })
-
-  let promptImportModalOpen = $state(false)
 
   let manualBodyEditorOpen = $state(false)
   let manualBodyEditorTitle = $state('Manual Request Body')
@@ -110,16 +110,14 @@
     const diagonalRatio = absDeltaY / absDeltaX
     if (diagonalRatio > DIAGONAL_TOLERANCE) return
 
-    const currentIndex = tabs.findIndex((t) => t.id === activeTab)
+    const currentIndex = tabs.findIndex((t) => t.id === ui.settingsTab)
     if (deltaX > 0 && currentIndex > 0) {
       slideDirection = 'right'
-      activeTab = tabs[currentIndex - 1].id
-      ui.setSettingsTab(activeTab)
+      ui.setSettingsTab(tabs[currentIndex - 1].id)
       setTimeout(() => (slideDirection = 'none'), 300)
     } else if (deltaX < 0 && currentIndex < tabs.length - 1) {
       slideDirection = 'left'
-      activeTab = tabs[currentIndex + 1].id
-      ui.setSettingsTab(activeTab)
+      ui.setSettingsTab(tabs[currentIndex + 1].id)
       setTimeout(() => (slideDirection = 'none'), 300)
     }
   }
@@ -149,8 +147,9 @@
   }
 
   async function handleResetAll() {
-    const confirmed = confirm(
+    const confirmed = await ask(
       'Reset all settings to their default values?\n\nYour API key will be preserved, but all other settings (models, temperatures, prompts, UI preferences) will be reset.\n\nThis cannot be undone.',
+      { title: 'Reset All Settings', kind: 'warning' },
     )
     if (!confirmed) return
 
@@ -202,11 +201,10 @@
           {#each tabs as tab (tab.id)}
             <button
               class="hover:bg-accent/50 hover:text-foreground flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors"
-              class:bg-accent={activeTab === tab.id}
-              class:text-accent-foreground={activeTab === tab.id}
-              class:text-muted-foreground={activeTab !== tab.id}
+              class:bg-accent={ui.settingsTab === tab.id}
+              class:text-accent-foreground={ui.settingsTab === tab.id}
+              class:text-muted-foreground={ui.settingsTab !== tab.id}
               onclick={() => {
-                activeTab = tab.id
                 ui.setSettingsTab(tab.id)
               }}
             >
@@ -242,65 +240,68 @@
       >
         <div class="mx-auto px-4 sm:p-6">
           <Tabs
-            value={activeTab}
+            value={ui.settingsTab}
             onValueChange={(v) => {
-              activeTab = v as any
-              ui.setSettingsTab(v)
+              ui.setSettingsTab(v as any)
             }}
           >
             {#each tabs as tab (tab.id)}
               <TabsContent value={tab.id} class="mt-0">
-                <div
-                  class={activeTab === tab.id && slideDirection === 'left'
-                    ? 'slide-in-right'
-                    : activeTab === tab.id && slideDirection === 'right'
-                      ? 'slide-in-left'
-                      : ''}
-                >
-                  {#if tab.id === 'api'}
-                    <ApiConnectionTab />
-                  {:else if tab.id === 'generation'}
-                    <GenerationTab onOpenManualBodyEditor={openManualBodyEditor} />
-                  {:else if tab.id === 'interface'}
-                    <InterfaceTab />
-                  {:else if tab.id === 'prompts'}
-                    <PromptsTab openImportModal={() => (promptImportModalOpen = true)} />
-                  {:else if tab.id === 'images'}
-                    <ImagesTab />
-                  {:else if tab.id === 'tts'}
-                    <TTSSettings />
-                  {:else if tab.id === 'advanced'}
-                    <div class="space-y-6">
-                      <AdvancedSettings />
+                {#if ui.settingsTab === tab.id}
+                  <div
+                    class={slideDirection === 'left'
+                      ? 'slide-in-right'
+                      : slideDirection === 'right'
+                        ? 'slide-in-left'
+                        : ''}
+                  >
+                    {#if tab.id === 'story-settings'}
+                      <StorySettingsTab />
+                    {:else if tab.id === 'api'}
+                      <ApiConnectionTab />
+                    {:else if tab.id === 'generation'}
+                      <GenerationTab onOpenManualBodyEditor={openManualBodyEditor} />
+                    {:else if tab.id === 'interface'}
+                      <InterfaceTab />
+                    {:else if tab.id === 'images'}
+                      <ImagesTab />
+                    {:else if tab.id === 'tts'}
+                      <TTSSettings />
+                    {:else if tab.id === 'advanced'}
+                      <div class="space-y-6">
+                        <AdvancedSettings />
 
-                      <div
-                        class="border-destructive/50 flex items-center justify-between rounded-lg border p-4"
-                      >
-                        <div class="space-y-0.5">
-                          <p class="text-destructive font-medium">Reset All Settings</p>
-                          <p class="text-muted-foreground text-xs">
-                            Resets all settings to defaults. API key is preserved.
-                          </p>
-                        </div>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onclick={handleResetAll}
-                          disabled={isResettingSettings}
+                        <div
+                          class="border-destructive/50 flex items-center justify-between rounded-lg border p-4"
                         >
-                          {#if isResettingSettings}
-                            <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-                            Resetting...
-                          {:else}
-                            <RotateCcw class="mr-2 h-4 w-4" />
-                            Reset
-                          {/if}
-                        </Button>
+                          <div class="space-y-0.5">
+                            <p class="text-destructive font-medium">Reset All Settings</p>
+                            <p class="text-muted-foreground text-xs">
+                              Resets all settings to defaults. API key is preserved.
+                            </p>
+                          </div>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onclick={handleResetAll}
+                            disabled={isResettingSettings}
+                          >
+                            {#if isResettingSettings}
+                              <Loader2 class="mr-2 h-4 w-4 animate-spin" />
+                              Resetting...
+                            {:else}
+                              <RotateCcw class="mr-2 h-4 w-4" />
+                              Reset
+                            {/if}
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  {/if}
-                </div></TabsContent
-              >
+                    {:else if tab.id === 'experimental'}
+                      <ExperimentalSettings />
+                    {/if}
+                  </div>
+                {/if}
+              </TabsContent>
             {/each}
           </Tabs>
         </div>
@@ -311,10 +312,9 @@
       <div class="flex justify-center gap-0 overflow-x-auto pb-0.5">
         {#each tabs as tab (tab.id)}
           <Toggle
-            pressed={activeTab === tab.id}
+            pressed={ui.settingsTab === tab.id}
             onPressedChange={(pressed) => {
               if (pressed) {
-                activeTab = tab.id
                 ui.setSettingsTab(tab.id)
               }
             }}
@@ -323,7 +323,7 @@
           >
             <tab.icon class="h-4 w-4" />
             <span
-              class="overflow-hidden text-xs whitespace-nowrap transition-all duration-300 ease-in-out {activeTab ===
+              class="overflow-hidden text-xs whitespace-nowrap transition-all duration-300 ease-in-out {ui.settingsTab ===
               tab.id
                 ? 'max-w-20 opacity-100'
                 : 'max-w-0 opacity-0'}"
@@ -361,8 +361,6 @@
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
-
-<PromptImportModal open={promptImportModalOpen} onClose={() => (promptImportModalOpen = false)} />
 
 <style>
   .slide-in-right {

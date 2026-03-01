@@ -2,7 +2,7 @@
  * Fandom Wiki Tools
  *
  * Tool definitions for searching and fetching content from Fandom wikis.
- * Used by InteractiveLorebookService to help users create entries from wiki content.
+ * Used by InteractiveVaultService to help users create entries from wiki content.
  */
 
 import { tool } from 'ai'

@@ -102,6 +102,124 @@ function escapeHtml(str: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
 }
+// ─── Shared SVG fragments ───
+
+const spinnerSvg = (extraClass = '') =>
+  `<svg class="placeholder-spinner-svg ${extraClass}" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-dasharray="80, 200" stroke-dashoffset="0"></circle></svg>`
+
+const imageIconSvg = `<svg class="placeholder-image-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>`
+
+const errorIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>`
+
+const retryButton = (imageId: string) =>
+  `<button class="inline-image-btn retry-btn" data-action="regenerate" data-image-id="${imageId}" title="Retry generation"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg> Retry</button>`
+
+// ─── Shared placeholder builder ───
+
+function buildPlaceholder(
+  status: 'generating' | 'failed' | 'pending',
+  imageId: string,
+  prompt: string,
+  innerContent: string,
+): string {
+  const shimmer = status !== 'failed' ? '<div class="placeholder-shimmer"></div>' : ''
+  return `<div class="inline-image-placeholder ${status}" data-image-id="${imageId}" data-prompt="${escapeHtml(prompt)}">
+    ${shimmer}
+    <div class="placeholder-content">${innerContent}</div>
+  </div>`
+}
+
+function loaderWithInfo(statusText: string, shortPrompt: string, spinnerClass = ''): string {
+  return `<div class="placeholder-loader">${spinnerSvg(spinnerClass)}${imageIconSvg}</div>
+    <div class="placeholder-info">
+      <span class="placeholder-status">${statusText}</span>
+      <span class="placeholder-prompt">${escapeHtml(shortPrompt)}</span>
+    </div>`
+}
+
+function errorWithInfo(errorMsg: string, shortPrompt: string, imageId: string): string {
+  return `<div class="placeholder-error-icon">${errorIconSvg}</div>
+    <div class="placeholder-info">
+      <span class="placeholder-status error">${escapeHtml(errorMsg)}</span>
+      <span class="placeholder-prompt">${escapeHtml(shortPrompt)}</span>
+    </div>
+    ${retryButton(imageId)}`
+}
+
+// ─── Completed image renderers ───
+
+function renderCompleteImage(imageId: string, prompt: string, imageData: string): string {
+  return `<div class="inline-generated-image" data-image-id="${imageId}" data-prompt="${escapeHtml(prompt)}" data-action="view" role="button" tabindex="0"><img src="data:image/png;base64,${imageData}" alt="${escapeHtml(prompt)}" loading="lazy" /></div>`
+}
+
+function renderRegeneratingImage(imageId: string, prompt: string, imageData: string): string {
+  return `<div class="inline-generated-image regenerating" data-image-id="${imageId}" data-prompt="${escapeHtml(prompt)}">
+    <img src="data:image/png;base64,${imageData}" alt="${escapeHtml(prompt)}" loading="lazy" class="regenerating-image" />
+    <div class="regenerating-overlay">
+      <div class="regenerating-content">
+        <svg class="regenerating-spinner" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-dasharray="80, 200" stroke-dashoffset="0"></circle></svg>
+        <span class="regenerating-text">Regenerating...</span>
+      </div>
+    </div>
+  </div>`
+}
+
+/**
+ * Render HTML for a single <pic> tag match.
+ * Handles all image states: complete, regenerating, generating, failed, pending, unknown.
+ *
+ * @param match - The full <pic> tag match string
+ * @param imageMap - Map of original tag text to image info
+ * @param regeneratingIds - Optional set of image IDs currently being regenerated
+ * @returns HTML string for the image (or empty string if no image record found)
+ */
+export function renderSinglePicTag(
+  match: string,
+  imageMap: Map<string, ImageReplacementInfo>,
+  regeneratingIds?: Set<string>,
+): string {
+  const attrMatch = match.match(/<pic\s+([^>]*?)(?:\/>|>\s*<\/pic>)/i)
+  const attrs = attrMatch ? attrMatch[1] : ''
+  const promptMatch = attrs.match(/prompt=["']([^"']+)["']/i)
+  const prompt = promptMatch ? promptMatch[1] : ''
+  const shortPrompt = prompt.length > 60 ? prompt.slice(0, 60) + '...' : prompt
+
+  const imageInfo = imageMap.get(match)
+  if (!imageInfo) return ''
+
+  if (imageInfo.status === 'complete' && imageInfo.imageData) {
+    return (regeneratingIds?.has(imageInfo.id) ?? false)
+      ? renderRegeneratingImage(imageInfo.id, prompt, imageInfo.imageData)
+      : renderCompleteImage(imageInfo.id, prompt, imageInfo.imageData)
+  }
+
+  if (imageInfo.status === 'generating') {
+    return buildPlaceholder(
+      'generating',
+      imageInfo.id,
+      prompt,
+      loaderWithInfo('Generating image...', shortPrompt),
+    )
+  }
+
+  if (imageInfo.status === 'failed') {
+    const errorMsg = imageInfo.errorMessage || 'Generation failed'
+    return buildPlaceholder(
+      'failed',
+      imageInfo.id,
+      prompt,
+      errorWithInfo(errorMsg, shortPrompt, imageInfo.id),
+    )
+  }
+
+  // Pending
+  return buildPlaceholder(
+    'pending',
+    imageInfo.id,
+    prompt,
+    loaderWithInfo('In queue...', shortPrompt, 'pending'),
+  )
+}
 
 /**
  * Replace <pic> tags with loading placeholders during streaming.
@@ -115,26 +233,13 @@ export function replacePicTagsWithPlaceholders(content: string): string {
     const promptMatch = attrs.match(/prompt=["']([^"']+)["']/i)
     const prompt = promptMatch ? promptMatch[1] : 'Image'
     const shortPrompt = prompt.length > 60 ? prompt.slice(0, 60) + '...' : prompt
-
-    return `<div class="inline-image-placeholder generating" data-prompt="${escapeHtml(prompt)}">
-        <div class="placeholder-shimmer"></div>
-        <div class="placeholder-content">
-          <div class="placeholder-loader">
-            <svg class="placeholder-spinner-svg" viewBox="0 0 50 50">
-              <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-dasharray="80, 200" stroke-dashoffset="0"></circle>
-            </svg>
-            <svg class="placeholder-image-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-              <circle cx="9" cy="9" r="2"/>
-              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
-            </svg>
-          </div>
-          <div class="placeholder-info">
-            <span class="placeholder-status">Generating image...</span>
-            <span class="placeholder-prompt">${escapeHtml(shortPrompt)}</span>
-          </div>
-        </div>
-      </div>`
+    // No imageId during streaming — use empty string
+    return buildPlaceholder(
+      'generating',
+      '',
+      prompt,
+      loaderWithInfo('Generating image...', shortPrompt),
+    )
   })
 }
 
@@ -162,107 +267,8 @@ export function replacePicTagsWithImages(
   imageMap: Map<string, ImageReplacementInfo>,
   regeneratingIds?: Set<string>,
 ): string {
-  return content.replace(/<pic\s+([^>]*?)(?:\/>|>\s*<\/pic>)/gi, (match, attrs) => {
-    const promptMatch = attrs.match(/prompt=["']([^"']+)["']/i)
-    const prompt = promptMatch ? promptMatch[1] : ''
-    const shortPrompt = prompt.length > 60 ? prompt.slice(0, 60) + '...' : prompt
-
-    // Look up by original tag text
-    const imageInfo = imageMap.get(match)
-
-    if (!imageInfo) {
-      // No image record - this shouldn't happen after streaming completes
-      // Just hide the tag (image may have failed to queue)
-      return ''
-    }
-
-    if (imageInfo.status === 'complete' && imageInfo.imageData) {
-      const isRegenerating = regeneratingIds?.has(imageInfo.id) ?? false
-      // Successfully generated - show clickable image (opens modal on click)
-      // If regenerating, show loading overlay
-      if (isRegenerating) {
-        return `<div class="inline-generated-image regenerating" data-image-id="${imageInfo.id}" data-prompt="${escapeHtml(prompt)}">
-            <img src="data:image/png;base64,${imageInfo.imageData}" alt="${escapeHtml(prompt)}" loading="lazy" class="regenerating-image" />
-            <div class="regenerating-overlay">
-              <div class="regenerating-content">
-                <svg class="regenerating-spinner" viewBox="0 0 50 50">
-                  <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-dasharray="80, 200" stroke-dashoffset="0"></circle>
-                </svg>
-                <span class="regenerating-text">Regenerating...</span>
-              </div>
-            </div>
-          </div>`
-      }
-      return `<div class="inline-generated-image" data-image-id="${imageInfo.id}" data-prompt="${escapeHtml(prompt)}" data-action="view" role="button" tabindex="0"><img src="data:image/png;base64,${imageInfo.imageData}" alt="${escapeHtml(prompt)}" loading="lazy" /></div>`
-    }
-
-    if (imageInfo.status === 'generating') {
-      // Currently generating - show animated loading state
-      return `<div class="inline-image-placeholder generating" data-image-id="${imageInfo.id}" data-prompt="${escapeHtml(prompt)}">
-          <div class="placeholder-shimmer"></div>
-          <div class="placeholder-content">
-            <div class="placeholder-loader">
-              <svg class="placeholder-spinner-svg" viewBox="0 0 50 50">
-                <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-dasharray="80, 200" stroke-dashoffset="0"></circle>
-              </svg>
-              <svg class="placeholder-image-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-                <circle cx="9" cy="9" r="2"/>
-                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
-              </svg>
-            </div>
-            <div class="placeholder-info">
-              <span class="placeholder-status">Generating image...</span>
-              <span class="placeholder-prompt">${escapeHtml(shortPrompt)}</span>
-            </div>
-          </div>
-        </div>`
-    }
-
-    if (imageInfo.status === 'failed') {
-      // Failed - show error state with retry button
-      const errorMsg = imageInfo.errorMessage || 'Generation failed'
-      return `<div class="inline-image-placeholder failed" data-image-id="${imageInfo.id}" data-prompt="${escapeHtml(prompt)}">
-          <div class="placeholder-content">
-            <div class="placeholder-error-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" x2="12" y1="8" y2="12"/>
-                <line x1="12" x2="12.01" y1="16" y2="16"/>
-              </svg>
-            </div>
-            <div class="placeholder-info">
-              <span class="placeholder-status error">${escapeHtml(errorMsg)}</span>
-              <span class="placeholder-prompt">${escapeHtml(shortPrompt)}</span>
-            </div>
-            <button class="inline-image-btn retry-btn" data-action="regenerate" data-image-id="${imageInfo.id}" title="Retry generation">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
-              Retry
-            </button>
-          </div>
-        </div>`
-    }
-
-    // Pending state - image record exists but hasn't started generating yet
-    return `<div class="inline-image-placeholder pending" data-image-id="${imageInfo.id}" data-prompt="${escapeHtml(prompt)}">
-        <div class="placeholder-shimmer"></div>
-        <div class="placeholder-content">
-          <div class="placeholder-loader">
-            <svg class="placeholder-spinner-svg pending" viewBox="0 0 50 50">
-              <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-dasharray="80, 200" stroke-dashoffset="0"></circle>
-            </svg>
-            <svg class="placeholder-image-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-              <circle cx="9" cy="9" r="2"/>
-              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
-            </svg>
-          </div>
-          <div class="placeholder-info">
-            <span class="placeholder-status">In queue...</span>
-            <span class="placeholder-prompt">${escapeHtml(shortPrompt)}</span>
-          </div>
-        </div>
-      </div>`
+  return content.replace(/<pic\s+([^>]*?)(?:\/>|>\s*<\/pic>)/gi, (match) => {
+    return renderSinglePicTag(match, imageMap, regeneratingIds)
   })
 }
 

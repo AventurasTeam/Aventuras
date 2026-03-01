@@ -20,12 +20,15 @@
     Save,
   } from 'lucide-svelte'
   import type { Character } from '$lib/types'
+  import type { RuntimeVariable, RuntimeVarsMap } from '$lib/services/packs/types'
   import {
     hasRequiredCredentials,
     getProviderDisplayName,
     generatePortrait as sdkGeneratePortrait,
   } from '$lib/services/ai/image'
-  import { promptService } from '$lib/services/prompts'
+  import { database } from '$lib/services/database'
+  import RuntimeVariableDisplay from './RuntimeVariableDisplay.svelte'
+  import { ContextBuilder } from '$lib/services/context'
   import { normalizeImageDataUrl } from '$lib/utils/image'
   import { createLogger } from '$lib/services/ai/core/config'
 
@@ -64,6 +67,41 @@
   let expandedPortrait = $state<{ src: string; name: string } | null>(null)
   let savedToVaultId = $state<string | null>(null)
   let expandedDescriptors = $state<Set<string>>(new Set())
+
+  // Runtime variables
+  let runtimeVarDefs = $state<RuntimeVariable[]>([])
+  let editRuntimeVars = $state<RuntimeVarsMap>({})
+
+  $effect(() => {
+    if (story.currentStory) {
+      loadRuntimeVarDefs()
+    }
+  })
+
+  async function loadRuntimeVarDefs() {
+    if (!story.currentStory) return
+    try {
+      const packId = await database.getStoryPackId(story.currentStory.id)
+      if (packId) {
+        runtimeVarDefs = await database.getRuntimeVariablesByEntityType(packId, 'character')
+      } else {
+        runtimeVarDefs = []
+      }
+    } catch {
+      runtimeVarDefs = []
+    }
+  }
+
+  function updateEditRuntimeVar(
+    defId: string,
+    variableName: string,
+    value: string | number | null,
+  ) {
+    editRuntimeVars = {
+      ...editRuntimeVars,
+      [defId]: { variableName, v: value },
+    }
+  }
 
   function toggleDescriptorExpand(characterId: string) {
     const newSet = new SvelteSet(expandedDescriptors)
@@ -175,6 +213,9 @@
     editVisualDescriptors = descriptorsToString(character.visualDescriptors)
     editPortrait = character.portrait
     portraitError = null
+    // Initialize runtime vars from entity metadata
+    const rv = (character.metadata as Record<string, unknown> | null)?.runtimeVars
+    editRuntimeVars = rv && typeof rv === 'object' ? { ...(rv as RuntimeVarsMap) } : {}
   }
 
   function cancelEdit() {
@@ -187,6 +228,7 @@
     editStatus = 'active'
     editPortrait = null
     portraitError = null
+    editRuntimeVars = {}
   }
 
   async function saveEdit(character: Character) {
@@ -200,6 +242,19 @@
       .filter(Boolean)
     const visualDescriptors = stringToDescriptors(editVisualDescriptors)
 
+    // Merge runtime vars into metadata
+    const existingMeta = (character.metadata as Record<string, unknown>) ?? {}
+    const hasRuntimeVarEdits = Object.keys(editRuntimeVars).length > 0
+    const updatedMetadata = hasRuntimeVarEdits
+      ? {
+          ...existingMeta,
+          runtimeVars: {
+            ...((existingMeta.runtimeVars as RuntimeVarsMap) ?? {}),
+            ...editRuntimeVars,
+          },
+        }
+      : character.metadata
+
     await story.updateCharacter(character.id, {
       name,
       description: editDescription.trim() || null,
@@ -208,6 +263,7 @@
       traits,
       visualDescriptors,
       portrait: editPortrait,
+      metadata: updatedMetadata,
     })
 
     cancelEdit()
@@ -321,7 +377,7 @@
 
     log('Starting portrait generation', {
       characterName: character.name,
-      model: imageSettings.portraitModel,
+      model: settings.getImageProfile(imageSettings.portraitProfileId ?? '')?.model ?? '',
       styleId: imageSettings.portraitStyleId,
     })
 
@@ -349,39 +405,29 @@
     portraitError = null
 
     try {
-      // Get the style prompt
+      // Get the style prompt from database (external template)
       const styleId = imageSettings.portraitStyleId
 
       let stylePrompt = ''
       try {
-        const promptContext = {
-          mode: 'adventure' as const,
-          pov: 'second' as const,
-          tense: 'present' as const,
-          protagonistName: '',
-        }
-        stylePrompt = promptService.getPrompt(styleId, promptContext) || ''
+        const template = await database.getPackTemplate('default-pack', styleId)
+        stylePrompt = template?.content || ''
       } catch {
         stylePrompt = DEFAULT_FALLBACK_STYLE_PROMPT
       }
 
-      // Build the portrait generation prompt using the template
-      const promptContext = {
-        mode: 'adventure' as const,
-        pov: 'second' as const,
-        tense: 'present' as const,
+      // Build the portrait generation prompt using ContextBuilder
+      const ctx = new ContextBuilder()
+      ctx.add({
+        mode: 'adventure',
+        pov: 'second',
+        tense: 'present',
         protagonistName: '',
-      }
-
-      const portraitPrompt = promptService.renderPrompt(
-        'image-portrait-generation',
-        promptContext,
-        {
-          imageStylePrompt: stylePrompt,
-          visualDescriptors: descriptors.join(', '),
-          characterName: editName || character.name,
-        },
-      )
+        imageStylePrompt: stylePrompt,
+        visualDescriptors: descriptors.join(', '),
+        characterName: editName || character.name,
+      })
+      const { system: portraitPrompt } = await ctx.render('image-portrait-generation')
 
       log('Sending portrait generation request', {
         promptLength: portraitPrompt.length,
@@ -592,6 +638,19 @@
                   class="min-h-[60px] resize-none text-xs"
                 />
               </div>
+
+              <!-- Runtime Variables (Edit) -->
+              {#if runtimeVarDefs.length > 0}
+                <RuntimeVariableDisplay
+                  definitions={runtimeVarDefs}
+                  values={editRuntimeVars}
+                  editMode={true}
+                  onValueChange={(defId, value) => {
+                    const def = runtimeVarDefs.find((d) => d.id === defId)
+                    if (def) updateEditRuntimeVar(defId, def.variableName, value)
+                  }}
+                />
+              {/if}
 
               <!-- Portrait Section -->
               <div class="border-border bg-muted/20 rounded-md border p-2">
@@ -869,7 +928,26 @@
                     {character.translatedDescription ?? character.description}
                   </p>
                 {/if}
+
+                <!-- Runtime Variables (Non-pinned, collapsible) -->
+                {#if runtimeVarDefs.length > 0}
+                  <RuntimeVariableDisplay
+                    definitions={runtimeVarDefs}
+                    values={character.metadata?.runtimeVars as RuntimeVarsMap | undefined}
+                    pinnedOnly={false}
+                  />
+                {/if}
               </div>
+            {/if}
+
+            <!-- Runtime Variables (Pinned, always visible) -->
+            {#if runtimeVarDefs.length > 0}
+              <RuntimeVariableDisplay
+                definitions={runtimeVarDefs}
+                values={character.metadata?.runtimeVars as RuntimeVarsMap | undefined}
+                pinnedOnly={true}
+                class={isCollapsed ? 'mt-2' : 'mt-1'}
+              />
             {/if}
 
             <!-- Footer Actions -->

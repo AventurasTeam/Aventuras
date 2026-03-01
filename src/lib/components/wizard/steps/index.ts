@@ -3,6 +3,7 @@
  */
 
 export { default as Step1Mode } from './Step1Mode.svelte'
+export { default as StepPackSelection } from './StepPackSelection.svelte'
 export { default as Step2Lorebook } from './Step2Lorebook.svelte'
 export { default as Step3Setting } from './Step3Setting.svelte'
 export { default as Step4Characters } from './Step4Characters.svelte'

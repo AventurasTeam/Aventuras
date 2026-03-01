@@ -14,6 +14,7 @@
 *.p12
 *.pfx
 .opencode/
+.planning/
 
 # Keystore files (Android signing)
 *.keystore
@@ -43,9 +44,18 @@ build/
 # Rust / Tauri
 # -----------------------------------------------------------------------------
 src-tauri/target/
-src-tauri/gen/
+src-tauri/gen/schemas/
 src-tauri/WixTools/
 src-tauri/Cargo.lock.bak
+
+# Android: files regenerated at build time (do NOT track)
+src-tauri/gen/android/app/src/main/jniLibs/
+src-tauri/gen/android/app/src/main/assets/
+src-tauri/gen/android/app/src/main/java/**/generated/
+
+# Android: secrets (handled by CI secrets)
+src-tauri/gen/android/aventura.keystore
+src-tauri/gen/android/key.properties
 
 # SQLite databases (runtime data)
 *.db
@@ -228,7 +238,11 @@ sunicon.*
 .claude/
 scripts/ralph/
 tasks/
-.planning/
+
+# -----------------------------------------------------------------------------
+# Antigravity
+# -----------------------------------------------------------------------------
+.agent/
 
 # -----------------------------------------------------------------------------
 # AUR Package (separate repo)
@@ -244,3 +258,7 @@ aventura-release.keystore.old
 design.md
 prompting_guide.md
 nul
+
+FEATURES.md
+IMPLEMENTATION_PLAN.md
+TODO_*.md

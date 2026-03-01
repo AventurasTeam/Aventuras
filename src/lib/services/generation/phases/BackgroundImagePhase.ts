@@ -28,6 +28,7 @@ export interface BackgroundImageDependencies {
 /** Settings needed for image phase decision making */
 export interface BackgroundImageSettings {
   backgroundImagesEnabled?: boolean
+  imageGenerationMode?: 'none' | 'agentic' | 'inline'
 }
 
 /** Input for the image phase */
@@ -64,6 +65,13 @@ export class BackgroundImagePhase {
       return result
     }
 
+    // Skip in inline mode - we don't want agentic background analysis in pure inline mode
+    if (imageSettings.imageGenerationMode === 'inline') {
+      const result: BackgroundImageResult = { started: false, skippedReason: 'inline_mode' }
+      yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
+      return result
+    }
+
     // Check if image generation is actually configured (profile exists)
     if (!this.deps.isImageGenerationEnabled(imageSettings, 'background')) {
       const result: BackgroundImageResult = { started: false, skippedReason: 'not_configured' }
@@ -77,10 +85,6 @@ export class BackgroundImagePhase {
     }
 
     try {
-      console.log('BackgroundImagePhase.execute2')
-      // Start image generation (runs in background via AIService)
-      // Note: This is intentionally fire-and-forget within the pipeline
-      // The AIService handles its own error logging
       await this.deps.analyzeBackgroundChangeAndGenerateImage(storyId, storyEntries)
 
       const result: BackgroundImageResult = { started: true }

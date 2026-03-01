@@ -71,6 +71,12 @@ export class NarrativeStore {
     // });
   }
 
+  // Genre Actions
+  setCustomGenre(genre: string) {
+    this.customGenre = genre
+    this.selectedGenre = 'custom'
+  }
+
   // Lorebook Actions
   addLorebookFromVault(vaultLorebook: VaultLorebook) {
     const entries = vaultLorebook.entries.map((e) => ({

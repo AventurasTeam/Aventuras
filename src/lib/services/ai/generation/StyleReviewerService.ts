@@ -6,9 +6,9 @@
  */
 
 import type { StoryEntry, StoryMode, POV, Tense } from '$lib/types'
-import { promptService, type PromptContext } from '$lib/services/prompts'
+import { BaseAIService } from '../BaseAIService'
+import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '../core/config'
-import { generateStructured } from '../sdk/generate'
 import { styleReviewResultSchema, type PhraseAnalysis } from '../sdk/schemas/style'
 
 const log = createLogger('StyleReviewer')
@@ -28,16 +28,13 @@ export interface StyleReviewResult {
 /**
  * Service that analyzes text for style issues.
  */
-export class StyleReviewerService {
-  private presetId: string
-
-  constructor(presetId: string = 'styleReviewer') {
-    this.presetId = presetId
+export class StyleReviewerService extends BaseAIService {
+  constructor(serviceId: string) {
+    super(serviceId)
   }
 
   /**
    * Format style review results for injection into the system prompt.
-   * This is a static method used by systemBuilder.
    */
   static formatForPromptInjection(review: StyleReviewResult): string {
     if (!review.phrases || review.phrases.length === 0) {
@@ -93,29 +90,18 @@ export class StyleReviewerService {
       .map((e, i) => `--- Passage ${i + 1} ---\n${e.content}`)
       .join('\n\n')
 
-    const promptContext: PromptContext = {
+    const ctx = new ContextBuilder()
+    ctx.add({
       mode,
       pov,
       tense,
-      protagonistName: '',
-    }
-
-    const system = promptService.renderPrompt('style-reviewer', promptContext)
-    const prompt = promptService.renderUserPrompt('style-reviewer', promptContext, {
       passageCount: narrationEntries.length.toString(),
       passages,
     })
+    const { system, user: prompt } = await ctx.render('style-reviewer')
 
     try {
-      const result = await generateStructured(
-        {
-          presetId: this.presetId,
-          schema: styleReviewResultSchema,
-          system,
-          prompt,
-        },
-        'style-reviewer',
-      )
+      const result = await this.generate(styleReviewResultSchema, system, prompt, 'style-reviewer')
 
       log('analyzeStyle complete', { phrasesFound: result.phrases.length })
 

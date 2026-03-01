@@ -4,6 +4,7 @@
   import { settings } from '$lib/stores/settings.svelte'
   import { grammarService } from '$lib/services/grammar'
   import { updaterService } from '$lib/services/updater'
+  import { packService } from '$lib/services/packs/pack-service'
   import AppShell from '$lib/components/layout/AppShell.svelte'
   import WelcomeScreen from '$lib/components/intro/WelcomeScreen.svelte'
 
@@ -15,6 +16,9 @@
     try {
       // Initialize database connection
       await database.init()
+
+      // Seed prompt templates into the database (idempotent)
+      await packService.initialize()
 
       // Initialize settings from database
       await settings.init()
@@ -64,8 +68,10 @@
     }
   })
 
-  function handleProviderSetupComplete() {
+  async function handleProviderSetupComplete() {
     showProviderSetup = false
+    // Ensure templates are seeded (idempotent, safe to call again)
+    await packService.initialize()
     // Continue with initialization
     grammarService.setup().catch(console.error)
     initialized = true

@@ -6,11 +6,16 @@
  */
 
 import type { Entry, VaultLorebookEntry } from '$lib/types'
+import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '../core/config'
 import { createAgentFromPreset, extractTerminalToolResult, stopOnTerminalTool } from '../sdk/agents'
-import { createLorebookTools, type LorebookToolContext } from '../sdk/tools'
-import type { PendingChangeSchema, FinishLoreManagementSchema } from '../sdk/schemas/lorebook'
-import { promptService } from '$lib/services/prompts'
+import { createLoreManagementTools } from '../sdk/tools'
+import type {
+  FinishLoreManagementSchema,
+  LorebookEntryPendingChangeSchema,
+} from '../sdk/schemas/lorebook'
+import { ContextBuilder } from '$lib/services/context'
+import type { LoreManagementToolContext } from '../sdk/tools/lorebook'
 
 const log = createLogger('LoreManagement')
 
@@ -82,12 +87,11 @@ function entryToVaultEntry(entry: Entry): VaultLorebookEntry {
  * Service that autonomously manages lorebook entries.
  * Uses ToolLoopAgent for multi-turn tool calling.
  */
-export class LoreManagementService {
-  private presetId: string
+export class LoreManagementService extends BaseAIService {
   private maxIterations: number
 
-  constructor(presetId: string = 'agentic', maxIterations: number = 3) {
-    this.presetId = presetId
+  constructor(serviceId: string, maxIterations: number = 3) {
+    super(serviceId)
     this.maxIterations = maxIterations
   }
 
@@ -109,7 +113,7 @@ export class LoreManagementService {
     })
 
     // Track pending changes - in autonomous mode, we auto-approve everything
-    const pendingChanges: PendingChangeSchema[] = []
+    const pendingChanges: LorebookEntryPendingChangeSchema[] = []
     const createdEntries: Entry[] = []
     const updatedEntries: Entry[] = []
     let changeIdCounter = 0
@@ -122,7 +126,7 @@ export class LoreManagementService {
       : undefined
 
     // Create tool context with chapter querying
-    const toolContext: LorebookToolContext = {
+    const toolContext: LoreManagementToolContext = {
       entries: vaultEntries,
       onPendingChange: (change) => {
         // Auto-approve in autonomous mode
@@ -136,7 +140,7 @@ export class LoreManagementService {
     }
 
     // Create tools
-    const tools = createLorebookTools(toolContext)
+    const tools = createLoreManagementTools(toolContext)
 
     // Build entry summaries for user prompt (use 0-based indices to match tool expectations)
     const entrySummary =
@@ -156,16 +160,6 @@ ${context.narrativeResponse}
 
 `
 
-    // Get prompts from prompt service
-    const dummyContext = {
-      mode: 'adventure' as const,
-      pov: 'second' as const,
-      tense: 'present' as const,
-      protagonistName: '',
-    }
-
-    const systemPrompt = promptService.renderPrompt('lore-management', dummyContext)
-
     // Build chapter summary from chapters array
     const chapterSummary =
       context.chapters && context.chapters.length > 0
@@ -177,11 +171,10 @@ ${context.narrativeResponse}
             .join('\n')
         : 'No chapters available. Use list_chapters and query_chapter tools to explore story history.'
 
-    const userPrompt = promptService.renderUserPrompt('lore-management', dummyContext, {
-      entrySummary,
-      recentStorySection,
-      chapterSummary,
-    })
+    // Render prompts through unified pipeline
+    const ctx = new ContextBuilder()
+    ctx.add({ entrySummary, recentStorySection, chapterSummary })
+    const { system: systemPrompt, user: userPrompt } = await ctx.render('lore-management')
 
     // Create the agent
     const agent = createAgentFromPreset(

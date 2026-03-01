@@ -22,6 +22,11 @@
     "fs:allow-write-text-file",
     "fs:allow-exists",
     "fs:allow-mkdir",
+    "fs:allow-remove",
+    {
+      "identifier": "fs:scope",
+      "allow": [{ "path": "$APPDATA/**" }, { "path": "$TEMP/**" }]
+    },
     "dialog:default",
     "dialog:allow-open",
     "dialog:allow-save",
@@ -69,6 +74,7 @@
         { "url": "https://*:*" },
         { "url": "http://*:*" }
       ]
-    }
+    },
+    "notification:default"
   ]
 }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ImageModelInfo } from '$lib/services/ai/image/modelListing'
+  import type { ImageModelInfo } from '$lib/services/ai/image'
   import { Autocomplete } from '$lib/components/ui/autocomplete'
   import { Button } from '$lib/components/ui/button'
   import { RefreshCw, Loader2, Check } from 'lucide-svelte'

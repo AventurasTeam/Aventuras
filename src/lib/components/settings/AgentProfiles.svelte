@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { settings } from '$lib/stores/settings.svelte'
+  import { SvelteMap } from 'svelte/reactivity'
+  import { settings, DEFAULT_SERVICE_PRESET_ASSIGNMENTS } from '$lib/stores/settings.svelte'
   import type { GenerationPreset } from '$lib/types'
   import { ask } from '@tauri-apps/plugin-dialog'
   import {
@@ -139,10 +140,10 @@
       description: 'Active context search',
     },
     {
-      id: 'interactiveLorebook',
-      label: 'Interactive Lore',
+      id: 'interactiveVault',
+      label: 'Vault Assistant',
       icon: BookOpen,
-      description: 'Assists creating entries',
+      description: 'AI vault assistant',
     },
     // Wizard tasks
     {
@@ -238,44 +239,7 @@
   let activeTaskMenu = $state<string | null>(null) // Just stores serviceId now
   let resettingProfiles = $state(false)
 
-  // Default profile assignments
-  const defaultAssignments: Record<string, string> = {
-    // Classification
-    classifier: 'classification',
-    lorebookClassifier: 'classification',
-    entryRetrieval: 'classification',
-    characterCardImport: 'classification',
-    // Memory
-    memory: 'memory',
-    chapterQuery: 'memory',
-    timelineFill: 'memory',
-    // Suggestions
-    suggestions: 'suggestions',
-    actionChoices: 'suggestions',
-    styleReviewer: 'suggestions',
-    imageGeneration: 'suggestions',
-    bgImageGeneration: 'suggestions',
-    // Agentic
-    loreManagement: 'agentic',
-    agenticRetrieval: 'agentic',
-    interactiveLorebook: 'agentic',
-    // Wizard
-    'wizard:settingExpansion': 'wizard',
-    'wizard:settingRefinement': 'wizard',
-    'wizard:protagonistGeneration': 'wizard',
-    'wizard:characterElaboration': 'wizard',
-    'wizard:characterRefinement': 'wizard',
-    'wizard:supportingCharacters': 'wizard',
-    'wizard:openingGeneration': 'wizard',
-    'wizard:openingRefinement': 'wizard',
-    // Translation
-    'translation:narration': 'translation',
-    'translation:input': 'translation',
-    'translation:ui': 'translation',
-    'translation:suggestions': 'translation',
-    'translation:actionChoices': 'translation',
-    'translation:wizard': 'translation',
-  }
+  const defaultAssignments = DEFAULT_SERVICE_PRESET_ASSIGNMENTS
 
   function getReasoningIndex(value?: string): number {
     const index = reasoningLevels.indexOf((value ?? 'off') as any)
@@ -287,14 +251,23 @@
     return reasoningLevels[clamped]
   }
 
-  function getServicesForProfile(profileId: string | 'custom') {
-    return systemServices.filter((service) => {
-      const assignedPresetId = settings.servicePresetAssignments[service.id]
-      if (profileId === 'custom') {
-        return !assignedPresetId
+  // Memoized: compute service-to-profile mapping once per reactive update
+  let servicesByProfile = $derived.by(() => {
+    const map = new SvelteMap<string, (typeof systemServices)[number][]>()
+    for (const service of systemServices) {
+      const key = settings.servicePresetAssignments[service.id] || 'custom'
+      let arr = map.get(key)
+      if (!arr) {
+        arr = []
+        map.set(key, arr)
       }
-      return assignedPresetId === profileId
-    })
+      arr.push(service)
+    }
+    return map
+  })
+
+  function getServicesForProfile(profileId: string | 'custom') {
+    return servicesByProfile.get(profileId) ?? []
   }
 
   function createNewPreset() {
@@ -362,12 +335,13 @@
       settings.generationPresets = settings.generationPresets.filter((p) => p.id !== presetId)
       await settings.saveGenerationPresets()
 
-      // Reset assignments
+      // Reset assignments - mutate in-memory then save once
       for (const service of systemServices) {
         if (settings.servicePresetAssignments[service.id] === presetId) {
-          settings.setServicePresetId(service.id, '')
+          settings.servicePresetAssignments[service.id] = ''
         }
       }
+      await settings.saveServicePresetAssignments()
     }
   }
 
@@ -472,6 +446,15 @@
     const profile = settings.getProfile(profileId)
     if (!profile) return false
     return getReasoningMode(profile.providerType) === 'fetched'
+  })
+
+  // For 'heuristic' providers (e.g., Ollama), reasoning is tag-based only — no effort levels
+  let isHeuristicProvider = $derived.by(() => {
+    if (!tempPreset) return false
+    const profileId = tempPreset.profileId ?? settings.getDefaultProfileIdForProvider()
+    const profile = settings.getProfile(profileId)
+    if (!profile) return false
+    return getReasoningMode(profile.providerType) === 'heuristic'
   })
 </script>
 
@@ -628,7 +611,7 @@
               Some models support reasoning. Fetch models to detect capabilities.
             </p>
           {/if}
-        {:else if tempPresetReasoningSupported}
+        {:else if tempPresetReasoningSupported && !isHeuristicProvider}
           <div class="grid gap-4">
             <div class="flex justify-between">
               <Label>Thinking: {reasoningLabels[tempPreset.reasoningEffort]}</Label>
@@ -803,73 +786,68 @@
     {/each}
 
     <!-- Unassigned Card -->
-    <Card.Root class="bg-muted/20 flex h-full flex-col border-dashed">
-      <div class="border-b p-3 pb-2">
-        <div class="text-muted-foreground text-sm font-medium">Unassigned</div>
-      </div>
-      <Card.Content
-        class="flex flex-1 flex-col gap-2 p-3 transition-all {getServicesForProfile('custom')
-          .length > 0
-          ? 'bg-muted/30'
-          : ''}"
-      >
-        {#if getServicesForProfile('custom').length > 0}
-          <div
-            class="mb-2 rounded border border-amber-500/20 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-600 dark:text-amber-400"
-          >
-            Unassigned agents will not work. Assign them to a profile.
-          </div>
-        {/if}
-        {#each getServicesForProfile('custom') as service (service.id)}
-          <div
-            class="bg-background flex flex-col overflow-hidden rounded-md border shadow-sm transition-all"
-          >
-            <button
-              class="group hover:bg-muted/50 flex w-full items-center gap-2 p-2 text-left transition-colors select-none"
-              onclick={(e) => handleTaskClick(e, service.id)}
-              title={service.description}
+    {#if getServicesForProfile('custom').length !== 0}
+      <Card.Root class="bg-muted/20 flex h-full flex-col border-dashed">
+        <div class="border-b p-3 pb-2">
+          <div class="text-muted-foreground text-sm font-medium">Unassigned</div>
+        </div>
+        <Card.Content
+          class="flex flex-1 flex-col gap-2 p-3 transition-all {getServicesForProfile('custom')
+            .length > 0
+            ? 'bg-muted/30'
+            : ''}"
+        >
+          {#if getServicesForProfile('custom').length > 0}
+            <div
+              class="mb-2 rounded border border-amber-500/20 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-600 dark:text-amber-400"
             >
-              <service.icon class="text-muted-foreground h-3 w-3 shrink-0" />
-              <span class="flex-1 truncate text-xs">{service.label}</span>
-              <ChevronDown
-                class="text-muted-foreground ml-auto h-3 w-3 transition-transform {isTaskMenuOpen(
-                  service.id,
-                )
-                  ? 'rotate-180'
-                  : ''}"
-              />
-            </button>
+              Unassigned agents will not work. Assign them to a profile.
+            </div>
+          {/if}
+          {#each getServicesForProfile('custom') as service (service.id)}
+            <div
+              class="bg-background flex flex-col overflow-hidden rounded-md border shadow-sm transition-all"
+            >
+              <button
+                class="group hover:bg-muted/50 flex w-full items-center gap-2 p-2 text-left transition-colors select-none"
+                onclick={(e) => handleTaskClick(e, service.id)}
+                title={service.description}
+              >
+                <service.icon class="text-muted-foreground h-3 w-3 shrink-0" />
+                <span class="flex-1 truncate text-xs">{service.label}</span>
+                <ChevronDown
+                  class="text-muted-foreground ml-auto h-3 w-3 transition-transform {isTaskMenuOpen(
+                    service.id,
+                  )
+                    ? 'rotate-180'
+                    : ''}"
+                />
+              </button>
 
-            {#if isTaskMenuOpen(service.id)}
-              <div class="bg-muted/50 flex flex-col gap-0.5 border-t p-1">
-                <div
-                  class="text-muted-foreground px-2 py-1 text-[10px] font-bold tracking-wider uppercase"
-                >
-                  Move to...
-                </div>
-                {#each settings.generationPresets as targetPreset (targetPreset.id)}
-                  <button
-                    class="hover:bg-background w-full truncate rounded-sm px-2 py-1.5 text-left text-xs transition-colors"
-                    onclick={(e) => {
-                      e.stopPropagation()
-                      moveTask(service.id, targetPreset.id)
-                    }}
+              {#if isTaskMenuOpen(service.id)}
+                <div class="bg-muted/50 flex flex-col gap-0.5 border-t p-1">
+                  <div
+                    class="text-muted-foreground px-2 py-1 text-[10px] font-bold tracking-wider uppercase"
                   >
-                    {targetPreset.name}
-                  </button>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        {/each}
-        {#if getServicesForProfile('custom').length === 0}
-          <div
-            class="text-muted-foreground flex flex-1 items-center justify-center py-2 text-xs italic"
-          >
-            All tasks assigned
-          </div>
-        {/if}
-      </Card.Content>
-    </Card.Root>
+                    Move to...
+                  </div>
+                  {#each settings.generationPresets as targetPreset (targetPreset.id)}
+                    <button
+                      class="hover:bg-background w-full truncate rounded-sm px-2 py-1.5 text-left text-xs transition-colors"
+                      onclick={(e) => {
+                        e.stopPropagation()
+                        moveTask(service.id, targetPreset.id)
+                      }}
+                    >
+                      {targetPreset.name}
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/each}
+        </Card.Content>
+      </Card.Root>
+    {/if}
   </div>
 </div>

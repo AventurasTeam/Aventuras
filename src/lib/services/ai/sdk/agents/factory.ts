@@ -5,12 +5,19 @@
  * Integrates with the existing settings and provider system.
  */
 
-import { ToolLoopAgent, type StopCondition, type ToolSet, type StepResult } from 'ai'
+import {
+  ToolLoopAgent,
+  wrapLanguageModel,
+  type StopCondition,
+  type ToolSet,
+  type StepResult,
+} from 'ai'
 import type { LanguageModelV3 } from '@ai-sdk/provider'
 import type { ProviderOptions } from '@ai-sdk/provider-utils'
 import { settings } from '$lib/stores/settings.svelte'
 import { createProviderFromProfile } from '../providers'
 import { buildProviderOptions } from '../generate'
+import { uniqueToolCallIdMiddleware } from '../middleware'
 import type { GenerationPreset, APIProfile, ProviderType } from '$lib/types'
 import { createLogger } from '../../core/config'
 
@@ -33,7 +40,11 @@ export interface ResolvedAgentConfig {
  *
  * @param presetId - The preset ID (e.g., 'agentic', 'loreManagement')
  */
-export function resolveAgentConfig(presetId: string, serviceId: string): ResolvedAgentConfig {
+export function resolveAgentConfig(
+  presetId: string,
+  serviceId: string,
+  debugId?: string,
+): ResolvedAgentConfig {
   const preset = settings.getPresetConfig(presetId)
   const profileId = preset.profileId ?? settings.apiSettings.mainNarrativeProfileId
   const profile = settings.getProfile(profileId)
@@ -42,9 +53,12 @@ export function resolveAgentConfig(presetId: string, serviceId: string): Resolve
     throw new Error(`Profile not found: ${profileId}`)
   }
 
-  const provider = createProviderFromProfile(profile, serviceId)
+  const provider = createProviderFromProfile(profile, serviceId, debugId)
   // Call provider directly - all providers support provider(modelId) syntax
-  const model = provider(preset.model) as LanguageModelV3
+  const baseModel = provider(preset.model) as LanguageModelV3
+  // Wrap with uniqueToolCallIdMiddleware so providers that reuse IDs across steps
+  // (e.g. Google's `functions.tool:0` scheme) get globally unique tool call IDs.
+  const model = wrapLanguageModel({ model: baseModel, middleware: [uniqueToolCallIdMiddleware()] })
   const providerOptions = buildProviderOptions(preset, profile.providerType)
 
   return { preset, profile, providerType: profile.providerType, model, providerOptions }

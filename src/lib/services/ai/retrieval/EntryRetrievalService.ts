@@ -1,3 +1,5 @@
+import { generateStructured } from '../sdk/generate'
+import { settings } from '$lib/stores/settings.svelte'
 /**
  * Entry Retrieval Service for Aventura
  * Per design doc section 3.2.3: Tiered Injection
@@ -8,6 +10,7 @@
  * - Tier 3: LLM selection (STUBBED - awaiting SDK migration)
  */
 
+import { escapeRegex } from '$lib/utils/text'
 import type {
   Entry,
   EntryType,
@@ -17,12 +20,11 @@ import type {
   Item,
   GenerationPreset,
 } from '$lib/types'
-import { settings } from '$lib/stores/settings.svelte'
+import { BaseAIService } from '../BaseAIService'
 import { buildExtraBody } from '../core/requestOverrides'
 import { createLogger } from '../core/config'
-import { generateStructured } from '../sdk/generate'
 import { entitySelectionSchema } from '../sdk/schemas/context'
-import { promptService } from '$lib/services/prompts'
+import { ContextBuilder } from '$lib/services/context'
 
 const log = createLogger('EntryRetrieval')
 
@@ -130,12 +132,11 @@ export interface EntryRetrievalResult {
  * - Tier 1 and Tier 2 work without AI
  * - Tier 3 uses LLM selection for large entry counts
  */
-export class EntryRetrievalService {
+export class EntryRetrievalService extends BaseAIService {
   private config: EntryRetrievalConfig
-  private presetId: string
 
-  constructor(config: Partial<EntryRetrievalConfig> = {}, presetId: string = 'classification') {
-    this.presetId = presetId
+  constructor(config: Partial<EntryRetrievalConfig> = {}, serviceId: string = 'entryRetrieval') {
+    super(serviceId)
     this.config = { ...DEFAULT_ENTRY_RETRIEVAL_CONFIG, ...config }
     const maxWords = Number.isFinite(this.config.maxWordsPerEntry)
       ? this.config.maxWordsPerEntry
@@ -601,27 +602,9 @@ export class EntryRetrievalService {
       .map((e) => e.content)
       .join('\n\n')
 
-    const system = promptService.renderPrompt('tier3-entry-selection', {
-      mode: 'adventure',
-      pov: 'second',
-      tense: 'present',
-      protagonistName: '',
-    })
-
-    const prompt = promptService.renderUserPrompt(
-      'tier3-entry-selection',
-      {
-        mode: 'adventure',
-        pov: 'second',
-        tense: 'present',
-        protagonistName: '',
-      },
-      {
-        recentContent,
-        userInput,
-        entrySummaries,
-      },
-    )
+    const ctx = new ContextBuilder()
+    ctx.add({ recentContent, userInput, entrySummaries })
+    const { system, user: prompt } = await ctx.render('tier3-entry-selection')
 
     try {
       const result = await generateStructured(
@@ -682,16 +665,12 @@ export class EntryRetrievalService {
     }
 
     // Word boundary match
-    const wordPattern = new RegExp(`\\b${this.escapeRegex(normalized)}\\b`, 'i')
+    const wordPattern = new RegExp(`\\b${escapeRegex(normalized)}\\b`, 'i')
     if (wordPattern.test(searchContent)) {
       return true
     }
 
     return false
-  }
-
-  private escapeRegex(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   }
 
   /**
@@ -808,7 +787,7 @@ export async function getRelevantEntries(
   activationTracker?: ActivationTracker,
 ): Promise<EntryRetrievalResult> {
   const config = getEntryRetrievalConfigFromSettings()
-  const service = new EntryRetrievalService(config)
+  const service = new EntryRetrievalService(config, 'entryRetrieval')
   return service.getRelevantEntries(
     entries,
     userInput,

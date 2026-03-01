@@ -712,11 +712,11 @@
               <div class="flex justify-between">
                 <Label>Action Choices</Label>
                 <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                  {settings.serviceSpecificSettings.contextWindow?.recentEntriesForChoices ?? 3} entries
+                  {settings.serviceSpecificSettings.contextWindow?.recentEntriesForChoices ?? 5} entries
                 </span>
               </div>
               <Slider
-                value={settings.serviceSpecificSettings.contextWindow?.recentEntriesForChoices ?? 3}
+                value={settings.serviceSpecificSettings.contextWindow?.recentEntriesForChoices ?? 5}
                 min={1}
                 max={10}
                 step={1}
@@ -824,11 +824,11 @@
               <div class="flex justify-between">
                 <Label>Per Tier</Label>
                 <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                  {settings.serviceSpecificSettings.lorebookLimits?.maxEntriesPerTier ?? 10} entries
+                  {settings.serviceSpecificSettings.lorebookLimits?.maxEntriesPerTier ?? 20} entries
                 </span>
               </div>
               <Slider
-                value={settings.serviceSpecificSettings.lorebookLimits?.maxEntriesPerTier ?? 10}
+                value={settings.serviceSpecificSettings.lorebookLimits?.maxEntriesPerTier ?? 20}
                 min={3}
                 max={20}
                 step={1}

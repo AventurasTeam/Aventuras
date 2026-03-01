@@ -11,11 +11,9 @@ import type {
   EntryCreator,
   VaultLorebookEntry,
 } from '$lib/types'
-import type { StoryMode } from '$lib/services/prompts'
-import { promptService, type PromptContext } from '$lib/services/prompts'
-import { generateStructured } from './ai/sdk/generate'
-import { lorebookClassificationResultSchema } from './ai/sdk/schemas/lorebook'
+import type { StoryMode } from '$lib/types'
 import { createLogger } from './ai/core/config'
+import { LorebookClassifierService } from './ai/import/LorebookClassifierService'
 
 const log = createLogger('LorebookImporter')
 
@@ -245,72 +243,8 @@ export async function classifyEntriesWithLLM(
   onProgress?: (classified: number, total: number) => void,
   mode: StoryMode = 'adventure',
 ): Promise<ImportedEntry[]> {
-  if (entries.length === 0) return entries
-
-  const BATCH_SIZE = 20 // Process in batches to avoid token limits
-  const result = [...entries]
-  let classified = 0
-
-  // Minimal context for prompt rendering
-  const promptContext: PromptContext = {
-    mode,
-    pov: 'second',
-    tense: 'present',
-    protagonistName: '',
-  }
-
-  const system = promptService.renderPrompt('lorebook-classifier', promptContext)
-
-  // Process in batches
-  for (let i = 0; i < entries.length; i += BATCH_SIZE) {
-    const batch = entries.slice(i, i + BATCH_SIZE)
-
-    // Build entries JSON for the prompt
-    const entriesJson = JSON.stringify(
-      batch.map((entry, batchIndex) => ({
-        index: batchIndex,
-        name: entry.name,
-        content: entry.description.slice(0, 500), // Limit content length
-        keywords: entry.keywords.slice(0, 10),
-      })),
-      null,
-      2,
-    )
-
-    const prompt = promptService.renderUserPrompt('lorebook-classifier', promptContext, {
-      entriesJson,
-    })
-
-    const classifications = await generateStructured(
-      {
-        presetId: 'classification',
-        schema: lorebookClassificationResultSchema,
-        system,
-        prompt,
-      },
-      'lorebook-classifier',
-    )
-
-    // Apply classifications to batch
-    for (const classification of classifications) {
-      const globalIndex = i + classification.index
-      if (globalIndex < result.length) {
-        result[globalIndex] = {
-          ...result[globalIndex],
-          type: classification.type as EntryType,
-        }
-      }
-    }
-
-    classified += batch.length
-    if (onProgress) {
-      onProgress(classified, entries.length)
-    }
-
-    log('Classified batch', { batch: i / BATCH_SIZE + 1, classified, total: entries.length })
-  }
-
-  return result
+  const service = new LorebookClassifierService()
+  return service.classifyEntries(entries, onProgress, mode)
 }
 
 function determineInjectionMode(entry: SillyTavernEntry): EntryInjectionMode {

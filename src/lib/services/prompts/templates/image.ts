@@ -1,17 +1,6 @@
-/**
- * Image Generation Prompt Templates
- *
- * Templates for image generation including style presets,
- * scene analysis, and portrait generation.
- */
-
 import type { PromptTemplate } from '../types'
 
-/**
- * Soft Anime style template
- * Soft cel-shading, muted pastels, dreamy atmosphere
- */
-export const softAnimeStyleTemplate: PromptTemplate = {
+const softAnimeStyleTemplate: PromptTemplate = {
   id: 'image-style-soft-anime',
   name: 'Soft Anime',
   category: 'image-style',
@@ -19,11 +8,7 @@ export const softAnimeStyleTemplate: PromptTemplate = {
   content: `Soft cel-shaded anime illustration with muted pastel color palette. Low saturation, gentle lighting with diffused ambient glow. Subtle linework that blends into the coloring rather than hard outlines. Smooth gradients on shadows, slight bloom effect on highlights and light sources. Dreamy, airy, cozy atmosphere. Studio Ghibli-inspired aesthetic with soft watercolor texture hints in background. Smooth blending on hair and skin with no visible harsh texture. Avoid high contrast, sharp shadows, or dark gritty environments.`,
 }
 
-/**
- * Semi-realistic Anime style template
- * Polished, cinematic, detailed rendering
- */
-export const semiRealisticAnimeStyleTemplate: PromptTemplate = {
+const semiRealisticAnimeStyleTemplate: PromptTemplate = {
   id: 'image-style-semi-realistic',
   name: 'Semi-realistic Anime',
   category: 'image-style',
@@ -31,11 +16,7 @@ export const semiRealisticAnimeStyleTemplate: PromptTemplate = {
   content: `Digital anime art with polished, detailed rendering. NOT photorealistic - this is stylized anime/digital art with refined details. Anime-style eyes and facial features with expressive proportions. Detailed hair with visible strands, smooth skin with subtle shading, fabric with weight and texture. Clear directional lighting with soft falloff. Cinematic composition with depth of field. Rich colors with professional color grading. Clean linework with painterly rendering. Atmospheric and polished digital illustration style. Think high-quality anime key visual or game CG art. Avoid photorealism, 3D renders, or uncanny valley faces.`,
 }
 
-/**
- * Photorealistic style template
- * True-to-life rendering with natural lighting
- */
-export const photorealisticStyleTemplate: PromptTemplate = {
+const photorealisticStyleTemplate: PromptTemplate = {
   id: 'image-style-photorealistic',
   name: 'Photorealistic',
   category: 'image-style',
@@ -43,11 +24,7 @@ export const photorealisticStyleTemplate: PromptTemplate = {
   content: `Photorealistic digital art with true-to-life rendering. Natural lighting with accurate shadows and highlights. Detailed textures on skin, fabric, and materials. Accurate human proportions and anatomy. Professional photography aesthetic with cinematic depth of field. High dynamic range with realistic contrast. Detailed environments with accurate perspective. Materials rendered with proper reflectance and subsurface scattering where appropriate. Film grain optional for cinematic feel. 8K quality, hyperrealistic detail.`,
 }
 
-/**
- * Image Prompt Analysis template (legacy mode - full character descriptions)
- * Identifies imageable scenes in narrative text for image generation
- */
-export const imagePromptAnalysisTemplate: PromptTemplate = {
+const imagePromptAnalysisTemplate: PromptTemplate = {
   id: 'image-prompt-analysis',
   name: 'Image Prompt Analysis',
   category: 'service',
@@ -55,15 +32,15 @@ export const imagePromptAnalysisTemplate: PromptTemplate = {
   content: `You identify visually striking moments in narrative text for image generation.
 
 ## Your Task
-Analyze the narrative and identify up to {{maxImages}} key visual moments (0 = unlimited). Create DETAILED, descriptive image prompts (aim for below 500 characters each). **Do NOT exceed 500 characters per prompt - prompts over 500 characters will cause an error and fail to generate.**
+Analyze the narrative and identify up to {{ maxImages }} key visual moments (0 = unlimited). Create DETAILED, descriptive image prompts (aim for below 500 characters each). **Do NOT exceed 500 characters per prompt - prompts over 500 characters will cause an error and fail to generate.**
 
 ## Style (MUST include in every prompt)
-{{imageStylePrompt}}
+{{ imageStylePrompt }}
 
 **You MUST incorporate this full style description into every prompt.** Include multiple style keywords and rendering details.
 
 ## Character Reference
-{{characterDescriptors}}
+{{ characterDescriptors }}
 
 ## Prompt Requirements
 - **Prompt length:** below 500 characters MAX (prompts over 500 characters will ERROR and fail)
@@ -104,26 +81,22 @@ Analyze the narrative and identify up to {{maxImages}} key visual moments (0 = u
 - 5-7: Character introductions, emotions
 - 3-5: Environmental shots, atmosphere`,
   userContent: `## Story Context
-{{chatHistory}}
+{{ chatHistory }}
 
-{{lorebookContext}}
+{{ lorebookContext }}
 
 ## User Action
-{{userAction}}
+{{ userAction }}
 
 ## English Narrative (use for understanding context)
-{{narrativeResponse}}
+{{ narrativeResponse }}
 
-{{translatedNarrativeBlock}}
+{{ translatedNarrativeBlock }}
 
 Identify the most visually striking moments and return the JSON array. Remember: sourceText must come from the Display Narrative (translated if provided), but prompts must ALWAYS be in English.`,
 }
 
-/**
- * Image Prompt Analysis (Reference Mode) template
- * Identifies imageable scenes for generation with character reference images
- */
-export const imagePromptAnalysisReferenceTemplate: PromptTemplate = {
+const imagePromptAnalysisReferenceTemplate: PromptTemplate = {
   id: 'image-prompt-analysis-reference',
   name: 'Image Prompt Analysis (Reference Mode)',
   category: 'service',
@@ -131,7 +104,7 @@ export const imagePromptAnalysisReferenceTemplate: PromptTemplate = {
   content: `You identify visually striking moments in narrative text for image generation WITH REFERENCE IMAGES.
 
 ## Your Task
-Analyze the narrative and identify up to {{maxImages}} scene images (0 = unlimited). Portrait generations do NOT count towards this limit - generate portraits freely as needed. Create concise image prompts.
+Analyze the narrative and identify up to {{ maxImages }} scene images (0 = unlimited). Portrait generations do NOT count towards this limit - generate portraits freely as needed. Create concise image prompts.
 
 **Prompt length targets:**
 - Single character: 200-350 characters
@@ -148,16 +121,16 @@ Analyze the narrative and identify up to {{maxImages}} scene images (0 = unlimit
 - Think of portraits as "unlocking" a character for visual representation - no portrait = character cannot exist in images.
 
 ## Style Keywords (pick 2-3 relevant ones per prompt)
-{{imageStylePrompt}}
+{{ imageStylePrompt }}
 
 ## Characters With Portraits (can appear in scene images)
-{{charactersWithPortraits}}
+{{ charactersWithPortraits }}
 
 ## Characters Without Portraits (need portrait generation first)
-{{charactersWithoutPortraits}}
+{{ charactersWithoutPortraits }}
 
 ## Character Visual Descriptors
-{{characterDescriptors}}
+{{ characterDescriptors }}
 
 ## CRITICAL: Never Use Character Names in Prompts
 Image models don't know who "Elena" or "Marcus" are. Character names are ONLY for the JSON fields, NEVER in the prompt text itself.
@@ -280,31 +253,27 @@ Match the angle to the emotional tone: action scenes benefit from low/dutch angl
 - 5-7: Emotional moments, reveals
 - 3-5: Environmental atmosphere`,
   userContent: `## Story Context
-{{chatHistory}}
+{{ chatHistory }}
 
-{{lorebookContext}}
+{{ lorebookContext }}
 
 ## User Action
-{{userAction}}
+{{ userAction }}
 
 ## English Narrative (use for understanding context)
-{{narrativeResponse}}
+{{ narrativeResponse }}
 
-{{translatedNarrativeBlock}}
+{{ translatedNarrativeBlock }}
 
 Identify visually striking moments. Return JSON array. Remember: NEVER use character names in prompts - describe by visual traits only. Keep prompts concise. sourceText must come from the Display Narrative (translated if provided), but prompts must ALWAYS be in English.`,
 }
 
-/**
- * Portrait Generation template
- * Direct image prompt template for character portraits
- */
-export const imagePortraitGenerationTemplate: PromptTemplate = {
+const imagePortraitGenerationTemplate: PromptTemplate = {
   id: 'image-portrait-generation',
   name: 'Portrait Generation',
   category: 'service',
   description: 'Direct image prompt template for character portraits',
-  content: `Full body portrait of a character: {{visualDescriptors}}. Standing in a relaxed natural pose, facing the viewer, full body visible from head to feet. Neutral expression or slight smile. Plain solid color gradient background only, no objects, no environment, no scenery. Portrait composition, centered framing, professional lighting. {{imageStylePrompt}}`,
+  content: `Full body portrait of a character: {{ visualDescriptors }}. Standing in a relaxed natural pose, facing the viewer, full body visible from head to feet. Neutral expression or slight smile. Plain solid color gradient background only, no objects, no environment, no scenery. Portrait composition, centered framing, professional lighting. {{ imageStylePrompt }}`,
   userContent: '',
 }
 
@@ -340,15 +309,12 @@ When generating a description, follow these standards:
 *   **Composition**: Ensure the composition leaves negative space (usually the lower center or middle) for dialogue boxes and character sprites. Do not clutter the entire image; the edges should be detailed but the focal area should be relatively open.
 *   **Format**: A single, cohesive paragraph. 800 characters or less, any more **will break** the process.`,
   userContent: `##Previous Message:
-{{previousResponse}}
+{{ previousResponse }}
 
 ##Current Message:
-{{currentResponse}}`,
+{{ currentResponse }}`,
 }
 
-/**
- * Image templates array for registration
- */
 export const imageTemplates: PromptTemplate[] = [
   softAnimeStyleTemplate,
   semiRealisticAnimeStyleTemplate,

@@ -99,8 +99,22 @@ export class ChapterService {
       return { created: false, loreManagementTriggered: false }
     }
 
+    // Chapter endpoints must stay outside the protected tail buffer.
+    const protectedCount = Math.max(0, memoryConfig.chapterBuffer)
+    const maxSelectableEndIndex = Math.max(0, entries.length - protectedCount)
+    const startIndex = input.lastChapterEndIndex
+    const analysisEntries = entries.slice(startIndex, maxSelectableEndIndex)
+    if (maxSelectableEndIndex <= startIndex) {
+      log('No non-protected entries available for chapter end, skipping', {
+        startIndex,
+        maxSelectableEndIndex,
+        protectedCount,
+      })
+      return { created: false, loreManagementTriggered: false }
+    }
+
     const analysis = await this.deps.analyzeForChapter(
-      entries,
+      analysisEntries,
       input.lastChapterEndIndex,
       memoryConfig,
       tokensOutsideBuffer,
@@ -114,10 +128,27 @@ export class ChapterService {
       return { created: false, loreManagementTriggered: false }
     }
 
-    log('Creating new chapter', { optimalEndIndex: analysis.optimalEndIndex })
+    const clampedEndIndex = Math.min(
+      Math.max(analysis.optimalEndIndex, startIndex + 1),
+      maxSelectableEndIndex,
+    )
 
-    const startIndex = input.lastChapterEndIndex
-    const chapterEntries = entries.slice(startIndex, analysis.optimalEndIndex)
+    if (clampedEndIndex !== analysis.optimalEndIndex) {
+      log('Adjusted chapter endpoint to non-protected range', {
+        requestedEndIndex: analysis.optimalEndIndex,
+        clampedEndIndex,
+        startIndex,
+        maxSelectableEndIndex,
+      })
+    }
+
+    log('Creating new chapter', {
+      optimalEndIndex: analysis.optimalEndIndex,
+      finalEndIndex: clampedEndIndex,
+      maxSelectableEndIndex,
+    })
+
+    const chapterEntries = entries.slice(startIndex, clampedEndIndex)
 
     if (chapterEntries.length === 0) {
       log('No entries for chapter')

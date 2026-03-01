@@ -16,6 +16,7 @@ import type {
 } from '$lib/types'
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
 import type { TimelineFillResult } from '$lib/services/ai/retrieval'
+import type { EntryRetrievalResult } from '$lib/services/ai/retrieval/EntryRetrievalService'
 
 // Generation Phases
 export type GenerationPhase =
@@ -54,6 +55,7 @@ export interface GenerationContext {
 export interface RetrievalResult {
   chapterContext: string | null
   lorebookContext: string | null
+  lorebookRetrievalResult: EntryRetrievalResult | null
   timelineFillResult: TimelineFillResult | null
   combinedContext: string | null
 }

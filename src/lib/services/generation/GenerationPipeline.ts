@@ -11,7 +11,7 @@ import type {
   Character,
   StoryBeat,
 } from '$lib/types'
-import type { StoryMode, POV, Tense } from '$lib/services/prompts'
+import type { StoryMode, POV, Tense } from '$lib/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
 import type { ActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import {

@@ -104,6 +104,13 @@
     return getReasoningMode(profile.providerType) === 'fetched'
   })
 
+  // For 'heuristic' providers (e.g., Ollama), reasoning is tag-based only — no effort levels
+  let isHeuristicReasoningProvider = $derived.by(() => {
+    const profile = settings.getMainNarrativeProfile()
+    if (!profile) return false
+    return getReasoningMode(profile.providerType) === 'heuristic'
+  })
+
   // Proxy states for sliders to ensure correct array type binding
   let tempValue = $derived(settings.apiSettings.temperature)
   let tokensValue = $derived(settings.apiSettings.maxTokens)
@@ -242,8 +249,8 @@
       </div>
     </div>
 
-    <!-- Thinking Row (only shown if provider/model supports reasoning via slider) -->
-    {#if reasoningSupported && !isFetchedReasoningProvider}
+    <!-- Thinking Row (only shown if provider/model supports native reasoning slider) -->
+    {#if reasoningSupported && !isFetchedReasoningProvider && !isHeuristicReasoningProvider}
       <div
         class={cn(
           'grid grid-cols-1 gap-6 border-t pt-4 md:grid-cols-2',

@@ -2,7 +2,8 @@
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings } from '$lib/stores/settings.svelte'
-  import { Loader2, BookOpen, ChevronDown } from 'lucide-svelte'
+  import { Loader2, BookOpen, ChevronDown, ChevronUp } from 'lucide-svelte'
+  import { tick } from 'svelte'
   import { fade } from 'svelte/transition'
   import StoryEntry from './StoryEntry.svelte'
   import StreamingEntry from './StreamingEntry.svelte'
@@ -19,98 +20,185 @@
   // This dramatically improves performance with large stories (80k+ words)
   const DEFAULT_VISIBLE_ENTRIES = 50
   const LOAD_MORE_BATCH = 50
+  const MAX_VISIBLE_ENTRIES = DEFAULT_VISIBLE_ENTRIES * 2 // keep both current + previous batch
+  const SCROLL_THRESHOLD = 50 // pixels from top/bottom to trigger state changes
 
-  // Track how many entries to show (starts at DEFAULT_VISIBLE_ENTRIES)
-  let visibleEntryCount = $state(DEFAULT_VISIBLE_ENTRIES)
+  // Explicit window into story.entries. Loading more on one side trims the other
+  // to keep the rendered DOM at a fixed size for performance.
+  let windowStart = $state(0)
+  let windowEnd = $state(DEFAULT_VISIBLE_ENTRIES)
+
+  // Track if user has scrolled away from top (for showing scroll-to-top button)
+  let userScrolledDown = $state(false)
 
   // Track the current story ID to detect story switches
   let lastStoryId = $state<string | null>(null)
 
-  // Reset visible count when story changes
+  // Auto-scroll to bottom when new entries are added or streaming content changes
+  // Use requestAnimationFrame to batch scroll updates and avoid layout thrashing
+  let scrollRAF: number | null = null
+  let prevEntryCount = 0
+  let suppressScrollHandler = false
+
+  // Anchor the window to the end (latest entries) or start (oldest entries)
+  function anchorToBottom(total: number) {
+    windowStart = Math.max(0, total - DEFAULT_VISIBLE_ENTRIES)
+    windowEnd = total
+  }
+
+  function anchorToTop(total: number) {
+    windowStart = 0
+    windowEnd = Math.min(total, DEFAULT_VISIBLE_ENTRIES)
+  }
+
+  // Reset window when story changes
   $effect(() => {
     const currentStoryId = story.currentStory?.id ?? null
 
-    // If story changed, reset the visible count
     if (currentStoryId !== lastStoryId) {
       lastStoryId = currentStoryId
-      visibleEntryCount = DEFAULT_VISIBLE_ENTRIES
+      anchorToBottom(story.entries.length)
     }
   })
 
-  // Compute which entries to render (using $derived.by for complex logic)
+  // Compute which entries to render
   const displayedEntries = $derived.by(() => {
     const entries = story.entries
     const total = entries.length
-
-    if (total <= visibleEntryCount) {
-      return { entries, hiddenCount: 0, startIndex: 0 }
-    }
-
-    // Show the most recent entries
-    const startIndex = total - visibleEntryCount
+    const start = Math.max(0, Math.min(windowStart, total))
+    const end = Math.min(total, Math.max(windowEnd, start))
     return {
-      entries: entries.slice(startIndex),
-      hiddenCount: startIndex,
-      startIndex,
+      entries: entries.slice(start, end),
+      hiddenAtTop: start,
+      hiddenAtBottom: total - end,
+      startIndex: start,
     }
   })
 
-  function showMoreEntries() {
-    visibleEntryCount = Math.min(visibleEntryCount + LOAD_MORE_BATCH, story.entries.length)
+  // Load earlier entries above, compensate scroll, then trim the bottom if it's
+  // safely off-screen (two-phase so each compensation is isolated and correct).
+  async function showMoreAbove() {
+    const prevScrollHeight = storyContainer?.scrollHeight ?? 0
+    const prevScrollTop = storyContainer?.scrollTop ?? 0
+
+    // Phase 1: expand window upward
+    windowStart = Math.max(0, windowStart - LOAD_MORE_BATCH)
+    await tick()
+
+    if (!storyContainer) return
+
+    // Compensate: new entries above push existing content down
+    storyContainer.scrollTop = prevScrollTop + (storyContainer.scrollHeight - prevScrollHeight)
+
+    // Phase 2: trim from bottom only if those entries are safely below the viewport
+    const distFromBottom =
+      storyContainer.scrollHeight - storyContainer.scrollTop - storyContainer.clientHeight
+    if (
+      distFromBottom > storyContainer.clientHeight &&
+      windowEnd - windowStart > MAX_VISIBLE_ENTRIES
+    ) {
+      const trimCount = Math.min(windowEnd - windowStart - MAX_VISIBLE_ENTRIES, LOAD_MORE_BATCH)
+      windowEnd -= trimCount
+      await tick()
+      // No scroll compensation: removed entries were below the viewport
+    }
   }
 
-  function showAllEntries() {
-    visibleEntryCount = story.entries.length
+  // Load later entries below, then trim the top if it's safely off-screen.
+  async function showMoreBelow() {
+    const total = story.entries.length
+
+    // Phase 1: expand window downward (no scroll compensation needed — adding below doesn't shift content)
+    windowEnd = Math.min(total, windowEnd + LOAD_MORE_BATCH)
+    await tick()
+
+    if (!storyContainer) return
+
+    // Phase 2: trim from top only if those entries are safely above the viewport
+    if (
+      storyContainer.scrollTop > storyContainer.clientHeight &&
+      windowEnd - windowStart > MAX_VISIBLE_ENTRIES
+    ) {
+      const prevScrollHeight = storyContainer.scrollHeight
+      const prevScrollTop = storyContainer.scrollTop
+      const trimCount = Math.min(windowEnd - windowStart - MAX_VISIBLE_ENTRIES, LOAD_MORE_BATCH)
+      windowStart += trimCount
+      await tick()
+      // Compensate: removed entries above shift all content up
+      storyContainer.scrollTop = prevScrollTop - (prevScrollHeight - storyContainer.scrollHeight)
+    }
   }
 
-  function scrollToBottom() {
+  // Helper function to perform smooth scroll with RAF batching
+  function performScroll(scrollPosition: number) {
     if (!storyContainer) return
 
     if (scrollRAF !== null) {
       cancelAnimationFrame(scrollRAF)
     }
 
-    // Batch scroll update with requestAnimationFrame for better performance
     scrollRAF = requestAnimationFrame(() => {
       if (storyContainer) {
-        storyContainer.scrollTop = storyContainer.scrollHeight
+        storyContainer.scrollTop = scrollPosition
       }
       scrollRAF = null
     })
   }
 
-  // Check if container is scrolled near bottom
-  function isNearBottom(): boolean {
+  function scrollToBottom() {
+    anchorToBottom(story.entries.length)
+    requestAnimationFrame(() => {
+      performScroll(storyContainer?.scrollHeight ?? 0)
+    })
+  }
+
+  async function scrollToTop() {
+    ui.setScrollBreak(true)
+    suppressScrollHandler = true
+    anchorToTop(story.entries.length)
+    await tick()
+    performScroll(0)
+    requestAnimationFrame(() => {
+      suppressScrollHandler = false
+    })
+  }
+
+  // Check if container is scrolled near a specific edge
+  function isNearEdge(edge: 'top' | 'bottom'): boolean {
     if (!storyContainer) return true
-    const threshold = 50 // pixels from bottom
+
+    if (edge === 'top') {
+      return storyContainer.scrollTop < SCROLL_THRESHOLD
+    }
+
     return (
       storyContainer.scrollHeight - storyContainer.scrollTop - storyContainer.clientHeight <
-      threshold
+      SCROLL_THRESHOLD
     )
   }
   // Handle scroll events during streaming
   function handleScroll() {
-    if (!storyContainer) return
+    if (!storyContainer || suppressScrollHandler) return
 
-    // Keep userScrolledUp in sync with actual scroll position
-    // This allows re-engaging auto-scroll when the user scrolls back to bottom
-    const nearBottom = isNearBottom()
+    const nearBottom = isNearEdge('bottom')
+    const nearTop = isNearEdge('top')
 
-    // Update the break state based on current scroll position
-    // If we are near bottom, we are NOT "scrolled up"
-    // If we are NOT near bottom, we ARE "scrolled up"
+    // Update scroll break state - if near bottom, re-engage auto-scroll
     if (nearBottom) {
       if (ui.userScrolledUp) ui.setScrollBreak(false)
     } else {
       if (!ui.userScrolledUp) ui.setScrollBreak(true)
     }
+
+    // Track if user has scrolled down from top (for scroll-to-top button)
+    userScrolledDown = !nearTop
   }
 
-  // Auto-scroll to bottom when new entries are added or streaming content changes
-  // Use requestAnimationFrame to batch scroll updates and avoid layout thrashing
-  let scrollRAF: number | null = null
-  let prevEntryCount = 0
+  // Disabled when truly at the very start/end of the entire story
+  const atVeryTop = $derived(displayedEntries.hiddenAtTop === 0 && !userScrolledDown)
+  const atVeryBottom = $derived(displayedEntries.hiddenAtBottom === 0 && !ui.userScrolledUp)
 
+  // Auto-scroll to bottom when new entries are added or streaming content changes
   $effect(() => {
     // Track primary scroll-inducing changes
     const currentCount = story.entries.length
@@ -126,12 +214,18 @@
     // 2. OR on user action send message/retry
     const lastEntry = story.entries[story.entries.length - 1]
     const shouldScroll =
-      !ui.userScrolledUp ||
-      (wasAdded && lastEntry && ['user_action', 'retry'].includes(lastEntry.type))
+      settings.uiSettings.autoScroll &&
+      (!ui.userScrolledUp ||
+        (wasAdded && lastEntry && ['user_action', 'retry'].includes(lastEntry.type)))
 
     if (!shouldScroll) return
 
-    scrollToBottom()
+    // New entries: re-anchor window to the latest entries
+    if (wasAdded) {
+      anchorToBottom(currentCount)
+    }
+
+    performScroll(storyContainer?.scrollHeight ?? 0)
   })
 
   // Scroll to bottom when returning from gallery or other panels
@@ -173,10 +267,10 @@
   <div
     bind:this={storyContainer}
     bind:clientHeight={containerHeight}
-    class="relative z-10 flex-1 overflow-y-auto px-3 py-3 sm:px-6 sm:py-4"
+    class="relative z-10 flex-1 overflow-y-auto px-3 pt-3 pb-1 sm:px-6 sm:pt-4 sm:pb-2"
     onscroll={handleScroll}
   >
-    <div class="mx-auto max-w-3xl space-y-3 sm:space-y-4" bind:clientHeight={innerHeight}>
+    <div class="mx-auto max-w-3xl space-y-2.5 sm:space-y-3" bind:clientHeight={innerHeight}>
       {#if story.entries.length === 0 && !ui.isStreaming}
         <EmptyState
           icon={BookOpen}
@@ -185,19 +279,21 @@
           class="py-12 sm:py-20"
         />
       {:else}
-        <!-- Show collapsed entries indicator if there are hidden entries -->
-        {#if displayedEntries.hiddenCount > 0}
+        <!-- Show collapsed entries indicator if there are hidden entries at top -->
+        {#if displayedEntries.hiddenAtTop > 0}
           <div class="border-border mb-3 flex flex-col items-center gap-2 border-b py-3">
             <p class="text-muted-foreground text-sm">
-              {displayedEntries.hiddenCount} earlier entries hidden for performance
+              {displayedEntries.hiddenAtTop} earlier entries hidden for performance
             </p>
-            <div class="flex gap-2">
-              <Button variant="secondary" size="sm" class="h-7 text-xs" onclick={showMoreEntries}>
-                Show {Math.min(LOAD_MORE_BATCH, displayedEntries.hiddenCount)} more
+            <div class="flex flex-row gap-2">
+              <Button variant="secondary" size="sm" class="h-7 text-xs" onclick={showMoreAbove}>
+                Show {Math.min(LOAD_MORE_BATCH, displayedEntries.hiddenAtTop)} more
               </Button>
-              <Button variant="text" size="sm" class="h-7 text-xs" onclick={showAllEntries}>
-                Show all
-              </Button>
+              {#if !settings.uiSettings.showScrollToTop}
+                <Button variant="secondary" size="sm" class="h-7 text-xs" onclick={scrollToTop}>
+                  Go to top
+                </Button>
+              {/if}
             </div>
           </div>
         {/if}
@@ -225,28 +321,70 @@
         {#if !ui.isStreaming && !ui.isGenerating && story.storyMode === 'adventure' && !settings.uiSettings.disableSuggestions}
           <ActionChoices />
         {/if}
+
+        <!-- Show collapsed entries indicator if there are hidden entries at bottom -->
+        {#if displayedEntries.hiddenAtBottom > 0}
+          <div class="border-border mt-3 flex flex-col items-center gap-2 border-t py-3">
+            <p class="text-muted-foreground text-sm">
+              {displayedEntries.hiddenAtBottom} later entries hidden for performance
+            </p>
+            <div class="flex flex-row gap-2">
+              <Button variant="secondary" size="sm" class="h-7 text-xs" onclick={showMoreBelow}>
+                Show {Math.min(LOAD_MORE_BATCH, displayedEntries.hiddenAtBottom)} more
+              </Button>
+              {#if !settings.uiSettings.showScrollToBottom}
+                <Button variant="secondary" size="sm" class="h-7 text-xs" onclick={scrollToBottom}>
+                  Go to bottom
+                </Button>
+              {/if}
+            </div>
+          </div>
+        {/if}
       {/if}
     </div>
 
-    <!-- Scroll to bottom button -->
-    {#if ui.userScrolledUp}
-      <div class="pointer-events-none sticky bottom-2 flex w-full justify-center pb-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          class="border-border bg-background/80 hover:bg-accent animate-in fade-in slide-in-from-bottom-2 pointer-events-auto h-9 w-9 rounded-full border shadow-lg backdrop-blur-sm"
-          onclick={scrollToBottom}
-          aria-label="Scroll to bottom"
-        >
-          <ChevronDown class="h-5 w-5" />
-        </Button>
+    <!-- Scroll navigation buttons (floating at bottom of scroll container) -->
+    {#if story.entries.length > 0}
+      {@const buttonClasses = 'h-8 w-8 rounded-full shadow-lg disabled:opacity-50 sm:h-9 sm:w-9'}
+      {@const iconClasses = 'h-4 w-4 sm:h-5 sm:w-5'}
+
+      <div class="pointer-events-none sticky right-0 bottom-0 left-0 z-20 flex justify-center py-2">
+        <div class="pointer-events-auto flex gap-2">
+          <!-- Scroll to top button -->
+          {#if settings.uiSettings.showScrollToTop}
+            <Button
+              variant="secondary"
+              size="sm"
+              class={buttonClasses}
+              onclick={scrollToTop}
+              disabled={atVeryTop}
+              aria-label="Scroll to first message"
+            >
+              <ChevronUp class={iconClasses} />
+            </Button>
+          {/if}
+
+          <!-- Scroll to bottom button -->
+          {#if settings.uiSettings.showScrollToBottom}
+            <Button
+              variant="secondary"
+              size="sm"
+              class={buttonClasses}
+              onclick={scrollToBottom}
+              disabled={atVeryBottom}
+              aria-label="Scroll to bottom"
+            >
+              <ChevronDown class={iconClasses} />
+            </Button>
+          {/if}
+        </div>
       </div>
     {/if}
   </div>
 
   <!-- Action input area -->
   <div
-    class="border-border relative z-10 border-t px-3 pt-2 pb-1 sm:py-4 sm:pr-8 sm:pl-6 {story.currentBgImage
+    class="border-border relative z-10 border-t px-3 pt-2 pb-1 sm:pt-3 sm:pr-8 sm:pb-2 sm:pl-6 {story.currentBgImage
       ? 'bg-background/60 backdrop-blur-md'
       : 'bg-card'}"
   >

@@ -1,11 +1,11 @@
 <script lang="ts">
-  import type { PendingChange } from '$lib/services/ai/lorebook/InteractiveLorebookService'
+  import type { VaultPendingChange } from '$lib/services/ai/sdk/schemas/vault'
   import type { VaultLorebookEntry } from '$lib/types'
   import { Check, X, ArrowRight, Trash2, GitMerge, Plus } from 'lucide-svelte'
   import { fade } from 'svelte/transition'
 
   interface Props {
-    change: PendingChange
+    change: VaultPendingChange
     onApprove: () => void
     onReject: () => void
   }
@@ -49,6 +49,35 @@
   ): VaultLorebookEntry {
     return { ...previous, ...updates }
   }
+
+  // Extract data from VaultPendingChange for lorebook-entry display
+  // This component only displays lorebook-entry changes
+  const entryData = $derived(
+    change.entityType === 'lorebook-entry' && change.action === 'create'
+      ? (change.data as VaultLorebookEntry)
+      : undefined,
+  )
+  const updateData = $derived(
+    change.entityType === 'lorebook-entry' && change.action === 'update'
+      ? (change.data as Partial<VaultLorebookEntry>)
+      : undefined,
+  )
+  const previousEntry = $derived(
+    change.entityType === 'lorebook-entry' &&
+      (change.action === 'update' || change.action === 'delete')
+      ? (change.previous as VaultLorebookEntry | undefined)
+      : undefined,
+  )
+  const mergeData = $derived(
+    change.entityType === 'lorebook-entry' && change.action === 'merge'
+      ? (change.data as VaultLorebookEntry)
+      : undefined,
+  )
+  const previousEntries = $derived(
+    change.entityType === 'lorebook-entry' && change.action === 'merge'
+      ? (change.previousEntries as VaultLorebookEntry[] | undefined)
+      : undefined,
+  )
 </script>
 
 <div
@@ -57,19 +86,19 @@
 >
   <!-- Header -->
   <div
-    class="bg-surface-700/50 border-surface-600 flex flex-col justify-between gap-2 border-b px-3 py-2 sm:flex-row sm:items-center sm:px-4"
+    class="bg-surface-700 border-surface-600 flex flex-col justify-between gap-2 border-b px-3 py-2 sm:flex-row sm:items-center sm:px-4"
   >
     <div class="flex items-center gap-2">
-      {#if change.type === 'create'}
+      {#if change.action === 'create'}
         <Plus class="h-4 w-4 text-green-400" />
         <span class="text-sm font-medium text-green-400">Create Entry</span>
-      {:else if change.type === 'update'}
+      {:else if change.action === 'update'}
         <ArrowRight class="h-4 w-4 text-blue-400" />
         <span class="text-sm font-medium text-blue-400">Update Entry</span>
-      {:else if change.type === 'delete'}
+      {:else if change.action === 'delete'}
         <Trash2 class="h-4 w-4 text-red-400" />
         <span class="text-sm font-medium text-red-400">Delete Entry</span>
-      {:else if change.type === 'merge'}
+      {:else if change.action === 'merge'}
         <GitMerge class="h-4 w-4 text-purple-400" />
         <span class="text-sm font-medium text-purple-400">Merge Entries</span>
       {/if}
@@ -95,31 +124,31 @@
 
   <!-- Content -->
   <div class="p-3 sm:p-4">
-    {#if change.type === 'create'}
+    {#if change.action === 'create'}
       <!-- Create: Show new entry -->
       <div class="rounded-md border border-green-500/30 bg-green-500/10 p-3">
         <div class="mb-2 text-xs font-medium text-green-400">New Entry</div>
         <pre class="text-surface-200 font-mono text-sm whitespace-pre-wrap">{formatEntry(
-            change.entry,
+            entryData,
           )}</pre>
       </div>
-    {:else if change.type === 'update'}
+    {:else if change.action === 'update'}
       <!-- Update: Stacked on mobile, side-by-side on desktop -->
       <div class="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
         <!-- Old (Previous) -->
         <div class="rounded-md border border-red-500/30 bg-red-500/10 p-3">
           <div class="mb-2 text-xs font-medium text-red-400">Before</div>
           <pre class="text-surface-300 font-mono text-sm whitespace-pre-wrap">{formatEntry(
-              change.previous,
+              previousEntry,
             )}</pre>
         </div>
 
         <!-- New (With updates applied) -->
         <div class="rounded-md border border-green-500/30 bg-green-500/10 p-3">
           <div class="mb-2 text-xs font-medium text-green-400">After</div>
-          {#if change.previous && change.updates}
+          {#if previousEntry && updateData}
             <pre class="text-surface-200 font-mono text-sm whitespace-pre-wrap">{formatEntry(
-                getMergedView(change.previous, change.updates),
+                getMergedView(previousEntry, updateData),
               )}</pre>
           {/if}
         </div>
@@ -129,29 +158,29 @@
       <div class="mt-3 rounded-md border border-blue-500/30 bg-blue-500/10 p-3">
         <div class="mb-2 text-xs font-medium text-blue-400">Changes</div>
         <pre class="text-surface-200 font-mono text-sm whitespace-pre-wrap">{formatUpdates(
-            change.updates,
+            updateData,
           )}</pre>
       </div>
-    {:else if change.type === 'delete'}
+    {:else if change.action === 'delete'}
       <!-- Delete: Show entry being removed -->
       <div class="rounded-md border border-red-500/30 bg-red-500/10 p-3">
         <div class="mb-2 text-xs font-medium text-red-400">Entry to Delete</div>
         <pre
           class="text-surface-300 font-mono text-sm whitespace-pre-wrap line-through opacity-70">{formatEntry(
-            change.previous,
+            previousEntry,
           )}</pre>
       </div>
-    {:else if change.type === 'merge'}
+    {:else if change.action === 'merge'}
       <!-- Merge: Show source entries and result -->
       <div class="space-y-4">
         <!-- Source entries -->
         <div class="rounded-md border border-red-500/30 bg-red-500/10 p-3">
           <div class="mb-2 text-xs font-medium text-red-400">
-            Entries to Merge ({change.previousEntries?.length ?? 0})
+            Entries to Merge ({previousEntries?.length ?? 0})
           </div>
           <div class="space-y-2">
-            {#each change.previousEntries ?? [] as entry, i (i)}
-              <div class="bg-surface-700/50 rounded p-2">
+            {#each previousEntries ?? [] as entry, i (i)}
+              <div class="bg-surface-700 rounded p-2">
                 <div class="text-surface-400 mb-1 text-xs">Entry {i + 1}: {entry.name}</div>
                 <pre class="text-surface-300 font-mono text-sm whitespace-pre-wrap">{formatEntry(
                     entry,
@@ -170,7 +199,7 @@
         <div class="rounded-md border border-green-500/30 bg-green-500/10 p-3">
           <div class="mb-2 text-xs font-medium text-green-400">Merged Entry</div>
           <pre class="text-surface-200 font-mono text-sm whitespace-pre-wrap">{formatEntry(
-              change.entry,
+              mergeData,
             )}</pre>
         </div>
       </div>

@@ -56,12 +56,23 @@ export async function fetchModelsFromProvider(
   const data = await response.json()
 
   if (data.data && Array.isArray(data.data)) {
-    return { models: data.data.map((m: { id: string }) => m.id), reasoningModels: [] }
+    return {
+      models: [...new Set<string>(data.data.map((m: { id: string }) => m.id))],
+      reasoningModels: [],
+    }
   }
   if (Array.isArray(data)) {
+    const entries = data as { id?: string; name?: string; reasoning?: boolean }[]
     return {
-      models: data.map((m: { id?: string; name?: string }) => m.id || m.name || '').filter(Boolean),
-      reasoningModels: [],
+      models: [...new Set(entries.map((m) => m.id || m.name || '').filter(Boolean))],
+      reasoningModels: [
+        ...new Set(
+          entries
+            .filter((m) => m.reasoning)
+            .map((m) => m.id || m.name || '')
+            .filter(Boolean),
+        ),
+      ],
     }
   }
 
