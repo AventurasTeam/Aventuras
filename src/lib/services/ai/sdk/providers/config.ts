@@ -87,7 +87,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     },
     fallbackModels: [
       'z-ai/glm-5',
-      'stepfun/step-3.5-flash:free',
+      'x-ai/grok-4.1-fast',
       'google/gemini-3-flash-preview',
       'deepseek/deepseek-v3.2',
       'stepfun/step-3.5-flash:free',
@@ -100,13 +100,13 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
         reasoningEffort: 'high',
       },
       classification: {
-        model: 'stepfun/step-3.5-flash:free',
+        model: 'x-ai/grok-4.1-fast',
         temperature: 0.5,
         maxTokens: 8192,
         reasoningEffort: 'high',
       },
       memory: {
-        model: 'stepfun/step-3.5-flash:free',
+        model: 'x-ai/grok-4.1-fast',
         temperature: 0.5,
         maxTokens: 8192,
         reasoningEffort: 'high',
