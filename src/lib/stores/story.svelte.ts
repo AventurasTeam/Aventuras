@@ -2310,7 +2310,7 @@ class StoryStore {
       })
     }
 
-    // Add new characters (check for duplicates, merge into existing if already created)
+    // Add new characters (check for duplicates)
     for (const newChar of result.entryUpdates.newCharacters) {
       await this.wrapUpdate('Add character', newChar.name, async () => {
         // Skip if already created by characterUpdates handler above
@@ -2319,44 +2319,10 @@ class StoryStore {
           return
         }
 
-        const existing = this.characters.find(
+        const exists = this.characters.some(
           (c) => c.name.toLowerCase() === newChar.name.toLowerCase(),
         )
-        if (existing) {
-          // Merge new character data into existing
-          log('Merging new character into existing:', newChar.name)
-          const changes: Partial<Character> = {}
-          if (newChar.description && !existing.description) {
-            changes.description = newChar.description
-          }
-          if (newChar.relationship && !existing.relationship) {
-            changes.relationship = newChar.relationship
-          }
-          if (newChar.traits?.length && !existing.traits.length) {
-            changes.traits = newChar.traits
-          }
-          if (
-            newChar.visualDescriptors &&
-            Object.keys(newChar.visualDescriptors).length > 0 &&
-            Object.keys(existing.visualDescriptors).length === 0
-          ) {
-            changes.visualDescriptors = newChar.visualDescriptors
-          }
-          // Merge inline runtime variable values into metadata if present
-          const newCharInlineVars = extractInlineCustomVars(
-            newChar as unknown as Record<string, unknown>,
-            defsByName,
-          )
-          if (Object.keys(newCharInlineVars).length > 0) {
-            changes.metadata = mergeRuntimeVars(existing.metadata, newCharInlineVars, defsByName)
-          }
-          if (Object.keys(changes).length > 0) {
-            await database.updateCharacter(existing.id, changes)
-            this.characters = this.characters.map((c) =>
-              c.id === existing.id ? { ...c, ...changes } : c,
-            )
-          }
-        } else {
+        if (!exists) {
           log('Adding new character:', newChar.name)
           const charMetadata: Record<string, unknown> = { source: 'classifier' }
           const newCharInlineVars = extractInlineCustomVars(
@@ -2386,94 +2352,8 @@ class StoryStore {
       })
     }
 
-    // Add new locations (check for duplicates, merge into existing if already created)
-    for (const newLoc of result.entryUpdates.newLocations) {
-      await this.wrapUpdate('Add location', newLoc.name, async () => {
-        // Skip if already created by locationUpdates handler above
-        if (createdNewLocationNames.has(newLoc.name.toLowerCase())) {
-          log('Skipping new location (already created by update):', newLoc.name)
-          return
-        }
-
-        const existing = this.locations.find(
-          (l) => l.name.toLowerCase() === newLoc.name.toLowerCase(),
-        )
-        if (existing) {
-          // Merge new location data into existing (e.g. stub created by currentLocationName)
-          log('Merging new location into existing:', newLoc.name)
-          const changes: Partial<Location> = {}
-          if (newLoc.description && !existing.description) {
-            changes.description = newLoc.description
-          }
-          if (newLoc.visited !== undefined && newLoc.visited !== existing.visited) {
-            changes.visited = newLoc.visited
-          }
-          if (newLoc.current && !existing.current) {
-            changes.current = true
-            changes.visited = true
-          }
-          // Merge inline runtime variable values into metadata if present
-          const newLocInlineVars = extractInlineCustomVars(
-            newLoc as unknown as Record<string, unknown>,
-            defsByName,
-          )
-          if (Object.keys(newLocInlineVars).length > 0) {
-            changes.metadata = mergeRuntimeVars(existing.metadata, newLocInlineVars, defsByName)
-          }
-          if (Object.keys(changes).length > 0) {
-            await database.updateLocation(existing.id, changes)
-            this.locations = this.locations.map((l) =>
-              l.id === existing.id ? { ...l, ...changes } : l,
-            )
-          }
-        } else {
-          log('Adding new location:', newLoc.name)
-          // If this is the current location, unset others first
-          if (newLoc.current) {
-            if (this.isCowBranch()) {
-              // COW-aware: targeted unset of previous current
-              const prevCurrent = this.locations.find((l) => l.current)
-              if (prevCurrent) {
-                const { entity: ownedPrev } = await this.cowLocation(prevCurrent)
-                await database.updateLocation(ownedPrev.id, { current: false })
-                this.locations = this.locations.map((l) =>
-                  l.id === ownedPrev.id ? { ...l, current: false } : l,
-                )
-              }
-            } else {
-              this.locations = this.locations.map((l) => ({ ...l, current: false }))
-              for (const l of this.locations) {
-                await database.updateLocation(l.id, { current: false })
-              }
-            }
-          }
-          const locMetadata: Record<string, unknown> = { source: 'classifier' }
-          const newLocInlineVars = extractInlineCustomVars(
-            newLoc as unknown as Record<string, unknown>,
-            defsByName,
-          )
-          if (Object.keys(newLocInlineVars).length > 0) {
-            Object.assign(locMetadata, mergeRuntimeVars(null, newLocInlineVars, defsByName))
-          }
-          const location: Location = {
-            id: crypto.randomUUID(),
-            storyId,
-            name: newLoc.name,
-            description: newLoc.description ?? null,
-            visited: newLoc.visited ?? false,
-            current: newLoc.current ?? false,
-            connections: [],
-            metadata: locMetadata,
-            branchId: this.currentStory?.currentBranchId ?? null,
-          }
-          await database.addLocation(location)
-          this.locations = [...this.locations, location]
-          if (trackingEnabled) createdLocationIds.push(location.id)
-        }
-      })
-    }
-
     // Handle scene.currentLocationName - update current location if specified
+    // Runs before newLocations so stubs are available for merging
     if (result.scene.currentLocationName) {
       await this.wrapUpdate('Set scene location', result.scene.currentLocationName, async () => {
         const locationName = result.scene.currentLocationName!.toLowerCase()
@@ -2543,7 +2423,95 @@ class StoryStore {
       })
     }
 
-    // Add new items (check for duplicates, merge into existing if already created)
+    // Add new locations (check for duplicates, merge into recently created)
+    for (const newLoc of result.entryUpdates.newLocations) {
+      await this.wrapUpdate('Add location', newLoc.name, async () => {
+        // Skip if already created by locationUpdates handler above
+        if (createdNewLocationNames.has(newLoc.name.toLowerCase())) {
+          log('Skipping new location (already created by update):', newLoc.name)
+          return
+        }
+
+        const existing = this.locations.find(
+          (l) => l.name.toLowerCase() === newLoc.name.toLowerCase(),
+        )
+        if (existing && createdLocationIds.includes(existing.id)) {
+          // Merge into location created earlier in this classification run
+          // (e.g. stub from scene.currentLocationName or from update handler)
+          log('Merging new location into recently created:', newLoc.name)
+          const changes: Partial<Location> = {}
+          if (newLoc.description && !existing.description) {
+            changes.description = newLoc.description
+          }
+          if (newLoc.visited !== undefined && newLoc.visited !== existing.visited) {
+            changes.visited = newLoc.visited
+          }
+          if (newLoc.current && !existing.current) {
+            changes.current = true
+            changes.visited = true
+          }
+          // Merge inline runtime variable values into metadata if present
+          const newLocInlineVars = extractInlineCustomVars(
+            newLoc as unknown as Record<string, unknown>,
+            defsByName,
+          )
+          if (Object.keys(newLocInlineVars).length > 0) {
+            changes.metadata = mergeRuntimeVars(existing.metadata, newLocInlineVars, defsByName)
+          }
+          if (Object.keys(changes).length > 0) {
+            await database.updateLocation(existing.id, changes)
+            this.locations = this.locations.map((l) =>
+              l.id === existing.id ? { ...l, ...changes } : l,
+            )
+          }
+        } else if (!existing) {
+          log('Adding new location:', newLoc.name)
+          // If this is the current location, unset others first
+          if (newLoc.current) {
+            if (this.isCowBranch()) {
+              // COW-aware: targeted unset of previous current
+              const prevCurrent = this.locations.find((l) => l.current)
+              if (prevCurrent) {
+                const { entity: ownedPrev } = await this.cowLocation(prevCurrent)
+                await database.updateLocation(ownedPrev.id, { current: false })
+                this.locations = this.locations.map((l) =>
+                  l.id === ownedPrev.id ? { ...l, current: false } : l,
+                )
+              }
+            } else {
+              this.locations = this.locations.map((l) => ({ ...l, current: false }))
+              for (const l of this.locations) {
+                await database.updateLocation(l.id, { current: false })
+              }
+            }
+          }
+          const locMetadata: Record<string, unknown> = { source: 'classifier' }
+          const newLocInlineVars = extractInlineCustomVars(
+            newLoc as unknown as Record<string, unknown>,
+            defsByName,
+          )
+          if (Object.keys(newLocInlineVars).length > 0) {
+            Object.assign(locMetadata, mergeRuntimeVars(null, newLocInlineVars, defsByName))
+          }
+          const location: Location = {
+            id: crypto.randomUUID(),
+            storyId,
+            name: newLoc.name,
+            description: newLoc.description ?? null,
+            visited: newLoc.visited ?? false,
+            current: newLoc.current ?? false,
+            connections: [],
+            metadata: locMetadata,
+            branchId: this.currentStory?.currentBranchId ?? null,
+          }
+          await database.addLocation(location)
+          this.locations = [...this.locations, location]
+          if (trackingEnabled) createdLocationIds.push(location.id)
+        }
+      })
+    }
+
+    // Add new items (check for duplicates)
     for (const newItem of result.entryUpdates.newItems) {
       await this.wrapUpdate('Add item', newItem.name, async () => {
         // Skip if already created by itemUpdates handler above
@@ -2552,36 +2520,8 @@ class StoryStore {
           return
         }
 
-        const existing = this.items.find((i) => i.name.toLowerCase() === newItem.name.toLowerCase())
-        if (existing) {
-          // Merge new item data into existing
-          log('Merging new item into existing:', newItem.name)
-          const changes: Partial<Item> = {}
-          if (newItem.description && !existing.description) {
-            changes.description = newItem.description
-          }
-          if (newItem.quantity !== undefined && newItem.quantity !== existing.quantity) {
-            changes.quantity = newItem.quantity
-          }
-          if (newItem.location && newItem.location !== existing.location) {
-            changes.location = newItem.location
-          }
-          if (newItem.equipped !== undefined && newItem.equipped !== existing.equipped) {
-            changes.equipped = newItem.equipped
-          }
-          // Merge inline runtime variable values into metadata if present
-          const newItemInlineVars = extractInlineCustomVars(
-            newItem as unknown as Record<string, unknown>,
-            defsByName,
-          )
-          if (Object.keys(newItemInlineVars).length > 0) {
-            changes.metadata = mergeRuntimeVars(existing.metadata, newItemInlineVars, defsByName)
-          }
-          if (Object.keys(changes).length > 0) {
-            await database.updateItem(existing.id, changes)
-            this.items = this.items.map((i) => (i.id === existing.id ? { ...i, ...changes } : i))
-          }
-        } else {
+        const exists = this.items.some((i) => i.name.toLowerCase() === newItem.name.toLowerCase())
+        if (!exists) {
           log('Adding new item:', newItem.name)
           const itemMetadata: Record<string, unknown> = { source: 'classifier' }
           const newItemInlineVars = extractInlineCustomVars(
@@ -2609,7 +2549,7 @@ class StoryStore {
       })
     }
 
-    // Add new story beats (check for duplicates, merge into existing if already created)
+    // Add new story beats (check for duplicates)
     for (const newBeat of result.entryUpdates.newStoryBeats) {
       await this.wrapUpdate('Add story beat', newBeat.title, async () => {
         // Skip if already created by storyBeatUpdates handler above
@@ -2618,34 +2558,10 @@ class StoryStore {
           return
         }
 
-        const existing = this.storyBeats.find(
+        const exists = this.storyBeats.some(
           (b) => b.title.toLowerCase() === newBeat.title.toLowerCase(),
         )
-        if (existing) {
-          // Merge new story beat data into existing
-          log('Merging new story beat into existing:', newBeat.title)
-          const changes: Partial<StoryBeat> = {}
-          if (newBeat.description && !existing.description) {
-            changes.description = newBeat.description
-          }
-          if (newBeat.type && newBeat.type !== existing.type) {
-            changes.type = newBeat.type
-          }
-          // Merge inline runtime variable values into metadata if present
-          const newBeatInlineVars = extractInlineCustomVars(
-            newBeat as unknown as Record<string, unknown>,
-            defsByName,
-          )
-          if (Object.keys(newBeatInlineVars).length > 0) {
-            changes.metadata = mergeRuntimeVars(existing.metadata, newBeatInlineVars, defsByName)
-          }
-          if (Object.keys(changes).length > 0) {
-            await database.updateStoryBeat(existing.id, changes)
-            this.storyBeats = this.storyBeats.map((b) =>
-              b.id === existing.id ? { ...b, ...changes } : b,
-            )
-          }
-        } else {
+        if (!exists) {
           log('Adding new story beat:', newBeat.title)
           const beatMetadata: Record<string, unknown> = { source: 'classifier' }
           const newBeatInlineVars = extractInlineCustomVars(
