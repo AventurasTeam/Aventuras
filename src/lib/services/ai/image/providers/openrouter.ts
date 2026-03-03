@@ -37,7 +37,6 @@ interface OpenRouterModel {
   }
 }
 
-
 /**
  * Map a WIDTHxHEIGHT size string to OpenRouter's image_config format.
  * Returns { aspect_ratio, image_size } or empty object if no mapping.
@@ -97,9 +96,7 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
       const { model, prompt, size, referenceImages, signal } = options
 
       // Build user message content
-      const contentParts: Array<Record<string, unknown>> = [
-        { type: 'text', text: prompt },
-      ]
+      const contentParts: Array<Record<string, unknown>> = [{ type: 'text', text: prompt }]
 
       // img2img: attach reference images as image_url content parts
       if (referenceImages?.length) {
@@ -173,58 +170,52 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
         const models = data?.data || []
 
         // Filter for models that have "image" in output_modalities
-        const imageModels = models.filter(
-          (m: OpenRouterModel) => m.architecture?.output_modalities?.includes('image'),
+        const imageModels = models.filter((m: OpenRouterModel) =>
+          m.architecture?.output_modalities?.includes('image'),
         )
 
         if (imageModels.length === 0) return getFallbackModels()
 
-        return imageModels.map(
-          (m: OpenRouterModel): ImageModelInfo => {
-            const inputMods = m.architecture?.input_modalities || []
-            const outputMods = m.architecture?.output_modalities || []
-            const supportsImg2Img = inputMods.includes('image') && outputMods.includes('image')
+        return imageModels.map((m: OpenRouterModel): ImageModelInfo => {
+          const inputMods = m.architecture?.input_modalities || []
+          const outputMods = m.architecture?.output_modalities || []
+          const supportsImg2Img = inputMods.includes('image') && outputMods.includes('image')
 
-            // Parse cost from pricing.image if available
-            let costPerImage: number | undefined
-            if (m.pricing?.image) {
-              const parsed = parseFloat(m.pricing.image)
-              if (!isNaN(parsed) && parsed > 0) costPerImage = parsed
-            }
+          // Parse cost from pricing.image if available
+          let costPerImage: number | undefined
+          if (m.pricing?.image) {
+            const parsed = parseFloat(m.pricing.image)
+            if (!isNaN(parsed) && parsed > 0) costPerImage = parsed
+          }
 
-            let costPerTextToken: number | undefined
-            if (m.pricing?.prompt) {
-              const parsed = parseFloat(m.pricing.prompt)
-              if (!isNaN(parsed) && parsed > 0) costPerTextToken = parsed
-            }
+          let costPerTextToken: number | undefined
+          if (m.pricing?.prompt) {
+            const parsed = parseFloat(m.pricing.prompt)
+            if (!isNaN(parsed) && parsed > 0) costPerTextToken = parsed
+          }
 
-            let costPerImageToken: number | undefined
-            if (m.pricing?.completion) {
-              const parsed = parseFloat(m.pricing.completion)
-              if (!isNaN(parsed) && parsed > 0) costPerImageToken = parsed
-            }
+          let costPerImageToken: number | undefined
+          if (m.pricing?.completion) {
+            const parsed = parseFloat(m.pricing.completion)
+            if (!isNaN(parsed) && parsed > 0) costPerImageToken = parsed
+          }
 
-            return {
-              id: m.id,
-              name: m.name || m.id,
-              description: m.description,
-              supportsSizes: OPENROUTER_SUPPORTED_SIZES,
-              supportsImg2Img,
-              costPerImage,
-              costPerTextToken,
-              costPerImageToken,
-              inputModalities: inputMods,
-              outputModalities: outputMods,
-            }
-          },
-        )
+          return {
+            id: m.id,
+            name: m.name || m.id,
+            description: m.description,
+            supportsSizes: OPENROUTER_SUPPORTED_SIZES,
+            supportsImg2Img,
+            costPerImage,
+            costPerTextToken,
+            costPerImageToken,
+            inputModalities: inputMods,
+            outputModalities: outputMods,
+          }
+        })
       } catch {
         return getFallbackModels()
       }
-    },
-
-    supportsImg2Img(_modelId: string): boolean {
-      return false
     },
   }
 }

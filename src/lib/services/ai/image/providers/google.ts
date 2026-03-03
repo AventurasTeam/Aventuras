@@ -54,10 +54,6 @@ export function createGoogleProvider(config: ImageProviderConfig): ImageProvider
     async listModels(): Promise<ImageModelInfo[]> {
       return getGoogleModels()
     },
-
-    supportsImg2Img(_modelId: string): boolean {
-      return false
-    },
   }
 }
 

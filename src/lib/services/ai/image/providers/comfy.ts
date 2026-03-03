@@ -211,10 +211,6 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
             : [],
       }
     },
-
-    supportsImg2Img(_modelId: string): boolean {
-      return true
-    },
   }
 }
 

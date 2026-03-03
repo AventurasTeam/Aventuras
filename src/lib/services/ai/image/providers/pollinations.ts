@@ -109,10 +109,6 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
         return getFallbackModels()
       }
     },
-
-    supportsImg2Img(modelId: string): boolean {
-      return modelId === REFERENCE_MODEL || modelId.includes('kontext')
-    },
   }
 }
 
