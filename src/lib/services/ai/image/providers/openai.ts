@@ -68,10 +68,6 @@ export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider
     async listModels(): Promise<ImageModelInfo[]> {
       return getOpenAIModels()
     },
-
-    supportsImg2Img(modelId: string): boolean {
-      return modelId === 'dall-e-2' || modelId === 'gpt-image-1'
-    },
   }
 }
 

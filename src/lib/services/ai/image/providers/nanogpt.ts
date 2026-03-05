@@ -124,12 +124,6 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
         return getFallbackModels()
       }
     },
-
-    supportsImg2Img(_modelId: string): boolean {
-      // NanoGPT supports img2img for models tagged with image-to-image
-      // The model listing provides this info; here we default to true for known models
-      return true
-    },
   }
 }
 

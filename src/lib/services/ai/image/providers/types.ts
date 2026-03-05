@@ -44,7 +44,6 @@ export interface ImageProvider {
   readonly name: string
   generate(options: ImageGenerateOptions): Promise<ImageGenerateResult>
   listModels(apiKey?: string): Promise<ImageModelInfo[]>
-  supportsImg2Img(modelId: string): boolean
   // ComfyUI specific
   getSamplerInfo?(): Promise<ComfySamplerInfo>
   listLoras?(): Promise<string[]>

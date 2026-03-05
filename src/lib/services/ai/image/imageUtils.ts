@@ -76,6 +76,7 @@ export function getProviderDisplayName(): string {
 
   const names: Record<string, string> = {
     openai: 'OpenAI',
+    openrouter: 'OpenRouter',
     nanogpt: 'NanoGPT',
     chutes: 'Chutes',
     pollinations: 'Pollinations.ai',

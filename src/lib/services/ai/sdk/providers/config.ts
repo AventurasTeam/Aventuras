@@ -5,6 +5,7 @@
  */
 
 import type { ProviderType, ReasoningEffort } from '$lib/types'
+import { OPENROUTER_SUPPORTED_SIZES } from '../../image/providers/openrouter'
 
 // ============================================================================
 // Types
@@ -80,10 +81,15 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     requiresApiKey: true,
     capabilities: {
       textGeneration: true,
-      imageGeneration: false,
+      imageGeneration: true,
       structuredOutput: true,
       reasoning: 'openrouter',
       reasoningExtraction: 'think-tag',
+    },
+    imageDefaults: {
+      defaultModel: 'google/gemini-2.5-flash-image',
+      referenceModel: 'google/gemini-2.5-flash-image',
+      supportedSizes: OPENROUTER_SUPPORTED_SIZES,
     },
     fallbackModels: [
       'z-ai/glm-5',
