@@ -15,6 +15,7 @@
   import LorebookDebugPanel from '$lib/components/debug/LorebookDebugPanel.svelte'
   import DebugLogModal from '$lib/components/debug/DebugLogModal.svelte'
   import SyncModal from '$lib/components/sync/SyncModal.svelte'
+  import STChatImportModal from '$lib/components/modals/STChatImportModal.svelte'
   import { swipe } from '$lib/utils/swipe'
   import { Bug } from 'lucide-svelte'
   import { MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MAX_SIDEBAR_RATIO } from '$lib/constants/layout'
@@ -249,6 +250,9 @@
 
   <!-- Sync Modal -->
   <SyncModal />
+
+  <!-- SillyTavern Chat Import Modal -->
+  <STChatImportModal />
 
   <!-- Floating Debug Button (when debug mode enabled) - draggable, high z-index -->
   {#if settings.uiSettings.debugMode && !ui.debugModalOpen}

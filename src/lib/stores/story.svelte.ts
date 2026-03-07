@@ -32,6 +32,7 @@ import type { RuntimeVariable } from '$lib/services/packs/types'
 import { DEFAULT_MEMORY_CONFIG } from '$lib/services/ai/generation/MemoryService'
 import { convertToEntries, type ImportedEntry } from '$lib/services/lorebookImporter'
 import { countTokens } from '$lib/services/tokenizer'
+import type { STChatMessage } from '$lib/services/stChatImporter'
 import {
   eventBus,
   emitStoryLoaded,
@@ -580,6 +581,75 @@ class StoryStore {
     eventBus.emit<StoryCreatedEvent>({ type: 'StoryCreated', storyId: storyData.id, mode })
 
     return storyData
+  }
+
+  /**
+   * Import a SillyTavern chat into the current story, replacing all existing
+   * main-branch entries. The current story must be loaded before calling this.
+   */
+  async importSTChat(messages: STChatMessage[]): Promise<void> {
+    if (!this.currentStory) {
+      throw new Error('No story loaded')
+    }
+
+    const storyId = this.currentStory.id
+
+    // Branches fork off main-branch entries via fork_entry_id.
+    // Deleting all main-branch entries would leave every branch with a
+    // dangling FK reference — block the import if any branches exist.
+    if (this.branches.length > 0) {
+      throw new Error(
+        `Cannot import: this story has ${this.branches.length} branch${this.branches.length === 1 ? '' : 'es'}. ` +
+          'Delete all branches before importing a SillyTavern chat.',
+      )
+    }
+
+    // Wipe all existing main-branch entries
+    await database.clearStoryEntries(storyId)
+
+    // Build entry objects up front, then bulk-insert in batches
+    // (O(n/50) IPC calls instead of O(n))
+    const entries: Omit<StoryEntry, 'createdAt'>[] = messages.map((msg, i) => ({
+      id: crypto.randomUUID(),
+      storyId,
+      type: msg.type,
+      content: msg.content,
+      parentId: null,
+      position: i,
+      metadata: { source: 'sillytavern_import' },
+      branchId: null,
+    }))
+    await database.bulkInsertStoryEntries(entries)
+
+    // Bump the story's updatedAt so the library view reflects the import
+    await database.updateStory(storyId, {})
+    this.currentStory.updatedAt = Date.now()
+
+    // Reload entries into the store
+    await this.reloadEntriesForCurrentBranch()
+  }
+
+  /**
+   * Trigger suggested-action generation after a SillyTavern import.
+   * Called by the modal once the user has made their world-state choice,
+   * so generation doesn't start before that dialog is resolved.
+   */
+  triggerSuggestionsAfterImport(): void {
+    this.restoreSuggestedActionsAfterDelete()
+  }
+
+  /**
+   * Reset mutable world state after a SillyTavern chat import.
+   * Clears locations, items, story beats, and the time tracker.
+   * Characters and lorebook entries are intentionally preserved.
+   */
+  async resetWorldStateAfterImport(): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    await database.resetWorldStateForImport(this.currentStory.id)
+    this.locations = []
+    this.items = []
+    this.storyBeats = []
+    this.currentStory = { ...this.currentStory, timeTracker: null }
   }
 
   // Add a new story entry

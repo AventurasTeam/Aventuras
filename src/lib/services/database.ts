@@ -632,6 +632,86 @@ class DatabaseService {
   }
 
   /**
+   * Delete all main-branch entries for a story (branch_id IS NULL).
+   * Also clears related world_state_snapshots so stale snapshots don't
+   * reference non-existent entry positions after the import.
+   * Used by the SillyTavern chat import to overwrite story content.
+   */
+  async clearStoryEntries(storyId: string): Promise<void> {
+    const db = await this.getDb()
+    await db.execute(
+      'DELETE FROM story_entries WHERE story_id = ? AND branch_id IS NULL',
+      [storyId],
+    )
+    await db.execute(
+      'DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL',
+      [storyId],
+    )
+  }
+
+  /**
+   * Reset mutable world state for a story after a SillyTavern chat import.
+   * Bulk-deletes main-branch locations, items, and story beats, then
+   * clears the time tracker on the story row.
+   * Characters and lorebook entries are intentionally NOT touched.
+   */
+  async resetWorldStateForImport(storyId: string): Promise<void> {
+    const db = await this.getDb()
+    await Promise.all([
+      db.execute('DELETE FROM locations WHERE story_id = ? AND branch_id IS NULL', [storyId]),
+      db.execute('DELETE FROM items WHERE story_id = ? AND branch_id IS NULL', [storyId]),
+      db.execute('DELETE FROM story_beats WHERE story_id = ? AND branch_id IS NULL', [storyId]),
+      db.execute('UPDATE stories SET time_tracker = NULL WHERE id = ?', [storyId]),
+    ])
+  }
+
+  /**
+   * Bulk-insert story entries in batched multi-row INSERTs.
+   * Reduces IPC round-trips from O(n) to O(n/BATCH_SIZE).
+   * 15 parameters per row × BATCH_SIZE 50 = 750 params/batch,
+   * safely under SQLite's 999-variable limit.
+   * All entries share a single createdAt timestamp.
+   */
+  async bulkInsertStoryEntries(entries: Omit<StoryEntry, 'createdAt'>[]): Promise<void> {
+    if (entries.length === 0) return
+    const db = await this.getDb()
+    const now = Date.now()
+    const BATCH_SIZE = 50
+
+    for (let batchStart = 0; batchStart < entries.length; batchStart += BATCH_SIZE) {
+      const batch = entries.slice(batchStart, batchStart + BATCH_SIZE)
+      const valuePlaceholders = batch.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',')
+      const values: unknown[] = []
+
+      for (const entry of batch) {
+        values.push(
+          entry.id,
+          entry.storyId,
+          entry.type,
+          entry.content,
+          entry.parentId,
+          entry.position,
+          now,
+          entry.metadata ? JSON.stringify(entry.metadata) : null,
+          entry.branchId || null,
+          entry.reasoning || null,
+          entry.translatedContent || null,
+          entry.translationLanguage || null,
+          entry.originalInput || null,
+          entry.worldStateDelta ? JSON.stringify(entry.worldStateDelta) : null,
+          entry.suggestedActions || null,
+        )
+      }
+
+      await db.execute(
+        `INSERT INTO story_entries (id, story_id, type, content, parent_id, position, created_at, metadata, branch_id, reasoning, translated_content, translation_language, original_input, world_state_delta, suggested_actions)
+         VALUES ${valuePlaceholders}`,
+        values,
+      )
+    }
+  }
+
+  /**
    * Delete multiple story entries by ID.
    */
   async deleteStoryEntries(ids: string[]): Promise<void> {

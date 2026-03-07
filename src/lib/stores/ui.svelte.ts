@@ -237,6 +237,9 @@ class UIStore {
   syncModalOpen = $state(false)
   syncMode = $state<SyncMode>('select')
 
+  // SillyTavern chat import modal state
+  stChatImportModalOpen = $state(false)
+
   // Lore management mode state
   // When active, the AI is reviewing/updating the lorebook - user editing is locked
   loreManagementActive = $state(false)
@@ -1370,6 +1373,15 @@ class UIStore {
   openSyncModal() {
     this.syncModalOpen = true
     this.syncMode = 'select'
+  }
+
+  // SillyTavern chat import modal methods
+  openSTChatImport() {
+    this.stChatImportModalOpen = true
+  }
+
+  closeSTChatImport() {
+    this.stChatImportModalOpen = false
   }
 
   closeSyncModal() {
