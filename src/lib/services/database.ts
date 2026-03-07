@@ -632,6 +632,18 @@ class DatabaseService {
   }
 
   /**
+   * Delete all main-branch entries for a story (branch_id IS NULL).
+   * Used by the SillyTavern chat import to overwrite story content.
+   */
+  async clearStoryEntries(storyId: string): Promise<void> {
+    const db = await this.getDb()
+    await db.execute(
+      'DELETE FROM story_entries WHERE story_id = ? AND branch_id IS NULL',
+      [storyId],
+    )
+  }
+
+  /**
    * Delete multiple story entries by ID.
    */
   async deleteStoryEntries(ids: string[]): Promise<void> {

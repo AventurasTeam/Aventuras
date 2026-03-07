@@ -32,6 +32,7 @@ import type { RuntimeVariable } from '$lib/services/packs/types'
 import { DEFAULT_MEMORY_CONFIG } from '$lib/services/ai/generation/MemoryService'
 import { convertToEntries, type ImportedEntry } from '$lib/services/lorebookImporter'
 import { countTokens } from '$lib/services/tokenizer'
+import type { STChatMessage } from '$lib/services/stChatImporter'
 import {
   eventBus,
   emitStoryLoaded,
@@ -580,6 +581,41 @@ class StoryStore {
     eventBus.emit<StoryCreatedEvent>({ type: 'StoryCreated', storyId: storyData.id, mode })
 
     return storyData
+  }
+
+  /**
+   * Import a SillyTavern chat into the current story, replacing all existing
+   * main-branch entries. The current story must be loaded before calling this.
+   */
+  async importSTChat(messages: STChatMessage[]): Promise<void> {
+    if (!this.currentStory) {
+      throw new Error('No story loaded')
+    }
+
+    const storyId = this.currentStory.id
+
+    // Wipe all existing main-branch entries
+    await database.clearStoryEntries(storyId)
+
+    // Insert new entries sequentially (positions 0…n-1)
+    for (let i = 0; i < messages.length; i++) {
+      await database.addStoryEntry({
+        id: crypto.randomUUID(),
+        storyId,
+        type: messages[i].type,
+        content: messages[i].content,
+        parentId: null,
+        position: i,
+        metadata: { source: 'sillytavern_import' },
+        branchId: null,
+      })
+    }
+
+    // Reload entries into the store
+    await this.reloadEntriesForCurrentBranch()
+
+    // Restore or clear suggested actions so the UI reflects the new content
+    this.restoreSuggestedActionsAfterDelete()
   }
 
   // Add a new story entry

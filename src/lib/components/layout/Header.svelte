@@ -27,6 +27,7 @@
     ChevronDown,
     Bug,
     ImageIcon,
+    MessageSquare,
   } from 'lucide-svelte'
 
   let showExportMenu = $state(false)
@@ -247,6 +248,16 @@
         class="text-muted-foreground hover:text-primary min-h-11 min-w-11"
         onclick={() => ui.setActivePanel(ui.activePanel === 'gallery' ? 'story' : 'gallery')}
         title="View generated images"
+      />
+
+      <!-- Import ST Chat Button -->
+      <Button
+        icon={MessageSquare}
+        label="Import ST Chat"
+        variant="text"
+        class="text-muted-foreground hover:text-primary min-h-11 min-w-11"
+        onclick={() => ui.openSTChatImport()}
+        title="Import SillyTavern chat"
       />
 
       <!-- Export Menu -->
