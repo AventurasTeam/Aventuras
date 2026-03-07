@@ -25,6 +25,7 @@ export interface ProviderCapabilities {
    * Whether the provider supports reasoning/thinking.
    */
   reasoning: boolean
+  binaryReasoning?: true
   /**
    * How reasoning is extracted from the response.
    * - 'think-tag': Provider embeds reasoning in <think> tags, use extractReasoningMiddleware
@@ -233,7 +234,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       textGeneration: true,
       imageGeneration: true,
       structuredOutput: false,
-      reasoning: false,
+      reasoning: true,
     },
     imageDefaults: {
       defaultModel: 'flux',
@@ -331,7 +332,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
   openai: {
     name: 'OpenAI',
     description: 'GPT models from OpenAI',
-    baseUrl: '', // SDK default
+    baseUrl: 'https://api.openai.com/v1',
     requiresApiKey: true,
     capabilities: {
       textGeneration: true,
@@ -387,7 +388,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       textGeneration: true,
       imageGeneration: true,
       structuredOutput: true,
-      reasoning: false,
+      reasoning: true,
     },
     imageDefaults: {
       defaultModel: 'imagen-3.0-generate-002',
@@ -428,7 +429,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       textGeneration: true,
       imageGeneration: false,
       structuredOutput: true,
-      reasoning: false,
+      reasoning: true,
     },
     fallbackModels: [
       'llama-3.3-70b-versatile',
@@ -448,7 +449,8 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       textGeneration: true,
       imageGeneration: true,
       structuredOutput: true,
-      reasoning: false,
+      reasoning: true,
+      binaryReasoning: true,
     },
     imageDefaults: {
       defaultModel: 'cogview-3-plus',
@@ -476,6 +478,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       imageGeneration: false,
       structuredOutput: true,
       reasoning: true,
+      binaryReasoning: true,
     },
     fallbackModels: ['deepseek-chat', 'deepseek-reasoner'],
     // No service defaults - user must configure models in Generation Settings
@@ -535,6 +538,11 @@ export function getProviderList(): Array<{
 /** Check if a provider supports reasoning/thinking */
 export function supportsReasoning(providerType: ProviderType): boolean {
   return !!PROVIDERS[providerType].capabilities.reasoning
+}
+
+/** Check if a provider uses binary (on/off) reasoning instead of a level slider */
+export function supportsBinaryReasoning(providerType: ProviderType): boolean {
+  return !!PROVIDERS[providerType].capabilities.binaryReasoning
 }
 
 /** Check if a provider supports capability fetching */

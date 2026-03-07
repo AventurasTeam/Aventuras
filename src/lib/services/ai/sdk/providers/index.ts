@@ -12,6 +12,7 @@ export {
   hasDefaultEndpoint,
   getProviderList,
   supportsReasoning,
+  supportsBinaryReasoning,
   supportsCapabilityFetch,
   getReasoningExtraction,
   type ProviderConfig,

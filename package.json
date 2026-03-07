@@ -56,7 +56,6 @@
     "marked": "^17.0.1",
     "svelte-codemirror-editor": "^2.1.0",
     "tailwind-merge": "^3.4.0",
-    "zhipu-ai-provider": "^0.2.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {

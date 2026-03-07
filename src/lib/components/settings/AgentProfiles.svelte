@@ -27,7 +27,12 @@
     AlertTriangle,
   } from 'lucide-svelte'
   import ModelSelector from './ModelSelector.svelte'
-  import { supportsCapabilityFetch, supportsReasoning } from '$lib/services/ai/sdk/providers'
+  import {
+    getReasoningExtraction,
+    supportsCapabilityFetch,
+    supportsReasoning,
+    supportsBinaryReasoning,
+  } from '$lib/services/ai/sdk/providers'
 
   // Shadcn Components
   import * as Card from '$lib/components/ui/card'
@@ -37,6 +42,7 @@
   import { Slider } from '$lib/components/ui/slider'
   import { Textarea } from '$lib/components/ui/textarea'
   import { Checkbox } from '$lib/components/ui/checkbox'
+  import { Switch } from '$lib/components/ui/switch'
 
   const reasoningLevels = ['off', 'low', 'medium', 'high'] as const
   const reasoningLabels: Record<string, string> = {
@@ -464,10 +470,21 @@
     return supportsCapabilityFetch(profile.providerType)
   })
 
-  let tempProviderIsOpenAICompatible = $derived.by(() => {
+  let tempProviderBinaryReasoning = $derived.by(() => {
     if (!tempPreset?.profileId) return false
     const profile = settings.getProfile(tempPreset.profileId)
-    return profile?.providerType === 'openai-compatible'
+    if (!profile) return false
+    return supportsBinaryReasoning(profile.providerType)
+  })
+
+  let tempProviderIsOpenAICompatibleOrThinkTag = $derived.by(() => {
+    if (!tempPreset?.profileId) return false
+    const profile = settings.getProfile(tempPreset.profileId)
+    if (!profile) return false
+    return (
+      profile.providerType === 'openai-compatible' ||
+      getReasoningExtraction(profile.providerType) === 'think-tag'
+    )
   })
 
   $effect(() => {
@@ -650,7 +667,7 @@
         <div class="grid gap-2">
           <Label>Structured Output</Label>
           <div class="flex rounded-md border">
-            {#each [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']] as [val, label] (val)}
+            {#each [['auto', 'Auto'], ['on', 'Force On'], ['off', 'Force Off']] as [val, label] (val)}
               {@const isActive = (tempPreset.structuredOutputOverride ?? 'auto') === val}
               <button
                 type="button"
@@ -666,64 +683,74 @@
             {/each}
           </div>
           <p class="text-muted-foreground text-xs">
-            Auto uses provider/model capability detection. Force On/Off to override.
+            Auto uses provider/model capability detection. Force On/Off to override. Using
+            structured output can break reasoning when using local models.
           </p>
         </div>
 
-        {#if tempProviderIsOpenAICompatible}
-          <div class="bg-muted/20 flex items-center gap-3 rounded-md border p-3">
-            <Checkbox
-              id="force-think-tag"
-              checked={!!tempPreset.forceThinkTagExtraction}
-              onCheckedChange={(v) => {
-                if (tempPreset) tempPreset.forceThinkTagExtraction = !!v
-              }}
-            />
-            <div>
-              <Label for="force-think-tag" class="cursor-pointer text-sm">
-                Extract thinking tags
-              </Label>
+        {#if tempProviderIsOpenAICompatibleOrThinkTag}
+          <div class="flex flex-row items-center justify-between gap-3">
+            <div class="space-y-0.5">
+              <Label class="text-sm">Thinking nudge</Label>
               <p class="text-muted-foreground text-xs">
-                Strip <code>&lt;think&gt;</code> blocks from output and expose as reasoning.
+                Inject a prompt to encourage the model to use <code>&lt;think&gt;</code> tags properly.
+                Useful for some local models such as Mistral models, but may cause issues other models
+                such as Qwen 3.5. Has no effect when using structured output.
               </p>
             </div>
+            <Switch
+              checked={!!tempPreset.thinkingNudgePrompt}
+              onCheckedChange={(v) => {
+                if (tempPreset) tempPreset.thinkingNudgePrompt = !!v
+              }}
+            />
           </div>
         {/if}
 
         {#if tempGlobalProviderReasoningCapability && (!tempProviderModelCapabilityFetching || tempModelReasoningCapability !== 'unsupported')}
           <div class="grid gap-4">
-            <div class="flex justify-between">
-              <Label>Thinking: {reasoningLabels[tempPreset.reasoningEffort]}</Label>
-            </div>
-            {#if tempModelReasoningCapability === 'enforced'}
-              <Slider
-                bind:value={tempPresetReasoning}
-                type="single"
-                min={1}
-                max={3}
-                step={1}
-                onValueChange={updateTempPresetReasoning}
-              />
-              <div class="text-muted-foreground flex justify-between text-xs">
-                <span>Low</span>
-                <span>Med</span>
-                <span>High</span>
+            {#if tempProviderBinaryReasoning}
+              <div class="flex items-center justify-between">
+                <Label>Thinking</Label>
+                <Switch
+                  checked={tempPreset.reasoningEffort !== 'off'}
+                  onCheckedChange={(v) => updateTempPresetReasoning(v ? 3 : 0)}
+                />
               </div>
             {:else}
-              <Slider
-                bind:value={tempPresetReasoning}
-                type="single"
-                min={0}
-                max={3}
-                step={1}
-                onValueChange={updateTempPresetReasoning}
-              />
-              <div class="text-muted-foreground flex justify-between px-1 text-xs">
-                <span>Off</span>
-                <span>Low</span>
-                <span>Medium</span>
-                <span>High</span>
+              <div class="flex justify-between">
+                <Label>Thinking: {reasoningLabels[tempPreset.reasoningEffort]}</Label>
               </div>
+              {#if tempModelReasoningCapability === 'enforced'}
+                <Slider
+                  bind:value={tempPresetReasoning}
+                  type="single"
+                  min={1}
+                  max={3}
+                  step={1}
+                  onValueChange={updateTempPresetReasoning}
+                />
+                <div class="text-muted-foreground flex justify-between text-xs">
+                  <span>Low</span>
+                  <span>Med</span>
+                  <span>High</span>
+                </div>
+              {:else}
+                <Slider
+                  bind:value={tempPresetReasoning}
+                  type="single"
+                  min={0}
+                  max={3}
+                  step={1}
+                  onValueChange={updateTempPresetReasoning}
+                />
+                <div class="text-muted-foreground flex justify-between px-1 text-xs">
+                  <span>Off</span>
+                  <span>Low</span>
+                  <span>Medium</span>
+                  <span>High</span>
+                </div>
+              {/if}
             {/if}
           </div>
         {/if}

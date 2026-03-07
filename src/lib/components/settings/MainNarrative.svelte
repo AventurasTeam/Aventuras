@@ -7,6 +7,7 @@
     fetchModelsFromProvider,
     supportsCapabilityFetch,
     supportsReasoning,
+    supportsBinaryReasoning,
   } from '$lib/services/ai/sdk/providers'
 
   // Shadcn Components
@@ -14,6 +15,7 @@
   import { Label } from '$lib/components/ui/label'
   import { Button } from '$lib/components/ui/button'
   import { Slider } from '$lib/components/ui/slider'
+  import { Switch } from '$lib/components/ui/switch'
   import { Input } from '$lib/components/ui/input'
   import { Textarea } from '$lib/components/ui/textarea'
   import ModelSelector from './ModelSelector.svelte'
@@ -121,6 +123,12 @@
     const profile = settings.getMainNarrativeProfile()
     if (!profile) return false
     return supportsCapabilityFetch(profile.providerType)
+  })
+
+  let binaryReasoningProvider = $derived.by(() => {
+    const profile = settings.getMainNarrativeProfile()
+    if (!profile) return false
+    return supportsBinaryReasoning(profile.providerType)
   })
 
   $effect(() => {
@@ -298,38 +306,48 @@
         )}
       >
         <div class="grid gap-4">
-          <div class="flex justify-between">
-            <Label>Thinking: {reasoningLabels[settings.apiSettings.reasoningEffort]}</Label>
-          </div>
-          {#if modelReasoningCapability === 'enforced'}
-            <Slider
-              bind:value={reasoningValue}
-              type="single"
-              min={1}
-              max={3}
-              step={1}
-              onValueChange={updateReasoning}
-            />
-            <div class="text-muted-foreground flex justify-between text-xs">
-              <span>Low</span>
-              <span>Med</span>
-              <span>High</span>
+          {#if binaryReasoningProvider}
+            <div class="flex items-center justify-between">
+              <Label>Thinking</Label>
+              <Switch
+                checked={settings.apiSettings.reasoningEffort !== 'off'}
+                onCheckedChange={(v) => updateReasoning(v ? 3 : 0)}
+              />
             </div>
           {:else}
-            <Slider
-              bind:value={reasoningValue}
-              type="single"
-              min={0}
-              max={3}
-              step={1}
-              onValueChange={updateReasoning}
-            />
-            <div class="text-muted-foreground flex justify-between text-xs">
-              <span>Off</span>
-              <span>Low</span>
-              <span>Med</span>
-              <span>High</span>
+            <div class="flex justify-between">
+              <Label>Thinking: {reasoningLabels[settings.apiSettings.reasoningEffort]}</Label>
             </div>
+            {#if modelReasoningCapability === 'enforced'}
+              <Slider
+                bind:value={reasoningValue}
+                type="single"
+                min={1}
+                max={3}
+                step={1}
+                onValueChange={updateReasoning}
+              />
+              <div class="text-muted-foreground flex justify-between text-xs">
+                <span>Low</span>
+                <span>Med</span>
+                <span>High</span>
+              </div>
+            {:else}
+              <Slider
+                bind:value={reasoningValue}
+                type="single"
+                min={0}
+                max={3}
+                step={1}
+                onValueChange={updateReasoning}
+              />
+              <div class="text-muted-foreground flex justify-between text-xs">
+                <span>Off</span>
+                <span>Low</span>
+                <span>Med</span>
+                <span>High</span>
+              </div>
+            {/if}
           {/if}
         </div>
       </div>

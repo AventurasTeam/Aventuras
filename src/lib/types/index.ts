@@ -658,20 +658,20 @@ export interface UIState {
 // Provider types matching Vercel AI SDK providers
 export type ProviderType =
   | 'openrouter' // @openrouter/ai-sdk-provider
-  | 'nanogpt' // OpenAI-compatible at nano-gpt.com
+  | 'nanogpt' // @ai-sdk/openai-compatible at nano-gpt.com
   | 'chutes' // @chutes-ai/ai-sdk-provider
   | 'pollinations' // ai-sdk-pollinations
   | 'ollama' // @ai-sdk/openai-compatible (local)
   | 'lmstudio' // @ai-sdk/openai (local, default localhost:1234)
   | 'llamacpp' // @ai-sdk/openai (local, default localhost:8080)
   | 'nvidia-nim' // @ai-sdk/openai (NVIDIA NIM)
-  | 'openai-compatible' // @ai-sdk/openai (requires custom baseUrl)
+  | 'openai-compatible' // @ai-sdk/openai-compatible (requires custom baseUrl)
   | 'openai' // @ai-sdk/openai
   | 'anthropic' // @ai-sdk/anthropic
   | 'google' // @ai-sdk/google
   | 'xai' // @ai-sdk/xai (Grok)
   | 'groq' // @ai-sdk/groq
-  | 'zhipu' // zhipu-ai-provider (Z.AI/GLM)
+  | 'zhipu' // @ai-sdk/openai-compatible cuz the proper provider package SUCKS (Z.AI/GLM)
   | 'deepseek' // @ai-sdk/deepseek
   | 'mistral' // @ai-sdk/mistral
 
@@ -707,7 +707,6 @@ export interface APISettings {
   manualBody: string // Manual request body JSON for the main narrative model
   enableThinking: boolean // Legacy toggle for reasoning (backward compatibility)
   llmTimeoutMs: number // Request timeout in milliseconds (default: 360000 = 6 minutes)
-  useNativeTimeout: boolean // If true, pass timeout to API's native timeout parameter (modern SDK-compatible endpoints)
 }
 
 export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high'
@@ -843,8 +842,8 @@ export interface GenerationPreset {
   manualBody: string
   /** Override structured output capability detection. 'auto' = use provider default, 'on' = force enable, 'off' = force disable */
   structuredOutputOverride?: 'auto' | 'on' | 'off'
-  /** Force extraction of reasoning from <think>...</think> tags in model output */
-  forceThinkTagExtraction?: boolean
+  /** Inject a prompt nudge to encourage the model to use thinking tags properly */
+  thinkingNudgePrompt?: boolean
 }
 
 // ===== Translation System Types =====

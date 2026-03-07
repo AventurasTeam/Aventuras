@@ -1084,7 +1084,6 @@ class SettingsStore {
     manualBody: '',
     enableThinking: false,
     llmTimeoutMs: LLM_TIMEOUT_DEFAULT,
-    useNativeTimeout: false,
   })
 
   uiSettings = $state<UISettings>(getDefaultUISettings())
@@ -1290,12 +1289,6 @@ class SettingsStore {
         if (!isNaN(parsed) && parsed >= LLM_TIMEOUT_MIN && parsed <= LLM_TIMEOUT_MAX) {
           this.apiSettings.llmTimeoutMs = parsed
         }
-      }
-
-      // Load native timeout setting
-      const useNativeTimeout = await database.getSetting('use_native_timeout')
-      if (useNativeTimeout !== null) {
-        this.apiSettings.useNativeTimeout = useNativeTimeout === 'true'
       }
 
       // Load provider preset (which provider's defaults to use)
@@ -1681,11 +1674,6 @@ class SettingsStore {
   async setLlmTimeout(timeoutMs: number) {
     this.apiSettings.llmTimeoutMs = timeoutMs
     await database.setSetting('llm_timeout_ms', timeoutMs.toString())
-  }
-
-  async setUseNativeTimeout(useNative: boolean) {
-    this.apiSettings.useNativeTimeout = useNative
-    await database.setSetting('use_native_timeout', useNative.toString())
   }
 
   async setEnableThinking(enabled: boolean) {
@@ -2765,7 +2753,6 @@ class SettingsStore {
       manualBody: '',
       enableThinking: false,
       llmTimeoutMs: LLM_TIMEOUT_DEFAULT,
-      useNativeTimeout: false,
     }
 
     // Reset UI settings
