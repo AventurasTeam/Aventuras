@@ -650,6 +650,29 @@ class DatabaseService {
   }
 
   /**
+   * Reset mutable world state for a story after a SillyTavern chat import.
+   * Bulk-deletes main-branch locations, items, and story beats, then
+   * clears the time tracker on the story row.
+   * Characters and lorebook entries are intentionally NOT touched.
+   */
+  async resetWorldStateForImport(storyId: string): Promise<void> {
+    const db = await this.getDb()
+    await db.execute(
+      'DELETE FROM locations WHERE story_id = ? AND branch_id IS NULL',
+      [storyId],
+    )
+    await db.execute(
+      'DELETE FROM items WHERE story_id = ? AND branch_id IS NULL',
+      [storyId],
+    )
+    await db.execute(
+      'DELETE FROM story_beats WHERE story_id = ? AND branch_id IS NULL',
+      [storyId],
+    )
+    await db.execute('UPDATE stories SET time_tracker = NULL WHERE id = ?', [storyId])
+  }
+
+  /**
    * Bulk-insert story entries in batched multi-row INSERTs.
    * Reduces IPC round-trips from O(n) to O(n/BATCH_SIZE).
    * 15 parameters per row × BATCH_SIZE 50 = 750 params/batch,

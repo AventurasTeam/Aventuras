@@ -632,6 +632,20 @@ class StoryStore {
     this.restoreSuggestedActionsAfterDelete()
   }
 
+  /**
+   * Reset mutable world state after a SillyTavern chat import.
+   * Clears locations, items, story beats, and the time tracker.
+   * Characters and lorebook entries are intentionally preserved.
+   */
+  async resetWorldStateAfterImport(): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    await database.resetWorldStateForImport(this.currentStory.id)
+    this.locations = []
+    this.items = []
+    this.storyBeats = []
+    this.currentStory = { ...this.currentStory, timeTracker: null }
+  }
+
   // Add a new story entry
   // The optional id parameter allows pre-generating the entry ID before streaming starts,
   // which is needed for inline image generation during streaming

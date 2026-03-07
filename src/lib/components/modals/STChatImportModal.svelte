@@ -4,7 +4,7 @@
   import { parseSTChat, type STChatParseResult } from '$lib/services/stChatImporter'
   import { open } from '@tauri-apps/plugin-dialog'
   import { readTextFile } from '@tauri-apps/plugin-fs'
-  import { Upload, MessageSquare, Loader2, Check, AlertTriangle, GitBranch } from 'lucide-svelte'
+  import { Upload, MessageSquare, Loader2, Check, AlertTriangle, GitBranch, RefreshCw } from 'lucide-svelte'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -13,6 +13,8 @@
   let dragOver = $state(false)
   let parseResult = $state<STChatParseResult | null>(null)
   let importing = $state(false)
+  let imported = $state(false)
+  let resettingWorldState = $state(false)
 
   // Reset state each time modal opens
   $effect(() => {
@@ -20,6 +22,8 @@
       dragOver = false
       parseResult = null
       importing = false
+      imported = false
+      resettingWorldState = false
     }
   })
 
@@ -60,7 +64,7 @@
   async function processFile(file: File) {
     try {
       const text = await file.text()
-      await processContent(text)
+      processContent(text)
     } catch (err) {
       ui.showToast(err instanceof Error ? err.message : 'Failed to read file', 'error')
     }
@@ -73,7 +77,7 @@
       })
       if (!filePath || typeof filePath !== 'string') return
       const content = await readTextFile(filePath)
-      await processContent(content)
+      processContent(content)
     } catch (err) {
       ui.showToast(err instanceof Error ? err.message : 'Failed to open file', 'error')
     }
@@ -84,12 +88,29 @@
     importing = true
     try {
       await story.importSTChat(parseResult.messages)
-      ui.showToast(`Imported ${total} messages`, 'info')
-      ui.closeSTChatImport()
+      imported = true
     } catch (err) {
       ui.showToast(err instanceof Error ? err.message : 'Import failed', 'error')
     } finally {
       importing = false
+    }
+  }
+
+  function handleKeepWorldState() {
+    ui.showToast(`Imported ${total} messages`, 'info')
+    ui.closeSTChatImport()
+  }
+
+  async function handleResetWorldState() {
+    resettingWorldState = true
+    try {
+      await story.resetWorldStateAfterImport()
+      ui.showToast(`Imported ${total} messages — world state reset`, 'info')
+    } catch (err) {
+      ui.showToast(err instanceof Error ? err.message : 'Reset failed', 'error')
+    } finally {
+      resettingWorldState = false
+      ui.closeSTChatImport()
     }
   }
 
@@ -124,6 +145,26 @@
               importing would leave them broken. Delete all branches in the Branch panel, then
               re-open this dialog.
             </p>
+          </div>
+        </div>
+      {:else if imported}
+        <!-- Post-import: world state choice -->
+        <div class="flex flex-col items-center gap-4 py-2 text-center">
+          <div class="bg-muted rounded-full p-3">
+            <Check class="h-8 w-8 text-green-500" />
+          </div>
+          <div class="space-y-1">
+            <p class="text-foreground font-medium">{total} messages imported</p>
+            <p class="text-muted-foreground text-sm">
+              Locations, items, story beats, and the time tracker still reflect your previous
+              story. Reset them now, or keep them to fill in manually later.
+            </p>
+          </div>
+          <div
+            class="text-muted-foreground w-full rounded-md border px-3 py-2 text-left text-xs"
+          >
+            <strong class="text-foreground">Characters and lorebook are not affected</strong>
+            — they are always preserved.
           </div>
         </div>
       {:else if !parseResult}
@@ -205,20 +246,40 @@
     </div>
 
     <ResponsiveModal.Footer class="mt-auto border-t px-6 py-4">
-      <Button variant="outline" onclick={close} disabled={importing}>Cancel</Button>
-      <Button
-        onclick={handleImport}
-        disabled={!parseResult || importing || story.branches.length > 0}
-        variant="destructive"
-        class="gap-2"
-      >
-        {#if importing}
-          <Loader2 class="h-4 w-4 animate-spin" />
-          Importing…
-        {:else}
-          Replace with {total} Messages
-        {/if}
-      </Button>
+      {#if imported}
+        <Button variant="outline" onclick={handleKeepWorldState} disabled={resettingWorldState}>
+          Keep World State
+        </Button>
+        <Button
+          variant="destructive"
+          onclick={handleResetWorldState}
+          disabled={resettingWorldState}
+          class="gap-2"
+        >
+          {#if resettingWorldState}
+            <Loader2 class="h-4 w-4 animate-spin" />
+            Resetting…
+          {:else}
+            <RefreshCw class="h-4 w-4" />
+            Reset World State
+          {/if}
+        </Button>
+      {:else}
+        <Button variant="outline" onclick={close} disabled={importing}>Cancel</Button>
+        <Button
+          onclick={handleImport}
+          disabled={!parseResult || importing || story.branches.length > 0}
+          variant="destructive"
+          class="gap-2"
+        >
+          {#if importing}
+            <Loader2 class="h-4 w-4 animate-spin" />
+            Importing…
+          {:else}
+            Replace with {total} Messages
+          {/if}
+        </Button>
+      {/if}
     </ResponsiveModal.Footer>
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>

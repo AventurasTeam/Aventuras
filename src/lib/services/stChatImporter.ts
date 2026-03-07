@@ -66,8 +66,9 @@ export function parseSTChat(content: string): STChatParseOutcome {
       createDate = meta.create_date
     }
   } catch {
-    // If the first line isn't valid JSON, treat it as a message and start from index 0
-    // (non-standard file — process all lines)
+    // First line is not valid JSON — not a standard ST export.
+    // Metadata defaults are kept; the loop below still starts at i=1,
+    // so line 0 is skipped (acceptable: line 0 is always the header in ST exports).
   }
 
   const messages: STChatMessage[] = []
