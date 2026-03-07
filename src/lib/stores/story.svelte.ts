@@ -611,6 +611,10 @@ class StoryStore {
       })
     }
 
+    // Bump the story's updatedAt so the library view reflects the import
+    await database.updateStory(storyId, {})
+    this.currentStory.updatedAt = Date.now()
+
     // Reload entries into the store
     await this.reloadEntriesForCurrentBranch()
 
