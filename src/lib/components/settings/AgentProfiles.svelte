@@ -418,6 +418,16 @@
     if (tempPreset) tempPreset.reasoningEffort = getReasoningValue(v) as any
   }
 
+  function maybeEnableNanogptReasoning(profileId: string | null | undefined, modelId: string) {
+    if (!profileId) return
+    const profile = settings.getProfile(profileId)
+    if (!profile) return
+    const model = settings.getProfileModels(profileId).find((mod) => mod.id === modelId)
+    if (!!model?.reasoning && profile.providerType === 'nanogpt' && tempPresetReasoning === 0) {
+      updateTempPresetReasoning(3)
+    }
+  }
+
   let tempModelReasoningCapability = $derived.by<'enforced' | 'supported' | 'unsupported'>(() => {
     if (!tempPreset) return 'unsupported'
     const profileId = tempPreset.profileId
@@ -576,37 +586,12 @@
           model={tempPreset?.model ?? ''}
           onProfileChange={(id) => {
             if (!tempPreset) return
-            const profile = id ? settings.getProfile(id) : undefined
-            if (profile) {
-              const model = settings
-                .getProfileModels(id)
-                .find((mod) => mod.id === tempPreset!.model)
-              if (
-                !!model?.reasoning &&
-                profile.providerType === 'nanogpt' &&
-                tempPresetReasoning === 0
-              ) {
-                updateTempPresetReasoning(3)
-              }
-            }
+            maybeEnableNanogptReasoning(id, tempPreset.model)
             tempPreset.profileId = id
           }}
           onModelChange={(m) => {
             if (!tempPreset) return
-            const profileId = tempPreset.profileId
-            if (profileId) {
-              const profile = settings.getProfile(profileId)
-              if (profile) {
-                const model = settings.getProfileModels(profileId).find((mod) => mod.id === m)
-                if (
-                  !!model?.reasoning &&
-                  profile.providerType === 'nanogpt' &&
-                  tempPresetReasoning === 0
-                ) {
-                  updateTempPresetReasoning(3)
-                }
-              }
-            }
+            maybeEnableNanogptReasoning(tempPreset.profileId, m)
             tempPreset.model = m
           }}
         />
