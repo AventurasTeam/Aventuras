@@ -1596,8 +1596,8 @@ class DatabaseService {
   async addBranch(branch: Branch): Promise<void> {
     const db = await this.getDb()
     await db.execute(
-      `INSERT INTO branches (id, story_id, name, parent_branch_id, fork_entry_id, checkpoint_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO branches (id, story_id, name, parent_branch_id, fork_entry_id, checkpoint_id, created_at, snapshot_complete)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         branch.id,
         branch.storyId,
@@ -1606,6 +1606,7 @@ class DatabaseService {
         branch.forkEntryId,
         branch.checkpointId ?? null,
         branch.createdAt,
+        branch.snapshotComplete ? 1 : 0,
       ],
     )
   }

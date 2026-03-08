@@ -436,6 +436,7 @@ class ExportService {
               forkEntryId: mapEntryId(branch.forkEntryId) ?? branch.forkEntryId,
               checkpointId: null,
               createdAt: branch.createdAt,
+              snapshotComplete: branch.snapshotComplete ?? false,
             })
 
             const mappedCheckpointId = branch.checkpointId
@@ -461,6 +462,7 @@ class ExportService {
             forkEntryId: mapEntryId(branch.forkEntryId) ?? branch.forkEntryId,
             checkpointId: null,
             createdAt: branch.createdAt,
+            snapshotComplete: branch.snapshotComplete ?? false,
           })
 
           const mappedCheckpointId = branch.checkpointId
