@@ -117,7 +117,7 @@ Per-story memory settings:
 - **AI**: OpenAI-compatible APIs (OpenRouter, AI SDK), Local NLP via Harper.js (WASM)
 - **Package Manager**: npm
 
-## Building From Source
+## Development
 ### Requirements
 - Node.js 18+
 - Rust (latest stable)
@@ -156,7 +156,7 @@ Available `npm run` scripts:
 - TODO: Document any required or optional environment variables (e.g., specific build or deployment variables).
 - **API Keys**: Configured primarily via the UI (Settings -> API Settings).
 
-## Project Structure
+### Project Structure
 ```text
 aventuras/
 ├── src/                  # SvelteKit frontend source
@@ -170,14 +170,14 @@ aventuras/
 ├── src-tauri/            # Rust backend
 │   ├── gen/android/      # Android scaffold files (DO NOT OVERWRITE)
 │   ├── src/              # Rust source code
-│   └── Cargo.toml        # Rust dependencies
+│   ├── Cargo.toml        # Rust dependencies
+│   └── tauri.conf.json   # Tauri configuration
 ├── static/               # Static web assets
 ├── scripts/              # Build and utility scripts
 ├── package.json          # Node dependencies and scripts
-└── tauri.conf.json       # Tauri configuration (inside src-tauri)
 ```
 
-### Building from Source
+### Building Release Binaries
 
 <details>
 <summary>Click to expand build instructions</summary>
