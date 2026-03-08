@@ -1,23 +1,28 @@
 # Aventuras
+
 ## Overview
-Aventuras is a desktop and mobile interactive fiction application offering multiple story modes (Adventure Mode, Creative Writing Mode), deep AI integration via OpenRouter and other OpenAI-compatible providers, an advanced Memory System, dynamic Lorebook, and an autonomous Lore Management Agent. The app provides a robust set of writing tools and world tracking features, ensuring contextually rich and coherent AI-generated narratives.
+
+Aventuras is a desktop and mobile interactive fiction application offering multiple story modes (Adventure Mode, Creative Writing Mode), deep AI integration via major providers, an advanced Memory System, dynamic Lorebook, and an autonomous Lore Management Agent. The app provides a robust set of writing tools and world tracking features, ensuring contextually rich and coherent AI-generated narratives.
 
 ## Features
+
 ### Story Modes
+
 - **Adventure Mode** - Interactive fiction with multiple-choice actions and world tracking
 - **Creative Writing Mode** - Freeform collaborative writing with AI-generated suggestions
 - **POV Options** - First, second, or third person perspective
 - **Tense Control** - Past or present tense narrative style
 
 ### AI Integration
-- OpenRouter API integration for 70+ LLM providers and models
+
+- Use any OpenAI-compatible gateway or provider like OpenRouter, NanoGPT, llama.cpp, LM Studio, and more
 - Streaming responses with real-time text generation
 - Configurable models, temperature, and token limits
 - Extended thinking/reasoning support with configurable effort levels
-- Custom API endpoints for OpenAI-compatible providers
 - API profiles for saving multiple configurations
 
 ### Memory System
+
 - Automatic chapter summarization to manage context windows
 - Configurable token thresholds and chapter buffers
 - Manual chapter creation and resummarization
@@ -26,6 +31,7 @@ Aventuras is a desktop and mobile interactive fiction application offering multi
 - In-story time tracking per chapter
 
 ### Lorebook
+
 - Unified entry system for characters, locations, items, factions, concepts, and events
 - Dynamic state tracking (relationships, inventory, discoveries)
 - Keyword-based and relevance-based context injection
@@ -36,12 +42,14 @@ Aventuras is a desktop and mobile interactive fiction application offering multi
 - AI-assisted autonomous lore management agent
 
 ### Writing Tools
+
 - Local grammar checking powered by Harper.js (WebAssembly)
 - AI-powered style analysis for repetitive words and phrases
 - Action suggestions that match player writing style
 - Persistent action suggestions between sessions
 
 ### World Tracking
+
 - Character relationships and dispositions with portrait support
 - Location visits and changes with automatic discovery
 - Inventory management with equipment tracking
@@ -50,12 +58,14 @@ Aventuras is a desktop and mobile interactive fiction application offering multi
 - Collapsible UI cards for all world elements
 
 ### Templates
+
 - Built-in genre templates (fantasy, sci-fi, mystery, horror, slice of life)
 - Custom template creation with system prompts
 - Initial state configuration (protagonist, locations, items)
 - Opening scene text support
 
 ### Image Generation
+
 - Embedded image generation in story entries
 - AI-powered imageable scene detection
 - NanoGPT provider integration
@@ -63,51 +73,46 @@ Aventuras is a desktop and mobile interactive fiction application offering multi
 - Configurable image size (512x512 or 1024x1024)
 
 ### Save and Restore
+
 - Named checkpoints with full state snapshots
 - Retry system for undoing actions and generating alternatives
 - Character and time state preservation on retry
 
 ### Network Sync
+
 - Local network sync between devices
 - QR code connection for easy pairing
 - Push/pull stories between devices
 - Server mode for sharing stories
 
 ### UI Customization
+
 - Multiple themes (dark, light, light solarized, retro console, fallen down)
 - Custom font selection (system or Google fonts)
 - Adjustable text size (small, medium, large)
 - Word count display toggle
 
 ### Cross-Platform
+
 - Desktop (Windows, macOS, Linux)
 - Android (APK)
 - iOS (planned)
 
 ## Installation
+
 ### Download Pre-built Binaries
+
 Pre-compiled binaries are available on the [Releases](https://github.com/AventurasTeam/Aventuras/releases) page:
 
 | Platform | Download                                  |
-| -------- |-------------------------------------------|
+| -------- | ----------------------------------------- |
 | Windows  | `aventuras_x.x.x_x64-setup.exe`           |
 | macOS    | `aventuras_x.x.x_x64.dmg`                 |
 | Linux    | `aventuras_x.x.x_amd64.deb` / `.AppImage` |
 | Android  | `aventuras-release.apk`                   |
 
-## Configuration
-### API Key Setup
-1. Get an API key from [OpenRouter](https://openrouter.ai/)
-2. Open Aventuras settings
-3. Enter your API key in the API Settings section
-
-### Memory Configuration
-Per-story memory settings:
-- **Token Threshold**: Context size before auto-summarization (default: 24,000)
-- **Chapter Buffer**: Recent messages protected from chapter boundaries (default: 10)
-- **Auto-Summarize**: Enable/disable automatic chapter creation
-
 ## Tech Stack
+
 - **Language**: TypeScript (strict mode)
 - **Frontend Framework**: SvelteKit 2
 - **State Management**: Svelte 5 runes (`$state`, `$derived`, `$props`)
@@ -118,12 +123,15 @@ Per-story memory settings:
 - **Package Manager**: npm
 
 ## Development
+
 ### Requirements
+
 - Node.js 18+
 - Rust (latest stable)
 - (Optional) Android SDK, NDK, Java 17+ for Android builds
 
 ### Setup & Run Commands
+
 ```bash
 # Clone the repository
 git clone https://github.com/AventurasTeam/Aventuras.git
@@ -138,7 +146,9 @@ npx tauri dev
 ```
 
 ### Scripts
+
 Available `npm run` scripts:
+
 - `build`: Build for production
 - `check`: Run `svelte-check` (type checking)
 - `check:watch`: Watch mode type checking
@@ -149,14 +159,18 @@ Available `npm run` scripts:
 - `format`: Format code with Prettier
 
 ### Tests
+
 **Current Status**: No test suite is currently configured.
+
 - TODO: Add testing framework (e.g., Vitest/Playwright) and configure tests.
 
 ### Environment Variables
+
 - TODO: Document any required or optional environment variables (e.g., specific build or deployment variables).
 - **API Keys**: Configured primarily via the UI (Settings -> API Settings).
 
 ### Project Structure
+
 ```text
 aventuras/
 ├── src/                  # SvelteKit frontend source
@@ -183,11 +197,13 @@ aventuras/
 <summary>Click to expand build instructions</summary>
 
 #### Building Desktop
+
 ```bash
 npx tauri build
 ```
 
 #### Building Android
+
 **IMPORTANT**: The Android project scaffold (`src-tauri/gen/android/`) is tracked in git.
 **Do NOT run `npx tauri android init`** as it will overwrite customizations.
 
@@ -206,6 +222,7 @@ src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-rele
 ```
 
 #### Signing APK
+
 ```bash
 # Create keystore (first time only)
 keytool -genkey -v -keystore release.keystore -alias myalias -keyalg RSA -keysize 2048 -validity 10000
@@ -220,6 +237,7 @@ apksigner sign --ks release.keystore --ks-key-alias myalias --out app-release.ap
 </details>
 
 ## Acknowledgments
+
 - [Tauri](https://tauri.app/) - Desktop/mobile app framework
 - [SvelteKit](https://kit.svelte.dev/) - Frontend framework
 - [OpenRouter](https://openrouter.ai/) - LLM API aggregator
@@ -227,4 +245,5 @@ apksigner sign --ks release.keystore --ks-key-alias myalias --out app-release.ap
 - [Lucide](https://lucide.dev/) - Icon library
 
 ## License
+
 AGPL-3.0
