@@ -1734,10 +1734,9 @@ class SettingsStore {
   }
 
   async deleteProfile(id: string) {
-    // Prevent deleting the main narrative profile
+    // Reset main narrative profile to default if the deleted profile is currently set as main narrative
     if (id === this.apiSettings.mainNarrativeProfileId) {
-      console.warn('[Settings] Cannot delete the main narrative profile')
-      return false
+      this.setMainNarrativeProfile(this.getDefaultProfileIdForProvider())
     }
 
     // Prevent deleting the default profile for the current provider
