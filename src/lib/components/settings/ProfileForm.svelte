@@ -82,10 +82,10 @@
   let customModelDialogInput = $state('')
   let customModelDialogError = $state('')
   let displaymodels = $derived.by(() => {
-    const allModels = [...fetchedModels.map((m) => m.id), ...customModels].filter(
-      (id) => !hiddenModels.includes(id),
+    const allModels = [...fetchedModels, ...customModels.map((id) => ({ id }))].filter(
+      (model) => !hiddenModels.includes(model.id),
     )
-    return filterModels(allModels.map((id) => ({ id })))
+    return filterModels(allModels)
   })
 
   function isSelfHostedUrl(url: string): boolean {
@@ -269,7 +269,7 @@
           <div class="flex flex-wrap gap-1 p-2">
             {#each filterModels(sortedModels(displaymodels)) as model (model.id)}
               {@const isFav = favoriteModels.includes(model.id)}
-              <Badge variant="secondary" class="gap-1 pr-0.5">
+              <Badge variant="secondary" class="gap-1 px-2">
                 <button
                   class="p-0 transition-colors hover:text-yellow-500 {isFav
                     ? 'text-yellow-500'
@@ -306,7 +306,7 @@
           <div class="flex flex-wrap gap-1 p-2">
             {#each filterModels(sortedModels(customModels.map( (id) => ({ id }), ))) as model (model.id)}
               {@const isFav = favoriteModels.includes(model.id)}
-              <Badge variant="outline" class="gap-1 pr-0.5">
+              <Badge variant="outline" class="gap-1 px-2">
                 <button
                   class="p-0 transition-colors hover:text-yellow-500 {isFav
                     ? 'text-yellow-500'
@@ -349,7 +349,7 @@
           <ScrollArea class="h-24 w-full rounded-md border border-dashed">
             <div class="flex flex-wrap gap-1 p-2">
               {#each filterModels(hiddenModels.map((id) => ({ id }))) as model (model.id)}
-                <Badge variant="outline" class="gap-1 pr-1 opacity-60">
+                <Badge variant="outline" class="gap-1 px-2 opacity-60">
                   <span class="max-w-48 truncate">{model.id}</span>
                   <button
                     class="hover:text-primary text-muted-foreground p-0 transition-colors"

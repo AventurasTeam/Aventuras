@@ -127,6 +127,8 @@
 
   function handleRemoveCustomModel(model: string) {
     formCustomModels = formCustomModels.filter((m) => m !== model)
+    formHiddenModels = formHiddenModels.filter((m) => m !== model)
+    formFavoriteModels = formFavoriteModels.filter((m) => m !== model)
   }
 
   function handleRemoveFetchedModel(model: string) {
