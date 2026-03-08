@@ -939,12 +939,7 @@
     emitUserInput(content, isCreativeMode ? 'direction' : forceFreeMode ? 'free' : actionType)
     await tick()
 
-    if (!settings.needsApiKey) await generateResponse(userActionEntry.id, content)
-    else
-      await story.addEntry(
-        'system',
-        'Please configure your API key in settings to enable AI generation.',
-      )
+    await generateResponse(userActionEntry.id, content)
   }
 
   async function handleStopGeneration() {
@@ -1013,12 +1008,10 @@
     await story.deleteEntry(error.errorEntryId)
     ui.clearGenerationError()
 
-    if (!settings.needsApiKey) {
-      await generateResponse(userActionEntry.id, userActionEntry.content, {
-        countStyleReview: false,
-        styleReviewSource: 'retry-error',
-      })
-    }
+    await generateResponse(userActionEntry.id, userActionEntry.content, {
+      countStyleReview: false,
+      styleReviewSource: 'retry-error',
+    })
   }
 
   function dismissError() {
@@ -1083,16 +1076,14 @@
     emitUserInput(backup.userActionContent, isCreativeMode ? 'direction' : backup.actionType)
     await tick()
 
-    if (!settings.needsApiKey) {
-      ui.setRetryingLastMessage(true)
-      try {
-        await generateResponse(userActionEntry.id, promptContent, {
-          countStyleReview: false,
-          styleReviewSource: 'retry-last-message',
-        })
-      } finally {
-        ui.setRetryingLastMessage(false)
-      }
+    ui.setRetryingLastMessage(true)
+    try {
+      await generateResponse(userActionEntry.id, promptContent, {
+        countStyleReview: false,
+        styleReviewSource: 'retry-last-message',
+      })
+    } finally {
+      ui.setRetryingLastMessage(false)
     }
   }
 

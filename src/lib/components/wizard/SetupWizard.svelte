@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { settings } from '$lib/stores/settings.svelte'
   import { WizardStore } from '$lib/stores/wizard/wizard.svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
-  import { ChevronLeft, ChevronRight, Sparkles, Play } from 'lucide-svelte'
+  import { ChevronLeft, ChevronRight, Play } from 'lucide-svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
   import { characterVault } from '$lib/stores/characterVault.svelte'
@@ -53,9 +52,6 @@
     if (!char) return undefined
     return (char.metadata as Record<string, unknown>)?.linkedLorebookId as string | undefined
   }
-
-  // Check if API key is configured
-  const needsApiKey = $derived(settings.needsApiKey)
 
   // Check if image generation is enabled and configured
   const imageGenerationEnabled = $derived.by(() => {
@@ -114,27 +110,7 @@
 
     <!-- Content -->
     <div class="min-h-0 flex-1 overflow-y-auto p-4">
-      {#if needsApiKey}
-        <!-- API Key Warning -->
-        <div class="flex flex-col items-center justify-center py-8 text-center">
-          <div class="mb-4 rounded-full bg-amber-500/20 p-4">
-            <Sparkles class="h-8 w-8 text-amber-400" />
-          </div>
-          <h3 class="mb-2 text-lg font-semibold">API Key Required</h3>
-          <p class="text-muted-foreground mb-4 max-w-md">
-            The setup wizard uses AI to dynamically generate your story world. Please configure your
-            OpenRouter API key in settings first.
-          </p>
-          <Button
-            onclick={() => {
-              ui.openSettings()
-              onClose()
-            }}
-          >
-            Open Settings
-          </Button>
-        </div>
-      {:else if wizard.currentStep === 1}
+      {#if wizard.currentStep === 1}
         <Step1Mode
           selectedMode={wizard.narrative.selectedMode}
           onModeChange={(mode) => (wizard.narrative.selectedMode = mode)}

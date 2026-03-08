@@ -25,6 +25,7 @@ import { ui } from '$lib/stores/ui.svelte'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '$lib/constants/timeout'
 import { SvelteSet, SvelteMap } from 'svelte/reactivity'
+import type { TextModel } from '$lib/services/ai/sdk/providers'
 
 // Provider preset type (used by WelcomeScreen)
 export type ProviderPreset = 'openrouter' | 'nanogpt' | 'openai-compatible'
@@ -1083,7 +1084,6 @@ class SettingsStore {
     manualBody: '',
     enableThinking: false,
     llmTimeoutMs: LLM_TIMEOUT_DEFAULT,
-    useNativeTimeout: false,
   })
 
   uiSettings = $state<UISettings>(getDefaultUISettings())
@@ -1231,17 +1231,34 @@ class SettingsStore {
       const profilesJson = await database.getSetting('api_profiles')
       if (profilesJson) {
         try {
-          const parsed = JSON.parse(profilesJson) as import('$lib/types').APIProfile[]
+          const parsed = JSON.parse(profilesJson) as (import('$lib/types').APIProfile & {
+            reasoningModels?: string[]
+          })[]
           // Ensure new fields have defaults for profiles saved before these fields existed
-          this.apiSettings.profiles = parsed.map((p) => ({
-            ...p,
-            customModels: Array.isArray(p.customModels) ? p.customModels : [],
-            fetchedModels: Array.isArray(p.fetchedModels) ? p.fetchedModels : [],
-            reasoningModels: Array.isArray(p.reasoningModels) ? p.reasoningModels : [],
-            hiddenModels: Array.isArray(p.hiddenModels) ? p.hiddenModels : [],
-            favoriteModels: Array.isArray(p.favoriteModels) ? p.favoriteModels : [],
-            providerType: p.providerType ?? 'openai-compatible',
-          }))
+          this.apiSettings.profiles = parsed.map((p) => {
+            // Migrate fetchedModels: old format was string[], new format is TextModel[]
+            let fetchedModels: import('$lib/services/ai/sdk/providers').TextModel[] = []
+            if (Array.isArray(p.fetchedModels) && p.fetchedModels.length > 0) {
+              if (typeof p.fetchedModels[0] === 'string') {
+                // Old format: string[] + optional reasoningModels string[]
+                const reasoningSet = new Set(p.reasoningModels ?? [])
+                fetchedModels = (p.fetchedModels as unknown as string[]).map((id) => ({
+                  id,
+                  reasoning: reasoningSet.has(id) || undefined,
+                }))
+              } else {
+                fetchedModels = p.fetchedModels
+              }
+            }
+            return {
+              ...p,
+              customModels: Array.isArray(p.customModels) ? p.customModels : [],
+              fetchedModels,
+              hiddenModels: Array.isArray(p.hiddenModels) ? p.hiddenModels : [],
+              favoriteModels: Array.isArray(p.favoriteModels) ? p.favoriteModels : [],
+              providerType: p.providerType ?? 'openai-compatible',
+            }
+          })
         } catch {
           this.apiSettings.profiles = []
         }
@@ -1272,12 +1289,6 @@ class SettingsStore {
         if (!isNaN(parsed) && parsed >= LLM_TIMEOUT_MIN && parsed <= LLM_TIMEOUT_MAX) {
           this.apiSettings.llmTimeoutMs = parsed
         }
-      }
-
-      // Load native timeout setting
-      const useNativeTimeout = await database.getSetting('use_native_timeout')
-      if (useNativeTimeout !== null) {
-        this.apiSettings.useNativeTimeout = useNativeTimeout === 'true'
       }
 
       // Load provider preset (which provider's defaults to use)
@@ -1665,11 +1676,6 @@ class SettingsStore {
     await database.setSetting('llm_timeout_ms', timeoutMs.toString())
   }
 
-  async setUseNativeTimeout(useNative: boolean) {
-    this.apiSettings.useNativeTimeout = useNative
-    await database.setSetting('use_native_timeout', useNative.toString())
-  }
-
   async setEnableThinking(enabled: boolean) {
     this.apiSettings.enableThinking = enabled
     this.apiSettings.reasoningEffort = enabled ? 'high' : 'off'
@@ -1728,10 +1734,9 @@ class SettingsStore {
   }
 
   async deleteProfile(id: string) {
-    // Prevent deleting the main narrative profile
+    // Reset main narrative profile to default if the deleted profile is currently set as main narrative
     if (id === this.apiSettings.mainNarrativeProfileId) {
-      console.warn('[Settings] Cannot delete the main narrative profile')
-      return false
+      this.setMainNarrativeProfile(this.getDefaultProfileIdForProvider())
     }
 
     // Prevent deleting the default profile for the current provider
@@ -1867,24 +1872,24 @@ class SettingsStore {
     return this.getProfile(this.apiSettings.activeProfileId)
   }
 
-  getProfileModels(profileId: string | null): string[] {
+  getProfileModels(profileId: string | null): TextModel[] {
     if (!profileId) return []
     const profile = this.getProfile(profileId)
     if (!profile) return []
-    return [...new Set([...profile.fetchedModels, ...profile.customModels])]
+    return [...profile.fetchedModels, ...profile.customModels.map((m) => ({ id: m }))]
   }
 
-  getAvailableModels(profileId: string | null): string[] {
+  getAvailableModels(profileId: string | null): TextModel[] {
     if (!profileId) return []
     const profile = this.getProfile(profileId)
     if (!profile) return []
-    const hidden = new Set(profile.hiddenModels ?? [])
-    const favSet = new Set(profile.favoriteModels ?? [])
-    const all = [...new Set([...profile.fetchedModels, ...profile.customModels])].filter(
-      (m) => !hidden.has(m),
-    )
-    const favorites = all.filter((m) => favSet.has(m))
-    const rest = all.filter((m) => !favSet.has(m))
+
+    const hidden = profile.hiddenModels ?? []
+    const favSet = profile.favoriteModels ?? []
+    const profileModels = this.getProfileModels(profileId)
+    const all = profileModels.filter((m) => !hidden.includes(m.id))
+    const favorites = all.filter((m) => favSet.includes(m.id))
+    const rest = all.filter((m) => !favSet.includes(m.id))
     return [...favorites, ...rest]
   }
 
@@ -1994,7 +1999,6 @@ class SettingsStore {
         apiKey: existingApiKey || '', // Migrate existing key if present
         customModels: allModels, // Include all models in use plus defaults
         fetchedModels: [], // Will be populated when user fetches from API
-        reasoningModels: [],
         hiddenModels: [],
         favoriteModels: [],
         createdAt: Date.now(),
@@ -2383,20 +2387,6 @@ class SettingsStore {
     await database.setSetting('advanced_manual_mode', enabled.toString())
   }
 
-  //Return true if an API key is needed for main narrative generation.
-  get needsApiKey(): boolean {
-    const mainProfile = this.getMainNarrativeProfile() ?? this.getDefaultProfile()
-    if (mainProfile) {
-      return !mainProfile.apiKey || mainProfile.apiKey.length === 0
-    }
-
-    // Fall back to legacy check for pre-profile installations
-    return (
-      !this.apiSettings.openaiApiKey &&
-      this.apiSettings.openaiApiURL === PROVIDERS.openrouter.baseUrl
-    )
-  }
-
   // Wizard settings methods
   async saveWizardSettings() {
     await database.setSetting('wizard_settings', JSON.stringify(this.wizardSettings))
@@ -2748,7 +2738,6 @@ class SettingsStore {
       manualBody: '',
       enableThinking: false,
       llmTimeoutMs: LLM_TIMEOUT_DEFAULT,
-      useNativeTimeout: false,
     }
 
     // Reset UI settings
@@ -2849,7 +2838,6 @@ class SettingsStore {
       apiKey: apiKey,
       customModels: [],
       fetchedModels: [],
-      reasoningModels: [],
       hiddenModels: [],
       favoriteModels: [],
       createdAt: Date.now(),
@@ -2933,19 +2921,6 @@ class SettingsStore {
   getDefaultProviderType(): ProviderType {
     const defaultProfile = this.getDefaultProfile()
     return defaultProfile?.providerType ?? 'openrouter'
-  }
-
-  /**
-   * Get the first available model from the default profile.
-   * Used for 'custom' provider resets to use user's actual models instead of placeholders.
-   */
-  getFirstModelFromDefaultProfile(): string | null {
-    const defaultProfile = this.getDefaultProfile()
-    if (!defaultProfile) return null
-
-    // Prefer fetched models, then custom models
-    const models = [...defaultProfile.fetchedModels, ...defaultProfile.customModels]
-    return models.length > 0 ? models[0] : null
   }
 
   /**

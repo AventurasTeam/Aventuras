@@ -5,9 +5,9 @@
   import { cn } from '$lib/utils/cn'
   import {
     fetchModelsFromProvider,
+    supportsCapabilityFetch,
     supportsReasoning,
-    modelSupportsReasoning,
-    getReasoningMode,
+    supportsBinaryReasoning,
   } from '$lib/services/ai/sdk/providers'
 
   // Shadcn Components
@@ -15,6 +15,7 @@
   import { Label } from '$lib/components/ui/label'
   import { Button } from '$lib/components/ui/button'
   import { Slider } from '$lib/components/ui/slider'
+  import { Switch } from '$lib/components/ui/switch'
   import { Input } from '$lib/components/ui/input'
   import { Textarea } from '$lib/components/ui/textarea'
   import ModelSelector from './ModelSelector.svelte'
@@ -47,6 +48,15 @@
   }
 
   async function handleSetMainNarrativeProfile(profileId: string) {
+    const profile = settings.getProfile(profileId)
+    if (profile) {
+      const model = settings
+        .getProfileModels(profileId)
+        .find((mod) => mod.id === settings.apiSettings.defaultModel)
+      if (!!model?.reasoning && profile.providerType === 'nanogpt' && reasoningValue === 0) {
+        updateReasoning(3)
+      }
+    }
     await settings.setMainNarrativeProfile(profileId)
   }
 
@@ -67,13 +77,10 @@
 
       await settings.updateProfile(profile.id, {
         ...profile,
-        fetchedModels: result.models,
-        reasoningModels: result.reasoningModels,
+        fetchedModels: result,
       })
 
-      console.log(
-        `[MainNarrative] Fetched ${result.models.length} models from ${profile.providerType}`,
-      )
+      console.log(`[MainNarrative] Fetched ${result.length} models from ${profile.providerType}`)
     } catch (error) {
       console.error('[MainNarrative] Failed to fetch models:', error)
       modelError = error instanceof Error ? error.message : 'Failed to load models.'
@@ -82,33 +89,57 @@
     }
   }
 
-  // Check if reasoning is supported for the current profile and model
-  let reasoningSupported = $derived.by(() => {
+  let modelReasoningCapability = $derived.by<'enforced' | 'supported' | 'unsupported'>(() => {
     const profile = settings.getMainNarrativeProfile()
-    if (!profile) return false
-
-    // Check if provider supports reasoning
-    if (!supportsReasoning(profile.providerType)) return false
+    if (!profile) return 'unsupported'
 
     // Check if the specific model supports reasoning
-    const model = settings.apiSettings.defaultModel
-    if (!model) return false
+    const modelId = settings.apiSettings.defaultModel
+    if (!modelId) return 'unsupported'
 
-    return modelSupportsReasoning(model, profile.providerType, profile.reasoningModels)
+    const model = settings.getProfileModels(profile.id).find((m) => m.id === modelId)
+
+    if (!!model?.reasoning && profile.providerType === 'nanogpt') {
+      return 'enforced'
+    } else if (!!model?.reasoning) {
+      return 'supported'
+    }
+    return 'unsupported'
   })
 
-  // For 'fetched' providers (e.g., NanoGPT), reasoning is binary — no slider, just text
-  let isFetchedReasoningProvider = $derived.by(() => {
+  // Check if reasoning is supported for the current profile and model
+  let globalProviderReasoningCapability = $derived.by(() => {
     const profile = settings.getMainNarrativeProfile()
     if (!profile) return false
-    return getReasoningMode(profile.providerType) === 'fetched'
+
+    // Check if the specific model supports reasoning
+    const modelId = settings.apiSettings.defaultModel
+    if (!modelId) return false
+
+    return supportsReasoning(profile.providerType)
   })
 
-  // For 'heuristic' providers (e.g., Ollama), reasoning is tag-based only — no effort levels
-  let isHeuristicReasoningProvider = $derived.by(() => {
+  let providerModelCapbilityFetching = $derived.by(() => {
     const profile = settings.getMainNarrativeProfile()
     if (!profile) return false
-    return getReasoningMode(profile.providerType) === 'heuristic'
+    return supportsCapabilityFetch(profile.providerType)
+  })
+
+  let binaryReasoningProvider = $derived.by(() => {
+    const profile = settings.getMainNarrativeProfile()
+    if (!profile) return false
+    return supportsBinaryReasoning(profile.providerType)
+  })
+
+  $effect(() => {
+    const _model = settings.apiSettings.defaultModel // explicit tracking to re-run on model switch
+    const reasoningSupported =
+      globalProviderReasoningCapability &&
+      (!providerModelCapbilityFetching || modelReasoningCapability !== 'unsupported')
+
+    if (!reasoningSupported && reasoningValue > 0) {
+      updateReasoning(0)
+    }
   })
 
   // Proxy states for sliders to ensure correct array type binding
@@ -159,23 +190,40 @@
         profileId={settings.apiSettings.mainNarrativeProfileId}
         model={settings.apiSettings.defaultModel}
         onProfileChange={(id) => handleSetMainNarrativeProfile(id || '')}
-        onModelChange={(m) => settings.setDefaultModel(m)}
+        onModelChange={(m) => {
+          const profile = settings.getMainNarrativeProfile()
+          if (profile) {
+            const model = settings.getProfileModels(profile.id).find((mod) => mod.id === m)
+            if (!!model?.reasoning && profile.providerType === 'nanogpt' && reasoningValue === 0) {
+              updateReasoning(3)
+            }
+          }
+          settings.setDefaultModel(m)
+        }}
         onRefreshModels={fetchModelsToProfile}
         isRefreshingModels={isLoadingModels}
       />
       {#if modelError}
         <p class="text-destructive text-xs">{modelError}</p>
       {/if}
-      {#if isFetchedReasoningProvider}
-        {#if reasoningSupported}
+      {#if globalProviderReasoningCapability}
+        {#if providerModelCapbilityFetching}
+          {#if modelReasoningCapability === 'enforced'}
+            <div class="flex items-center gap-1.5 text-xs text-emerald-500">
+              <Brain class="h-3.5 w-3.5" />
+              Reasoning enabled
+            </div>
+          {:else if modelReasoningCapability === 'supported'}
+            <div class="flex items-center gap-1.5 text-xs text-emerald-500">
+              <Brain class="h-3.5 w-3.5" />
+              Reasoning supported
+            </div>
+          {/if}
+        {:else}
           <div class="flex items-center gap-1.5 text-xs text-emerald-500">
             <Brain class="h-3.5 w-3.5" />
-            Reasoning enabled
+            Reasoning supported by provider (specific model support unknown)
           </div>
-        {:else}
-          <p class="text-muted-foreground text-xs">
-            Some models support reasoning. Fetch models to detect capabilities.
-          </p>
         {/if}
       {/if}
     </div>
@@ -250,7 +298,7 @@
     </div>
 
     <!-- Thinking Row (only shown if provider/model supports native reasoning slider) -->
-    {#if reasoningSupported && !isFetchedReasoningProvider && !isHeuristicReasoningProvider}
+    {#if globalProviderReasoningCapability && (!providerModelCapbilityFetching || modelReasoningCapability !== 'unsupported')}
       <div
         class={cn(
           'grid grid-cols-1 gap-6 border-t pt-4 md:grid-cols-2',
@@ -258,23 +306,49 @@
         )}
       >
         <div class="grid gap-4">
-          <div class="flex justify-between">
-            <Label>Thinking: {reasoningLabels[settings.apiSettings.reasoningEffort]}</Label>
-          </div>
-          <Slider
-            bind:value={reasoningValue}
-            type="single"
-            min={0}
-            max={3}
-            step={1}
-            onValueChange={updateReasoning}
-          />
-          <div class="text-muted-foreground flex justify-between text-xs">
-            <span>Off</span>
-            <span>Low</span>
-            <span>Med</span>
-            <span>High</span>
-          </div>
+          {#if binaryReasoningProvider}
+            <div class="flex items-center justify-between">
+              <Label>Thinking</Label>
+              <Switch
+                checked={settings.apiSettings.reasoningEffort !== 'off'}
+                onCheckedChange={(v) => updateReasoning(v ? 3 : 0)}
+              />
+            </div>
+          {:else}
+            <div class="flex justify-between">
+              <Label>Thinking: {reasoningLabels[settings.apiSettings.reasoningEffort]}</Label>
+            </div>
+            {#if modelReasoningCapability === 'enforced'}
+              <Slider
+                bind:value={reasoningValue}
+                type="single"
+                min={1}
+                max={3}
+                step={1}
+                onValueChange={updateReasoning}
+              />
+              <div class="text-muted-foreground flex justify-between text-xs">
+                <span>Low</span>
+                <span>Med</span>
+                <span>High</span>
+              </div>
+            {:else}
+              <Slider
+                bind:value={reasoningValue}
+                type="single"
+                min={0}
+                max={3}
+                step={1}
+                onValueChange={updateReasoning}
+              />
+              <div class="text-muted-foreground flex justify-between text-xs">
+                <span>Off</span>
+                <span>Low</span>
+                <span>Med</span>
+                <span>High</span>
+              </div>
+            {/if}
+          {/if}
         </div>
       </div>
     {/if}
