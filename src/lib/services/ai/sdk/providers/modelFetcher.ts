@@ -213,7 +213,7 @@ async function fetchChutesModels(baseUrl?: string, apiKey?: string): Promise<str
     throw new Error('Chutes requires an API key to fetch models')
   }
 
-  const effectiveBaseUrl = "https://api.chutes.ai"
+  const effectiveBaseUrl = 'https://api.chutes.ai'
   const chutesUrl = effectiveBaseUrl.replace(/\/$/, '') + '/chutes/?include_public=true&limit=200'
 
   const fetchFn = createTimeoutFetch(30000, 'model-fetch')
