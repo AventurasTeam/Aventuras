@@ -89,7 +89,11 @@ export function createTimeoutFetch(
       debugIdExternal,
     )
     try {
-      const response = await tauriFetch(input, { ...init, signal: controller.signal, body: JSON.stringify(parsedBody) })
+      const response = await tauriFetch(input, {
+        ...init,
+        signal: controller.signal,
+        body: JSON.stringify(parsedBody),
+      })
 
       if (!response.ok) {
         const error = await response.text()

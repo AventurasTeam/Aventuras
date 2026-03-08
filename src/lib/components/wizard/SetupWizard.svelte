@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { settings } from '$lib/stores/settings.svelte'
   import { WizardStore } from '$lib/stores/wizard/wizard.svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
-  import { ChevronLeft, ChevronRight, Sparkles, Play } from 'lucide-svelte'
+  import { ChevronLeft, ChevronRight, Play } from 'lucide-svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
   import { characterVault } from '$lib/stores/characterVault.svelte'

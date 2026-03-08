@@ -164,11 +164,11 @@ ${context.narrativeResponse}
     const chapterSummary =
       context.chapters && context.chapters.length > 0
         ? context.chapters
-          .map(
-            (ch) =>
-              `Chapter ${ch.number}${ch.title ? `: ${ch.title}` : ''} - ${ch.summary.slice(0, 200)}...`,
-          )
-          .join('\n')
+            .map(
+              (ch) =>
+                `Chapter ${ch.number}${ch.title ? `: ${ch.title}` : ''} - ${ch.summary.slice(0, 200)}...`,
+            )
+            .join('\n')
         : 'No chapters available. Use list_chapters and query_chapter tools to explore story history.'
 
     // Render prompts through unified pipeline

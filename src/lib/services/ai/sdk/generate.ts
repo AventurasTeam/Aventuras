@@ -186,7 +186,6 @@ export function buildProviderOptions(
         options = { reasoningEffort: reasoningEffort } satisfies OpenAICompatibleProviderOptions
         break
     }
-
   }
 
   if (Object.keys(options).length === 0) {
@@ -250,7 +249,9 @@ function resolveConfig(presetId: string, serviceId: string, debugId?: string): R
   }
 
   const provider = createProviderFromProfile({
-    profile, presetId: serviceId, debugId,
+    profile,
+    presetId: serviceId,
+    debugId,
     structuredOutputs: supportsStructuredOutput,
     manualBody: preset.manualBody ?? '',
   })
@@ -280,7 +281,12 @@ function resolveNarrativeConfig(debugId?: string): NarrativeConfig {
     )
   }
 
-  const provider = createProviderFromProfile({ profile, presetId: 'narrative', debugId, manualBody: settings.apiSettings.manualBody ?? '' })
+  const provider = createProviderFromProfile({
+    profile,
+    presetId: 'narrative',
+    debugId,
+    manualBody: settings.apiSettings.manualBody ?? '',
+  })
   const baseModelId = settings.apiSettings.defaultModel
   const reasoningEffort = settings.apiSettings.reasoningEffort ?? 'off'
   const model = provider(baseModelId) as LanguageModelV3

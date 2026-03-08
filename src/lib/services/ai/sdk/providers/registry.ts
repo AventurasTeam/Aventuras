@@ -21,13 +21,12 @@ import { createTimeoutFetch } from './fetch'
 import { PROVIDERS, getBaseUrl } from './config'
 import { settings } from '$lib/stores/settings.svelte'
 
-
 export function createProviderFromProfile(options: {
-  profile: APIProfile,
-  presetId: string,
-  debugId?: string,
-  structuredOutputs?: boolean,
-  manualBody?: string,
+  profile: APIProfile
+  presetId: string
+  debugId?: string
+  structuredOutputs?: boolean
+  manualBody?: string
 }) {
   const { profile, presetId, debugId, structuredOutputs, manualBody } = options
   const fetch = createTimeoutFetch(settings.apiSettings.llmTimeoutMs, presetId, manualBody, debugId)

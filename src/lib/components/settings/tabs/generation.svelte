@@ -12,7 +12,6 @@
   import { Input } from '$lib/components/ui/input'
   import { Label } from '$lib/components/ui/label'
   import { Slider } from '$lib/components/ui/slider'
-  import { Switch } from '$lib/components/ui/switch'
   import {
     LLM_TIMEOUT_MIN,
     LLM_TIMEOUT_MAX,

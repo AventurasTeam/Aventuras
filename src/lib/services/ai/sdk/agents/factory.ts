@@ -13,7 +13,7 @@ import {
   type StepResult,
 } from 'ai'
 import type { LanguageModelV3 } from '@ai-sdk/provider'
-import type { ModelMessage, ProviderOptions } from '@ai-sdk/provider-utils'
+import type { ProviderOptions } from '@ai-sdk/provider-utils'
 import { settings } from '$lib/stores/settings.svelte'
 import { createProviderFromProfile } from '../providers'
 import { buildProviderOptions } from '../generate'
@@ -53,7 +53,12 @@ export function resolveAgentConfig(
     throw new Error(`Profile not found: ${profileId}`)
   }
 
-  const provider = createProviderFromProfile({ profile, presetId: serviceId, debugId, manualBody: preset.manualBody ?? '' })
+  const provider = createProviderFromProfile({
+    profile,
+    presetId: serviceId,
+    debugId,
+    manualBody: preset.manualBody ?? '',
+  })
   // Call provider directly - all providers support provider(modelId) syntax
   const baseModel = provider(preset.model) as LanguageModelV3
   // Wrap with uniqueToolCallIdMiddleware so providers that reuse IDs across steps

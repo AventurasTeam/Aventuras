@@ -610,29 +610,29 @@ export interface LorebookClassifierSpecificSettings {
 // Linter doesnt like empty objects interfaces, but keeping them for potential future use.
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface SuggestionsSpecificSettings { }
+export interface SuggestionsSpecificSettings {}
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface ActionChoicesSpecificSettings { }
+export interface ActionChoicesSpecificSettings {}
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface StyleReviewerSpecificSettings { }
+export interface StyleReviewerSpecificSettings {}
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface LoreManagementSpecificSettings { }
+export interface LoreManagementSpecificSettings {}
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface InteractiveVaultSpecificSettings { }
+export interface InteractiveVaultSpecificSettings {}
 
 export interface AgenticRetrievalSpecificSettings {
   maxIterations: number
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface TimelineFillSpecificSettings { }
+export interface TimelineFillSpecificSettings {}
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface ChapterQuerySpecificSettings { }
+export interface ChapterQuerySpecificSettings {}
 
 // Global context configuration - controls how much context is included in AI operations
 export interface ContextWindowSettings {
@@ -2115,7 +2115,7 @@ class SettingsStore {
     let wizardNeedsSave = false
     for (const [key, process] of Object.entries(this.wizardSettings)) {
       if (needsMigration(process.profileId)) {
-        ; (this.wizardSettings as any)[key].profileId = DEFAULT_OPENROUTER_PROFILE_ID
+        ;(this.wizardSettings as any)[key].profileId = DEFAULT_OPENROUTER_PROFILE_ID
         wizardNeedsSave = true
       }
     }
@@ -2163,7 +2163,7 @@ class SettingsStore {
 
       const uniqueKey = `${apiProfileId}:${model}`
       if (newProfileIds.has(uniqueKey)) {
-        ; (imgSettings as unknown as Record<string, unknown>)[profileField] =
+        ;(imgSettings as unknown as Record<string, unknown>)[profileField] =
           newProfileIds.get(uniqueKey)!
         changed = true
         continue
@@ -2187,7 +2187,7 @@ class SettingsStore {
       })
 
       newProfileIds.set(uniqueKey, newProfile.id)
-        ; (imgSettings as unknown as Record<string, unknown>)[profileField] = newProfile.id
+      ;(imgSettings as unknown as Record<string, unknown>)[profileField] = newProfile.id
       changed = true
     }
 
