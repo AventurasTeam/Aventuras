@@ -225,7 +225,7 @@ releases/
 # -----------------------------------------------------------------------------
 prompting_guide.md
 architecture.md
-CLAUDE.md
+design.md
 
 # Temporary image files used during icon creation
 # (sun2022.png is kept as the app icon source)
@@ -235,6 +235,7 @@ sunicon.*
 # -----------------------------------------------------------------------------
 # Claude Code
 # -----------------------------------------------------------------------------
+CLAUDE.md
 .claude/
 scripts/ralph/
 tasks/
@@ -243,6 +244,14 @@ tasks/
 # Antigravity
 # -----------------------------------------------------------------------------
 .agent/
+
+# -----------------------------------------------------------------------------
+# Other Agentic Coding Documents
+# -----------------------------------------------------------------------------
+AGENTS.md
+FEATURES.md
+IMPLEMENTATION_PLAN.md
+TODO_*.md
 
 # -----------------------------------------------------------------------------
 # AUR Package (separate repo)
@@ -255,11 +264,5 @@ aur/
 *.local
 .env*.local
 aventura-release.keystore.old
-design.md
-prompting_guide.md
-nul
-
-FEATURES.md
-IMPLEMENTATION_PLAN.md
-TODO_*.md
 key.properties
+nul
