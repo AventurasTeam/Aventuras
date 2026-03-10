@@ -12,7 +12,7 @@ This roadmap converts Aventura's AI prompt pipeline from pre-formatted TypeScrip
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - TypeScript interfaces, variable registry, sample context, compat shim module shell
+- [x] **Phase 1: Foundation** - TypeScript interfaces, variable registry, sample context, compat shim module shell (completed 2026-03-10)
 - [ ] **Phase 2: World State Context** - Replace tieredContextBlock with typed arrays and template formatting
 - [ ] **Phase 3: Lorebook and Style** - Replace lorebook context blocks and style guidance with structured data
 - [ ] **Phase 4: Chapters and Feature Instructions** - Replace chapter summaries block and embed feature instructions in templates
@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Variable registry lists all new variables with element field descriptions visible in CodeMirror autocomplete tooltips, and old variables are marked deprecated
   3. Sample context in the template editor preview shows realistic structured fake data for all new variables
   4. A `compatShims.ts` module exists at `src/lib/services/context/` as the designated home for all backward-compatibility logic
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 01-01-PLAN.md — Type definitions, variable registry, sample context, compat shim shell
@@ -122,7 +122,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 1/2 | In progress | - |
+| 1. Foundation | 2/2 | Complete   | 2026-03-10 |
 | 2. World State Context | 0/? | Not started | - |
 | 3. Lorebook and Style | 0/? | Not started | - |
 | 4. Chapters and Feature Instructions | 0/? | Not started | - |
