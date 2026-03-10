@@ -1055,6 +1055,51 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     ] satisfies VariableFieldInfo[],
   },
   {
+    name: 'worldStateRelevantItems',
+    type: 'array',
+    category: 'runtime',
+    description: 'Tier 2/3 items relevant to current context (non-inventory)',
+    required: false,
+    infoFields: [
+      { name: 'name', type: 'string', description: 'Item name' },
+      { name: 'description', type: 'string', description: 'Item description' },
+      { name: 'tier', type: 'number', description: 'Retrieval tier (2 or 3)' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'worldStateRelatedBeats',
+    type: 'array',
+    category: 'runtime',
+    description: 'Tier 2/3 story beats related to current context',
+    required: false,
+    infoFields: [
+      { name: 'title', type: 'string', description: 'Beat title' },
+      { name: 'description', type: 'string', description: 'Beat description' },
+      {
+        name: 'type',
+        type: 'string',
+        description: 'Beat type (discovery, conflict, quest, revelation)',
+      },
+      {
+        name: 'status',
+        type: 'string',
+        description: 'Beat status (active, completed, failed)',
+      },
+      { name: 'tier', type: 'number', description: 'Retrieval tier (2 or 3)' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'currentLocationObject',
+    type: 'object',
+    category: 'runtime',
+    description: 'Current location as object with name and description',
+    required: false,
+    infoFields: [
+      { name: 'name', type: 'string', description: 'Location name' },
+      { name: 'description', type: 'string', description: 'Location description' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
     name: 'lorebookEntries',
     type: 'array',
     category: 'runtime',

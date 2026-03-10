@@ -9,7 +9,7 @@
  * Variable data type
  * Defines what kind of value a variable holds.
  */
-export type VariableType = 'text' | 'number' | 'boolean' | 'enum' | 'array'
+export type VariableType = 'text' | 'number' | 'boolean' | 'enum' | 'array' | 'object'
 
 /**
  * Variable category

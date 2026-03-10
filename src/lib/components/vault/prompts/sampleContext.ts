@@ -280,6 +280,39 @@ export const structuredSamples: Record<string, unknown> = {
     { type: 'user_action', content: 'I whisper to Theron to flank left.' },
   ],
   styleOverusedPhrases: ['suddenly', 'all of a sudden', 'with a smile'],
+  worldStateRelevantItems: [
+    {
+      name: 'Enchanted Compass',
+      description: 'Points toward the nearest ley line convergence',
+      tier: 2,
+    },
+    {
+      name: 'Faded Map Fragment',
+      description: 'Partial map of the Thornwood labyrinth',
+      tier: 3,
+    },
+  ],
+  worldStateRelatedBeats: [
+    {
+      title: 'The Missing Apprentice',
+      description: 'Rumors of a sorcerer apprentice who vanished near the old ruins',
+      type: 'quest',
+      status: 'active',
+      tier: 2,
+    },
+    {
+      title: 'Harvest Festival Preparations',
+      description: 'The village is preparing for the annual harvest celebration',
+      type: 'discovery',
+      status: 'active',
+      tier: 3,
+    },
+  ],
+  currentLocationObject: {
+    name: 'The Silver Stag Inn',
+    description:
+      'A cozy tavern at the crossroads, known for its warm hearth and loose-lipped travelers',
+  },
 }
 
 /** All sample values combined — system strings, runtime strings, and structured arrays */
