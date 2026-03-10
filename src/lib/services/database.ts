@@ -639,14 +639,12 @@ class DatabaseService {
    */
   async clearStoryEntries(storyId: string): Promise<void> {
     const db = await this.getDb()
-    await db.execute(
-      'DELETE FROM story_entries WHERE story_id = ? AND branch_id IS NULL',
-      [storyId],
-    )
-    await db.execute(
-      'DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL',
-      [storyId],
-    )
+    await db.execute('DELETE FROM story_entries WHERE story_id = ? AND branch_id IS NULL', [
+      storyId,
+    ])
+    await db.execute('DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL', [
+      storyId,
+    ])
   }
 
   /**
@@ -3168,7 +3166,7 @@ class DatabaseService {
         try {
           const tags = JSON.parse(row.tags) as string[]
           tags.forEach((t) => uniqueTags.add(t.trim()))
-        } catch {}
+        } catch { }
       }
 
       for (const tagName of uniqueTags) {
@@ -3843,12 +3841,12 @@ class DatabaseService {
       maxValue: row.max_value != null ? Number(row.max_value) : undefined,
       enumOptions: row.enum_options
         ? (() => {
-            try {
-              return JSON.parse(row.enum_options)
-            } catch {
-              return undefined
-            }
-          })()
+          try {
+            return JSON.parse(row.enum_options)
+          } catch {
+            return undefined
+          }
+        })()
         : undefined,
       color: row.color,
       icon: row.icon ?? undefined,
@@ -3871,12 +3869,12 @@ class DatabaseService {
       defaultValue: row.default_value ?? undefined,
       enumOptions: row.enum_options
         ? (() => {
-            try {
-              return JSON.parse(row.enum_options)
-            } catch {
-              return undefined
-            }
-          })()
+          try {
+            return JSON.parse(row.enum_options)
+          } catch {
+            return undefined
+          }
+        })()
         : undefined,
       createdAt: row.created_at,
     }
