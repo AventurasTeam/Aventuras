@@ -58,7 +58,6 @@ export interface ContextResult {
   tier2: RelevantEntry[]
   tier3: RelevantEntry[]
   all: RelevantEntry[]
-  contextBlock: string
 }
 
 /**
@@ -82,7 +81,6 @@ export class EntryInjector extends BaseAIService {
     worldState: WorldState,
     userInput: string,
     recentEntries: StoryEntry[],
-    retrievedChapterContext?: string,
   ): Promise<ContextResult> {
     log('buildContext called', {
       characters: worldState.characters.length,
@@ -123,10 +121,7 @@ export class EntryInjector extends BaseAIService {
     // Combine all entries
     const all = [...tier1, ...tier2, ...tier3]
 
-    // Build the context block
-    const contextBlock = this.buildContextBlock(tier1, tier2, tier3, retrievedChapterContext)
-
-    return { tier1, tier2, tier3, all, contextBlock }
+    return { tier1, tier2, tier3, all }
   }
 
   /**
@@ -459,135 +454,5 @@ export class EntryInjector extends BaseAIService {
     count += worldState.items.filter((i) => !excludeIds.has(i.id)).length
     count += worldState.storyBeats.filter((b) => !excludeIds.has(b.id)).length
     return count
-  }
-
-  /**
-   * Build the context block string for injection into the system prompt.
-   */
-  private buildContextBlock(
-    tier1: RelevantEntry[],
-    tier2: RelevantEntry[],
-    tier3: RelevantEntry[],
-    retrievedChapterContext?: string,
-  ): string {
-    let block = ''
-
-    // Current location (from Tier 1)
-    const currentLoc = tier1.find((e) => e.type === 'location' && e.metadata?.current)
-    if (currentLoc) {
-      block += `\n\n[CURRENT LOCATION]\n${currentLoc.name}`
-      if (currentLoc.description) {
-        block += `\n${currentLoc.description}`
-      }
-    }
-
-    // Characters (combine from all tiers)
-    const allChars = [...tier1, ...tier2, ...tier3].filter((e) => e.type === 'character')
-    if (allChars.length > 0) {
-      block += '\n\n[KNOWN CHARACTERS]'
-      for (const char of allChars) {
-        block += `\n• ${char.name}`
-        if (char.metadata?.relationship) {
-          block += ` (${char.metadata.relationship})`
-        }
-        if (char.description) {
-          block += ` - ${char.description}`
-        }
-        if (char.metadata?.traits && char.metadata.traits.length > 0) {
-          block += ` [${char.metadata.traits.join(', ')}]`
-        }
-        if (char.metadata?.visualDescriptors) {
-          const vd = char.metadata.visualDescriptors
-          // Handle both old array format and new object format
-          if (Array.isArray(vd) && vd.length > 0) {
-            block += ` {Appearance: ${vd.join(', ')}}`
-          } else if (typeof vd === 'object' && Object.keys(vd).length > 0) {
-            const parts: string[] = []
-            if (vd.face) parts.push(vd.face)
-            if (vd.hair) parts.push(vd.hair)
-            if (vd.eyes) parts.push(vd.eyes)
-            if (vd.build) parts.push(vd.build)
-            if (vd.clothing) parts.push(vd.clothing)
-            if (vd.accessories) parts.push(vd.accessories)
-            if (vd.distinguishing) parts.push(vd.distinguishing)
-            if (parts.length > 0) {
-              block += ` {Appearance: ${parts.join(', ')}}`
-            }
-          }
-        }
-      }
-    }
-
-    // Inventory (from Tier 1)
-    const inventoryItems = tier1.filter((e) => e.type === 'item')
-    if (inventoryItems.length > 0) {
-      const inventoryStr = inventoryItems
-        .map((item) => {
-          let str = item.name
-          const qty = item.metadata?.quantity
-          if (qty && qty > 1) str += ` (×${qty})`
-          if (item.metadata?.equipped) str += ' [equipped]'
-          return str
-        })
-        .join(', ')
-      block += `\n\n[INVENTORY]\n${inventoryStr}`
-    }
-
-    // Active quests/threads (from Tier 1)
-    const activeBeats = tier1.filter((e) => e.type === 'storyBeat')
-    if (activeBeats.length > 0) {
-      block += '\n\n[ACTIVE THREADS]'
-      for (const beat of activeBeats) {
-        block += `\n• ${beat.name}`
-        if (beat.description) {
-          block += `: ${beat.description}`
-        }
-      }
-    }
-
-    // Mentioned locations (from Tier 2/3, not current)
-    const mentionedLocs = [...tier2, ...tier3].filter(
-      (e) => e.type === 'location' && !e.metadata?.current,
-    )
-    if (mentionedLocs.length > 0) {
-      block += '\n\n[RELEVANT LOCATIONS]'
-      for (const loc of mentionedLocs) {
-        block += `\n• ${loc.name}`
-        if (loc.description) {
-          block += `: ${loc.description}`
-        }
-      }
-    }
-
-    // Mentioned items (from Tier 2/3, not inventory)
-    const mentionedItems = [...tier2, ...tier3].filter((e) => e.type === 'item')
-    if (mentionedItems.length > 0) {
-      block += '\n\n[RELEVANT ITEMS]'
-      for (const item of mentionedItems) {
-        block += `\n• ${item.name}`
-        if (item.description) {
-          block += `: ${item.description}`
-        }
-      }
-    }
-
-    // Story beats from Tier 2/3
-    const mentionedBeats = [...tier2, ...tier3].filter((e) => e.type === 'storyBeat')
-    if (mentionedBeats.length > 0) {
-      block += '\n\n[RELATED STORY THREADS]'
-      for (const beat of mentionedBeats) {
-        block += `\n• ${beat.name}`
-        if (beat.description) {
-          block += `: ${beat.description}`
-        }
-      }
-    }
-
-    // Retrieved chapter context
-    if (retrievedChapterContext) {
-      block += retrievedChapterContext
-    }
-
-    return block
   }
 }

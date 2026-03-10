@@ -30,6 +30,7 @@ import type {
 } from '$lib/types'
 import type { StyleReviewResult } from './StyleReviewerService'
 import type { TimelineFillResult } from '../retrieval/TimelineFillService'
+import type { WorldStateArrays } from '$lib/services/context/worldStateMapper'
 
 const log = createLogger('Narrative')
 
@@ -231,8 +232,8 @@ export function buildChapterSummariesBlock(
  * Options for narrative generation.
  */
 export interface NarrativeOptions {
-  /** Pre-built tiered context block for injection */
-  tieredContextBlock?: string
+  /** World state arrays from the tiered context mapper */
+  worldStateArrays?: WorldStateArrays
   /** Style review results for avoiding repetition */
   styleReview?: StyleReviewResult | null
   /** Retrieved chapter context from memory system */
@@ -273,12 +274,12 @@ export class NarrativeService {
     story?: Story | null,
     options: NarrativeOptions = {},
   ): AsyncIterable<StreamChunk> {
-    const { tieredContextBlock, styleReview, retrievedChapterContext, signal, timelineFillResult } =
+    const { worldStateArrays, styleReview, retrievedChapterContext, signal, timelineFillResult } =
       options
 
     log('stream', {
       entriesCount: entries.length,
-      hasTieredContext: !!tieredContextBlock,
+      hasTieredContext: !!worldStateArrays,
       hasStyleReview: !!styleReview,
       hasRetrievedContext: !!retrievedChapterContext,
       hasTimelineFill: !!timelineFillResult,
@@ -288,7 +289,7 @@ export class NarrativeService {
     const { systemPrompt, primingMessage } = await this.buildPrompts(
       story,
       worldState,
-      tieredContextBlock,
+      worldStateArrays,
       styleReview,
       retrievedChapterContext,
       timelineFillResult,
@@ -340,7 +341,7 @@ export class NarrativeService {
     story?: Story | null,
     options: Omit<NarrativeOptions, 'timelineFillResult'> = {},
   ): Promise<string> {
-    const { tieredContextBlock, styleReview, retrievedChapterContext, signal } = options
+    const { worldStateArrays, styleReview, retrievedChapterContext, signal } = options
 
     log('generate', { entriesCount: entries.length })
 
@@ -348,7 +349,7 @@ export class NarrativeService {
     const { systemPrompt, primingMessage } = await this.buildPrompts(
       story,
       worldState,
-      tieredContextBlock,
+      worldStateArrays,
       styleReview,
       retrievedChapterContext,
     )
@@ -374,7 +375,7 @@ export class NarrativeService {
   private async buildPrompts(
     story: Story | null | undefined,
     worldState: NarrativeWorldState,
-    tieredContextBlock?: string,
+    worldStateArrays?: WorldStateArrays,
     styleReview?: StyleReviewResult | null,
     retrievedChapterContext?: string | null,
     timelineFillResult?: TimelineFillResult | null,
@@ -401,8 +402,8 @@ export class NarrativeService {
     // Add runtime variables for template rendering
     // These are pre-formatted blocks that templates inject via {{ variable }}
 
-    if (tieredContextBlock) {
-      ctx.add({ tieredContextBlock })
+    if (worldStateArrays) {
+      ctx.add({ ...worldStateArrays })
     }
 
     if (retrievedChapterContext) {

@@ -65,6 +65,11 @@ export class ContextBuilder {
     const locations = await database.getLocations(storyId)
     const currentLocation = locations.find((l) => l.current)
     builder.add({ currentLocation: currentLocation?.name || '' })
+    builder.add({
+      currentLocationObject: currentLocation
+        ? { name: currentLocation.name, description: currentLocation.description || '' }
+        : null,
+    })
 
     // Story time
     if (story.timeTracker) {

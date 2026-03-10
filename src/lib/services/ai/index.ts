@@ -41,6 +41,10 @@ import {
 import type { TimelineFillResult } from './retrieval/TimelineFillService'
 import { EntryInjector, type ContextResult, type ContextConfig } from './generation/EntryInjector'
 import {
+  mapContextResultToArrays,
+  type WorldStateArrays,
+} from '$lib/services/context/worldStateMapper'
+import {
   EntryRetrievalService,
   type EntryRetrievalResult,
   type ActivationTracker,
@@ -154,22 +158,17 @@ class AIService {
     })
 
     // Build tiered context if requested
-    let tieredContextBlock: string | undefined
+    let worldStateArrays: WorldStateArrays | undefined
     if (useTieredContext) {
       const lastEntry = entries[entries.length - 1]
       const userInput = lastEntry?.content ?? ''
-      const contextResult = await this.buildTieredContext(
-        worldState,
-        userInput,
-        entries,
-        retrievedChapterContext ?? undefined,
-      )
-      tieredContextBlock = contextResult.contextBlock
+      const contextResult = await this.buildTieredContext(worldState, userInput, entries)
+      worldStateArrays = mapContextResultToArrays(contextResult, worldState)
     }
 
     // Delegate to NarrativeService
     yield* this.narrativeService.stream(entries, worldState, currentStory, {
-      tieredContextBlock,
+      worldStateArrays,
       styleReview,
       retrievedChapterContext,
       signal,
@@ -422,22 +421,15 @@ class AIService {
     worldState: WorldState,
     userInput: string,
     recentEntries: StoryEntry[],
-    retrievedChapterContext?: string,
     config?: Partial<ContextConfig>,
   ): Promise<ContextResult> {
     log('buildTieredContext called', {
       userInputLength: userInput.length,
       recentEntriesCount: recentEntries.length,
-      hasRetrievedContext: !!retrievedChapterContext,
     })
 
     const contextBuilder = new EntryInjector(config, 'entryRetrieval')
-    const result = await contextBuilder.buildContext(
-      worldState,
-      userInput,
-      recentEntries,
-      retrievedChapterContext,
-    )
+    const result = await contextBuilder.buildContext(worldState, userInput, recentEntries)
 
     log('buildTieredContext complete', {
       tier1: result.tier1.length,
