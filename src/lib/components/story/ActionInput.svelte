@@ -792,12 +792,13 @@
           storyBeats: story.storyBeats,
         }
 
-        const lorebookEntries = story.lorebookEntries
+        // Pass empty lorebook entries — this is a standalone regeneration call outside the
+        // pipeline, so no mapped ContextLorebookEntry[] is available here.
         const result = await aiService.generateActionChoices(
           story.entries,
           worldState,
           lastNarration.content,
-          lorebookEntries,
+          [],
           promptContext,
           story.pov,
         )

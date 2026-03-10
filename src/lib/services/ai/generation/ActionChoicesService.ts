@@ -7,11 +7,13 @@
  * Prompt generation flows through ContextBuilder + Liquid templates.
  */
 
-import type { StoryEntry, Entry, Character, Location, Item, StoryBeat } from '$lib/types'
+import type { StoryEntry, Character, Location, Item, StoryBeat } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
-import { createLogger } from '../core/config'
+import { createLogger, getLorebookConfig } from '../core/config'
 import { actionChoicesResultSchema, type ActionChoice } from '../sdk/schemas/actionchoices'
+import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import { prepareLorebookForContext } from '$lib/services/context/lorebookMapper'
 
 const log = createLogger('ActionChoices')
 
@@ -29,7 +31,8 @@ export interface ActionChoicesContext {
   presentCharacters?: Character[]
   inventory?: Item[]
   activeQuests?: StoryBeat[]
-  lorebookEntries?: Entry[]
+  lorebookEntries?: ContextLorebookEntry[]
+  styleOverusedPhrases?: string[]
 }
 
 /**
@@ -77,21 +80,12 @@ export class ActionChoicesService extends BaseAIService {
         .map((q) => `• ${q.title}${q.description ? `: ${q.description}` : ''}`)
         .join('\n') || 'None'
 
-    // Format lorebook context
-    let lorebookContext = ''
-    if (context.lorebookEntries && context.lorebookEntries.length > 0) {
-      const entryDescriptions = context.lorebookEntries
-        .slice(0, 10)
-        .map((e) => {
-          let desc = `• ${e.name} (${e.type})`
-          if (e.description) {
-            desc += `: ${e.description.substring(0, 100)}${e.description.length > 100 ? '...' : ''}`
-          }
-          return desc
-        })
-        .join('\n')
-      lorebookContext = `\n## World Context\n${entryDescriptions}\n`
-    }
+    // Prepare lorebook entries using structured mapper
+    const lorebookConfig = getLorebookConfig()
+    const preparedLorebook = prepareLorebookForContext(
+      context.lorebookEntries ?? [],
+      lorebookConfig.maxForActionChoices,
+    )
 
     // Protagonist description
     const protagonistDescription = context.protagonistDescription
@@ -146,12 +140,17 @@ export class ActionChoicesService extends BaseAIService {
       npcsPresent,
       inventory,
       activeQuests,
-      lorebookContext,
       protagonistDescription,
       styleGuidance,
       povInstruction,
       lengthInstruction,
     })
+    if (preparedLorebook.length > 0) {
+      ctx.add({ lorebookEntries: preparedLorebook })
+    }
+    if (context.styleOverusedPhrases && context.styleOverusedPhrases.length > 0) {
+      ctx.add({ styleOverusedPhrases: context.styleOverusedPhrases })
+    }
 
     // Render through the action-choices template
     const { system, user: prompt } = await ctx.render('action-choices')

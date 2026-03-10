@@ -7,11 +7,13 @@
  * Prompt generation flows through ContextBuilder + Liquid templates.
  */
 
-import type { StoryEntry, StoryBeat, Entry } from '$lib/types'
+import type { StoryEntry, StoryBeat } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger, getContextConfig, getLorebookConfig } from '../core/config'
 import { suggestionsResultSchema, type SuggestionsResult } from '../sdk/schemas/suggestions'
+import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import { prepareLorebookForContext } from '$lib/services/context/lorebookMapper'
 
 const log = createLogger('Suggestions')
 
@@ -43,7 +45,7 @@ export class SuggestionsService extends BaseAIService {
   async generateSuggestions(
     recentEntries: StoryEntry[],
     activeThreads: StoryBeat[],
-    lorebookEntries?: Entry[],
+    lorebookEntries?: ContextLorebookEntry[],
     storyId?: string,
     latestNarrativeResponse?: string,
   ): Promise<SuggestionsResult> {
@@ -88,21 +90,11 @@ export class SuggestionsService extends BaseAIService {
             .join('\n')
         : '(none)'
 
-    // Format lorebook entries for context
-    let lorebookContext = ''
-    if (lorebookEntries && lorebookEntries.length > 0) {
-      const entryDescriptions = lorebookEntries
-        .slice(0, lorebookConfig.maxForSuggestions)
-        .map((e) => {
-          let desc = `• ${e.name} (${e.type})`
-          if (e.description) {
-            desc += `: ${e.description}`
-          }
-          return desc
-        })
-        .join('\n')
-      lorebookContext = `\n## Lorebook/World Elements\nThe following characters, locations, and concepts exist in this world and can be incorporated into suggestions:\n${entryDescriptions}`
-    }
+    // Prepare lorebook entries using structured mapper
+    const preparedLorebook = prepareLorebookForContext(
+      lorebookEntries ?? [],
+      lorebookConfig.maxForSuggestions,
+    )
 
     // Create ContextBuilder -- use forStory when storyId available
     let ctx: ContextBuilder
@@ -127,8 +119,10 @@ export class SuggestionsService extends BaseAIService {
       recentContent,
       activeThreads: activeThreadsStr,
       genre: genreStr,
-      lorebookContext,
     })
+    if (preparedLorebook.length > 0) {
+      ctx.add({ lorebookEntries: preparedLorebook })
+    }
 
     // Render through the suggestions template
     const { system, user: prompt } = await ctx.render('suggestions')

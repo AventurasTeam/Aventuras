@@ -19,13 +19,13 @@ import type {
 } from '../types'
 import type {
   StoryEntry,
-  Entry,
   TranslationSettings,
   Character,
   Location,
   Item,
   StoryBeat,
 } from '$lib/types'
+import type { ContextLorebookEntry } from '$lib/services/context/context-types'
 import type { Suggestion, ActionChoice } from '$lib/services/ai/sdk/schemas'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 
@@ -54,7 +54,7 @@ export interface PostGenerationDependencies {
   generateSuggestions: (
     entries: StoryEntry[],
     activeThreads: StoryBeat[],
-    lorebookEntries?: Entry[],
+    lorebookEntries?: ContextLorebookEntry[],
     promptContext?: PromptContext,
     latestNarrativeResponse?: string,
   ) => Promise<{ suggestions: Suggestion[] }>
@@ -63,9 +63,10 @@ export interface PostGenerationDependencies {
     entries: StoryEntry[],
     worldState: PostWorldState,
     narrativeResponse: string,
-    lorebookEntries: Entry[],
+    lorebookEntries: ContextLorebookEntry[],
     promptContext: PromptContext,
     pov: 'first' | 'second' | 'third',
+    styleOverusedPhrases?: string[],
   ) => Promise<{ choices: ActionChoice[] }>
   translateActionChoices: (
     choices: ActionChoice[],
@@ -79,7 +80,8 @@ export interface PostGenerationInput {
   disableSuggestions: boolean
   entries: StoryEntry[]
   activeThreads: StoryBeat[]
-  lorebookEntries: Entry[]
+  lorebookEntries: ContextLorebookEntry[]
+  styleOverusedPhrases?: string[]
   promptContext: PromptContext
   worldState: PostWorldState
   narrativeResponse: string
@@ -167,6 +169,7 @@ export class PostGenerationPhase {
     const {
       entries,
       lorebookEntries,
+      styleOverusedPhrases,
       promptContext,
       worldState,
       narrativeResponse,
@@ -180,6 +183,7 @@ export class PostGenerationPhase {
       lorebookEntries,
       promptContext,
       pov,
+      styleOverusedPhrases,
     )
 
     if (TranslationService.shouldTranslate(translationSettings)) {

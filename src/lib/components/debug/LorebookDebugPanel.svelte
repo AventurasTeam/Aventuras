@@ -6,7 +6,6 @@
   import { ScrollArea } from '$lib/components/ui/scroll-area'
   import { Badge } from '$lib/components/ui/badge'
   import { Card, CardContent } from '$lib/components/ui/card'
-  import { Separator } from '$lib/components/ui/separator'
   import { cn } from '$lib/utils/cn'
 
   const tierLabels: Record<number, string> = {
@@ -166,24 +165,7 @@
             {/each}
           {/if}
 
-          <!-- Context Block Preview -->
-          {#if result.contextBlock}
-            <Separator class="my-6" />
-            <div class="space-y-3">
-              <h3 class="text-foreground/80 flex items-center gap-2 text-sm font-medium">
-                <Package class="h-4 w-4" />
-                Injected Context Block
-              </h3>
-              <div class="bg-muted/30 relative rounded-lg border">
-                <ScrollArea class="h-48 w-full rounded-lg">
-                  <div class="p-4">
-                    <pre
-                      class="text-muted-foreground font-mono text-xs break-words whitespace-pre-wrap">{result.contextBlock}</pre>
-                  </div>
-                </ScrollArea>
-              </div>
-            </div>
-          {/if}
+          <!-- Context Block Preview removed — lorebook now uses structured ContextLorebookEntry[] injected via template -->
         {:else}
           <div class="text-muted-foreground flex flex-col items-center justify-center py-20">
             <div class="bg-muted/30 mb-6 flex h-20 w-20 items-center justify-center rounded-full">

@@ -18,6 +18,9 @@ import type {
   EntryRetrievalResult,
   ActivationTracker,
 } from '$lib/services/ai/retrieval/EntryRetrievalService'
+import { getEntryRetrievalConfigFromSettings } from '$lib/services/ai/retrieval/EntryRetrievalService'
+import { mapEntryRetrievalToLorebookEntries } from '$lib/services/context/lorebookMapper'
+import type { ContextLorebookEntry } from '$lib/services/context/context-types'
 
 /** Dependencies injected from AIService - phase calls these methods rather than duplicating logic */
 export interface RetrievalDependencies {
@@ -86,8 +89,7 @@ export class RetrievalPhase {
     const { worldState, visibleEntries, userAction, abortSignal } = context
     const { chapters, lorebookEntries, characters, locations, items, memoryConfig } = worldState
 
-    let chapterContext: string | null = null
-    let lorebookContext: string | null = null
+    let agenticRetrievalContext: string | null = null
     let lorebookRetrievalResult: EntryRetrievalResult | null = null
     let timelineFillResult: TimelineFillResult | null = null
 
@@ -98,7 +100,7 @@ export class RetrievalPhase {
       tasks.push(
         this.runMemoryRetrieval(input)
           .then((result) => {
-            chapterContext = result.chapterContext
+            agenticRetrievalContext = result.agenticRetrievalContext
             timelineFillResult = result.timelineFillResult
           })
           .catch((err) => {
@@ -128,7 +130,6 @@ export class RetrievalPhase {
           )
           .then((result) => {
             lorebookRetrievalResult = result
-            lorebookContext = result.contextBlock
           })
           .catch((err) => {
             if (err instanceof Error && err.name === 'AbortError') return
@@ -142,21 +143,27 @@ export class RetrievalPhase {
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'retrieval' } satisfies AbortedEvent
       return {
-        chapterContext: null,
-        lorebookContext: null,
+        agenticRetrievalContext: null,
+        lorebookEntries: [],
         lorebookRetrievalResult: null,
         timelineFillResult: null,
-        combinedContext: null,
       }
     }
 
-    const combinedContext = [chapterContext, lorebookContext].filter(Boolean).join('\n') || null
+    // Map raw retrieval result to typed ContextLorebookEntry[]
+    const entryRetrievalConfig = getEntryRetrievalConfigFromSettings()
+    const mappedLorebookEntries: ContextLorebookEntry[] = lorebookRetrievalResult
+      ? mapEntryRetrievalToLorebookEntries(
+          lorebookRetrievalResult,
+          entryRetrievalConfig.maxWordsPerEntry,
+        )
+      : []
+
     const result: RetrievalResult = {
-      chapterContext,
-      lorebookContext,
+      agenticRetrievalContext,
+      lorebookEntries: mappedLorebookEntries,
       lorebookRetrievalResult,
       timelineFillResult,
-      combinedContext,
     }
 
     yield { type: 'phase_complete', phase: 'retrieval', result } satisfies PhaseCompleteEvent
@@ -164,7 +171,7 @@ export class RetrievalPhase {
   }
 
   private async runMemoryRetrieval(input: RetrievalInput): Promise<{
-    chapterContext: string | null
+    agenticRetrievalContext: string | null
     timelineFillResult: TimelineFillResult | null
   }> {
     const { context, dependencies, storyMode, pov, tense } = input
@@ -185,7 +192,7 @@ export class RetrievalPhase {
         tense,
       )
       return {
-        chapterContext: result.context
+        agenticRetrievalContext: result.context
           ? dependencies.formatAgenticRetrievalForPrompt(result)
           : null,
         timelineFillResult: null,
@@ -193,7 +200,7 @@ export class RetrievalPhase {
     }
 
     return {
-      chapterContext: null,
+      agenticRetrievalContext: null,
       timelineFillResult: await dependencies.runTimelineFill(visibleEntries, chapters),
     }
   }

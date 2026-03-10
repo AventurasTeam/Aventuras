@@ -44,6 +44,7 @@ import {
   mapContextResultToArrays,
   type WorldStateArrays,
 } from '$lib/services/context/worldStateMapper'
+import type { ContextLorebookEntry } from '$lib/services/context/context-types'
 import {
   EntryRetrievalService,
   type EntryRetrievalResult,
@@ -145,16 +146,18 @@ class AIService {
     currentStory?: Story | null,
     useTieredContext = true,
     styleReview?: StyleReviewResult | null,
-    retrievedChapterContext?: string | null,
+    agenticRetrievalContext?: string | null,
     signal?: AbortSignal,
     timelineFillResult?: TimelineFillResult | null,
+    lorebookEntries: ContextLorebookEntry[] = [],
   ): AsyncIterable<StreamChunk> {
     log('streamNarrative called', {
       entriesCount: entries.length,
       useTieredContext,
       hasStyleReview: !!styleReview,
-      hasRetrievedContext: !!retrievedChapterContext,
+      hasAgenticContext: !!agenticRetrievalContext,
       hasTimelineFill: !!timelineFillResult,
+      lorebookEntriesCount: lorebookEntries.length,
     })
 
     // Build tiered context if requested
@@ -170,7 +173,8 @@ class AIService {
     yield* this.narrativeService.stream(entries, worldState, currentStory, {
       worldStateArrays,
       styleReview,
-      retrievedChapterContext,
+      agenticRetrievalContext,
+      lorebookEntries,
       signal,
       timelineFillResult,
     })
@@ -236,7 +240,7 @@ class AIService {
   async generateSuggestions(
     entries: StoryEntry[],
     activeThreads: StoryBeat[],
-    lorebookEntries?: Entry[],
+    lorebookEntries?: ContextLorebookEntry[],
     promptContext?: PromptContext,
     latestNarrativeResponse?: string,
   ): Promise<SuggestionsResult> {
@@ -265,9 +269,10 @@ class AIService {
     entries: StoryEntry[],
     worldState: WorldState,
     narrativeResponse: string,
-    lorebookEntries?: Entry[],
+    lorebookEntries?: ContextLorebookEntry[],
     promptContext?: PromptContext,
     pov?: 'first' | 'second' | 'third',
+    styleOverusedPhrases?: string[],
   ): Promise<ActionChoicesResult> {
     log('generateActionChoices called', {
       entriesCount: entries.length,
@@ -310,6 +315,7 @@ class AIService {
         (b) => b.status === 'pending' || b.status === 'active',
       ),
       lorebookEntries,
+      styleOverusedPhrases,
     }
 
     const choices = await actionChoicesService.generateChoices(context)

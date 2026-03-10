@@ -13,7 +13,6 @@
 
 import { streamNarrative, generateNarrative } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
-import { StyleReviewerService } from './StyleReviewerService'
 import { createLogger } from '../core/config'
 import { stripPicTags } from '$lib/utils/inlineImageParser'
 import type { StreamChunk } from '../core/types'
@@ -31,6 +30,7 @@ import type {
 import type { StyleReviewResult } from './StyleReviewerService'
 import type { TimelineFillResult } from '../retrieval/TimelineFillService'
 import type { WorldStateArrays } from '$lib/services/context/worldStateMapper'
+import type { ContextLorebookEntry } from '$lib/services/context/context-types'
 
 const log = createLogger('Narrative')
 
@@ -236,8 +236,10 @@ export interface NarrativeOptions {
   worldStateArrays?: WorldStateArrays
   /** Style review results for avoiding repetition */
   styleReview?: StyleReviewResult | null
-  /** Retrieved chapter context from memory system */
-  retrievedChapterContext?: string | null
+  /** Agentic retrieval context from memory system (replaces retrievedChapterContext) */
+  agenticRetrievalContext?: string | null
+  /** Lorebook entries for structured lorebook injection */
+  lorebookEntries?: ContextLorebookEntry[]
   /** Abort signal for cancellation */
   signal?: AbortSignal
   /** Timeline fill result for Q&A injection */
@@ -274,15 +276,22 @@ export class NarrativeService {
     story?: Story | null,
     options: NarrativeOptions = {},
   ): AsyncIterable<StreamChunk> {
-    const { worldStateArrays, styleReview, retrievedChapterContext, signal, timelineFillResult } =
-      options
+    const {
+      worldStateArrays,
+      styleReview,
+      agenticRetrievalContext,
+      lorebookEntries,
+      signal,
+      timelineFillResult,
+    } = options
 
     log('stream', {
       entriesCount: entries.length,
       hasTieredContext: !!worldStateArrays,
       hasStyleReview: !!styleReview,
-      hasRetrievedContext: !!retrievedChapterContext,
+      hasAgenticContext: !!agenticRetrievalContext,
       hasTimelineFill: !!timelineFillResult,
+      lorebookEntriesCount: lorebookEntries?.length ?? 0,
     })
 
     // Build system prompt via ContextBuilder pipeline
@@ -291,7 +300,8 @@ export class NarrativeService {
       worldState,
       worldStateArrays,
       styleReview,
-      retrievedChapterContext,
+      agenticRetrievalContext,
+      lorebookEntries,
       timelineFillResult,
     )
 
@@ -341,7 +351,8 @@ export class NarrativeService {
     story?: Story | null,
     options: Omit<NarrativeOptions, 'timelineFillResult'> = {},
   ): Promise<string> {
-    const { worldStateArrays, styleReview, retrievedChapterContext, signal } = options
+    const { worldStateArrays, styleReview, agenticRetrievalContext, lorebookEntries, signal } =
+      options
 
     log('generate', { entriesCount: entries.length })
 
@@ -351,7 +362,8 @@ export class NarrativeService {
       worldState,
       worldStateArrays,
       styleReview,
-      retrievedChapterContext,
+      agenticRetrievalContext,
+      lorebookEntries,
     )
 
     const mode = story?.mode ?? 'adventure'
@@ -377,7 +389,8 @@ export class NarrativeService {
     worldState: NarrativeWorldState,
     worldStateArrays?: WorldStateArrays,
     styleReview?: StyleReviewResult | null,
-    retrievedChapterContext?: string | null,
+    agenticRetrievalContext?: string | null,
+    lorebookEntries?: ContextLorebookEntry[],
     timelineFillResult?: TimelineFillResult | null,
   ): Promise<{ systemPrompt: string; primingMessage: string }> {
     const mode = story?.mode ?? 'adventure'
@@ -406,8 +419,11 @@ export class NarrativeService {
       ctx.add({ ...worldStateArrays })
     }
 
-    if (retrievedChapterContext) {
-      ctx.add({ retrievedChapterContext })
+    if (lorebookEntries && lorebookEntries.length > 0) {
+      ctx.add({ lorebookEntries })
+    }
+    if (agenticRetrievalContext) {
+      ctx.add({ agenticRetrievalContext })
     }
 
     // Build chapter summaries block
@@ -418,12 +434,12 @@ export class NarrativeService {
       }
     }
 
-    // Build style guidance block
+    // Inject style review for template rendering
     if (styleReview && styleReview.phrases.length > 0) {
-      const styleGuidance = StyleReviewerService.formatForPromptInjection(styleReview)
-      if (styleGuidance) {
-        ctx.add({ styleGuidance })
-      }
+      ctx.add({
+        styleReview,
+        styleOverusedPhrases: styleReview.phrases.map((p) => p.phrase),
+      })
     }
 
     // Inject feature instruction content when modes are enabled
