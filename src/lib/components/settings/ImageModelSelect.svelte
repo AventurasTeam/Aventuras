@@ -2,7 +2,7 @@
   import type { ImageModelInfo } from '$lib/services/ai/image'
   import { Autocomplete } from '$lib/components/ui/autocomplete'
   import { Button } from '$lib/components/ui/button'
-  import { RefreshCw, Loader2, Check } from 'lucide-svelte'
+  import { RefreshCw, Loader2, Check, ImagePlus } from 'lucide-svelte'
   import { cn } from '$lib/utils/cn'
   import {
     DEFAULT_AVG_PROMPT_TOKENS,
@@ -139,7 +139,7 @@
                   <span class="truncate">{getModelLabel(model)}</span>
                 </div>
                 {#if showImg2ImgIndicator && model.supportsImg2Img}
-                  <span class="shrink-0">🖼️</span>
+                  <ImagePlus class="text-muted-foreground h-4 w-4 shrink-0" />
                 {/if}
               </div>
               {#if showDescription && model.description}
@@ -163,7 +163,7 @@
             <span class="flex w-full items-center justify-between gap-2 overflow-hidden">
               <span class="truncate">{selectedLabel}</span>
               {#if showImg2ImgIndicator && selectedModel?.supportsImg2Img}
-                <span class="shrink-0 text-xs">🖼️</span>
+                <ImagePlus class="text-muted-foreground h-3.5 w-3.5 shrink-0" />
               {/if}
             </span>
           {/snippet}

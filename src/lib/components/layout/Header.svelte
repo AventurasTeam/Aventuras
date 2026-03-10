@@ -21,12 +21,13 @@
     PanelRight,
     Settings,
     Library,
-    Download,
+    ArrowUpDown,
     FileJson,
     FileText,
     ChevronDown,
     Bug,
     ImageIcon,
+    MessageSquare,
   } from 'lucide-svelte'
 
   let showExportMenu = $state(false)
@@ -249,22 +250,34 @@
         title="View generated images"
       />
 
-      <!-- Export Menu -->
+      <!-- Import / Export Menu -->
       <DropdownMenu.Root bind:open={showExportMenu}>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
             <Button
               {...props}
-              icon={Download}
-              label="Export"
+              icon={ArrowUpDown}
+              label="Import/Export"
               endIcon={ChevronDown}
               variant="text"
               class="text-muted-foreground hover:text-primary min-h-[44px] min-w-[44px]"
-              title="Export story"
+              title="Import / Export story"
             />
           {/snippet}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
+          <DropdownMenu.Label>Import</DropdownMenu.Label>
+          <DropdownMenu.Item
+            onclick={() => {
+              showExportMenu = false
+              ui.openSTChatImport()
+            }}
+          >
+            <MessageSquare class="text-muted-foreground h-4 w-4" />
+            SillyTavern Chat (.jsonl)
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Label>Export</DropdownMenu.Label>
           <DropdownMenu.Item onclick={() => exportAventuras()}>
             <FileJson class="text-accent-400 h-4 w-4" />
             Aventuras (.avt)

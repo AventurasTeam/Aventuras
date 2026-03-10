@@ -347,6 +347,20 @@ class ExportService {
         oldToNewId.set(entry.id, crypto.randomUUID())
       }
 
+      // Pre-map world-state entity IDs so that COW overridesId references can be
+      // resolved during import (override rows reference the original entity's old ID).
+      for (const collection of [
+        data.characters,
+        data.locations,
+        data.items,
+        data.storyBeats,
+        data.lorebookEntries,
+      ]) {
+        for (const entity of collection ?? []) {
+          oldToNewId.set(entity.id, crypto.randomUUID())
+        }
+      }
+
       // Pre-map branch/checkpoint IDs if present
       if (data.branches) {
         for (const branch of data.branches) {
@@ -382,10 +396,32 @@ class ExportService {
         branchId ? (branchIdMap.get(branchId) ?? null) : null
       const mapEntryId = (entryId: string | null | undefined) =>
         entryId ? (oldToNewId.get(entryId) ?? entryId) : null
+      // For COW overridesId: resolve to new UUID or null (never keep the old ID)
+      const mapOverridesId = (id: string | null | undefined) =>
+        id ? (oldToNewId.get(id) ?? null) : null
 
       // Import branches (insert parents before children)
       const branchCheckpointMap = new Map<string, string | null>()
       if (data.branches && data.branches.length > 0) {
+        const insertBranch = async (branch: Branch, parentBranchId: string | null) => {
+          const newBranchId = branchIdMap.get(branch.id)
+          if (!newBranchId) return
+          await database.addBranch({
+            id: newBranchId,
+            storyId: newStoryId,
+            name: branch.name,
+            parentBranchId,
+            forkEntryId: mapEntryId(branch.forkEntryId) ?? branch.forkEntryId,
+            checkpointId: null,
+            createdAt: branch.createdAt,
+            snapshotComplete: branch.snapshotComplete ?? false,
+          })
+          const mappedCheckpointId = branch.checkpointId
+            ? (checkpointIdMap.get(branch.checkpointId) ?? null)
+            : null
+          branchCheckpointMap.set(newBranchId, mappedCheckpointId)
+        }
+
         const pending = [...data.branches]
         const inserted = new Set<string>()
         let progress = true
@@ -407,21 +443,7 @@ class ExportService {
               continue
             }
 
-            await database.addBranch({
-              id: newBranchId,
-              storyId: newStoryId,
-              name: branch.name,
-              parentBranchId: mappedParentId,
-              forkEntryId: mapEntryId(branch.forkEntryId) ?? branch.forkEntryId,
-              checkpointId: null,
-              createdAt: branch.createdAt,
-            })
-
-            const mappedCheckpointId = branch.checkpointId
-              ? (checkpointIdMap.get(branch.checkpointId) ?? null)
-              : null
-            branchCheckpointMap.set(newBranchId, mappedCheckpointId)
-
+            await insertBranch(branch, mappedParentId)
             inserted.add(newBranchId)
             pending.splice(i, 1)
             progress = true
@@ -430,29 +452,13 @@ class ExportService {
 
         // If any branches remain, insert them with no parent to avoid FK errors
         for (const branch of pending) {
-          const newBranchId = branchIdMap.get(branch.id)
-          if (!newBranchId) continue
-          await database.addBranch({
-            id: newBranchId,
-            storyId: newStoryId,
-            name: branch.name,
-            parentBranchId: null,
-            forkEntryId: mapEntryId(branch.forkEntryId) ?? branch.forkEntryId,
-            checkpointId: null,
-            createdAt: branch.createdAt,
-          })
-
-          const mappedCheckpointId = branch.checkpointId
-            ? (checkpointIdMap.get(branch.checkpointId) ?? null)
-            : null
-          branchCheckpointMap.set(newBranchId, mappedCheckpointId)
+          await insertBranch(branch, null)
         }
       }
 
       // Import entries
       for (const entry of data.entries) {
         const newEntryId = oldToNewId.get(entry.id) ?? crypto.randomUUID()
-        oldToNewId.set(entry.id, newEntryId)
 
         await database.addStoryEntry({
           id: newEntryId,
@@ -473,8 +479,7 @@ class ExportService {
       // Import characters
       if (data.characters) {
         for (const char of data.characters) {
-          const newCharId = crypto.randomUUID()
-          oldToNewId.set(char.id, newCharId)
+          const newCharId = oldToNewId.get(char.id) ?? crypto.randomUUID()
 
           await database.addCharacter({
             id: newCharId,
@@ -488,6 +493,8 @@ class ExportService {
             visualDescriptors: char.visualDescriptors ?? {},
             portrait: char.portrait ?? null,
             branchId: mapBranchId(char.branchId ?? null),
+            overridesId: mapOverridesId(char.overridesId),
+            deleted: char.deleted ?? false,
             // Translation fields
             translatedName: char.translatedName ?? null,
             translatedDescription: char.translatedDescription ?? null,
@@ -502,8 +509,7 @@ class ExportService {
       // Import locations
       if (data.locations) {
         for (const loc of data.locations) {
-          const newLocId = crypto.randomUUID()
-          oldToNewId.set(loc.id, newLocId)
+          const newLocId = oldToNewId.get(loc.id) ?? crypto.randomUUID()
 
           await database.addLocation({
             id: newLocId,
@@ -515,6 +521,8 @@ class ExportService {
             connections: loc.connections.map((c) => oldToNewId.get(c) ?? c),
             metadata: loc.metadata,
             branchId: mapBranchId(loc.branchId ?? null),
+            overridesId: mapOverridesId(loc.overridesId),
+            deleted: loc.deleted ?? false,
             // Translation fields
             translatedName: loc.translatedName ?? null,
             translatedDescription: loc.translatedDescription ?? null,
@@ -526,8 +534,7 @@ class ExportService {
       // Import items
       if (data.items) {
         for (const item of data.items) {
-          const newItemId = crypto.randomUUID()
-          oldToNewId.set(item.id, newItemId)
+          const newItemId = oldToNewId.get(item.id) ?? crypto.randomUUID()
 
           const mappedLocation =
             item.location === 'inventory'
@@ -544,6 +551,8 @@ class ExportService {
             location: mappedLocation,
             metadata: item.metadata,
             branchId: mapBranchId(item.branchId ?? null),
+            overridesId: mapOverridesId(item.overridesId),
+            deleted: item.deleted ?? false,
             // Translation fields
             translatedName: item.translatedName ?? null,
             translatedDescription: item.translatedDescription ?? null,
@@ -555,8 +564,7 @@ class ExportService {
       // Import story beats
       if (data.storyBeats) {
         for (const beat of data.storyBeats) {
-          const newBeatId = crypto.randomUUID()
-          oldToNewId.set(beat.id, newBeatId)
+          const newBeatId = oldToNewId.get(beat.id) ?? crypto.randomUUID()
 
           await database.addStoryBeat({
             id: newBeatId,
@@ -569,6 +577,8 @@ class ExportService {
             resolvedAt: beat.resolvedAt ?? null,
             metadata: beat.metadata,
             branchId: mapBranchId(beat.branchId ?? null),
+            overridesId: mapOverridesId(beat.overridesId),
+            deleted: beat.deleted ?? false,
             // Translation fields
             translatedTitle: beat.translatedTitle ?? null,
             translatedDescription: beat.translatedDescription ?? null,
@@ -580,8 +590,7 @@ class ExportService {
       // Import lorebook entries (added in v1.1.0)
       if (data.lorebookEntries) {
         for (const entry of data.lorebookEntries) {
-          const newEntryId = crypto.randomUUID()
-          oldToNewId.set(entry.id, newEntryId)
+          const newEntryId = oldToNewId.get(entry.id) ?? crypto.randomUUID()
 
           await database.addEntry({
             id: newEntryId,
@@ -607,6 +616,8 @@ class ExportService {
             updatedAt: Date.now(),
             loreManagementBlacklisted: entry.loreManagementBlacklisted || false,
             branchId: mapBranchId(entry.branchId ?? null),
+            overridesId: mapOverridesId(entry.overridesId),
+            deleted: entry.deleted ?? false,
           })
         }
       }
@@ -614,33 +625,31 @@ class ExportService {
       // Import checkpoints (added in v1.6.0)
       if (data.checkpoints) {
         const remapEntityId = (id: string) => oldToNewId.get(id) ?? id
-        const remapBranchId = (id: string | null | undefined) =>
-          id ? (branchIdMap.get(id) ?? null) : null
         const remapStoryEntry = (entry: StoryEntry): StoryEntry => ({
           ...entry,
           id: remapEntityId(entry.id),
           storyId: newStoryId,
           parentId: entry.parentId ? (remapEntityId(entry.parentId) ?? entry.parentId) : null,
-          branchId: remapBranchId(entry.branchId ?? null),
+          branchId: mapBranchId(entry.branchId ?? null),
         })
         const remapCharacter = (char: Character): Character => ({
           ...char,
           id: remapEntityId(char.id),
           storyId: newStoryId,
-          branchId: remapBranchId(char.branchId ?? null),
+          branchId: mapBranchId(char.branchId ?? null),
         })
         const remapLocation = (loc: Location): Location => ({
           ...loc,
           id: remapEntityId(loc.id),
           storyId: newStoryId,
-          branchId: remapBranchId(loc.branchId ?? null),
+          branchId: mapBranchId(loc.branchId ?? null),
           connections: loc.connections.map((id) => oldToNewId.get(id) ?? id),
         })
         const remapItem = (item: Item): Item => ({
           ...item,
           id: remapEntityId(item.id),
           storyId: newStoryId,
-          branchId: remapBranchId(item.branchId ?? null),
+          branchId: mapBranchId(item.branchId ?? null),
           location:
             item.location === 'inventory'
               ? 'inventory'
@@ -650,7 +659,7 @@ class ExportService {
           ...beat,
           id: remapEntityId(beat.id),
           storyId: newStoryId,
-          branchId: remapBranchId(beat.branchId ?? null),
+          branchId: mapBranchId(beat.branchId ?? null),
         })
         const remapChapter = (chapter: Chapter): Chapter => ({
           ...chapter,
@@ -658,13 +667,13 @@ class ExportService {
           storyId: newStoryId,
           startEntryId: remapEntityId(chapter.startEntryId),
           endEntryId: remapEntityId(chapter.endEntryId),
-          branchId: remapBranchId(chapter.branchId ?? null),
+          branchId: mapBranchId(chapter.branchId ?? null),
         })
         const remapLorebookEntry = (entry: Entry): Entry => ({
           ...entry,
           id: remapEntityId(entry.id),
           storyId: newStoryId,
-          branchId: remapBranchId(entry.branchId ?? null),
+          branchId: mapBranchId(entry.branchId ?? null),
           firstMentioned: entry.firstMentioned
             ? (oldToNewId.get(entry.firstMentioned) ?? entry.firstMentioned)
             : null,

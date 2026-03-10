@@ -32,6 +32,7 @@ import type { RuntimeVariable } from '$lib/services/packs/types'
 import { DEFAULT_MEMORY_CONFIG } from '$lib/services/ai/generation/MemoryService'
 import { convertToEntries, type ImportedEntry } from '$lib/services/lorebookImporter'
 import { countTokens } from '$lib/services/tokenizer'
+import type { STChatMessage } from '$lib/services/stChatImporter'
 import {
   eventBus,
   emitStoryLoaded,
@@ -580,6 +581,75 @@ class StoryStore {
     eventBus.emit<StoryCreatedEvent>({ type: 'StoryCreated', storyId: storyData.id, mode })
 
     return storyData
+  }
+
+  /**
+   * Import a SillyTavern chat into the current story, replacing all existing
+   * main-branch entries. The current story must be loaded before calling this.
+   */
+  async importSTChat(messages: STChatMessage[]): Promise<void> {
+    if (!this.currentStory) {
+      throw new Error('No story loaded')
+    }
+
+    const storyId = this.currentStory.id
+
+    // Branches fork off main-branch entries via fork_entry_id.
+    // Deleting all main-branch entries would leave every branch with a
+    // dangling FK reference — block the import if any branches exist.
+    if (this.branches.length > 0) {
+      throw new Error(
+        `Cannot import: this story has ${this.branches.length} branch${this.branches.length === 1 ? '' : 'es'}. ` +
+          'Delete all branches before importing a SillyTavern chat.',
+      )
+    }
+
+    // Wipe all existing main-branch entries
+    await database.clearStoryEntries(storyId)
+
+    // Build entry objects up front, then bulk-insert in batches
+    // (O(n/50) IPC calls instead of O(n))
+    const entries: Omit<StoryEntry, 'createdAt'>[] = messages.map((msg, i) => ({
+      id: crypto.randomUUID(),
+      storyId,
+      type: msg.type,
+      content: msg.content,
+      parentId: null,
+      position: i,
+      metadata: { source: 'sillytavern_import' },
+      branchId: null,
+    }))
+    await database.bulkInsertStoryEntries(entries)
+
+    // Bump the story's updatedAt so the library view reflects the import
+    await database.updateStory(storyId, {})
+    this.currentStory.updatedAt = Date.now()
+
+    // Reload entries into the store
+    await this.reloadEntriesForCurrentBranch()
+  }
+
+  /**
+   * Trigger suggested-action generation after a SillyTavern import.
+   * Called by the modal once the user has made their world-state choice,
+   * so generation doesn't start before that dialog is resolved.
+   */
+  triggerSuggestionsAfterImport(): void {
+    this.restoreSuggestedActionsAfterDelete()
+  }
+
+  /**
+   * Reset mutable world state after a SillyTavern chat import.
+   * Clears locations, items, story beats, and the time tracker.
+   * Characters and lorebook entries are intentionally preserved.
+   */
+  async resetWorldStateAfterImport(): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    await database.resetWorldStateForImport(this.currentStory.id)
+    this.locations = []
+    this.items = []
+    this.storyBeats = []
+    this.currentStory = { ...this.currentStory, timeTracker: null }
   }
 
   // Add a new story entry
@@ -1927,9 +1997,45 @@ class StoryStore {
     // Apply character updates
     for (const update of result.entryUpdates.characterUpdates) {
       await this.wrapUpdate('Update character', update.name, async () => {
-        const existing = this.characters.find(
+        let existing = this.characters.find(
           (c) => c.name.toLowerCase() === update.name.toLowerCase(),
         )
+
+        // If character doesn't exist yet, create it first
+        if (!existing) {
+          const newCharData = result.entryUpdates.newCharacters.find(
+            (nc) => nc.name.toLowerCase() === update.name.toLowerCase(),
+          )
+          log('Creating character from update (not found):', update.name)
+          const charMetadata: Record<string, unknown> = { source: 'classifier' }
+          if (newCharData) {
+            const newCharInlineVars = extractInlineCustomVars(
+              newCharData as unknown as Record<string, unknown>,
+              defsByName,
+            )
+            if (Object.keys(newCharInlineVars).length > 0) {
+              Object.assign(charMetadata, mergeRuntimeVars(null, newCharInlineVars, defsByName))
+            }
+          }
+          const character: Character = {
+            id: crypto.randomUUID(),
+            storyId,
+            name: newCharData?.name ?? update.name,
+            description: newCharData?.description ?? null,
+            relationship: newCharData?.relationship ?? null,
+            traits: newCharData?.traits ?? [],
+            visualDescriptors: newCharData?.visualDescriptors ?? {},
+            status: (newCharData?.status as Character['status']) ?? 'active',
+            metadata: charMetadata,
+            portrait: null,
+            branchId: this.currentStory?.currentBranchId ?? null,
+          }
+          await database.addCharacter(character)
+          this.characters = [...this.characters, character]
+          if (trackingEnabled) createdCharacterIds.push(character.id)
+          existing = character
+        }
+
         if (existing) {
           log('Updating character:', update.name, update.changes)
           const changes: Partial<Character> = {}
@@ -1988,19 +2094,58 @@ class StoryStore {
     // Apply location updates
     for (const update of result.entryUpdates.locationUpdates) {
       await this.wrapUpdate('Update location', update.name, async () => {
-        const existing = this.locations.find(
+        let existing = this.locations.find(
           (l) => l.name.toLowerCase() === update.name.toLowerCase(),
         )
+
+        // If location doesn't exist yet, create it first
+        if (!existing) {
+          // Check if newLocations has data for this name
+          const newLocData = result.entryUpdates.newLocations.find(
+            (nl) => nl.name.toLowerCase() === update.name.toLowerCase(),
+          )
+          log('Creating location from update (not found):', update.name)
+          const locMetadata: Record<string, unknown> = { source: 'classifier' }
+          if (newLocData) {
+            const newLocInlineVars = extractInlineCustomVars(
+              newLocData as unknown as Record<string, unknown>,
+              defsByName,
+            )
+            if (Object.keys(newLocInlineVars).length > 0) {
+              Object.assign(locMetadata, mergeRuntimeVars(null, newLocInlineVars, defsByName))
+            }
+          }
+          const location: Location = {
+            id: crypto.randomUUID(),
+            storyId,
+            name: newLocData?.name ?? update.name,
+            description: newLocData?.description ?? null,
+            visited: newLocData?.visited ?? false,
+            current: newLocData?.current ?? false,
+            connections: [],
+            metadata: locMetadata,
+            branchId: this.currentStory?.currentBranchId ?? null,
+          }
+          await database.addLocation(location)
+          this.locations = [...this.locations, location]
+          if (trackingEnabled) createdLocationIds.push(location.id)
+          existing = location
+        }
+
         if (existing) {
           log('Updating location:', update.name, update.changes)
           const changes: Partial<Location> = {}
           if (update.changes.visited !== undefined) changes.visited = update.changes.visited
+          if (update.changes.description) {
+            changes.description = update.changes.description
+          }
           if (update.changes.descriptionAddition) {
             const addition = update.changes.descriptionAddition.trim()
             if (addition) {
-              changes.description = existing.description
-                ? `${existing.description} ${addition}`
-                : addition
+              changes.description =
+                (changes.description ?? existing.description)
+                  ? `${changes.description ?? existing.description} ${addition}`
+                  : addition
             }
           }
           // Merge inline runtime variable values into metadata if present
@@ -2083,7 +2228,41 @@ class StoryStore {
     // Apply item updates
     for (const update of result.entryUpdates.itemUpdates) {
       await this.wrapUpdate('Update item', update.name, async () => {
-        const existing = this.items.find((i) => i.name.toLowerCase() === update.name.toLowerCase())
+        let existing = this.items.find((i) => i.name.toLowerCase() === update.name.toLowerCase())
+
+        // If item doesn't exist yet, create it first
+        if (!existing) {
+          const newItemData = result.entryUpdates.newItems.find(
+            (ni) => ni.name.toLowerCase() === update.name.toLowerCase(),
+          )
+          log('Creating item from update (not found):', update.name)
+          const itemMetadata: Record<string, unknown> = { source: 'classifier' }
+          if (newItemData) {
+            const newItemInlineVars = extractInlineCustomVars(
+              newItemData as unknown as Record<string, unknown>,
+              defsByName,
+            )
+            if (Object.keys(newItemInlineVars).length > 0) {
+              Object.assign(itemMetadata, mergeRuntimeVars(null, newItemInlineVars, defsByName))
+            }
+          }
+          const item: Item = {
+            id: crypto.randomUUID(),
+            storyId,
+            name: newItemData?.name ?? update.name,
+            description: newItemData?.description ?? null,
+            quantity: newItemData?.quantity ?? 1,
+            equipped: false,
+            location: newItemData?.location ?? 'inventory',
+            metadata: itemMetadata,
+            branchId: this.currentStory?.currentBranchId ?? null,
+          }
+          await database.addItem(item)
+          this.items = [...this.items, item]
+          if (trackingEnabled) createdItemIds.push(item.id)
+          existing = item
+        }
+
         if (existing) {
           log('Updating item:', update.name, update.changes)
           const changes: Partial<Item> = {}
@@ -2114,9 +2293,43 @@ class StoryStore {
     // Apply story beat updates (mark as completed/failed)
     for (const update of result.entryUpdates.storyBeatUpdates) {
       await this.wrapUpdate('Update story beat', update.title, async () => {
-        const existing = this.storyBeats.find(
+        let existing = this.storyBeats.find(
           (b) => b.title.toLowerCase() === update.title.toLowerCase(),
         )
+
+        // If story beat doesn't exist yet, create it first
+        if (!existing) {
+          const newBeatData = result.entryUpdates.newStoryBeats.find(
+            (nb) => nb.title.toLowerCase() === update.title.toLowerCase(),
+          )
+          log('Creating story beat from update (not found):', update.title)
+          const beatMetadata: Record<string, unknown> = { source: 'classifier' }
+          if (newBeatData) {
+            const newBeatInlineVars = extractInlineCustomVars(
+              newBeatData as unknown as Record<string, unknown>,
+              defsByName,
+            )
+            if (Object.keys(newBeatInlineVars).length > 0) {
+              Object.assign(beatMetadata, mergeRuntimeVars(null, newBeatInlineVars, defsByName))
+            }
+          }
+          const beat: StoryBeat = {
+            id: crypto.randomUUID(),
+            storyId,
+            title: newBeatData?.title ?? update.title,
+            description: newBeatData?.description ?? null,
+            type: newBeatData?.type ?? 'event',
+            status: newBeatData?.status ?? 'active',
+            triggeredAt: Date.now(),
+            metadata: beatMetadata,
+            branchId: this.currentStory?.currentBranchId ?? null,
+          }
+          await database.addStoryBeat(beat)
+          this.storyBeats = [...this.storyBeats, beat]
+          if (trackingEnabled) createdStoryBeatIds.push(beat.id)
+          existing = beat
+        }
+
         if (existing) {
           log('Updating story beat:', update.title, update.changes)
           const changes: Partial<StoryBeat> = {}
@@ -2187,13 +2400,113 @@ class StoryStore {
       })
     }
 
-    // Add new locations (check for duplicates)
+    // Handle scene.currentLocationName - update current location if specified
+    // Runs before newLocations so stubs are available for merging
+    if (result.scene.currentLocationName) {
+      await this.wrapUpdate('Set scene location', result.scene.currentLocationName, async () => {
+        const locationName = result.scene.currentLocationName!.toLowerCase()
+        let currentLoc = this.locations.find((l) => l.name.toLowerCase() === locationName)
+
+        // If location doesn't exist yet, create a stub
+        if (!currentLoc) {
+          log(
+            'Creating stub location from scene.currentLocationName:',
+            result.scene.currentLocationName,
+          )
+          const stubLocation: Location = {
+            id: crypto.randomUUID(),
+            storyId,
+            name: result.scene.currentLocationName!,
+            description: null,
+            visited: true,
+            current: false,
+            connections: [],
+            metadata: { source: 'classifier' },
+            branchId: this.currentStory?.currentBranchId ?? null,
+          }
+          await database.addLocation(stubLocation)
+          this.locations = [...this.locations, stubLocation]
+          if (trackingEnabled) createdLocationIds.push(stubLocation.id)
+          currentLoc = stubLocation
+        }
+
+        if (currentLoc && !currentLoc.current) {
+          log('Setting current location from scene:', currentLoc.name)
+          if (this.isCowBranch()) {
+            // COW-aware: targeted updates
+            const { entity: ownedTarget, wasCowed: targetWasCowed } =
+              await this.cowLocation(currentLoc)
+            const prevCurrent = this.locations.find((l) => l.current && l.id !== ownedTarget.id)
+            if (prevCurrent) {
+              const { entity: ownedPrev, wasCowed: prevWasCowed } =
+                await this.cowLocation(prevCurrent)
+              await database.updateLocation(ownedPrev.id, { current: false })
+              this.locations = this.locations.map((l) =>
+                l.id === ownedPrev.id ? { ...l, current: false } : l,
+              )
+              if (prevWasCowed && trackingEnabled) {
+                createdLocationIds.push(ownedPrev.id)
+                const idx = locationsBefore.findIndex((lb) => lb.id === prevCurrent.id)
+                if (idx !== -1) locationsBefore.splice(idx, 1)
+              }
+            }
+            await database.updateLocation(ownedTarget.id, { current: true, visited: true })
+            this.locations = this.locations.map((l) =>
+              l.id === ownedTarget.id ? { ...l, current: true, visited: true } : l,
+            )
+            if (targetWasCowed && trackingEnabled) {
+              createdLocationIds.push(ownedTarget.id)
+              const idx = locationsBefore.findIndex((lb) => lb.id === currentLoc!.id)
+              if (idx !== -1) locationsBefore.splice(idx, 1)
+            }
+          } else {
+            await database.setCurrentLocation(storyId, currentLoc.id)
+            this.locations = this.locations.map((l) => ({
+              ...l,
+              current: l.id === currentLoc!.id,
+              visited: l.id === currentLoc!.id ? true : l.visited,
+            }))
+          }
+        }
+      })
+    }
+
+    // Add new locations (check for duplicates, merge into recently created)
     for (const newLoc of result.entryUpdates.newLocations) {
       await this.wrapUpdate('Add location', newLoc.name, async () => {
-        const exists = this.locations.some(
+        const existing = this.locations.find(
           (l) => l.name.toLowerCase() === newLoc.name.toLowerCase(),
         )
-        if (!exists) {
+        if (existing && createdLocationIds.includes(existing.id)) {
+          // Merge into location created earlier in this classification run
+          // (e.g. stub from scene.currentLocationName or from update handler)
+          log('Merging new location into recently created:', newLoc.name)
+          const changes: Partial<Location> = {}
+          if (newLoc.description && !existing.description) {
+            changes.description = newLoc.description
+          }
+          if (newLoc.visited !== undefined && newLoc.visited !== existing.visited) {
+            changes.visited = newLoc.visited
+          }
+          if (newLoc.current && !existing.current) {
+            changes.current = true
+            changes.visited = true
+          }
+          // Merge inline runtime variable values into metadata if present
+          const newLocInlineVars = extractInlineCustomVars(
+            newLoc as unknown as Record<string, unknown>,
+            defsByName,
+          )
+          if (Object.keys(newLocInlineVars).length > 0) {
+            changes.metadata = mergeRuntimeVars(existing.metadata, newLocInlineVars, defsByName)
+          }
+          if (Object.keys(changes).length > 0) {
+            await database.updateLocation(existing.id, changes)
+            this.locations = this.locations.map((l) =>
+              l.id === existing.id ? { ...l, ...changes } : l,
+            )
+          }
+        } else if (!existing) {
           log('Adding new location:', newLoc.name)
           // If this is the current location, unset others first
           if (newLoc.current) {
@@ -2240,52 +2553,6 @@ class StoryStore {
       })
     }
 
-    // Handle scene.currentLocationName - update current location if specified
-    if (result.scene.currentLocationName) {
-      await this.wrapUpdate('Set scene location', result.scene.currentLocationName, async () => {
-        const locationName = result.scene.currentLocationName!.toLowerCase()
-        const currentLoc = this.locations.find((l) => l.name.toLowerCase() === locationName)
-        if (currentLoc && !currentLoc.current) {
-          log('Setting current location from scene:', currentLoc.name)
-          if (this.isCowBranch()) {
-            // COW-aware: targeted updates
-            const { entity: ownedTarget, wasCowed: targetWasCowed } =
-              await this.cowLocation(currentLoc)
-            const prevCurrent = this.locations.find((l) => l.current && l.id !== ownedTarget.id)
-            if (prevCurrent) {
-              const { entity: ownedPrev, wasCowed: prevWasCowed } =
-                await this.cowLocation(prevCurrent)
-              await database.updateLocation(ownedPrev.id, { current: false })
-              this.locations = this.locations.map((l) =>
-                l.id === ownedPrev.id ? { ...l, current: false } : l,
-              )
-              if (prevWasCowed && trackingEnabled) {
-                createdLocationIds.push(ownedPrev.id)
-                const idx = locationsBefore.findIndex((lb) => lb.id === prevCurrent.id)
-                if (idx !== -1) locationsBefore.splice(idx, 1)
-              }
-            }
-            await database.updateLocation(ownedTarget.id, { current: true, visited: true })
-            this.locations = this.locations.map((l) =>
-              l.id === ownedTarget.id ? { ...l, current: true, visited: true } : l,
-            )
-            if (targetWasCowed && trackingEnabled) {
-              createdLocationIds.push(ownedTarget.id)
-              const idx = locationsBefore.findIndex((lb) => lb.id === currentLoc.id)
-              if (idx !== -1) locationsBefore.splice(idx, 1)
-            }
-          } else {
-            await database.setCurrentLocation(storyId, currentLoc.id)
-            this.locations = this.locations.map((l) => ({
-              ...l,
-              current: l.id === currentLoc.id,
-              visited: l.id === currentLoc.id ? true : l.visited,
-            }))
-          }
-        }
-      })
-    }
-
     // Add new items (check for duplicates)
     for (const newItem of result.entryUpdates.newItems) {
       await this.wrapUpdate('Add item', newItem.name, async () => {
@@ -2318,7 +2585,7 @@ class StoryStore {
       })
     }
 
-    // Add new story beats (check for duplicates by title)
+    // Add new story beats (check for duplicates)
     for (const newBeat of result.entryUpdates.newStoryBeats) {
       await this.wrapUpdate('Add story beat', newBeat.title, async () => {
         const exists = this.storyBeats.some(

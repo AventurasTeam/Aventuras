@@ -1,6 +1,8 @@
 # Aventuras
 
-AI-powered interactive fiction and creative writing application built with Tauri, SvelteKit, and TypeScript.
+## Overview
+
+Aventuras is a desktop and mobile interactive fiction application offering multiple story modes (Adventure Mode, Creative Writing Mode), deep AI integration via major providers, an advanced Memory System, dynamic Lorebook, and an autonomous Lore Management Agent. The app provides a robust set of writing tools and world tracking features, ensuring contextually rich and coherent AI-generated narratives.
 
 ## Features
 
@@ -13,11 +15,10 @@ AI-powered interactive fiction and creative writing application built with Tauri
 
 ### AI Integration
 
-- OpenRouter API integration for 70+ LLM providers and models
+- Use any OpenAI-compatible gateway or provider like OpenRouter, NanoGPT, llama.cpp, LM Studio, and more
 - Streaming responses with real-time text generation
 - Configurable models, temperature, and token limits
 - Extended thinking/reasoning support with configurable effort levels
-- Custom API endpoints for OpenAI-compatible providers
 - API profiles for saving multiple configurations
 
 ### Memory System
@@ -86,7 +87,7 @@ AI-powered interactive fiction and creative writing application built with Tauri
 
 ### UI Customization
 
-- Multiple themes (dark, light, light solarized, retro console)
+- Multiple themes (dark, light, light solarized, retro console, fallen down)
 - Custom font selection (system or Google fonts)
 - Adjustable text size (small, medium, large)
 - Word count display toggle
@@ -97,77 +98,126 @@ AI-powered interactive fiction and creative writing application built with Tauri
 - Android (APK)
 - iOS (planned)
 
-## Tech Stack
-
-- **Frontend**: SvelteKit 5, TypeScript, Tailwind CSS
-- **Backend**: Tauri 2 (Rust)
-- **Database**: SQLite (via tauri-plugin-sql)
-- **AI**: OpenRouter API
-- **Grammar**: Harper.js (WASM)
-- **Icons**: Lucide
-
 ## Installation
 
 ### Download Pre-built Binaries
 
-Pre-compiled binaries are available on the [Releases](https://github.com/unkarelian/Aventuras/releases) page:
+Pre-compiled binaries are available on the [Releases](https://github.com/AventurasTeam/Aventuras/releases) page:
 
 | Platform | Download                                  |
 | -------- | ----------------------------------------- |
 | Windows  | `aventuras_x.x.x_x64-setup.exe`           |
 | macOS    | `aventuras_x.x.x_x64.dmg`                 |
 | Linux    | `aventuras_x.x.x_amd64.deb` / `.AppImage` |
-| Android  | `aventuras_x.x.x.apk`                     |
+| Android  | `aventuras-release.apk`                   |
 
-Simply download the appropriate file for your platform and install.
+## Tech Stack
 
-### Building from Source
+- **Language**: TypeScript (strict mode)
+- **Frontend Framework**: SvelteKit 2
+- **State Management**: Svelte 5 runes (`$state`, `$derived`, `$props`)
+- **Backend Framework**: Tauri 2 (Desktop/Android via Rust)
+- **Styling**: Tailwind CSS, shadcn-svelte
+- **Database**: SQLite (via `@tauri-apps/plugin-sql`)
+- **AI**: OpenAI-compatible APIs (OpenRouter, AI SDK), Local NLP via Harper.js (WASM)
+- **Package Manager**: npm
 
-<details>
-<summary>Click to expand build instructions</summary>
+## Development
 
-#### Prerequisites
+### Requirements
 
 - Node.js 18+
 - Rust (latest stable)
-- For Android: Android SDK, NDK, Java 17+
+- (Optional) Android SDK, NDK, Java 17+ for Android builds
 
-#### Setup
+### Setup & Run Commands
 
 ```bash
 # Clone the repository
-git clone https://github.com/unkarelian/Aventuras.git
+git clone https://github.com/AventurasTeam/Aventuras.git
 cd aventuras
 
 # Install dependencies
 npm install
 
-# Run in development mode
-npm run dev
-
-# Or run with Tauri (desktop app)
-npm run tauri dev
+# Start Tauri development window (Desktop)
+# Hot-reloading is fully supported for all Svelte/TypeScript code changes
+npx tauri dev
 ```
+
+### Scripts
+
+Available `npm run` scripts:
+
+- `build`: Build for production
+- `check`: Run `svelte-check` (type checking)
+- `check:watch`: Watch mode type checking
+- `tauri`: Tauri CLI commands
+- `release`: Run release script (`node scripts/release.js`)
+- `lint`: Run ESLint
+- `lint:fix`: Fix ESLint issues
+- `format`: Format code with Prettier
+
+### Tests
+
+**Current Status**: No test suite is currently configured.
+
+- TODO: Add testing framework (e.g., Vitest/Playwright) and configure tests.
+
+### Environment Variables
+
+- TODO: Document any required or optional environment variables (e.g., specific build or deployment variables).
+- **API Keys**: Configured primarily via the UI (Settings -> API Settings).
+
+### Project Structure
+
+```text
+aventuras/
+├── src/                  # SvelteKit frontend source
+│   ├── routes/           # SvelteKit pages (+page.svelte, +layout.svelte)
+│   ├── lib/              # Shared application logic and components
+│   │   ├── components/   # UI components (PascalCase.svelte)
+│   │   ├── services/     # Business logic classes/modules (AI, DB, etc.)
+│   │   ├── stores/       # Svelte stores (*.svelte.ts for runes)
+│   │   ├── types/        # TypeScript types
+│   │   └── utils/        # Utility functions
+├── src-tauri/            # Rust backend
+│   ├── gen/android/      # Android scaffold files (DO NOT OVERWRITE)
+│   ├── src/              # Rust source code
+│   ├── Cargo.toml        # Rust dependencies
+│   └── tauri.conf.json   # Tauri configuration
+├── static/               # Static web assets
+├── scripts/              # Build and utility scripts
+├── package.json          # Node dependencies and scripts
+```
+
+### Building Release Binaries
+
+<details>
+<summary>Click to expand build instructions</summary>
 
 #### Building Desktop
 
 ```bash
-npm run tauri build
+npx tauri build
 ```
 
 #### Building Android
 
-```bash
-# Initialize Android target (first time only)
-npm run tauri android init
+**IMPORTANT**: The Android project scaffold (`src-tauri/gen/android/`) is tracked in git.
+**Do NOT run `npx tauri android init`** as it will overwrite customizations.
 
-# Build APK
-npm run tauri android build -- --apk true
+```bash
+# Dev build + deploy to device/emulator
+npx tauri android dev
+
+# Release build (unsigned APK)
+npx tauri android build
 ```
 
 The unsigned APK will be at:
 
-```
+```text
 src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
 ```
 
@@ -186,64 +236,6 @@ apksigner sign --ks release.keystore --ks-key-alias myalias --out app-release.ap
 
 </details>
 
-## Project Structure
-
-```
-aventuras/
-├── src/
-│   ├── lib/
-│   │   ├── components/     # Svelte components
-│   │   │   ├── layout/     # AppShell, Header, Sidebar
-│   │   │   ├── story/      # StoryView, ActionInput, etc.
-│   │   │   ├── lorebook/   # Lorebook management UI
-│   │   │   ├── memory/     # Chapter/memory management
-│   │   │   └── world/      # Character, Location, Inventory panels
-│   │   ├── services/       # Business logic
-│   │   │   ├── ai/         # AI services (OpenRouter, context, memory)
-│   │   │   ├── database.ts # SQLite operations
-│   │   │   └── grammar.ts  # Harper grammar checking
-│   │   ├── stores/         # Svelte stores (state management)
-│   │   └── types/          # TypeScript interfaces
-│   └── routes/             # SvelteKit routes
-├── src-tauri/              # Rust backend
-│   ├── src/
-│   └── Cargo.toml
-├── static/                 # Static assets
-└── package.json
-```
-
-## Configuration
-
-### API Key Setup
-
-1. Get an API key from [OpenRouter](https://openrouter.ai/)
-2. Open Aventuras settings
-3. Enter your API key in the API Settings section
-
-### Memory Configuration
-
-Per-story memory settings:
-
-- **Token Threshold**: Context size before auto-summarization (default: 24,000)
-- **Chapter Buffer**: Recent messages protected from chapter boundaries (default: 10)
-- **Auto-Summarize**: Enable/disable automatic chapter creation
-
-## Development
-
-```bash
-# Type checking
-npm run check
-
-# Watch mode type checking
-npm run check:watch
-
-# Build frontend only
-npm run build
-
-# Preview built frontend
-npm run preview
-```
-
 ## Acknowledgments
 
 - [Tauri](https://tauri.app/) - Desktop/mobile app framework
@@ -251,3 +243,7 @@ npm run preview
 - [OpenRouter](https://openrouter.ai/) - LLM API aggregator
 - [Harper](https://writewithharper.com/) - Grammar checking
 - [Lucide](https://lucide.dev/) - Icon library
+
+## License
+
+AGPL-3.0

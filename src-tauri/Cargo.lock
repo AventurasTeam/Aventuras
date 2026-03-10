@@ -282,7 +282,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "aventura"
-version = "0.7.0-pre.3"
+version = "0.8.0-pre.0"
 dependencies = [
  "axum 0.8.8",
  "base64 0.22.1",

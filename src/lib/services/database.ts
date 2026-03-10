@@ -632,6 +632,86 @@ class DatabaseService {
   }
 
   /**
+   * Delete all main-branch entries for a story (branch_id IS NULL).
+   * Also clears related world_state_snapshots so stale snapshots don't
+   * reference non-existent entry positions after the import.
+   * Used by the SillyTavern chat import to overwrite story content.
+   */
+  async clearStoryEntries(storyId: string): Promise<void> {
+    const db = await this.getDb()
+    await db.execute(
+      'DELETE FROM story_entries WHERE story_id = ? AND branch_id IS NULL',
+      [storyId],
+    )
+    await db.execute(
+      'DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL',
+      [storyId],
+    )
+  }
+
+  /**
+   * Reset mutable world state for a story after a SillyTavern chat import.
+   * Bulk-deletes main-branch locations, items, and story beats, then
+   * clears the time tracker on the story row.
+   * Characters and lorebook entries are intentionally NOT touched.
+   */
+  async resetWorldStateForImport(storyId: string): Promise<void> {
+    const db = await this.getDb()
+    await Promise.all([
+      db.execute('DELETE FROM locations WHERE story_id = ? AND branch_id IS NULL', [storyId]),
+      db.execute('DELETE FROM items WHERE story_id = ? AND branch_id IS NULL', [storyId]),
+      db.execute('DELETE FROM story_beats WHERE story_id = ? AND branch_id IS NULL', [storyId]),
+      db.execute('UPDATE stories SET time_tracker = NULL WHERE id = ?', [storyId]),
+    ])
+  }
+
+  /**
+   * Bulk-insert story entries in batched multi-row INSERTs.
+   * Reduces IPC round-trips from O(n) to O(n/BATCH_SIZE).
+   * 15 parameters per row × BATCH_SIZE 50 = 750 params/batch,
+   * safely under SQLite's 999-variable limit.
+   * All entries share a single createdAt timestamp.
+   */
+  async bulkInsertStoryEntries(entries: Omit<StoryEntry, 'createdAt'>[]): Promise<void> {
+    if (entries.length === 0) return
+    const db = await this.getDb()
+    const now = Date.now()
+    const BATCH_SIZE = 50
+
+    for (let batchStart = 0; batchStart < entries.length; batchStart += BATCH_SIZE) {
+      const batch = entries.slice(batchStart, batchStart + BATCH_SIZE)
+      const valuePlaceholders = batch.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',')
+      const values: unknown[] = []
+
+      for (const entry of batch) {
+        values.push(
+          entry.id,
+          entry.storyId,
+          entry.type,
+          entry.content,
+          entry.parentId,
+          entry.position,
+          now,
+          entry.metadata ? JSON.stringify(entry.metadata) : null,
+          entry.branchId || null,
+          entry.reasoning || null,
+          entry.translatedContent || null,
+          entry.translationLanguage || null,
+          entry.originalInput || null,
+          entry.worldStateDelta ? JSON.stringify(entry.worldStateDelta) : null,
+          entry.suggestedActions || null,
+        )
+      }
+
+      await db.execute(
+        `INSERT INTO story_entries (id, story_id, type, content, parent_id, position, created_at, metadata, branch_id, reasoning, translated_content, translation_language, original_input, world_state_delta, suggested_actions)
+         VALUES ${valuePlaceholders}`,
+        values,
+      )
+    }
+  }
+
+  /**
    * Delete multiple story entries by ID.
    */
   async deleteStoryEntries(ids: string[]): Promise<void> {
@@ -666,8 +746,8 @@ class DatabaseService {
   async addCharacter(character: Character): Promise<void> {
     const db = await this.getDb()
     await db.execute(
-      `INSERT INTO characters (id, story_id, name, description, relationship, traits, visual_descriptors, portrait, status, metadata, branch_id, overrides_id, translated_name, translated_description, translated_relationship, translated_traits, translated_visual_descriptors, translation_language)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO characters (id, story_id, name, description, relationship, traits, visual_descriptors, portrait, status, metadata, branch_id, overrides_id, deleted, translated_name, translated_description, translated_relationship, translated_traits, translated_visual_descriptors, translation_language)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         character.id,
         character.storyId,
@@ -681,6 +761,7 @@ class DatabaseService {
         character.metadata ? JSON.stringify(character.metadata) : null,
         character.branchId || null,
         character.overridesId || null,
+        character.deleted ? 1 : 0,
         character.translatedName || null,
         character.translatedDescription || null,
         character.translatedRelationship || null,
@@ -795,8 +876,8 @@ class DatabaseService {
   async addLocation(location: Location): Promise<void> {
     const db = await this.getDb()
     await db.execute(
-      `INSERT INTO locations (id, story_id, name, description, visited, current, connections, metadata, branch_id, overrides_id, translated_name, translated_description, translation_language)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO locations (id, story_id, name, description, visited, current, connections, metadata, branch_id, overrides_id, deleted, translated_name, translated_description, translation_language)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         location.id,
         location.storyId,
@@ -808,6 +889,7 @@ class DatabaseService {
         location.metadata ? JSON.stringify(location.metadata) : null,
         location.branchId || null,
         location.overridesId || null,
+        location.deleted ? 1 : 0,
         location.translatedName || null,
         location.translatedDescription || null,
         location.translationLanguage || null,
@@ -899,8 +981,8 @@ class DatabaseService {
   async addItem(item: Item): Promise<void> {
     const db = await this.getDb()
     await db.execute(
-      `INSERT INTO items (id, story_id, name, description, quantity, equipped, location, metadata, branch_id, overrides_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO items (id, story_id, name, description, quantity, equipped, location, metadata, branch_id, overrides_id, deleted)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         item.id,
         item.storyId,
@@ -912,6 +994,7 @@ class DatabaseService {
         item.metadata ? JSON.stringify(item.metadata) : null,
         item.branchId || null,
         item.overridesId || null,
+        item.deleted ? 1 : 0,
       ],
     )
   }
@@ -1048,8 +1131,8 @@ class DatabaseService {
   async addStoryBeat(beat: StoryBeat): Promise<void> {
     const db = await this.getDb()
     await db.execute(
-      `INSERT INTO story_beats (id, story_id, title, description, type, status, triggered_at, resolved_at, metadata, branch_id, overrides_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO story_beats (id, story_id, title, description, type, status, triggered_at, resolved_at, metadata, branch_id, overrides_id, deleted)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         beat.id,
         beat.storyId,
@@ -1062,6 +1145,7 @@ class DatabaseService {
         beat.metadata ? JSON.stringify(beat.metadata) : null,
         beat.branchId || null,
         beat.overridesId || null,
+        beat.deleted ? 1 : 0,
       ],
     )
   }
@@ -1512,8 +1596,8 @@ class DatabaseService {
   async addBranch(branch: Branch): Promise<void> {
     const db = await this.getDb()
     await db.execute(
-      `INSERT INTO branches (id, story_id, name, parent_branch_id, fork_entry_id, checkpoint_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO branches (id, story_id, name, parent_branch_id, fork_entry_id, checkpoint_id, created_at, snapshot_complete)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         branch.id,
         branch.storyId,
@@ -1522,6 +1606,7 @@ class DatabaseService {
         branch.forkEntryId,
         branch.checkpointId ?? null,
         branch.createdAt,
+        branch.snapshotComplete ? 1 : 0,
       ],
     )
   }
@@ -1962,8 +2047,8 @@ class DatabaseService {
         id, story_id, name, type, description, hidden_info, aliases,
         state, adventure_state, creative_state, injection,
         first_mentioned, last_mentioned, mention_count, created_by,
-        created_at, updated_at, lore_management_blacklisted, branch_id, overrides_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        created_at, updated_at, lore_management_blacklisted, branch_id, overrides_id, deleted
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         entry.id,
         entry.storyId,
@@ -1985,6 +2070,7 @@ class DatabaseService {
         entry.loreManagementBlacklisted ? 1 : 0,
         entry.branchId || null,
         entry.overridesId || null,
+        entry.deleted ? 1 : 0,
       ],
     )
   }

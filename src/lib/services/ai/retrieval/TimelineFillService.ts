@@ -94,7 +94,7 @@ export class TimelineFillService extends BaseAIService {
 
     // Build timeline from chapters
     const timeline = chapters
-      .map((c) => `Chapter ${c.number}: ${c.summary?.substring(0, 200) ?? 'No summary'}...`)
+      .map((c) => `Chapter ${c.number}: ${c.summary.trim() || 'No summary'}`)
       .join('\n')
 
     const ctx = new ContextBuilder()

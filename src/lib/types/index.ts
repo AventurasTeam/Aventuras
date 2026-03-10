@@ -747,6 +747,7 @@ export interface UpdateSettings {
 export type ImageProviderType =
   | 'nanogpt'
   | 'openai'
+  | 'openrouter'
   | 'chutes'
   | 'pollinations'
   | 'google'

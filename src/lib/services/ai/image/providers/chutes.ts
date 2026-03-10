@@ -111,10 +111,6 @@ export function createChutesProvider(config: ImageProviderConfig): ImageProvider
         return getFallbackModels()
       }
     },
-
-    supportsImg2Img(_modelId: string): boolean {
-      return false
-    },
   }
 }
 

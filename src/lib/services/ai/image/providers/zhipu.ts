@@ -85,9 +85,5 @@ export function createZhipuProvider(config: ImageProviderConfig): ImageProvider 
         },
       ]
     },
-
-    supportsImg2Img(_modelId: string): boolean {
-      return false
-    },
   }
 }
