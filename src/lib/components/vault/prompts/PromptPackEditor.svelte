@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import type { FullPack } from '$lib/services/packs/types'
-  import { allSamples } from './sampleContext'
+  import { systemSamples, runtimeSamples } from './sampleContext'
   import { packService } from '$lib/services/packs/pack-service'
   import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
   import TemplateGroupList from './TemplateGroupList.svelte'
@@ -72,7 +72,7 @@
     const vars = fullPack?.variables
     if (!vars) return
     // Build complete defaults: system + runtime samples + custom variable defaults
-    const defaults: Record<string, string> = { ...allSamples }
+    const defaults: Record<string, string> = { ...systemSamples, ...runtimeSamples }
     for (const v of vars) {
       if (v.defaultValue) {
         defaults[v.variableName] = v.defaultValue
