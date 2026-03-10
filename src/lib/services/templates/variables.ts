@@ -256,6 +256,11 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     category: 'runtime',
     description: 'Retrieved chapter context from memory',
     required: false,
+    deprecated: {
+      replacedBy: 'agenticRetrievalContext',
+      message:
+        'Use agenticRetrievalContext for agentic retrieval results; lorebookEntries[] for lorebook data',
+    },
   },
   {
     name: 'inlineImageInstructions',
@@ -1109,8 +1114,12 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
       { name: 'name', type: 'string', description: 'Entry name' },
       { name: 'type', type: 'string', description: 'e.g. character, location, item, faction' },
       { name: 'description', type: 'string', description: 'Entry description' },
-      { name: 'aliases', type: 'string[]', description: 'Alternative names and aliases' },
       { name: 'tier', type: 'number', description: 'Retrieval tier 1-3' },
+      {
+        name: 'disposition',
+        type: 'string',
+        description: 'Current disposition (character-only, optional)',
+      },
     ] satisfies VariableFieldInfo[],
   },
   {
@@ -1159,6 +1168,45 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     category: 'runtime',
     description:
       'Overused phrases to avoid from style analysis. Array of strings. Use in {% for phrase in styleOverusedPhrases %}',
+    required: false,
+    deprecated: {
+      replacedBy: 'styleReview.phrases',
+      message: 'Use styleReview object for full phrase analysis including frequency and severity',
+    },
+  },
+  {
+    name: 'styleReview',
+    type: 'object' as const,
+    category: 'runtime' as const,
+    description: 'Style analysis result with overused phrases and assessment',
+    required: false,
+    infoFields: [
+      { name: 'phrases', type: 'array', description: 'Array of PhraseAnalysis objects' },
+      { name: 'phrases[].phrase', type: 'string', description: 'The overused phrase' },
+      { name: 'phrases[].frequency', type: 'number', description: 'Times used in recent entries' },
+      { name: 'phrases[].severity', type: 'string', description: 'low, medium, or high' },
+      {
+        name: 'phrases[].alternatives',
+        type: 'string[]',
+        description: 'Suggested replacement phrases',
+      },
+      {
+        name: 'overallAssessment',
+        type: 'string',
+        description: 'Overall style assessment summary',
+      },
+      {
+        name: 'reviewedEntryCount',
+        type: 'number',
+        description: 'Number of entries analyzed',
+      },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'agenticRetrievalContext',
+    type: 'text' as const,
+    category: 'runtime' as const,
+    description: 'LLM-formatted Q&A context from agentic chapter retrieval',
     required: false,
   },
 ]

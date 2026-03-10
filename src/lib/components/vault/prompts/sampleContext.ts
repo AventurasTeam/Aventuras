@@ -23,6 +23,7 @@ export const runtimeSamples: Record<string, string> = {
   chapterSummaries: '[Formatted chapter summaries from memory system...]',
   styleGuidance: '[Style guidance from repetition analysis...]',
   retrievedChapterContext: '[Retrieved chapter context from memory...]',
+  agenticRetrievalContext: '[Agentic retrieval Q&A context from chapter memory...]',
   inlineImageInstructions: '[Instructions for inline image generation...]',
   visualProseInstructions: '[Instructions for visual prose mode...]',
   visualProseMode: 'false',
@@ -222,22 +223,20 @@ export const structuredSamples: Record<string, unknown> = {
       name: 'The Whispering Woods',
       type: 'location',
       description: 'Ancient forest where trees carry memories of the world.',
-      aliases: ['the Woods', 'the Ancient Forest'],
       tier: 1,
     },
     {
       name: 'The Moonstone Pendant',
       type: 'item',
       description: 'A pendant that glows under moonlight, said to reveal hidden paths.',
-      aliases: ['the pendant'],
       tier: 1,
     },
     {
       name: 'Elder Maren',
       type: 'character',
       description: 'A wandering sage who guards forgotten knowledge.',
-      aliases: ['Old Maren', 'the Sage'],
       tier: 2,
+      disposition: 'cautiously helpful',
     },
   ],
   chapters: [
@@ -280,6 +279,24 @@ export const structuredSamples: Record<string, unknown> = {
     { type: 'user_action', content: 'I whisper to Theron to flank left.' },
   ],
   styleOverusedPhrases: ['suddenly', 'all of a sudden', 'with a smile'],
+  styleReview: {
+    phrases: [
+      {
+        phrase: 'suddenly',
+        frequency: 4,
+        severity: 'medium',
+        alternatives: ['abruptly', 'without warning'],
+      },
+      {
+        phrase: 'all of a sudden',
+        frequency: 2,
+        severity: 'low',
+        alternatives: ['without warning', 'unexpectedly'],
+      },
+    ],
+    overallAssessment: 'Writing is clear but relies on sudden-transition clich\u00e9s.',
+    reviewedEntryCount: 12,
+  },
   worldStateRelevantItems: [
     {
       name: 'Enchanted Compass',
