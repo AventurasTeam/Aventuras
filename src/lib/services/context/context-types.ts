@@ -38,6 +38,8 @@ export interface ContextItem {
   quantity: number
   /** Whether the item is currently equipped */
   equipped: boolean
+  /** Retrieval tier — present for tier-2/3 items (worldStateRelevantItems), omitted for inventory */
+  tier?: 1 | 2 | 3
 }
 
 /** A story beat/active thread as seen by Liquid templates (worldStateBeats[]) */
@@ -50,6 +52,8 @@ export interface ContextStoryBeat {
   type: string
   /** Beat status (e.g. active, completed, failed) */
   status: string
+  /** Retrieval tier — present for tier-2/3 beats (worldStateRelatedBeats), omitted for active beats */
+  tier?: 1 | 2 | 3
 }
 
 /** A non-current location as seen by Liquid templates (worldStateLocations[]) */
