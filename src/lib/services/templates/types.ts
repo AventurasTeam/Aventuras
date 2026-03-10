@@ -9,7 +9,7 @@
  * Variable data type
  * Defines what kind of value a variable holds.
  */
-export type VariableType = 'text' | 'number' | 'boolean' | 'enum'
+export type VariableType = 'text' | 'number' | 'boolean' | 'enum' | 'array'
 
 /**
  * Variable category
@@ -18,6 +18,21 @@ export type VariableType = 'text' | 'number' | 'boolean' | 'enum'
  * - custom: User-defined variables in preset packs
  */
 export type VariableCategory = 'system' | 'runtime' | 'custom'
+
+/**
+ * Sub-field descriptor for array/object variable tooltips.
+ * Used by the tooltip renderer to build the mini code-block UI in the template editor.
+ */
+export interface VariableFieldInfo {
+  /** Field name */
+  name: string
+  /** Field type as a string (e.g. 'string', 'string[]', 'number', '"active"|"inactive"') */
+  type: string
+  /** Human-readable description of the field */
+  description: string
+  /** Example value string */
+  example?: string
+}
 
 /**
  * Variable definition
@@ -38,14 +53,30 @@ export interface VariableDefinition {
   defaultValue?: string | number | boolean
   /** Available options when type is 'enum' */
   enumValues?: string[]
+  /**
+   * Deprecation metadata. When present, the variable is deprecated.
+   * Shown in autocomplete with strikethrough + warning badge.
+   */
+  deprecated?: {
+    /** Comma-separated list of replacement variable names */
+    replacedBy: string
+    /** Human-readable guidance for template authors */
+    message: string
+  }
+  /**
+   * Sub-field descriptors for array/object variables.
+   * Used by the tooltip renderer to build the mini code-block UI.
+   * For simple text/boolean/enum variables, omit this field.
+   */
+  infoFields?: VariableFieldInfo[]
 }
 
 /**
  * Template context
  * The flat context object passed to render().
- * Simple values only - no nested objects, no variable references to other variables.
+ * LiquidJS accepts any JSON-serializable value, including arrays of objects.
  */
-export type TemplateContext = Record<string, string | number | boolean | string[] | undefined>
+export type TemplateContext = Record<string, unknown>
 
 /**
  * Validation error type
