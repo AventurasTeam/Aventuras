@@ -161,7 +161,47 @@ End with a natural opening for action, not a direct question.{% endif %}
 [RELATED STORY THREADS]
 {% for beat in worldStateRelatedBeats %}
 • {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif %}
-{% endfor %}{% endif %}{% if retrievedChapterContext != '' %}{{ retrievedChapterContext }}{% endif %}{% if chapterSummaries != '' %}{{ chapterSummaries }}{% endif %}{% if styleGuidance != '' %}{{ styleGuidance }}{% endif %}`,
+{% endfor %}{% endif %}{% if lorebookEntries.size > 0 %}
+
+[LOREBOOK CONTEXT]
+(CANONICAL - All information below is established lore. Do not contradict these facts.)
+{% assign loreCharacters = lorebookEntries | where: 'type', 'character' %}{% if loreCharacters.size > 0 %}
+
+• Characters:
+{% for entry in loreCharacters %}  - {{ entry.name }}: {{ entry.description }}{% if entry.disposition %} [{{ entry.disposition }}]{% endif %}
+{% endfor %}{% endif %}{% assign loreLocations = lorebookEntries | where: 'type', 'location' %}{% if loreLocations.size > 0 %}
+
+• Locations:
+{% for entry in loreLocations %}  - {{ entry.name }}: {{ entry.description }}
+{% endfor %}{% endif %}{% assign loreItems = lorebookEntries | where: 'type', 'item' %}{% if loreItems.size > 0 %}
+
+• Items:
+{% for entry in loreItems %}  - {{ entry.name }}: {{ entry.description }}
+{% endfor %}{% endif %}{% assign loreFactions = lorebookEntries | where: 'type', 'faction' %}{% if loreFactions.size > 0 %}
+
+• Factions:
+{% for entry in loreFactions %}  - {{ entry.name }}: {{ entry.description }}
+{% endfor %}{% endif %}{% assign loreConcepts = lorebookEntries | where: 'type', 'concept' %}{% if loreConcepts.size > 0 %}
+
+• Lore:
+{% for entry in loreConcepts %}  - {{ entry.name }}: {{ entry.description }}
+{% endfor %}{% endif %}{% assign loreEvents = lorebookEntries | where: 'type', 'event' %}{% if loreEvents.size > 0 %}
+
+• Events:
+{% for entry in loreEvents %}  - {{ entry.name }}: {{ entry.description }}
+{% endfor %}{% endif %}{% endif %}{% if agenticRetrievalContext != '' %}{{ agenticRetrievalContext }}{% endif %}{% if chapterSummaries != '' %}{{ chapterSummaries }}{% endif %}{% if styleReview.phrases.size > 0 %}
+
+<style_guidance>
+## Writing Style Feedback
+Based on analysis of {{ styleReview.reviewedEntryCount }} recent entries:
+
+{% for phrase in styleReview.phrases %}
+- "{{ phrase.phrase }}" (used {{ phrase.frequency }} times, {{ phrase.severity }} severity){% if phrase.alternatives.size > 0 %}
+  Alternatives: {{ phrase.alternatives | join: ', ' }}{% endif %}
+{% endfor %}
+Overall: {{ styleReview.overallAssessment }}
+</style_guidance>
+{% endif %}`,
 }
 
 const creativeWritingPromptTemplate: PromptTemplate = {
@@ -361,7 +401,47 @@ End at a natural narrative beat.{% endif %}
 [RELATED STORY THREADS]
 {% for beat in worldStateRelatedBeats %}
 • {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif %}
-{% endfor %}{% endif %}{% if retrievedChapterContext != '' %}{{ retrievedChapterContext }}{% endif %}{% if chapterSummaries != '' %}{{ chapterSummaries }}{% endif %}{% if styleGuidance != '' %}{{ styleGuidance }}{% endif %}`,
+{% endfor %}{% endif %}{% if lorebookEntries.size > 0 %}
+
+[LOREBOOK CONTEXT]
+(CANONICAL - All information below is established lore. Do not contradict these facts.)
+{% assign loreCharacters = lorebookEntries | where: 'type', 'character' %}{% if loreCharacters.size > 0 %}
+
+• Characters:
+{% for entry in loreCharacters %}  - {{ entry.name }}: {{ entry.description }}{% if entry.disposition %} [{{ entry.disposition }}]{% endif %}
+{% endfor %}{% endif %}{% assign loreLocations = lorebookEntries | where: 'type', 'location' %}{% if loreLocations.size > 0 %}
+
+• Locations:
+{% for entry in loreLocations %}  - {{ entry.name }}: {{ entry.description }}
+{% endfor %}{% endif %}{% assign loreItems = lorebookEntries | where: 'type', 'item' %}{% if loreItems.size > 0 %}
+
+• Items:
+{% for entry in loreItems %}  - {{ entry.name }}: {{ entry.description }}
+{% endfor %}{% endif %}{% assign loreFactions = lorebookEntries | where: 'type', 'faction' %}{% if loreFactions.size > 0 %}
+
+• Factions:
+{% for entry in loreFactions %}  - {{ entry.name }}: {{ entry.description }}
+{% endfor %}{% endif %}{% assign loreConcepts = lorebookEntries | where: 'type', 'concept' %}{% if loreConcepts.size > 0 %}
+
+• Lore:
+{% for entry in loreConcepts %}  - {{ entry.name }}: {{ entry.description }}
+{% endfor %}{% endif %}{% assign loreEvents = lorebookEntries | where: 'type', 'event' %}{% if loreEvents.size > 0 %}
+
+• Events:
+{% for entry in loreEvents %}  - {{ entry.name }}: {{ entry.description }}
+{% endfor %}{% endif %}{% endif %}{% if agenticRetrievalContext != '' %}{{ agenticRetrievalContext }}{% endif %}{% if chapterSummaries != '' %}{{ chapterSummaries }}{% endif %}{% if styleReview.phrases.size > 0 %}
+
+<style_guidance>
+## Writing Style Feedback
+Based on analysis of {{ styleReview.reviewedEntryCount }} recent entries:
+
+{% for phrase in styleReview.phrases %}
+- "{{ phrase.phrase }}" (used {{ phrase.frequency }} times, {{ phrase.severity }} severity){% if phrase.alternatives.size > 0 %}
+  Alternatives: {{ phrase.alternatives | join: ', ' }}{% endif %}
+{% endfor %}
+Overall: {{ styleReview.overallAssessment }}
+</style_guidance>
+{% endif %}`,
 }
 
 export const storyTemplates: PromptTemplate[] = [

@@ -27,7 +27,15 @@ Location: {{ currentLocation }}
 NPCs Present: {{ npcsPresent }}
 {{ protagonistName }}'s Inventory: {{ inventory }}
 Active Quests: {{ activeQuests }}
-{{ lorebookContext }}
+{% if lorebookEntries.size > 0 %}
+## World Context
+{% for entry in lorebookEntries %}
+- {{ entry.name }} ({{ entry.type }}): {{ entry.description }}
+{% endfor %}
+{% endif %}{% if styleOverusedPhrases.size > 0 %}
+## Style Notes
+Avoid overusing: {{ styleOverusedPhrases | join: ', ' }}
+{% endif %}
 ## Your Task
 Generate 3-4 distinct action choices for THE USER (playing as {{ protagonistName }}). Think like an RPG:
 - **Every choice should move the plot forward** - no passive waiting or stalling
