@@ -76,10 +76,10 @@ export interface ContextLorebookEntry {
   type: string
   /** Entry description */
   description: string
-  /** Alternative names and aliases */
-  aliases: string[]
   /** Retrieval tier — lower means higher priority in context window */
   tier: 1 | 2 | 3
+  /** Current disposition — optional, character-only */
+  disposition?: string
 }
 
 /** A chapter summary as seen by Liquid templates (chapters[]) */
