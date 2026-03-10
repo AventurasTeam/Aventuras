@@ -252,6 +252,14 @@ export function validateTemplate(
     forMatch = forPattern.exec(template)
   }
 
+  // Extract assign-scoped variables from {% assign X = ... %} constructs
+  const assignPattern = /\{%\s*assign\s+(\w+)\s*=/g
+  let assignMatch = assignPattern.exec(template)
+  while (assignMatch !== null) {
+    loopVars.add(assignMatch[1])
+    assignMatch = assignPattern.exec(template)
+  }
+
   // Built-in Liquid variables available in loops and elsewhere
   const builtinRoots = new Set(['forloop', 'tablerowloop'])
 
