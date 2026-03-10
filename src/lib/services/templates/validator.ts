@@ -243,23 +243,45 @@ export function validateTemplate(
     ...(additionalVariables || []),
   ])
 
+  // Extract loop-scoped variables from {% for X in Y %} constructs
+  const loopVars = new Set<string>()
+  const forPattern = /\{%\s*for\s+(\w+)\s+in\s+/g
+  let forMatch = forPattern.exec(template)
+  while (forMatch !== null) {
+    loopVars.add(forMatch[1])
+    forMatch = forPattern.exec(template)
+  }
+
+  // Built-in Liquid variables available in loops and elsewhere
+  const builtinRoots = new Set(['forloop', 'tablerowloop'])
+
   for (const varName of variableNames) {
-    if (!validVariables.has(varName)) {
-      // Variable doesn't exist - find similar names
-      const allValidNames = Array.from(validVariables)
-      const suggestion = findSimilar(varName, allValidNames)
+    // Extract root name (before first dot)
+    const root = varName.split('.')[0]
 
-      const message = suggestion
-        ? `Variable '${varName}' doesn't exist. Did you mean '${suggestion}'?`
-        : `Variable '${varName}' doesn't exist. Check the available variables list.`
+    // Skip if root is a registered variable (covers dot-access like currentLocationObject.name)
+    if (validVariables.has(root)) continue
 
-      log('unknown variable', { varName, suggestion })
+    // Skip loop-scoped variables and their properties (e.g., char, char.name)
+    if (loopVars.has(root)) continue
 
-      errors.push({
-        type: 'unknown_variable',
-        message,
-      })
-    }
+    // Skip built-in Liquid variables (e.g., forloop.first)
+    if (builtinRoots.has(root)) continue
+
+    // Variable doesn't exist - find similar names
+    const allValidNames = Array.from(validVariables)
+    const suggestion = findSimilar(root, allValidNames)
+
+    const message = suggestion
+      ? `Variable '${varName}' doesn't exist. Did you mean '${suggestion}'?`
+      : `Variable '${varName}' doesn't exist. Check the available variables list.`
+
+    log('unknown variable', { varName, suggestion })
+
+    errors.push({
+      type: 'unknown_variable',
+      message,
+    })
   }
 
   // Step 3: Filter validation
