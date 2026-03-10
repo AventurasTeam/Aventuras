@@ -127,9 +127,41 @@ End with a natural opening for action, not a direct question.{% endif %}
 {% if storyTime != '' %}
 [CURRENT STORY TIME]
 {{ storyTime }}
-{% endif %}{% if tieredContextBlock != '' %}
-{{ tieredContextBlock }}
-{% endif %}{% if chapterSummaries != '' %}{{ chapterSummaries }}{% endif %}{% if styleGuidance != '' %}{{ styleGuidance }}{% endif %}`,
+{% endif %}{% if currentLocationObject %}
+
+[CURRENT LOCATION]
+{{ currentLocationObject.name }}{% if currentLocationObject.description != '' %}
+{{ currentLocationObject.description }}{% endif %}
+{% endif %}{% if worldStateCharacters.size > 0 %}
+
+[KNOWN CHARACTERS]
+{% for char in worldStateCharacters %}
+• {{ char.name }}{% if char.relationship != '' %} ({{ char.relationship }}){% endif %}{% if char.description != '' %} - {{ char.description }}{% endif %}{% if char.traits.size > 0 %} [{{ char.traits | join: ', ' }}]{% endif %}{% if char.appearance.size > 0 %} {Appearance: {{ char.appearance | join: ', ' }}}{% endif %}
+{% endfor %}{% endif %}{% if worldStateInventory.size > 0 %}
+
+[INVENTORY]
+{% for item in worldStateInventory %}{% if forloop.first == false %}, {% endif %}{{ item.name }}{% if item.quantity > 1 %} (×{{ item.quantity }}){% endif %}{% if item.equipped %} [equipped]{% endif %}{% endfor %}
+{% endif %}{% if worldStateBeats.size > 0 %}
+
+[ACTIVE THREADS]
+{% for beat in worldStateBeats %}
+• {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif %}
+{% endfor %}{% endif %}{% if worldStateLocations.size > 0 %}
+
+[RELEVANT LOCATIONS]
+{% for loc in worldStateLocations %}
+• {{ loc.name }}{% if loc.description != '' %}: {{ loc.description }}{% endif %}
+{% endfor %}{% endif %}{% if worldStateRelevantItems.size > 0 %}
+
+[RELEVANT ITEMS]
+{% for item in worldStateRelevantItems %}
+• {{ item.name }}{% if item.description != '' %}: {{ item.description }}{% endif %}
+{% endfor %}{% endif %}{% if worldStateRelatedBeats.size > 0 %}
+
+[RELATED STORY THREADS]
+{% for beat in worldStateRelatedBeats %}
+• {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif %}
+{% endfor %}{% endif %}{% if retrievedChapterContext != '' %}{{ retrievedChapterContext }}{% endif %}{% if chapterSummaries != '' %}{{ chapterSummaries }}{% endif %}{% if styleGuidance != '' %}{{ styleGuidance }}{% endif %}`,
 }
 
 const creativeWritingPromptTemplate: PromptTemplate = {
@@ -295,9 +327,41 @@ End at a natural narrative beat.{% endif %}
 {% if storyTime != '' %}
 [CURRENT STORY TIME]
 {{ storyTime }}
-{% endif %}{% if tieredContextBlock != '' %}
-{{ tieredContextBlock }}
-{% endif %}{% if chapterSummaries != '' %}{{ chapterSummaries }}{% endif %}{% if styleGuidance != '' %}{{ styleGuidance }}{% endif %}`,
+{% endif %}{% if currentLocationObject %}
+
+[CURRENT LOCATION]
+{{ currentLocationObject.name }}{% if currentLocationObject.description != '' %}
+{{ currentLocationObject.description }}{% endif %}
+{% endif %}{% if worldStateCharacters.size > 0 %}
+
+[KNOWN CHARACTERS]
+{% for char in worldStateCharacters %}
+• {{ char.name }}{% if char.relationship != '' %} ({{ char.relationship }}){% endif %}{% if char.description != '' %} - {{ char.description }}{% endif %}{% if char.traits.size > 0 %} [{{ char.traits | join: ', ' }}]{% endif %}{% if char.appearance.size > 0 %} {Appearance: {{ char.appearance | join: ', ' }}}{% endif %}
+{% endfor %}{% endif %}{% if worldStateInventory.size > 0 %}
+
+[INVENTORY]
+{% for item in worldStateInventory %}{% if forloop.first == false %}, {% endif %}{{ item.name }}{% if item.quantity > 1 %} (×{{ item.quantity }}){% endif %}{% if item.equipped %} [equipped]{% endif %}{% endfor %}
+{% endif %}{% if worldStateBeats.size > 0 %}
+
+[ACTIVE THREADS]
+{% for beat in worldStateBeats %}
+• {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif %}
+{% endfor %}{% endif %}{% if worldStateLocations.size > 0 %}
+
+[RELEVANT LOCATIONS]
+{% for loc in worldStateLocations %}
+• {{ loc.name }}{% if loc.description != '' %}: {{ loc.description }}{% endif %}
+{% endfor %}{% endif %}{% if worldStateRelevantItems.size > 0 %}
+
+[RELEVANT ITEMS]
+{% for item in worldStateRelevantItems %}
+• {{ item.name }}{% if item.description != '' %}: {{ item.description }}{% endif %}
+{% endfor %}{% endif %}{% if worldStateRelatedBeats.size > 0 %}
+
+[RELATED STORY THREADS]
+{% for beat in worldStateRelatedBeats %}
+• {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif %}
+{% endfor %}{% endif %}{% if retrievedChapterContext != '' %}{{ retrievedChapterContext }}{% endif %}{% if chapterSummaries != '' %}{{ chapterSummaries }}{% endif %}{% if styleGuidance != '' %}{{ styleGuidance }}{% endif %}`,
 }
 
 export const storyTemplates: PromptTemplate[] = [
