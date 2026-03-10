@@ -2,7 +2,7 @@
   import { onDestroy } from 'svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import type { APIProfile, ProviderType } from '$lib/types'
-  import { fetchModelsFromProvider } from '$lib/services/ai/sdk/providers'
+  import { fetchModelsFromProvider, type TextModel } from '$lib/services/ai/sdk/providers'
   import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
   import { Plus, Check, ChevronRight, Key as KeyIcon, Star } from 'lucide-svelte'
 
@@ -24,8 +24,7 @@
   let formBaseUrl = $state('')
   let formApiKey = $state('')
   let formCustomModels = $state<string[]>([])
-  let formFetchedModels = $state<string[]>([])
-  let formReasoningModels = $state<string[]>([])
+  let formFetchedModels = $state<TextModel[]>([])
   let formHiddenModels = $state<string[]>([])
   let formFavoriteModels = $state<string[]>([])
 
@@ -52,7 +51,6 @@
     formApiKey = profile.apiKey
     formCustomModels = [...profile.customModels]
     formFetchedModels = [...profile.fetchedModels]
-    formReasoningModels = [...(profile.reasoningModels ?? [])]
     formHiddenModels = [...(profile.hiddenModels ?? [])]
     formFavoriteModels = [...(profile.favoriteModels ?? [])]
     fetchError = null
@@ -68,7 +66,6 @@
     formApiKey = ''
     formCustomModels = []
     formFetchedModels = []
-    formReasoningModels = []
     formHiddenModels = []
     formFavoriteModels = []
     fetchError = null
@@ -92,7 +89,6 @@
       apiKey: formApiKey,
       customModels: formCustomModels,
       fetchedModels: formFetchedModels,
-      reasoningModels: formReasoningModels,
       hiddenModels: formHiddenModels,
       favoriteModels: formFavoriteModels,
       createdAt: isNewProfile
@@ -119,14 +115,9 @@
     isFetchingModels = true
     fetchError = null
     formFetchedModels = []
-    formReasoningModels = []
 
     try {
-      const result = await fetchModelsFromProvider(formProviderType, formBaseUrl, formApiKey)
-      // Exclude models the user has explicitly hidden so they don't reappear on refresh
-      const hidden = new Set(formHiddenModels)
-      formFetchedModels = result.models.filter((m) => !hidden.has(m))
-      formReasoningModels = result.reasoningModels
+      formFetchedModels = await fetchModelsFromProvider(formProviderType, formBaseUrl, formApiKey)
     } catch (err) {
       fetchError = err instanceof Error ? err.message : 'Failed to fetch models'
     } finally {
@@ -136,11 +127,12 @@
 
   function handleRemoveCustomModel(model: string) {
     formCustomModels = formCustomModels.filter((m) => m !== model)
+    formHiddenModels = formHiddenModels.filter((m) => m !== model)
+    formFavoriteModels = formFavoriteModels.filter((m) => m !== model)
   }
 
   function handleRemoveFetchedModel(model: string) {
-    formFetchedModels = formFetchedModels.filter((m) => m !== model)
-    if (!formHiddenModels.includes(model)) {
+    if (!formHiddenModels.find((m) => m === model)) {
       formHiddenModels = [...formHiddenModels, model]
     }
     // Also remove from favorites if hidden
@@ -149,9 +141,6 @@
 
   function handleRestoreHiddenModel(model: string) {
     formHiddenModels = formHiddenModels.filter((m) => m !== model)
-    if (!formFetchedModels.includes(model) && !formCustomModels.includes(model)) {
-      formFetchedModels = [...formFetchedModels, model]
-    }
   }
 
   function handleToggleFavorite(model: string) {
@@ -214,7 +203,6 @@
       apiKey: formApiKey,
       customModels: formCustomModels,
       fetchedModels: formFetchedModels,
-      reasoningModels: formReasoningModels,
       hiddenModels: formHiddenModels,
       favoriteModels: formFavoriteModels,
       createdAt: existingProfile.createdAt,
@@ -265,7 +253,6 @@
     formName = PROVIDERS[v].name
     formBaseUrl = ''
     formFetchedModels = []
-    formReasoningModels = []
     formCustomModels = []
     formHiddenModels = []
     formFavoriteModels = []
@@ -306,7 +293,6 @@
           bind:apiKey={formApiKey}
           bind:fetchedModels={formFetchedModels}
           bind:customModels={formCustomModels}
-          bind:reasoningModels={formReasoningModels}
           bind:hiddenModels={formHiddenModels}
           bind:favoriteModels={formFavoriteModels}
           {isFetchingModels}
@@ -419,7 +405,6 @@
                 bind:apiKey={formApiKey}
                 bind:fetchedModels={formFetchedModels}
                 bind:customModels={formCustomModels}
-                bind:reasoningModels={formReasoningModels}
                 bind:hiddenModels={formHiddenModels}
                 bind:favoriteModels={formFavoriteModels}
                 {isFetchingModels}
@@ -432,15 +417,13 @@
                 onToggleFavorite={handleToggleFavorite}
                 onAddCustomModel={handleAddCustomModel}
               />
-              {#if saveStatus !== 'idle'}
-                <p class="text-muted-foreground mt-2 text-right text-xs">
-                  {#if saveStatus === 'saving'}
-                    Saving...
-                  {:else}
-                    ✓ Saved
-                  {/if}
-                </p>
-              {/if}
+              <p class="text-muted-foreground mt-2 min-h-[1lh] text-right text-xs">
+                {#if saveStatus === 'saving'}
+                  Saving...
+                {:else if saveStatus !== 'idle'}
+                  ✓ Saved
+                {/if}
+              </p>
             </div>
           </Collapsible.Content>
         </Collapsible.Root>

@@ -28,9 +28,10 @@
   } from 'lucide-svelte'
   import ModelSelector from './ModelSelector.svelte'
   import {
+    getReasoningExtraction,
+    supportsCapabilityFetch,
     supportsReasoning,
-    modelSupportsReasoning,
-    getReasoningMode,
+    supportsBinaryReasoning,
   } from '$lib/services/ai/sdk/providers'
 
   // Shadcn Components
@@ -40,6 +41,8 @@
   import { Label } from '$lib/components/ui/label'
   import { Slider } from '$lib/components/ui/slider'
   import { Textarea } from '$lib/components/ui/textarea'
+  import { Switch } from '$lib/components/ui/switch'
+  import { cn } from '$lib/utils/cn'
 
   const reasoningLevels = ['off', 'low', 'medium', 'high'] as const
   const reasoningLabels: Record<string, string> = {
@@ -400,13 +403,12 @@
   // Proxy states for sliders when editing
   let tempPresetTemperature = $state(0.7)
   let tempPresetMaxTokens = $state(4096)
-  let tempPresetReasoning = $state(0)
+  let tempPresetReasoning = $derived(tempPreset ? getReasoningIndex(tempPreset.reasoningEffort) : 0)
 
   $effect(() => {
     if (tempPreset) {
       tempPresetTemperature = tempPreset.temperature
       tempPresetMaxTokens = tempPreset.maxTokens
-      tempPresetReasoning = getReasoningIndex(tempPreset.reasoningEffort)
     }
   })
 
@@ -422,39 +424,77 @@
     if (tempPreset) tempPreset.reasoningEffort = getReasoningValue(v) as any
   }
 
-  // Check if reasoning is supported for the currently editing preset
-  let tempPresetReasoningSupported = $derived.by(() => {
-    if (!tempPreset) return false
-    const profileId = tempPreset.profileId ?? settings.getDefaultProfileIdForProvider()
+  function maybeEnableNanogptReasoning(profileId: string | null | undefined, modelId: string) {
+    if (!profileId) return
     const profile = settings.getProfile(profileId)
-    if (!profile) return false
+    if (!profile) return
+    const model = settings.getProfileModels(profileId).find((mod) => mod.id === modelId)
+    if (!!model?.reasoning && profile.providerType === 'nanogpt' && tempPresetReasoning === 0) {
+      updateTempPresetReasoning(3)
+    }
+  }
 
-    // Check if provider supports reasoning
-    if (!supportsReasoning(profile.providerType)) return false
-
-    // Check if the specific model supports reasoning
-    const model = tempPreset.model
-    if (!model) return false
-
-    return modelSupportsReasoning(model, profile.providerType, profile.reasoningModels)
+  let tempModelReasoningCapability = $derived.by<'enforced' | 'supported' | 'unsupported'>(() => {
+    if (!tempPreset) return 'unsupported'
+    const profileId = tempPreset.profileId
+    if (!profileId) return 'unsupported'
+    const profile = settings.getProfile(profileId)
+    if (!profile) return 'unsupported'
+    const modelId = tempPreset.model
+    if (!modelId) return 'unsupported'
+    const model = settings.getProfileModels(profileId).find((m) => m.id === modelId)
+    if (!!model?.reasoning && profile.providerType === 'nanogpt') {
+      return 'enforced'
+    } else if (!!model?.reasoning) {
+      return 'supported'
+    }
+    return 'unsupported'
   })
 
-  // For 'fetched' providers (e.g., NanoGPT), reasoning is binary — no slider, just text
-  let tempPresetIsFetchedProvider = $derived.by(() => {
+  let tempGlobalProviderReasoningCapability = $derived.by(() => {
     if (!tempPreset) return false
-    const profileId = tempPreset.profileId ?? settings.getDefaultProfileIdForProvider()
+    const profileId = tempPreset.profileId
+    if (!profileId) return false
     const profile = settings.getProfile(profileId)
     if (!profile) return false
-    return getReasoningMode(profile.providerType) === 'fetched'
+    if (!tempPreset.model) return false
+    return supportsReasoning(profile.providerType)
   })
 
-  // For 'heuristic' providers (e.g., Ollama), reasoning is tag-based only — no effort levels
-  let isHeuristicProvider = $derived.by(() => {
+  let tempProviderModelCapabilityFetching = $derived.by(() => {
     if (!tempPreset) return false
-    const profileId = tempPreset.profileId ?? settings.getDefaultProfileIdForProvider()
+    const profileId = tempPreset.profileId
+    if (!profileId) return false
     const profile = settings.getProfile(profileId)
     if (!profile) return false
-    return getReasoningMode(profile.providerType) === 'heuristic'
+    return supportsCapabilityFetch(profile.providerType)
+  })
+
+  let tempProviderBinaryReasoning = $derived.by(() => {
+    if (!tempPreset?.profileId) return false
+    const profile = settings.getProfile(tempPreset.profileId)
+    if (!profile) return false
+    return supportsBinaryReasoning(profile.providerType)
+  })
+
+  let tempProviderIsOpenAICompatibleOrThinkTag = $derived.by(() => {
+    if (!tempPreset?.profileId) return false
+    const profile = settings.getProfile(tempPreset.profileId)
+    if (!profile) return false
+    return (
+      profile.providerType === 'openai-compatible' ||
+      getReasoningExtraction(profile.providerType) === 'think-tag'
+    )
+  })
+
+  $effect(() => {
+    if (!tempPreset) return
+    const reasoningSupported =
+      tempGlobalProviderReasoningCapability &&
+      (!tempProviderModelCapabilityFetching || tempModelReasoningCapability !== 'unsupported')
+    if (!reasoningSupported && tempPresetReasoning > 0) {
+      updateTempPresetReasoning(0)
+    }
   })
 </script>
 
@@ -562,13 +602,42 @@
           profileId={tempPreset?.profileId ?? null}
           model={tempPreset?.model ?? ''}
           onProfileChange={(id) => {
-            if (tempPreset) tempPreset.profileId = id
+            if (!tempPreset) return
+            maybeEnableNanogptReasoning(id, tempPreset.model)
+            tempPreset.profileId = id
           }}
           onModelChange={(m) => {
-            if (tempPreset) tempPreset.model = m
+            if (!tempPreset) return
+            maybeEnableNanogptReasoning(tempPreset.profileId, m)
+            tempPreset.model = m
           }}
         />
-        <div class="grid grid-cols-2 gap-6">
+        {#if tempGlobalProviderReasoningCapability}
+          {#if tempProviderModelCapabilityFetching}
+            {#if tempModelReasoningCapability === 'enforced'}
+              <div class="flex items-center gap-1.5 text-xs text-emerald-500">
+                <Brain class="h-3.5 w-3.5" />
+                Reasoning enabled
+              </div>
+            {:else if tempModelReasoningCapability === 'supported'}
+              <div class="flex items-center gap-1.5 text-xs text-emerald-500">
+                <Brain class="h-3.5 w-3.5" />
+                Reasoning supported
+              </div>
+            {/if}
+          {:else}
+            <div class="flex items-center gap-1.5 text-xs text-emerald-500">
+              <Brain class="h-3.5 w-3.5" />
+              Reasoning supported by provider (specific model support unknown)
+            </div>
+          {/if}
+        {/if}
+        <div
+          class={cn(
+            'grid grid-cols-2 gap-6',
+            settings.advancedRequestSettings.manualMode && 'pointer-events-none opacity-50',
+          )}
+        >
           <div class="grid gap-4">
             <div class="flex justify-between">
               <Label>Temperature</Label>
@@ -600,36 +669,99 @@
           </div>
         </div>
 
-        {#if tempPresetIsFetchedProvider}
-          {#if tempPresetReasoningSupported}
-            <div class="flex items-center gap-1.5 text-xs text-emerald-500">
-              <Brain class="h-3.5 w-3.5" />
-              Reasoning enabled
+        <div class="grid gap-2">
+          <Label>Structured Output</Label>
+          <div class="flex rounded-md border">
+            {#each [['auto', 'Auto'], ['on', 'Force On'], ['off', 'Force Off']] as [val, label] (val)}
+              {@const isActive = (tempPreset.structuredOutputOverride ?? 'auto') === val}
+              <button
+                type="button"
+                class="flex-1 px-3 py-1.5 text-xs transition-colors first:rounded-l-md last:rounded-r-md {isActive
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-muted/50'}"
+                onclick={() => {
+                  if (tempPreset) tempPreset.structuredOutputOverride = val as 'auto' | 'on' | 'off'
+                }}
+              >
+                {label}
+              </button>
+            {/each}
+          </div>
+          <p class="text-muted-foreground text-xs">
+            Auto uses provider/model capability detection. Force On/Off to override. Using
+            structured output can break reasoning when using local model servers.
+          </p>
+        </div>
+
+        {#if tempProviderIsOpenAICompatibleOrThinkTag}
+          <div class="flex flex-row items-center justify-between gap-3">
+            <div class="space-y-0.5">
+              <Label class="text-sm">Thinking nudge</Label>
+              <p class="text-muted-foreground text-xs">
+                Inject a prompt to encourage the model to use <code>&lt;think&gt;</code> tags properly.
+                Useful for some local models such as Mistral models, but may cause issues with other models
+                such as Qwen 3.5. Has no effect when using structured output with local model servers.
+              </p>
             </div>
-          {:else}
-            <p class="text-muted-foreground text-xs">
-              Some models support reasoning. Fetch models to detect capabilities.
-            </p>
-          {/if}
-        {:else if tempPresetReasoningSupported && !isHeuristicProvider}
-          <div class="grid gap-4">
-            <div class="flex justify-between">
-              <Label>Thinking: {reasoningLabels[tempPreset.reasoningEffort]}</Label>
-            </div>
-            <Slider
-              bind:value={tempPresetReasoning}
-              type="single"
-              min={0}
-              max={3}
-              step={1}
-              onValueChange={updateTempPresetReasoning}
+            <Switch
+              checked={!!tempPreset.thinkingNudgePrompt}
+              onCheckedChange={(v) => {
+                if (tempPreset) tempPreset.thinkingNudgePrompt = !!v
+              }}
             />
-            <div class="text-muted-foreground flex justify-between px-1 text-xs">
-              <span>Off</span>
-              <span>Low</span>
-              <span>Medium</span>
-              <span>High</span>
-            </div>
+          </div>
+        {/if}
+
+        {#if tempGlobalProviderReasoningCapability && (!tempProviderModelCapabilityFetching || tempModelReasoningCapability !== 'unsupported')}
+          <div
+            class={cn(
+              'grid gap-4',
+              settings.advancedRequestSettings.manualMode && 'pointer-events-none opacity-50',
+            )}
+          >
+            {#if tempProviderBinaryReasoning}
+              <div class="flex items-center justify-between">
+                <Label>Thinking</Label>
+                <Switch
+                  checked={tempPreset.reasoningEffort !== 'off'}
+                  onCheckedChange={(v) => updateTempPresetReasoning(v ? 3 : 0)}
+                />
+              </div>
+            {:else}
+              <div class="flex justify-between">
+                <Label>Thinking: {reasoningLabels[tempPreset.reasoningEffort]}</Label>
+              </div>
+              {#if tempModelReasoningCapability === 'enforced'}
+                <Slider
+                  bind:value={tempPresetReasoning}
+                  type="single"
+                  min={1}
+                  max={3}
+                  step={1}
+                  onValueChange={updateTempPresetReasoning}
+                />
+                <div class="text-muted-foreground flex justify-between text-xs">
+                  <span>Low</span>
+                  <span>Med</span>
+                  <span>High</span>
+                </div>
+              {:else}
+                <Slider
+                  bind:value={tempPresetReasoning}
+                  type="single"
+                  min={0}
+                  max={3}
+                  step={1}
+                  onValueChange={updateTempPresetReasoning}
+                />
+                <div class="text-muted-foreground flex justify-between px-1 text-xs">
+                  <span>Off</span>
+                  <span>Low</span>
+                  <span>Medium</span>
+                  <span>High</span>
+                </div>
+              {/if}
+            {/if}
           </div>
         {/if}
 
@@ -689,7 +821,7 @@
                 {@const _models = settings.getAvailableModels(
                   preset.profileId || settings.getDefaultProfileIdForProvider(),
                 )}
-                {#if _models.length > 0 && !_models.includes(preset.model)}
+                {#if _models.length > 0 && !_models.find((m) => m.id === preset.model)}
                   <div class="mt-0.5 flex items-center gap-1 text-xs text-yellow-500">
                     <AlertTriangle class="h-3 w-3" />
                     Model not in profile

@@ -12,7 +12,6 @@
   import { Input } from '$lib/components/ui/input'
   import { Label } from '$lib/components/ui/label'
   import { Slider } from '$lib/components/ui/slider'
-  import { Switch } from '$lib/components/ui/switch'
   import {
     LLM_TIMEOUT_MIN,
     LLM_TIMEOUT_MAX,
@@ -97,25 +96,6 @@
             />
           </div>
         </div>
-      </div>
-
-      <!-- Native Timeout Support -->
-      <div class="flex items-center justify-between space-x-2">
-        <div class="flex-1 space-y-1">
-          <Label for="native-timeout">Use Native Timeout (SDK compatible endpoints)</Label>
-          <p class="text-muted-foreground text-xs">
-            If enabled, passes timeout to the API's native parameter instead of using manual
-            timeout. Enable this for modern SDK-compatible endpoints (Vercel AI SDK, OpenAI SDK v4+,
-            etc.).
-          </p>
-        </div>
-        <Switch
-          id="native-timeout"
-          checked={settings.apiSettings.useNativeTimeout}
-          onCheckedChange={(checked) => {
-            settings.setUseNativeTimeout(checked)
-          }}
-        />
       </div>
     </CardContent>
   </Card>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { settings } from '$lib/stores/settings.svelte'
-  import { Server, Check, RefreshCw, Star, AlertTriangle, Brain } from 'lucide-svelte'
+  import { Server, Check, RefreshCw, Star, AlertTriangle, Brain, Braces } from 'lucide-svelte'
   import Autocomplete from '$lib/components/ui/autocomplete/Autocomplete.svelte'
   import * as Select from '$lib/components/ui/select'
   import { Button } from '$lib/components/ui/button'
@@ -41,13 +41,6 @@
   // Get available models for the selected profile (excluding hidden, favorites first)
   let availableModels = $derived(settings.getAvailableModels(effectiveProfileId))
 
-  // Set of models that support reasoning (for brain icon)
-  let reasoningSet = $derived.by(() => {
-    if (!effectiveProfileId) return new Set<string>()
-    const profile = settings.getProfile(effectiveProfileId)
-    return new Set(profile?.reasoningModels ?? [])
-  })
-
   // Number of favorite models (for separator)
   let favoriteCount = $derived.by(() => {
     if (!effectiveProfileId) return 0
@@ -55,14 +48,14 @@
     if (!profile) return 0
     const favSet = new Set(profile.favoriteModels ?? [])
     const hidden = new Set(profile.hiddenModels ?? [])
-    return [...new Set([...profile.fetchedModels, ...profile.customModels])].filter(
-      (m) => !hidden.has(m) && favSet.has(m),
-    ).length
+    return [
+      ...new Set([...profile.fetchedModels, ...profile.customModels.map((m) => ({ id: m }))]),
+    ].filter((m) => !hidden.has(m.id) && favSet.has(m.id)).length
   })
 
   // Check if currently selected model is missing from the profile
   let isModelMissing = $derived(
-    model.length > 0 && availableModels.length > 0 && !availableModels.includes(model),
+    model.length > 0 && availableModels.length > 0 && !availableModels.find((m) => m.id === model),
   )
 
   // Get selected profile name
@@ -79,6 +72,16 @@
       label: p.name + (settings.apiSettings.defaultProfileId === p.id ? ' (Default)' : ''),
     })),
   )
+
+  function checkModelReasoningCapability(modelId: string): boolean {
+    const model = availableModels.find((m) => m.id === modelId)
+    return !!model?.reasoning
+  }
+
+  function checkModelStructuredCapability(modelId: string): boolean {
+    const model = availableModels.find((m) => m.id === modelId)
+    return !!model?.structuredOutput
+  }
 
   function handleSelectProfile(val: string) {
     onProfileChange(val)
@@ -149,7 +152,7 @@
       </div>
     </div>
     <Autocomplete
-      items={availableModels}
+      items={availableModels.map((m) => m.id)}
       selected={model}
       onSelect={(m) => onModelChange(m as string)}
       itemLabel={(m) => m}
@@ -167,8 +170,15 @@
           <Check class={cn('mr-2 h-4 w-4', model === modelOption ? 'opacity-100' : 'opacity-0')} />
         {/if}
         <span class="truncate">{modelOption}</span>
-        {#if reasoningSet.has(modelOption)}
-          <Brain class="ml-auto h-3 w-3 shrink-0 text-emerald-500" />
+        {#if checkModelReasoningCapability(modelOption) || checkModelStructuredCapability(modelOption)}
+          <span class="ml-auto flex shrink-0 items-center gap-1">
+            {#if checkModelStructuredCapability(modelOption)}
+              <Braces class="h-3 w-3 text-blue-400" />
+            {/if}
+            {#if checkModelReasoningCapability(modelOption)}
+              <Brain class="h-3 w-3 text-emerald-500" />
+            {/if}
+          </span>
         {/if}
       {/snippet}
       {#snippet triggerSnippet()}

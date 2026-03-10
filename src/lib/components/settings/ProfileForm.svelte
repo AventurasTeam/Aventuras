@@ -23,6 +23,7 @@
     Star,
   } from 'lucide-svelte'
   import X from '@lucide/svelte/icons/x'
+  import type { TextModel } from '$lib/services/ai/sdk/providers'
 
   interface Props {
     // Form fields (bindable)
@@ -30,9 +31,8 @@
     providerType: ProviderType
     baseUrl: string
     apiKey: string
-    fetchedModels: string[]
+    fetchedModels: TextModel[]
     customModels: string[]
-    reasoningModels: string[]
     hiddenModels: string[]
     favoriteModels: string[]
 
@@ -60,7 +60,6 @@
     apiKey = $bindable(),
     fetchedModels = $bindable(),
     customModels = $bindable(),
-    reasoningModels = $bindable(),
     hiddenModels = $bindable(),
     favoriteModels = $bindable(),
     isFetchingModels,
@@ -82,6 +81,12 @@
   let showCustomModelDialog = $state(false)
   let customModelDialogInput = $state('')
   let customModelDialogError = $state('')
+  let displaymodels = $derived.by(() => {
+    const allModels = [...fetchedModels, ...customModels.map((id) => ({ id }))].filter(
+      (model) => !hiddenModels.includes(model.id),
+    )
+    return filterModels(allModels)
+  })
 
   function isSelfHostedUrl(url: string): boolean {
     if (!url) return false
@@ -99,23 +104,25 @@
     }
   }
 
-  function sortedModels(models: string[]): string[] {
+  function sortedModels(models: TextModel[]): TextModel[] {
     const favSet = new Set(favoriteModels)
-    const favs = models.filter((m) => favSet.has(m))
-    const rest = models.filter((m) => !favSet.has(m))
+    const favs = models.filter((m) => favSet.has(m.id))
+    const rest = models.filter((m) => !favSet.has(m.id))
     return [...favs, ...rest]
   }
 
-  function filterModels(models: string[]): string[] {
+  function filterModels(models: TextModel[], shownOnly: boolean = false): TextModel[] {
     if (!modelFilterInput.trim()) return models
     const search = modelFilterInput.toLowerCase()
-    return models.filter((m) => m.toLowerCase().includes(search))
+    return models.filter(
+      (m) => m.id.toLowerCase().includes(search) && (!shownOnly || !hiddenModels.includes(m.id)),
+    )
   }
 
   function handleAddCustomModelFromDialog() {
     const model = customModelDialogInput.trim()
     if (!model) return
-    if (customModels.includes(model) || fetchedModels.includes(model)) {
+    if (customModels.includes(model) || fetchedModels.find((m) => m.id === model)) {
       customModelDialogError = `"${model}" is already in the list`
       return
     }
@@ -243,7 +250,7 @@
     {/if}
 
     <!-- Model filter (shown when there are enough models) -->
-    {#if fetchedModels.length + customModels.length > 10}
+    {#if displaymodels.length + customModels.length > 10}
       <Input
         placeholder="Filter models..."
         bind:value={modelFilterInput}
@@ -253,30 +260,30 @@
     {/if}
 
     <!-- Fetched Models -->
-    {#if fetchedModels.length > 0}
+    {#if displaymodels.length > 0}
       <div class="space-y-1">
         <p class="text-muted-foreground text-xs font-medium">
-          Fetched Models ({fetchedModels.length})
+          Fetched Models ({displaymodels.length})
         </p>
         <ScrollArea class="h-32 w-full rounded-md border">
           <div class="flex flex-wrap gap-1 p-2">
-            {#each filterModels(sortedModels(fetchedModels)) as model (model)}
-              {@const isFav = favoriteModels.includes(model)}
-              <Badge variant="secondary" class="gap-1 pr-0.5">
+            {#each filterModels(sortedModels(displaymodels)) as model (model.id)}
+              {@const isFav = favoriteModels.includes(model.id)}
+              <Badge variant="secondary" class="gap-1 px-2">
                 <button
                   class="p-0 transition-colors hover:text-yellow-500 {isFav
                     ? 'text-yellow-500'
                     : 'text-muted-foreground'}"
-                  onclick={() => onToggleFavorite(model)}
+                  onclick={() => onToggleFavorite(model.id)}
                   title={isFav ? 'Remove from favorites' : 'Add to favorites'}
                 >
                   <Star class="h-3 w-3" fill={isFav ? 'currentColor' : 'none'} />
                 </button>
-                <span class="max-w-48 truncate">{model}</span>
+                <span class="max-w-48 truncate">{model.id}</span>
                 {#if !isFav}
                   <button
                     class="hover:text-destructive text-muted-foreground p-0 transition-colors"
-                    onclick={() => onRemoveFetchedModel(model)}
+                    onclick={() => onRemoveFetchedModel(model.id)}
                     title="Hide model"
                   >
                     <X class="h-3 w-3" />
@@ -297,23 +304,23 @@
         </p>
         <ScrollArea class="h-24 w-full rounded-md border">
           <div class="flex flex-wrap gap-1 p-2">
-            {#each filterModels(sortedModels(customModels)) as model (model)}
-              {@const isFav = favoriteModels.includes(model)}
-              <Badge variant="outline" class="gap-1 pr-0.5">
+            {#each filterModels(sortedModels(customModels.map( (id) => ({ id }), ))) as model (model.id)}
+              {@const isFav = favoriteModels.includes(model.id)}
+              <Badge variant="outline" class="gap-1 px-2">
                 <button
                   class="p-0 transition-colors hover:text-yellow-500 {isFav
                     ? 'text-yellow-500'
                     : 'text-muted-foreground'}"
-                  onclick={() => onToggleFavorite(model)}
+                  onclick={() => onToggleFavorite(model.id)}
                   title={isFav ? 'Remove from favorites' : 'Add to favorites'}
                 >
                   <Star class="h-3 w-3" fill={isFav ? 'currentColor' : 'none'} />
                 </button>
-                <span class="max-w-48 truncate">{model}</span>
+                <span class="max-w-48 truncate">{model.id}</span>
                 {#if !isFav}
                   <button
                     class="hover:text-destructive text-muted-foreground p-0 transition-colors"
-                    onclick={() => onRemoveCustomModel(model)}
+                    onclick={() => onRemoveCustomModel(model.id)}
                     title="Delete model"
                   >
                     <X class="h-3 w-3" />
@@ -341,12 +348,12 @@
         {#if showHiddenModels}
           <ScrollArea class="h-24 w-full rounded-md border border-dashed">
             <div class="flex flex-wrap gap-1 p-2">
-              {#each filterModels(hiddenModels) as model (model)}
-                <Badge variant="outline" class="gap-1 pr-1 opacity-60">
-                  <span class="max-w-48 truncate">{model}</span>
+              {#each filterModels(hiddenModels.map((id) => ({ id }))) as model (model.id)}
+                <Badge variant="outline" class="gap-1 px-2 opacity-60">
+                  <span class="max-w-48 truncate">{model.id}</span>
                   <button
                     class="hover:text-primary text-muted-foreground p-0 transition-colors"
-                    onclick={() => onRestoreHiddenModel(model)}
+                    onclick={() => onRestoreHiddenModel(model.id)}
                     title="Restore model"
                   >
                     <RotateCcw class="h-3 w-3" />
