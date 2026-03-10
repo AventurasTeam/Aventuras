@@ -396,7 +396,7 @@ export class WizardStore {
       description: replaceUserPlaceholders(e.description, protagonistName),
       keywords: e.keywords.map((k) => replaceUserPlaceholders(k, protagonistName)),
       // To fix a regression issue where lorebooks from older versions didnt default to empty array when no aliases were set
-      aliases: e.aliases ?? []
+      aliases: e.aliases ?? [],
     }))
 
     const wizardData: WizardData = {
@@ -447,25 +447,25 @@ export class WizardStore {
     const translationSettings = settings.translationSettings
     let translations:
       | {
-        language: string
-        openingScene?: string
-        protagonist?: {
-          name?: string
-          description?: string
-          traits?: string[]
-          visualDescriptors?: string[]
-        }
-        startingLocation?: { name?: string; description?: string }
-        characters?: {
-          [originalName: string]: {
+          language: string
+          openingScene?: string
+          protagonist?: {
             name?: string
             description?: string
-            relationship?: string
             traits?: string[]
             visualDescriptors?: string[]
           }
+          startingLocation?: { name?: string; description?: string }
+          characters?: {
+            [originalName: string]: {
+              name?: string
+              description?: string
+              relationship?: string
+              traits?: string[]
+              visualDescriptors?: string[]
+            }
+          }
         }
-      }
       | undefined
 
     if (TranslationService.shouldTranslate(translationSettings)) {

@@ -4,7 +4,15 @@
   import { parseSTChat, type STChatParseResult } from '$lib/services/stChatImporter'
   import { open } from '@tauri-apps/plugin-dialog'
   import { readTextFile } from '@tauri-apps/plugin-fs'
-  import { Upload, MessageSquare, Loader2, Check, AlertTriangle, GitBranch, RefreshCw } from 'lucide-svelte'
+  import {
+    Upload,
+    MessageSquare,
+    Loader2,
+    Check,
+    AlertTriangle,
+    GitBranch,
+    RefreshCw,
+  } from 'lucide-svelte'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -136,16 +144,16 @@
     <div class="flex-1 space-y-4 overflow-y-auto px-6 py-6">
       {#if story.branches.length > 0}
         <!-- Blocking error: branches must be deleted first -->
-        <div class="flex gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-4">
-          <GitBranch class="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+        <div class="border-destructive/40 bg-destructive/10 flex gap-3 rounded-lg border p-4">
+          <GitBranch class="text-destructive mt-0.5 h-5 w-5 shrink-0" />
           <div class="space-y-1 text-sm">
             <p class="text-foreground font-medium">Branches must be deleted first</p>
             <p class="text-muted-foreground">
               This story has {story.branches.length} branch{story.branches.length === 1
                 ? ''
-                : 'es'}. Because branches reference main-branch entries via fork points,
-              importing would leave them broken. Delete all branches in the Branch panel, then
-              re-open this dialog.
+                : 'es'}. Because branches reference main-branch entries via fork points, importing
+              would leave them broken. Delete all branches in the Branch panel, then re-open this
+              dialog.
             </p>
           </div>
         </div>
@@ -158,13 +166,11 @@
           <div class="space-y-1">
             <p class="text-foreground font-medium">{total} messages imported</p>
             <p class="text-muted-foreground text-sm">
-              Locations, items, story beats, and the time tracker still reflect your previous
-              story. Reset them now, or keep them to fill in manually later.
+              Locations, items, story beats, and the time tracker still reflect your previous story.
+              Reset them now, or keep them to fill in manually later.
             </p>
           </div>
-          <div
-            class="text-muted-foreground w-full rounded-md border px-3 py-2 text-left text-xs"
-          >
+          <div class="text-muted-foreground w-full rounded-md border px-3 py-2 text-left text-xs">
             <strong class="text-foreground">Characters and lorebook are not affected</strong>
             — they are always preserved.
           </div>
@@ -194,8 +200,8 @@
           Supports SillyTavern .jsonl chat exports
         </p>
         <p class="text-muted-foreground text-center text-xs">
-          <strong class="text-foreground">Recommended:</strong> An empty story is recommended for
-          better state tracking and classification.
+          <strong class="text-foreground">Recommended:</strong> An empty story is recommended for better
+          state tracking and classification.
         </p>
       {:else}
         <!-- Parse preview -->
@@ -274,7 +280,7 @@
         <Button
           onclick={handleImport}
           disabled={!parseResult || importing || story.branches.length > 0}
-          class="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          class="bg-destructive text-destructive-foreground hover:bg-destructive/90 gap-2"
         >
           {#if importing}
             <Loader2 class="h-4 w-4 animate-spin" />

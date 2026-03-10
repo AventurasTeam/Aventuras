@@ -639,14 +639,12 @@ class DatabaseService {
    */
   async clearStoryEntries(storyId: string): Promise<void> {
     const db = await this.getDb()
-    await db.execute(
-      'DELETE FROM story_entries WHERE story_id = ? AND branch_id IS NULL',
-      [storyId],
-    )
-    await db.execute(
-      'DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL',
-      [storyId],
-    )
+    await db.execute('DELETE FROM story_entries WHERE story_id = ? AND branch_id IS NULL', [
+      storyId,
+    ])
+    await db.execute('DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL', [
+      storyId,
+    ])
   }
 
   /**
