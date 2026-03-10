@@ -7,7 +7,7 @@
  * - custom: User-defined variables in preset packs
  */
 
-import type { VariableDefinition, VariableCategory } from './types'
+import type { VariableDefinition, VariableCategory, VariableFieldInfo } from './types'
 
 /**
  * System variables - auto-filled by the application
@@ -153,7 +153,13 @@ class VariableRegistry {
    * @returns Array of variable definitions in that category
    */
   getByCategory(category: VariableCategory): VariableDefinition[] {
-    return Array.from(this.variables.values()).filter((v) => v.category === category)
+    return Array.from(this.variables.values())
+      .filter((v) => v.category === category)
+      .sort((a, b) => {
+        const aDeprecated = a.deprecated ? 1 : 0
+        const bDeprecated = b.deprecated ? 1 : 0
+        return aDeprecated - bDeprecated
+      })
   }
 
   /**
@@ -171,7 +177,11 @@ class VariableRegistry {
    * @returns Array of all variable definitions
    */
   getAll(): VariableDefinition[] {
-    return Array.from(this.variables.values())
+    return Array.from(this.variables.values()).sort((a, b) => {
+      const aDeprecated = a.deprecated ? 1 : 0
+      const bDeprecated = b.deprecated ? 1 : 0
+      return aDeprecated - bDeprecated
+    })
   }
 
   /**
@@ -212,6 +222,11 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     category: 'runtime',
     description: 'Lorebook entries injected by tiered retrieval',
     required: false,
+    deprecated: {
+      replacedBy:
+        'worldStateCharacters[], worldStateInventory[], worldStateBeats[], worldStateLocations[]',
+      message: 'Use structured world state arrays for template-controlled formatting',
+    },
   },
   {
     name: 'chapterSummaries',
@@ -219,6 +234,10 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     category: 'runtime',
     description: 'Formatted chapter summaries block',
     required: false,
+    deprecated: {
+      replacedBy: 'chapters[], timelineFill[]',
+      message: 'Use structured chapter and timeline arrays for template-controlled formatting',
+    },
   },
   {
     name: 'styleGuidance',
@@ -226,6 +245,10 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     category: 'runtime',
     description: 'Style guidance from repetition analysis',
     required: false,
+    deprecated: {
+      replacedBy: 'styleOverusedPhrases[]',
+      message: 'Use styleOverusedPhrases array for template-controlled style avoidance',
+    },
   },
   {
     name: 'retrievedChapterContext',
@@ -240,6 +263,10 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     category: 'runtime',
     description: 'Instructions for inline image generation',
     required: false,
+    deprecated: {
+      replacedBy: 'inlineImageMode',
+      message: 'Instruction text will be embedded in templates, gated by inlineImageMode boolean',
+    },
   },
   {
     name: 'visualProseInstructions',
@@ -247,6 +274,10 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     category: 'runtime',
     description: 'Instructions for visual prose mode',
     required: false,
+    deprecated: {
+      replacedBy: 'visualProseMode',
+      message: 'Instruction text will be embedded in templates, gated by visualProseMode boolean',
+    },
   },
   {
     name: 'visualProseMode',
@@ -398,6 +429,10 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     category: 'runtime',
     description: 'Recent narrative context for retrieval',
     required: false,
+    deprecated: {
+      replacedBy: 'storyEntries[]',
+      message: 'Use structured story entries array for template-controlled formatting',
+    },
   },
   {
     name: 'maxChaptersPerRetrieval',
@@ -444,6 +479,10 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     category: 'runtime',
     description: 'Injected lorebook entries',
     required: false,
+    deprecated: {
+      replacedBy: 'lorebookEntries[]',
+      message: 'Use structured lorebook entries array for template-controlled formatting',
+    },
   },
   {
     name: 'protagonistDescription',
@@ -956,6 +995,125 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     category: 'runtime',
     description:
       'Custom variable extraction instructions for the classifier (auto-generated from runtime variable definitions)',
+    required: false,
+  },
+
+  // === Structured Context Arrays ===
+  {
+    name: 'worldStateCharacters',
+    type: 'array',
+    category: 'runtime',
+    description: 'Characters in the world state, ordered by retrieval tier',
+    required: false,
+    infoFields: [
+      { name: 'name', type: 'string', description: 'Character name' },
+      { name: 'relationship', type: 'string', description: 'e.g. companion, rival, ally' },
+      { name: 'description', type: 'string', description: 'Character description' },
+      { name: 'traits', type: 'string[]', description: 'Personality traits' },
+      { name: 'appearance', type: 'string[]', description: 'Visual appearance details' },
+      { name: 'tier', type: 'number', description: 'Retrieval tier 1-3' },
+      { name: 'status', type: 'string', description: 'active, inactive, or deceased' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'worldStateInventory',
+    type: 'array',
+    category: 'runtime',
+    description: 'Items in player inventory',
+    required: false,
+    infoFields: [
+      { name: 'name', type: 'string', description: 'Item name' },
+      { name: 'description', type: 'string', description: 'Item description' },
+      { name: 'quantity', type: 'number', description: 'Quantity held' },
+      { name: 'equipped', type: 'boolean', description: 'Whether the item is currently equipped' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'worldStateBeats',
+    type: 'array',
+    category: 'runtime',
+    description: 'Active story threads and plot beats',
+    required: false,
+    infoFields: [
+      { name: 'title', type: 'string', description: 'Beat title' },
+      { name: 'description', type: 'string', description: 'Beat description' },
+      { name: 'type', type: 'string', description: 'e.g. discovery, conflict, quest' },
+      { name: 'status', type: 'string', description: 'e.g. active, completed, failed' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'worldStateLocations',
+    type: 'array',
+    category: 'runtime',
+    description: 'Known locations (excluding current location)',
+    required: false,
+    infoFields: [
+      { name: 'name', type: 'string', description: 'Location name' },
+      { name: 'description', type: 'string', description: 'Location description' },
+      { name: 'visited', type: 'boolean', description: 'Whether the protagonist has visited' },
+      { name: 'tier', type: 'number', description: 'Retrieval tier 1-3' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'lorebookEntries',
+    type: 'array',
+    category: 'runtime',
+    description: 'Retrieved lorebook entries with tier metadata',
+    required: false,
+    infoFields: [
+      { name: 'name', type: 'string', description: 'Entry name' },
+      { name: 'type', type: 'string', description: 'e.g. character, location, item, faction' },
+      { name: 'description', type: 'string', description: 'Entry description' },
+      { name: 'aliases', type: 'string[]', description: 'Alternative names and aliases' },
+      { name: 'tier', type: 'number', description: 'Retrieval tier 1-3' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'chapters',
+    type: 'array',
+    category: 'runtime',
+    description: 'Chapter summaries from story history',
+    required: false,
+    infoFields: [
+      { name: 'number', type: 'number', description: 'Chapter number' },
+      { name: 'title', type: 'string', description: 'Chapter title' },
+      { name: 'summary', type: 'string', description: 'Chapter summary text' },
+      { name: 'startTime', type: 'string', description: 'Formatted time or null' },
+      { name: 'endTime', type: 'string', description: 'Formatted time or null' },
+      { name: 'characters', type: 'string[]', description: 'Character names' },
+      { name: 'locations', type: 'string[]', description: 'Location names' },
+      { name: 'emotionalTone', type: 'string', description: 'Emotional tone of the chapter' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'timelineFill',
+    type: 'array',
+    category: 'runtime',
+    description: 'Timeline gap-fill Q&A results between chapters',
+    required: false,
+    infoFields: [
+      { name: 'query', type: 'string', description: 'The question posed to fill the timeline gap' },
+      { name: 'answer', type: 'string', description: 'The generated answer' },
+      { name: 'chapterNumbers', type: 'number[]', description: 'Chapter range covered' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'storyEntries',
+    type: 'array',
+    category: 'runtime',
+    description: 'Recent story entries (actions and narration)',
+    required: false,
+    infoFields: [
+      { name: 'type', type: 'string', description: 'user_action or narration' },
+      { name: 'content', type: 'string', description: 'Entry text' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'styleOverusedPhrases',
+    type: 'array',
+    category: 'runtime',
+    description:
+      'Overused phrases to avoid from style analysis. Array of strings. Use in {% for phrase in styleOverusedPhrases %}',
     required: false,
   },
 ]
