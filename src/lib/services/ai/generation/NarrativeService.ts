@@ -14,7 +14,7 @@
 import { streamNarrative, generateNarrative } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
 import { StyleReviewerService } from './StyleReviewerService'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 import { stripPicTags } from '$lib/utils/inlineImageParser'
 import type { StreamChunk } from '../core/types'
 import type {

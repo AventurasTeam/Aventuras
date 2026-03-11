@@ -19,7 +19,7 @@ import { createProviderFromProfile } from '../providers'
 import { buildProviderOptions } from '../generate'
 import { uniqueToolCallIdMiddleware } from '../middleware'
 import type { GenerationPreset, APIProfile, ProviderType } from '$lib/types'
-import { createLogger } from '../../core/config'
+import { createLogger } from '$lib/log'
 
 const log = createLogger('AgentFactory')
 

@@ -30,7 +30,7 @@
   import RuntimeVariableDisplay from './RuntimeVariableDisplay.svelte'
   import { ContextBuilder } from '$lib/services/context'
   import { normalizeImageDataUrl } from '$lib/utils/image'
-  import { createLogger } from '$lib/services/ai/core/config'
+  import { createLogger } from '$lib/log'
 
   const log = createLogger('CharacterPortrait')
   import { Button, buttonVariants } from '$lib/components/ui/button'

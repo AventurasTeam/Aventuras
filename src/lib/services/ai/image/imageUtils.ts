@@ -9,7 +9,7 @@ import { database } from '$lib/services/database'
 import { settings } from '$lib/stores/settings.svelte'
 import type { StorySettings } from '$lib/types'
 import { emitImageReady, emitImageAnalysisFailed } from '$lib/services/events'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 
 const log = createLogger('ImageUtils')
 

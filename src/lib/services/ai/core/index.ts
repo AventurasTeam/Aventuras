@@ -2,13 +2,13 @@
  * AI Core Module
  *
  * Core infrastructure for AI services including:
- * - Configuration: Centralized config constants and logging
+ * - Configuration: Centralized config constants
  * - Types: All API types and interfaces
  * - Request utilities: Extra body building, provider config
  */
 
-// Configuration and logging
-export { AI_CONFIG, DEBUG, createLogger, type Logger } from './config'
+// Configuration
+export { AI_CONFIG } from './config'
 
 // Types
 export type {

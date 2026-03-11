@@ -7,7 +7,7 @@
 
 import type { TranslationSettings } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 import { generatePlainText } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
 import {

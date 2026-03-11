@@ -7,7 +7,7 @@
 
 import type { Entry, Chapter } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 import { createAgentFromPreset, extractTerminalToolResult, stopOnTerminalTool } from '../sdk/agents'
 import { createRetrievalTools, type RetrievalToolContext } from '../sdk/tools'
 import { ContextBuilder } from '$lib/services/context'

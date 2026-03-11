@@ -10,7 +10,8 @@
 
 import type { Character, Location, Item, StoryBeat, StoryEntry, Chapter } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
-import { AI_CONFIG, createLogger } from '../core/config'
+import { AI_CONFIG } from '../core/config'
+import { createLogger } from '$lib/log'
 import { entitySelectionSchema } from '../sdk/schemas/context'
 import { ContextBuilder as ContextPipeline } from '$lib/services/context'
 

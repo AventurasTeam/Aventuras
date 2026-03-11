@@ -100,7 +100,7 @@ import type {
   TimeTracker,
   StorySettings,
 } from '$lib/types'
-import { createLogger } from './core/config'
+import { createLogger } from '$lib/log'
 import { serviceFactory } from './core/factory'
 import { NarrativeService } from './generation/NarrativeService'
 import type { WorldStateContext } from './generation/NarrativeService'

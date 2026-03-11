@@ -10,7 +10,8 @@
 import type { StoryEntry, StoryBeat, Entry } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
-import { createLogger, getContextConfig, getLorebookConfig } from '../core/config'
+import { getContextConfig, getLorebookConfig } from '../core/config'
+import { createLogger } from '$lib/log'
 import { suggestionsResultSchema, type SuggestionsResult } from '../sdk/schemas/suggestions'
 
 const log = createLogger('Suggestions')

@@ -7,7 +7,7 @@ import {
 import { database } from '$lib/services/database'
 import { ContextBuilder } from '$lib/services/context'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from '$lib/services/ai/image/constants'
-import { createLogger } from '$lib/services/ai/core/config'
+import { createLogger } from '$lib/log'
 import type { GeneratedCharacter, GeneratedProtagonist } from '$lib/services/ai/sdk'
 
 const log = createLogger('WizardPortrait')

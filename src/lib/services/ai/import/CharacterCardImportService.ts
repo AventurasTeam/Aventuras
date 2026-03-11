@@ -10,7 +10,7 @@ import { BaseAIService } from '../BaseAIService'
 import type { Genre } from '$lib/services/ai/wizard/ScenarioService'
 import { ContextBuilder } from '$lib/services/context'
 import { cardImportResultSchema, vaultCharacterImportSchema } from '../sdk/schemas/cardimport'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 import type { GeneratedCharacter } from '../sdk'
 import {
   parseCharacterCard,

@@ -23,7 +23,7 @@ import type {
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { database } from '$lib/services/database'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 import { stripPicTags } from '$lib/utils/inlineImageParser'
 import {
   classificationResultSchema,

@@ -13,7 +13,7 @@ import { BaseAIService } from '../BaseAIService'
 import { characterVault } from '$lib/stores/characterVault.svelte'
 import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
 import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 import { FandomService } from '../../fandom'
 import { stopWhenDone } from '../sdk/agents'
 import {

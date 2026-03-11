@@ -7,7 +7,7 @@
 
 import type { StoryMode, VisualDescriptors } from '$lib/types'
 import type { Genre } from '$lib/services/ai/wizard/ScenarioService'
-import { createLogger } from './ai/core/config'
+import { createLogger } from '$lib/log'
 import type { GeneratedCharacter } from './ai/sdk'
 import { CharacterCardImportService } from './ai/import/CharacterCardImportService'
 

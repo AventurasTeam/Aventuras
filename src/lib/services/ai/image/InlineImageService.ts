@@ -23,7 +23,7 @@ import { normalizeImageDataUrl } from '$lib/utils/image'
 import { extractPicTags, type ParsedPicTag } from '$lib/utils/inlineImageParser'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from './constants'
 import { parseImageSize } from './imageUtils'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 
 const log = createLogger('InlineImageGen')
 

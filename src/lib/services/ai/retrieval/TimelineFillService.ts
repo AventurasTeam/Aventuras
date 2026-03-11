@@ -8,7 +8,7 @@
 import type { Chapter, StoryEntry } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 import { generatePlainText } from '../sdk/generate'
 import { timelineQueriesResultSchema, type TimelineQuery } from '../sdk/schemas/timeline'
 
