@@ -64,6 +64,12 @@ export interface VariableDefinition {
     message: string
   }
   /**
+   * When true, suppresses the deprecation warning in the template validator.
+   * Use for variables that are deprecated for narrative templates but still
+   * live-injected by other services (e.g., recentContext by MemoryService).
+   */
+  suppressDeprecation?: boolean
+  /**
    * Sub-field descriptors for array/object variables.
    * Used by the tooltip renderer to build the mini code-block UI.
    * For simple text/boolean/enum variables, omit this field.

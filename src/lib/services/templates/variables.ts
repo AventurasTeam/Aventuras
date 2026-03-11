@@ -434,6 +434,8 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     category: 'runtime',
     description: 'Recent narrative context for retrieval',
     required: false,
+    // recentContext is deprecated for narrative templates but still live-injected by MemoryService for retrieval templates
+    suppressDeprecation: true,
     deprecated: {
       replacedBy: 'storyEntries[]',
       message: 'Use structured story entries array for template-controlled formatting',

@@ -301,7 +301,7 @@ export function validateTemplate(
     if (builtinRoots.has(root)) continue
     // Only warn for known (registered) variables that are deprecated
     const def = variableRegistry.get(root)
-    if (def?.deprecated) {
+    if (def?.deprecated && !def.suppressDeprecation) {
       errors.push({
         type: 'deprecated_variable',
         message: `'${root}' is deprecated — use ${def.deprecated.replacedBy} instead. ${def.deprecated.message}`,
@@ -331,7 +331,7 @@ export function validateTemplate(
   }
 
   return {
-    valid: errors.length === 0,
+    valid: !errors.some((e) => e.severity !== 'warning'),
     errors,
   }
 }

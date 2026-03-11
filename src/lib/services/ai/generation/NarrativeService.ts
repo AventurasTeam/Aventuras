@@ -243,8 +243,7 @@ export class NarrativeService {
     const storyEntries = mapStoryEntriesToContext(entries, { stripPicTags: !inlineImageMode })
     ctx.add({ storyEntries })
 
-    // Add runtime variables for template rendering
-    // These are pre-formatted blocks that templates inject via {{ variable }}
+    // Add runtime context variables for template rendering
 
     if (worldStateArrays) {
       ctx.add({ ...worldStateArrays })
