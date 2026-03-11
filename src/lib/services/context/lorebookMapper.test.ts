@@ -59,7 +59,7 @@ describe('mapEntryRetrievalToLorebookEntries', () => {
 
   describe('edge case: empty EntryRetrievalResult', () => {
     it('returns empty array for empty result', () => {
-      const emptyResult = { all: [] } as EntryRetrievalResult
+      const emptyResult = { all: [], tier1: [], tier2: [], tier3: [] } as EntryRetrievalResult
       const result = mapEntryRetrievalToLorebookEntries(emptyResult, 500)
       expect(result).toHaveLength(0)
       expect(result).toEqual([])
