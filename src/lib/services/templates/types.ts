@@ -81,7 +81,11 @@ export type TemplateContext = Record<string, unknown>
 /**
  * Validation error type
  */
-export type ValidationErrorType = 'syntax' | 'unknown_variable' | 'unknown_filter'
+export type ValidationErrorType =
+  | 'syntax'
+  | 'unknown_variable'
+  | 'unknown_filter'
+  | 'deprecated_variable'
 
 /**
  * Validation error
@@ -96,6 +100,12 @@ export interface ValidationError {
   line?: number
   /** Column number where error occurred (if available) */
   column?: number
+  /**
+   * Severity of the issue.
+   * When absent, defaults to 'error' for backward compatibility.
+   * Deprecated variable diagnostics use 'warning'.
+   */
+  severity?: 'error' | 'warning'
 }
 
 /**

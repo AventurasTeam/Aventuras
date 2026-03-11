@@ -292,6 +292,24 @@ export function validateTemplate(
     })
   }
 
+  // Step 2b: Deprecated variable warnings
+  for (const varName of variableNames) {
+    const root = varName.split('.')[0]
+    // Skip loop-scoped and assign-scoped variables
+    if (loopVars.has(root)) continue
+    // Skip built-in Liquid variables
+    if (builtinRoots.has(root)) continue
+    // Only warn for known (registered) variables that are deprecated
+    const def = variableRegistry.get(root)
+    if (def?.deprecated) {
+      errors.push({
+        type: 'deprecated_variable',
+        message: `'${root}' is deprecated — use ${def.deprecated.replacedBy} instead. ${def.deprecated.message}`,
+        severity: 'warning',
+      })
+    }
+  }
+
   // Step 3: Filter validation
   const filterNames = extractFilterNames(template)
 
