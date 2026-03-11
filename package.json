@@ -13,7 +13,9 @@
     "release": "node scripts/release.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"**/*.{ts,js,svelte,json,css,html}\""
+    "format": "prettier --write \"**/*.{ts,js,svelte,json,css,html}\"",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "license": "AGPL-3.0",
   "dependencies": {
@@ -89,6 +91,7 @@
     "typescript": "~5.6.2",
     "typescript-eslint": "^8.54.0",
     "vaul-svelte": "^1.0.0-next.7",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "vitest": "^4.0.18"
   }
 }
