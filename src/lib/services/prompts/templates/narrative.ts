@@ -189,7 +189,29 @@ End with a natural opening for action, not a direct question.{% endif %}
 
 • Events:
 {% for entry in loreEvents %}  - {{ entry.name }}: {{ entry.description }}
-{% endfor %}{% endif %}{% endif %}{% if agenticRetrievalContext != '' %}{{ agenticRetrievalContext }}{% endif %}{% if chapterSummaries != '' %}{{ chapterSummaries }}{% endif %}{% if styleReview.phrases.size > 0 %}
+{% endfor %}{% endif %}{% endif %}{% if agenticRetrievalContext != '' %}{{ agenticRetrievalContext }}{% endif %}{% if chapters.size > 0 or timelineFill.size > 0 %}
+
+<story_history>
+## Previous Chapters
+The following chapters have occurred earlier in the story. Use them for continuity and context.
+
+{% for c in chapters %}
+### Chapter {{ c.number }}{% if c.title != '' %}: {{ c.title }}{% endif %}
+{% if c.startTime and c.endTime %}*Time: {{ c.startTime }} → {{ c.endTime }}*
+{% elsif c.startTime %}*Time: {{ c.startTime }}*
+{% endif %}{{ c.summary }}
+{% assign metadata = '' %}{% if c.characters.size > 0 %}{% assign charPart = c.characters | join: ', ' %}{% assign charLine = 'Characters: ' | append: charPart %}{% assign metadata = charLine %}{% endif %}{% if c.locations.size > 0 %}{% assign locPart = c.locations | join: ', ' %}{% assign locLine = 'Locations: ' | append: locPart %}{% if metadata != '' %}{% assign metadata = metadata | append: ' | ' | append: locLine %}{% else %}{% assign metadata = locLine %}{% endif %}{% endif %}{% if c.emotionalTone != '' %}{% assign toneLine = 'Tone: ' | append: c.emotionalTone %}{% if metadata != '' %}{% assign metadata = metadata | append: ' | ' | append: toneLine %}{% else %}{% assign metadata = toneLine %}{% endif %}{% endif %}{% if metadata != '' %}
+*{{ metadata }}*
+{% endif %}
+{% endfor %}{% if timelineFill.size > 0 %}
+## Retrieved Context
+The following information was retrieved from past chapters and is relevant to the current scene:
+
+{% for item in timelineFill %}{% assign chapCount = item.chapterNumbers.size %}{% if chapCount == 1 %}**Chapter {{ item.chapterNumbers[0] }}**{% else %}**Chapters {{ item.chapterNumbers | join: ', ' }}**{% endif %}
+Q: {{ item.query }}
+A: {{ item.answer }}
+
+{% endfor %}{% endif %}</story_history>{% endif %}{% if styleReview.phrases.size > 0 %}
 
 <style_guidance>
 ## Writing Style Feedback
@@ -429,7 +451,29 @@ End at a natural narrative beat.{% endif %}
 
 • Events:
 {% for entry in loreEvents %}  - {{ entry.name }}: {{ entry.description }}
-{% endfor %}{% endif %}{% endif %}{% if agenticRetrievalContext != '' %}{{ agenticRetrievalContext }}{% endif %}{% if chapterSummaries != '' %}{{ chapterSummaries }}{% endif %}{% if styleReview.phrases.size > 0 %}
+{% endfor %}{% endif %}{% endif %}{% if agenticRetrievalContext != '' %}{{ agenticRetrievalContext }}{% endif %}{% if chapters.size > 0 or timelineFill.size > 0 %}
+
+<story_history>
+## Previous Chapters
+The following chapters have occurred earlier in the story. Use them for continuity and context.
+
+{% for c in chapters %}
+### Chapter {{ c.number }}{% if c.title != '' %}: {{ c.title }}{% endif %}
+{% if c.startTime and c.endTime %}*Time: {{ c.startTime }} → {{ c.endTime }}*
+{% elsif c.startTime %}*Time: {{ c.startTime }}*
+{% endif %}{{ c.summary }}
+{% assign metadata = '' %}{% if c.characters.size > 0 %}{% assign charPart = c.characters | join: ', ' %}{% assign charLine = 'Characters: ' | append: charPart %}{% assign metadata = charLine %}{% endif %}{% if c.locations.size > 0 %}{% assign locPart = c.locations | join: ', ' %}{% assign locLine = 'Locations: ' | append: locPart %}{% if metadata != '' %}{% assign metadata = metadata | append: ' | ' | append: locLine %}{% else %}{% assign metadata = locLine %}{% endif %}{% endif %}{% if c.emotionalTone != '' %}{% assign toneLine = 'Tone: ' | append: c.emotionalTone %}{% if metadata != '' %}{% assign metadata = metadata | append: ' | ' | append: toneLine %}{% else %}{% assign metadata = toneLine %}{% endif %}{% endif %}{% if metadata != '' %}
+*{{ metadata }}*
+{% endif %}
+{% endfor %}{% if timelineFill.size > 0 %}
+## Retrieved Context
+The following information was retrieved from past chapters and is relevant to the current scene:
+
+{% for item in timelineFill %}{% assign chapCount = item.chapterNumbers.size %}{% if chapCount == 1 %}**Chapter {{ item.chapterNumbers[0] }}**{% else %}**Chapters {{ item.chapterNumbers | join: ', ' }}**{% endif %}
+Q: {{ item.query }}
+A: {{ item.answer }}
+
+{% endfor %}{% endif %}</story_history>{% endif %}{% if styleReview.phrases.size > 0 %}
 
 <style_guidance>
 ## Writing Style Feedback
