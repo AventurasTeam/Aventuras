@@ -14,8 +14,8 @@
 import { streamNarrative, generateNarrative } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
 import { mapChaptersToContext } from '$lib/services/context/chapterMapper'
+import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
 import { createLogger } from '../core/config'
-import { stripPicTags } from '$lib/utils/inlineImageParser'
 import type { StreamChunk } from '../core/types'
 import type {
   Story,
@@ -212,8 +212,12 @@ export class NarrativeService {
       lorebookEntriesCount: lorebookEntries?.length ?? 0,
     })
 
-    // Build system prompt via ContextBuilder pipeline
-    const { systemPrompt, primingMessage } = await this.buildPrompts(
+    const inlineImageMode = story?.settings?.imageGenerationMode === 'inline'
+
+    // Build system prompt and user message via ContextBuilder pipeline
+    const { systemPrompt, userMessage } = await this.buildPrompts(
+      entries,
+      inlineImageMode,
       story,
       worldState,
       worldStateArrays,
@@ -223,16 +227,11 @@ export class NarrativeService {
       timelineFillResult,
     )
 
-    // Build the user prompt from entries
-    const mode = story?.mode ?? 'adventure'
-    const inlineImageMode = story?.settings?.imageGenerationMode === 'inline'
-    const userPrompt = this.buildUserPrompt(entries, mode, inlineImageMode)
-
     try {
       // Stream using the main narrative profile
       const stream = streamNarrative({
         system: systemPrompt,
-        prompt: `${primingMessage}\n\n${userPrompt}`,
+        prompt: userMessage,
         signal,
       })
 
@@ -274,8 +273,12 @@ export class NarrativeService {
 
     log('generate', { entriesCount: entries.length })
 
-    // Build system prompt via ContextBuilder pipeline
-    const { systemPrompt, primingMessage } = await this.buildPrompts(
+    const inlineImageMode = story?.settings?.imageGenerationMode === 'inline'
+
+    // Build system prompt and user message via ContextBuilder pipeline
+    const { systemPrompt, userMessage } = await this.buildPrompts(
+      entries,
+      inlineImageMode,
       story,
       worldState,
       worldStateArrays,
@@ -284,13 +287,9 @@ export class NarrativeService {
       lorebookEntries,
     )
 
-    const mode = story?.mode ?? 'adventure'
-    const inlineImageMode = story?.settings?.imageGenerationMode === 'inline'
-    const userPrompt = this.buildUserPrompt(entries, mode, inlineImageMode)
-
     return generateNarrative({
       system: systemPrompt,
-      prompt: `${primingMessage}\n\n${userPrompt}`,
+      prompt: userMessage,
       signal,
     })
   }
@@ -303,6 +302,8 @@ export class NarrativeService {
    * through the Liquid template for the story's mode.
    */
   private async buildPrompts(
+    entries: StoryEntry[],
+    inlineImageMode: boolean,
     story: Story | null | undefined,
     worldState: NarrativeWorldState,
     worldStateArrays?: WorldStateArrays,
@@ -310,7 +311,7 @@ export class NarrativeService {
     agenticRetrievalContext?: string | null,
     lorebookEntries?: ContextLorebookEntry[],
     timelineFillResult?: TimelineFillResult | null,
-  ): Promise<{ systemPrompt: string; primingMessage: string }> {
+  ): Promise<{ systemPrompt: string; userMessage: string }> {
     const mode = story?.mode ?? 'adventure'
 
     // Create ContextBuilder -- forStory auto-populates mode, pov, tense, genre,
@@ -329,6 +330,10 @@ export class NarrativeService {
         protagonistName: 'the protagonist',
       })
     }
+
+    // Map story entries via mapper and add to context for template rendering
+    const storyEntries = mapStoryEntriesToContext(entries, { stripPicTags: !inlineImageMode })
+    ctx.add({ storyEntries })
 
     // Add runtime variables for template rendering
     // These are pre-formatted blocks that templates inject via {{ variable }}
@@ -358,166 +363,17 @@ export class NarrativeService {
       ctx.add({ styleReview })
     }
 
-    // Render through the mode-specific template
+    // Render through the mode-specific template -- user field comes from ${templateId}-user template
     const templateId = mode === 'creative-writing' ? 'creative-writing' : 'adventure'
-    const { system: systemPrompt } = await ctx.render(templateId)
-
-    // Build priming message based on mode/pov/tense
-    const context = ctx.getContext()
-    const primingMessage = this.buildPrimingMessage(
-      mode,
-      (context.pov as string) ?? 'second',
-      (context.tense as string) ?? 'present',
-      (context.protagonistName as string) ?? 'the protagonist',
-    )
+    const { system: systemPrompt, user: userMessage } = await ctx.render(templateId)
 
     log('buildPrompts complete', {
       mode,
       templateId,
       systemPromptLength: systemPrompt.length,
-      primingMessageLength: primingMessage.length,
+      userMessageLength: userMessage.length,
     })
 
-    return { systemPrompt, primingMessage }
-  }
-
-  /**
-   * Build the user prompt from recent story entries.
-   *
-   * Formats entries as a conversation history with the current action highlighted.
-   */
-  private buildUserPrompt(
-    entries: StoryEntry[],
-    mode: 'adventure' | 'creative-writing',
-    inlineImageMode: boolean = false,
-  ): string {
-    // Use all entries passed - these are already the visible (non-summarized) entries
-    // Truncation/context management happens upstream via the memory system
-
-    // Format entries based on mode
-    const historyParts: string[] = []
-    for (const entry of entries) {
-      // Strip <pic> tags if not in inline mode to prevent AI from immitating them
-      const content = inlineImageMode ? entry.content : stripPicTags(entry.content)
-
-      if (entry.type === 'user_action') {
-        const prefix = mode === 'creative-writing' ? '[DIRECTION]' : '[ACTION]'
-        historyParts.push(`${prefix} ${content}`)
-      } else if (entry.type === 'narration') {
-        historyParts.push(`[NARRATIVE]\n${content}`)
-      }
-    }
-
-    // Get the last user action as the current input
-    const lastUserAction = [...entries].reverse().find((e) => e.type === 'user_action')
-    const currentAction = lastUserAction
-      ? inlineImageMode
-        ? lastUserAction.content
-        : stripPicTags(lastUserAction.content)
-      : ''
-
-    // Build final prompt
-    let prompt = ''
-
-    if (historyParts.length > 1) {
-      // Include history minus the last action (which becomes current)
-      prompt += '## Recent Story:\n'
-      prompt += historyParts.slice(0, -1).join('\n\n')
-      prompt += '\n\n'
-    }
-
-    prompt += '## Current Action:\n'
-    prompt += currentAction
-    prompt += '\n\n'
-    prompt += 'Continue the narrative:'
-
-    return prompt
-  }
-
-  /**
-   * Build a priming user message to establish the narrator role.
-   * This helps models that expect user-first conversation format.
-   */
-  private buildPrimingMessage(
-    mode: string,
-    pov: string,
-    tense: string,
-    protagonistName: string,
-  ): string {
-    if (mode === 'creative-writing') {
-      return this.buildCreativeWritingPriming(pov, tense, protagonistName)
-    }
-    return this.buildAdventurePriming(pov, tense, protagonistName)
-  }
-
-  private buildAdventurePriming(pov: string, tense: string, protagonistName: string): string {
-    const tenseWord = tense === 'past' ? 'past' : 'present'
-    const actionExample =
-      tense === 'past' ? 'pushed open the heavy door' : 'pushes open the heavy door'
-    const descWords =
-      tense === 'past'
-        ? 'saw, heard, and experienced as I explored'
-        : 'see, hear, and experience as I explore'
-
-    if (pov === 'third') {
-      return `You are the narrator of this interactive adventure. Write in ${tenseWord} tense, third person (they/the character name).
-
-Your role:
-- Describe ${protagonistName}'s experiences and the world around them
-- Control all NPCs and the environment
-- NEVER write ${protagonistName}'s dialogue, decisions, or inner thoughts - I decide those
-- When I say "I do X", describe the results in third person (e.g., "I open the door" -> "${protagonistName} ${actionExample}...")
-
-I am the player controlling ${protagonistName}. You narrate what happens. Begin when I take my first action.`
-    }
-
-    return `You are the narrator of this interactive adventure. Write in ${tenseWord} tense, second person (you/your).
-
-Your role:
-- Describe what I ${descWords}
-- Control all NPCs and the environment
-- NEVER write my dialogue, decisions, or inner thoughts
-- When I say "I do X", describe the results using "you" (e.g., "I open the door" -> "You ${actionExample}...")
-
-I am the player. You narrate the world around me. Begin when I take my first action.`
-  }
-
-  private buildCreativeWritingPriming(pov: string, tense: string, protagonistName: string): string {
-    const tenseWord = tense === 'past' ? 'past' : 'present'
-
-    if (pov === 'first') {
-      return `You are a skilled fiction writer. Write in ${tenseWord} tense, first person (I/me/my).
-
-Your role:
-- Write prose based on my directions from ${protagonistName}'s internal perspective
-- Bring scenes to life with vivid detail and internal monologue
-- Write for any character I direct you to, including dialogue, actions, and thoughts
-- Maintain consistent characterization throughout
-
-I am the author directing the story. Write what I ask for.`
-    }
-
-    if (pov === 'second') {
-      return `You are a skilled fiction writer. Write in ${tenseWord} tense, second person (you/your).
-
-Your role:
-- Write prose based on my directions, addressing ${protagonistName} directly
-- Bring scenes to life with vivid detail
-- Write for any character I direct you to, including dialogue, actions, and thoughts
-- Maintain consistent characterization throughout
-
-I am the author directing the story. Write what I ask for.`
-    }
-
-    // Third person (default for creative-writing)
-    return `You are a skilled fiction writer. Write in ${tenseWord} tense, third person (they/the character name).
-
-Your role:
-- Write prose based on my directions
-- Bring scenes to life with vivid detail
-- Write for any character I direct you to, including dialogue, actions, and thoughts
-- Maintain consistent characterization throughout
-
-I am the author directing the story. Write what I ask for.`
+    return { systemPrompt, userMessage }
   }
 }

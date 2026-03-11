@@ -14,6 +14,7 @@ import { createLogger, getLorebookConfig } from '../core/config'
 import { actionChoicesResultSchema, type ActionChoice } from '../sdk/schemas/actionchoices'
 import type { ContextLorebookEntry } from '$lib/services/context/context-types'
 import { prepareLorebookForContext } from '$lib/services/context/lorebookMapper'
+import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
 import type { StyleReviewResult } from './StyleReviewerService'
 
 const log = createLogger('ActionChoices')
@@ -55,11 +56,11 @@ export class ActionChoicesService extends BaseAIService {
       hasStoryId: !!context.storyId,
     })
 
-    // Format recent context
-    const recentContext = context.recentEntries
-      .slice(-5)
-      .map((e) => `[${e.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}]: ${e.content}`)
-      .join('\n\n')
+    // Map recent entries via structured mapper
+    const storyEntries = mapStoryEntriesToContext(context.recentEntries, {
+      stripPicTags: true,
+      maxEntries: 5,
+    })
 
     // Format current location
     const currentLocation = context.currentLocation?.name ?? 'Unknown'
@@ -121,7 +122,7 @@ export class ActionChoicesService extends BaseAIService {
     // Add runtime variables for template rendering
     ctx.add({
       narrativeResponse: context.narrativeResponse,
-      recentContext,
+      storyEntries,
       currentLocation,
       npcsPresent,
       inventory,
