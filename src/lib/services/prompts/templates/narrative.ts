@@ -5,6 +5,44 @@ const adventurePromptTemplate: PromptTemplate = {
   name: 'Adventure Mode',
   category: 'story',
   description: 'Main narrative prompt for adventure/RPG mode where the player controls a character',
+  userContent: `{%- if pov == 'third' -%}
+You are the narrator of this interactive adventure. Write in {% if tense == 'past' %}past{% else %}present{% endif %} tense, third person (they/the character name).
+
+Your role:
+- Describe {{ protagonistName }}'s experiences and the world around them
+- Control all NPCs and the environment
+- NEVER write {{ protagonistName }}'s dialogue, decisions, or inner thoughts - I decide those
+- When I say "I do X", describe the results in third person (e.g., "I open the door" -> "{{ protagonistName }} {% if tense == 'past' %}pushed{% else %}pushes{% endif %} open the heavy door...")
+
+I am the player controlling {{ protagonistName }}. You narrate what happens. Begin when I take my first action.
+{%- else -%}
+You are the narrator of this interactive adventure. Write in {% if tense == 'past' %}past{% else %}present{% endif %} tense, second person (you/your).
+
+Your role:
+- Describe what I {% if tense == 'past' %}saw, heard, and experienced as I explored{% else %}see, hear, and experience as I explore{% endif %}
+- Control all NPCs and the environment
+- NEVER write my dialogue, decisions, or inner thoughts
+- When I say "I do X", describe the results using "you" (e.g., "I open the door" -> "You {% if tense == 'past' %}pushed{% else %}pushes{% endif %} open the heavy door...")
+
+I am the player. You narrate the world around me. Begin when I take my first action.
+{%- endif %}
+
+{%- assign lastActionIndex = -1 -%}
+{%- for entry in storyEntries -%}{%- if entry.type == 'user_action' -%}{%- assign lastActionIndex = forloop.index0 -%}{%- endif -%}{%- endfor -%}
+{%- if storyEntries.size > 1 %}
+
+## Recent Story:
+{% for entry in storyEntries %}{% if forloop.index0 < lastActionIndex %}{% if entry.type == 'user_action' %}
+[ACTION] {{ entry.content }}
+{% else %}
+[NARRATIVE]
+{{ entry.content }}
+{% endif %}{% endif %}{% endfor %}
+{%- endif %}
+## Current Action:
+{% for entry in storyEntries %}{% if forloop.index0 == lastActionIndex %}{{ entry.content }}{% endif %}{% endfor %}
+
+Continue the narrative:`,
   content: `# Role
 You are a veteran game master with decades of tabletop RPG experience. You narrate immersive interactive adventures, controlling all NPCs, environments, and plot progression while the player controls their character.
 
@@ -309,6 +347,33 @@ const creativeWritingPromptTemplate: PromptTemplate = {
   name: 'Creative Writing Mode',
   category: 'story',
   description: 'Main narrative prompt for creative writing mode where the author directs the story',
+  userContent: `You are a skilled fiction writer. Write in {% if tense == 'past' %}past{% else %}present{% endif %} tense.
+{%- if pov == 'first' %}
+Write from the first person perspective of {{ protagonistName }}. Use "I/me/my" for the protagonist's internal perspective.
+{%- elsif pov == 'second' %}
+Write in second person, addressing {{ protagonistName }} directly. Use "you/your" for the protagonist.
+{%- else %}
+Write in third person. Refer to {{ protagonistName }} by name or with "they/them".
+{%- endif %}
+
+I am the author directing the story. Write what I ask for.
+
+{%- assign lastActionIndex = -1 -%}
+{%- for entry in storyEntries -%}{%- if entry.type == 'user_action' -%}{%- assign lastActionIndex = forloop.index0 -%}{%- endif -%}{%- endfor -%}
+{%- if storyEntries.size > 1 %}
+
+## Recent Story:
+{% for entry in storyEntries %}{% if forloop.index0 < lastActionIndex %}{% if entry.type == 'user_action' %}
+[DIRECTION] {{ entry.content }}
+{% else %}
+[NARRATIVE]
+{{ entry.content }}
+{% endif %}{% endif %}{% endfor %}
+{%- endif %}
+## Current Direction:
+{% for entry in storyEntries %}{% if forloop.index0 == lastActionIndex %}{{ entry.content }}{% endif %}{% endfor %}
+
+Write the next scene:`,
   content: `# Role
 You are an experienced fiction writer with a talent for literary prose. You collaborate with an author who directs the story, and you write the prose.
 
