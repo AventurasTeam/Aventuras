@@ -14,6 +14,7 @@ import { createLogger, getLorebookConfig } from '../core/config'
 import { actionChoicesResultSchema, type ActionChoice } from '../sdk/schemas/actionchoices'
 import type { ContextLorebookEntry } from '$lib/services/context/context-types'
 import { prepareLorebookForContext } from '$lib/services/context/lorebookMapper'
+import type { StyleReviewResult } from './StyleReviewerService'
 
 const log = createLogger('ActionChoices')
 
@@ -32,7 +33,7 @@ export interface ActionChoicesContext {
   inventory?: Item[]
   activeQuests?: StoryBeat[]
   lorebookEntries?: ContextLorebookEntry[]
-  styleOverusedPhrases?: string[]
+  styleReview?: StyleReviewResult | null
 }
 
 /**
@@ -92,21 +93,6 @@ export class ActionChoicesService extends BaseAIService {
       ? ` (${context.protagonistDescription})`
       : ''
 
-    // Style guidance based on recent user actions
-    const userActions = context.recentEntries.filter((e) => e.type === 'user_action').slice(-3)
-    let styleGuidance = ''
-    if (userActions.length > 0) {
-      const avgLength =
-        userActions.reduce((sum, e) => sum + e.content.length, 0) / userActions.length
-      if (avgLength < 30) {
-        styleGuidance =
-          "\n## Style: Match the player's TERSE style - keep choices short and punchy (under 10 words each).\n"
-      } else if (avgLength > 100) {
-        styleGuidance =
-          "\n## Style: Match the player's DETAILED style - include specific details in each choice.\n"
-      }
-    }
-
     // POV instruction
     const povInstruction =
       context.pov === 'first'
@@ -141,15 +127,14 @@ export class ActionChoicesService extends BaseAIService {
       inventory,
       activeQuests,
       protagonistDescription,
-      styleGuidance,
       povInstruction,
       lengthInstruction,
     })
     if (preparedLorebook.length > 0) {
       ctx.add({ lorebookEntries: preparedLorebook })
     }
-    if (context.styleOverusedPhrases && context.styleOverusedPhrases.length > 0) {
-      ctx.add({ styleOverusedPhrases: context.styleOverusedPhrases })
+    if (context.styleReview && context.styleReview.phrases.length > 0) {
+      ctx.add({ styleReview: context.styleReview })
     }
 
     // Render through the action-choices template

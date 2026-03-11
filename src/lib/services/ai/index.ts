@@ -272,7 +272,7 @@ class AIService {
     lorebookEntries?: ContextLorebookEntry[],
     promptContext?: PromptContext,
     pov?: 'first' | 'second' | 'third',
-    styleOverusedPhrases?: string[],
+    styleReview?: StyleReviewResult | null,
   ): Promise<ActionChoicesResult> {
     log('generateActionChoices called', {
       entriesCount: entries.length,
@@ -315,7 +315,7 @@ class AIService {
         (b) => b.status === 'pending' || b.status === 'active',
       ),
       lorebookEntries,
-      styleOverusedPhrases,
+      styleReview,
     }
 
     const choices = await actionChoicesService.generateChoices(context)

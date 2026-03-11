@@ -246,8 +246,8 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     description: 'Style guidance from repetition analysis',
     required: false,
     deprecated: {
-      replacedBy: 'styleOverusedPhrases[]',
-      message: 'Use styleOverusedPhrases array for template-controlled style avoidance',
+      replacedBy: 'styleReview',
+      message: 'Use styleReview object for full phrase analysis including frequency and severity',
     },
   },
   {
@@ -1161,18 +1161,6 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
       { name: 'type', type: 'string', description: 'user_action or narration' },
       { name: 'content', type: 'string', description: 'Entry text' },
     ] satisfies VariableFieldInfo[],
-  },
-  {
-    name: 'styleOverusedPhrases',
-    type: 'array',
-    category: 'runtime',
-    description:
-      'Overused phrases to avoid from style analysis. Array of strings. Use in {% for phrase in styleOverusedPhrases %}',
-    required: false,
-    deprecated: {
-      replacedBy: 'styleReview.phrases',
-      message: 'Use styleReview object for full phrase analysis including frequency and severity',
-    },
   },
   {
     name: 'styleReview',

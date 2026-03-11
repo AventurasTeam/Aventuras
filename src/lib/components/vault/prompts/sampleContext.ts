@@ -21,8 +21,6 @@ export const runtimeSamples: Record<string, string> = {
   recentContent: '[Recent story content would appear here...]',
   tieredContextBlock: '[Lorebook entries injected by tiered retrieval...]',
   chapterSummaries: '[Formatted chapter summaries from memory system...]',
-  styleGuidance: '[Style guidance from repetition analysis...]',
-  retrievedChapterContext: '[Retrieved chapter context from memory...]',
   agenticRetrievalContext: '[Agentic retrieval Q&A context from chapter memory...]',
   inlineImageInstructions: '[Instructions for inline image generation...]',
   visualProseInstructions: '[Instructions for visual prose mode...]',
@@ -278,7 +276,6 @@ export const structuredSamples: Record<string, unknown> = {
     },
     { type: 'user_action', content: 'I whisper to Theron to flank left.' },
   ],
-  styleOverusedPhrases: ['suddenly', 'all of a sudden', 'with a smile'],
   styleReview: {
     phrases: [
       {

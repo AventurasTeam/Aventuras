@@ -92,7 +92,18 @@
       desc.textContent = v.description
 
       // Type-specific content
-      if (v.type === 'array' && v.infoFields?.length) {
+      if (v.type === 'object' && v.infoFields?.length) {
+        // Object with fields -- show shape
+        const pre = dom.appendChild(document.createElement('pre'))
+        pre.className = 'cm-var-fields'
+        pre.textContent = v.infoFields
+          .map((f) => `  ${f.name}: ${f.type}  // ${f.description}`)
+          .join('\n')
+
+        const hint = dom.appendChild(document.createElement('p'))
+        hint.className = 'cm-var-hint'
+        hint.textContent = `Access with: {{ ${v.name}.fieldName }}`
+      } else if (v.type === 'array' && v.infoFields?.length) {
         // Mini code block showing object shape with field descriptions
         const pre = dom.appendChild(document.createElement('pre'))
         pre.className = 'cm-var-fields'
@@ -105,7 +116,7 @@
         hint.className = 'cm-var-hint'
         hint.textContent = `Use in: {% for item in ${v.name} %}`
       } else if (v.type === 'array') {
-        // String array (like styleOverusedPhrases) -- no fields, just usage hint
+        // String array -- no fields, just usage hint
         const hint = dom.appendChild(document.createElement('p'))
         hint.className = 'cm-var-hint'
         hint.textContent = `Use in: {% for item in ${v.name} %}`

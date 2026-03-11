@@ -436,10 +436,7 @@ export class NarrativeService {
 
     // Inject style review for template rendering
     if (styleReview && styleReview.phrases.length > 0) {
-      ctx.add({
-        styleReview,
-        styleOverusedPhrases: styleReview.phrases.map((p) => p.phrase),
-      })
+      ctx.add({ styleReview })
     }
 
     // Inject feature instruction content when modes are enabled

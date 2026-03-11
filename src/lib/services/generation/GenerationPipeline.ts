@@ -185,17 +185,13 @@ export class GenerationPipeline {
       r.image = yield* this.imagePhase.execute(this.buildImageInput(ctx, cfg, r))
       if (ctx.abortSignal?.aborted) return { ...r, aborted: true }
 
-      const styleOverusedPhrases = cfg.styleReview?.phrases?.length
-        ? cfg.styleReview.phrases.map((p) => p.phrase)
-        : undefined
-
       r.postGeneration = yield* this.postPhase.execute({
         isCreativeMode: cfg.storyMode === 'creative-writing',
         disableSuggestions: cfg.disableSuggestions,
         entries: ctx.visibleEntries,
         activeThreads: cfg.activeThreads,
         lorebookEntries: retrieval.lorebookEntries,
-        styleOverusedPhrases,
+        styleReview: cfg.styleReview,
         promptContext: cfg.promptContext,
         worldState: ctx.worldState,
         narrativeResponse: r.narrative.content,
