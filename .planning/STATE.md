@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in-progress
-stopped_at: Completed 04-01 Chapter Mapper and Template Rendering
-last_updated: "2026-03-11T09:24:28Z"
+status: completed
+stopped_at: Completed 04-02 Feature Instructions Template Embedding
+last_updated: '2026-03-11T09:37:44.113Z'
 last_activity: 2026-03-11 -- Completed 04-01 Chapter Mapper and Template Rendering
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 9
-  completed_plans: 8
+  completed_plans: 9
   percent: 14
 ---
 
@@ -35,28 +35,31 @@ Progress: [██░░░░░░░░] 14%
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 1
 - Average duration: 12 min
 - Total execution time: 0.2 hours
 
 **By Phase:**
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 01-foundation | 1 | 12 min | 12 min |
-| 02-world-state-context | 1 | 4 min | 4 min |
+| Phase                  | Plans | Total  | Avg/Plan |
+| ---------------------- | ----- | ------ | -------- |
+| 01-foundation          | 1     | 12 min | 12 min   |
+| 02-world-state-context | 1     | 4 min  | 4 min    |
 
 **Recent Trend:**
+
 - Last 5 plans: 4 min
 - Trend: Faster
 
-*Updated after each plan completion*
+_Updated after each plan completion_
 | Phase 01-foundation P02 | 3 | 1 tasks | 1 files |
 | Phase 02-world-state-context P01 | 4 | 2 tasks | 5 files |
 | Phase 03-lorebook-and-style P01 | 8 | 2 tasks | 4 files |
 | Phase 03-lorebook-and-style P02 | 51 | 2 tasks | 16 files |
 | Phase 03-lorebook-and-style P03 | 2 | 1 tasks | 1 files |
 | Phase 04-chapters-and-feature-instructions P01 | 20 | 2 tasks | 6 files |
+| Phase 04-chapters-and-feature-instructions P02 | 5 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -85,6 +88,7 @@ Recent decisions affecting current work:
 - [Phase 04-01]: formatStoryTime() moved to chapterMapper.ts and re-exported from generation/index.ts for external consumers
 - [Phase 04-01]: inlineImageInstructions/visualProseInstructions ctx.add() injection removed (ahead of 04-02 schedule); constants kept in NarrativeService for Phase 6 compat shim
 - [Phase 04-01]: {% assign %} metadata accumulation on single line in templates to prevent LiquidJS whitespace drift in pipe-delimited chapter metadata
+- [Phase 04-chapters-and-feature-instructions]: Instruction text embedded as verbatim static content in templates — ctx.add() injection was already removed in 04-01 ahead of schedule
 
 ### Pending Todos
 
@@ -96,6 +100,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T09:24:28Z
-Stopped at: Completed 04-01 Chapter Mapper and Template Rendering
-Resume file: .planning/phases/04-chapters-and-feature-instructions/04-02-PLAN.md
+Last session: 2026-03-11T09:33:47.530Z
+Stopped at: Completed 04-02 Feature Instructions Template Embedding
+Resume file: None

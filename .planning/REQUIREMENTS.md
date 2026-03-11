@@ -36,11 +36,11 @@
 
 ### Feature Instructions
 
-- [ ] **FEAT-01**: `INLINE_IMAGE_INSTRUCTIONS` constant removed from NarrativeService
-- [ ] **FEAT-02**: `VISUAL_PROSE_INSTRUCTIONS` constant removed from NarrativeService
-- [ ] **FEAT-03**: Inline image instruction text embedded as static conditional content in `adventure` and `creative-writing` templates, gated by `{% if inlineImageMode %}`
-- [ ] **FEAT-04**: Visual prose instruction text embedded as static conditional content in `adventure` and `creative-writing` templates, gated by `{% if visualProseMode %}`
-- [ ] **FEAT-05**: `inlineImageInstructions` and `visualProseInstructions` variables removed from ContextBuilder injection
+- [x] **FEAT-01**: `INLINE_IMAGE_INSTRUCTIONS` constant removed from NarrativeService
+- [x] **FEAT-02**: `VISUAL_PROSE_INSTRUCTIONS` constant removed from NarrativeService
+- [x] **FEAT-03**: Inline image instruction text embedded as static conditional content in `adventure` and `creative-writing` templates, gated by `{% if inlineImageMode %}`
+- [x] **FEAT-04**: Visual prose instruction text embedded as static conditional content in `adventure` and `creative-writing` templates, gated by `{% if visualProseMode %}`
+- [x] **FEAT-05**: `inlineImageInstructions` and `visualProseInstructions` variables removed from ContextBuilder injection
 
 ### Narrative User Content
 
@@ -75,62 +75,64 @@
 
 ## Out of Scope
 
-| Feature | Reason |
-|---------|--------|
-| `narrativeResponse` variable | This is raw narrative content, not a formatting block |
-| Retrieval tier logic (tier1/tier2/tier3 selection algorithms) | Only the formatting layer changes, not the selection logic |
-| New LiquidJS filters or engine changes | Existing features are sufficient |
-| ActionChoicesService `styleGuidance` (player terse/verbose detection) | This is dynamic computed guidance, different from StyleReviewer; handled separately |
-| ClassifierService, LoreManagementService, image generation prompts | Out of scope for v1; limited to NarrativeService, ActionChoicesService, SuggestionsService |
-| Story mode gating of variables | Both adventure and creative-writing share same entity types; templates are identical |
+| Feature                                                               | Reason                                                                                     |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `narrativeResponse` variable                                          | This is raw narrative content, not a formatting block                                      |
+| Retrieval tier logic (tier1/tier2/tier3 selection algorithms)         | Only the formatting layer changes, not the selection logic                                 |
+| New LiquidJS filters or engine changes                                | Existing features are sufficient                                                           |
+| ActionChoicesService `styleGuidance` (player terse/verbose detection) | This is dynamic computed guidance, different from StyleReviewer; handled separately        |
+| ClassifierService, LoreManagementService, image generation prompts    | Out of scope for v1; limited to NarrativeService, ActionChoicesService, SuggestionsService |
+| Story mode gating of variables                                        | Both adventure and creative-writing share same entity types; templates are identical       |
 
 ## Traceability
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| META-01 | Phase 1: Foundation | Complete |
-| META-02 | Phase 1: Foundation | Complete |
-| META-03 | Phase 1: Foundation | Complete |
-| META-04 | Phase 1: Foundation | Complete |
-| COMPAT-05 | Phase 1: Foundation | Complete |
-| WSC-01 | Phase 2: World State Context | Pending |
-| WSC-02 | Phase 2: World State Context | Complete |
-| WSC-03 | Phase 2: World State Context | Complete |
-| WSC-04 | Phase 2: World State Context | Complete |
-| WSC-05 | Phase 2: World State Context | Pending |
-| LORE-01 | Phase 3: Lorebook and Style | Complete |
-| LORE-02 | Phase 3: Lorebook and Style | Complete |
-| LORE-03 | Phase 3: Lorebook and Style | Complete |
-| LORE-04 | Phase 3: Lorebook and Style | Complete |
-| LORE-05 | Phase 3: Lorebook and Style | Complete |
-| STYLE-01 | Phase 3: Lorebook and Style | Complete |
-| STYLE-02 | Phase 3: Lorebook and Style | Complete |
-| STYLE-03 | Phase 3: Lorebook and Style | Complete |
-| CHAP-01 | Phase 4: Chapters and Feature Instructions | Complete |
-| CHAP-02 | Phase 4: Chapters and Feature Instructions | Complete |
-| CHAP-03 | Phase 4: Chapters and Feature Instructions | Complete |
-| CHAP-04 | Phase 4: Chapters and Feature Instructions | Complete |
-| FEAT-01 | Phase 4: Chapters and Feature Instructions | Pending |
-| FEAT-02 | Phase 4: Chapters and Feature Instructions | Pending |
-| FEAT-03 | Phase 4: Chapters and Feature Instructions | Pending |
-| FEAT-04 | Phase 4: Chapters and Feature Instructions | Pending |
-| FEAT-05 | Phase 4: Chapters and Feature Instructions | Pending |
-| USER-01 | Phase 5: Narrative User Content | Pending |
-| USER-02 | Phase 5: Narrative User Content | Pending |
-| USER-03 | Phase 5: Narrative User Content | Pending |
-| USER-04 | Phase 5: Narrative User Content | Pending |
-| USER-05 | Phase 5: Narrative User Content | Pending |
-| USER-06 | Phase 5: Narrative User Content | Pending |
-| COMPAT-01 | Phase 6: Compatibility Shims | Pending |
-| COMPAT-02 | Phase 6: Compatibility Shims | Pending |
-| COMPAT-03 | Phase 6: Compatibility Shims | Pending |
-| COMPAT-04 | Phase 6: Compatibility Shims | Pending |
+| Requirement | Phase                                      | Status   |
+| ----------- | ------------------------------------------ | -------- |
+| META-01     | Phase 1: Foundation                        | Complete |
+| META-02     | Phase 1: Foundation                        | Complete |
+| META-03     | Phase 1: Foundation                        | Complete |
+| META-04     | Phase 1: Foundation                        | Complete |
+| COMPAT-05   | Phase 1: Foundation                        | Complete |
+| WSC-01      | Phase 2: World State Context               | Pending  |
+| WSC-02      | Phase 2: World State Context               | Complete |
+| WSC-03      | Phase 2: World State Context               | Complete |
+| WSC-04      | Phase 2: World State Context               | Complete |
+| WSC-05      | Phase 2: World State Context               | Pending  |
+| LORE-01     | Phase 3: Lorebook and Style                | Complete |
+| LORE-02     | Phase 3: Lorebook and Style                | Complete |
+| LORE-03     | Phase 3: Lorebook and Style                | Complete |
+| LORE-04     | Phase 3: Lorebook and Style                | Complete |
+| LORE-05     | Phase 3: Lorebook and Style                | Complete |
+| STYLE-01    | Phase 3: Lorebook and Style                | Complete |
+| STYLE-02    | Phase 3: Lorebook and Style                | Complete |
+| STYLE-03    | Phase 3: Lorebook and Style                | Complete |
+| CHAP-01     | Phase 4: Chapters and Feature Instructions | Complete |
+| CHAP-02     | Phase 4: Chapters and Feature Instructions | Complete |
+| CHAP-03     | Phase 4: Chapters and Feature Instructions | Complete |
+| CHAP-04     | Phase 4: Chapters and Feature Instructions | Complete |
+| FEAT-01     | Phase 4: Chapters and Feature Instructions | Complete |
+| FEAT-02     | Phase 4: Chapters and Feature Instructions | Complete |
+| FEAT-03     | Phase 4: Chapters and Feature Instructions | Complete |
+| FEAT-04     | Phase 4: Chapters and Feature Instructions | Complete |
+| FEAT-05     | Phase 4: Chapters and Feature Instructions | Complete |
+| USER-01     | Phase 5: Narrative User Content            | Pending  |
+| USER-02     | Phase 5: Narrative User Content            | Pending  |
+| USER-03     | Phase 5: Narrative User Content            | Pending  |
+| USER-04     | Phase 5: Narrative User Content            | Pending  |
+| USER-05     | Phase 5: Narrative User Content            | Pending  |
+| USER-06     | Phase 5: Narrative User Content            | Pending  |
+| COMPAT-01   | Phase 6: Compatibility Shims               | Pending  |
+| COMPAT-02   | Phase 6: Compatibility Shims               | Pending  |
+| COMPAT-03   | Phase 6: Compatibility Shims               | Pending  |
+| COMPAT-04   | Phase 6: Compatibility Shims               | Pending  |
 
 **Coverage:**
+
 - v1 requirements: 37 total
 - Mapped to phases: 37
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-03-10*
-*Last updated: 2026-03-10 after roadmap creation*
+
+_Requirements defined: 2026-03-10_
+_Last updated: 2026-03-10 after roadmap creation_
