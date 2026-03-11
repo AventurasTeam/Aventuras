@@ -26,8 +26,3 @@ export function createLogger(serviceName: string) {
     }
   }
 }
-
-/**
- * Type for the logger function returned by createLogger.
- */
-export type Logger = ReturnType<typeof createLogger>
