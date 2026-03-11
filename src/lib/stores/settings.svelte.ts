@@ -25,7 +25,7 @@ import { ui } from '$lib/stores/ui.svelte'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '$lib/constants/timeout'
 import { SvelteSet, SvelteMap } from 'svelte/reactivity'
-import type { TextModel } from '$lib/services/ai/sdk/providers'
+import { dedupeTextModels, type TextModel } from '$lib/services/ai/sdk/providers'
 
 // Provider preset type (used by WelcomeScreen)
 export type ProviderPreset = 'openrouter' | 'nanogpt' | 'openai-compatible'
@@ -33,6 +33,24 @@ export type ProviderPreset = 'openrouter' | 'nanogpt' | 'openai-compatible'
 // Default profile IDs for each provider
 export const DEFAULT_OPENROUTER_PROFILE_ID = 'default-openrouter-profile'
 export const DEFAULT_NANOGPT_PROFILE_ID = 'default-nanogpt-profile'
+
+function dedupeModelIds(models: string[]): string[] {
+  return Array.from(new Set(models.map((model) => model.trim()).filter(Boolean)))
+}
+
+function mergeProfileModels(fetchedModels: TextModel[], customModels: string[]): TextModel[] {
+  return dedupeTextModels([...fetchedModels, ...dedupeModelIds(customModels).map((id) => ({ id }))])
+}
+
+function normalizeProfile(profile: APIProfile): APIProfile {
+  return {
+    ...profile,
+    customModels: dedupeModelIds(profile.customModels ?? []),
+    fetchedModels: dedupeTextModels(profile.fetchedModels ?? []),
+    hiddenModels: dedupeModelIds(profile.hiddenModels ?? []),
+    favoriteModels: dedupeModelIds(profile.favoriteModels ?? []),
+  }
+}
 
 // ===== System Services Settings =====
 
@@ -1250,14 +1268,14 @@ class SettingsStore {
                 fetchedModels = p.fetchedModels
               }
             }
-            return {
+            return normalizeProfile({
               ...p,
               customModels: Array.isArray(p.customModels) ? p.customModels : [],
               fetchedModels,
               hiddenModels: Array.isArray(p.hiddenModels) ? p.hiddenModels : [],
               favoriteModels: Array.isArray(p.favoriteModels) ? p.favoriteModels : [],
               providerType: p.providerType ?? 'openai-compatible',
-            }
+            })
           })
         } catch {
           this.apiSettings.profiles = []
@@ -1705,11 +1723,11 @@ class SettingsStore {
   }
 
   async addProfile(profile: Omit<APIProfile, 'id' | 'createdAt'>) {
-    const newProfile: APIProfile = {
+    const newProfile = normalizeProfile({
       ...profile,
       id: crypto.randomUUID(),
       createdAt: Date.now(),
-    }
+    })
     this.apiSettings.profiles = [...this.apiSettings.profiles, newProfile]
     await this.saveProfiles()
 
@@ -1725,10 +1743,10 @@ class SettingsStore {
     const index = this.apiSettings.profiles.findIndex((p) => p.id === id)
     if (index === -1) return
 
-    this.apiSettings.profiles[index] = {
+    this.apiSettings.profiles[index] = normalizeProfile({
       ...this.apiSettings.profiles[index],
       ...updates,
-    }
+    })
     this.apiSettings.profiles = [...this.apiSettings.profiles]
     await this.saveProfiles()
   }
@@ -1876,7 +1894,7 @@ class SettingsStore {
     if (!profileId) return []
     const profile = this.getProfile(profileId)
     if (!profile) return []
-    return [...profile.fetchedModels, ...profile.customModels.map((m) => ({ id: m }))]
+    return mergeProfileModels(profile.fetchedModels, profile.customModels)
   }
 
   getAvailableModels(profileId: string | null): TextModel[] {
@@ -2030,15 +2048,15 @@ class SettingsStore {
       }
 
       // Add any models in use that aren't already in the profile
-      const existingModels = new Set([
-        ...existingDefault.fetchedModels,
-        ...existingDefault.customModels,
-      ])
+      const existingModels = new Set(
+        this.getProfileModels(existingDefault.id).map((model) => model.id),
+      )
       const missingModels = modelsInUse.filter((m) => !existingModels.has(m))
       if (missingModels.length > 0) {
-        existingDefault.customModels = [
-          ...new Set([...existingDefault.customModels, ...missingModels]),
-        ]
+        existingDefault.customModels = dedupeModelIds([
+          ...existingDefault.customModels,
+          ...missingModels,
+        ])
         needsSave = true
         console.log(
           '[Settings] Added',

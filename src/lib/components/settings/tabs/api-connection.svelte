@@ -360,7 +360,7 @@
                     {profile.providerType}
                   </Badge>
                   <Badge variant="outline" class="text-muted-foreground text-xs">
-                    {new Set([...profile.fetchedModels, ...profile.customModels]).size}
+                    {settings.getProfileModels(profile.id).length}
                     models
                   </Badge>
                 </div>

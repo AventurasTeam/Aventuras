@@ -15,8 +15,44 @@ export interface TextModel {
   structuredOutput?: boolean
 }
 
+export function dedupeTextModels(models: TextModel[]): TextModel[] {
+  const deduped = new Map<string, TextModel>()
+
+  for (const model of models) {
+    const id = model.id.trim()
+    if (!id) continue
+
+    const existing = deduped.get(id)
+    if (existing) {
+      deduped.set(id, {
+        ...existing,
+        reasoning: existing.reasoning || model.reasoning || undefined,
+        structuredOutput: existing.structuredOutput || model.structuredOutput || undefined,
+      })
+      continue
+    }
+
+    deduped.set(id, { ...model, id })
+  }
+
+  return Array.from(deduped.values())
+}
+
 /** URLs that don't require authentication for model fetching */
 const NO_AUTH_PATTERNS = ['nano-gpt.com', 'gen.pollinations.ai', '127.0.0.1', 'localhost']
+
+function normalizeBaseUrl(baseUrl?: string): string | undefined {
+  const trimmed = baseUrl?.trim()
+  return trimmed ? trimmed.replace(/\/$/, '') : undefined
+}
+
+function buildOpenRouterModelsUrl(baseUrl?: string): string {
+  const effectiveBase = normalizeBaseUrl(baseUrl) || 'https://openrouter.ai/api/v1'
+  if (effectiveBase.endsWith('/api')) {
+    return `${effectiveBase}/v1/models`
+  }
+  return `${effectiveBase}/models`
+}
 
 /**
  * Fetches available models from a provider.
@@ -37,7 +73,7 @@ export async function fetchModelsFromProvider(
   if (providerType === 'mistral') return wrap(fetchMistralModels(baseUrl, apiKey))
 
   // Standard OpenAI-compatible endpoint
-  const effectiveBaseUrl = baseUrl || getBaseUrl(providerType)
+  const effectiveBaseUrl = normalizeBaseUrl(baseUrl) || getBaseUrl(providerType)
   if (!effectiveBaseUrl) {
     throw new Error(`No base URL available for provider: ${providerType}`)
   }
@@ -58,11 +94,13 @@ export async function fetchModelsFromProvider(
   const data = await response.json()
 
   if (data.data && Array.isArray(data.data)) {
-    return data.data.map((m: { id: string }) => ({ id: m.id }))
+    return dedupeTextModels(data.data.map((m: { id: string }) => ({ id: m.id })))
   }
   if (Array.isArray(data)) {
     const entries = data as { id?: string; name?: string; reasoning?: boolean }[]
-    return entries.map((m) => ({ id: m.id || m.name || '', reasoning: m.reasoning }))
+    return dedupeTextModels(
+      entries.map((m) => ({ id: m.id || m.name || '', reasoning: m.reasoning })),
+    )
   }
 
   throw new Error('Unexpected API response format')
@@ -70,7 +108,7 @@ export async function fetchModelsFromProvider(
 
 /** Wrap a plain string[] result into TextModel[] */
 function wrap(promise: Promise<string[]>): Promise<TextModel[]> {
-  return promise.then((models) => models.map((id) => ({ id })))
+  return promise.then((models) => dedupeTextModels(models.map((id) => ({ id }))))
 }
 
 interface NanogptModelEntry {
@@ -105,13 +143,12 @@ async function fetchNanogptModels(baseUrl?: string): Promise<TextModel[]> {
     })
   }
 
-  return models
+  return dedupeTextModels(models)
 }
 
 async function fetchOpenRouterModels(baseUrl?: string): Promise<TextModel[]> {
   // Use the detailed API to get capabilities including reasoning
-  const effectiveBase = baseUrl?.replace(/\/v1\/?$/, '') || 'https://openrouter.ai/api/v1'
-  const modelsUrl = effectiveBase.replace(/\/$/, '') + '/models'
+  const modelsUrl = buildOpenRouterModelsUrl(baseUrl)
 
   const fetchFn = createTimeoutFetch(30000, 'model-fetch')
   const response = await fetchFn(modelsUrl, { method: 'GET' })
@@ -134,7 +171,7 @@ async function fetchOpenRouterModels(baseUrl?: string): Promise<TextModel[]> {
     })
   }
 
-  return models
+  return dedupeTextModels(models)
 }
 
 async function fetchAnthropicModels(baseUrl?: string, apiKey?: string): Promise<string[]> {

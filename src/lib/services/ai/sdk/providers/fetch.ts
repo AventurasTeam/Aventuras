@@ -8,6 +8,7 @@
 import { ui } from '$lib/stores/ui.svelte'
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { LLM_TIMEOUT_DEFAULT } from '$lib/constants/timeout'
+import { parseManualBody } from '$lib/services/ai/core/requestOverrides'
 
 function normalizeHeaders(headers: RequestInit['headers']): Record<string, string> {
   if (!headers) return {}
@@ -65,17 +66,15 @@ export function createTimeoutFetch(
       }
     }
 
-    try {
-      const manual = JSON.parse(manualBody)
-      const reservedKeys = ['messages', 'tools', 'tool_choice', 'stream', 'model']
-      if (manual && typeof manual === 'object' && !Array.isArray(manual)) {
-        for (const [key, value] of Object.entries(manual)) {
-          if (!reservedKeys.includes(key)) {
-            parsedBody[key] = value
-          }
+    const manual = parseManualBody(manualBody)
+    if (manual) {
+      const reservedKeys = new Set(['messages', 'tools', 'tool_choice', 'stream', 'model'])
+      for (const [key, value] of Object.entries(manual)) {
+        if (!reservedKeys.has(key)) {
+          parsedBody[key] = value
         }
       }
-    } catch {
+    } else if (manualBody.trim()) {
       console.log('[Fetch] Invalid manualBody JSON, skipping')
     }
 

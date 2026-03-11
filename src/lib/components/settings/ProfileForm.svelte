@@ -81,11 +81,27 @@
   let showCustomModelDialog = $state(false)
   let customModelDialogInput = $state('')
   let customModelDialogError = $state('')
-  let displaymodels = $derived.by(() => {
-    const allModels = [...fetchedModels, ...customModels.map((id) => ({ id }))].filter(
-      (model) => !hiddenModels.includes(model.id),
+  let visibleFetchedModels = $derived.by(() => {
+    const seenIds: string[] = []
+    return filterModels(
+      fetchedModels.filter((model) => {
+        if (hiddenModels.includes(model.id) || seenIds.includes(model.id)) return false
+        seenIds.push(model.id)
+        return true
+      }),
     )
-    return filterModels(allModels)
+  })
+  let visibleCustomModels = $derived.by(() => {
+    const seenIds = fetchedModels.map((model) => model.id)
+    return filterModels(
+      customModels
+        .map((id) => ({ id }))
+        .filter((model) => {
+          if (hiddenModels.includes(model.id) || seenIds.includes(model.id)) return false
+          seenIds.push(model.id)
+          return true
+        }),
+    )
   })
 
   function isSelfHostedUrl(url: string): boolean {
@@ -250,7 +266,7 @@
     {/if}
 
     <!-- Model filter (shown when there are enough models) -->
-    {#if displaymodels.length + customModels.length > 10}
+    {#if visibleFetchedModels.length + visibleCustomModels.length > 10}
       <Input
         placeholder="Filter models..."
         bind:value={modelFilterInput}
@@ -260,14 +276,14 @@
     {/if}
 
     <!-- Fetched Models -->
-    {#if displaymodels.length > 0}
+    {#if visibleFetchedModels.length > 0}
       <div class="space-y-1">
         <p class="text-muted-foreground text-xs font-medium">
-          Fetched Models ({displaymodels.length})
+          Fetched Models ({visibleFetchedModels.length})
         </p>
         <ScrollArea class="h-32 w-full rounded-md border">
           <div class="flex flex-wrap gap-1 p-2">
-            {#each filterModels(sortedModels(displaymodels)) as model (model.id)}
+            {#each sortedModels(visibleFetchedModels) as model (model.id)}
               {@const isFav = favoriteModels.includes(model.id)}
               <Badge variant="secondary" class="gap-1 px-2">
                 <button
@@ -297,14 +313,14 @@
     {/if}
 
     <!-- Custom Models -->
-    {#if customModels.length > 0}
+    {#if visibleCustomModels.length > 0}
       <div class="space-y-1">
         <p class="text-muted-foreground text-xs font-medium">
-          Custom Models ({customModels.length})
+          Custom Models ({visibleCustomModels.length})
         </p>
         <ScrollArea class="h-24 w-full rounded-md border">
           <div class="flex flex-wrap gap-1 p-2">
-            {#each filterModels(sortedModels(customModels.map( (id) => ({ id }), ))) as model (model.id)}
+            {#each sortedModels(visibleCustomModels) as model (model.id)}
               {@const isFav = favoriteModels.includes(model.id)}
               <Badge variant="outline" class="gap-1 px-2">
                 <button

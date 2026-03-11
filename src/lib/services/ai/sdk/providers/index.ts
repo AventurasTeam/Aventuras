@@ -5,7 +5,7 @@
  */
 
 export { createProviderFromProfile } from './registry'
-export { fetchModelsFromProvider, type TextModel } from './modelFetcher'
+export { dedupeTextModels, fetchModelsFromProvider, type TextModel } from './modelFetcher'
 export {
   PROVIDERS,
   getBaseUrl,
