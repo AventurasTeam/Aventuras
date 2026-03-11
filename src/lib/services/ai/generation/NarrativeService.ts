@@ -13,6 +13,7 @@
 
 import { streamNarrative, generateNarrative } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
+import { mapChaptersToContext } from '$lib/services/context/chapterMapper'
 import { createLogger } from '../core/config'
 import { stripPicTags } from '$lib/utils/inlineImageParser'
 import type { StreamChunk } from '../core/types'
@@ -25,7 +26,6 @@ import type {
   Item,
   StoryBeat,
   Chapter,
-  TimeTracker,
 } from '$lib/types'
 import type { StyleReviewResult } from './StyleReviewerService'
 import type { TimelineFillResult } from '../retrieval/TimelineFillService'
@@ -144,88 +144,6 @@ export interface WorldStateContext {
  */
 export interface NarrativeWorldState extends WorldStateContext {
   lorebookEntries?: Entry[]
-}
-
-/**
- * Format a TimeTracker into a human-readable string for the narrative prompt.
- * Always returns a value, defaulting to Year 1, Day 1, 0 hours 0 minutes if null.
- */
-export function formatStoryTime(time: TimeTracker | null | undefined): string {
-  const t = time ?? { years: 0, days: 0, hours: 0, minutes: 0 }
-  const year = t.years + 1
-  const day = t.days + 1
-  return `Year ${year}, Day ${day}, ${t.hours} hours ${t.minutes} minutes`
-}
-
-/**
- * Build a block containing chapter summaries for injection into the system prompt.
- * Per design doc: summarized entries are excluded from direct context,
- * but their summaries provide narrative continuity.
- */
-export function buildChapterSummariesBlock(
-  chapters: Chapter[],
-  timelineFillResult?: TimelineFillResult | null,
-): string {
-  if (chapters.length === 0) return ''
-
-  let block = '\n\n<story_history>\n'
-  block += '## Previous Chapters\n'
-  block +=
-    'The following chapters have occurred earlier in the story. Use them for continuity and context.\n\n'
-
-  for (const chapter of chapters) {
-    block += `### Chapter ${chapter.number}`
-    if (chapter.title) {
-      block += `: ${chapter.title}`
-    }
-    block += '\n'
-
-    const startTime = formatStoryTime(chapter.startTime)
-    const endTime = formatStoryTime(chapter.endTime)
-    if (startTime && endTime) {
-      block += `*Time: ${startTime} \u2192 ${endTime}*\n`
-    } else if (startTime) {
-      block += `*Time: ${startTime}*\n`
-    }
-
-    block += chapter.summary
-    block += '\n'
-
-    const metadata: string[] = []
-    if (chapter.characters.length > 0) {
-      metadata.push(`Characters: ${chapter.characters.join(', ')}`)
-    }
-    if (chapter.locations.length > 0) {
-      metadata.push(`Locations: ${chapter.locations.join(', ')}`)
-    }
-    if (chapter.emotionalTone) {
-      metadata.push(`Tone: ${chapter.emotionalTone}`)
-    }
-    if (metadata.length > 0) {
-      block += `*${metadata.join(' | ')}*\n`
-    }
-    block += '\n'
-  }
-
-  if (timelineFillResult && timelineFillResult.responses.length > 0) {
-    block += '## Retrieved Context\n'
-    block +=
-      'The following information was retrieved from past chapters and is relevant to the current scene:\n\n'
-
-    for (const response of timelineFillResult.responses) {
-      const chapterLabel =
-        response.chapterNumbers.length === 1
-          ? `Chapter ${response.chapterNumbers[0]}`
-          : `Chapters ${response.chapterNumbers.join(', ')}`
-
-      block += `**${chapterLabel}**\n`
-      block += `Q: ${response.query}\n`
-      block += `A: ${response.answer}\n\n`
-    }
-  }
-
-  block += '</story_history>'
-  return block
 }
 
 /**
@@ -426,28 +344,18 @@ export class NarrativeService {
       ctx.add({ agenticRetrievalContext })
     }
 
-    // Build chapter summaries block
+    // Build chapter context arrays via mapper
     if (worldState.chapters && worldState.chapters.length > 0) {
-      const chapterSummaries = buildChapterSummariesBlock(worldState.chapters, timelineFillResult)
-      if (chapterSummaries) {
-        ctx.add({ chapterSummaries })
-      }
+      const { chapters, timelineFill } = mapChaptersToContext(
+        worldState.chapters,
+        timelineFillResult,
+      )
+      ctx.add({ chapters, timelineFill })
     }
 
     // Inject style review for template rendering
     if (styleReview && styleReview.phrases.length > 0) {
       ctx.add({ styleReview })
-    }
-
-    // Inject feature instruction content when modes are enabled
-    // These provide the actual instructions (not just boolean flags) that templates reference
-    // via {{ inlineImageInstructions }} and {{ visualProseInstructions }}
-    const preRenderContext = ctx.getContext()
-    if (preRenderContext.inlineImageMode) {
-      ctx.add({ inlineImageInstructions: INLINE_IMAGE_INSTRUCTIONS })
-    }
-    if (preRenderContext.visualProseMode) {
-      ctx.add({ visualProseInstructions: VISUAL_PROSE_INSTRUCTIONS })
     }
 
     // Render through the mode-specific template
