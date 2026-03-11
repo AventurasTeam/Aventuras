@@ -19,7 +19,11 @@ Do NOT generate actions for {{ protagonistName }} as if they were a separate cha
 """
 
 ## Recent Context
-{{ recentContext }}
+{% for entry in storyEntries %}{%- if entry.type == 'user_action' %}
+[ACTION] {{ entry.content }}
+{%- else %}
+[NARRATIVE] {{ entry.content }}
+{%- endif %}{% endfor %}
 
 ## Current Scene
 Location: {{ currentLocation }}

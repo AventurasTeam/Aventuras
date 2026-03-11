@@ -19,7 +19,11 @@ These should read like instructions an author gives to guide the next part of th
 
 ## Recent Story Content
 """
-{{ recentContent }}
+{% for entry in storyEntries %}{%- if entry.type == 'user_action' %}
+[DIRECTION] {{ entry.content }}
+{%- else %}
+[NARRATIVE] {{ entry.content }}
+{%- endif %}{% endfor %}
 """
 
 ## Active Story Threads
