@@ -60,7 +60,6 @@
   })
 
   function handleInput() {
-    console.log(data)
     onUpdate({
       ...data,
       traits: traitsStr

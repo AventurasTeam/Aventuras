@@ -50,7 +50,7 @@ export function stringToDescriptors(input: string): VisualDescriptors {
 
   const result: VisualDescriptors = {}
   const categoryPattern =
-    /\b(Face|Hair|Eyes|Build|Clothing|Accessories|Distinguishing features):\s*/gi
+    /\b(Face|Hair|Eyes|Build|Clothing|Accessories|Distinguishing):\s*/gi
 
   const parts = input.split(categoryPattern).filter(Boolean)
   for (let i = 0; i < parts.length - 1; i += 2) {

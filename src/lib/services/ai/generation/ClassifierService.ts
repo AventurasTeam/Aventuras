@@ -367,8 +367,7 @@ export class ClassifierService extends BaseAIService {
     if (descriptors.build) parts.push(`Build: ${descriptors.build}`)
     if (descriptors.clothing) parts.push(`Clothing: ${descriptors.clothing}`)
     if (descriptors.accessories) parts.push(`Accessories: ${descriptors.accessories}`)
-    if (descriptors.distinguishing)
-      parts.push(`Distinguishing features: ${descriptors.distinguishing}`)
+    if (descriptors.distinguishing) parts.push(`Distinguishing: ${descriptors.distinguishing}`)
 
     return parts.join(', ')
   }
