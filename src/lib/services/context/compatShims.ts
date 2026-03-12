@@ -10,7 +10,6 @@
  * To remove shim support in the future, delete this file and remove the
  * computeShims() call from ContextBuilder.render().
  *
- * @see REQUIREMENTS.md COMPAT-01..05
  */
 
 /** Track which deprecated variables have already warned this session */
