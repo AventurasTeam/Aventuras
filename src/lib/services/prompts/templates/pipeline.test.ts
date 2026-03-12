@@ -57,7 +57,7 @@ describe('pipeline: adventure', () => {
   })
 
   it('PIPE-01: userContent render is non-null', () => {
-    const result = templateEngine.render(template.userContent, narrativePipelineContext)
+    const result = templateEngine.render(template.userContent || '', narrativePipelineContext)
     expect(result).not.toBeNull()
   })
 })
@@ -76,7 +76,7 @@ describe('pipeline: creative-writing', () => {
   })
 
   it('PIPE-01: userContent render is non-null', () => {
-    const result = templateEngine.render(template.userContent, narrativePipelineContext)
+    const result = templateEngine.render(template.userContent || '', narrativePipelineContext)
     expect(result).not.toBeNull()
   })
 })
@@ -91,12 +91,12 @@ describe('pipeline: suggestions', () => {
   }
 
   it('PIPE-01: userContent render is non-null', () => {
-    const result = templateEngine.render(template.userContent, suggestionsPipelineContext)
+    const result = templateEngine.render(template.userContent || '', suggestionsPipelineContext)
     expect(result).not.toBeNull()
   })
 
   it('PIPE-02: userContent render contains mapped story entry content', () => {
-    const result = templateEngine.render(template.userContent, suggestionsPipelineContext)
+    const result = templateEngine.render(template.userContent || '', suggestionsPipelineContext)
     expect(result).not.toBeNull()
     expect(result!.length).toBeGreaterThan(0)
   })
@@ -119,12 +119,12 @@ describe('pipeline: action-choices', () => {
   }
 
   it('PIPE-01: userContent render is non-null', () => {
-    const result = templateEngine.render(template.userContent, actionChoicesPipelineContext)
+    const result = templateEngine.render(template.userContent || '', actionChoicesPipelineContext)
     expect(result).not.toBeNull()
   })
 
   it('PIPE-02: userContent render contains Aria from context', () => {
-    const result = templateEngine.render(template.userContent, actionChoicesPipelineContext)
+    const result = templateEngine.render(template.userContent || '', actionChoicesPipelineContext)
     expect(result).toContain('Aria')
   })
 })
@@ -143,12 +143,12 @@ describe('pipeline: chapter-summarization', () => {
   })
 
   it('PIPE-01: userContent render is non-null', () => {
-    const result = templateEngine.render(template.userContent, chapterPipelineContext)
+    const result = templateEngine.render(template.userContent || '', chapterPipelineContext)
     expect(result).not.toBeNull()
   })
 
   it('PIPE-02: userContent render contains chapter title from fixture', () => {
-    const result = templateEngine.render(template.userContent, chapterPipelineContext)
+    const result = templateEngine.render(template.userContent || '', chapterPipelineContext)
     expect(result).toContain(firstChapterTitle)
   })
 })

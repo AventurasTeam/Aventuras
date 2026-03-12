@@ -21,7 +21,7 @@ describe('mapContextResultToArrays', () => {
     })
 
     it('tier-1 item tier field is undefined (absent from ContextItem for inventory)', () => {
-      expect((result.worldStateInventory[0] as Record<string, unknown>).tier).toBeUndefined()
+      expect(result.worldStateInventory[0].tier).toBeUndefined()
     })
   })
 
@@ -46,7 +46,7 @@ describe('mapContextResultToArrays', () => {
     })
 
     it('tier-1 beat tier field is undefined (absent from ContextStoryBeat for active beats)', () => {
-      expect((result.worldStateBeats[0] as Record<string, unknown>).tier).toBeUndefined()
+      expect(result.worldStateBeats[0].tier).toBeUndefined()
     })
   })
 

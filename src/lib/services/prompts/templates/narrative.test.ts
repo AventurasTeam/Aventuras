@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { templateEngine } from '$lib/services/templates/engine'
 import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
 import { computeShims } from '$lib/services/context/compatShims'
@@ -26,6 +26,11 @@ const adventureBase = {
   chapters: [],
   timelineFill: [],
 }
+
+beforeEach(() => {
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
+  vi.resetModules()
+})
 
 // ---------------------------------------------------------------------------
 // Adventure template
