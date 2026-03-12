@@ -6,7 +6,7 @@
  * Modules don't call each other directly - they communicate through events and shared state.
  */
 
-import { createLogger } from './ai/core/config'
+import { createLogger } from '$lib/log'
 
 const log = createLogger('EventBus')
 

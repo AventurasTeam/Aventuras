@@ -22,10 +22,9 @@ import {
 import { database } from '$lib/services/database'
 import { settings } from '$lib/stores/settings.svelte'
 import { emitImageQueued, emitImageReady } from '$lib/services/events'
-import { normalizeImageDataUrl } from '$lib/utils/image'
+import { normalizeImageDataUrl, parseImageSize } from '$lib/utils/image'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from './constants'
-import { parseImageSize } from './imageUtils'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 import type { Character, EmbeddedImage } from '$lib/types'
 
 const log = createLogger('InlineImageTracker')

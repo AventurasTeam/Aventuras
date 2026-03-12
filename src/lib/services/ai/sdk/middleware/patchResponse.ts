@@ -5,7 +5,7 @@
  */
 
 import type { LanguageModelV3Middleware } from '@ai-sdk/provider'
-import { createLogger } from '../../core/config'
+import { createLogger } from '$lib/log'
 
 const log = createLogger('PatchResponse')
 

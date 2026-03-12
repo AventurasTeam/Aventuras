@@ -12,7 +12,7 @@ import type { ProviderType } from '$lib/types'
 import type { ReasoningEffort } from '$lib/types'
 import type { StoryMode, POV, Character, Location, Item } from '$lib/types'
 import { ContextBuilder } from '$lib/services/context'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 import {
   type ExpandedSetting,
   type GeneratedProtagonist,

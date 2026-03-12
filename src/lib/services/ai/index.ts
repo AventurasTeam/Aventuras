@@ -70,7 +70,7 @@ import {
   emitBackgroundImageReady,
 } from '$lib/services/events'
 import { generateImage as registryGenerateImage } from './image/providers/registry'
-import { normalizeImageDataUrl } from '$lib/utils/image'
+import { normalizeImageDataUrl, parseImageSize } from '$lib/utils/image'
 import type { ImageableScene } from './sdk/schemas/imageanalysis'
 import type { EmbeddedImage } from '$lib/types'
 
@@ -105,11 +105,10 @@ import type {
   TimeTracker,
   StorySettings,
 } from '$lib/types'
-import { createLogger } from './core/config'
+import { createLogger } from '$lib/log'
 import { serviceFactory } from './core/factory'
 import { NarrativeService } from './generation/NarrativeService'
 import type { WorldStateContext } from './generation/NarrativeService'
-import { parseImageSize } from './image/imageUtils'
 
 const log = createLogger('AIService')
 

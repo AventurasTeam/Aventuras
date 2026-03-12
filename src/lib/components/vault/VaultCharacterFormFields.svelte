@@ -31,10 +31,32 @@
   let uploadingPortrait = $state(false)
   let error = $state<string | null>(null)
 
-  // Sync internal editing state with incoming data if it changes externally
+  // True when the user has typed something that doesn't parse to any descriptor category
+  let visualDescriptorsInvalid = $derived(
+    visualDescriptorsStr.trim().length > 0 &&
+      Object.keys(stringToDescriptors(visualDescriptorsStr)).length === 0,
+  )
+
+  // Sync internal editing state with incoming data if it changes externally,
+  // but don't overwrite the user's in-progress input when the change came from handleInput itself.
   $effect(() => {
-    visualDescriptorsStr = descriptorsToString(data.visualDescriptors)
-    traitsStr = data.traits.join(', ')
+    const externalStr = descriptorsToString(data.visualDescriptors)
+    const externalTraitsStr = data.traits.join(', ')
+    untrack(() => {
+      if (externalStr !== descriptorsToString(stringToDescriptors(visualDescriptorsStr))) {
+        visualDescriptorsStr = externalStr
+      }
+      if (
+        externalTraitsStr !==
+        traitsStr
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .join(', ')
+      ) {
+        traitsStr = externalTraitsStr
+      }
+    })
   })
 
   function handleInput() {
@@ -139,9 +161,16 @@
       type="text"
       bind:value={visualDescriptorsStr}
       oninput={handleInput}
-      placeholder="Tall, dark hair, blue eyes (comma-separated)"
+      placeholder="Face: oval, Hair: dark brown, Eyes: blue"
     />
-    <p class="text-muted-foreground text-[0.8rem]">Used for portrait generation</p>
+    {#if visualDescriptorsInvalid}
+      <p class="text-[0.8rem] text-amber-500">
+        Use "Category: value" format, e.g. <span class="font-medium">Face: oval, Hair: dark</span>.
+        Categories: Face, Hair, Eyes, Build, Clothing, Accessories, Distinguishing features.
+      </p>
+    {:else}
+      <p class="text-muted-foreground text-[0.8rem]">Used for portrait generation</p>
+    {/if}
   </div>
 
   <!-- Portrait -->

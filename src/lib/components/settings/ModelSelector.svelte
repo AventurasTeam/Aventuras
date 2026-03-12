@@ -47,10 +47,7 @@
     const profile = settings.getProfile(effectiveProfileId)
     if (!profile) return 0
     const favSet = new Set(profile.favoriteModels ?? [])
-    const hidden = new Set(profile.hiddenModels ?? [])
-    return [
-      ...new Set([...profile.fetchedModels, ...profile.customModels.map((m) => ({ id: m }))]),
-    ].filter((m) => !hidden.has(m.id) && favSet.has(m.id)).length
+    return availableModels.filter((m) => favSet.has(m.id)).length
   })
 
   // Check if currently selected model is missing from the profile

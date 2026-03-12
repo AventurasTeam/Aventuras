@@ -11,7 +11,7 @@ import type { EntryType } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { lorebookClassificationResultSchema } from '../sdk/schemas/lorebook'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 import type { ImportedEntry } from '$lib/services/lorebookImporter'
 
 const log = createLogger('LorebookClassifierService')

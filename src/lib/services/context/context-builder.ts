@@ -11,8 +11,8 @@
 
 import { database } from '$lib/services/database'
 import { templateEngine } from '$lib/services/templates/engine'
-import { createLogger } from '$lib/services/ai/core/config'
 import { computeShims } from './compatShims'
+import { createLogger } from '$lib/log'
 import type { RenderResult } from './types'
 import type { Character, Location, Item, StoryBeat } from '$lib/types'
 import type { RuntimeVariable, RuntimeVarsMap } from '$lib/services/packs/types'

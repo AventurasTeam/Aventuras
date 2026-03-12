@@ -5,7 +5,7 @@
  */
 
 import type { LanguageModelV3Middleware, LanguageModelV3Prompt } from '@ai-sdk/provider'
-import { createLogger } from '../../core/config'
+import { createLogger } from '$lib/log'
 
 const log = createLogger('AI')
 

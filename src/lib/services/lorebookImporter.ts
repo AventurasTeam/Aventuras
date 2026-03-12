@@ -12,7 +12,7 @@ import type {
   VaultLorebookEntry,
 } from '$lib/types'
 import type { StoryMode } from '$lib/types'
-import { createLogger } from './ai/core/config'
+import { createLogger } from '$lib/log'
 import { LorebookClassifierService } from './ai/import/LorebookClassifierService'
 
 const log = createLogger('LorebookImporter')

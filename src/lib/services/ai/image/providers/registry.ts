@@ -14,7 +14,7 @@ import type {
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { createLogger } from '../../core/config'
+import { createLogger } from '$lib/log'
 
 // Provider factory imports (lazy)
 import { createNanoGPTProvider } from './nanogpt'

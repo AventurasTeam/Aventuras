@@ -15,8 +15,9 @@ import {
   type ChapterSummaryResult,
   type RetrievalDecision,
 } from '../sdk/schemas/memory'
-import { AI_CONFIG, createLogger } from '../core/config'
 import { mapChaptersToContext } from '$lib/services/context/chapterMapper'
+import { AI_CONFIG } from '../core/config'
+import { createLogger } from '$lib/log'
 
 const log = createLogger('Memory')
 

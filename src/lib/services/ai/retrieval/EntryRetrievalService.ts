@@ -22,7 +22,7 @@ import type {
 } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { buildExtraBody } from '../core/requestOverrides'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 import { entitySelectionSchema } from '../sdk/schemas/context'
 import { ContextBuilder } from '$lib/services/context'
 

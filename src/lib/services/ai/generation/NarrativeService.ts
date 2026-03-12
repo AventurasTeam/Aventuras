@@ -15,7 +15,7 @@ import { streamNarrative, generateNarrative } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
 import { mapChaptersToContext } from '$lib/services/context/chapterMapper'
 import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 import type { StreamChunk } from '../core/types'
 import type {
   Story,

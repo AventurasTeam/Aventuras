@@ -8,7 +8,7 @@
 import type { StoryEntry, StoryMode, POV, Tense } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 import { styleReviewResultSchema, type PhraseAnalysis } from '../sdk/schemas/style'
 
 const log = createLogger('StyleReviewer')

@@ -20,7 +20,7 @@ import type { z } from 'zod'
 
 import { settings } from '$lib/stores/settings.svelte'
 import type { ProviderType, GenerationPreset, ReasoningEffort, APIProfile } from '$lib/types'
-import { createLogger } from '../core/config'
+import { createLogger } from '$lib/log'
 import { createProviderFromProfile } from './providers'
 import { PROVIDERS, getReasoningExtraction } from './providers/config'
 import { promptSchemaMiddleware, patchResponseMiddleware, loggingMiddleware } from './middleware'
