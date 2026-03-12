@@ -245,7 +245,7 @@ export function validateTemplate(
 
   // Extract loop-scoped variables from {% for X in Y %} constructs
   const loopVars = new Set<string>()
-  const forPattern = /\{%\s*for\s+(\w+)\s+in\s+/g
+  const forPattern = /\{%-?\s*for\s+(\w+)\s+in\s+/g
   let forMatch = forPattern.exec(template)
   while (forMatch !== null) {
     loopVars.add(forMatch[1])
@@ -253,7 +253,7 @@ export function validateTemplate(
   }
 
   // Extract assign-scoped variables from {% assign X = ... %} constructs
-  const assignPattern = /\{%\s*assign\s+(\w+)\s*=/g
+  const assignPattern = /\{%-?\s*assign\s+(\w+)\s*=/g
   let assignMatch = assignPattern.exec(template)
   while (assignMatch !== null) {
     loopVars.add(assignMatch[1])

@@ -239,70 +239,63 @@ Elena drew her blade, firelight dancing along the steel edge as she faced the cr
 - Do not use <pic> for every scene - reserve for truly striking visual moments
 - Keep prompts between 50-150 words for best results
 </InlineImages>{% endif %}
-
 {% if storyTime != '' %}
 [CURRENT STORY TIME]
 {{ storyTime }}
-{% endif %}{% if currentLocationObject %}
+{% endif %}{% if currentLocationObject -%}
 
 [CURRENT LOCATION]
 {{ currentLocationObject.name }}{% if currentLocationObject.description != '' %}
-{{ currentLocationObject.description }}{% endif %}
+{{ currentLocationObject.description }}{% endif -%}
 {% endif %}{% if worldStateCharacters.size > 0 %}
 
 [KNOWN CHARACTERS]
-{% for char in worldStateCharacters %}
-• {{ char.name }}{% if char.relationship != '' %} ({{ char.relationship }}){% endif %}{% if char.description != '' %} - {{ char.description }}{% endif %}{% if char.traits.size > 0 %} [{{ char.traits | join: ', ' }}]{% endif %}{% if char.appearance.size > 0 %} {Appearance: {{ char.appearance | join: ', ' }}}{% endif %}
+{%- for char in worldStateCharacters %}
+• {{ char.name }}{% if char.relationship != '' %} ({{ char.relationship }}){% endif %}{% if char.description != '' %} - {{ char.description }}{% endif %}{% if char.traits.size > 0 %} [{{ char.traits | join: ', ' }}]{% endif %}{% if char.appearance.size > 0 %} {Appearance: {{ char.appearance | join: ', ' }}}{% endif -%}
 {% endfor %}{% endif %}{% if worldStateInventory.size > 0 %}
 
 [INVENTORY]
-{% for item in worldStateInventory %}{% if forloop.first == false %}, {% endif %}{{ item.name }}{% if item.quantity > 1 %} (×{{ item.quantity }}){% endif %}{% if item.equipped %} [equipped]{% endif %}{% endfor %}
+{% for item in worldStateInventory %}{% if forloop.first == false %}, {% endif %}{{ item.name }}{% if item.quantity > 1 %} (×{{ item.quantity }}){% endif %}{% if item.equipped %} [equipped]{% endif %}{% endfor -%}
 {% endif %}{% if worldStateBeats.size > 0 %}
 
 [ACTIVE THREADS]
-{% for beat in worldStateBeats %}
-• {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif %}
+{%- for beat in worldStateBeats %}
+• {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif -%}
 {% endfor %}{% endif %}{% if worldStateLocations.size > 0 %}
 
 [RELEVANT LOCATIONS]
-{% for loc in worldStateLocations %}
-• {{ loc.name }}{% if loc.description != '' %}: {{ loc.description }}{% endif %}
+{%- for loc in worldStateLocations %}
+• {{ loc.name }}{% if loc.description != '' %}: {{ loc.description }}{% endif -%}
 {% endfor %}{% endif %}{% if worldStateRelevantItems.size > 0 %}
 
 [RELEVANT ITEMS]
-{% for item in worldStateRelevantItems %}
-• {{ item.name }}{% if item.description != '' %}: {{ item.description }}{% endif %}
+{%- for item in worldStateRelevantItems %}
+• {{ item.name }}{% if item.description != '' %}: {{ item.description }}{% endif -%}
 {% endfor %}{% endif %}{% if worldStateRelatedBeats.size > 0 %}
 
 [RELATED STORY THREADS]
-{% for beat in worldStateRelatedBeats %}
-• {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif %}
+{%- for beat in worldStateRelatedBeats %}
+• {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif -%}
 {% endfor %}{% endif %}{% if lorebookEntries.size > 0 %}
 
 [LOREBOOK CONTEXT]
 (CANONICAL - All information below is established lore. Do not contradict these facts.)
 {% assign loreCharacters = lorebookEntries | where: 'type', 'character' %}{% if loreCharacters.size > 0 %}
-
 • Characters:
 {% for entry in loreCharacters %}  - {{ entry.name }}: {{ entry.description }}{% if entry.disposition %} [{{ entry.disposition }}]{% endif %}
 {% endfor %}{% endif %}{% assign loreLocations = lorebookEntries | where: 'type', 'location' %}{% if loreLocations.size > 0 %}
-
 • Locations:
 {% for entry in loreLocations %}  - {{ entry.name }}: {{ entry.description }}
 {% endfor %}{% endif %}{% assign loreItems = lorebookEntries | where: 'type', 'item' %}{% if loreItems.size > 0 %}
-
 • Items:
 {% for entry in loreItems %}  - {{ entry.name }}: {{ entry.description }}
 {% endfor %}{% endif %}{% assign loreFactions = lorebookEntries | where: 'type', 'faction' %}{% if loreFactions.size > 0 %}
-
 • Factions:
 {% for entry in loreFactions %}  - {{ entry.name }}: {{ entry.description }}
 {% endfor %}{% endif %}{% assign loreConcepts = lorebookEntries | where: 'type', 'concept' %}{% if loreConcepts.size > 0 %}
-
 • Lore:
 {% for entry in loreConcepts %}  - {{ entry.name }}: {{ entry.description }}
 {% endfor %}{% endif %}{% assign loreEvents = lorebookEntries | where: 'type', 'event' %}{% if loreEvents.size > 0 %}
-
 • Events:
 {% for entry in loreEvents %}  - {{ entry.name }}: {{ entry.description }}
 {% endfor %}{% endif %}{% endif %}{% if agenticRetrievalContext != '' %}{{ agenticRetrievalContext }}{% endif %}{% if chapters.size > 0 or timelineFill.size > 0 %}
@@ -310,30 +303,42 @@ Elena drew her blade, firelight dancing along the steel edge as she faced the cr
 <story_history>
 ## Previous Chapters
 The following chapters have occurred earlier in the story. Use them for continuity and context.
-
 {% for c in chapters %}
 ### Chapter {{ c.number }}{% if c.title != '' %}: {{ c.title }}{% endif %}
 {% if c.startTime and c.endTime %}*Time: {{ c.startTime }} → {{ c.endTime }}*
 {% elsif c.startTime %}*Time: {{ c.startTime }}*
 {% endif %}{{ c.summary }}
-{% assign metadata = '' %}{% if c.characters.size > 0 %}{% assign charPart = c.characters | join: ', ' %}{% assign charLine = 'Characters: ' | append: charPart %}{% assign metadata = charLine %}{% endif %}{% if c.locations.size > 0 %}{% assign locPart = c.locations | join: ', ' %}{% assign locLine = 'Locations: ' | append: locPart %}{% if metadata != '' %}{% assign metadata = metadata | append: ' | ' | append: locLine %}{% else %}{% assign metadata = locLine %}{% endif %}{% endif %}{% if c.emotionalTone != '' %}{% assign toneLine = 'Tone: ' | append: c.emotionalTone %}{% if metadata != '' %}{% assign metadata = metadata | append: ' | ' | append: toneLine %}{% else %}{% assign metadata = toneLine %}{% endif %}{% endif %}{% if metadata != '' %}
-*{{ metadata }}*
-{% endif %}
-{% endfor %}{% if timelineFill.size > 0 %}
+  
+  {%- capture metadata -%}
+  {%- assign separator = '' -%}
+  {%- if c.characters.size > 0 -%}
+    Characters: {{ c.characters | join: ', ' }}{%- assign separator = ' | ' -%}
+  {%- endif -%}
+  {%- if c.locations.size > 0 -%}
+    {{ separator }}Locations: {{ c.locations | join: ', ' }}{%- assign separator = ' | ' -%}
+  {%- endif -%}
+  {%- if c.emotionalTone != '' -%}
+    {{ separator }}Tone: {{ c.emotionalTone }}
+  {%- endif -%}
+{%- endcapture -%}
+{%- assign stripped_metadata = metadata | strip -%}
+{%- if stripped_metadata != '' -%}
+*{{ stripped_metadata }}*
+{%- endif %}
+{% endfor %}
+{%- if timelineFill.size > 0 %}
 ## Retrieved Context
 The following information was retrieved from past chapters and is relevant to the current scene:
 
 {% for item in timelineFill %}{% assign chapCount = item.chapterNumbers.size %}{% if chapCount == 1 %}**Chapter {{ item.chapterNumbers[0] }}**{% else %}**Chapters {{ item.chapterNumbers | join: ', ' }}**{% endif %}
 Q: {{ item.query }}
 A: {{ item.answer }}
-
 {% endfor %}{% endif %}</story_history>{% endif %}{% if styleReview.phrases.size > 0 %}
 
 <style_guidance>
 ## Writing Style Feedback
 Based on analysis of {{ styleReview.reviewedEntryCount }} recent entries:
-
-{% for phrase in styleReview.phrases %}
+{%- for phrase in styleReview.phrases %}
 - "{{ phrase.phrase }}" (used {{ phrase.frequency }} times, {{ phrase.severity }} severity){% if phrase.alternatives.size > 0 %}
   Alternatives: {{ phrase.alternatives | join: ', ' }}{% endif %}
 {% endfor %}
@@ -606,70 +611,60 @@ Elena drew her blade, firelight dancing along the steel edge as she faced the cr
 - Do not use <pic> for every scene - reserve for truly striking visual moments
 - Keep prompts between 50-150 words for best results
 </InlineImages>{% endif %}
-
 {% if storyTime != '' %}
 [CURRENT STORY TIME]
 {{ storyTime }}
 {% endif %}{% if currentLocationObject %}
-
 [CURRENT LOCATION]
 {{ currentLocationObject.name }}{% if currentLocationObject.description != '' %}
 {{ currentLocationObject.description }}{% endif %}
 {% endif %}{% if worldStateCharacters.size > 0 %}
-
 [KNOWN CHARACTERS]
-{% for char in worldStateCharacters %}
-• {{ char.name }}{% if char.relationship != '' %} ({{ char.relationship }}){% endif %}{% if char.description != '' %} - {{ char.description }}{% endif %}{% if char.traits.size > 0 %} [{{ char.traits | join: ', ' }}]{% endif %}{% if char.appearance.size > 0 %} {Appearance: {{ char.appearance | join: ', ' }}}{% endif %}
+{%- for char in worldStateCharacters %}
+• {{ char.name }}{% if char.relationship != '' %} ({{ char.relationship }}){% endif %}{% if char.description != '' %} - {{ char.description }}{% endif %}{% if char.traits.size > 0 %} [{{ char.traits | join: ', ' }}]{% endif %}{% if char.appearance.size > 0 %} {Appearance: {{ char.appearance | join: ', ' }}}{% endif -%}
 {% endfor %}{% endif %}{% if worldStateInventory.size > 0 %}
-
+  
 [INVENTORY]
 {% for item in worldStateInventory %}{% if forloop.first == false %}, {% endif %}{{ item.name }}{% if item.quantity > 1 %} (×{{ item.quantity }}){% endif %}{% if item.equipped %} [equipped]{% endif %}{% endfor %}
 {% endif %}{% if worldStateBeats.size > 0 %}
-
 [ACTIVE THREADS]
-{% for beat in worldStateBeats %}
-• {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif %}
+{%- for beat in worldStateBeats %}
+• {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif -%}
 {% endfor %}{% endif %}{% if worldStateLocations.size > 0 %}
-
+  
 [RELEVANT LOCATIONS]
-{% for loc in worldStateLocations %}
-• {{ loc.name }}{% if loc.description != '' %}: {{ loc.description }}{% endif %}
+{%- for loc in worldStateLocations %}
+• {{ loc.name }}{% if loc.description != '' %}: {{ loc.description }}{% endif -%}
 {% endfor %}{% endif %}{% if worldStateRelevantItems.size > 0 %}
-
+  
 [RELEVANT ITEMS]
-{% for item in worldStateRelevantItems %}
-• {{ item.name }}{% if item.description != '' %}: {{ item.description }}{% endif %}
+{%- for item in worldStateRelevantItems %}
+• {{ item.name }}{% if item.description != '' %}: {{ item.description }}{% endif -%}
 {% endfor %}{% endif %}{% if worldStateRelatedBeats.size > 0 %}
-
+  
 [RELATED STORY THREADS]
-{% for beat in worldStateRelatedBeats %}
-• {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif %}
+{%- for beat in worldStateRelatedBeats %}
+• {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif -%}
 {% endfor %}{% endif %}{% if lorebookEntries.size > 0 %}
 
 [LOREBOOK CONTEXT]
 (CANONICAL - All information below is established lore. Do not contradict these facts.)
 {% assign loreCharacters = lorebookEntries | where: 'type', 'character' %}{% if loreCharacters.size > 0 %}
-
 • Characters:
 {% for entry in loreCharacters %}  - {{ entry.name }}: {{ entry.description }}{% if entry.disposition %} [{{ entry.disposition }}]{% endif %}
 {% endfor %}{% endif %}{% assign loreLocations = lorebookEntries | where: 'type', 'location' %}{% if loreLocations.size > 0 %}
-
 • Locations:
 {% for entry in loreLocations %}  - {{ entry.name }}: {{ entry.description }}
 {% endfor %}{% endif %}{% assign loreItems = lorebookEntries | where: 'type', 'item' %}{% if loreItems.size > 0 %}
-
 • Items:
 {% for entry in loreItems %}  - {{ entry.name }}: {{ entry.description }}
 {% endfor %}{% endif %}{% assign loreFactions = lorebookEntries | where: 'type', 'faction' %}{% if loreFactions.size > 0 %}
-
 • Factions:
 {% for entry in loreFactions %}  - {{ entry.name }}: {{ entry.description }}
 {% endfor %}{% endif %}{% assign loreConcepts = lorebookEntries | where: 'type', 'concept' %}{% if loreConcepts.size > 0 %}
-
 • Lore:
 {% for entry in loreConcepts %}  - {{ entry.name }}: {{ entry.description }}
 {% endfor %}{% endif %}{% assign loreEvents = lorebookEntries | where: 'type', 'event' %}{% if loreEvents.size > 0 %}
-
 • Events:
 {% for entry in loreEvents %}  - {{ entry.name }}: {{ entry.description }}
 {% endfor %}{% endif %}{% endif %}{% if agenticRetrievalContext != '' %}{{ agenticRetrievalContext }}{% endif %}{% if chapters.size > 0 or timelineFill.size > 0 %}
@@ -683,23 +678,36 @@ The following chapters have occurred earlier in the story. Use them for continui
 {% if c.startTime and c.endTime %}*Time: {{ c.startTime }} → {{ c.endTime }}*
 {% elsif c.startTime %}*Time: {{ c.startTime }}*
 {% endif %}{{ c.summary }}
-{% assign metadata = '' %}{% if c.characters.size > 0 %}{% assign charPart = c.characters | join: ', ' %}{% assign charLine = 'Characters: ' | append: charPart %}{% assign metadata = charLine %}{% endif %}{% if c.locations.size > 0 %}{% assign locPart = c.locations | join: ', ' %}{% assign locLine = 'Locations: ' | append: locPart %}{% if metadata != '' %}{% assign metadata = metadata | append: ' | ' | append: locLine %}{% else %}{% assign metadata = locLine %}{% endif %}{% endif %}{% if c.emotionalTone != '' %}{% assign toneLine = 'Tone: ' | append: c.emotionalTone %}{% if metadata != '' %}{% assign metadata = metadata | append: ' | ' | append: toneLine %}{% else %}{% assign metadata = toneLine %}{% endif %}{% endif %}{% if metadata != '' %}
-*{{ metadata }}*
-{% endif %}
-{% endfor %}{% if timelineFill.size > 0 %}
+  
+  {%- capture metadata -%}
+  {%- assign separator = '' -%}
+  {%- if c.characters.size > 0 -%}
+    Characters: {{ c.characters | join: ', ' }}{%- assign separator = ' | ' -%}
+  {%- endif -%}
+  {%- if c.locations.size > 0 -%}
+    {{ separator }}Locations: {{ c.locations | join: ', ' }}{%- assign separator = ' | ' -%}
+  {%- endif -%}
+  {%- if c.emotionalTone != '' -%}
+    {{ separator }}Tone: {{ c.emotionalTone }}
+  {%- endif -%}
+{%- endcapture -%}
+{%- assign stripped_metadata = metadata | strip -%}
+{%- if stripped_metadata != '' -%}
+*{{ stripped_metadata }}*
+{%- endif %}
+{% endfor %}
+{%- if timelineFill.size > 0 %}
 ## Retrieved Context
 The following information was retrieved from past chapters and is relevant to the current scene:
 
 {% for item in timelineFill %}{% assign chapCount = item.chapterNumbers.size %}{% if chapCount == 1 %}**Chapter {{ item.chapterNumbers[0] }}**{% else %}**Chapters {{ item.chapterNumbers | join: ', ' }}**{% endif %}
 Q: {{ item.query }}
 A: {{ item.answer }}
-
 {% endfor %}{% endif %}</story_history>{% endif %}{% if styleReview.phrases.size > 0 %}
 
 <style_guidance>
 ## Writing Style Feedback
 Based on analysis of {{ styleReview.reviewedEntryCount }} recent entries:
-
 {% for phrase in styleReview.phrases %}
 - "{{ phrase.phrase }}" (used {{ phrase.frequency }} times, {{ phrase.severity }} severity){% if phrase.alternatives.size > 0 %}
   Alternatives: {{ phrase.alternatives | join: ', ' }}{% endif %}

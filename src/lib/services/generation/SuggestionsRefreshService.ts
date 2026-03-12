@@ -8,6 +8,7 @@ import type { Suggestion, SuggestionsResult } from '$lib/services/ai/sdk/schemas
 import type { PromptContext } from '$lib/services/generation/phases/PostGenerationPhase'
 import type { RetrievedEntry } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import { mapRetrievedEntries } from '$lib/services/context/lorebookMapper'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 
 function log(...args: unknown[]) {
@@ -78,22 +79,7 @@ export class SuggestionsRefreshService {
       return { suggestions: [], translated: false }
     }
 
-    // Map RetrievedEntry[] to ContextLorebookEntry[] for template injection
-    // Uses basic mapping since SuggestionsRefreshService doesn't have access to maxWordsPerEntry config
-    const activeLorebookEntries: ContextLorebookEntry[] = (lastLorebookRetrieval ?? []).map(
-      (r) => ({
-        name: r.entry.name,
-        type: r.entry.type,
-        description: r.entry.description ?? '',
-        tier: r.tier,
-        disposition:
-          r.entry.type === 'character' &&
-          r.entry.state?.type === 'character' &&
-          r.entry.state.currentDisposition
-            ? r.entry.state.currentDisposition
-            : undefined,
-      }),
-    )
+    const activeLorebookEntries = mapRetrievedEntries(lastLorebookRetrieval ?? [])
 
     const result = await this.deps.generateSuggestions(
       entries,

@@ -29,21 +29,21 @@ function truncateEntryText(text: string, maxWords: number): string {
 }
 
 /**
- * Map an EntryRetrievalResult into a flat array of ContextLorebookEntry objects.
+ * Map a RetrievedEntry array into ContextLorebookEntry objects.
  *
- * Maps result.all (all tiers, ordered by tier) into the lean projection
- * shape that Liquid templates expect. Character entries with a currentDisposition
- * get a disposition field; all other entries omit it.
+ * Maps each entry into the lean projection shape that Liquid templates expect.
+ * Character entries with a currentDisposition get a disposition field; all
+ * other entries omit it.
  *
- * @param result - Output from EntryRetrievalService
+ * @param entries - Array of RetrievedEntry (from EntryRetrievalService)
  * @param maxWordsPerEntry - Maximum words per entry description (0 = unlimited)
  * @returns Flat array of ContextLorebookEntry ready for template injection
  */
-export function mapEntryRetrievalToLorebookEntries(
-  result: EntryRetrievalResult,
-  maxWordsPerEntry: number,
+export function mapRetrievedEntries(
+  entries: RetrievedEntry[],
+  maxWordsPerEntry: number = 0,
 ): ContextLorebookEntry[] {
-  return result.all.map(({ entry, tier }: RetrievedEntry): ContextLorebookEntry => {
+  return entries.map(({ entry, tier }: RetrievedEntry): ContextLorebookEntry => {
     const base: ContextLorebookEntry = {
       name: entry.name,
       type: entry.type,
@@ -61,6 +61,22 @@ export function mapEntryRetrievalToLorebookEntries(
 
     return base
   })
+}
+
+/**
+ * Map an EntryRetrievalResult into a flat array of ContextLorebookEntry objects.
+ *
+ * Convenience wrapper around mapRetrievedEntries that extracts result.all.
+ *
+ * @param result - Output from EntryRetrievalService
+ * @param maxWordsPerEntry - Maximum words per entry description (0 = unlimited)
+ * @returns Flat array of ContextLorebookEntry ready for template injection
+ */
+export function mapEntryRetrievalToLorebookEntries(
+  result: EntryRetrievalResult,
+  maxWordsPerEntry: number,
+): ContextLorebookEntry[] {
+  return mapRetrievedEntries(result.all, maxWordsPerEntry)
 }
 
 /**
