@@ -304,8 +304,6 @@ export function hasPicTags(content: string): boolean {
  */
 export function stripPicTags(content: string): string {
   // Remove self-closing pic tags: <pic ... />
-  // For paired tags: <pic ...>text</pic> — remove markup, preserve inner text
-  return content
-    .replace(/<pic\s+[^>]*?\/>/gi, '')
-    .replace(/<pic\s+[^>]*?>([\s\S]*?)<\/pic>/gi, '$1')
+  // For paired tags: <pic ...>text</pic> — remove markup and inner text (none should be generated in the first place)
+  return content.replace(/<pic\s+[^>]*?(?:\/>|>\s*<\/pic>)/gi, '')
 }
