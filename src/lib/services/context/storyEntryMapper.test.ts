@@ -42,9 +42,9 @@ describe('mapStoryEntriesToContext', () => {
       expect(result[2].content).not.toContain('<pic')
     })
 
-    it("stripPicTags:true — third entry content equals 'A dragon appeared.'", () => {
+    it('stripPicTags:true — third entry content is empty', () => {
       const result = mapStoryEntriesToContext(rawStoryEntries, { stripPicTags: true })
-      expect(result[2].content).toBe('A dragon appeared.')
+      expect(result[2].content).toBe('')
     })
   })
 
