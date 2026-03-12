@@ -7,7 +7,7 @@ beforeEach(() => {
 })
 
 describe('computeShims', () => {
-  describe('tieredContextBlock (SHIM-01)', () => {
+  describe('tieredContextBlock', () => {
     it('contains [CURRENT LOCATION] section header', async () => {
       const { computeShims } = await import('./compatShims')
       const result = computeShims(shimContext, 'tieredContextBlock', 'adventure')
@@ -33,7 +33,7 @@ describe('computeShims', () => {
     })
   })
 
-  describe('chapterSummaries (SHIM-02)', () => {
+  describe('chapterSummaries', () => {
     it('contains <story_history> wrapper tag', async () => {
       const { computeShims } = await import('./compatShims')
       const result = computeShims(shimContext, 'chapterSummaries', 'adventure')
@@ -47,7 +47,7 @@ describe('computeShims', () => {
     })
   })
 
-  describe('styleGuidance (SHIM-03)', () => {
+  describe('styleGuidance', () => {
     it('contains <style_guidance> wrapper tag', async () => {
       const { computeShims } = await import('./compatShims')
       const result = computeShims(shimContext, 'styleGuidance', 'adventure')
@@ -70,7 +70,7 @@ describe('computeShims', () => {
     })
   })
 
-  describe('lorebookContext (SHIM-04)', () => {
+  describe('lorebookContext', () => {
     it('contains fixture lorebook entry name', async () => {
       const { computeShims } = await import('./compatShims')
       const result = computeShims(shimContext, 'lorebookContext', 'adventure')
@@ -78,7 +78,7 @@ describe('computeShims', () => {
     })
   })
 
-  describe('recentContext (SHIM-05)', () => {
+  describe('recentContext', () => {
     it('memory template: contains narration entry', async () => {
       const { computeShims } = await import('./compatShims')
       const result = computeShims(shimContext, 'recentContext', 'retrieval-decision')

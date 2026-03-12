@@ -37,8 +37,7 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('adventure template', () => {
-  // TMPL-01: variable injection
-  describe('TMPL-01: variable injection', () => {
+  describe('variable injection', () => {
     it('renders protagonistName in content', () => {
       const result = templateEngine.render(adventureTemplate.content, {
         ...adventureBase,
@@ -58,8 +57,7 @@ describe('adventure template', () => {
     })
   })
 
-  // TMPL-02: conditional suppression
-  describe('TMPL-02: conditional suppression', () => {
+  describe('conditional suppression', () => {
     it('Story Context absent when genre, tone, settingDescription, themes all empty', () => {
       const result = templateEngine.render(adventureTemplate.content, { ...adventureBase })
       expect(result).not.toBeNull()
@@ -195,8 +193,7 @@ describe('adventure template', () => {
     })
   })
 
-  // TMPL-03: array iteration
-  describe('TMPL-03: array iteration', () => {
+  describe('array iteration', () => {
     it('worldStateCharacters with 2 entries renders both names', () => {
       const result = templateEngine.render(adventureTemplate.content, {
         ...adventureBase,
@@ -237,8 +234,7 @@ describe('adventure template', () => {
     })
   })
 
-  // TMPL-04: no crash on missing optional vars
-  describe('TMPL-04: no crash on missing optional vars', () => {
+  describe('no crash on missing optional vars', () => {
     it('renders content with only required vars present', () => {
       const result = templateEngine.render(adventureTemplate.content, {
         protagonistName: 'Hero',
@@ -259,8 +255,7 @@ describe('adventure template', () => {
     })
   })
 
-  // TMPL-05: POV/tense branches (adventure only)
-  describe('TMPL-05: POV/tense branches', () => {
+  describe('POV/tense branches', () => {
     it('second-person-present: userContent contains "second person"', () => {
       const result = templateEngine.render(adventureTemplate.userContent!, {
         ...adventureBase,
@@ -302,8 +297,7 @@ describe('adventure template', () => {
     })
   })
 
-  // TMPL-06: compat shim rendering
-  describe('TMPL-06: compat shim rendering', () => {
+  describe('compat shim rendering', () => {
     it('tieredContextBlock shim injects into template string referencing it', () => {
       const templateSource = 'World: {{ tieredContextBlock }}'
       const shims = computeShims(
@@ -371,8 +365,7 @@ describe('adventure template', () => {
 // ---------------------------------------------------------------------------
 
 describe('creative-writing template', () => {
-  // TMPL-01: variable injection
-  describe('TMPL-01: variable injection', () => {
+  describe('variable injection', () => {
     it('renders protagonistName in content', () => {
       const result = templateEngine.render(creativeWritingTemplate.content, {
         ...adventureBase,
@@ -383,8 +376,7 @@ describe('creative-writing template', () => {
     })
   })
 
-  // TMPL-02: conditional suppression
-  describe('TMPL-02: conditional suppression', () => {
+  describe('conditional suppression', () => {
     it('Story Context absent when genre, tone, settingDescription, themes all empty', () => {
       const result = templateEngine.render(creativeWritingTemplate.content, { ...adventureBase })
       expect(result).not.toBeNull()
@@ -422,8 +414,7 @@ describe('creative-writing template', () => {
     })
   })
 
-  // TMPL-03: array iteration
-  describe('TMPL-03: array iteration', () => {
+  describe('array iteration', () => {
     it('worldStateCharacters with 2 entries renders both names', () => {
       const result = templateEngine.render(creativeWritingTemplate.content, {
         ...adventureBase,
@@ -438,8 +429,7 @@ describe('creative-writing template', () => {
     })
   })
 
-  // TMPL-04: no crash on missing optional vars
-  describe('TMPL-04: no crash on missing optional vars', () => {
+  describe('no crash on missing optional vars', () => {
     it('renders content with only required vars present', () => {
       const result = templateEngine.render(creativeWritingTemplate.content, {
         protagonistName: 'Hero',

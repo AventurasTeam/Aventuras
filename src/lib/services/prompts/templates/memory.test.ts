@@ -5,7 +5,7 @@ import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
 const template = PROMPT_TEMPLATES.find((t) => t.id === 'chapter-summarization')!
 
 describe('chapter-summarization template', () => {
-  describe('TMPL-01: variable injection', () => {
+  describe('variable injection', () => {
     it('renders previousContext in userContent', () => {
       const result = templateEngine.render(template.userContent!, {
         previousContext: 'Earlier events: the village was attacked.',
@@ -28,7 +28,7 @@ describe('chapter-summarization template', () => {
     })
   })
 
-  describe('TMPL-02: conditional suppression', () => {
+  describe('conditional suppression', () => {
     it('content renders with empty context (no conditionals to suppress)', () => {
       const result = templateEngine.render(template.content, {})
       expect(result).not.toBeNull()
@@ -36,7 +36,7 @@ describe('chapter-summarization template', () => {
     })
   })
 
-  describe('TMPL-03: array iteration', () => {
+  describe('array iteration', () => {
     it('userContent renders with both vars set', () => {
       const result = templateEngine.render(template.userContent!, {
         previousContext: 'Context.',
@@ -48,7 +48,7 @@ describe('chapter-summarization template', () => {
     })
   })
 
-  describe('TMPL-04: no crash on missing optional vars', () => {
+  describe('no crash on missing optional vars', () => {
     it('userContent renders without crash when both vars absent', () => {
       const result = templateEngine.render(template.userContent!, {})
       expect(result).not.toBeNull()

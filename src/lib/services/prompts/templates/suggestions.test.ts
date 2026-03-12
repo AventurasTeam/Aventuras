@@ -12,7 +12,7 @@ const suggestionsBase = {
 }
 
 describe('suggestions template', () => {
-  describe('TMPL-01: variable injection', () => {
+  describe('variable injection', () => {
     it('renders genre in userContent', () => {
       const result = templateEngine.render(template.userContent!, {
         ...suggestionsBase,
@@ -30,7 +30,7 @@ describe('suggestions template', () => {
     })
   })
 
-  describe('TMPL-02: conditional suppression', () => {
+  describe('conditional suppression', () => {
     it('lorebook section absent when lorebookEntries empty', () => {
       const result = templateEngine.render(template.userContent!, { ...suggestionsBase })
       expect(result).not.toContain('## Lorebook/World Elements')
@@ -47,7 +47,7 @@ describe('suggestions template', () => {
     })
   })
 
-  describe('TMPL-03: array iteration', () => {
+  describe('array iteration', () => {
     it('storyEntries loop renders 2 entries', () => {
       const result = templateEngine.render(template.userContent!, {
         ...suggestionsBase,
@@ -73,7 +73,7 @@ describe('suggestions template', () => {
     })
   })
 
-  describe('TMPL-04: no crash on missing optional vars', () => {
+  describe('no crash on missing optional vars', () => {
     it('userContent renders without crash when all optional vars absent', () => {
       const result = templateEngine.render(template.userContent!, {})
       expect(result).not.toBeNull()

@@ -19,7 +19,7 @@ const actionChoicesBase = {
 }
 
 describe('action-choices template', () => {
-  describe('TMPL-01: variable injection', () => {
+  describe('variable injection', () => {
     it('renders protagonistName in userContent', () => {
       const result = templateEngine.render(template.userContent!, {
         ...actionChoicesBase,
@@ -37,7 +37,7 @@ describe('action-choices template', () => {
     })
   })
 
-  describe('TMPL-02: conditional suppression', () => {
+  describe('conditional suppression', () => {
     it('World Context section absent when lorebookEntries empty', () => {
       const result = templateEngine.render(template.userContent!, { ...actionChoicesBase })
       expect(result).not.toContain('## World Context')
@@ -71,7 +71,7 @@ describe('action-choices template', () => {
     })
   })
 
-  describe('TMPL-03: array iteration', () => {
+  describe('array iteration', () => {
     it('storyEntries loop renders 2 entries', () => {
       const result = templateEngine.render(template.userContent!, {
         ...actionChoicesBase,
@@ -97,7 +97,7 @@ describe('action-choices template', () => {
     })
   })
 
-  describe('TMPL-04: no crash on missing optional vars', () => {
+  describe('no crash on missing optional vars', () => {
     it('userContent renders without crash when optional vars absent', () => {
       const result = templateEngine.render(template.userContent!, { protagonistName: 'Hero' })
       expect(result).not.toBeNull()
