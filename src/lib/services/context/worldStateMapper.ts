@@ -8,17 +8,16 @@
  * and the template context builder (ContextBuilder).
  */
 
-import type {
-  RelevantEntry,
-  ContextResult,
-  WorldState,
-} from '$lib/services/ai/generation/EntryInjector'
+import type { ContextResult, WorldState } from '$lib/services/ai/generation/EntryInjector'
 import type {
   ContextCharacter,
   ContextItem,
   ContextStoryBeat,
   ContextLocation,
 } from './context-types'
+import { normalizeAppearance } from './context-utils'
+
+export { normalizeAppearance }
 
 /**
  * All world state arrays produced by mapContextResultToArrays().
@@ -39,36 +38,6 @@ export interface WorldStateArrays {
   worldStateLocations: ContextLocation[]
   /** Current location as a flat object, or null if none in tier-1 */
   currentLocationObject: { name: string; description: string } | null
-}
-
-/**
- * Normalize appearance data from a character's visualDescriptors metadata field.
- *
- * Handles two historical formats:
- * - Legacy array: string[] — each element is an appearance descriptor
- * - Object format: { face, hair, eyes, build, clothing, accessories, distinguishing }
- *
- * @param visualDescriptors - Raw value from RelevantEntry.metadata.visualDescriptors
- * @returns Array of non-empty appearance descriptor strings
- */
-export function normalizeAppearance(visualDescriptors: unknown): string[] {
-  if (!visualDescriptors) return []
-
-  if (Array.isArray(visualDescriptors)) {
-    return (visualDescriptors as unknown[]).filter(Boolean).map(String)
-  }
-
-  if (typeof visualDescriptors === 'object') {
-    const vd = visualDescriptors as Record<string, unknown>
-    const fields = ['face', 'hair', 'eyes', 'build', 'clothing', 'accessories', 'distinguishing']
-    const parts: string[] = []
-    for (const field of fields) {
-      if (vd[field]) parts.push(String(vd[field]))
-    }
-    return parts
-  }
-
-  return []
 }
 
 /**
