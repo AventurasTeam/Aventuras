@@ -132,22 +132,16 @@ export class AgenticRetrievalService extends BaseAIService {
     // Create tools
     const tools = createRetrievalTools(toolContext)
 
-    // Build chapter list for user prompt
-    const chapterList =
-      context.chapters
-        ?.slice(0, 20) // Limit for prompt size
-        .map(
-          (ch) =>
-            `- Chapter ${ch.number}${ch.title ? `: ${ch.title}` : ''} - ${ch.summary.slice(0, 100)}...`,
-        )
-        .join('\n') ?? 'No chapters available.'
-
-    // Build entry list for user prompt
-    const entryList =
-      context.availableEntries
-        .slice(0, 30) // Limit for prompt size
-        .map((e, i) => `${i}. [${e.type}] ${e.name}`)
-        .join('\n') || 'No entries available.'
+    // Build typed arrays (apply slice limits before mapping — templates cannot slice)
+    const agenticChapters = (context.chapters ?? []).slice(0, 20).map((ch) => ({
+      number: ch.number,
+      title: ch.title ?? '',
+      summary: ch.summary.slice(0, 100) + '...',
+    }))
+    const agenticEntries = context.availableEntries.slice(0, 30).map((e) => ({
+      name: e.name,
+      type: e.type,
+    }))
 
     // Render prompts through unified pipeline
     const ctx = new ContextBuilder()
@@ -158,9 +152,9 @@ export class AgenticRetrievalService extends BaseAIService {
         .join('\n\n')
         .slice(0, 2000),
       chaptersCount: context.chapters?.length ?? 0,
-      chapterList,
+      agenticChapters,
       entriesCount: context.availableEntries.length,
-      entryList,
+      agenticEntries,
     })
     const { system: systemPrompt, user: userPrompt } = await ctx.render('agentic-retrieval')
 

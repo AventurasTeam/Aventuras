@@ -209,10 +209,12 @@ RECENT SCENE:
 {{ recentContext }}
 
 # Available Chapters: {{ chaptersCount }}
-{{ chapterList }}
+{% if agenticChapters.size > 0 %}{% for c in agenticChapters %}- Chapter {{ c.number }}{% if c.title %}: {{ c.title }}{% endif %} - {{ c.summary }}
+{% endfor %}{% else %}No chapters available.{% endif %}
 
 # Lorebook Entries: {{ entriesCount }}
-{{ entryList }}
+{% if agenticEntries.size > 0 %}{% for e in agenticEntries %}{{ forloop.index0 }}. [{{ e.type }}] {{ e.name }}
+{% endfor %}{% else %}No entries available.{% endif %}
 
 Please gather relevant context from past chapters that will help respond to this situation. Focus on information that is actually needed - often, no retrieval is necessary for simple actions.`,
 }
