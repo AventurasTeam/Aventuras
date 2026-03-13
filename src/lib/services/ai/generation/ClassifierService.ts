@@ -32,6 +32,7 @@ import {
 } from '../sdk/schemas/classifier'
 import { buildExtendedClassificationSchema } from '../sdk/schemas/runtime-variables'
 import type { RuntimeVariable, RuntimeEntityType } from '$lib/services/packs/types'
+import { mapCharacters, mapBeats, mapChatEntries } from '$lib/services/context/classifierMapper'
 
 const log = createLogger('Classifier')
 
@@ -95,16 +96,16 @@ export class ClassifierService extends BaseAIService {
         ? buildExtendedClassificationSchema(runtimeVarsByType)
         : classificationResultSchema
 
-    // Format existing entities for the prompt
-    const existingCharacters = this.formatExistingCharacters(context.existingCharacters)
-    const existingLocations = context.existingLocations.map((l) => l.name).join(', ') || '(none)'
-    const existingItems = context.existingItems.map((i) => i.name).join(', ') || '(none)'
-    const existingBeats = this.formatExistingBeats(context.existingStoryBeats)
+    // Map domain entities to typed context arrays for template rendering
+    const characters = mapCharacters(context.existingCharacters)
+    const locations = context.existingLocations
+    const items = context.existingItems
+    const storyBeats = mapBeats(context.existingStoryBeats)
 
-    // Build chat history block if entries provided
-    const chatHistoryBlock = visibleEntries
-      ? this.buildChatHistoryBlock(visibleEntries, currentStoryTime)
-      : ''
+    // Build chat history array if entries provided
+    const chatHistory = visibleEntries
+      ? mapChatEntries(visibleEntries.slice(-this.chatHistoryTruncation))
+      : []
 
     // Build time info
     const currentTimeInfo = currentStoryTime
@@ -124,14 +125,14 @@ export class ClassifierService extends BaseAIService {
       mode,
       entityCounts: `${context.existingCharacters.length} characters, ${context.existingLocations.length} locations, ${context.existingItems.length} items`,
       currentTimeInfo,
-      chatHistoryBlock,
+      chatHistory,
       inputLabel: mode === 'creative-writing' ? 'Author Direction' : 'Player Action',
       userAction: stripPicTags(context.userAction),
       narrativeResponse: stripPicTags(context.narrativeResponse),
-      existingCharacters,
-      existingLocations,
-      existingItems,
-      existingBeats,
+      characters,
+      locations,
+      items,
+      storyBeats,
       storyBeatTypes: 'milestone, quest, revelation, event, plot_point',
       itemLocationOptions: 'inventory, worn, ground, or specific location name',
       defaultItemLocation: 'inventory',
@@ -333,83 +334,5 @@ export class ClassifierService extends BaseAIService {
     for (const entity of result.entryUpdates.newStoryBeats) {
       clampInlineVars(entity as unknown as Record<string, unknown>)
     }
-  }
-
-  /**
-   * Format existing characters for the prompt.
-   */
-  private formatExistingCharacters(characters: Character[]): string {
-    if (characters.length === 0) return '(none)'
-
-    return characters
-      .map((c) => {
-        let entry = `- ${c.name}`
-        if (c.relationship) entry += ` (${c.relationship})`
-        if (c.status && c.status !== 'active') entry += ` [${c.status}]`
-        if (c.visualDescriptors && Object.keys(c.visualDescriptors).length > 0) {
-          entry += `\n  Appearance: ${this.formatVisualDescriptors(c.visualDescriptors)}`
-        }
-        return entry
-      })
-      .join('\n')
-  }
-
-  /**
-   * Format visual descriptors object into a readable string.
-   */
-  private formatVisualDescriptors(descriptors: Character['visualDescriptors']): string {
-    if (!descriptors) return ''
-
-    const parts: string[] = []
-    if (descriptors.face) parts.push(`Face: ${descriptors.face}`)
-    if (descriptors.hair) parts.push(`Hair: ${descriptors.hair}`)
-    if (descriptors.eyes) parts.push(`Eyes: ${descriptors.eyes}`)
-    if (descriptors.build) parts.push(`Build: ${descriptors.build}`)
-    if (descriptors.clothing) parts.push(`Clothing: ${descriptors.clothing}`)
-    if (descriptors.accessories) parts.push(`Accessories: ${descriptors.accessories}`)
-    if (descriptors.distinguishing) parts.push(`Distinguishing: ${descriptors.distinguishing}`)
-
-    return parts.join(', ')
-  }
-
-  /**
-   * Format existing story beats for the prompt.
-   */
-  private formatExistingBeats(beats: StoryBeat[]): string {
-    const activeBeats = beats.filter((b) => b.status === 'active' || b.status === 'pending')
-    if (activeBeats.length === 0) return '(none)'
-
-    return activeBeats
-      .map((b) => {
-        let entry = `- "${b.title}" [${b.status}]`
-        if (b.description) entry += `: ${b.description}`
-        return entry
-      })
-      .join('\n')
-  }
-
-  /**
-   * Build chat history block for context.
-   */
-  private buildChatHistoryBlock(entries: StoryEntry[], _currentTime?: TimeTracker | null): string {
-    if (entries.length === 0) return ''
-
-    const recentEntries = entries.slice(-this.chatHistoryTruncation)
-
-    const formatted = recentEntries
-      .map((e) => {
-        const prefix = e.type === 'user_action' ? '[ACTION]' : '[NARRATIVE]'
-        let timeInfo = ''
-        if (e.metadata?.timeStart) {
-          const t = e.metadata.timeStart
-          timeInfo = ` (at Y${t.years}D${t.days} ${String(t.hours).padStart(2, '0')}:${String(t.minutes).padStart(2, '0')})`
-        }
-        // Always strip pic tags for classification to avoid confusion
-        const cleanContent = stripPicTags(e.content)
-        return `${prefix}${timeInfo} ${cleanContent.slice(0, 500)}${cleanContent.length > 500 ? '...' : ''}`
-      })
-      .join('\n\n')
-
-    return `## Recent Chat History\n${formatted}\n`
   }
 }
