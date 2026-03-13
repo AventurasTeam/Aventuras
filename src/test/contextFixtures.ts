@@ -14,7 +14,14 @@ import type {
   RetrievedEntry,
 } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import type { TimelineFillResult } from '$lib/services/ai/retrieval/TimelineFillService'
-import type { Chapter, StoryEntry, Entry, CharacterEntryState } from '$lib/types'
+import type {
+  Chapter,
+  StoryEntry,
+  Entry,
+  CharacterEntryState,
+  Character,
+  StoryBeat,
+} from '$lib/types'
 
 // ---------------------------------------------------------------------------
 // contextResult: ContextResult
@@ -439,3 +446,87 @@ export const shimContext: Record<string, unknown> = {
     },
   ],
 }
+
+// ---------------------------------------------------------------------------
+// rawCharacters: Character[]
+// ---------------------------------------------------------------------------
+
+/**
+ * Input fixture for classifierMapper and imageMapper tests.
+ *
+ * Two characters:
+ *   1. 'Aria' — fully populated with all VisualDescriptors fields
+ *   2. 'Unknown Traveler' — minimal, empty visualDescriptors (exercises empty-array fallback)
+ */
+export const rawCharacters: Character[] = [
+  {
+    id: 'char-aria',
+    storyId: 'story-1',
+    name: 'Aria',
+    description: 'A skilled archer with a steady aim.',
+    relationship: 'companion',
+    traits: ['brave', 'loyal'],
+    visualDescriptors: {
+      face: 'Sharp cheekbones',
+      hair: 'Dark brown braid',
+      eyes: 'Amber',
+      build: 'Lean and athletic',
+      clothing: 'Leather travelling gear',
+      accessories: 'Quiver of arrows',
+      distinguishing: 'Scar above right eyebrow',
+    },
+    portrait: null,
+    status: 'active',
+    metadata: null,
+    branchId: null,
+  },
+  {
+    id: 'char-minimal',
+    storyId: 'story-1',
+    name: 'Unknown Traveler',
+    description: null,
+    relationship: null,
+    traits: [],
+    visualDescriptors: {},
+    portrait: null,
+    status: 'inactive',
+    metadata: null,
+    branchId: null,
+  },
+]
+
+// ---------------------------------------------------------------------------
+// rawStoryBeats: StoryBeat[]
+// ---------------------------------------------------------------------------
+
+/**
+ * Input fixture for classifierMapper and imageMapper tests.
+ *
+ * Two beats:
+ *   1. 'Find the Lost Key' — fully populated quest beat
+ *   2. 'The Darkness' — minimal, description=null (exercises ?? '' path)
+ */
+export const rawStoryBeats: StoryBeat[] = [
+  {
+    id: 'beat-key',
+    storyId: 'story-1',
+    title: 'Find the Lost Key',
+    description: 'Retrieve the key to the sealed vault.',
+    type: 'quest',
+    status: 'active',
+    triggeredAt: null,
+    metadata: null,
+    branchId: null,
+  },
+  {
+    id: 'beat-minimal',
+    storyId: 'story-1',
+    title: 'The Darkness',
+    description: null,
+    type: 'revelation',
+    status: 'pending',
+    triggeredAt: null,
+    metadata: null,
+    branchId: null,
+  },
+]
