@@ -562,13 +562,6 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
   },
   {
-    name: 'chatHistory',
-    type: 'text',
-    category: 'runtime',
-    description: 'Chat history for image context',
-    required: false,
-  },
-  {
     name: 'translatedNarrativeBlock',
     type: 'text',
     category: 'runtime',
