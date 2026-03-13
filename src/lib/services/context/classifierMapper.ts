@@ -14,6 +14,7 @@ import type {
   ContextChatEntry,
 } from './context-types'
 import { normalizeAppearance } from './context-utils'
+import { stripPicTags } from '$lib/utils/inlineImageParser'
 
 /**
  * Map an array of Character domain objects to ContextClassifierCharacter context shapes.
@@ -58,16 +59,46 @@ export function mapBeats(beats: StoryBeat[]): ContextClassifierBeat[] {
 /**
  * Map an array of StoryEntry domain objects to ContextChatEntry context shapes.
  *
- * Picks only type and content — Pick<StoryEntry, 'type' | 'content'> semantics.
+ * Used by ClassifierService for the chatHistory[] context variable.
+ * Caller is responsible for truncating entry count before calling (service responsibility).
+ *
+ * - Strips pic tags from content
+ * - Truncates content to 500 chars (with '...' suffix if truncated)
+ * - Formats timeStart from metadata.timeStart as 'YxDy HH:MM', or '' if not present
+ */
+export function mapChatEntries(entries: StoryEntry[]): ContextChatEntry[] {
+  return entries.map((e) => {
+    const stripped = stripPicTags(e.content)
+    const content = stripped.length > 500 ? stripped.slice(0, 500) + '...' : stripped
+
+    const ts = e.metadata?.timeStart
+    const timeStart = ts
+      ? `Y${ts.years}D${ts.days} ${String(ts.hours).padStart(2, '0')}:${String(ts.minutes).padStart(2, '0')}`
+      : ''
+
+    return {
+      type: e.type,
+      content,
+      metadata: e.metadata,
+      timeStart,
+    } satisfies ContextChatEntry
+  })
+}
+
+/**
+ * Map an array of StoryEntry domain objects to ContextChatEntry context shapes.
+ *
+ * Picks only type and content — minimal shape for classifier context.
  * Does NOT strip pic tags — that is the caller's responsibility.
  * Does NOT import from storyEntryMapper — no cross-mapper dependency.
+ *
+ * @deprecated Use mapChatEntries for full ContextChatEntry shape with timeStart support.
  */
 export function mapEntries(entries: StoryEntry[]): ContextChatEntry[] {
-  return entries.map(
-    (e) =>
-      ({
-        type: e.type,
-        content: e.content,
-      }) satisfies ContextChatEntry,
-  )
+  return entries.map((e) => ({
+    type: e.type,
+    content: e.content,
+    metadata: e.metadata,
+    timeStart: '',
+  }))
 }

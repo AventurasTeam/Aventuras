@@ -197,9 +197,16 @@ export type ContextClassifierBeat = Pick<StoryBeat, 'title' | 'description' | 't
 
 /**
  * A chat entry for classifier/image templates (chatHistory[]).
- * Same shape as ContextStoryEntry — type alias for semantic clarity.
+ * Extended from StoryEntry — strips IDs and tracking fields, adds timeStart for template rendering.
+ * The metadata field is retained so mappers can read it; templates use timeStart directly.
  */
-export type ContextChatEntry = ContextStoryEntry
+export type ContextChatEntry = Omit<
+  StoryEntry,
+  'id' | 'storyId' | 'branchId' | 'parentId' | 'position' | 'createdAt'
+> & {
+  /** Formatted time string for template rendering, e.g. 'Y1D3 09:30', empty string if none */
+  timeStart: string
+}
 
 /**
  * A passage for style review templates (passages[]).
