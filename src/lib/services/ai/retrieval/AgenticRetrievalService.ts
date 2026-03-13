@@ -5,7 +5,7 @@
  * and chapter context using the Vercel AI SDK ToolLoopAgent.
  */
 
-import type { Entry, Chapter } from '$lib/types'
+import type { Entry, Chapter, StoryEntry } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '$lib/log'
 import { createAgentFromPreset, extractTerminalToolResult, stopOnTerminalTool } from '../sdk/agents'
@@ -37,7 +37,7 @@ export interface RetrievalResult {
  */
 export interface RetrievalContext {
   userInput: string
-  recentNarrative: string
+  recentEntries: StoryEntry[]
   availableEntries: Entry[]
   /** Chapter summaries for context */
   chapters?: Chapter[]
@@ -153,7 +153,10 @@ export class AgenticRetrievalService extends BaseAIService {
     const ctx = new ContextBuilder()
     ctx.add({
       userInput: context.userInput,
-      recentContext: context.recentNarrative.slice(0, 2000),
+      recentContext: context.recentEntries
+        .map((e) => e.content)
+        .join('\n\n')
+        .slice(0, 2000),
       chaptersCount: context.chapters?.length ?? 0,
       chapterList,
       entriesCount: context.availableEntries.length,

@@ -80,8 +80,9 @@ USER INPUT:
 
 CURRENT SCENE (last few messages):
 """
-{{ recentContext }}
-"""
+{% for e in recentEntries %}[{{ e.type }}]: {{ e.content }}
+
+{% endfor %}"""
 
 CHAPTER SUMMARIES:
 {% for c in chapters %}Chapter {{ c.number }}: {{ c.summary }}

@@ -401,7 +401,7 @@ class AIService {
     const memoryService = serviceFactory.createMemoryService()
     const context: RetrievalContext = {
       userInput,
-      recentNarrative: recentEntries.map((e) => e.content).join(' '),
+      recentEntries,
       availableChapters: chapters,
     }
     return memoryService.decideRetrieval(context, mode, pov, tense)
@@ -604,13 +604,10 @@ class AIService {
 
     const service = serviceFactory.createAgenticRetrievalService()
 
-    // Build recent narrative from entries
-    const recentNarrative = recentEntries.map((e) => e.content).join('\n\n')
-
     // Build context for the service
     const context: AgenticRetrievalContext = {
       userInput,
-      recentNarrative,
+      recentEntries,
       availableEntries: entries,
       chapters,
       // Pass through the chapter query callback directly

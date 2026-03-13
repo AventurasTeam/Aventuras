@@ -37,7 +37,7 @@ export interface RetrievedContext {
 
 export interface RetrievalContext {
   userInput: string
-  recentNarrative: string
+  recentEntries: StoryEntry[]
   availableChapters: Chapter[]
 }
 
@@ -145,6 +145,7 @@ export class MemoryService extends BaseAIService {
     }
 
     const { chapters } = mapChaptersToContext(context.availableChapters)
+    const recentEntries = mapStoryEntriesToContext(context.recentEntries, { stripPicTags: false })
 
     const ctx = new ContextBuilder()
     ctx.add({
@@ -152,7 +153,7 @@ export class MemoryService extends BaseAIService {
       pov,
       tense,
       userInput: context.userInput,
-      recentContext: context.recentNarrative,
+      recentEntries,
       chapters,
       maxChaptersPerRetrieval: DEFAULT_MEMORY_CONFIG.maxChaptersPerRetrieval.toString(),
     })
