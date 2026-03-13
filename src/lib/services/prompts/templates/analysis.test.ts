@@ -308,10 +308,8 @@ describe('lorebook-classifier template', () => {
   })
 
   it('rendered output contains valid JSON fragment', () => {
-    const result = templateEngine.render(
-      lorebookClassifierTemplate.userContent!,
-      lorebookClassifierBase,
-    )
+    const result =
+      templateEngine.render(lorebookClassifierTemplate.userContent!, lorebookClassifierBase) ?? ''
     // Extract the JSON array portion from the rendered output
     const jsonStart = result.indexOf('[')
     const jsonEnd = result.lastIndexOf(']')
