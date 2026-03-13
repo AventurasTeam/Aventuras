@@ -16,6 +16,7 @@ import {
   type RetrievalDecision,
 } from '../sdk/schemas/memory'
 import { mapChaptersToContext } from '$lib/services/context/chapterMapper'
+import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
 import { AI_CONFIG } from '../core/config'
 import { createLogger } from '$lib/log'
 
@@ -60,20 +61,16 @@ export class MemoryService extends BaseAIService {
       previousChaptersCount: previousChapters?.length ?? 0,
     })
 
-    const entriesText = entries.map((e) => `[${e.type}]: ${e.content}`).join('\n\n')
-
-    const previousChaptersContext =
-      previousChapters && previousChapters.length > 0
-        ? `Previous chapters:\n${previousChapters.map((c) => `Chapter ${c.number}: ${c.summary}`).join('\n\n')}`
-        : ''
+    const chapterEntries = mapStoryEntriesToContext(entries, { stripPicTags: false })
+    const { chapters: previousChaptersCtx } = mapChaptersToContext(previousChapters ?? [])
 
     const ctx = new ContextBuilder()
     ctx.add({
       mode,
       pov,
       tense,
-      chapterContent: entriesText,
-      previousContext: previousChaptersContext,
+      chapterEntries,
+      previousChapters: previousChaptersCtx,
     })
     const { system, user: prompt } = await ctx.render('chapter-summarization')
 
@@ -108,18 +105,16 @@ export class MemoryService extends BaseAIService {
 
     const firstValidMessageId = lastChapterEndIndex + 1
     const lastValidMessageId = firstValidMessageId + entries.length - 1
-    const entriesText = entries
-      .map((e, index) => `[Message ${firstValidMessageId + index}] [${e.type}]: ${e.content}`)
-      .join('\n\n')
+    const messagesInRange = mapStoryEntriesToContext(entries, { stripPicTags: false })
 
     const ctx = new ContextBuilder()
     ctx.add({
       mode,
       pov,
       tense,
-      messagesInRange: entriesText,
-      firstValidId: firstValidMessageId.toString(),
-      lastValidId: lastValidMessageId.toString(),
+      messagesInRange,
+      firstValidId: firstValidMessageId,
+      lastValidId: lastValidMessageId,
     })
     const { system, user: prompt } = await ctx.render('chapter-analysis')
 

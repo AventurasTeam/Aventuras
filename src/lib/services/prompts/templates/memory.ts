@@ -21,8 +21,9 @@ First valid message ID: {{ firstValidId }}
 Last valid message ID: {{ lastValidId }}
 
 # Messages in Range:
-{{ messagesInRange }}
+{% for e in messagesInRange %}[Message {{ forloop.index0 | plus: firstValidId }}] [{{ e.type }}]: {{ e.content }}
 
+{% endfor %}
 Select the single best chapter endpoint from this range.`,
 }
 
@@ -49,12 +50,16 @@ For each chapter, create a concise summary that includes ONLY:
 - Dialogue excerpts (unless pivotal)
 - Stylistic or thematic analysis
 - Personal interpretations or opinions`,
-  userContent: `{{ previousContext }}Summarize this story chapter and extract metadata.
+  userContent: `{% if previousChapters.size > 0 %}Previous chapters:
+{% for c in previousChapters %}Chapter {{ c.number }}: {{ c.summary }}
+
+{% endfor %}{% endif %}Summarize this story chapter and extract metadata.
 
 CHAPTER CONTENT:
 """
-{{ chapterContent }}
-"""`,
+{% for e in chapterEntries %}[{{ e.type }}]: {{ e.content }}
+
+{% endfor %}"""`,
 }
 
 const retrievalDecisionPromptTemplate: PromptTemplate = {
