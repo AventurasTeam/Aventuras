@@ -8,7 +8,9 @@
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../build",
-    "features": ["devtools"]
+    "features": [
+      "devtools"
+    ]
   },
   "app": {
     "windows": [
