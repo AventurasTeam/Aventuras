@@ -202,7 +202,11 @@ Identify overused phrases, sentence patterns, structural repetition, and stylist
 - Focus on actionable improvements`,
   userContent: `Analyze these {{ passageCount }} passages for repetitive phrases, structural patterns, and style issues. Each passage is a separate AI-generated narrative response.
 
-{{ passages }}`,
+{% for passage in passages %}--- Passage {{ forloop.index }} ---
+{{ passage.content }}
+{% unless forloop.last %}
+
+{% endunless %}{% endfor %}`,
 }
 
 const lorebookClassifierPromptTemplate: PromptTemplate = {
@@ -243,14 +247,16 @@ Consider:
 
 Only include entries that have a clear connection to the current scene or user's intended action. Do not include entries just because they exist in the world.`,
   userContent: `# Current Scene
-{{ recentContent }}
+{% for entry in recentEntries %}{{ entry.content }}{% unless forloop.last %}
+
+{% endunless %}{% endfor %}
 
 # User's Input
 "{{ userInput }}"
 
 # Available Entries
-{{ entrySummaries }}
-
+{% for entry in availableEntries %}{{ forloop.index0 }}. [{{ entry.type }}] {{ entry.name }}{% if entry.description != '' %}: {{ entry.description }}{% endif %}
+{% endfor %}
 Which entries (by number) are relevant to the current scene and user input?`,
 }
 
