@@ -496,7 +496,6 @@ class AIService {
     storyId: string,
     branchId: string | null,
     entries: Entry[],
-    recentMessages: StoryEntry[],
     chapters: Chapter[],
     callbacks: {
       onCreateEntry: (entry: Entry) => Promise<void>
@@ -509,15 +508,6 @@ class AIService {
     _pov?: POV,
     _tense?: Tense,
   ): Promise<LoreManagementResult> {
-    // Extract recent user action and narrative
-    const recentNarration = recentMessages.filter((m) => m.type === 'narration')
-    const recentActions = recentMessages.filter((m) => m.type === 'user_action')
-
-    const narrativeResponse =
-      recentNarration.length > 0 ? recentNarration[recentNarration.length - 1].content : ''
-    const userAction =
-      recentActions.length > 0 ? recentActions[recentActions.length - 1].content : ''
-
     // Build chapters info for lore management
     // Deep clone to avoid Svelte proxy issues with AI SDK structured cloning
     const chapterInfos = JSON.parse(
@@ -536,8 +526,6 @@ class AIService {
     const service = serviceFactory.createLoreManagementService()
     const sessionResult = await service.runSession({
       storyId,
-      narrativeResponse,
-      userAction,
       existingEntries: entries,
       chapters: chapterInfos,
       queryChapter: callbacks.onQueryChapter,

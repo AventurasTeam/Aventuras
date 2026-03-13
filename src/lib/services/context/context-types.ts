@@ -292,3 +292,15 @@ export type ContextAnswerChapter = Pick<Chapter, 'number' | 'title' | 'summary'>
   /** Optional story entries within this chapter (for detailed answer mode) */
   entries?: ContextStoryEntry[]
 }
+
+/**
+ * A chapter for agentic retrieval templates (agenticChapters[]).
+ * Same shape as ContextLoreChapter — type alias for semantic clarity.
+ */
+export type ContextAgenticChapter = ContextLoreChapter
+
+/**
+ * A lorebook entry for agentic retrieval templates (agenticEntries[]).
+ * Slim subset — name and type only.
+ */
+export type ContextAgenticEntry = Pick<Entry, 'name' | 'type'>

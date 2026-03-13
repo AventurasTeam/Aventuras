@@ -120,9 +120,11 @@ Guidelines:
 
 Use your tools to review the story and make necessary changes. When finished, call finish_lore_management with a summary.`,
   userContent: `# Current Lorebook Entries
-{{ entrySummary }}
-{{ recentStorySection }}# Chapter Summaries
-{{ chapterSummary }}
+{% for e in loreEntries %}[{{ forloop.index0 }}] [{{ e.type }}] {{ e.name }}: {{ e.description }}
+{% endfor %}
+# Chapter Summaries
+{% if loreChapters.size > 0 %}{% for c in loreChapters %}Chapter {{ c.number }}{% if c.title %}: {{ c.title }}{% endif %} - {{ c.summary }}
+{% endfor %}{% else %}No chapters available. Use list_chapters and query_chapter tools to explore story history.{% endif %}
 
 Please review the story content and identify:
 1. Important elements that should have entries but don't

@@ -38,7 +38,6 @@ export interface LoreManagementDependencies {
     storyId: string,
     branchId: string | null,
     entries: Entry[],
-    recentMessages: [], // Empty array - lore management runs without current chat history
     chapters: Chapter[],
     callbacks: {
       onCreateEntry: (entry: Entry) => Promise<void>
@@ -86,7 +85,6 @@ export class LoreManagementCoordinator {
         input.storyId,
         input.currentBranchId,
         [...input.lorebookEntries], // Clone to avoid mutation issues
-        [], // Lore management runs without current chat history
         input.chapters,
         {
           onCreateEntry: async (entry) => {
