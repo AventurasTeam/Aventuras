@@ -19,25 +19,18 @@ export const systemSamples: Record<string, string> = {
 export const runtimeSamples: Record<string, string> = {
   // Narrative Service
   recentContent: '[Recent story content would appear here...]',
-  tieredContextBlock: '[Lorebook entries injected by tiered retrieval...]',
-  chapterSummaries: '[Formatted chapter summaries from memory system...]',
   agenticRetrievalContext: '[Agentic retrieval Q&A context from chapter memory...]',
-  inlineImageInstructions: '[Instructions for inline image generation...]',
-  visualProseInstructions: '[Instructions for visual prose mode...]',
   visualProseMode: 'false',
   inlineImageMode: 'false',
 
   // Classifier Service
   entityCounts: 'Characters: 3, Locations: 5, Items: 4',
   currentTimeInfo: 'Year 1, Day 15, 14:30',
-  chatHistoryBlock: '[Formatted chat history...]',
   inputLabel: 'Player Action',
   userAction: 'I want to explore the ancient ruins to the north.',
   narrativeResponse: '[The narrative response text...]',
-  existingCharacters: 'Aria (protagonist), Theron (companion), Lyra (antagonist)',
   existingLocations: 'The Whispering Woods, Crystal Caverns, Thornhold Castle',
   existingItems: 'Enchanted Compass, Shadow Cloak, Moonstone Pendant',
-  existingBeats: 'Discovered the hidden map, Met the wandering sage',
   storyBeatTypes: 'discovery, encounter, revelation, conflict, resolution',
   itemLocationOptions: 'inventory, equipped, location, npc',
   defaultItemLocation: 'location',
@@ -48,7 +41,6 @@ export const runtimeSamples: Record<string, string> = {
   messagesInRange: '[Messages in range for chapter analysis...]',
   firstValidId: '1',
   lastValidId: '25',
-  recentContext: '[Recent narrative context for retrieval...]',
   maxChaptersPerRetrieval: '3',
 
   // Suggestions Service
@@ -58,7 +50,6 @@ export const runtimeSamples: Record<string, string> = {
   npcsPresent: 'Theron the Ranger, Old Sage Maren',
   inventory: 'Enchanted Compass, Shadow Cloak, Healing Potion x2',
   activeQuests: 'Find the Moonstone Pendant, Explore the Crystal Caverns',
-  lorebookContext: '[Relevant lorebook entries injected by context system...]',
   protagonistDescription: 'A young woman with silver hair and violet eyes',
   povInstruction: 'Write in second person perspective.',
   lengthInstruction: 'Write 2-3 paragraphs.',
