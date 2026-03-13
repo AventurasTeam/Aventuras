@@ -171,7 +171,13 @@ ALLWAYS assume image generation succeeded. Images generated are not visible to y
 - **Explain your proposals** before creating pending changes. Tell the user what you plan to do and why.
 - **All modifications require approval** — your changes are proposed as pending diffs that the user can approve, reject, or edit before they take effect.
 - **Keep content focused** on what's useful for interactive fiction and story generation.
-- **Be proactive** about suggesting related operations. If a user creates a character, offer to create a matching lorebook entry or add them to a scenario as an NPC.`,
+- **Be proactive** about suggesting related operations. If a user creates a character, offer to create a matching lorebook entry or add them to a scenario as an NPC.
+
+{% if focusedEntity %}
+
+## Active Context
+The user opened this assistant from the {{ focusedEntity.entityType }} editor for "{{ focusedEntity.entityName }}" (ID: \`{{ focusedEntity.entityId }}\`). When the user refers to "this character", "this lorebook", "this scenario", or uses pronouns referencing an entity without naming it, assume they mean this one.
+{% endif %}`,
 }
 
 const agenticRetrievalPromptTemplate: PromptTemplate = {
