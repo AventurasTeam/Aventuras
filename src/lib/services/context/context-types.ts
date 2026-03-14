@@ -19,11 +19,10 @@ import type { Character, Item, StoryBeat, Location, Entry, Chapter, StoryEntry }
  * Explicit field list — new Character fields won't leak into templates.
  * `appearance` is normalized from VisualDescriptors; `tier` is retrieval priority.
  */
-export type ContextCharacter = {
-  name: string
-  description: string | null
-  relationship: string | null
-  traits: string[]
+export type ContextCharacter = Pick<
+  Character,
+  'name' | 'description' | 'relationship' | 'traits'
+> & {
   status: 'active' | 'inactive' | 'deceased'
   /** Visual appearance details (normalized from VisualDescriptors) */
   appearance: string[]
