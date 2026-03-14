@@ -1,14 +1,5 @@
 <script lang="ts">
-  import {
-    Upload,
-    FileJson,
-    ImageIcon,
-    Check,
-    X,
-    MessageSquare,
-    User,
-    AlertCircle,
-  } from 'lucide-svelte'
+  import { Upload, ImageIcon, Check, X, MessageSquare, User, AlertCircle } from 'lucide-svelte'
   import * as Card from '$lib/components/ui/card'
   import * as Alert from '$lib/components/ui/alert'
   import { Button } from '$lib/components/ui/button'
@@ -137,7 +128,6 @@
         </Card.Content>
       </Card.Root>
     {:else}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class={cn(
           'border-border hover:border-primary/40 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-colors',
@@ -206,7 +196,6 @@
         </Card.Content>
       </Card.Root>
     {:else}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class={cn(
           'border-border hover:border-primary/40 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-colors',

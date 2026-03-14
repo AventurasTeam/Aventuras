@@ -76,12 +76,7 @@
       rows={4}
     />
     <div class="flex gap-2">
-      <Button
-        variant="secondary"
-        size="sm"
-        onclick={onUseAsIs}
-        disabled={!settingSeed.trim()}
-      >
+      <Button variant="secondary" size="sm" onclick={onUseAsIs} disabled={!settingSeed.trim()}>
         Use as-is
       </Button>
       <Button
@@ -116,7 +111,7 @@
         <p class="text-muted-foreground text-sm">{expandedSetting.description}</p>
         {#if expandedSetting.themes.length > 0}
           <div class="mt-2 flex flex-wrap gap-1">
-            {#each expandedSetting.themes as theme}
+            {#each expandedSetting.themes as theme (theme)}
               <Badge variant="outline" class="text-xs">{theme}</Badge>
             {/each}
           </div>
@@ -194,9 +189,12 @@
                 <Collapsible.Content>
                   <div class="border-t p-3">
                     <div class="flex flex-wrap gap-2">
-                      {#each Object.entries(getTypeCounts(lorebook.entries)) as [type, count]}
+                      {#each Object.entries(getTypeCounts(lorebook.entries)) as [type, count] (type)}
                         {#if count > 0}
-                          <Badge variant="secondary" class="text-xs {getTypeColor(type as EntryType)}">
+                          <Badge
+                            variant="secondary"
+                            class="text-xs {getTypeColor(type as EntryType)}"
+                          >
                             {type}: {count}
                           </Badge>
                         {/if}

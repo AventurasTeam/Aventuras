@@ -31,6 +31,7 @@ import type { LorebookImportResult } from '$lib/services/lorebookImporter'
 import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
 import { database } from '$lib/services/database'
 import { ImageStore } from '$lib/stores/wizard/imageStore.svelte'
+import { SvelteMap } from 'svelte/reactivity'
 import { packService } from '$lib/services/packs/pack-service'
 import type { PresetPack, CustomVariable } from '$lib/services/packs/types'
 
@@ -85,7 +86,7 @@ export class STImportWizardStore {
   showVaultPicker = $state(false)
   supportingCharacters = $state<GeneratedCharacter[]>([])
   cardCharacterName = $state('')
-  characterPortraits = $state<Map<string, string>>(new Map())
+  characterPortraits = $state<SvelteMap<string, string>>(new SvelteMap())
 
   // Step 4: World & Lorebook
   settingSeed = $state('')
@@ -254,7 +255,7 @@ export class STImportWizardStore {
     // Sync protagonist portrait back
     this.protagonistPortrait = this.image.protagonistPortrait
     // Sync supporting character portraits back
-    const map = new Map<string, string>()
+    const map = new SvelteMap<string, string>()
     for (const [name, portrait] of Object.entries(this.image.supportingCharacterPortraits)) {
       if (portrait) {
         map.set(name, portrait)
@@ -386,7 +387,7 @@ export class STImportWizardStore {
         this.cardCharacterName = cardChar.name
         // Attach card portrait to the primary character
         if (this.cardPortrait) {
-          this.characterPortraits = new Map(this.characterPortraits).set(
+          this.characterPortraits = new SvelteMap(this.characterPortraits).set(
             cardChar.name,
             this.cardPortrait,
           )
@@ -497,7 +498,7 @@ export class STImportWizardStore {
   }
 
   updateCharacterPortrait(name: string, portrait: string | null) {
-    const map = new Map(this.characterPortraits)
+    const map = new SvelteMap(this.characterPortraits)
     if (portrait) {
       map.set(name, portrait)
     } else {

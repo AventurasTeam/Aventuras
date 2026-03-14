@@ -158,7 +158,7 @@
             <span class="text-sm">{supportingCharacters.length} supporting characters</span>
           </div>
           <div class="mt-1.5 flex flex-wrap gap-1">
-            {#each supportingCharacters as char}
+            {#each supportingCharacters as char (char.name)}
               <Badge variant="outline" class="text-xs">{char.name}</Badge>
             {/each}
           </div>

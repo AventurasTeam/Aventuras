@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { User, Users, Edit3, Trash2, Archive, Check, Loader2 } from 'lucide-svelte'
+  import { User, Users, Edit3, Trash2, Archive, Check } from 'lucide-svelte'
   import * as Card from '$lib/components/ui/card'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
@@ -55,7 +55,7 @@
     showManualInput,
     showVaultPicker,
     supportingCharacters,
-    cardPortrait,
+    cardPortrait: _cardPortrait,
     cardCharacterName,
     characterPortraits,
     onManualNameChange,
@@ -64,7 +64,7 @@
     onManualMotivationChange,
     onManualTraitsChange,
     onUseManualCharacter,
-    onEditCharacter,
+    onEditCharacter: _onEditCharacter,
     onUpdateProtagonist,
     onSelectFromVault,
     onToggleVaultPicker,
@@ -90,7 +90,7 @@
   // Protagonist-specific fields
   let editBackground = $state('')
   let editMotivation = $state('')
-  let saving = $state(false)
+  let _saving = $state(false)
 
   // Track which characters were saved to vault
   let savedToVault = $state<Set<number>>(new Set())
@@ -184,7 +184,7 @@
       })
       savedToVault = new Set([...savedToVault, index])
       ui.showToast(`${char.name} saved to vault`, 'info')
-    } catch (err) {
+    } catch {
       ui.showToast('Failed to save to vault', 'error')
     }
   }
@@ -226,7 +226,7 @@
               <p class="text-muted-foreground text-sm">{protagonist.description}</p>
               {#if protagonist.traits.length > 0}
                 <div class="mt-2 flex flex-wrap gap-1">
-                  {#each protagonist.traits as trait}
+                  {#each protagonist.traits as trait (trait)}
                     <Badge variant="outline" class="text-xs">{trait}</Badge>
                   {/each}
                 </div>
@@ -341,7 +341,7 @@
           <Card.Root class="group hover:border-primary/30 transition-all">
             <Card.Content class="p-3">
               <div class="flex items-start justify-between">
-                <div class="flex items-start gap-3 min-w-0 flex-1">
+                <div class="flex min-w-0 flex-1 items-start gap-3">
                   {#if characterPortraits.has(char.name)}
                     <img
                       src={characterPortraits.get(char.name)}
@@ -369,7 +369,9 @@
                     {/if}
                   </div>
                 </div>
-                <div class="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                <div
+                  class="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+                >
                   <Button
                     variant="ghost"
                     size="icon"

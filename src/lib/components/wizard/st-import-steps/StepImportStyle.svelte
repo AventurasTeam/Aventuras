@@ -2,7 +2,6 @@
   import { Sword, Feather, MessageSquare, FileText } from 'lucide-svelte'
   import * as Card from '$lib/components/ui/card'
   import { Label } from '$lib/components/ui/label'
-  import { Badge } from '$lib/components/ui/badge'
   import { ScrollArea } from '$lib/components/ui/scroll-area'
   import WritingStyleFields from '$lib/components/shared/WritingStyleFields.svelte'
   import { hasRequiredCredentials } from '$lib/services/ai/image'
@@ -105,7 +104,9 @@
         <Card.Root
           class="h-full transition-all {importChatAsEntries
             ? 'ring-primary border-primary ring-2'
-            : 'border-border hover:border-primary/40'} {!hasChatFile ? 'opacity-50 cursor-not-allowed' : ''}"
+            : 'border-border hover:border-primary/40'} {!hasChatFile
+            ? 'cursor-not-allowed opacity-50'
+            : ''}"
         >
           <Card.Content class="flex items-center gap-3 p-3">
             <MessageSquare
@@ -165,9 +166,9 @@
       imageGenerationMode="none"
       backgroundImagesEnabled={false}
       referenceMode={false}
-      onPOVChange={onPOVChange}
-      onTenseChange={onTenseChange}
-      onToneChange={onToneChange}
+      {onPOVChange}
+      {onTenseChange}
+      {onToneChange}
       onVisualProseModeChange={() => {}}
       onImageGenerationModeChange={() => {}}
       onBackgroundImagesEnabledChange={() => {}}
