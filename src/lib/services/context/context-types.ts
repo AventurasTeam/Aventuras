@@ -251,22 +251,10 @@ export type ContextLoreChapter = Pick<Chapter, 'number' | 'title' | 'summary'>
 /**
  * A character for image generation templates (sceneCharacters[]).
  * Keeps visualDescriptors and portrait for image prompt construction.
- * Strips internal IDs, branch tracking, and translation fields only.
  */
-export type ContextSceneCharacter = Omit<
+export type ContextSceneCharacter = Pick<
   Character,
-  | 'id'
-  | 'storyId'
-  | 'branchId'
-  | 'overridesId'
-  | 'deleted'
-  | 'metadata'
-  | 'translatedName'
-  | 'translatedDescription'
-  | 'translatedRelationship'
-  | 'translatedTraits'
-  | 'translatedVisualDescriptors'
-  | 'translationLanguage'
+  'name' | 'description' | 'relationship' | 'traits' | 'visualDescriptors' | 'portrait' | 'status'
 >
 
 /**
