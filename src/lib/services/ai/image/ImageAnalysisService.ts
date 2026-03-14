@@ -8,11 +8,13 @@
  * which phrases/moments should have images generated.
  */
 
-import type { VisualDescriptors } from '$lib/types'
+import type { Character } from '$lib/types'
+import type { ContextChatEntry } from '$lib/services/context/context-types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
 import { sceneAnalysisResultSchema, type ImageableScene } from '../sdk/schemas/imageanalysis'
+import { mapPresentCharacters } from '$lib/services/context/imageMapper'
 
 const log = createLogger('ImageAnalysis')
 
@@ -24,12 +26,8 @@ export interface ImageAnalysisContext {
   narrativeResponse: string
   /** The user action that triggered this narrative */
   userAction: string
-  /** Characters present in the scene with their visual descriptors */
-  presentCharacters: Array<{
-    name: string
-    visualDescriptors?: VisualDescriptors
-    isProtagonist: boolean
-  }>
+  /** Characters present in the scene */
+  presentCharacters: Character[]
   /** Current location name */
   currentLocation?: string
   /** The image style prompt to include */
@@ -37,13 +35,9 @@ export interface ImageAnalysisContext {
   /** Maximum number of images (0 = unlimited) */
   maxImages: number
   /** Full chat history for comprehensive context */
-  chatHistory?: string
+  chatHistory?: ContextChatEntry[]
   /** Activated lorebook entries for world context */
   lorebookContext?: string
-  /** Names of characters that have portrait images available */
-  charactersWithPortraits: string[]
-  /** Names of characters that need portrait generation before appearing in scene images */
-  charactersWithoutPortraits: string[]
   /** Translated narrative text - use this for sourceText extraction when available */
   translatedNarrative?: string
   /** Target language for translation */
@@ -77,19 +71,6 @@ export class ImageAnalysisService extends BaseAIService {
       hasTranslation: !!context.translatedNarrative,
     })
 
-    // Build character descriptors block
-    const characterDescriptors = this.buildCharacterDescriptors(context.presentCharacters)
-
-    // Format portrait lists
-    const charactersWithPortraitsStr =
-      context.charactersWithPortraits.length > 0
-        ? context.charactersWithPortraits.join(', ')
-        : 'None'
-    const charactersWithoutPortraitsStr =
-      context.charactersWithoutPortraits.length > 0
-        ? context.charactersWithoutPortraits.join(', ')
-        : 'None'
-
     // Build translated narrative block if available
     let translatedNarrativeBlock = ''
     if (context.translatedNarrative && context.translationLanguage) {
@@ -106,13 +87,11 @@ ${context.translatedNarrative}`
     const ctx = new ContextBuilder()
     ctx.add({
       imageStylePrompt: context.stylePrompt,
-      characterDescriptors: characterDescriptors || 'No character visual descriptors available.',
-      charactersWithPortraits: charactersWithPortraitsStr,
-      charactersWithoutPortraits: charactersWithoutPortraitsStr,
+      sceneCharacters: mapPresentCharacters(context.presentCharacters),
       maxImages: context.maxImages === 0 ? '0 (unlimited)' : String(context.maxImages),
       narrativeResponse: context.narrativeResponse,
       userAction: context.userAction,
-      chatHistory: context.chatHistory || '',
+      chatHistory: context.chatHistory || [],
       lorebookContext: context.lorebookContext || '',
       translatedNarrativeBlock,
     })
@@ -134,52 +113,5 @@ ${context.translatedNarrative}`
       log('identifyScenes failed', error)
       return []
     }
-  }
-
-  /**
-   * Build a formatted string of character visual descriptors for the prompt.
-   */
-  private buildCharacterDescriptors(
-    characters: Array<{
-      name: string
-      visualDescriptors?: VisualDescriptors
-      isProtagonist: boolean
-    }>,
-  ): string {
-    const withDescriptors = characters.filter((c) => c.visualDescriptors)
-
-    if (withDescriptors.length === 0) {
-      return ''
-    }
-
-    return withDescriptors
-      .map((char) => {
-        const vd = char.visualDescriptors!
-        const parts: string[] = [`**${char.name}**:`]
-
-        /* if (vd.gender) parts.push(`Gender: ${vd.gender}`)
-        if (vd.age) parts.push(`Age: ${vd.age}`)
-        if (vd.height) parts.push(`Height: ${vd.height}`)
-        if (vd.build) parts.push(`Build: ${vd.build}`)
-        if (vd.skinTone) parts.push(`Skin: ${vd.skinTone}`)
-        if (vd.hairColor) parts.push(`Hair color: ${vd.hairColor}`)
-        if (vd.hairStyle) parts.push(`Hair style: ${vd.hairStyle}`)
-        if (vd.eyeColor) parts.push(`Eyes: ${vd.eyeColor}`)
-        if (vd.facialFeatures) parts.push(`Face: ${vd.facialFeatures}`)
-        if (vd.distinguishingMarks) parts.push(`Marks: ${vd.distinguishingMarks}`)
-        if (vd.clothingStyle) parts.push(`Clothing: ${vd.clothingStyle}`)
-        if (vd.accessories) parts.push(`Accessories: ${vd.accessories}`) */
-        if (vd.face) parts.push(`Face: ${vd.face}`)
-        if (vd.hair) parts.push(`Hair: ${vd.hair}`)
-        if (vd.eyes) parts.push(`Eyes: ${vd.eyes}`)
-        if (vd.build) parts.push(`Build: ${vd.build}`)
-        if (vd.clothing) parts.push(`Clothing: ${vd.clothing}`)
-        if (vd.accessories) parts.push(`Accessories: ${vd.accessories}`)
-        if (vd.distinguishing) parts.push(`Distinguishing features: ${vd.distinguishing}`)
-        if (char.isProtagonist) parts.push(` (Protagonist)`)
-
-        return parts.join('\n  ')
-      })
-      .join('\n\n')
   }
 }

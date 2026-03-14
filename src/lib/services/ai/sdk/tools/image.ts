@@ -20,7 +20,7 @@ import { DEFAULT_FALLBACK_STYLE_PROMPT } from '$lib/services/ai/image/constants'
 import { database } from '$lib/services/database'
 import { ContextBuilder } from '$lib/services/context'
 import { settings } from '$lib/stores/settings.svelte'
-import { descriptorsToString } from '$lib/utils/visualDescriptors'
+import { hasDescriptors } from '$lib/utils/visualDescriptors'
 
 /**
  * Context provided to image tools.
@@ -157,10 +157,8 @@ export function createImageTools(context: ImageToolContext) {
             }
           }
 
-          // Get visual descriptors (inside try so any unexpected throw is handled)
-          const descriptors = descriptorsToString(character.visualDescriptors)
-
-          if (!descriptors.trim()) {
+          // Check visual descriptors
+          if (!hasDescriptors(character.visualDescriptors)) {
             return {
               success: false,
               error: `Cannot generate portrait for "${character.name}" because they have no visual descriptors defined. Please update the character with visual descriptors first.`,
@@ -182,23 +180,21 @@ export function createImageTools(context: ImageToolContext) {
           const imageId = crypto.randomUUID()
           generatedPortraitIds.set(characterId, imageId)
 
-          if (descriptors.trim()) {
-            const ctx = new ContextBuilder()
-            ctx.add({
-              mode: 'adventure',
-              pov: 'second',
-              tense: 'present',
-              protagonistName: '',
-              imageStylePrompt: stylePrompt,
-              visualDescriptors: descriptors,
-              characterName: character.name,
-            })
-            const { system: portraitPrompt } = await ctx.render('image-portrait-generation')
+          const ctx = new ContextBuilder()
+          ctx.add({
+            mode: 'adventure',
+            pov: 'second',
+            tense: 'present',
+            protagonistName: '',
+            imageStylePrompt: stylePrompt,
+            visualDescriptors: character.visualDescriptors,
+            characterName: character.name,
+          })
+          const { system: portraitPrompt } = await ctx.render('image-portrait-generation')
 
-            const base64 = await sdkGeneratePortrait(portraitPrompt)
-            const dataUrl = `data:image/png;base64,${base64}`
-            generatedImages.set(imageId, dataUrl)
-          }
+          const base64 = await sdkGeneratePortrait(portraitPrompt)
+          const dataUrl = `data:image/png;base64,${base64}`
+          generatedImages.set(imageId, dataUrl)
 
           return {
             success: true,

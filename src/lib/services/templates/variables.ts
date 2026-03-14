@@ -155,11 +155,7 @@ class VariableRegistry {
   getByCategory(category: VariableCategory): VariableDefinition[] {
     return Array.from(this.variables.values())
       .filter((v) => v.category === category)
-      .sort((a, b) => {
-        const aDeprecated = a.deprecated ? 1 : 0
-        const bDeprecated = b.deprecated ? 1 : 0
-        return aDeprecated - bDeprecated
-      })
+      .sort((a, b) => a.name.localeCompare(b.name))
   }
 
   /**
@@ -177,11 +173,7 @@ class VariableRegistry {
    * @returns Array of all variable definitions
    */
   getAll(): VariableDefinition[] {
-    return Array.from(this.variables.values()).sort((a, b) => {
-      const aDeprecated = a.deprecated ? 1 : 0
-      const bDeprecated = b.deprecated ? 1 : 0
-      return aDeprecated - bDeprecated
-    })
+    return Array.from(this.variables.values()).sort((a, b) => a.name.localeCompare(b.name))
   }
 
   /**
@@ -217,74 +209,6 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
   },
   {
-    name: 'tieredContextBlock',
-    type: 'text',
-    category: 'runtime',
-    description: 'Lorebook entries injected by tiered retrieval',
-    required: false,
-    deprecated: {
-      replacedBy:
-        'worldStateCharacters[], worldStateInventory[], worldStateBeats[], worldStateLocations[]',
-      message: 'Use structured world state arrays for template-controlled formatting',
-    },
-  },
-  {
-    name: 'chapterSummaries',
-    type: 'text',
-    category: 'runtime',
-    description: 'Formatted chapter summaries block',
-    required: false,
-    deprecated: {
-      replacedBy: 'chapters[], timelineFill[]',
-      message: 'Use structured chapter and timeline arrays for template-controlled formatting',
-    },
-  },
-  {
-    name: 'styleGuidance',
-    type: 'text',
-    category: 'runtime',
-    description: 'Style guidance from repetition analysis',
-    required: false,
-    deprecated: {
-      replacedBy: 'styleReview',
-      message: 'Use styleReview object for full phrase analysis including frequency and severity',
-    },
-  },
-  {
-    name: 'retrievedChapterContext',
-    type: 'text',
-    category: 'runtime',
-    description: 'Retrieved chapter context from memory',
-    required: false,
-    deprecated: {
-      replacedBy: 'agenticRetrievalContext',
-      message:
-        'Use agenticRetrievalContext for agentic retrieval results; lorebookEntries[] for lorebook data',
-    },
-  },
-  {
-    name: 'inlineImageInstructions',
-    type: 'text',
-    category: 'runtime',
-    description: 'Instructions for inline image generation',
-    required: false,
-    deprecated: {
-      replacedBy: 'inlineImageMode',
-      message: 'Instruction text will be embedded in templates, gated by inlineImageMode boolean',
-    },
-  },
-  {
-    name: 'visualProseInstructions',
-    type: 'text',
-    category: 'runtime',
-    description: 'Instructions for visual prose mode',
-    required: false,
-    deprecated: {
-      replacedBy: 'visualProseMode',
-      message: 'Instruction text will be embedded in templates, gated by visualProseMode boolean',
-    },
-  },
-  {
     name: 'visualProseMode',
     type: 'boolean',
     category: 'runtime',
@@ -315,13 +239,6 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
   },
   {
-    name: 'chatHistoryBlock',
-    type: 'text',
-    category: 'runtime',
-    description: 'Formatted chat history block',
-    required: false,
-  },
-  {
     name: 'inputLabel',
     type: 'text',
     category: 'runtime',
@@ -340,34 +257,6 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     type: 'text',
     category: 'runtime',
     description: 'The narrative response text',
-    required: false,
-  },
-  {
-    name: 'existingCharacters',
-    type: 'text',
-    category: 'runtime',
-    description: 'Known character list for classification',
-    required: false,
-  },
-  {
-    name: 'existingLocations',
-    type: 'text',
-    category: 'runtime',
-    description: 'Known location list for classification',
-    required: false,
-  },
-  {
-    name: 'existingItems',
-    type: 'text',
-    category: 'runtime',
-    description: 'Known item list for classification',
-    required: false,
-  },
-  {
-    name: 'existingBeats',
-    type: 'text',
-    category: 'runtime',
-    description: 'Known story beat list for classification',
     required: false,
   },
   {
@@ -394,36 +283,15 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
 
   // === Memory Service ===
   {
-    name: 'chapterContent',
-    type: 'text',
-    category: 'runtime',
-    description: 'Chapter entries to summarize',
-    required: false,
-  },
-  {
-    name: 'previousContext',
-    type: 'text',
-    category: 'runtime',
-    description: 'Previous chapter summaries for context',
-    required: false,
-  },
-  {
-    name: 'messagesInRange',
-    type: 'text',
-    category: 'runtime',
-    description: 'Messages in range for chapter analysis',
-    required: false,
-  },
-  {
     name: 'firstValidId',
-    type: 'text',
+    type: 'number',
     category: 'runtime',
     description: 'First valid entry ID in range',
     required: false,
   },
   {
     name: 'lastValidId',
-    type: 'text',
+    type: 'number',
     category: 'runtime',
     description: 'Last valid entry ID in range',
     required: false,
@@ -434,12 +302,6 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     category: 'runtime',
     description: 'Recent narrative context for retrieval',
     required: false,
-    // recentContext is deprecated for narrative templates but still live-injected by MemoryService for retrieval templates
-    suppressDeprecation: true,
-    deprecated: {
-      replacedBy: 'storyEntries[]',
-      message: 'Use structured story entries array for template-controlled formatting',
-    },
   },
   {
     name: 'maxChaptersPerRetrieval',
@@ -481,17 +343,6 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
   },
   {
-    name: 'lorebookContext',
-    type: 'text',
-    category: 'runtime',
-    description: 'Injected lorebook entries',
-    required: false,
-    deprecated: {
-      replacedBy: 'lorebookEntries[]',
-      message: 'Use structured lorebook entries array for template-controlled formatting',
-    },
-  },
-  {
     name: 'protagonistDescription',
     type: 'text',
     category: 'runtime',
@@ -530,36 +381,6 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     description: 'Number of passages being reviewed',
     required: false,
   },
-  {
-    name: 'passages',
-    type: 'text',
-    category: 'runtime',
-    description: 'Formatted passages for style review',
-    required: false,
-  },
-
-  // === Lore Management Service ===
-  {
-    name: 'entrySummary',
-    type: 'text',
-    category: 'runtime',
-    description: 'Summary of lorebook entries',
-    required: false,
-  },
-  {
-    name: 'recentStorySection',
-    type: 'text',
-    category: 'runtime',
-    description: 'Recent story content for lore analysis',
-    required: false,
-  },
-  {
-    name: 'chapterSummary',
-    type: 'text',
-    category: 'runtime',
-    description: 'Chapter summary for lore context',
-    required: false,
-  },
 
   // === Agentic Retrieval Service ===
   {
@@ -570,51 +391,13 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
   },
   {
-    name: 'chapterList',
-    type: 'text',
-    category: 'runtime',
-    description: 'Formatted chapter list for retrieval',
-    required: false,
-  },
-  {
     name: 'entriesCount',
     type: 'text',
     category: 'runtime',
     description: 'Number of available lorebook entries',
     required: false,
   },
-  {
-    name: 'entryList',
-    type: 'text',
-    category: 'runtime',
-    description: 'Formatted lorebook entry list',
-    required: false,
-  },
-
-  // === Entry Retrieval Service (Tier 3) ===
-  {
-    name: 'entrySummaries',
-    type: 'text',
-    category: 'runtime',
-    description: 'Formatted entry summaries for LLM selection',
-    required: false,
-  },
-
   // === Timeline Fill Service ===
-  {
-    name: 'chapterHistory',
-    type: 'text',
-    category: 'runtime',
-    description: 'Chapter history for timeline fill',
-    required: false,
-  },
-  {
-    name: 'timeline',
-    type: 'text',
-    category: 'runtime',
-    description: 'Timeline data for gap filling',
-    required: false,
-  },
   {
     name: 'query',
     type: 'text',
@@ -676,38 +459,10 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
   },
   {
-    name: 'characterDescriptors',
-    type: 'text',
-    category: 'runtime',
-    description: 'Character visual descriptors for images',
-    required: false,
-  },
-  {
-    name: 'charactersWithPortraits',
-    type: 'text',
-    category: 'runtime',
-    description: 'Characters that have portrait images',
-    required: false,
-  },
-  {
-    name: 'charactersWithoutPortraits',
-    type: 'text',
-    category: 'runtime',
-    description: 'Characters without portrait images',
-    required: false,
-  },
-  {
     name: 'maxImages',
     type: 'text',
     category: 'runtime',
     description: 'Maximum number of images to generate',
-    required: false,
-  },
-  {
-    name: 'chatHistory',
-    type: 'text',
-    category: 'runtime',
-    description: 'Chat history for image context',
     required: false,
   },
   {
@@ -718,24 +473,38 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
   },
   {
-    name: 'previousResponse',
-    type: 'text',
-    category: 'runtime',
-    description: 'Previous narrative response for background images',
-    required: false,
-  },
-  {
-    name: 'currentResponse',
-    type: 'text',
-    category: 'runtime',
-    description: 'Current narrative response for background images',
-    required: false,
-  },
-  {
     name: 'visualDescriptors',
+    type: 'object',
+    category: 'runtime',
+    description:
+      'Structured visual descriptors for portrait generation (face, hair, eyes, build, clothing, accessories, distinguishing)',
+    required: false,
+    infoFields: [
+      { name: 'face', type: 'string', description: 'Skin tone, facial features, expression' },
+      { name: 'hair', type: 'string', description: 'Color, length, style, texture' },
+      { name: 'eyes', type: 'string', description: 'Color, shape, notable features' },
+      { name: 'build', type: 'string', description: 'Height, body type, posture' },
+      { name: 'clothing', type: 'string', description: 'Full outfit description' },
+      { name: 'accessories', type: 'string', description: 'Jewelry, weapons, bags' },
+      { name: 'distinguishing', type: 'string', description: 'Scars, tattoos, birthmarks' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'narrationEntries',
+    type: 'array',
+    category: 'runtime',
+    description: 'All narration entries for background image analysis',
+    required: false,
+    infoFields: [
+      { name: 'type', type: 'string', description: 'Always narration' },
+      { name: 'content', type: 'string', description: 'Narration text' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'lastNarrationIndex',
     type: 'text',
     category: 'runtime',
-    description: 'Visual descriptors for portrait generation',
+    description: 'Index of the last element in narrationEntries (narrationEntries.length - 1)',
     required: false,
   },
 
@@ -1198,6 +967,244 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     category: 'runtime' as const,
     description: 'LLM-formatted Q&A context from agentic chapter retrieval',
     required: false,
+  },
+
+  // === Structured Context Arrays (v1.2) ===
+  {
+    name: 'characters',
+    type: 'array',
+    category: 'runtime',
+    description: 'Character list for classifier templates',
+    required: false,
+    infoFields: [
+      { name: 'name', type: 'string', description: 'Character name' },
+      { name: 'relationship', type: 'string', description: 'Relationship to protagonist' },
+      { name: 'description', type: 'string', description: 'Character description' },
+      { name: 'traits', type: 'string[]', description: 'Personality traits' },
+      { name: 'appearance', type: 'string[]', description: 'Visual appearance details' },
+      { name: 'tier', type: 'number', description: 'Retrieval tier 1-3' },
+      { name: 'status', type: 'string', description: 'active, inactive, or deceased' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'storyBeats',
+    type: 'array',
+    category: 'runtime',
+    description: 'Story beat list for classifier templates',
+    required: false,
+    infoFields: [
+      { name: 'title', type: 'string', description: 'Beat title' },
+      { name: 'description', type: 'string', description: 'Beat description' },
+      { name: 'type', type: 'string', description: 'Beat type (milestone, quest, etc.)' },
+      { name: 'status', type: 'string', description: 'pending, active, completed, or failed' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'chatHistory',
+    type: 'array',
+    category: 'runtime',
+    description: 'Chat history for classifier and image context',
+    required: false,
+    infoFields: [
+      { name: 'type', type: 'string', description: 'user_action or narration' },
+      { name: 'content', type: 'string', description: 'Entry text content' },
+      {
+        name: 'timeStart',
+        type: 'string',
+        description: "Formatted time e.g. 'Y1D3 09:30', empty string if none",
+      },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'passages',
+    type: 'array',
+    category: 'runtime',
+    description: 'Story passages for style review',
+    required: false,
+    infoFields: [
+      { name: 'content', type: 'string', description: 'Passage text content' },
+      { name: 'entryId', type: 'string', description: 'ID of the source story entry' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'availableEntries',
+    type: 'array',
+    category: 'runtime',
+    description: 'Available lorebook entries for tier-3 selection',
+    required: false,
+    infoFields: [
+      { name: 'name', type: 'string', description: 'Entry name' },
+      { name: 'type', type: 'string', description: 'e.g. character, location, item, faction' },
+      { name: 'description', type: 'string', description: 'Entry description' },
+      { name: 'keywords', type: 'string', description: 'Comma-separated keywords (optional)' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'recentEntries',
+    type: 'array',
+    category: 'runtime',
+    description: 'Recent story entries for tier-3 and retrieval-decision templates',
+    required: false,
+    infoFields: [
+      { name: 'type', type: 'string', description: 'user_action or narration' },
+      { name: 'content', type: 'string', description: 'Entry text content' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'messagesInRange',
+    type: 'array',
+    category: 'runtime',
+    description: 'Story entries in range for chapter analysis',
+    required: false,
+    infoFields: [
+      { name: 'type', type: 'string', description: 'user_action or narration' },
+      { name: 'content', type: 'string', description: 'Entry text content' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'chapterEntries',
+    type: 'array',
+    category: 'runtime',
+    description: 'Story entries within a chapter for summarization',
+    required: false,
+    infoFields: [
+      { name: 'type', type: 'string', description: 'user_action or narration' },
+      { name: 'content', type: 'string', description: 'Entry text content' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'previousChapters',
+    type: 'array',
+    category: 'runtime',
+    description: 'Previous chapter summaries for chapter summarization context',
+    required: false,
+    infoFields: [
+      { name: 'number', type: 'number', description: 'Chapter number' },
+      { name: 'title', type: 'string', description: 'Chapter title' },
+      { name: 'summary', type: 'string', description: 'Chapter summary text' },
+      { name: 'startTime', type: 'string', description: 'Formatted start time or null' },
+      { name: 'endTime', type: 'string', description: 'Formatted end time or null' },
+      { name: 'characters', type: 'string[]', description: 'Character names in this chapter' },
+      { name: 'locations', type: 'string[]', description: 'Location names in this chapter' },
+      { name: 'emotionalTone', type: 'string', description: 'Emotional tone of the chapter' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'loreEntries',
+    type: 'array',
+    category: 'runtime',
+    description: 'Lorebook entries for lore management templates',
+    required: false,
+    infoFields: [
+      { name: 'name', type: 'string', description: 'Entry name' },
+      { name: 'type', type: 'string', description: 'e.g. character, location, item, faction' },
+      { name: 'description', type: 'string', description: 'Entry description' },
+      { name: 'state', type: 'string', description: 'Current dynamic state (optional)' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'loreChapters',
+    type: 'array',
+    category: 'runtime',
+    description: 'Chapter summaries for lore management templates',
+    required: false,
+    infoFields: [
+      { name: 'number', type: 'number', description: 'Chapter number' },
+      { name: 'title', type: 'string', description: 'Chapter title' },
+      { name: 'summary', type: 'string', description: 'Chapter summary text' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'agenticChapters',
+    type: 'array',
+    category: 'runtime',
+    description: 'Chapter summaries for agentic retrieval templates',
+    required: false,
+    infoFields: [
+      { name: 'number', type: 'number', description: 'Chapter number' },
+      { name: 'title', type: 'string', description: 'Chapter title' },
+      { name: 'summary', type: 'string', description: 'Chapter summary text' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'agenticEntries',
+    type: 'array',
+    category: 'runtime',
+    description: 'Lorebook entries for agentic retrieval templates',
+    required: false,
+    infoFields: [
+      { name: 'name', type: 'string', description: 'Entry name' },
+      { name: 'type', type: 'string', description: 'e.g. character, location, item, faction' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'sceneCharacters',
+    type: 'array',
+    category: 'runtime',
+    description: 'Characters in scene for image generation templates',
+    required: false,
+    infoFields: [
+      { name: 'name', type: 'string', description: 'Character name' },
+      { name: 'description', type: 'string', description: 'Character description' },
+      {
+        name: 'visualDescriptors',
+        type: 'object',
+        description: 'Visual descriptor fields for image prompts',
+      },
+      {
+        name: 'visualDescriptors.face',
+        type: 'string',
+        description: 'Skin tone, facial features, expression',
+      },
+      {
+        name: 'visualDescriptors.hair',
+        type: 'string',
+        description: 'Color, length, style, texture',
+      },
+      {
+        name: 'visualDescriptors.eyes',
+        type: 'string',
+        description: 'Color, shape, notable features',
+      },
+      {
+        name: 'visualDescriptors.build',
+        type: 'string',
+        description: 'Height, body type, posture',
+      },
+      {
+        name: 'visualDescriptors.clothing',
+        type: 'string',
+        description: 'Full outfit description',
+      },
+      {
+        name: 'visualDescriptors.accessories',
+        type: 'string',
+        description: 'Jewelry, weapons, bags',
+      },
+      {
+        name: 'visualDescriptors.distinguishing',
+        type: 'string',
+        description: 'Scars, tattoos, birthmarks',
+      },
+      { name: 'portrait', type: 'string', description: 'Portrait data URL (null if none)' },
+    ] satisfies VariableFieldInfo[],
+  },
+  {
+    name: 'answerChapters',
+    type: 'array',
+    category: 'runtime',
+    description: 'Chapters for timeline-fill-answer templates',
+    required: false,
+    infoFields: [
+      { name: 'number', type: 'number', description: 'Chapter number' },
+      { name: 'title', type: 'string', description: 'Chapter title' },
+      { name: 'summary', type: 'string', description: 'Chapter summary text' },
+      {
+        name: 'entries',
+        type: 'array',
+        description: 'Optional story entries within this chapter (ContextStoryEntry[])',
+      },
+    ] satisfies VariableFieldInfo[],
   },
 ]
 

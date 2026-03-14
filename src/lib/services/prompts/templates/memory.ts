@@ -21,8 +21,9 @@ First valid message ID: {{ firstValidId }}
 Last valid message ID: {{ lastValidId }}
 
 # Messages in Range:
-{{ messagesInRange }}
+{% for e in messagesInRange %}[Message {{ forloop.index0 | plus: firstValidId }}] [{{ e.type }}]: {{ e.content }}
 
+{% endfor %}
 Select the single best chapter endpoint from this range.`,
 }
 
@@ -49,12 +50,16 @@ For each chapter, create a concise summary that includes ONLY:
 - Dialogue excerpts (unless pivotal)
 - Stylistic or thematic analysis
 - Personal interpretations or opinions`,
-  userContent: `{{ previousContext }}Summarize this story chapter and extract metadata.
+  userContent: `{% if previousChapters.size > 0 %}Previous chapters:
+{% for c in previousChapters %}Chapter {{ c.number }}: {{ c.summary }}
+
+{% endfor %}{% endif %}Summarize this story chapter and extract metadata.
 
 CHAPTER CONTENT:
 """
-{{ chapterContent }}
-"""`,
+{% for e in chapterEntries %}[{{ e.type }}]: {{ e.content }}
+
+{% endfor %}"""`,
 }
 
 const retrievalDecisionPromptTemplate: PromptTemplate = {
@@ -75,8 +80,9 @@ USER INPUT:
 
 CURRENT SCENE (last few messages):
 """
-{{ recentContext }}
-"""
+{% for e in recentEntries %}[{{ e.type }}]: {{ e.content }}
+
+{% endfor %}"""
 
 CHAPTER SUMMARIES:
 {% for c in chapters %}Chapter {{ c.number }}: {{ c.summary }}
@@ -114,9 +120,11 @@ Guidelines:
 
 Use your tools to review the story and make necessary changes. When finished, call finish_lore_management with a summary.`,
   userContent: `# Current Lorebook Entries
-{{ entrySummary }}
-{{ recentStorySection }}# Chapter Summaries
-{{ chapterSummary }}
+{% for e in loreEntries %}[{{ forloop.index0 }}] [{{ e.type }}] {{ e.name }}: {{ e.description }}
+{% endfor %}
+# Chapter Summaries
+{% if loreChapters.size > 0 %}{% for c in loreChapters %}Chapter {{ c.number }}{% if c.title %}: {{ c.title }}{% endif %} - {{ c.summary }}
+{% endfor %}{% else %}No chapters available. Use list_chapters and query_chapter tools to explore story history.{% endif %}
 
 Please review the story content and identify:
 1. Important elements that should have entries but don't
@@ -163,7 +171,13 @@ ALLWAYS assume image generation succeeded. Images generated are not visible to y
 - **Explain your proposals** before creating pending changes. Tell the user what you plan to do and why.
 - **All modifications require approval** — your changes are proposed as pending diffs that the user can approve, reject, or edit before they take effect.
 - **Keep content focused** on what's useful for interactive fiction and story generation.
-- **Be proactive** about suggesting related operations. If a user creates a character, offer to create a matching lorebook entry or add them to a scenario as an NPC.`,
+- **Be proactive** about suggesting related operations. If a user creates a character, offer to create a matching lorebook entry or add them to a scenario as an NPC.
+
+{% if focusedEntity %}
+
+## Active Context
+The user opened this assistant from the {{ focusedEntity.entityType }} editor for "{{ focusedEntity.entityName }}" (ID: \`{{ focusedEntity.entityId }}\`). When the user refers to "this character", "this lorebook", "this scenario", or uses pronouns referencing an entity without naming it, assume they mean this one.
+{% endif %}`,
 }
 
 const agenticRetrievalPromptTemplate: PromptTemplate = {
@@ -201,10 +215,12 @@ RECENT SCENE:
 {{ recentContext }}
 
 # Available Chapters: {{ chaptersCount }}
-{{ chapterList }}
+{% if agenticChapters.size > 0 %}{% for c in agenticChapters %}- Chapter {{ c.number }}{% if c.title %}: {{ c.title }}{% endif %} - {{ c.summary }}
+{% endfor %}{% else %}No chapters available.{% endif %}
 
 # Lorebook Entries: {{ entriesCount }}
-{{ entryList }}
+{% if agenticEntries.size > 0 %}{% for e in agenticEntries %}{{ forloop.index0 }}. [{{ e.type }}] {{ e.name }}
+{% endfor %}{% else %}No entries available.{% endif %}
 
 Please gather relevant context from past chapters that will help respond to this situation. Focus on information that is actually needed - often, no retrieval is necessary for simple actions.`,
 }

@@ -44,6 +44,7 @@ import {
   type BackgroundImageSettings,
 } from './phases/BackgroundImagePhase'
 import { mergeGenerators } from '$lib/utils/async'
+import { mapChatEntries } from '$lib/services/context/classifierMapper'
 
 export interface PipelineDependencies
   extends
@@ -221,6 +222,10 @@ export class GenerationPipeline {
       userAction: ctx.userAction.content,
       presentCharacters,
       currentLocation: ctx.worldState.currentLocation?.name,
+      chatHistory: mapChatEntries(
+        ctx.visibleEntries.filter((e) => e.type === 'user_action' || e.type === 'narration'),
+        { truncate: false, stripPicTags: true },
+      ),
       translatedNarrative: r.translation?.translatedContent ?? undefined,
       translationLanguage: r.translation?.targetLanguage ?? undefined,
       imageSettings: cfg.imageSettings,

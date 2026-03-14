@@ -34,6 +34,7 @@ import {
 } from '../sdk/tools'
 import type { VaultPendingChange } from '../sdk/schemas/vault'
 import { database } from '$lib/services/database'
+import { ContextBuilder } from '$lib/services/context'
 import { createStreamingAgenticAssistant } from '../sdk/agents/factory'
 
 const log = createLogger('InteractiveVault')
@@ -161,19 +162,16 @@ export class InteractiveVaultService extends BaseAIService {
   async initialize(vaultSummary: VaultSummary, focusedEntity?: FocusedEntity): Promise<void> {
     this.conversationHistory = []
 
-    const template = await database.getPackTemplate('default-pack', 'interactive-lorebook')
-
-    let content = template?.content ?? ''
-    content = content
-      .replace(/\{\{\s*characterCount\s*\}\}/g, String(vaultSummary.characterCount))
-      .replace(/\{\{\s*lorebookCount\s*\}\}/g, String(vaultSummary.lorebookCount))
-      .replace(/\{\{\s*totalEntryCount\s*\}\}/g, String(vaultSummary.totalEntryCount))
-      .replace(/\{\{\s*scenarioCount\s*\}\}/g, String(vaultSummary.scenarioCount))
-    this.systemPrompt = content
-
-    if (focusedEntity) {
-      this.systemPrompt += `\n\n## Active Context\nThe user opened this assistant from the ${focusedEntity.entityType} editor for "${focusedEntity.entityName}" (ID: \`${focusedEntity.entityId}\`). When the user refers to "this character", "this lorebook", "this scenario", or uses pronouns referencing an entity without naming it, assume they mean this one.`
-    }
+    const ctx = new ContextBuilder()
+    ctx.add({
+      characterCount: vaultSummary.characterCount,
+      lorebookCount: vaultSummary.lorebookCount,
+      totalEntryCount: vaultSummary.totalEntryCount,
+      scenarioCount: vaultSummary.scenarioCount,
+      focusedEntity: focusedEntity ?? null,
+    })
+    const { system } = await ctx.render('interactive-lorebook')
+    this.systemPrompt = system
 
     this.initialized = true
     log('Initialized conversation', { ...vaultSummary, model: this.preset.model })

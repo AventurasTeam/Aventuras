@@ -40,7 +40,30 @@ Analyze the narrative and identify up to {{ maxImages }} key visual moments (0 =
 **You MUST incorporate this full style description into every prompt.** Include multiple style keywords and rendering details.
 
 ## Character Reference
-{{ characterDescriptors }}
+{%- for char in sceneCharacters %}{% if char.visualDescriptors %}
+**{{ char.name }}**:
+  {%- if char.visualDescriptors.face %}
+  Face: {{ char.visualDescriptors.face }}
+  {%- endif %}
+  {%- if char.visualDescriptors.hair %}
+  Hair: {{ char.visualDescriptors.hair }}
+  {%- endif %}
+  {%- if char.visualDescriptors.eyes %}
+  Eyes: {{ char.visualDescriptors.eyes }}
+  {%- endif %}
+  {%- if char.visualDescriptors.build %}
+  Build: {{ char.visualDescriptors.build }}
+  {%- endif %}
+  {%- if char.visualDescriptors.clothing %}
+  Clothing: {{ char.visualDescriptors.clothing }}
+  {%- endif %}
+  {%- if char.visualDescriptors.accessories %}
+  Accessories: {{ char.visualDescriptors.accessories }}
+  {%- endif %}
+  {%- if char.visualDescriptors.distinguishing %}
+  Distinguishing features: {{ char.visualDescriptors.distinguishing }}
+  {%- endif %}
+{% endif %}{%- endfor %}
 
 ## Prompt Requirements
 - **Prompt length:** below 500 characters MAX (prompts over 500 characters will ERROR and fail)
@@ -81,7 +104,11 @@ Analyze the narrative and identify up to {{ maxImages }} key visual moments (0 =
 - 5-7: Character introductions, emotions
 - 3-5: Environmental shots, atmosphere`,
   userContent: `## Story Context
-{{ chatHistory }}
+{%- if chatHistory.size > 0 %}
+{% for entry in chatHistory %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.timeStart != '' %} (at {{ entry.timeStart }}){% endif %} {{ entry.content }}
+
+{% endfor %}
+{%- endif %}
 
 {{ lorebookContext }}
 
@@ -124,13 +151,36 @@ Analyze the narrative and identify up to {{ maxImages }} scene images (0 = unlim
 {{ imageStylePrompt }}
 
 ## Characters With Portraits (can appear in scene images)
-{{ charactersWithPortraits }}
+{%- assign hasPortrait = false %}{% for char in sceneCharacters %}{% if char.portrait %}{% if hasPortrait %}, {% endif %}{{ char.name }}{% assign hasPortrait = true %}{% endif %}{% endfor %}{% unless hasPortrait %}None{% endunless %}
 
 ## Characters Without Portraits (need portrait generation first)
-{{ charactersWithoutPortraits }}
+{%- assign hasNoPortrait = false %}{% for char in sceneCharacters %}{% unless char.portrait %}{% if hasNoPortrait %}, {% endif %}{{ char.name }}{% assign hasNoPortrait = true %}{% endunless %}{% endfor %}{% unless hasNoPortrait %}None{% endunless %}
 
 ## Character Visual Descriptors
-{{ characterDescriptors }}
+{%- for char in sceneCharacters %}{% if char.visualDescriptors %}
+**{{ char.name }}**:
+  {%- if char.visualDescriptors.face %}
+  Face: {{ char.visualDescriptors.face }}
+  {%- endif %}
+  {%- if char.visualDescriptors.hair %}
+  Hair: {{ char.visualDescriptors.hair }}
+  {%- endif %}
+  {%- if char.visualDescriptors.eyes %}
+  Eyes: {{ char.visualDescriptors.eyes }}
+  {%- endif %}
+  {%- if char.visualDescriptors.build %}
+  Build: {{ char.visualDescriptors.build }}
+  {%- endif %}
+  {%- if char.visualDescriptors.clothing %}
+  Clothing: {{ char.visualDescriptors.clothing }}
+  {%- endif %}
+  {%- if char.visualDescriptors.accessories %}
+  Accessories: {{ char.visualDescriptors.accessories }}
+  {%- endif %}
+  {%- if char.visualDescriptors.distinguishing %}
+  Distinguishing features: {{ char.visualDescriptors.distinguishing }}
+  {%- endif %}
+{% endif %}{%- endfor %}
 
 ## CRITICAL: Never Use Character Names in Prompts
 Image models don't know who "Elena" or "Marcus" are. Character names are ONLY for the JSON fields, NEVER in the prompt text itself.
@@ -253,7 +303,11 @@ Match the angle to the emotional tone: action scenes benefit from low/dutch angl
 - 5-7: Emotional moments, reveals
 - 3-5: Environmental atmosphere`,
   userContent: `## Story Context
-{{ chatHistory }}
+{%- if chatHistory.size > 0 %}
+{% for entry in chatHistory %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.timeStart != '' %} (at {{ entry.timeStart }}){% endif %} {{ entry.content }}
+
+{% endfor %}
+{%- endif %}
 
 {{ lorebookContext }}
 
@@ -273,7 +327,7 @@ const imagePortraitGenerationTemplate: PromptTemplate = {
   name: 'Portrait Generation',
   category: 'service',
   description: 'Direct image prompt template for character portraits',
-  content: `Full body portrait of a character: {{ visualDescriptors }}. Standing in a relaxed natural pose, facing the viewer, full body visible from head to feet. Neutral expression or slight smile. Plain solid color gradient background only, no objects, no environment, no scenery. Portrait composition, centered framing, professional lighting. {{ imageStylePrompt }}`,
+  content: `Full body portrait of a character:{% if visualDescriptors.face %} {{ visualDescriptors.face }}.{% endif %}{% if visualDescriptors.hair %} {{ visualDescriptors.hair }}.{% endif %}{% if visualDescriptors.eyes %} {{ visualDescriptors.eyes }}.{% endif %}{% if visualDescriptors.build %} {{ visualDescriptors.build }}.{% endif %}{% if visualDescriptors.clothing %} {{ visualDescriptors.clothing }}.{% endif %}{% if visualDescriptors.accessories %} {{ visualDescriptors.accessories }}.{% endif %}{% if visualDescriptors.distinguishing %} {{ visualDescriptors.distinguishing }}.{% endif %} Standing in a relaxed natural pose, facing the viewer, full body visible from head to feet. Neutral expression or slight smile. Plain solid color gradient background only, no objects, no environment, no scenery. Portrait composition, centered framing, professional lighting. {{ imageStylePrompt }}`,
   userContent: '',
 }
 
@@ -308,11 +362,11 @@ When generating a description, follow these standards:
 *   **Details**: Describe the environment with vibrant or atmospheric colors. Include elements like "soft lighting," "lens flare," or "depth of field" if applicable.
 *   **Composition**: Ensure the composition leaves negative space (usually the lower center or middle) for dialogue boxes and character sprites. Do not clutter the entire image; the edges should be detailed but the focal area should be relatively open.
 *   **Format**: A single, cohesive paragraph. 800 characters or less, any more **will break** the process.`,
-  userContent: `##Previous Message:
-{{ previousResponse }}
+  userContent: `{% assign prevIdx = lastNarrationIndex | minus: 1 %}##Previous Message:
+{% if prevIdx >= 0 %}{{ narrationEntries[prevIdx].content }}{% endif %}
 
 ##Current Message:
-{{ currentResponse }}`,
+{{ narrationEntries[lastNarrationIndex].content }}`,
 }
 
 export const imageTemplates: PromptTemplate[] = [

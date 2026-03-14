@@ -42,7 +42,6 @@
         story.currentStory.id,
         story.currentStory.currentBranchId,
         [...story.lorebookEntries],
-        [],
         story.chapters,
         {
           onCreateEntry: async (entry) => {
