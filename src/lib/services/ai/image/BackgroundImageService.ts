@@ -6,6 +6,7 @@ import { createLogger } from '$lib/log'
 import { backgroundImageAnalysisResultSchema, type BackgroundImageAnalysisResult } from '../sdk'
 import { BaseAIService } from '../BaseAIService'
 import { generateImage } from './providers/registry'
+import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
 
 const log = createLogger('BackgroundImageService')
 
@@ -37,11 +38,11 @@ export class BackgroundImageService extends BaseAIService {
       }
     }
 
-    const previousResponse = narrationEntries[narrationEntries.length - 2]?.content
-    const currentResponse = narrationEntries[narrationEntries.length - 1]?.content
+    const mappedEntries = mapStoryEntriesToContext(narrationEntries, { stripPicTags: false })
+    const lastNarrationIndex = mappedEntries.length - 1
 
     const ctx = new ContextBuilder()
-    ctx.add({ previousResponse, currentResponse })
+    ctx.add({ narrationEntries: mappedEntries, lastNarrationIndex })
     const { system, user: prompt } = await ctx.render('background-image-prompt-analysis')
 
     try {

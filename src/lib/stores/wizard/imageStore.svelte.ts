@@ -9,6 +9,8 @@ import { ContextBuilder } from '$lib/services/context'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from '$lib/services/ai/image/constants'
 import { createLogger } from '$lib/log'
 import type { GeneratedCharacter, GeneratedProtagonist } from '$lib/services/ai/sdk'
+import type { VisualDescriptors } from '$lib/types'
+import { stringToDescriptors, hasDescriptors } from '$lib/utils/visualDescriptors'
 
 const log = createLogger('WizardPortrait')
 
@@ -33,7 +35,7 @@ async function getStylePrompt(styleId: string): Promise<string> {
  */
 async function buildPortraitPrompt(
   stylePrompt: string,
-  visualDescriptors: string,
+  visualDescriptors: VisualDescriptors,
   characterName: string,
 ): Promise<string> {
   const ctx = new ContextBuilder()
@@ -81,8 +83,8 @@ export class ImageStore {
       return
     }
 
-    const descriptors = this.protagonistVisualDescriptors.trim()
-    if (!descriptors) {
+    const descriptors = stringToDescriptors(this.protagonistVisualDescriptors)
+    if (!hasDescriptors(descriptors)) {
       log('No visual descriptors provided')
       this.portraitError = 'Add appearance descriptors first'
       return
@@ -140,8 +142,10 @@ export class ImageStore {
       return
     }
 
-    const descriptors = (this.supportingCharacterVisualDescriptors[charName] || '').trim()
-    if (!descriptors) {
+    const descriptors = stringToDescriptors(
+      (this.supportingCharacterVisualDescriptors[charName] || '').trim(),
+    )
+    if (!hasDescriptors(descriptors)) {
       log('No visual descriptors provided for character', { characterName: charName })
       this.portraitError = `Add appearance descriptors for ${char.name} first`
       return

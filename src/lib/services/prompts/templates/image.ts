@@ -319,7 +319,7 @@ const imagePortraitGenerationTemplate: PromptTemplate = {
   name: 'Portrait Generation',
   category: 'service',
   description: 'Direct image prompt template for character portraits',
-  content: `Full body portrait of a character: {{ visualDescriptors }}. Standing in a relaxed natural pose, facing the viewer, full body visible from head to feet. Neutral expression or slight smile. Plain solid color gradient background only, no objects, no environment, no scenery. Portrait composition, centered framing, professional lighting. {{ imageStylePrompt }}`,
+  content: `Full body portrait of a character:{% if visualDescriptors.face %} {{ visualDescriptors.face }}.{% endif %}{% if visualDescriptors.hair %} {{ visualDescriptors.hair }}.{% endif %}{% if visualDescriptors.eyes %} {{ visualDescriptors.eyes }}.{% endif %}{% if visualDescriptors.build %} {{ visualDescriptors.build }}.{% endif %}{% if visualDescriptors.clothing %} {{ visualDescriptors.clothing }}.{% endif %}{% if visualDescriptors.accessories %} {{ visualDescriptors.accessories }}.{% endif %}{% if visualDescriptors.distinguishing %} {{ visualDescriptors.distinguishing }}.{% endif %} Standing in a relaxed natural pose, facing the viewer, full body visible from head to feet. Neutral expression or slight smile. Plain solid color gradient background only, no objects, no environment, no scenery. Portrait composition, centered framing, professional lighting. {{ imageStylePrompt }}`,
   userContent: '',
 }
 
@@ -354,11 +354,11 @@ When generating a description, follow these standards:
 *   **Details**: Describe the environment with vibrant or atmospheric colors. Include elements like "soft lighting," "lens flare," or "depth of field" if applicable.
 *   **Composition**: Ensure the composition leaves negative space (usually the lower center or middle) for dialogue boxes and character sprites. Do not clutter the entire image; the edges should be detailed but the focal area should be relatively open.
 *   **Format**: A single, cohesive paragraph. 800 characters or less, any more **will break** the process.`,
-  userContent: `##Previous Message:
-{{ previousResponse }}
+  userContent: `{% assign prevIdx = lastNarrationIndex | minus: 1 %}##Previous Message:
+{% if prevIdx >= 0 %}{{ narrationEntries[prevIdx].content }}{% endif %}
 
 ##Current Message:
-{{ currentResponse }}`,
+{{ narrationEntries[lastNarrationIndex].content }}`,
 }
 
 export const imageTemplates: PromptTemplate[] = [
