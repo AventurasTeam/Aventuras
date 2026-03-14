@@ -344,7 +344,7 @@ export class STImportWizardStore {
   // === Step 2: Import Selection & Processing ===
 
   async processCardImport() {
-    if (!this.cardRawJson || this.isProcessingCard) return
+    if (!this.cardRawJson || !this.cardParsedData || this.isProcessingCard) return
 
     this.isProcessingCard = true
     this.cardProcessError = null
@@ -374,7 +374,7 @@ export class STImportWizardStore {
 
       if (this.importCharacters) {
         // Use sanitized data for clean character info, fallback to raw parsed data
-        const charName = sanitized?.name || result.primaryCharacterName || this.cardParsedData!.name
+        const charName = sanitized?.name || result.primaryCharacterName || this.cardParsedData.name
         const cardChar: GeneratedCharacter = {
           name: charName,
           description:

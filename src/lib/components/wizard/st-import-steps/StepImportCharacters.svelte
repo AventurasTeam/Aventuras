@@ -171,7 +171,7 @@
         name: char.name,
         description: char.description || null,
         traits: char.traits || [],
-        visualDescriptors: {},
+        visualDescriptors: { distinguishing: char.description || '' },
         portrait: characterPortraits.get(char.name) ?? null,
         tags: ['imported'],
         favorite: false,
