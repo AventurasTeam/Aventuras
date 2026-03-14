@@ -14,6 +14,7 @@
     StepImportReview,
   } from './st-import-steps'
   import Step6Portraits from './steps/Step6Portraits.svelte'
+  import StepPackSelection from './steps/StepPackSelection.svelte'
 
   interface Props {
     onClose: () => void
@@ -26,6 +27,7 @@
   const imageGenerationEnabled = $derived(hasRequiredCredentials())
 
   const stepTitles = [
+    'Prompt Pack',
     'Upload Files',
     'Import Selection',
     'Characters',
@@ -68,6 +70,15 @@
     <!-- Content -->
     <div class="min-h-0 flex-1 overflow-y-auto p-4">
       {#if wizard.currentStep === 1}
+        <StepPackSelection
+          availablePacks={wizard.availablePacks}
+          selectedPackId={wizard.selectedPackId}
+          packVariables={wizard.packVariables}
+          variableValues={wizard.customVariableValues}
+          onSelectPack={(packId) => wizard.selectPack(packId)}
+          onVariableChange={(name, value) => wizard.setVariableValue(name, value)}
+        />
+      {:else if wizard.currentStep === 2}
         <StepUploadFiles
           chatParseResult={wizard.chatParseResult}
           chatFileError={wizard.chatFileError}
@@ -79,7 +90,7 @@
           onCardFileProcess={(file: File) => wizard.processCardFile(file)}
           onCardFileClear={() => wizard.clearCardFile()}
         />
-      {:else if wizard.currentStep === 2}
+      {:else if wizard.currentStep === 3}
         <StepImportSelection
           cardParsedData={wizard.cardParsedData}
           cardPortrait={wizard.cardPortrait}
@@ -97,7 +108,7 @@
           onImportLorebookChange={(v) => (wizard.importLorebook = v)}
           onProcessCard={() => wizard.processCardImport()}
         />
-      {:else if wizard.currentStep === 3}
+      {:else if wizard.currentStep === 4}
         <StepImportCharacters
           protagonist={wizard.protagonist}
           protagonistPortrait={wizard.protagonistPortrait}
@@ -126,7 +137,7 @@
           onUpdateSupportingCharacter={(i, c) => wizard.updateSupportingCharacter(i, c)}
           onUpdateCharacterPortrait={(name, portrait) => wizard.updateCharacterPortrait(name, portrait)}
         />
-      {:else if wizard.currentStep === 4}
+      {:else if wizard.currentStep === 5}
         <StepImportWorld
           settingSeed={wizard.settingSeed}
           expandedSetting={wizard.expandedSetting}
@@ -140,7 +151,7 @@
           onRemoveLorebook={(id) => wizard.removeLorebook(id)}
           onToggleLorebookExpanded={(id) => wizard.toggleLorebookExpanded(id)}
         />
-      {:else if wizard.currentStep === 5}
+      {:else if wizard.currentStep === 6}
         <StepImportStyle
           selectedMode={wizard.selectedMode}
           selectedPOV={wizard.selectedPOV}
@@ -156,7 +167,7 @@
           onToneChange={(v) => (wizard.tone = v)}
           onImportChatToggle={(v) => (wizard.importChatAsEntries = v)}
         />
-      {:else if wizard.currentStep === 6}
+      {:else if wizard.currentStep === 7}
         <Step6Portraits
           protagonist={wizard.protagonist}
           supportingCharacters={wizard.supportingCharacters}
@@ -191,7 +202,7 @@
           onSupportingPortraitUpload={(e, name) =>
             wizard.image.handleSupportingCharacterPortraitUpload(e, name)}
         />
-      {:else if wizard.currentStep === 7}
+      {:else if wizard.currentStep === 8}
         <StepImportReview
           storyTitle={wizard.storyTitle}
           selectedMode={wizard.selectedMode}

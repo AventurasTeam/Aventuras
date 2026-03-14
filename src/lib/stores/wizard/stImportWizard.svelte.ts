@@ -22,11 +22,13 @@ import type { LorebookImportResult } from '$lib/services/lorebookImporter'
 import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
 import { database } from '$lib/services/database'
 import { ImageStore } from '$lib/stores/wizard/imageStore.svelte'
+import { packService } from '$lib/services/packs/pack-service'
+import type { PresetPack, CustomVariable } from '$lib/services/packs/types'
 
 export class STImportWizardStore {
   // Step navigation
   currentStep = $state(1)
-  totalSteps = 7
+  totalSteps = 8
 
   // Portrait generation/upload (Step 6)
   image = new ImageStore()
@@ -34,6 +36,13 @@ export class STImportWizardStore {
   // Step 1: File Uploads
   chatParseResult = $state<STChatParseResult | null>(null)
   chatFileError = $state<string | null>(null)
+
+  // Pack selection
+  selectedPackId = $state<string>('default-pack')
+  availablePacks = $state<PresetPack[]>([])
+  packVariables = $state<CustomVariable[]>([])
+  customVariableValues = $state<Record<string, string>>({})
+  packsLoaded = $state(false)
 
   cardParsedData = $state<ParsedCard | null>(null)
   cardRawJson = $state<string | null>(null)
@@ -94,6 +103,7 @@ export class STImportWizardStore {
 
   constructor(onClose: () => void) {
     this.onClose = onClose
+    void this.loadPacks()
   }
 
   // Derived
@@ -127,21 +137,58 @@ export class STImportWizardStore {
 
   // === Navigation ===
 
+  // === Pack Selection ===
+
+  async loadPacks(): Promise<void> {
+    if (this.packsLoaded) return
+    this.availablePacks = await packService.getAllPacks()
+    this.packsLoaded = true
+    await this.loadPackVariables(this.selectedPackId)
+  }
+
+  async loadPackVariables(packId: string): Promise<void> {
+    this.packVariables = await database.getPackVariables(packId)
+    const newValues: Record<string, string> = {}
+    for (const v of this.packVariables) {
+      newValues[v.variableName] = v.defaultValue ?? ''
+    }
+    this.customVariableValues = newValues
+  }
+
+  async selectPack(packId: string): Promise<void> {
+    this.selectedPackId = packId
+    await this.loadPackVariables(packId)
+  }
+
+  setVariableValue(variableName: string, value: string): void {
+    this.customVariableValues = { ...this.customVariableValues, [variableName]: value }
+  }
+
+  allVariablesFilled(): boolean {
+    return this.packVariables.every((v) => {
+      const val = this.customVariableValues[v.variableName]
+      if (v.variableType === 'boolean') return true
+      return val !== undefined && val !== ''
+    })
+  }
+
   canProceed(): boolean {
     switch (this.currentStep) {
-      case 1: // Upload Files
+      case 1: // Prompt Pack
+        return this.allVariablesFilled()
+      case 2: // Upload Files
         return this.cardParsedData !== null
-      case 2: // Import Selection
+      case 3: // Import Selection
         return !this.isProcessingCard
-      case 3: // Characters
+      case 4: // Characters
         return this.protagonist !== null
-      case 4: // World & Lorebook
+      case 5: // World & Lorebook
         return this.settingSeed.trim().length > 0
-      case 5: // Writing Style
+      case 6: // Writing Style
         return true
-      case 6: // Portraits (optional)
+      case 7: // Portraits (optional)
         return true
-      case 7: // Review
+      case 8: // Review
         return this.storyTitle.trim().length > 0
       default:
         return false
@@ -150,15 +197,15 @@ export class STImportWizardStore {
 
   nextStep() {
     if (this.currentStep < this.totalSteps && this.canProceed()) {
-      if (this.currentStep === 5) this.syncToImageStore()
-      if (this.currentStep === 6) this.syncFromImageStore()
+      if (this.currentStep === 6) this.syncToImageStore()
+      if (this.currentStep === 7) this.syncFromImageStore()
       this.currentStep++
     }
   }
 
   prevStep() {
     if (this.currentStep > 1) {
-      if (this.currentStep === 6) this.syncFromImageStore()
+      if (this.currentStep === 7) this.syncFromImageStore()
       this.currentStep--
     }
   }
@@ -671,8 +718,11 @@ export class STImportWizardStore {
         await this.saveImportToVault()
       }
 
-      // Set default pack
-      await database.setStoryPack(newStory.id, 'default-pack')
+      // Set pack
+      await database.setStoryPack(newStory.id, this.selectedPackId)
+      if (Object.keys(this.customVariableValues).length > 0) {
+        await database.setStoryCustomVariables(newStory.id, this.customVariableValues)
+      }
 
       await story.loadStory(newStory.id)
       ui.setActivePanel('story')
