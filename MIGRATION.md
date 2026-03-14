@@ -321,7 +321,7 @@ valid HTML.
 ```
 
 **New variable available:**
-- `characters[]` — each entry has `name`, `relationship`, `description`, `traits[]`, `appearance[]`
+- `characters[]` — each entry has `name`, `relationship`, `description`, `traits[]`, `appearance[]`, `tier`, `status`
 
 ---
 
@@ -365,7 +365,7 @@ by `chatHistory[]`, a structured array you can iterate.
 ```
 
 **New variable available:**
-- `chatHistory[]` — each entry has `type` (`narration`, `user_action`, etc.) and `content`
+- `chatHistory[]` — each entry has `type` (`user_action` or `narration`), `content`, and `timeStart` (formatted time string, e.g. `'Y1D3 09:30'`, empty string if none)
 
 ---
 
@@ -389,7 +389,7 @@ template uses `{{ passages }}` it will now render as `[object Object]` — updat
 ```
 
 **New variable shape:**
-- `passages[]` — each entry has `content` (the passage text), `entryId`, `type`
+- `passages[]` — each entry has `content` (the passage text) and `entryId`
 
 ---
 
