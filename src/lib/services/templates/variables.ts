@@ -283,13 +283,6 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
 
   // === Memory Service ===
   {
-    name: 'chapterContent',
-    type: 'text',
-    category: 'runtime',
-    description: 'Chapter entries to summarize',
-    required: false,
-  },
-  {
     name: 'previousContext',
     type: 'text',
     category: 'runtime',
@@ -459,20 +452,6 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
   },
 
   // === Timeline Fill Service ===
-  {
-    name: 'chapterHistory',
-    type: 'text',
-    category: 'runtime',
-    description: 'Chapter history for timeline fill',
-    required: false,
-  },
-  {
-    name: 'timeline',
-    type: 'text',
-    category: 'runtime',
-    description: 'Timeline data for gap filling',
-    required: false,
-  },
   {
     name: 'query',
     type: 'text',

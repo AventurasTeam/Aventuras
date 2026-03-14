@@ -544,6 +544,96 @@ response for background image analysis. It is replaced by direct index access on
 
 ---
 
+## 17. `chapterHistory`
+
+**What changed:** The old variable was a pre-formatted string of the last 10 visible chat entries
+(ACTION/NARRATIVE labels joined with double newlines). It is replaced by the `storyEntries[]`
+structured array — the template now controls the window size and formatting.
+
+**Before:**
+```liquid
+Visible chat history:
+{{ chapterHistory }}
+```
+
+**After:**
+```liquid
+Visible chat history:
+{% assign startIdx = storyEntries.size | minus: 10 %}
+{%- if startIdx < 0 -%}{%- assign startIdx = 0 -%}{%- endif -%}
+{% for entry in storyEntries limit: 10 offset: startIdx %}
+[{% if entry.type == 'user_action' %}ACTION{% else %}NARRATIVE{% endif %}]: {{ entry.content }}
+{% endfor %}
+```
+
+**New variable available:**
+- `storyEntries[]` — each entry has `type` (`user_action` or `narration`) and `content`
+
+---
+
+## 18. `timeline`
+
+**What changed:** The old variable was a pre-formatted string of chapter summaries
+(`Chapter N: <summary>` lines joined with newlines). It is replaced by the `chapters[]`
+structured array — the template now controls the formatting.
+
+**Before:**
+```liquid
+Existing chapter timeline:
+{{ timeline }}
+```
+
+**After:**
+```liquid
+Existing chapter timeline:
+{% for chapter in chapters %}
+Chapter {{ chapter.number }}: {{ chapter.summary | strip | default: 'No summary' }}
+{% endfor %}
+```
+
+**New variable available:**
+- `chapters[]` — each chapter has `number`, `title`, `summary`, `startTime`, `endTime`, and other fields
+
+---
+
+## 19. `chapterContent`
+
+**What changed:** The old variable was a pre-formatted string of chapter content built by
+concatenating chapter headers with either their full entry list or summary fallback. It is replaced
+by the `answerChapters[]` structured array with dual-mode rendering — templates control whether to
+show entries or summary.
+
+**Before:**
+```liquid
+{{ chapterContent }}
+
+QUESTION: {{ query }}
+```
+
+**After:**
+```liquid
+{% for chapter in answerChapters %}
+## Chapter {{ chapter.number }}{% if chapter.title %}: {{ chapter.title }}{% endif %}
+
+{% if chapter.entries.size > 0 %}
+{%- for entry in chapter.entries %}
+[{% if entry.type == 'user_action' %}ACTION{% else %}NARRATIVE{% endif %}]: {{ entry.content }}
+{% endfor %}
+{%- else %}
+{{ chapter.summary }}
+{%- endif %}
+{% endfor %}
+
+QUESTION: {{ query }}
+```
+
+**New variable available:**
+- `answerChapters[]` — each item has `number`, `title`, `summary`, and optionally `entries[]`
+  (each entry has `type` and `content`). `entries` is only present when full entry data was
+  fetched; when absent, use `summary` as the fallback.
+
+---
+
 ## Checking Your Templates
 
 To find templates that reference deprecated variables, search for these strings in your custom
@@ -565,6 +655,9 @@ charactersWithPortraits
 charactersWithoutPortraits
 previousResponse
 currentResponse
+chapterHistory
+timeline
+chapterContent
 ```
 
 The Aventura template editor will render these as empty strings if referenced — no error will be
