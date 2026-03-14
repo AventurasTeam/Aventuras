@@ -36,9 +36,6 @@ export const runtimeSamples: Record<string, string> = {
   defaultItemLocation: 'location',
 
   // Memory Service
-  chapterContent: '[Chapter entries to summarize...]',
-  previousContext: '[Previous chapter summaries for context...]',
-  messagesInRange: '[Messages in range for chapter analysis...]',
   firstValidId: '1',
   lastValidId: '25',
   maxChaptersPerRetrieval: '3',
@@ -59,12 +56,6 @@ export const runtimeSamples: Record<string, string> = {
 
   // Style Reviewer
   passageCount: '5',
-  passages: '[Formatted passages for style review...]',
-
-  // Lore Management
-  entrySummary: '[Summary of lorebook entries...]',
-  recentStorySection: '[Recent story content for lore analysis...]',
-  chapterSummary: '[Chapter summary for lore context...]',
 
   // Agentic Retrieval
   chaptersCount: '8',
@@ -72,12 +63,7 @@ export const runtimeSamples: Record<string, string> = {
   entriesCount: '15',
   entryList: '[Formatted lorebook entry list...]',
 
-  // Entry Retrieval (Tier 3)
-  entrySummaries: '[Formatted entry summaries for LLM selection...]',
-
   // Timeline Fill
-  chapterHistory: '[Chapter history for timeline fill...]',
-  timeline: '[Timeline data for gap filling...]',
   query: 'What happened between the forest encounter and arriving at the castle?',
 
   // Translation
@@ -90,15 +76,8 @@ export const runtimeSamples: Record<string, string> = {
 
   // Image Services
   imageStylePrompt: '[Style prompt for image generation...]',
-  characterDescriptors: 'Silver hair, violet eyes, leather armor, elven features',
-  charactersWithPortraits: 'Aria, Theron',
-  charactersWithoutPortraits: 'Lyra, Old Sage Maren',
   maxImages: '3',
-  chatHistory: '[Chat history for image context...]',
   translatedNarrativeBlock: '[Translated narrative for image analysis...]',
-  previousResponse: '[Previous narrative response...]',
-  currentResponse: '[Current narrative response...]',
-  visualDescriptors: '[Visual descriptors for portrait generation...]',
 
   // Wizard Service
   genreLabel: 'Fantasy',
@@ -129,9 +108,17 @@ export const runtimeSamples: Record<string, string> = {
   entriesJson: '[Lorebook entries JSON for vault import...]',
   entryCount: '12',
 
-  // Interactive Lorebook
+  // Interactive Lorebook (scalar counts)
+  characterCount: '12',
+  lorebookCount: '3',
+  totalEntryCount: '47',
+  scenarioCount: '5',
+  lastNarrationIndex: '2',
+
+  // Interactive Lorebook (chat)
   userMessage: 'Tell me about the Crystal Caverns.',
   conversationHistory: '[Conversation history for interactive lorebook...]',
+  recentContext: '[Recent story context for agentic retrieval...]',
 }
 
 /**
@@ -317,6 +304,329 @@ export const structuredSamples: Record<string, unknown> = {
     name: 'The Silver Stag Inn',
     description:
       'A cozy tavern at the crossroads, known for its warm hearth and loose-lipped travelers',
+  },
+
+  // v1.2 — Style Reviewer
+  passages: [
+    {
+      content:
+        'Aria stepped into the clearing, her breath catching as the moonlight spilled across the ancient stone altar.',
+      entryId: 'entry-001',
+    },
+    {
+      content:
+        'The forest whispered around them — a language older than words, older than the kingdom itself.',
+      entryId: 'entry-002',
+    },
+    {
+      content:
+        "Theron's hand tightened on his bow. 'Something moved out there,' he said, his voice barely audible.",
+      entryId: 'entry-003',
+    },
+  ],
+
+  // v1.2 — Entry Retrieval (Tier 3)
+  availableEntries: [
+    {
+      name: 'The Whispering Woods',
+      type: 'location',
+      description: 'Ancient forest where trees carry memories of the world.',
+      keywords: 'forest, ancient, magic, trees, memory',
+    },
+    {
+      name: 'The Moonstone Pendant',
+      type: 'item',
+      description: 'A pendant that glows under moonlight, said to reveal hidden paths.',
+      keywords: 'pendant, moonstone, glow, path',
+    },
+    {
+      name: 'Elder Maren',
+      type: 'character',
+      description: 'A wandering sage who guards forgotten knowledge.',
+    },
+  ],
+
+  // v1.2 — Retrieval Decision (recentEntries — same shape as storyEntries)
+  recentEntries: [
+    { type: 'narration', content: 'The Silver Stag Inn falls quiet as evening settles in.' },
+    {
+      type: 'user_action',
+      content: 'I approach the hooded figure sitting alone in the corner.',
+    },
+    {
+      type: 'narration',
+      content: 'The figure looks up — piercing eyes catch the candlelight before she looks away.',
+    },
+  ],
+
+  // v1.2 — Classifier (chatHistory — Omit<StoryEntry> + timeStart)
+  chatHistory: [
+    {
+      type: 'user_action',
+      content: 'I examine the Moonstone Pendant carefully.',
+      timeStart: 'Y1D15 13:45',
+      metadata: null,
+    },
+    {
+      type: 'narration',
+      content: 'The pendant pulses with a soft blue light in your hands.',
+      timeStart: 'Y1D15 13:45',
+      metadata: null,
+    },
+    {
+      type: 'user_action',
+      content: 'I ask Theron if he has ever seen anything like this.',
+      timeStart: 'Y1D15 13:50',
+      metadata: null,
+    },
+  ],
+
+  // v1.2 — Chapter Analysis (messagesInRange — same shape as storyEntries)
+  messagesInRange: [
+    { type: 'user_action', content: 'I draw my sword and step into the shadows.' },
+    {
+      type: 'narration',
+      content:
+        'The forest falls silent as Aria moves into the darkness, her blade catching the last slivers of moonlight.',
+    },
+    { type: 'user_action', content: 'I whisper to Theron to flank left.' },
+  ],
+
+  // v1.2 — Chapter Summarization
+  chapterEntries: [
+    { type: 'narration', content: 'Aria and Theron entered the Crystal Caverns at dawn.' },
+    { type: 'user_action', content: 'I run my hand along the glowing crystal wall.' },
+    {
+      type: 'narration',
+      content:
+        'The crystals hum under your touch, resonating with a frequency you feel in your bones.',
+    },
+  ],
+
+  // v1.2 — Chapter Summarization (previousChapters — same shape as chapters)
+  previousChapters: [
+    {
+      number: 1,
+      title: 'Into the Woods',
+      summary: 'Aria entered the Whispering Woods and encountered her first magical creature.',
+      startTime: 'Year 1, Day 1',
+      endTime: 'Year 1, Day 3',
+      characters: ['Aria', 'Theron'],
+      locations: ['The Whispering Woods'],
+      emotionalTone: 'curious',
+    },
+  ],
+
+  // v1.2 — Lore Management
+  loreEntries: [
+    {
+      name: 'The Whispering Woods',
+      type: 'location',
+      description: 'Ancient forest where trees carry memories of the world.',
+      state: 'Partially explored — southern trails mapped by Aria and Theron.',
+    },
+    {
+      name: 'The Moonstone Pendant',
+      type: 'item',
+      description: 'A pendant that glows under moonlight, said to reveal hidden paths.',
+    },
+    {
+      name: 'Elder Maren',
+      type: 'character',
+      description: 'A wandering sage who guards forgotten knowledge.',
+      state: 'Last seen at the Crystal Caverns entrance, offering cryptic guidance.',
+    },
+  ],
+
+  // v1.2 — Lore Management (loreChapters)
+  loreChapters: [
+    {
+      number: 1,
+      title: 'Into the Woods',
+      summary: 'Aria entered the Whispering Woods and encountered her first magical creature.',
+    },
+    {
+      number: 2,
+      title: 'The Map Revealed',
+      summary: 'Aria discovered the hidden map leading to the Crystal Caverns.',
+    },
+    {
+      number: 3,
+      title: 'Crystal Dawn',
+      summary: 'Aria and Theron reached the Crystal Caverns entrance and met Elder Maren.',
+    },
+  ],
+
+  // v1.2 — Agentic Retrieval (agenticChapters — same shape as loreChapters)
+  agenticChapters: [
+    {
+      number: 1,
+      title: 'Into the Woods',
+      summary: 'Aria entered the Whispering Woods and encountered her first magical creature.',
+    },
+    {
+      number: 2,
+      title: 'The Map Revealed',
+      summary: 'Aria discovered the hidden map leading to the Crystal Caverns.',
+    },
+    {
+      number: 3,
+      title: 'Crystal Dawn',
+      summary: 'Aria and Theron reached the Crystal Caverns entrance and met Elder Maren.',
+    },
+  ],
+
+  // v1.2 — Agentic Retrieval (agenticEntries — name and type only)
+  agenticEntries: [
+    { name: 'The Whispering Woods', type: 'location' },
+    { name: 'The Moonstone Pendant', type: 'item' },
+    { name: 'Elder Maren', type: 'character' },
+  ],
+
+  // v1.2 — Image Analysis (sceneCharacters — mixed portrait state)
+  sceneCharacters: [
+    {
+      name: 'Theron',
+      relationship: 'companion',
+      description: 'A seasoned ranger who has guided Aria through the Whispering Woods.',
+      traits: ['loyal', 'perceptive', 'cautious'],
+      status: 'active',
+      portrait: null,
+      visualDescriptors: {
+        face: 'weathered, strong jaw, high cheekbones',
+        hair: 'dark brown, shoulder-length',
+        eyes: 'amber, watchful',
+        build: 'lean and athletic',
+        clothing: 'worn leather armor, forest-green cloak',
+        accessories: 'shortbow, quiver of black-fletched arrows',
+        distinguishing: 'faint scar above left brow',
+      },
+    },
+    {
+      name: 'Lyra',
+      relationship: 'rival',
+      description: 'A rival mage who seeks the same ancient artifacts as Aria.',
+      traits: ['ambitious', 'cunning', 'talented'],
+      status: 'active',
+      portrait: 'portrait://lyra.png',
+      visualDescriptors: {
+        face: 'sharp features, pale complexion',
+        hair: 'raven black, pulled back tightly',
+        eyes: 'ice blue, calculating',
+        build: 'slender',
+        clothing: 'dark robes with silver trim',
+        accessories: 'silver staff',
+        distinguishing: '',
+      },
+    },
+    {
+      name: 'Elder Maren',
+      relationship: 'neutral',
+      description: 'A wandering sage who guards forgotten knowledge.',
+      traits: ['wise', 'cryptic', 'ancient'],
+      status: 'active',
+      portrait: null,
+      visualDescriptors: {},
+    },
+  ],
+
+  // v1.2 — Timeline Fill Answer (answerChapters — dual-mode)
+  answerChapters: [
+    {
+      number: 1,
+      title: 'Into the Woods',
+      summary: 'Aria entered the Whispering Woods and encountered her first magical creature.',
+      entries: [
+        {
+          type: 'narration',
+          content: 'The tree line swallows the last light of the village behind you.',
+        },
+        {
+          type: 'user_action',
+          content: 'I press deeper into the forest, following the faint luminescence.',
+        },
+      ],
+    },
+    {
+      number: 2,
+      title: 'The Map Revealed',
+      summary: 'Aria discovered the hidden map leading to the Crystal Caverns.',
+    },
+  ],
+
+  // v1.2 — Background Image (narrationEntries — all type narration)
+  narrationEntries: [
+    {
+      type: 'narration',
+      content:
+        'The Crystal Caverns stretch endlessly before you, each surface faceted like a gemstone.',
+    },
+    {
+      type: 'narration',
+      content:
+        'Pale blue light pulses from deep within the cave, casting long shadows across the floor.',
+    },
+    {
+      type: 'narration',
+      content:
+        'A low hum fills the air — the crystals are singing, resonating with some ancient frequency.',
+    },
+  ],
+
+  // v1.2 — Classifier (characters — same shape as worldStateCharacters)
+  characters: [
+    {
+      name: 'Theron',
+      relationship: 'companion',
+      description: 'A seasoned ranger who has guided Aria through the Whispering Woods.',
+      traits: ['loyal', 'perceptive', 'cautious'],
+      appearance: ['rugged leather armor', 'shortbow', 'weathered cloak'],
+      tier: 1,
+      status: 'active',
+    },
+    {
+      name: 'Lyra',
+      relationship: 'rival',
+      description: 'A rival mage who seeks the same ancient artifacts as Aria.',
+      traits: ['ambitious', 'cunning', 'talented'],
+      appearance: ['dark robes', 'silver staff', 'cold eyes'],
+      tier: 2,
+      status: 'active',
+    },
+  ],
+
+  // v1.2 — Classifier (storyBeats — same shape as worldStateBeats)
+  storyBeats: [
+    {
+      title: 'Discovered the Hidden Map',
+      description: 'Found a map leading to the Crystal Caverns.',
+      type: 'discovery',
+      status: 'completed',
+    },
+    {
+      title: 'Confrontation with Lyra',
+      description: 'Lyra demands the compass at the forest edge.',
+      type: 'conflict',
+      status: 'active',
+    },
+  ],
+
+  // v1.2 — Interactive Lorebook (focusedEntity object)
+  focusedEntity: {
+    entityType: 'character',
+    entityName: 'Theron',
+    entityId: 'char-001',
+  },
+
+  // v1.2 — Image Portrait (visualDescriptors object)
+  visualDescriptors: {
+    face: 'angular features, sharp cheekbones',
+    hair: 'silver, flowing to shoulders',
+    eyes: 'violet, luminous',
+    build: 'athletic, graceful',
+    clothing: 'leather armor with arcane engravings',
+    accessories: 'enchanted compass on a chain',
+    distinguishing: 'scar across left cheek',
   },
 }
 
