@@ -1,6 +1,7 @@
 <script lang="ts">
   import { templateEngine } from '$lib/services/templates/engine'
   import { variableRegistry } from '$lib/services/templates/variables'
+  import { allSamples } from './sampleContext'
   import type { CustomVariable } from '$lib/services/packs/types'
   import type { TemplateContext } from '$lib/services/templates/types'
   import { AlertTriangle } from 'lucide-svelte'
@@ -18,20 +19,27 @@
     vars: CustomVariable[],
     overrides?: Record<string, string>,
   ): TemplateContext {
-    const context: TemplateContext = {}
+    // Start with rich sample data (includes structured arrays/objects)
+    const context: TemplateContext = { ...allSamples }
 
-    // All variables get bracket-name fallback; actual values come from testValues overrides
+    // Bracket-name fallback only for variables missing from allSamples
     for (const v of variableRegistry.getByCategory('system')) {
-      context[v.name] = `[${v.name}]`
+      if (!(v.name in context)) {
+        context[v.name] = `[${v.name}]`
+      }
     }
     for (const v of variableRegistry.getByCategory('runtime')) {
-      context[v.name] = `[${v.name}]`
+      if (!(v.name in context)) {
+        context[v.name] = `[${v.name}]`
+      }
     }
     for (const v of vars) {
-      context[v.variableName] = `[${v.displayName}]`
+      if (!(v.variableName in context)) {
+        context[v.variableName] = `[${v.displayName}]`
+      }
     }
 
-    // Apply test value overrides (single source of truth for all sample/default values)
+    // Apply test value overrides (string overrides from TestVariablesModal)
     if (overrides) {
       for (const [key, value] of Object.entries(overrides)) {
         if (value !== '') {

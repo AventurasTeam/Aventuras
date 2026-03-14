@@ -9,9 +9,10 @@
   import { packService } from '$lib/services/packs/pack-service'
   import { validateTemplate } from '$lib/services/templates/validator'
   import { variableRegistry } from '$lib/services/templates/variables'
-  import type { ValidationError } from '$lib/services/templates/types'
+  import type { ValidationError, VariableDefinition } from '$lib/services/templates/types'
   import type { CustomVariable } from '$lib/services/packs/types'
-  import type { Completion } from '@codemirror/autocomplete'
+  import type { Completion, CompletionSection } from '@codemirror/autocomplete'
+  import { allSamples } from './sampleContext'
   import { AlertTriangle, CircleCheck, FlaskConical } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
   import TemplatePreview from './TemplatePreview.svelte'
@@ -67,6 +68,86 @@
     onDirtyChange?.(isDirty)
   })
 
+  // Build a DOM-node tooltip callback for a variable definition
+  function buildTooltipInfo(v: VariableDefinition): (completion: Completion) => { dom: Node } {
+    return () => {
+      const dom = document.createElement('div')
+      dom.className = 'cm-var-tooltip'
+
+      // Deprecated warning banner (if applicable)
+      if (v.deprecated) {
+        const warn = dom.appendChild(document.createElement('div'))
+        warn.className = 'cm-var-deprecated-banner'
+        warn.textContent = `Deprecated -- use ${v.deprecated.replacedBy}`
+      }
+
+      // Variable type badge
+      const typeBadge = dom.appendChild(document.createElement('span'))
+      typeBadge.className = 'cm-var-type-badge'
+      typeBadge.textContent = v.type
+
+      // Description
+      const desc = dom.appendChild(document.createElement('p'))
+      desc.className = 'cm-var-desc'
+      desc.textContent = v.description
+
+      // Type-specific content
+      if (v.type === 'object' && v.infoFields?.length) {
+        // Object with fields -- show shape
+        const pre = dom.appendChild(document.createElement('pre'))
+        pre.className = 'cm-var-fields'
+        pre.textContent = v.infoFields
+          .map((f) => `  ${f.name}: ${f.type}  // ${f.description}`)
+          .join('\n')
+
+        const hint = dom.appendChild(document.createElement('p'))
+        hint.className = 'cm-var-hint'
+        hint.textContent = `Access with: {{ ${v.name}.fieldName }}`
+      } else if (v.type === 'array' && v.infoFields?.length) {
+        // Mini code block showing object shape with field descriptions
+        const pre = dom.appendChild(document.createElement('pre'))
+        pre.className = 'cm-var-fields'
+        pre.textContent = v.infoFields
+          .map((f) => `  ${f.name}: ${f.type}  // ${f.description}`)
+          .join('\n')
+
+        // Usage hint
+        const hint = dom.appendChild(document.createElement('p'))
+        hint.className = 'cm-var-hint'
+        hint.textContent = `Use in: {% for item in ${v.name} %}`
+      } else if (v.type === 'array') {
+        // String array -- no fields, just usage hint
+        const hint = dom.appendChild(document.createElement('p'))
+        hint.className = 'cm-var-hint'
+        hint.textContent = `Use in: {% for item in ${v.name} %}`
+      } else if (v.type === 'boolean') {
+        const vals = dom.appendChild(document.createElement('p'))
+        vals.className = 'cm-var-hint'
+        vals.textContent = 'Values: true / false'
+      } else if (v.type === 'enum' && v.enumValues?.length) {
+        const vals = dom.appendChild(document.createElement('p'))
+        vals.className = 'cm-var-hint'
+        vals.textContent = `Values: ${v.enumValues.join(', ')}`
+      } else if (v.type === 'text' || v.type === 'number') {
+        // text/number variables show example value from sampleContext
+        const sample = allSamples[v.name]
+        if (sample != null) {
+          const example = dom.appendChild(document.createElement('p'))
+          example.className = 'cm-var-hint'
+          example.textContent = `Example: "${String(sample)}"`
+        }
+      }
+
+      return { dom }
+    }
+  }
+
+  // Section for deprecated variables -- shown last in autocomplete
+  const deprecatedSection: CompletionSection = {
+    name: 'Deprecated',
+    rank: 99,
+  }
+
   // Build variable completions for CodeMirror autocomplete
   let completions: Completion[] = $derived.by(() => {
     const result: Completion[] = []
@@ -74,8 +155,9 @@
       result.push({
         label: v.name,
         type: 'variable',
-        detail: v.category,
-        info: v.description,
+        detail: v.deprecated ? `${v.category} (deprecated)` : v.category,
+        info: buildTooltipInfo(v),
+        section: v.deprecated ? deprecatedSection : undefined,
       })
     }
     for (const v of customVariables) {
@@ -160,7 +242,67 @@
       border: '1px solid var(--border)',
       borderRadius: '6px',
       padding: '8px 12px',
-      maxWidth: '300px',
+      maxWidth: '400px',
+    },
+    // Rich tooltip container
+    '.cm-var-tooltip': {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '6px',
+    },
+    // Deprecated warning banner
+    '.cm-var-deprecated-banner': {
+      backgroundColor: 'color-mix(in srgb, #f59e0b 15%, transparent)',
+      color: '#f59e0b',
+      padding: '4px 8px',
+      borderRadius: '4px',
+      fontSize: '11px',
+      fontWeight: '500',
+    },
+    // Variable type badge
+    '.cm-var-type-badge': {
+      display: 'inline-block',
+      fontSize: '10px',
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: '0.05em',
+      color: 'var(--muted-foreground)',
+      opacity: '0.7',
+    },
+    // Description text
+    '.cm-var-desc': {
+      margin: '0',
+      fontSize: '12px',
+      lineHeight: '1.4',
+      color: 'var(--popover-foreground)',
+    },
+    // Mini code block for array field shapes
+    '.cm-var-fields': {
+      margin: '0',
+      padding: '6px 8px',
+      backgroundColor: 'color-mix(in srgb, var(--surface-100, var(--muted)) 50%, transparent)',
+      borderRadius: '4px',
+      fontSize: '11px',
+      lineHeight: '1.5',
+      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+      color: 'var(--popover-foreground)',
+      whiteSpace: 'pre',
+      overflowX: 'auto',
+    },
+    // Usage hint and value hints
+    '.cm-var-hint': {
+      margin: '0',
+      fontSize: '11px',
+      fontStyle: 'italic',
+      color: 'var(--muted-foreground)',
+    },
+    // Deprecated section header
+    '.cm-completionSection': {
+      color: 'var(--muted-foreground)',
+      fontSize: '11px',
+      fontStyle: 'italic',
+      padding: '4px 8px 2px',
+      borderTop: '1px solid var(--border)',
     },
     // Completion icon
     '.cm-completionIcon': {

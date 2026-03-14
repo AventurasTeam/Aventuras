@@ -15,6 +15,7 @@ import {
   type ChapterSummaryResult,
   type RetrievalDecision,
 } from '../sdk/schemas/memory'
+import { mapChaptersToContext } from '$lib/services/context/chapterMapper'
 import { AI_CONFIG } from '../core/config'
 import { createLogger } from '$lib/log'
 
@@ -148,9 +149,7 @@ export class MemoryService extends BaseAIService {
       return { shouldRetrieve: false, relevantChapterIds: [] }
     }
 
-    const chapterSummaries = context.availableChapters
-      .map((c) => `Chapter ${c.number}: ${c.summary}`)
-      .join('\n\n')
+    const { chapters } = mapChaptersToContext(context.availableChapters)
 
     const ctx = new ContextBuilder()
     ctx.add({
@@ -159,7 +158,7 @@ export class MemoryService extends BaseAIService {
       tense,
       userInput: context.userInput,
       recentContext: context.recentNarrative,
-      chapterSummaries,
+      chapters,
       maxChaptersPerRetrieval: DEFAULT_MEMORY_CONFIG.maxChaptersPerRetrieval.toString(),
     })
     const { system, user: prompt } = await ctx.render('retrieval-decision')

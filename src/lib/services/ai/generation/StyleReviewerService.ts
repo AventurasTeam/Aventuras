@@ -34,31 +34,6 @@ export class StyleReviewerService extends BaseAIService {
   }
 
   /**
-   * Format style review results for injection into the system prompt.
-   */
-  static formatForPromptInjection(review: StyleReviewResult): string {
-    if (!review.phrases || review.phrases.length === 0) {
-      return ''
-    }
-
-    let block = '\n\n<style_guidance>\n'
-    block += '## Writing Style Feedback\n'
-    block += `Based on analysis of ${review.reviewedEntryCount} recent entries:\n\n`
-
-    for (const phrase of review.phrases) {
-      block += `- **"${phrase.phrase}"** (used ${phrase.frequency} times, ${phrase.severity} severity)\n`
-      if (phrase.alternatives.length > 0) {
-        block += `  Alternatives: ${phrase.alternatives.join(', ')}\n`
-      }
-    }
-
-    block += `\nOverall: ${review.overallAssessment}\n`
-    block += '</style_guidance>'
-
-    return block
-  }
-
-  /**
    * Analyze narration entries for repetitive phrases and style issues.
    *
    * @param entries - Story entries to analyze (filters to narration only)

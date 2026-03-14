@@ -123,6 +123,7 @@ DerivedData/
 .project
 .classpath
 .settings/
+.devcontainer/
 
 # JetBrains
 *.iws

@@ -1,0 +1,109 @@
+name: Pull Request Checks
+
+on:
+  pull_request:
+    branches:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Cache build output
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            node_modules
+            .svelte-kit
+          key: build-${{ github.sha }}
+
+  lint:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Restore build output
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            node_modules
+            .svelte-kit
+          key: build-${{ github.sha }}
+
+      - name: Run Lint
+        run: npm run lint
+
+  typecheck:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Restore build output
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            node_modules
+            .svelte-kit
+          key: build-${{ github.sha }}
+
+      - name: Run Type-check
+        run: npm run check
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Restore build output
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            node_modules
+            .svelte-kit
+          key: build-${{ github.sha }}
+
+      - name: Run Tests
+        run: npm test

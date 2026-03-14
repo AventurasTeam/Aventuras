@@ -21,9 +21,10 @@ export {
   type NarrativeWorldState,
   type NarrativeOptions,
   type WorldStateContext,
-  buildChapterSummariesBlock,
-  formatStoryTime,
 } from './NarrativeService'
+
+// Chapter context mapper (formatStoryTime moved here from NarrativeService)
+export { mapChaptersToContext, formatStoryTime } from '$lib/services/context/chapterMapper'
 
 // Classification
 export { ClassifierService, type ClassificationContext } from './ClassifierService'

@@ -12,7 +12,6 @@ const actionChoicesPromptTemplate: PromptTemplate = {
 The USER is playing as {{ protagonistName }}{{ protagonistDescription }}. This is the USER'S persona/character - it IS the user, not a separate NPC.
 When generating action choices, you are suggesting what THE USER might want to do next as their character {{ protagonistName }}.
 Do NOT generate actions for {{ protagonistName }} as if they were a separate character - these are suggestions for the user's next move.
-{{ styleGuidance }}
 
 ## Current Narrative
 """
@@ -20,14 +19,28 @@ Do NOT generate actions for {{ protagonistName }} as if they were a separate cha
 """
 
 ## Recent Context
-{{ recentContext }}
+{% for entry in storyEntries %}{%- if entry.type == 'user_action' %}
+[ACTION] {{ entry.content }}
+{%- else %}
+[NARRATIVE] {{ entry.content }}
+{%- endif %}{% endfor %}
 
 ## Current Scene
 Location: {{ currentLocation }}
 NPCs Present: {{ npcsPresent }}
 {{ protagonistName }}'s Inventory: {{ inventory }}
 Active Quests: {{ activeQuests }}
-{{ lorebookContext }}
+{% if lorebookEntries.size > 0 %}
+## World Context
+{% for entry in lorebookEntries %}
+- {{ entry.name }} ({{ entry.type }}): {{ entry.description }}
+{% endfor %}
+{% endif %}{% if styleReview.phrases.size > 0 %}
+## Style Notes
+Avoid overusing:
+{% for phrase in styleReview.phrases %}
+- "{{ phrase.phrase }}"{% endfor %}
+{% endif %}
 ## Your Task
 Generate 3-4 distinct action choices for THE USER (playing as {{ protagonistName }}). Think like an RPG:
 - **Every choice should move the plot forward** - no passive waiting or stalling

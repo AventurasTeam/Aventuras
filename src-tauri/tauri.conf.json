@@ -11,6 +11,7 @@
     "features": ["devtools"]
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Aventuras",

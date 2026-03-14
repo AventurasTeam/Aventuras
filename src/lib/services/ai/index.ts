@@ -41,6 +41,11 @@ import {
 import type { TimelineFillResult } from './retrieval/TimelineFillService'
 import { EntryInjector, type ContextResult, type ContextConfig } from './generation/EntryInjector'
 import {
+  mapContextResultToArrays,
+  type WorldStateArrays,
+} from '$lib/services/context/worldStateMapper'
+import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import {
   EntryRetrievalService,
   type EntryRetrievalResult,
   type ActivationTracker,
@@ -140,37 +145,35 @@ class AIService {
     currentStory?: Story | null,
     useTieredContext = true,
     styleReview?: StyleReviewResult | null,
-    retrievedChapterContext?: string | null,
+    agenticRetrievalContext?: string | null,
     signal?: AbortSignal,
     timelineFillResult?: TimelineFillResult | null,
+    lorebookEntries: ContextLorebookEntry[] = [],
   ): AsyncIterable<StreamChunk> {
     log('streamNarrative called', {
       entriesCount: entries.length,
       useTieredContext,
       hasStyleReview: !!styleReview,
-      hasRetrievedContext: !!retrievedChapterContext,
+      hasAgenticContext: !!agenticRetrievalContext,
       hasTimelineFill: !!timelineFillResult,
+      lorebookEntriesCount: lorebookEntries.length,
     })
 
     // Build tiered context if requested
-    let tieredContextBlock: string | undefined
+    let worldStateArrays: WorldStateArrays | undefined
     if (useTieredContext) {
       const lastEntry = entries[entries.length - 1]
       const userInput = lastEntry?.content ?? ''
-      const contextResult = await this.buildTieredContext(
-        worldState,
-        userInput,
-        entries,
-        retrievedChapterContext ?? undefined,
-      )
-      tieredContextBlock = contextResult.contextBlock
+      const contextResult = await this.buildTieredContext(worldState, userInput, entries)
+      worldStateArrays = mapContextResultToArrays(contextResult, worldState)
     }
 
     // Delegate to NarrativeService
     yield* this.narrativeService.stream(entries, worldState, currentStory, {
-      tieredContextBlock,
+      worldStateArrays,
       styleReview,
-      retrievedChapterContext,
+      agenticRetrievalContext,
+      lorebookEntries,
       signal,
       timelineFillResult,
     })
@@ -236,7 +239,7 @@ class AIService {
   async generateSuggestions(
     entries: StoryEntry[],
     activeThreads: StoryBeat[],
-    lorebookEntries?: Entry[],
+    lorebookEntries?: ContextLorebookEntry[],
     promptContext?: PromptContext,
     latestNarrativeResponse?: string,
   ): Promise<SuggestionsResult> {
@@ -265,9 +268,10 @@ class AIService {
     entries: StoryEntry[],
     worldState: WorldState,
     narrativeResponse: string,
-    lorebookEntries?: Entry[],
+    lorebookEntries?: ContextLorebookEntry[],
     promptContext?: PromptContext,
     pov?: 'first' | 'second' | 'third',
+    styleReview?: StyleReviewResult | null,
   ): Promise<ActionChoicesResult> {
     log('generateActionChoices called', {
       entriesCount: entries.length,
@@ -310,6 +314,7 @@ class AIService {
         (b) => b.status === 'pending' || b.status === 'active',
       ),
       lorebookEntries,
+      styleReview,
     }
 
     const choices = await actionChoicesService.generateChoices(context)
@@ -421,22 +426,15 @@ class AIService {
     worldState: WorldState,
     userInput: string,
     recentEntries: StoryEntry[],
-    retrievedChapterContext?: string,
     config?: Partial<ContextConfig>,
   ): Promise<ContextResult> {
     log('buildTieredContext called', {
       userInputLength: userInput.length,
       recentEntriesCount: recentEntries.length,
-      hasRetrievedContext: !!retrievedChapterContext,
     })
 
     const contextBuilder = new EntryInjector(config, 'entryRetrieval')
-    const result = await contextBuilder.buildContext(
-      worldState,
-      userInput,
-      recentEntries,
-      retrievedChapterContext,
-    )
+    const result = await contextBuilder.buildContext(worldState, userInput, recentEntries)
 
     log('buildTieredContext complete', {
       tier1: result.tier1.length,

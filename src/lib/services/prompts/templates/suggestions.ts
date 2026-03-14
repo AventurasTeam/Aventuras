@@ -19,13 +19,23 @@ These should read like instructions an author gives to guide the next part of th
 
 ## Recent Story Content
 """
-{{ recentContent }}
+{% for entry in storyEntries %}{%- if entry.type == 'user_action' %}
+[DIRECTION] {{ entry.content }}
+{%- else %}
+[NARRATIVE] {{ entry.content }}
+{%- endif %}{% endfor %}
 """
 
 ## Active Story Threads
 {{ activeThreads }}
 
-{{ genre }}{{ lorebookContext }}
+{{ genre }}{% if lorebookEntries.size > 0 %}
+## Lorebook/World Elements
+The following characters, locations, and concepts exist in this world and can be incorporated into suggestions:
+{% for entry in lorebookEntries %}
+- {{ entry.name }} ({{ entry.type }}): {{ entry.description }}
+{% endfor %}
+{% endif %}
 
 ## Your Task
 Generate 3 STORY DIRECTION suggestions. These should be plot developments, scene ideas, or narrative beats—NOT singular character actions.

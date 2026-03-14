@@ -75,6 +75,7 @@
         { "url": "http://*:*" }
       ]
     },
-    "notification:default"
+    "notification:default",
+    "mcp-bridge:default"
   ]
 }

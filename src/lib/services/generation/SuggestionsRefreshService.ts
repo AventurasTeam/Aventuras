@@ -3,18 +3,12 @@
  * Coordinates suggestion generation and optional translation for creative writing mode.
  */
 
-import type {
-  StoryEntry,
-  StoryBeat,
-  Entry,
-  StoryMode,
-  POV,
-  Tense,
-  TranslationSettings,
-} from '$lib/types'
+import type { StoryEntry, StoryBeat, StoryMode, POV, Tense, TranslationSettings } from '$lib/types'
 import type { Suggestion, SuggestionsResult } from '$lib/services/ai/sdk/schemas/suggestions'
 import type { PromptContext } from '$lib/services/generation/phases/PostGenerationPhase'
 import type { RetrievedEntry } from '$lib/services/ai/retrieval/EntryRetrievalService'
+import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import { mapRetrievedEntries } from '$lib/services/context/lorebookMapper'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 
 function log(...args: unknown[]) {
@@ -41,8 +35,8 @@ export interface SuggestionsRefreshDependencies {
   generateSuggestions: (
     entries: StoryEntry[],
     activeThreads: StoryBeat[],
-    lorebookEntries: Entry[],
-    promptContext: PromptContext,
+    lorebookEntries?: ContextLorebookEntry[],
+    promptContext?: PromptContext,
   ) => Promise<SuggestionsResult>
   translateSuggestions: (suggestions: Suggestion[], targetLanguage: string) => Promise<Suggestion[]>
 }
@@ -85,8 +79,7 @@ export class SuggestionsRefreshService {
       return { suggestions: [], translated: false }
     }
 
-    // Extract Entry objects from RetrievedEntry wrappers
-    const activeLorebookEntries = (lastLorebookRetrieval ?? []).map((r) => r.entry)
+    const activeLorebookEntries = mapRetrievedEntries(lastLorebookRetrieval ?? [])
 
     const result = await this.deps.generateSuggestions(
       entries,

@@ -792,12 +792,11 @@
           storyBeats: story.storyBeats,
         }
 
-        const lorebookEntries = story.lorebookEntries
         const result = await aiService.generateActionChoices(
           story.entries,
           worldState,
           lastNarration.content,
-          lorebookEntries,
+          [], // TODO: Temporary measure, to be fixed by unified context later in epic #254
           promptContext,
           story.pov,
         )

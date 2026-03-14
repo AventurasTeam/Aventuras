@@ -21,6 +21,7 @@ import type {
 import type { Story, StoryEntry } from '$lib/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
 import type { StreamChunk } from '$lib/services/ai/core/types'
+import type { ContextLorebookEntry } from '$lib/services/context/context-types'
 
 const MAX_EMPTY_RESPONSE_RETRIES = 3
 
@@ -32,9 +33,10 @@ export interface NarrativeDependencies {
     story: Story | null | undefined,
     useTieredContext: boolean,
     styleReview: StyleReviewResult | null | undefined,
-    retrievedContext: string | null | undefined,
+    agenticRetrievalContext: string | null | undefined,
     signal: AbortSignal | undefined,
     timelineFillResult: RetrievalResult['timelineFillResult'],
+    lorebookEntries: ContextLorebookEntry[],
   ) => AsyncIterable<StreamChunk>
 }
 
@@ -90,9 +92,10 @@ export class NarrativePhase {
           story,
           true, // useTieredContext
           styleReview,
-          retrievalResult.combinedContext,
+          retrievalResult.agenticRetrievalContext,
           abortSignal,
           retrievalResult.timelineFillResult,
+          retrievalResult.lorebookEntries,
         )) {
           if (abortSignal?.aborted) {
             yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent

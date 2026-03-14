@@ -303,5 +303,7 @@ export function hasPicTags(content: string): boolean {
  * @returns Content without <pic> tags
  */
 export function stripPicTags(content: string): string {
-  return content.replace(/<pic\s+[^>]*?(?:\/>|>\s*<\/pic>)/gi, '')
+  // Remove self-closing pic tags: <pic ... />
+  // For paired tags: <pic ...>text</pic> — remove markup and inner text (none should be generated in the first place)
+  return content.replace(/<pic\s+[^>]*?(?:\/>|>[\s\S]*?<\/pic>)/gi, '')
 }

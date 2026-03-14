@@ -7,11 +7,16 @@
  * Prompt generation flows through ContextBuilder + Liquid templates.
  */
 
-import type { StoryEntry, Entry, Character, Location, Item, StoryBeat } from '$lib/types'
+import type { StoryEntry, Character, Location, Item, StoryBeat } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
+import { getLorebookConfig } from '../core/config'
 import { createLogger } from '$lib/log'
 import { actionChoicesResultSchema, type ActionChoice } from '../sdk/schemas/actionchoices'
+import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import { prepareLorebookForContext } from '$lib/services/context/lorebookMapper'
+import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
+import type { StyleReviewResult } from './StyleReviewerService'
 
 const log = createLogger('ActionChoices')
 
@@ -29,7 +34,8 @@ export interface ActionChoicesContext {
   presentCharacters?: Character[]
   inventory?: Item[]
   activeQuests?: StoryBeat[]
-  lorebookEntries?: Entry[]
+  lorebookEntries?: ContextLorebookEntry[]
+  styleReview?: StyleReviewResult | null
 }
 
 /**
@@ -51,11 +57,11 @@ export class ActionChoicesService extends BaseAIService {
       hasStoryId: !!context.storyId,
     })
 
-    // Format recent context
-    const recentContext = context.recentEntries
-      .slice(-5)
-      .map((e) => `[${e.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}]: ${e.content}`)
-      .join('\n\n')
+    // Map recent entries via structured mapper
+    const storyEntries = mapStoryEntriesToContext(context.recentEntries, {
+      stripPicTags: true,
+      maxEntries: 5,
+    })
 
     // Format current location
     const currentLocation = context.currentLocation?.name ?? 'Unknown'
@@ -77,41 +83,17 @@ export class ActionChoicesService extends BaseAIService {
         .map((q) => `• ${q.title}${q.description ? `: ${q.description}` : ''}`)
         .join('\n') || 'None'
 
-    // Format lorebook context
-    let lorebookContext = ''
-    if (context.lorebookEntries && context.lorebookEntries.length > 0) {
-      const entryDescriptions = context.lorebookEntries
-        .slice(0, 10)
-        .map((e) => {
-          let desc = `• ${e.name} (${e.type})`
-          if (e.description) {
-            desc += `: ${e.description.substring(0, 100)}${e.description.length > 100 ? '...' : ''}`
-          }
-          return desc
-        })
-        .join('\n')
-      lorebookContext = `\n## World Context\n${entryDescriptions}\n`
-    }
+    // Prepare lorebook entries using structured mapper
+    const lorebookConfig = getLorebookConfig()
+    const preparedLorebook = prepareLorebookForContext(
+      context.lorebookEntries ?? [],
+      lorebookConfig.maxForActionChoices,
+    )
 
     // Protagonist description
     const protagonistDescription = context.protagonistDescription
       ? ` (${context.protagonistDescription})`
       : ''
-
-    // Style guidance based on recent user actions
-    const userActions = context.recentEntries.filter((e) => e.type === 'user_action').slice(-3)
-    let styleGuidance = ''
-    if (userActions.length > 0) {
-      const avgLength =
-        userActions.reduce((sum, e) => sum + e.content.length, 0) / userActions.length
-      if (avgLength < 30) {
-        styleGuidance =
-          "\n## Style: Match the player's TERSE style - keep choices short and punchy (under 10 words each).\n"
-      } else if (avgLength > 100) {
-        styleGuidance =
-          "\n## Style: Match the player's DETAILED style - include specific details in each choice.\n"
-      }
-    }
 
     // POV instruction
     const povInstruction =
@@ -141,17 +123,21 @@ export class ActionChoicesService extends BaseAIService {
     // Add runtime variables for template rendering
     ctx.add({
       narrativeResponse: context.narrativeResponse,
-      recentContext,
+      storyEntries,
       currentLocation,
       npcsPresent,
       inventory,
       activeQuests,
-      lorebookContext,
       protagonistDescription,
-      styleGuidance,
       povInstruction,
       lengthInstruction,
     })
+    if (preparedLorebook.length > 0) {
+      ctx.add({ lorebookEntries: preparedLorebook })
+    }
+    if (context.styleReview && context.styleReview.phrases.length > 0) {
+      ctx.add({ styleReview: context.styleReview })
+    }
 
     // Render through the action-choices template
     const { system, user: prompt } = await ctx.render('action-choices')

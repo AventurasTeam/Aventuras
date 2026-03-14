@@ -79,8 +79,9 @@ CURRENT SCENE (last few messages):
 """
 
 CHAPTER SUMMARIES:
-{{ chapterSummaries }}
+{% for c in chapters %}Chapter {{ c.number }}: {{ c.summary }}
 
+{% endfor %}
 
 Guidelines:
 - Only include chapters that are ACTUALLY relevant to the current context

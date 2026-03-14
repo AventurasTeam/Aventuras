@@ -21,8 +21,7 @@ export const runtimeSamples: Record<string, string> = {
   recentContent: '[Recent story content would appear here...]',
   tieredContextBlock: '[Lorebook entries injected by tiered retrieval...]',
   chapterSummaries: '[Formatted chapter summaries from memory system...]',
-  styleGuidance: '[Style guidance from repetition analysis...]',
-  retrievedChapterContext: '[Retrieved chapter context from memory...]',
+  agenticRetrievalContext: '[Agentic retrieval Q&A context from chapter memory...]',
   inlineImageInstructions: '[Instructions for inline image generation...]',
   visualProseInstructions: '[Instructions for visual prose mode...]',
   visualProseMode: 'false',
@@ -144,5 +143,195 @@ export const runtimeSamples: Record<string, string> = {
   conversationHistory: '[Conversation history for interactive lorebook...]',
 }
 
-/** All sample values combined (system + runtime) */
-export const allSamples: Record<string, string> = { ...systemSamples, ...runtimeSamples }
+/**
+ * Structured sample arrays for the 9 new context-layer array variables.
+ * Uses the Aventura fantasy world (Aria, Theron, Lyra, Whispering Woods, Crystal Caverns).
+ */
+export const structuredSamples: Record<string, unknown> = {
+  worldStateCharacters: [
+    {
+      name: 'Theron',
+      relationship: 'companion',
+      description: 'A seasoned ranger who has guided Aria through the Whispering Woods.',
+      traits: ['loyal', 'perceptive', 'cautious'],
+      appearance: ['rugged leather armor', 'shortbow', 'weathered cloak'],
+      tier: 1,
+      status: 'active',
+    },
+    {
+      name: 'Lyra',
+      relationship: 'rival',
+      description: 'A rival mage who seeks the same ancient artifacts as Aria.',
+      traits: ['ambitious', 'cunning', 'talented'],
+      appearance: ['dark robes', 'silver staff', 'cold eyes'],
+      tier: 2,
+      status: 'active',
+    },
+  ],
+  worldStateInventory: [
+    {
+      name: 'Enchanted Compass',
+      description: 'Points toward hidden magical sources.',
+      quantity: 1,
+      equipped: false,
+    },
+    {
+      name: 'Shadow Cloak',
+      description: 'Grants partial invisibility in dim light.',
+      quantity: 1,
+      equipped: true,
+    },
+    {
+      name: 'Healing Potion',
+      description: 'Restores 2d4+2 health points.',
+      quantity: 2,
+      equipped: false,
+    },
+  ],
+  worldStateBeats: [
+    {
+      title: 'Discovered the Hidden Map',
+      description: 'Found a map leading to the Crystal Caverns.',
+      type: 'discovery',
+      status: 'completed',
+    },
+    {
+      title: 'Confrontation with Lyra',
+      description: 'Lyra demands the compass at the forest edge.',
+      type: 'conflict',
+      status: 'active',
+    },
+  ],
+  worldStateLocations: [
+    {
+      name: 'Crystal Caverns',
+      description: 'Shimmering caverns of magical crystal beneath the mountains.',
+      visited: false,
+      tier: 2,
+    },
+    {
+      name: 'Thornhold Castle',
+      description: 'Ancient fortress occupied by the Order of the Iron Veil.',
+      visited: true,
+      tier: 3,
+    },
+  ],
+  lorebookEntries: [
+    {
+      name: 'The Whispering Woods',
+      type: 'location',
+      description: 'Ancient forest where trees carry memories of the world.',
+      tier: 1,
+    },
+    {
+      name: 'The Moonstone Pendant',
+      type: 'item',
+      description: 'A pendant that glows under moonlight, said to reveal hidden paths.',
+      tier: 1,
+    },
+    {
+      name: 'Elder Maren',
+      type: 'character',
+      description: 'A wandering sage who guards forgotten knowledge.',
+      tier: 2,
+      disposition: 'cautiously helpful',
+    },
+  ],
+  chapters: [
+    {
+      number: 1,
+      title: 'Into the Woods',
+      summary: 'Aria entered the Whispering Woods and encountered her first magical creature.',
+      startTime: 'Year 1, Day 1',
+      endTime: 'Year 1, Day 3',
+      characters: ['Aria', 'Theron'],
+      locations: ['The Whispering Woods'],
+      emotionalTone: 'curious',
+    },
+    {
+      number: 2,
+      title: 'The Map Revealed',
+      summary: 'Aria discovered the hidden map leading to the Crystal Caverns.',
+      startTime: 'Year 1, Day 4',
+      endTime: 'Year 1, Day 10',
+      characters: ['Aria', 'Theron', 'Elder Maren'],
+      locations: ['The Whispering Woods', 'Crystal Caverns entrance'],
+      emotionalTone: 'hopeful',
+    },
+  ],
+  timelineFill: [
+    {
+      query: 'What happened between the forest encounter and arriving at the caverns?',
+      answer:
+        'Aria and Theron tracked a faint magical signal through three days of dense forest, camping near the Silver Creek.',
+      chapterNumbers: [1, 2],
+    },
+  ],
+  storyEntries: [
+    { type: 'user_action', content: 'I draw my sword and step into the shadows.' },
+    {
+      type: 'narration',
+      content:
+        'The forest falls silent as Aria moves into the darkness, her blade catching the last slivers of moonlight.',
+    },
+    { type: 'user_action', content: 'I whisper to Theron to flank left.' },
+  ],
+  styleReview: {
+    phrases: [
+      {
+        phrase: 'suddenly',
+        frequency: 4,
+        severity: 'medium',
+        alternatives: ['abruptly', 'without warning'],
+      },
+      {
+        phrase: 'all of a sudden',
+        frequency: 2,
+        severity: 'low',
+        alternatives: ['without warning', 'unexpectedly'],
+      },
+    ],
+    overallAssessment: 'Writing is clear but relies on sudden-transition clich\u00e9s.',
+    reviewedEntryCount: 12,
+  },
+  worldStateRelevantItems: [
+    {
+      name: 'Enchanted Compass',
+      description: 'Points toward the nearest ley line convergence',
+      tier: 2,
+    },
+    {
+      name: 'Faded Map Fragment',
+      description: 'Partial map of the Thornwood labyrinth',
+      tier: 3,
+    },
+  ],
+  worldStateRelatedBeats: [
+    {
+      title: 'The Missing Apprentice',
+      description: 'Rumors of a sorcerer apprentice who vanished near the old ruins',
+      type: 'quest',
+      status: 'active',
+      tier: 2,
+    },
+    {
+      title: 'Harvest Festival Preparations',
+      description: 'The village is preparing for the annual harvest celebration',
+      type: 'discovery',
+      status: 'active',
+      tier: 3,
+    },
+  ],
+  currentLocationObject: {
+    name: 'The Silver Stag Inn',
+    description:
+      'A cozy tavern at the crossroads, known for its warm hearth and loose-lipped travelers',
+  },
+}
+
+/** All sample values combined — system strings, runtime strings, and structured arrays */
+export const allSamples: Record<string, unknown> = {
+  ...systemSamples,
+  ...runtimeSamples,
+  ...structuredSamples,
+}

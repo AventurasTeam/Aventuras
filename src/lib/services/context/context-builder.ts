@@ -11,6 +11,7 @@
 
 import { database } from '$lib/services/database'
 import { templateEngine } from '$lib/services/templates/engine'
+import { computeShims } from './compatShims'
 import { createLogger } from '$lib/log'
 import type { RenderResult } from './types'
 import type { Character, Location, Item, StoryBeat } from '$lib/types'
@@ -65,6 +66,11 @@ export class ContextBuilder {
     const locations = await database.getLocations(storyId)
     const currentLocation = locations.find((l) => l.current)
     builder.add({ currentLocation: currentLocation?.name || '' })
+    builder.add({
+      currentLocationObject: currentLocation
+        ? { name: currentLocation.name, description: currentLocation.description || '' }
+        : null,
+    })
 
     // Story time
     if (story.timeTracker) {
@@ -121,6 +127,17 @@ export class ContextBuilder {
         templateId: `${templateId}-user`,
         packId: this.packId,
       })
+    }
+
+    // Inject compatibility shims for deprecated variable names
+    const systemSource = systemTemplate?.content ?? ''
+    const userSource = userTemplate?.content ?? ''
+    const combinedSource = systemSource + userSource
+    const shims = computeShims(this.context, combinedSource, templateId)
+    for (const [key, value] of Object.entries(shims)) {
+      if (!(key in this.context)) {
+        this.context[key] = value
+      }
     }
 
     const systemResult = systemTemplate?.content

@@ -243,21 +243,69 @@ export function validateTemplate(
     ...(additionalVariables || []),
   ])
 
+  // Extract loop-scoped variables from {% for X in Y %} constructs
+  const loopVars = new Set<string>()
+  const forPattern = /\{%-?\s*for\s+(\w+)\s+in\s+/g
+  let forMatch = forPattern.exec(template)
+  while (forMatch !== null) {
+    loopVars.add(forMatch[1])
+    forMatch = forPattern.exec(template)
+  }
+
+  // Extract assign-scoped variables from {% assign X = ... %} constructs
+  const assignPattern = /\{%-?\s*assign\s+(\w+)\s*=/g
+  let assignMatch = assignPattern.exec(template)
+  while (assignMatch !== null) {
+    loopVars.add(assignMatch[1])
+    assignMatch = assignPattern.exec(template)
+  }
+
+  // Built-in Liquid variables available in loops and elsewhere
+  const builtinRoots = new Set(['forloop', 'tablerowloop'])
+
   for (const varName of variableNames) {
-    if (!validVariables.has(varName)) {
-      // Variable doesn't exist - find similar names
-      const allValidNames = Array.from(validVariables)
-      const suggestion = findSimilar(varName, allValidNames)
+    // Extract root name (before first dot)
+    const root = varName.split('.')[0]
 
-      const message = suggestion
-        ? `Variable '${varName}' doesn't exist. Did you mean '${suggestion}'?`
-        : `Variable '${varName}' doesn't exist. Check the available variables list.`
+    // Skip if root is a registered variable (covers dot-access like currentLocationObject.name)
+    if (validVariables.has(root)) continue
 
-      log('unknown variable', { varName, suggestion })
+    // Skip loop-scoped variables and their properties (e.g., char, char.name)
+    if (loopVars.has(root)) continue
 
+    // Skip built-in Liquid variables (e.g., forloop.first)
+    if (builtinRoots.has(root)) continue
+
+    // Variable doesn't exist - find similar names
+    const allValidNames = Array.from(validVariables)
+    const suggestion = findSimilar(root, allValidNames)
+
+    const message = suggestion
+      ? `Variable '${varName}' doesn't exist. Did you mean '${suggestion}'?`
+      : `Variable '${varName}' doesn't exist. Check the available variables list.`
+
+    log('unknown variable', { varName, suggestion })
+
+    errors.push({
+      type: 'unknown_variable',
+      message,
+    })
+  }
+
+  // Step 2b: Deprecated variable warnings
+  for (const varName of variableNames) {
+    const root = varName.split('.')[0]
+    // Skip loop-scoped and assign-scoped variables
+    if (loopVars.has(root)) continue
+    // Skip built-in Liquid variables
+    if (builtinRoots.has(root)) continue
+    // Only warn for known (registered) variables that are deprecated
+    const def = variableRegistry.get(root)
+    if (def?.deprecated && !def.suppressDeprecation) {
       errors.push({
-        type: 'unknown_variable',
-        message,
+        type: 'deprecated_variable',
+        message: `'${root}' is deprecated — use ${def.deprecated.replacedBy} instead. ${def.deprecated.message}`,
+        severity: 'warning',
       })
     }
   }
@@ -283,7 +331,7 @@ export function validateTemplate(
   }
 
   return {
-    valid: errors.length === 0,
+    valid: !errors.some((e) => e.severity !== 'warning'),
     errors,
   }
 }

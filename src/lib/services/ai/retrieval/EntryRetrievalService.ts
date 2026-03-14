@@ -124,7 +124,6 @@ export interface EntryRetrievalResult {
   tier2: RetrievedEntry[]
   tier3: RetrievedEntry[]
   all: RetrievedEntry[]
-  contextBlock: string
 }
 
 /**
@@ -261,10 +260,7 @@ export class EntryRetrievalService extends BaseAIService {
     // Combine and sort by priority
     const all = [...tier1, ...tier2, ...tier3].sort((a, b) => b.priority - a.priority)
 
-    // Build context block
-    const contextBlock = this.buildContextBlock(tier1, tier2, tier3)
-
-    return { tier1, tier2, tier3, all, contextBlock }
+    return { tier1, tier2, tier3, all }
   }
 
   /**
@@ -671,107 +667,6 @@ export class EntryRetrievalService extends BaseAIService {
     }
 
     return false
-  }
-
-  /**
-   * Build context block for prompt injection.
-   */
-  private buildContextBlock(
-    tier1: RetrievedEntry[],
-    tier2: RetrievedEntry[],
-    tier3: RetrievedEntry[],
-  ): string {
-    const all = [...tier1, ...tier2, ...tier3]
-    if (all.length === 0) return ''
-
-    let block = `\n\n[LOREBOOK CONTEXT]
-(CANONICAL - All information below is established lore. Do not contradict these facts.)`
-
-    // Group by type
-    const byType: Record<EntryType, RetrievedEntry[]> = {
-      character: [],
-      location: [],
-      item: [],
-      faction: [],
-      concept: [],
-      event: [],
-    }
-
-    for (const retrieved of all) {
-      byType[retrieved.entry.type].push(retrieved)
-    }
-
-    // Characters
-    if (byType.character.length > 0) {
-      block += '\n\n• Characters:'
-      for (const { entry } of byType.character) {
-        const description = this.truncateEntryText(entry.description)
-        block += `\n  - ${entry.name}: ${description}`
-        if (entry.state?.type === 'character') {
-          const state = entry.state
-          if (state.currentDisposition) {
-            block += ` [${state.currentDisposition}]`
-          }
-        }
-      }
-    }
-
-    // Locations
-    if (byType.location.length > 0) {
-      block += '\n\n• Locations:'
-      for (const { entry } of byType.location) {
-        const description = this.truncateEntryText(entry.description)
-        block += `\n  - ${entry.name}: ${description}`
-      }
-    }
-
-    // Items
-    if (byType.item.length > 0) {
-      block += '\n\n• Items:'
-      for (const { entry } of byType.item) {
-        const description = this.truncateEntryText(entry.description)
-        block += `\n  - ${entry.name}: ${description}`
-      }
-    }
-
-    // Factions
-    if (byType.faction.length > 0) {
-      block += '\n\n• Factions:'
-      for (const { entry } of byType.faction) {
-        const description = this.truncateEntryText(entry.description)
-        block += `\n  - ${entry.name}: ${description}`
-      }
-    }
-
-    // Concepts
-    if (byType.concept.length > 0) {
-      block += '\n\n• Lore:'
-      for (const { entry } of byType.concept) {
-        const description = this.truncateEntryText(entry.description)
-        block += `\n  - ${entry.name}: ${description}`
-      }
-    }
-
-    // Events
-    if (byType.event.length > 0) {
-      block += '\n\n• Events:'
-      for (const { entry } of byType.event) {
-        const description = this.truncateEntryText(entry.description)
-        block += `\n  - ${entry.name}: ${description}`
-      }
-    }
-
-    return block
-  }
-
-  private truncateEntryText(text: string): string {
-    const maxWords = this.config.maxWordsPerEntry
-    if (!maxWords || maxWords <= 0) return text
-    const trimmed = text.trim()
-    if (!trimmed) return text
-    const words = trimmed.split(/\s+/)
-    if (words.length <= maxWords) return text
-    return `${words.slice(0, maxWords).join(' ')} [...]`
   }
 }
 

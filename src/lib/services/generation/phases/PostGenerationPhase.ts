@@ -19,15 +19,16 @@ import type {
 } from '../types'
 import type {
   StoryEntry,
-  Entry,
   TranslationSettings,
   Character,
   Location,
   Item,
   StoryBeat,
 } from '$lib/types'
+import type { ContextLorebookEntry } from '$lib/services/context/context-types'
 import type { Suggestion, ActionChoice } from '$lib/services/ai/sdk/schemas'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
+import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
 
 /** Prompt context for macro expansion */
 export interface PromptContext {
@@ -54,7 +55,7 @@ export interface PostGenerationDependencies {
   generateSuggestions: (
     entries: StoryEntry[],
     activeThreads: StoryBeat[],
-    lorebookEntries?: Entry[],
+    lorebookEntries?: ContextLorebookEntry[],
     promptContext?: PromptContext,
     latestNarrativeResponse?: string,
   ) => Promise<{ suggestions: Suggestion[] }>
@@ -63,9 +64,10 @@ export interface PostGenerationDependencies {
     entries: StoryEntry[],
     worldState: PostWorldState,
     narrativeResponse: string,
-    lorebookEntries: Entry[],
+    lorebookEntries: ContextLorebookEntry[],
     promptContext: PromptContext,
     pov: 'first' | 'second' | 'third',
+    styleReview?: StyleReviewResult | null,
   ) => Promise<{ choices: ActionChoice[] }>
   translateActionChoices: (
     choices: ActionChoice[],
@@ -79,7 +81,8 @@ export interface PostGenerationInput {
   disableSuggestions: boolean
   entries: StoryEntry[]
   activeThreads: StoryBeat[]
-  lorebookEntries: Entry[]
+  lorebookEntries: ContextLorebookEntry[]
+  styleReview?: StyleReviewResult | null
   promptContext: PromptContext
   worldState: PostWorldState
   narrativeResponse: string
@@ -167,6 +170,7 @@ export class PostGenerationPhase {
     const {
       entries,
       lorebookEntries,
+      styleReview,
       promptContext,
       worldState,
       narrativeResponse,
@@ -180,6 +184,7 @@ export class PostGenerationPhase {
       lorebookEntries,
       promptContext,
       pov,
+      styleReview,
     )
 
     if (TranslationService.shouldTranslate(translationSettings)) {

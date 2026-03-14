@@ -7,12 +7,15 @@
  * Prompt generation flows through ContextBuilder + Liquid templates.
  */
 
-import type { StoryEntry, StoryBeat, Entry } from '$lib/types'
+import type { StoryEntry, StoryBeat } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { getContextConfig, getLorebookConfig } from '../core/config'
 import { createLogger } from '$lib/log'
 import { suggestionsResultSchema, type SuggestionsResult } from '../sdk/schemas/suggestions'
+import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import { prepareLorebookForContext } from '$lib/services/context/lorebookMapper'
+import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
 
 const log = createLogger('Suggestions')
 
@@ -44,7 +47,7 @@ export class SuggestionsService extends BaseAIService {
   async generateSuggestions(
     recentEntries: StoryEntry[],
     activeThreads: StoryBeat[],
-    lorebookEntries?: Entry[],
+    lorebookEntries?: ContextLorebookEntry[],
     storyId?: string,
     latestNarrativeResponse?: string,
   ): Promise<SuggestionsResult> {
@@ -60,13 +63,9 @@ export class SuggestionsService extends BaseAIService {
     const contextConfig = getContextConfig()
     const lorebookConfig = getLorebookConfig()
     const lastEntries = recentEntries.slice(-contextConfig.recentEntriesForRetrieval)
-    let recentContent = lastEntries
-      .map((e) => {
-        const prefix = e.type === 'user_action' ? '[DIRECTION]' : '[NARRATIVE]'
-        return `${prefix} ${e.content}`
-      })
-      .join('\n\n')
 
+    // Append latest narrative if it differs from the last narration entry (preserves current behavior)
+    const entriesToMap = [...lastEntries]
     const latestNarrative = latestNarrativeResponse?.trim()
     if (latestNarrative) {
       const lastNarrativeInEntries = [...lastEntries]
@@ -75,11 +74,13 @@ export class SuggestionsService extends BaseAIService {
         ?.content?.trim()
 
       if (lastNarrativeInEntries !== latestNarrative) {
-        recentContent = recentContent
-          ? `${recentContent}\n\n[NARRATIVE] ${latestNarrative}`
-          : `[NARRATIVE] ${latestNarrative}`
+        entriesToMap.push({ type: 'narration', content: latestNarrative } as StoryEntry)
       }
     }
+
+    const storyEntries = mapStoryEntriesToContext(entriesToMap, {
+      stripPicTags: true,
+    })
 
     // Format active threads
     const activeThreadsStr =
@@ -89,21 +90,11 @@ export class SuggestionsService extends BaseAIService {
             .join('\n')
         : '(none)'
 
-    // Format lorebook entries for context
-    let lorebookContext = ''
-    if (lorebookEntries && lorebookEntries.length > 0) {
-      const entryDescriptions = lorebookEntries
-        .slice(0, lorebookConfig.maxForSuggestions)
-        .map((e) => {
-          let desc = `• ${e.name} (${e.type})`
-          if (e.description) {
-            desc += `: ${e.description}`
-          }
-          return desc
-        })
-        .join('\n')
-      lorebookContext = `\n## Lorebook/World Elements\nThe following characters, locations, and concepts exist in this world and can be incorporated into suggestions:\n${entryDescriptions}`
-    }
+    // Prepare lorebook entries using structured mapper
+    const preparedLorebook = prepareLorebookForContext(
+      lorebookEntries ?? [],
+      lorebookConfig.maxForSuggestions,
+    )
 
     // Create ContextBuilder -- use forStory when storyId available
     let ctx: ContextBuilder
@@ -125,11 +116,13 @@ export class SuggestionsService extends BaseAIService {
 
     // Add runtime variables for template rendering
     ctx.add({
-      recentContent,
+      storyEntries,
       activeThreads: activeThreadsStr,
       genre: genreStr,
-      lorebookContext,
     })
+    if (preparedLorebook.length > 0) {
+      ctx.add({ lorebookEntries: preparedLorebook })
+    }
 
     // Render through the suggestions template
     const { system, user: prompt } = await ctx.render('suggestions')
