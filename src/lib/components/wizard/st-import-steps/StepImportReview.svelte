@@ -108,118 +108,118 @@
   </div>
 
   <!-- Summary Cards -->
-    <div class="space-y-3">
-      <!-- Mode & Style -->
+  <div class="space-y-3">
+    <!-- Mode & Style -->
+    <Card.Root>
+      <Card.Content class="p-3">
+        <div class="flex flex-wrap gap-2">
+          <Badge variant="secondary">
+            {selectedMode === 'adventure' ? 'Adventure' : 'Creative Writing'}
+          </Badge>
+          <Badge variant="outline">{selectedPOV} person</Badge>
+          <Badge variant="outline">{selectedTense} tense</Badge>
+          {#if tone}
+            <Badge variant="outline">{tone}</Badge>
+          {/if}
+        </div>
+      </Card.Content>
+    </Card.Root>
+
+    <!-- Protagonist -->
+    {#if protagonist}
       <Card.Root>
-        <Card.Content class="p-3">
-          <div class="flex flex-wrap gap-2">
-            <Badge variant="secondary">
-              {selectedMode === 'adventure' ? 'Adventure' : 'Creative Writing'}
-            </Badge>
-            <Badge variant="outline">{selectedPOV} person</Badge>
-            <Badge variant="outline">{selectedTense} tense</Badge>
-            {#if tone}
-              <Badge variant="outline">{tone}</Badge>
-            {/if}
+        <Card.Content class="flex items-center gap-3 p-3">
+          {#if protagonistPortrait}
+            <img
+              src={protagonistPortrait}
+              alt={protagonist.name}
+              class="h-10 w-10 rounded-lg object-cover"
+            />
+          {/if}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <Users class="text-primary h-4 w-4" />
+              <p class="text-sm font-medium">{protagonist.name}</p>
+            </div>
+            <p class="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
+              {protagonist.description}
+            </p>
           </div>
         </Card.Content>
       </Card.Root>
+    {/if}
 
-      <!-- Protagonist -->
-      {#if protagonist}
-        <Card.Root>
-          <Card.Content class="flex items-center gap-3 p-3">
-            {#if protagonistPortrait}
-              <img
-                src={protagonistPortrait}
-                alt={protagonist.name}
-                class="h-10 w-10 rounded-lg object-cover"
-              />
-            {/if}
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
-                <Users class="text-primary h-4 w-4" />
-                <p class="text-sm font-medium">{protagonist.name}</p>
-              </div>
-              <p class="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
-                {protagonist.description}
-              </p>
-            </div>
-          </Card.Content>
-        </Card.Root>
-      {/if}
-
-      <!-- Supporting Cast -->
-      {#if supportingCharacters.length > 0}
-        <Card.Root>
-          <Card.Content class="p-3">
-            <div class="flex items-center gap-2">
-              <Users class="text-muted-foreground h-4 w-4" />
-              <span class="text-sm">{supportingCharacters.length} supporting characters</span>
-            </div>
-            <div class="mt-1.5 flex flex-wrap gap-1">
-              {#each supportingCharacters as char}
-                <Badge variant="outline" class="text-xs">{char.name}</Badge>
-              {/each}
-            </div>
-          </Card.Content>
-        </Card.Root>
-      {/if}
-
-      <!-- Setting -->
-      {#if settingSeed}
-        <Card.Root>
-          <Card.Content class="p-3">
-            <div class="flex items-center gap-2">
-              <MapPin class="text-muted-foreground h-4 w-4" />
-              <span class="text-sm font-medium">World Setting</span>
-            </div>
-            <p class="text-muted-foreground mt-1 line-clamp-2 text-xs">{settingSeed}</p>
-          </Card.Content>
-        </Card.Root>
-      {/if}
-
-      <!-- Lorebook -->
-      {#if totalLorebookEntries > 0}
-        <Card.Root>
-          <Card.Content class="flex items-center gap-2 p-3">
-            <BookOpen class="text-muted-foreground h-4 w-4" />
-            <span class="text-sm">
-              {totalLorebookEntries} lorebook entries from {importedLorebooks.length} lorebook{importedLorebooks.length >
-              1
-                ? 's'
-                : ''}
-            </span>
-          </Card.Content>
-        </Card.Root>
-      {/if}
-
-      <!-- Chat Import -->
+    <!-- Supporting Cast -->
+    {#if supportingCharacters.length > 0}
       <Card.Root>
-        <Card.Content class="flex items-center gap-2 p-3">
-          {#if importChatAsEntries}
-            <MessageSquare class="text-muted-foreground h-4 w-4" />
-            <span class="text-sm">{chatMessageCount} chat messages will be imported</span>
-          {:else}
-            <FileText class="text-muted-foreground h-4 w-4" />
-            <span class="text-sm">Starting fresh with card opening</span>
-          {/if}
+        <Card.Content class="p-3">
+          <div class="flex items-center gap-2">
+            <Users class="text-muted-foreground h-4 w-4" />
+            <span class="text-sm">{supportingCharacters.length} supporting characters</span>
+          </div>
+          <div class="mt-1.5 flex flex-wrap gap-1">
+            {#each supportingCharacters as char}
+              <Badge variant="outline" class="text-xs">{char.name}</Badge>
+            {/each}
+          </div>
         </Card.Content>
       </Card.Root>
+    {/if}
 
-      <!-- Save to Vault Option -->
-      {#if hasCard}
-        <Card.Root>
-          <Card.Content class="flex items-center justify-between p-3">
-            <div class="flex items-center gap-2">
-              <Save class="text-muted-foreground h-4 w-4" />
-              <span class="text-sm">Save scenario to vault</span>
-            </div>
-            <Switch checked={saveToVault} onCheckedChange={(v) => onSaveToVaultChange(v)} />
-          </Card.Content>
-        </Card.Root>
-      {/if}
-    </div>
+    <!-- Setting -->
+    {#if settingSeed}
+      <Card.Root>
+        <Card.Content class="p-3">
+          <div class="flex items-center gap-2">
+            <MapPin class="text-muted-foreground h-4 w-4" />
+            <span class="text-sm font-medium">World Setting</span>
+          </div>
+          <p class="text-muted-foreground mt-1 line-clamp-2 text-xs">{settingSeed}</p>
+        </Card.Content>
+      </Card.Root>
+    {/if}
+
+    <!-- Lorebook -->
+    {#if totalLorebookEntries > 0}
+      <Card.Root>
+        <Card.Content class="flex items-center gap-2 p-3">
+          <BookOpen class="text-muted-foreground h-4 w-4" />
+          <span class="text-sm">
+            {totalLorebookEntries} lorebook entries from {importedLorebooks.length} lorebook{importedLorebooks.length >
+            1
+              ? 's'
+              : ''}
+          </span>
+        </Card.Content>
+      </Card.Root>
+    {/if}
+
+    <!-- Chat Import -->
+    <Card.Root>
+      <Card.Content class="flex items-center gap-2 p-3">
+        {#if importChatAsEntries}
+          <MessageSquare class="text-muted-foreground h-4 w-4" />
+          <span class="text-sm">{chatMessageCount} chat messages will be imported</span>
+        {:else}
+          <FileText class="text-muted-foreground h-4 w-4" />
+          <span class="text-sm">Starting fresh with card opening</span>
+        {/if}
+      </Card.Content>
+    </Card.Root>
+
+    <!-- Save to Vault Option -->
+    {#if hasCard}
+      <Card.Root>
+        <Card.Content class="flex items-center justify-between p-3">
+          <div class="flex items-center gap-2">
+            <Save class="text-muted-foreground h-4 w-4" />
+            <span class="text-sm">Save scenario to vault</span>
+          </div>
+          <Switch checked={saveToVault} onCheckedChange={(v) => onSaveToVaultChange(v)} />
+        </Card.Content>
+      </Card.Root>
+    {/if}
+  </div>
 
   <!-- Loading -->
   {#if isCreatingStory}

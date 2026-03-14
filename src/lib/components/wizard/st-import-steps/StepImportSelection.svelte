@@ -3,7 +3,6 @@
   import * as Card from '$lib/components/ui/card'
   import * as Alert from '$lib/components/ui/alert'
   import { Switch } from '$lib/components/ui/switch'
-  import { Label } from '$lib/components/ui/label'
   import { Badge } from '$lib/components/ui/badge'
   import { Button } from '$lib/components/ui/button'
   import type { ParsedCard, CardImportResult } from '$lib/services/characterCardImporter'
@@ -162,9 +161,7 @@
 
       <!-- Scenario -->
       <Card.Root
-        class="transition-colors {importScenario
-          ? 'border-primary/30 bg-primary/5'
-          : 'opacity-60'}"
+        class="transition-colors {importScenario ? 'border-primary/30 bg-primary/5' : 'opacity-60'}"
       >
         <Card.Content class="p-4">
           <div class="flex items-center justify-between">
@@ -174,9 +171,7 @@
                   ? 'bg-primary/20'
                   : 'bg-muted'}"
               >
-                <Map
-                  class="h-4 w-4 {importScenario ? 'text-primary' : 'text-muted-foreground'}"
-                />
+                <Map class="h-4 w-4 {importScenario ? 'text-primary' : 'text-muted-foreground'}" />
               </div>
               <div>
                 <p class="text-sm font-medium">Scenario & Setting</p>

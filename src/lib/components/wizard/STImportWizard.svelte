@@ -135,7 +135,8 @@
           onToggleVaultPicker={(v) => (wizard.showVaultPicker = v)}
           onDeleteSupportingCharacter={(i) => wizard.deleteSupportingCharacter(i)}
           onUpdateSupportingCharacter={(i, c) => wizard.updateSupportingCharacter(i, c)}
-          onUpdateCharacterPortrait={(name, portrait) => wizard.updateCharacterPortrait(name, portrait)}
+          onUpdateCharacterPortrait={(name, portrait) =>
+            wizard.updateCharacterPortrait(name, portrait)}
         />
       {:else if wizard.currentStep === 5}
         <StepImportWorld
@@ -193,10 +194,7 @@
             }
           }}
           onGenerateSupportingPortrait={(name) =>
-            wizard.image.generateSupportingCharacterPortrait(
-              name,
-              wizard.supportingCharacters,
-            )}
+            wizard.image.generateSupportingCharacterPortrait(name, wizard.supportingCharacters)}
           onRemoveSupportingPortrait={(name) =>
             wizard.image.removeSupportingCharacterPortrait(name)}
           onSupportingPortraitUpload={(e, name) =>

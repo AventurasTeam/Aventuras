@@ -2,7 +2,11 @@ import { story } from '$lib/stores/story.svelte'
 import { ui } from '$lib/stores/ui.svelte'
 import { settings } from '$lib/stores/settings.svelte'
 import { scenarioService, type WizardData } from '$lib/services/ai/wizard/ScenarioService'
-import { parseSTChat, type STChatParseResult, type STChatMessage } from '$lib/services/stChatImporter'
+import {
+  parseSTChat,
+  type STChatParseResult,
+  type STChatMessage,
+} from '$lib/services/stChatImporter'
 import {
   readCharacterCardFile,
   parseCharacterCard,
@@ -16,7 +20,12 @@ import { extractEmbeddedLorebook } from '$lib/services/lorebookImporter'
 import { replaceUserPlaceholders } from '$lib/components/wizard/wizardTypes'
 import type { ImportedLorebookItem } from '$lib/components/wizard/wizardTypes'
 import type { StoryMode, POV, VaultCharacter, VaultLorebook, VaultLorebookEntry } from '$lib/types'
-import type { ExpandedSetting, GeneratedCharacter, GeneratedOpening, GeneratedProtagonist } from '$lib/services/ai/sdk'
+import type {
+  ExpandedSetting,
+  GeneratedCharacter,
+  GeneratedOpening,
+  GeneratedProtagonist,
+} from '$lib/services/ai/sdk'
 import type { Genre, Tense } from '$lib/services/ai/wizard/ScenarioService'
 import type { LorebookImportResult } from '$lib/services/lorebookImporter'
 import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
@@ -58,7 +67,11 @@ export class STImportWizardStore {
   cardSanitized = $state<SanitizedCharacter | null>(null)
   cardProcessError = $state<string | null>(null)
 
-  embeddedLorebookData = $state<{ name: string; entries: VaultLorebookEntry[]; result: LorebookImportResult } | null>(null)
+  embeddedLorebookData = $state<{
+    name: string
+    entries: VaultLorebookEntry[]
+    result: LorebookImportResult
+  } | null>(null)
 
   // Step 3: Characters
   protagonist = $state<GeneratedProtagonist | null>(null)
@@ -232,7 +245,9 @@ export class STImportWizardStore {
         this.image.supportingCharacterVisualDescriptors[char.name] = char.description || ''
       }
     }
-    this.image.supportingCharacterVisualDescriptors = { ...this.image.supportingCharacterVisualDescriptors }
+    this.image.supportingCharacterVisualDescriptors = {
+      ...this.image.supportingCharacterVisualDescriptors,
+    }
   }
 
   private syncFromImageStore() {
@@ -371,7 +386,10 @@ export class STImportWizardStore {
         this.cardCharacterName = cardChar.name
         // Attach card portrait to the primary character
         if (this.cardPortrait) {
-          this.characterPortraits = new Map(this.characterPortraits).set(cardChar.name, this.cardPortrait)
+          this.characterPortraits = new Map(this.characterPortraits).set(
+            cardChar.name,
+            this.cardPortrait,
+          )
         }
         // Filter out NPCs that duplicate the primary card character
         const dedupedNpcs = result.npcs.filter(
@@ -385,7 +403,8 @@ export class STImportWizardStore {
         this.addEmbeddedLorebook()
       }
     } catch (err) {
-      this.cardProcessError = err instanceof Error ? err.message : 'Failed to process character card'
+      this.cardProcessError =
+        err instanceof Error ? err.message : 'Failed to process character card'
     } finally {
       this.isProcessingCard = false
     }
@@ -424,8 +443,10 @@ export class STImportWizardStore {
     this.protagonistPortrait = character.portrait || null
     this.manualCharacterName = character.name
     this.manualCharacterDescription = character.description || ''
-    this.manualCharacterBackground = (character.metadata as Record<string, string>)?.background || ''
-    this.manualCharacterMotivation = (character.metadata as Record<string, string>)?.motivation || ''
+    this.manualCharacterBackground =
+      (character.metadata as Record<string, string>)?.background || ''
+    this.manualCharacterMotivation =
+      (character.metadata as Record<string, string>)?.motivation || ''
     this.manualCharacterTraits = (character.traits || []).join(', ')
     this.showManualInput = false
     this.showVaultPicker = false
