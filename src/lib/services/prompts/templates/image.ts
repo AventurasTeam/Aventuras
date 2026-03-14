@@ -40,7 +40,30 @@ Analyze the narrative and identify up to {{ maxImages }} key visual moments (0 =
 **You MUST incorporate this full style description into every prompt.** Include multiple style keywords and rendering details.
 
 ## Character Reference
-{{ characterDescriptors }}
+{%- for char in sceneCharacters %}{% if char.visualDescriptors %}
+**{{ char.name }}**:
+  {%- if char.visualDescriptors.face %}
+  Face: {{ char.visualDescriptors.face }}
+  {%- endif %}
+  {%- if char.visualDescriptors.hair %}
+  Hair: {{ char.visualDescriptors.hair }}
+  {%- endif %}
+  {%- if char.visualDescriptors.eyes %}
+  Eyes: {{ char.visualDescriptors.eyes }}
+  {%- endif %}
+  {%- if char.visualDescriptors.build %}
+  Build: {{ char.visualDescriptors.build }}
+  {%- endif %}
+  {%- if char.visualDescriptors.clothing %}
+  Clothing: {{ char.visualDescriptors.clothing }}
+  {%- endif %}
+  {%- if char.visualDescriptors.accessories %}
+  Accessories: {{ char.visualDescriptors.accessories }}
+  {%- endif %}
+  {%- if char.visualDescriptors.distinguishing %}
+  Distinguishing features: {{ char.visualDescriptors.distinguishing }}
+  {%- endif %}
+{% endif %}{%- endfor %}
 
 ## Prompt Requirements
 - **Prompt length:** below 500 characters MAX (prompts over 500 characters will ERROR and fail)
@@ -124,13 +147,36 @@ Analyze the narrative and identify up to {{ maxImages }} scene images (0 = unlim
 {{ imageStylePrompt }}
 
 ## Characters With Portraits (can appear in scene images)
-{{ charactersWithPortraits }}
+{%- assign hasPortrait = false %}{% for char in sceneCharacters %}{% if char.portrait %}{% if hasPortrait %}, {% endif %}{{ char.name }}{% assign hasPortrait = true %}{% endif %}{% endfor %}{% unless hasPortrait %}None{% endunless %}
 
 ## Characters Without Portraits (need portrait generation first)
-{{ charactersWithoutPortraits }}
+{%- assign hasNoPortrait = false %}{% for char in sceneCharacters %}{% unless char.portrait %}{% if hasNoPortrait %}, {% endif %}{{ char.name }}{% assign hasNoPortrait = true %}{% endunless %}{% endfor %}{% unless hasNoPortrait %}None{% endunless %}
 
 ## Character Visual Descriptors
-{{ characterDescriptors }}
+{%- for char in sceneCharacters %}{% if char.visualDescriptors %}
+**{{ char.name }}**:
+  {%- if char.visualDescriptors.face %}
+  Face: {{ char.visualDescriptors.face }}
+  {%- endif %}
+  {%- if char.visualDescriptors.hair %}
+  Hair: {{ char.visualDescriptors.hair }}
+  {%- endif %}
+  {%- if char.visualDescriptors.eyes %}
+  Eyes: {{ char.visualDescriptors.eyes }}
+  {%- endif %}
+  {%- if char.visualDescriptors.build %}
+  Build: {{ char.visualDescriptors.build }}
+  {%- endif %}
+  {%- if char.visualDescriptors.clothing %}
+  Clothing: {{ char.visualDescriptors.clothing }}
+  {%- endif %}
+  {%- if char.visualDescriptors.accessories %}
+  Accessories: {{ char.visualDescriptors.accessories }}
+  {%- endif %}
+  {%- if char.visualDescriptors.distinguishing %}
+  Distinguishing features: {{ char.visualDescriptors.distinguishing }}
+  {%- endif %}
+{% endif %}{%- endfor %}
 
 ## CRITICAL: Never Use Character Names in Prompts
 Image models don't know who "Elena" or "Marcus" are. Character names are ONLY for the JSON fields, NEVER in the prompt text itself.

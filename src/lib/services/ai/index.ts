@@ -819,15 +819,6 @@ class AIService {
     const imageSettings = settings.systemServicesSettings.imageGeneration
     const referenceMode = context.referenceMode ?? false
 
-    // Get characters with/without portraits
-    const presentCharacterNames = context.presentCharacters.map((c) => c.name.toLowerCase())
-    const charactersWithPortraits = story.characters
-      .filter((c) => presentCharacterNames.includes(c.name.toLowerCase()) && c.portrait)
-      .map((c) => c.name)
-    const charactersWithoutPortraits = story.characters
-      .filter((c) => presentCharacterNames.includes(c.name.toLowerCase()) && !c.portrait)
-      .map((c) => c.name)
-
     // Build style prompt
     const stylePrompt = await this.getStylePrompt(imageSettings.styleId)
 
@@ -835,18 +826,12 @@ class AIService {
     const analysisContext: ImageAnalysisContext = {
       narrativeResponse: context.narrativeResponse,
       userAction: context.userAction,
-      presentCharacters: context.presentCharacters.map((c) => ({
-        name: c.name,
-        visualDescriptors: c.visualDescriptors,
-        isProtagonist: c.relationship === 'self',
-      })),
+      presentCharacters: context.presentCharacters,
       currentLocation: context.currentLocation,
       stylePrompt,
       maxImages: imageSettings.maxImagesPerMessage ?? 3,
       chatHistory: context.chatHistory,
       lorebookContext: context.lorebookContext,
-      charactersWithPortraits,
-      charactersWithoutPortraits,
       referenceMode,
       translatedNarrative: context.translatedNarrative,
       translationLanguage: context.translationLanguage,
