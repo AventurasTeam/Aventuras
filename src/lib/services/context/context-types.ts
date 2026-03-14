@@ -35,21 +35,7 @@ export type ContextCharacter = Pick<
  * Strips internal IDs, branch tracking, location, and translation fields.
  * Adds optional `tier` for tier-2/3 relevant items.
  */
-export type ContextItem = Omit<
-  Item,
-  | 'id'
-  | 'storyId'
-  | 'branchId'
-  | 'overridesId'
-  | 'deleted'
-  | 'createdAt'
-  | 'updatedAt'
-  | 'metadata'
-  | 'location'
-  | 'translatedName'
-  | 'translatedDescription'
-  | 'translationLanguage'
-> & {
+export type ContextItem = Pick<Item, 'name' | 'description' | 'quantity' | 'equipped'> & {
   /** Retrieval tier — present for tier-2/3 items (worldStateRelevantItems), omitted for inventory */
   tier?: 1 | 2 | 3
 }
@@ -59,22 +45,7 @@ export type ContextItem = Omit<
  * Strips internal IDs, branch tracking, timestamps, and translation fields.
  * Adds optional `tier` for tier-2/3 related beats.
  */
-export type ContextStoryBeat = Omit<
-  StoryBeat,
-  | 'id'
-  | 'storyId'
-  | 'branchId'
-  | 'overridesId'
-  | 'deleted'
-  | 'createdAt'
-  | 'updatedAt'
-  | 'metadata'
-  | 'triggeredAt'
-  | 'resolvedAt'
-  | 'translatedTitle'
-  | 'translatedDescription'
-  | 'translationLanguage'
-> & {
+export type ContextStoryBeat = Pick<StoryBeat, 'title' | 'description' | 'type' | 'status'> & {
   /** Retrieval tier — present for tier-2/3 beats (worldStateRelatedBeats), omitted for active beats */
   tier?: 1 | 2 | 3
 }
@@ -84,22 +55,7 @@ export type ContextStoryBeat = Omit<
  * Strips internal IDs, branch tracking, connections, current flag, and translation fields.
  * Adds `tier` for retrieval priority ordering.
  */
-export type ContextLocation = Omit<
-  Location,
-  | 'id'
-  | 'storyId'
-  | 'branchId'
-  | 'overridesId'
-  | 'deleted'
-  | 'createdAt'
-  | 'updatedAt'
-  | 'metadata'
-  | 'connections'
-  | 'current'
-  | 'translatedName'
-  | 'translatedDescription'
-  | 'translationLanguage'
-> & {
+export type ContextLocation = Pick<Location, 'name' | 'description' | 'visited'> & {
   /** Retrieval tier — lower means higher priority in context window */
   tier: 1 | 2 | 3
 }
@@ -121,22 +77,7 @@ export type ContextLorebookEntry = Pick<Entry, 'name' | 'type' | 'description'> 
  * Strips internal IDs, branch tracking, entry boundary IDs, keyword/thread metadata.
  * Converts TimeTracker startTime/endTime to formatted string | null for template rendering.
  */
-export type ContextChapter = Omit<
-  Chapter,
-  | 'id'
-  | 'storyId'
-  | 'branchId'
-  | 'createdAt'
-  | 'startEntryId'
-  | 'endEntryId'
-  | 'entryCount'
-  | 'keywords'
-  | 'plotThreads'
-  | 'startTime'
-  | 'endTime'
-  | 'title'
-  | 'emotionalTone'
-> & {
+export type ContextChapter = Pick<Chapter, 'number' | 'summary' | 'characters' | 'locations'> & {
   /** Chapter title */
   title: string
   /** Formatted start time string, or null if not recorded */
