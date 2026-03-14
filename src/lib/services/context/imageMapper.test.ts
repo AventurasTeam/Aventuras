@@ -102,4 +102,65 @@ describe('mapPresentCharacters', () => {
       expect(result).toHaveLength(0)
     })
   })
+
+  describe('partial and varied characters', () => {
+    const partialChar: Character = {
+      id: 'char-partial',
+      storyId: 'story-1',
+      name: 'Halfling Scout',
+      description: 'A quick and quiet halfling.',
+      relationship: null,
+      traits: ['stealthy'],
+      visualDescriptors: {
+        face: 'round, freckled',
+        hair: 'curly auburn',
+        eyes: '',
+        build: '',
+        clothing: 'green cloak',
+        accessories: '',
+        distinguishing: '',
+      },
+      portrait: 'data:image/png;base64,abc123',
+      status: 'active',
+      metadata: null,
+      branchId: null,
+    }
+
+    const deceasedChar: Character = {
+      id: 'char-deceased',
+      storyId: 'story-1',
+      name: 'Fallen Knight',
+      description: null,
+      relationship: 'enemy',
+      traits: [],
+      visualDescriptors: {},
+      portrait: null,
+      status: 'deceased',
+      metadata: null,
+      branchId: null,
+    }
+
+    it('maps partial visualDescriptors (only some fields populated)', () => {
+      const result = mapPresentCharacters([partialChar])
+      expect(result[0].visualDescriptors.face).toBe('round, freckled')
+      expect(result[0].visualDescriptors.hair).toBe('curly auburn')
+      expect(result[0].visualDescriptors.eyes).toBe('')
+      expect(result[0].visualDescriptors.clothing).toBe('green cloak')
+    })
+
+    it('preserves non-null portrait value', () => {
+      const result = mapPresentCharacters([partialChar])
+      expect(result[0].portrait).toBe('data:image/png;base64,abc123')
+    })
+
+    it('maps deceased status correctly', () => {
+      const result = mapPresentCharacters([deceasedChar])
+      expect(result[0].status).toBe('deceased')
+    })
+
+    it('maps null relationship to empty string', () => {
+      const result = mapPresentCharacters([partialChar])
+      expect(result[0].relationship).toBe('')
+    })
+  })
 })
