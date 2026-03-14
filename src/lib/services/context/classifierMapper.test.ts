@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mapCharacters, mapBeats } from './classifierMapper'
-import { rawCharacters, rawStoryBeats, rawStoryEntries } from '../../../test/contextFixtures'
-import type { Character, StoryBeat, StoryEntry } from '$lib/types'
+import { rawCharacters, rawStoryBeats } from '../../../test/contextFixtures'
+import type { Character, StoryBeat } from '$lib/types'
 
 describe('mapCharacters', () => {
   describe('Aria (fully populated character)', () => {
