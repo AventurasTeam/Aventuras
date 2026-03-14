@@ -5,6 +5,10 @@
  * between classifierMapper, imageMapper, and worldStateMapper.
  */
 
+import { createLogger } from '$lib/log'
+
+const log = createLogger('ContextUtils')
+
 /**
  * Normalize appearance data from a character's visualDescriptors metadata field.
  *
@@ -32,5 +36,8 @@ export function normalizeAppearance(visualDescriptors: unknown): string[] {
     return parts
   }
 
+  log('normalizeAppearance: unexpected type, returning empty array', {
+    type: typeof visualDescriptors,
+  })
   return []
 }
