@@ -127,8 +127,8 @@ export function mapContextResultToArrays(
         ({
           title: e.name,
           description: e.description ?? '',
-          type: String(e.metadata?.type ?? ''),
-          status: String(e.metadata?.status ?? 'active'),
+          type: e.metadata?.type ?? '',
+          status: e.metadata?.status ?? 'active',
         }) satisfies ContextStoryBeat,
     )
 
@@ -140,8 +140,8 @@ export function mapContextResultToArrays(
         ({
           title: e.name,
           description: e.description ?? '',
-          type: String(e.metadata?.type ?? ''),
-          status: String(e.metadata?.status ?? 'active'),
+          type: e.metadata?.type ?? '',
+          status: e.metadata?.status ?? 'active',
           tier: e.tier,
         }) satisfies ContextStoryBeat,
     )

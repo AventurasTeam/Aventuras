@@ -11,7 +11,7 @@
   import { variableRegistry } from '$lib/services/templates/variables'
   import type { ValidationError, VariableDefinition } from '$lib/services/templates/types'
   import type { CustomVariable } from '$lib/services/packs/types'
-  import type { Completion, CompletionSection } from '@codemirror/autocomplete'
+  import type { Completion } from '@codemirror/autocomplete'
   import { allSamples } from './sampleContext'
   import { AlertTriangle, CircleCheck, FlaskConical } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
@@ -74,13 +74,6 @@
       const dom = document.createElement('div')
       dom.className = 'cm-var-tooltip'
 
-      // Deprecated warning banner (if applicable)
-      if (v.deprecated) {
-        const warn = dom.appendChild(document.createElement('div'))
-        warn.className = 'cm-var-deprecated-banner'
-        warn.textContent = `Deprecated -- use ${v.deprecated.replacedBy}`
-      }
-
       // Variable type badge
       const typeBadge = dom.appendChild(document.createElement('span'))
       typeBadge.className = 'cm-var-type-badge'
@@ -142,12 +135,6 @@
     }
   }
 
-  // Section for deprecated variables -- shown last in autocomplete
-  const deprecatedSection: CompletionSection = {
-    name: 'Deprecated',
-    rank: 99,
-  }
-
   // Build variable completions for CodeMirror autocomplete
   let completions: Completion[] = $derived.by(() => {
     const result: Completion[] = []
@@ -155,9 +142,8 @@
       result.push({
         label: v.name,
         type: 'variable',
-        detail: v.deprecated ? `${v.category} (deprecated)` : v.category,
+        detail: v.category,
         info: buildTooltipInfo(v),
-        section: v.deprecated ? deprecatedSection : undefined,
       })
     }
     for (const v of customVariables) {
@@ -250,15 +236,6 @@
       flexDirection: 'column',
       gap: '6px',
     },
-    // Deprecated warning banner
-    '.cm-var-deprecated-banner': {
-      backgroundColor: 'color-mix(in srgb, #f59e0b 15%, transparent)',
-      color: '#f59e0b',
-      padding: '4px 8px',
-      borderRadius: '4px',
-      fontSize: '11px',
-      fontWeight: '500',
-    },
     // Variable type badge
     '.cm-var-type-badge': {
       display: 'inline-block',
@@ -295,14 +272,6 @@
       fontSize: '11px',
       fontStyle: 'italic',
       color: 'var(--muted-foreground)',
-    },
-    // Deprecated section header
-    '.cm-completionSection': {
-      color: 'var(--muted-foreground)',
-      fontSize: '11px',
-      fontStyle: 'italic',
-      padding: '4px 8px 2px',
-      borderTop: '1px solid var(--border)',
     },
     // Completion icon
     '.cm-completionIcon': {
