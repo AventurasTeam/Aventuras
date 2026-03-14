@@ -34,8 +34,8 @@
 
   let chatDragOver = $state(false)
   let cardDragOver = $state(false)
-  let chatFileInput: HTMLInputElement
-  let cardFileInput: HTMLInputElement
+  let chatFileInput = $state<HTMLInputElement>()
+  let cardFileInput = $state<HTMLInputElement>()
 
   const userCount = $derived(
     chatParseResult?.messages.filter((m) => m.type === 'user_action').length ?? 0,
