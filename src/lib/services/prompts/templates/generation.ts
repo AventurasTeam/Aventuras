@@ -79,10 +79,16 @@ You will be provided with the entirety of the current chapter, as well as summar
 Query based ONLY on the information visible in the chapter summaries or things that may be implied to have happened in them. Do not reference current events in your queries, as the assistant that answers queries is only provided the history of that chapter, and would have no knowledge of events outside of the chapters queried. However, do not ask about information directly answered in the summaries. Instead, try to ask questions that 'fill in the gaps'. The maximum range of chapters (startChapter - endChapter) for a single query is 3, but you may make as many queries as you wish.
 </constraints>`,
   userContent: `Visible chat history:
-{{ chapterHistory }}
+{% assign startIdx = storyEntries.size | minus: 10 %}
+{%- if startIdx < 0 -%}{%- assign startIdx = 0 -%}{%- endif -%}
+{% for entry in storyEntries limit: 10 offset: startIdx %}
+[{% if entry.type == 'user_action' %}ACTION{% else %}NARRATIVE{% endif %}]: {{ entry.content }}
+{% endfor %}
 
 Existing chapter timeline:
-{{ timeline }}
+{% for chapter in chapters %}
+Chapter {{ chapter.number }}: {{ chapter.summary | strip | default: 'No summary' }}
+{% endfor %}
 
 Identify what information from past chapters would help understand the current scene. Generate queries about specific chapters or chapter ranges. The maximum number of chapters per query is 3.`,
 }
@@ -93,7 +99,17 @@ const timelineFillAnswerPromptTemplate: PromptTemplate = {
   category: 'service',
   description: 'Answers specific questions about past chapter content',
   content: `You answer specific questions about story chapters. Be concise and factual. Only include information that directly answers the question. If the chapter doesn't contain relevant information, say "Not mentioned in this chapter."`,
-  userContent: `{{ chapterContent }}
+  userContent: `{% for chapter in answerChapters %}
+## Chapter {{ chapter.number }}{% if chapter.title %}: {{ chapter.title }}{% endif %}
+
+{% if chapter.entries.size > 0 %}
+{%- for entry in chapter.entries %}
+[{% if entry.type == 'user_action' %}ACTION{% else %}NARRATIVE{% endif %}]: {{ entry.content }}
+{% endfor %}
+{%- else %}
+{{ chapter.summary }}
+{%- endif %}
+{% endfor %}
 
 QUESTION: {{ query }}
 

@@ -11,6 +11,9 @@ import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
 import { generatePlainText } from '../sdk/generate'
 import { timelineQueriesResultSchema, type TimelineQuery } from '../sdk/schemas/timeline'
+import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
+import { mapChaptersToContext } from '$lib/services/context/chapterMapper'
+import type { ContextAnswerChapter } from '$lib/services/context/context-types'
 
 const log = createLogger('TimelineFill')
 
@@ -86,19 +89,11 @@ export class TimelineFillService extends BaseAIService {
       return []
     }
 
-    // Build chapter history from visible entries
-    const chapterHistory = visibleEntries
-      .slice(-10)
-      .map((e) => `[${e.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}]: ${e.content}`)
-      .join('\n\n')
-
-    // Build timeline from chapters
-    const timeline = chapters
-      .map((c) => `Chapter ${c.number}: ${c.summary.trim() || 'No summary'}`)
-      .join('\n')
+    const storyEntries = mapStoryEntriesToContext(visibleEntries, { stripPicTags: false })
+    const { chapters: contextChapters } = mapChaptersToContext(chapters)
 
     const ctx = new ContextBuilder()
-    ctx.add({ chapterHistory, timeline })
+    ctx.add({ storyEntries, chapters: contextChapters })
     const { system, user: prompt } = await ctx.render('timeline-fill')
 
     try {
@@ -148,28 +143,23 @@ export class TimelineFillService extends BaseAIService {
       }
     }
 
-    // Build chapter content - use full entries if callback provided, otherwise use summary
-    const chapterContent = targetChapters
-      .map((c) => {
-        const header = `## Chapter ${c.number}${c.title ? `: ${c.title}` : ''}`
-
-        if (getChapterEntries) {
-          const entries = getChapterEntries(c)
-          if (entries.length > 0) {
-            const entriesText = entries
-              .map((e) => `[${e.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}]: ${e.content}`)
-              .join('\n\n')
-            return `${header}\n${entriesText}`
-          }
+    const answerChapters: ContextAnswerChapter[] = targetChapters.map((c) => {
+      const chapter: ContextAnswerChapter = {
+        number: c.number,
+        title: c.title ?? '',
+        summary: c.summary,
+      }
+      if (getChapterEntries) {
+        const entries = getChapterEntries(c)
+        if (entries.length > 0) {
+          chapter.entries = mapStoryEntriesToContext(entries, { stripPicTags: false })
         }
-
-        // Fallback to summary
-        return `${header}\n${c.summary}`
-      })
-      .join('\n\n')
+      }
+      return chapter
+    })
 
     const ctx = new ContextBuilder()
-    ctx.add({ chapterContent, query })
+    ctx.add({ answerChapters, query })
     const { system, user: prompt } = await ctx.render('timeline-fill-answer')
 
     try {
