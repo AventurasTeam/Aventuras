@@ -142,8 +142,8 @@ export class ContextBuilder {
     }
 
     return {
-      system: systemResult ?? systemTemplate?.content ?? '',
-      user: userResult ?? userTemplate?.content ?? '',
+      system: systemResult ?? '',
+      user: userResult ?? '',
     }
   }
 

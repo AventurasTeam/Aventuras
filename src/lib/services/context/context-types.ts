@@ -26,8 +26,6 @@ export type ContextCharacter = Omit<
   | 'branchId'
   | 'overridesId'
   | 'deleted'
-  | 'createdAt'
-  | 'updatedAt'
   | 'metadata'
   | 'portrait'
   | 'visualDescriptors'
@@ -176,9 +174,12 @@ export interface ContextTimelineFill {
 
 /**
  * A story entry as seen by Liquid templates (storyEntries[]).
- * Uses Pick — only type and content needed from the full StoryEntry type.
+ * Narrow type union — system/retry types are filtered out by mappers before reaching templates.
  */
-export type ContextStoryEntry = Pick<StoryEntry, 'type' | 'content'>
+export type ContextStoryEntry = {
+  type: 'user_action' | 'narration'
+  content: string
+}
 
 // ===== New v1.2 Interfaces =====
 
@@ -197,13 +198,10 @@ export type ContextClassifierBeat = Pick<StoryBeat, 'title' | 'description' | 't
 
 /**
  * A chat entry for classifier/image templates (chatHistory[]).
- * Extended from StoryEntry — strips IDs and tracking fields, adds timeStart for template rendering.
- * The metadata field is retained so mappers can read it; templates use timeStart directly.
+ * Only type and content are needed by templates; timeStart is computed by the mapper
+ * from the source entry's metadata.timeStart.
  */
-export type ContextChatEntry = Omit<
-  StoryEntry,
-  'id' | 'storyId' | 'branchId' | 'parentId' | 'position' | 'createdAt'
-> & {
+export type ContextChatEntry = Pick<StoryEntry, 'type' | 'content'> & {
   /** Formatted time string for template rendering, e.g. 'Y1D3 09:30', empty string if none */
   timeStart: string
 }
@@ -273,8 +271,6 @@ export type ContextSceneCharacter = Omit<
   | 'branchId'
   | 'overridesId'
   | 'deleted'
-  | 'createdAt'
-  | 'updatedAt'
   | 'metadata'
   | 'translatedName'
   | 'translatedDescription'

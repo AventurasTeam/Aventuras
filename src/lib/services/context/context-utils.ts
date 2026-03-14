@@ -12,7 +12,7 @@
  * - Legacy array: string[] — each element is an appearance descriptor
  * - Object format: { face, hair, eyes, build, clothing, accessories, distinguishing }
  *
- * @param visualDescriptors - Raw value from RelevantEntry.metadata.visualDescriptors
+ * @param visualDescriptors - Raw value from a Character or RelevantEntry's visualDescriptors field
  * @returns Array of non-empty appearance descriptor strings
  */
 export function normalizeAppearance(visualDescriptors: unknown): string[] {

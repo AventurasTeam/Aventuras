@@ -594,6 +594,10 @@ export class EntryRetrievalService extends BaseAIService {
 
     const recentEntries: ContextStoryEntry[] = recentStoryEntries
       .slice(-this.config.recentEntriesCount)
+      .filter(
+        (e): e is typeof e & { type: 'user_action' | 'narration' } =>
+          e.type === 'user_action' || e.type === 'narration',
+      )
       .map((e) => ({ type: e.type, content: e.content }))
 
     const ctx = new ContextBuilder()

@@ -284,14 +284,14 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
   // === Memory Service ===
   {
     name: 'firstValidId',
-    type: 'text',
+    type: 'number',
     category: 'runtime',
     description: 'First valid entry ID in range',
     required: false,
   },
   {
     name: 'lastValidId',
-    type: 'text',
+    type: 'number',
     category: 'runtime',
     description: 'Last valid entry ID in range',
     required: false,
@@ -1008,6 +1008,11 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     infoFields: [
       { name: 'type', type: 'string', description: 'user_action or narration' },
       { name: 'content', type: 'string', description: 'Entry text content' },
+      {
+        name: 'timeStart',
+        type: 'string',
+        description: "Formatted time e.g. 'Y1D3 09:30', empty string if none",
+      },
     ] satisfies VariableFieldInfo[],
   },
   {
@@ -1130,7 +1135,6 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     infoFields: [
       { name: 'name', type: 'string', description: 'Entry name' },
       { name: 'type', type: 'string', description: 'e.g. character, location, item, faction' },
-      { name: 'description', type: 'string', description: 'Entry description' },
     ] satisfies VariableFieldInfo[],
   },
   {

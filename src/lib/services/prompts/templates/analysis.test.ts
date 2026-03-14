@@ -62,7 +62,6 @@ function makeChatEntry(overrides: {
     type: overrides.type,
     content: overrides.content,
     timeStart: overrides.timeStart,
-    metadata: null,
   }
 }
 

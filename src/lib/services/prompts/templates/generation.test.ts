@@ -78,7 +78,7 @@ describe('action-choices template', () => {
       const result = templateEngine.render(template.userContent!, {
         ...actionChoicesBase,
         storyEntries: [
-          { type: 'narrative', content: 'The bridge collapsed.' },
+          { type: 'narration', content: 'The bridge collapsed.' },
           { type: 'user_action', content: 'I grabbed the rope.' },
         ],
       })
@@ -117,7 +117,7 @@ describe('timeline-fill template', () => {
     const result = templateEngine.render(timelineFillTemplate.userContent!, {
       storyEntries: [
         { type: 'user_action', content: 'I drew my sword.' },
-        { type: 'narrative', content: 'The knight fell back.' },
+        { type: 'narration', content: 'The knight fell back.' },
       ],
       chapters: [{ number: 1, summary: 'The journey began.' }],
     })
@@ -130,7 +130,7 @@ describe('timeline-fill template', () => {
     const result = templateEngine.render(timelineFillTemplate.userContent!, {
       storyEntries: [
         { type: 'user_action', content: 'I climbed the wall.' },
-        { type: 'narrative', content: 'Shadows gathered.' },
+        { type: 'narration', content: 'Shadows gathered.' },
       ],
       chapters: [],
     })
@@ -154,9 +154,9 @@ describe('timeline-fill template', () => {
 
   it('handles fewer than 10 entries without error', () => {
     const entries = [
-      { type: 'narrative', content: 'Entry A' },
-      { type: 'narrative', content: 'Entry B' },
-      { type: 'narrative', content: 'Entry C' },
+      { type: 'narration', content: 'Entry A' },
+      { type: 'narration', content: 'Entry B' },
+      { type: 'narration', content: 'Entry C' },
     ]
     const result = templateEngine.render(timelineFillTemplate.userContent!, {
       storyEntries: entries,
@@ -169,7 +169,7 @@ describe('timeline-fill template', () => {
 
   it('renders only last 10 entries when more than 10 provided', () => {
     const entries = Array.from({ length: 15 }, (_, i) => ({
-      type: 'narrative',
+      type: 'narration',
       content: `Entry ${i + 1}`,
     }))
     const result = templateEngine.render(timelineFillTemplate.userContent!, {
@@ -190,7 +190,7 @@ describe('timeline-fill-answer template', () => {
           number: 3,
           entries: [
             { type: 'user_action', content: 'I opened the gate.' },
-            { type: 'narrative', content: 'Light flooded the room.' },
+            { type: 'narration', content: 'Light flooded the room.' },
           ],
         },
       ],
@@ -229,7 +229,7 @@ describe('timeline-fill-answer template', () => {
       answerChapters: [
         {
           number: 2,
-          entries: [{ type: 'narrative', content: 'The battle raged on.' }],
+          entries: [{ type: 'narration', content: 'The battle raged on.' }],
         },
         {
           number: 4,

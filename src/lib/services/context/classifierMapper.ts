@@ -79,7 +79,6 @@ export function mapChatEntries(entries: StoryEntry[]): ContextChatEntry[] {
     return {
       type: e.type,
       content,
-      metadata: e.metadata,
       timeStart,
     } satisfies ContextChatEntry
   })
