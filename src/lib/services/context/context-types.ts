@@ -16,26 +16,15 @@ import type { Character, Item, StoryBeat, Location, Entry, Chapter, StoryEntry }
 
 /**
  * A character as seen by Liquid templates (worldStateCharacters[]).
- * Strips internal IDs, branch tracking, and translation fields.
- * Adds `appearance` (normalized from VisualDescriptors) and `tier`.
+ * Explicit field list — new Character fields won't leak into templates.
+ * `appearance` is normalized from VisualDescriptors; `tier` is retrieval priority.
  */
-export type ContextCharacter = Omit<
-  Character,
-  | 'id'
-  | 'storyId'
-  | 'branchId'
-  | 'overridesId'
-  | 'deleted'
-  | 'metadata'
-  | 'portrait'
-  | 'visualDescriptors'
-  | 'translatedName'
-  | 'translatedDescription'
-  | 'translatedRelationship'
-  | 'translatedTraits'
-  | 'translatedVisualDescriptors'
-  | 'translationLanguage'
-> & {
+export type ContextCharacter = {
+  name: string
+  description: string | null
+  relationship: string | null
+  traits: string[]
+  status: 'active' | 'inactive' | 'deceased'
   /** Visual appearance details (normalized from VisualDescriptors) */
   appearance: string[]
   /** Retrieval tier — lower means higher priority in context window */
