@@ -393,6 +393,157 @@ template uses `{{ passages }}` it will now render as `[object Object]` — updat
 
 ---
 
+---
+
+## 12. `characterDescriptors`
+
+**What changed:** The old variable was a pre-formatted text block of all character visual
+descriptors for image generation. It is replaced by the `sceneCharacters[]` array, which you
+can iterate and format yourself — giving full control over which fields to render and how.
+
+**Before:**
+```liquid
+{{ characterDescriptors }}
+```
+
+**After:**
+```liquid
+{%- for char in sceneCharacters %}{% if char.visualDescriptors %}
+**{{ char.name }}**:
+  {%- if char.visualDescriptors.face %}
+  Face: {{ char.visualDescriptors.face }}
+  {%- endif %}
+  {%- if char.visualDescriptors.hair %}
+  Hair: {{ char.visualDescriptors.hair }}
+  {%- endif %}
+  {%- if char.visualDescriptors.eyes %}
+  Eyes: {{ char.visualDescriptors.eyes }}
+  {%- endif %}
+  {%- if char.visualDescriptors.build %}
+  Build: {{ char.visualDescriptors.build }}
+  {%- endif %}
+  {%- if char.visualDescriptors.clothing %}
+  Clothing: {{ char.visualDescriptors.clothing }}
+  {%- endif %}
+  {%- if char.visualDescriptors.accessories %}
+  Accessories: {{ char.visualDescriptors.accessories }}
+  {%- endif %}
+  {%- if char.visualDescriptors.distinguishing %}
+  Distinguishing features: {{ char.visualDescriptors.distinguishing }}
+  {%- endif %}
+{% endif %}{%- endfor %}
+```
+
+**New variable available:**
+- `sceneCharacters[]` — each entry has `name`, `description`, `portrait`, and `visualDescriptors` (object with `face`, `hair`, `eyes`, `build`, `clothing`, `accessories`, `distinguishing`)
+
+---
+
+## 13. `charactersWithPortraits`
+
+**What changed:** The old variable was a pre-formatted text list of characters that already have
+portrait images. It is replaced by a Liquid filter on `sceneCharacters[]` that checks for the
+presence of a `portrait` field.
+
+**Before:**
+```liquid
+{{ charactersWithPortraits }}
+```
+
+**After:**
+```liquid
+{%- assign hasPortrait = false %}
+{%- for char in sceneCharacters %}
+  {%- if char.portrait %}
+    {%- if hasPortrait %}, {% endif %}{{ char.name }}
+    {%- assign hasPortrait = true %}
+  {%- endif %}
+{%- endfor %}
+{%- unless hasPortrait %}None{% endunless %}
+```
+
+**New variable available:**
+- `sceneCharacters[]` — filter by `char.portrait` being truthy to find characters with portraits
+
+---
+
+## 14. `charactersWithoutPortraits`
+
+**What changed:** The old variable was a pre-formatted text list of characters that do not yet
+have portrait images. It is replaced by a Liquid filter on `sceneCharacters[]` that checks for
+the absence of a `portrait` field.
+
+**Before:**
+```liquid
+{{ charactersWithoutPortraits }}
+```
+
+**After:**
+```liquid
+{%- assign hasNoPortrait = false %}
+{%- for char in sceneCharacters %}
+  {%- unless char.portrait %}
+    {%- if hasNoPortrait %}, {% endif %}{{ char.name }}
+    {%- assign hasNoPortrait = true %}
+  {%- endunless %}
+{%- endfor %}
+{%- unless hasNoPortrait %}None{% endunless %}
+```
+
+**New variable available:**
+- `sceneCharacters[]` — filter by `char.portrait` being falsy to find characters without portraits
+
+---
+
+## 15. `previousResponse`
+
+**What changed:** The old variable was a plain text scalar containing the previous narrative
+response for background image analysis. It is replaced by index arithmetic on the
+`narrationEntries[]` array.
+
+**Before:**
+```liquid
+##Previous Message:
+{{ previousResponse }}
+```
+
+**After:**
+```liquid
+{% assign prevIdx = lastNarrationIndex | minus: 1 %}
+##Previous Message:
+{% if prevIdx >= 0 %}{{ narrationEntries[prevIdx].content }}{% endif %}
+```
+
+**New variables available:**
+- `narrationEntries[]` — each entry has `type` (always `narration`) and `content`
+- `lastNarrationIndex` — the index of the last entry (`narrationEntries.length - 1`)
+
+---
+
+## 16. `currentResponse`
+
+**What changed:** The old variable was a plain text scalar containing the current narrative
+response for background image analysis. It is replaced by direct index access on the
+`narrationEntries[]` array using `lastNarrationIndex`.
+
+**Before:**
+```liquid
+##Current Message:
+{{ currentResponse }}
+```
+
+**After:**
+```liquid
+##Current Message:
+{{ narrationEntries[lastNarrationIndex].content }}
+```
+
+**New variables available:**
+- `narrationEntries[]` — each entry has `type` (always `narration`) and `content`
+- `lastNarrationIndex` — the index of the last entry (`narrationEntries.length - 1`)
+
+---
+
 ## Checking Your Templates
 
 To find templates that reference deprecated variables, search for these strings in your custom
@@ -409,6 +560,11 @@ visualProseInstructions
 existingCharacters
 existingBeats
 chatHistoryBlock
+characterDescriptors
+charactersWithPortraits
+charactersWithoutPortraits
+previousResponse
+currentResponse
 ```
 
 The Aventura template editor will render these as empty strings if referenced — no error will be
