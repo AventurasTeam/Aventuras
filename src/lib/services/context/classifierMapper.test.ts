@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mapCharacters, mapBeats, mapEntries } from './classifierMapper'
+import { mapCharacters, mapBeats } from './classifierMapper'
 import { rawCharacters, rawStoryBeats, rawStoryEntries } from '../../../test/contextFixtures'
 import type { Character, StoryBeat, StoryEntry } from '$lib/types'
 
@@ -126,40 +126,6 @@ describe('mapBeats', () => {
     it('returns empty array for empty input', () => {
       const emptyBeats: StoryBeat[] = []
       const result = mapBeats(emptyBeats)
-      expect(result).toHaveLength(0)
-    })
-  })
-})
-
-describe('mapEntries', () => {
-  describe('entry type and content preservation', () => {
-    it('returns array of length 3 for rawStoryEntries', () => {
-      const result = mapEntries(rawStoryEntries)
-      expect(result).toHaveLength(3)
-    })
-
-    it("result[0].type equals 'narration'", () => {
-      const result = mapEntries(rawStoryEntries)
-      expect(result[0].type).toBe('narration')
-    })
-
-    it("result[0].content equals 'The torches flickered.'", () => {
-      const result = mapEntries(rawStoryEntries)
-      expect(result[0].content).toBe('The torches flickered.')
-    })
-
-    it('result[0] has only type and content properties', () => {
-      const result = mapEntries(rawStoryEntries)
-      expect(result[0]).not.toHaveProperty('id')
-      expect(result[0]).not.toHaveProperty('storyId')
-      expect(result[0]).not.toHaveProperty('branchId')
-    })
-  })
-
-  describe('edge cases', () => {
-    it('returns empty array for empty input', () => {
-      const emptyEntries: StoryEntry[] = []
-      const result = mapEntries(emptyEntries)
       expect(result).toHaveLength(0)
     })
   })

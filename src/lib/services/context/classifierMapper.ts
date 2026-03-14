@@ -84,21 +84,3 @@ export function mapChatEntries(entries: StoryEntry[]): ContextChatEntry[] {
     } satisfies ContextChatEntry
   })
 }
-
-/**
- * Map an array of StoryEntry domain objects to ContextChatEntry context shapes.
- *
- * Picks only type and content — minimal shape for classifier context.
- * Does NOT strip pic tags — that is the caller's responsibility.
- * Does NOT import from storyEntryMapper — no cross-mapper dependency.
- *
- * @deprecated Use mapChatEntries for full ContextChatEntry shape with timeStart support.
- */
-export function mapEntries(entries: StoryEntry[]): ContextChatEntry[] {
-  return entries.map((e) => ({
-    type: e.type,
-    content: e.content,
-    metadata: e.metadata,
-    timeStart: '',
-  }))
-}
