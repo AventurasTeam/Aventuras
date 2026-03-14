@@ -120,7 +120,6 @@
           showManualInput={wizard.showManualInput}
           showVaultPicker={wizard.showVaultPicker}
           supportingCharacters={wizard.supportingCharacters}
-          cardPortrait={wizard.cardPortrait}
           cardCharacterName={wizard.cardCharacterName}
           characterPortraits={wizard.characterPortraits}
           onManualNameChange={(v) => (wizard.manualCharacterName = v)}
@@ -129,7 +128,6 @@
           onManualMotivationChange={(v) => (wizard.manualCharacterMotivation = v)}
           onManualTraitsChange={(v) => (wizard.manualCharacterTraits = v)}
           onUseManualCharacter={() => wizard.useManualCharacter()}
-          onEditCharacter={() => wizard.editCharacter()}
           onUpdateProtagonist={(p, portrait) => wizard.updateProtagonist(p, portrait)}
           onSelectFromVault={(c) => wizard.selectProtagonistFromVault(c)}
           onToggleVaultPicker={(v) => (wizard.showVaultPicker = v)}
@@ -187,12 +185,9 @@
             wizard.image.generateProtagonistPortrait(wizard.protagonist)}
           onRemoveProtagonistPortrait={() => wizard.image.removeProtagonistPortrait()}
           onProtagonistPortraitUpload={(e) => wizard.image.handleProtagonistPortraitUpload(e)}
-          onSupportingDescriptorsChange={(name, v) => {
-            wizard.image.supportingCharacterVisualDescriptors[name] = v
-            wizard.image.supportingCharacterVisualDescriptors = {
-              ...wizard.image.supportingCharacterVisualDescriptors,
-            }
-          }}
+          onSupportingDescriptorsChange={(name, v) =>
+            (wizard.image.supportingCharacterVisualDescriptors[name] = v)
+          }
           onGenerateSupportingPortrait={(name) =>
             wizard.image.generateSupportingCharacterPortrait(name, wizard.supportingCharacters)}
           onRemoveSupportingPortrait={(name) =>

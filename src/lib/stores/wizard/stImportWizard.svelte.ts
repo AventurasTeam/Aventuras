@@ -298,12 +298,10 @@ export class STImportWizardStore {
     try {
       // Extract portrait from PNG before reading card data
       if (file.name.toLowerCase().endsWith('.png')) {
-        const arrayBuffer = await file.arrayBuffer()
-        const blob = new Blob([arrayBuffer], { type: 'image/png' })
         const reader = new FileReader()
         this.cardPortrait = await new Promise<string>((resolve) => {
           reader.onload = () => resolve(reader.result as string)
-          reader.readAsDataURL(blob)
+          reader.readAsDataURL(file)
         })
       }
 
@@ -379,7 +377,7 @@ export class STImportWizardStore {
         const charName = sanitized?.name || result.primaryCharacterName || this.cardParsedData!.name
         const cardChar: GeneratedCharacter = {
           name: charName,
-          description: sanitized?.description || 'A character from the imported card.',
+          description: sanitized?.description || this.cardParsedData?.description || 'A character from the imported card.',
           role: 'primary',
           relationship: '',
           traits: sanitized?.traits?.slice(0, 8) || [],
@@ -613,6 +611,14 @@ export class STImportWizardStore {
     try {
       const protagonistName = this.protagonist?.name || 'the protagonist'
 
+      // Find the first narration message index once for reuse
+      const firstNarrationIndex =
+        this.importChatAsEntries && this.chatParseResult
+          ? this.chatParseResult.messages.findIndex((m) => m.type === 'narration')
+          : -1
+      const firstNarration =
+        firstNarrationIndex !== -1 ? this.chatParseResult!.messages[firstNarrationIndex] : undefined
+
       // Build opening
       let opening: GeneratedOpening
       if (!this.importChatAsEntries && this.cardImportResult?.firstMessage) {
@@ -627,7 +633,6 @@ export class STImportWizardStore {
         }
       } else if (this.importChatAsEntries && this.chatParseResult) {
         // Chat import: use first narration message as opening, or a placeholder
-        const firstNarration = this.chatParseResult.messages.find((m) => m.type === 'narration')
         opening = {
           scene: firstNarration
             ? replaceUserPlaceholders(firstNarration.content, protagonistName)
@@ -719,11 +724,8 @@ export class STImportWizardStore {
       if (this.importChatAsEntries && this.chatParseResult) {
         await story.loadStory(newStory.id)
         // Skip the first narration message since it was used as the opening scene
-        const firstNarrationIndex = this.chatParseResult.messages.findIndex(
-          (m) => m.type === 'narration',
-        )
         const messagesToImport =
-          firstNarrationIndex >= 0
+          firstNarrationIndex !== -1
             ? [
                 ...this.chatParseResult.messages.slice(0, firstNarrationIndex),
                 ...this.chatParseResult.messages.slice(firstNarrationIndex + 1),

@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    User,
     Users,
     MapPin,
     BookOpen,
@@ -138,7 +139,7 @@
           {/if}
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
-              <Users class="text-primary h-4 w-4" />
+              <User class="text-primary h-4 w-4" />
               <p class="text-sm font-medium">{protagonist.name}</p>
             </div>
             <p class="text-muted-foreground mt-0.5 line-clamp-1 text-xs">

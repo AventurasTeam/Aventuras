@@ -145,7 +145,7 @@
               </div>
               <!-- Extracted NPCs -->
               {#if cardImportResult.npcs.length > 0}
-                <div class="text-muted-foreground ml-13 text-xs">
+                <div class="text-muted-foreground ml-12 text-xs">
                   <span class="font-medium">Extracted NPCs:</span>
                   <ul class="mt-1 ml-4 list-disc space-y-0.5">
                     {#each cardImportResult.npcs as npc (npc.name)}

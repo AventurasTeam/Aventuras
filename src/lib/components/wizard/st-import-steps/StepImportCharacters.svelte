@@ -26,7 +26,6 @@
     showManualInput: boolean
     showVaultPicker: boolean
     supportingCharacters: GeneratedCharacter[]
-    cardPortrait: string | null
     cardCharacterName: string
     characterPortraits: Map<string, string>
     onManualNameChange: (v: string) => void
@@ -35,7 +34,6 @@
     onManualMotivationChange: (v: string) => void
     onManualTraitsChange: (v: string) => void
     onUseManualCharacter: () => void
-    onEditCharacter: () => void
     onUpdateProtagonist: (protagonist: GeneratedProtagonist, portrait: string | null) => void
     onSelectFromVault: (character: VaultCharacter) => void
     onToggleVaultPicker: (v: boolean) => void
@@ -55,7 +53,6 @@
     showManualInput,
     showVaultPicker,
     supportingCharacters,
-    cardPortrait: _cardPortrait,
     cardCharacterName,
     characterPortraits,
     onManualNameChange,
@@ -64,7 +61,6 @@
     onManualMotivationChange,
     onManualTraitsChange,
     onUseManualCharacter,
-    onEditCharacter: _onEditCharacter,
     onUpdateProtagonist,
     onSelectFromVault,
     onToggleVaultPicker,
@@ -90,8 +86,6 @@
   // Protagonist-specific fields
   let editBackground = $state('')
   let editMotivation = $state('')
-  let _saving = $state(false)
-
   // Track which characters were saved to vault
   let savedToVault = $state<Set<number>>(new Set())
 
@@ -182,9 +176,10 @@
           relationship: char.relationship || null,
         },
       })
-      savedToVault = new Set([...savedToVault, index])
+      savedToVault.add(index)
       ui.showToast(`${char.name} saved to vault`, 'info')
-    } catch {
+    } catch (error) {
+      console.error('Failed to save character to vault:', error)
       ui.showToast('Failed to save to vault', 'error')
     }
   }
