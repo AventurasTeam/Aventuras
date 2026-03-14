@@ -1,6 +1,5 @@
 <script lang="ts">
   import {
-    Check,
     Users,
     MapPin,
     BookOpen,
@@ -38,8 +37,12 @@
     createError: string | null
     saveToVault: boolean
     hasCard: boolean
+    vaultTag: string
+    vaultDescription: string
     onTitleChange: (v: string) => void
     onSaveToVaultChange: (v: boolean) => void
+    onVaultTagChange: (v: string) => void
+    onVaultDescriptionChange: (v: string) => void
   }
 
   let {
@@ -59,8 +62,12 @@
     createError,
     saveToVault,
     hasCard,
+    vaultTag,
+    vaultDescription,
     onTitleChange,
     onSaveToVaultChange,
+    onVaultTagChange,
+    onVaultDescriptionChange,
   }: Props = $props()
 
   const totalLorebookEntries = $derived(importedLorebooks.flatMap((lb) => lb.entries).length)
@@ -77,6 +84,26 @@
       placeholder="Enter a title for your story"
       value={storyTitle}
       oninput={(e) => onTitleChange(e.currentTarget.value)}
+    />
+  </div>
+
+  <!-- Tag & Description -->
+  <div class="space-y-2">
+    <Label for="vault-tag">Tag</Label>
+    <Input
+      id="vault-tag"
+      placeholder="e.g. fantasy, sci-fi, romance"
+      value={vaultTag}
+      oninput={(e) => onVaultTagChange(e.currentTarget.value)}
+    />
+  </div>
+  <div class="space-y-2">
+    <Label for="vault-description">Description</Label>
+    <Input
+      id="vault-description"
+      placeholder="Enter Description for your story"
+      value={vaultDescription}
+      oninput={(e) => onVaultDescriptionChange(e.currentTarget.value)}
     />
   </div>
 
@@ -186,7 +213,7 @@
           <Card.Content class="flex items-center justify-between p-3">
             <div class="flex items-center gap-2">
               <Save class="text-muted-foreground h-4 w-4" />
-              <span class="text-sm">Save character & scenario to vault</span>
+              <span class="text-sm">Save scenario to vault</span>
             </div>
             <Switch checked={saveToVault} onCheckedChange={(v) => onSaveToVaultChange(v)} />
           </Card.Content>

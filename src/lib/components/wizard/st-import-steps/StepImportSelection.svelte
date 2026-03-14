@@ -53,9 +53,17 @@
 </script>
 
 <div class="space-y-5">
-  <p class="text-muted-foreground">
-    Choose what to import from <strong>{cardParsedData?.name}</strong> and review the extracted data.
-  </p>
+  <div class="flex items-center justify-between">
+    <p class="text-muted-foreground">
+      Choose what to import from <strong>{cardParsedData?.name}</strong> and review the extracted data.
+    </p>
+    {#if !isProcessingCard}
+      <Button variant="outline" size="sm" class="shrink-0 gap-1.5" onclick={onProcessCard}>
+        <RefreshCw class="h-3 w-3" />
+        Reprocess
+      </Button>
+    {/if}
+  </div>
 
   {#if isProcessingCard}
     <Card.Root>
@@ -242,15 +250,9 @@
     </div>
 
     {#if cardImportResult}
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2 text-sm text-green-400">
-          <Check class="h-4 w-4" />
-          Card processed successfully — details shown above.
-        </div>
-        <Button variant="outline" size="sm" class="shrink-0 gap-1.5" onclick={onProcessCard}>
-          <RefreshCw class="h-3 w-3" />
-          Reprocess
-        </Button>
+      <div class="flex items-center gap-2 text-sm text-green-400">
+        <Check class="h-4 w-4" />
+        Card processed successfully — details shown above.
       </div>
     {/if}
   {/if}

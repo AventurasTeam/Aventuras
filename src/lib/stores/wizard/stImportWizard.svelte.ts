@@ -19,10 +19,7 @@ import type { StoryMode, POV, VaultCharacter, VaultLorebook, VaultLorebookEntry 
 import type { ExpandedSetting, GeneratedCharacter, GeneratedOpening, GeneratedProtagonist } from '$lib/services/ai/sdk'
 import type { Genre, Tense } from '$lib/services/ai/wizard/ScenarioService'
 import type { LorebookImportResult } from '$lib/services/lorebookImporter'
-import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
-import { characterVault } from '$lib/stores/characterVault.svelte'
 import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
-import { stringToDescriptors } from '$lib/utils/visualDescriptors'
 import { database } from '$lib/services/database'
 import { ImageStore } from '$lib/stores/wizard/imageStore.svelte'
 
@@ -89,6 +86,8 @@ export class STImportWizardStore {
   isCreatingStory = $state(false)
   createError = $state<string | null>(null)
   saveToVault = $state(false)
+  vaultTag = $state('')
+  vaultDescription = $state('')
 
   // Callback
   onClose: () => void
@@ -622,6 +621,14 @@ export class STImportWizardStore {
 
       const storyData = await scenarioService.prepareStoryData(wizardData, opening)
 
+      // Use user-provided tag and description from the wizard
+      if (this.vaultTag.trim()) {
+        storyData.genre = this.vaultTag.trim()
+      }
+      if (this.vaultDescription.trim()) {
+        storyData.description = this.vaultDescription.trim()
+      }
+
       // Attach protagonist portrait (from vault, not from card)
       if (storyData.protagonist && this.protagonistPortrait) {
         storyData.protagonist.portrait = this.protagonistPortrait
@@ -682,32 +689,13 @@ export class STImportWizardStore {
     if (!this.cardParsedData) return
 
     try {
-      // Save character to vault
-      if (this.protagonist) {
-        if (!characterVault.isLoaded) await characterVault.load()
-        await characterVault.add({
-          name: this.protagonist.name,
-          description: this.protagonist.description || null,
-          traits: this.protagonist.traits || [],
-          visualDescriptors: {},
-          portrait: this.cardPortrait,
-          tags: [],
-          favorite: false,
-          source: 'import',
-          originalStoryId: null,
-          metadata: {
-            background: this.protagonist.background || null,
-            motivation: this.protagonist.motivation || null,
-          },
-        })
-      }
-
       // Save scenario to vault
       if (this.cardImportResult) {
         if (!scenarioVault.isLoaded) await scenarioVault.load()
+        const tags = this.vaultTag.trim() ? [this.vaultTag.trim()] : []
         await scenarioVault.add({
           name: this.storyTitle || this.cardParsedData.name,
-          description: null,
+          description: this.vaultDescription.trim() || null,
           settingSeed: this.settingSeed,
           npcs: this.supportingCharacters.map((c) => ({
             name: c.name,
@@ -719,7 +707,7 @@ export class STImportWizardStore {
           primaryCharacterName: this.protagonist?.name || this.cardParsedData.name,
           firstMessage: this.cardImportResult.firstMessage || null,
           alternateGreetings: this.cardImportResult.alternateGreetings || [],
-          tags: [],
+          tags,
           favorite: false,
           source: 'import',
           originalFilename: null,

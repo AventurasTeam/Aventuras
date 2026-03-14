@@ -209,8 +209,12 @@
           createError={wizard.createError}
           saveToVault={wizard.saveToVault}
           hasCard={wizard.hasCard}
+          vaultTag={wizard.vaultTag}
+          vaultDescription={wizard.vaultDescription}
           onTitleChange={(v) => (wizard.storyTitle = v)}
           onSaveToVaultChange={(v) => (wizard.saveToVault = v)}
+          onVaultTagChange={(v) => (wizard.vaultTag = v)}
+          onVaultDescriptionChange={(v) => (wizard.vaultDescription = v)}
         />
       {/if}
     </div>
