@@ -472,19 +472,6 @@ export class STImportWizardStore {
     this.showManualInput = false
   }
 
-  editCharacter() {
-    if (this.protagonist) {
-      this.manualCharacterName = this.protagonist.name || ''
-      this.manualCharacterDescription = this.protagonist.description || ''
-      this.manualCharacterBackground = this.protagonist.background || ''
-      this.manualCharacterMotivation = this.protagonist.motivation || ''
-      this.manualCharacterTraits = this.protagonist.traits?.join(', ') || ''
-    }
-    this.showManualInput = true
-    this.protagonist = null
-    this.protagonistPortrait = null
-  }
-
   updateProtagonist(protagonist: GeneratedProtagonist, portrait: string | null) {
     this.protagonist = protagonist
     this.protagonistPortrait = portrait

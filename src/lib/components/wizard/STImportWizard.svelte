@@ -59,9 +59,9 @@
           <div
             class="h-1.5 flex-1 rounded-full transition-colors {i === wizard.currentStep - 1
               ? 'bg-primary'
-              : ''} {i < wizard.currentStep - 1 ? 'bg-primary/40' : ''} {i > wizard.currentStep - 1
-              ? 'bg-muted'
-              : ''}"
+              : i < wizard.currentStep - 1
+                ? 'bg-primary/40'
+                : 'bg-muted'}"
           ></div>
         {/each}
       </div>

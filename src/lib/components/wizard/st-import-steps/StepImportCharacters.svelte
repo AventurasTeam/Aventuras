@@ -144,6 +144,7 @@
     }
 
     if (editingIndex === null) return
+    const oldName = supportingCharacters[editingIndex].name
     const newName = editFormData.name.trim()
     onUpdateSupportingCharacter(editingIndex, {
       name: newName,
@@ -152,7 +153,12 @@
       relationship: editRelationship.trim(),
       traits: editFormData.traits,
     })
-    // Persist portrait change
+
+    // If name changed, remove old portrait entry to avoid orphaning it
+    if (oldName !== newName && characterPortraits.has(oldName)) {
+      onUpdateCharacterPortrait(oldName, null)
+    }
+    // Persist portrait change for the new name
     onUpdateCharacterPortrait(newName, editFormData.portrait ?? null)
     editingIndex = null
   }
