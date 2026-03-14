@@ -377,7 +377,10 @@ export class STImportWizardStore {
         const charName = sanitized?.name || result.primaryCharacterName || this.cardParsedData!.name
         const cardChar: GeneratedCharacter = {
           name: charName,
-          description: sanitized?.description || this.cardParsedData?.description || 'A character from the imported card.',
+          description:
+            sanitized?.description ||
+            this.cardParsedData?.description ||
+            'A character from the imported card.',
           role: 'primary',
           relationship: '',
           traits: sanitized?.traits?.slice(0, 8) || [],

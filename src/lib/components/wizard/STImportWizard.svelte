@@ -186,8 +186,7 @@
           onRemoveProtagonistPortrait={() => wizard.image.removeProtagonistPortrait()}
           onProtagonistPortraitUpload={(e) => wizard.image.handleProtagonistPortraitUpload(e)}
           onSupportingDescriptorsChange={(name, v) =>
-            (wizard.image.supportingCharacterVisualDescriptors[name] = v)
-          }
+            (wizard.image.supportingCharacterVisualDescriptors[name] = v)}
           onGenerateSupportingPortrait={(name) =>
             wizard.image.generateSupportingCharacterPortrait(name, wizard.supportingCharacters)}
           onRemoveSupportingPortrait={(name) =>
