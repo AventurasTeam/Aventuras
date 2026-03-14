@@ -283,13 +283,6 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
 
   // === Memory Service ===
   {
-    name: 'previousContext',
-    type: 'text',
-    category: 'runtime',
-    description: 'Previous chapter summaries for context',
-    required: false,
-  },
-  {
     name: 'firstValidId',
     type: 'text',
     category: 'runtime',
@@ -389,29 +382,6 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
   },
 
-  // === Lore Management Service ===
-  {
-    name: 'entrySummary',
-    type: 'text',
-    category: 'runtime',
-    description: 'Summary of lorebook entries',
-    required: false,
-  },
-  {
-    name: 'recentStorySection',
-    type: 'text',
-    category: 'runtime',
-    description: 'Recent story content for lore analysis',
-    required: false,
-  },
-  {
-    name: 'chapterSummary',
-    type: 'text',
-    category: 'runtime',
-    description: 'Chapter summary for lore context',
-    required: false,
-  },
-
   // === Agentic Retrieval Service ===
   {
     name: 'chaptersCount',
@@ -421,36 +391,12 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
   },
   {
-    name: 'chapterList',
-    type: 'text',
-    category: 'runtime',
-    description: 'Formatted chapter list for retrieval',
-    required: false,
-  },
-  {
     name: 'entriesCount',
     type: 'text',
     category: 'runtime',
     description: 'Number of available lorebook entries',
     required: false,
   },
-  {
-    name: 'entryList',
-    type: 'text',
-    category: 'runtime',
-    description: 'Formatted lorebook entry list',
-    required: false,
-  },
-
-  // === Entry Retrieval Service (Tier 3) ===
-  {
-    name: 'entrySummaries',
-    type: 'text',
-    category: 'runtime',
-    description: 'Formatted entry summaries for LLM selection',
-    required: false,
-  },
-
   // === Timeline Fill Service ===
   {
     name: 'query',
