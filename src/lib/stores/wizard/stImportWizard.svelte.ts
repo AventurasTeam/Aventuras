@@ -7,13 +7,15 @@ import {
   readCharacterCardFile,
   parseCharacterCard,
   convertCardToScenario,
+  sanitizeCharacterCard,
   type ParsedCard,
   type CardImportResult,
+  type SanitizedCharacter,
 } from '$lib/services/characterCardImporter'
 import { extractEmbeddedLorebook } from '$lib/services/lorebookImporter'
 import { replaceUserPlaceholders } from '$lib/components/wizard/wizardTypes'
 import type { ImportedLorebookItem } from '$lib/components/wizard/wizardTypes'
-import type { StoryMode, POV, VaultLorebook, VaultLorebookEntry } from '$lib/types'
+import type { StoryMode, POV, VaultCharacter, VaultLorebook, VaultLorebookEntry } from '$lib/types'
 import type { ExpandedSetting, GeneratedCharacter, GeneratedOpening, GeneratedProtagonist } from '$lib/services/ai/sdk'
 import type { Genre, Tense } from '$lib/services/ai/wizard/ScenarioService'
 import type { LorebookImportResult } from '$lib/services/lorebookImporter'
@@ -22,11 +24,15 @@ import { characterVault } from '$lib/stores/characterVault.svelte'
 import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
 import { stringToDescriptors } from '$lib/utils/visualDescriptors'
 import { database } from '$lib/services/database'
+import { ImageStore } from '$lib/stores/wizard/imageStore.svelte'
 
 export class STImportWizardStore {
   // Step navigation
   currentStep = $state(1)
-  totalSteps = 6
+  totalSteps = 7
+
+  // Portrait generation/upload (Step 6)
+  image = new ImageStore()
 
   // Step 1: File Uploads
   chatParseResult = $state<STChatParseResult | null>(null)
@@ -43,19 +49,24 @@ export class STImportWizardStore {
   importLorebook = $state(true)
   isProcessingCard = $state(false)
   cardImportResult = $state<CardImportResult | null>(null)
+  cardSanitized = $state<SanitizedCharacter | null>(null)
   cardProcessError = $state<string | null>(null)
 
   embeddedLorebookData = $state<{ name: string; entries: VaultLorebookEntry[]; result: LorebookImportResult } | null>(null)
 
   // Step 3: Characters
   protagonist = $state<GeneratedProtagonist | null>(null)
+  protagonistPortrait = $state<string | null>(null)
   manualCharacterName = $state('')
   manualCharacterDescription = $state('')
   manualCharacterBackground = $state('')
   manualCharacterMotivation = $state('')
   manualCharacterTraits = $state('')
   showManualInput = $state(true)
+  showVaultPicker = $state(false)
   supportingCharacters = $state<GeneratedCharacter[]>([])
+  cardCharacterName = $state('')
+  characterPortraits = $state<Map<string, string>>(new Map())
 
   // Step 4: World & Lorebook
   settingSeed = $state('')
@@ -71,7 +82,7 @@ export class STImportWizardStore {
   selectedPOV = $state<POV>('second')
   selectedTense = $state<Tense>('present')
   tone = $state('immersive and engaging')
-  importChatAsEntries = $state(true) // true = import chat, false = fresh start with card opening
+  importChatAsEntries = $state(false) // true = import chat, false = fresh start with card opening
 
   // Step 6: Review
   storyTitle = $state('')
@@ -120,7 +131,7 @@ export class STImportWizardStore {
   canProceed(): boolean {
     switch (this.currentStep) {
       case 1: // Upload Files
-        return this.chatParseResult !== null
+        return this.cardParsedData !== null
       case 2: // Import Selection
         return !this.isProcessingCard
       case 3: // Characters
@@ -129,7 +140,9 @@ export class STImportWizardStore {
         return this.settingSeed.trim().length > 0
       case 5: // Writing Style
         return true
-      case 6: // Review
+      case 6: // Portraits (optional)
+        return true
+      case 7: // Review
         return this.storyTitle.trim().length > 0
       default:
         return false
@@ -138,14 +151,55 @@ export class STImportWizardStore {
 
   nextStep() {
     if (this.currentStep < this.totalSteps && this.canProceed()) {
+      if (this.currentStep === 5) this.syncToImageStore()
+      if (this.currentStep === 6) this.syncFromImageStore()
       this.currentStep++
     }
   }
 
   prevStep() {
     if (this.currentStep > 1) {
+      if (this.currentStep === 6) this.syncFromImageStore()
       this.currentStep--
     }
+  }
+
+  private syncToImageStore() {
+    // Protagonist portrait
+    if (this.protagonistPortrait) {
+      this.image.protagonistPortrait = this.protagonistPortrait
+    }
+    // Protagonist visual descriptors from character data (only if empty)
+    if (this.protagonist && !this.image.protagonistVisualDescriptors) {
+      this.image.protagonistVisualDescriptors = this.protagonist.description || ''
+    }
+    // Supporting character portraits
+    for (const [name, portrait] of this.characterPortraits) {
+      if (portrait) {
+        this.image.supportingCharacterPortraits[name] = portrait
+      }
+    }
+    this.image.supportingCharacterPortraits = { ...this.image.supportingCharacterPortraits }
+    // Supporting character visual descriptors (only if empty for each)
+    for (const char of this.supportingCharacters) {
+      if (!this.image.supportingCharacterVisualDescriptors[char.name]) {
+        this.image.supportingCharacterVisualDescriptors[char.name] = char.description || ''
+      }
+    }
+    this.image.supportingCharacterVisualDescriptors = { ...this.image.supportingCharacterVisualDescriptors }
+  }
+
+  private syncFromImageStore() {
+    // Sync protagonist portrait back
+    this.protagonistPortrait = this.image.protagonistPortrait
+    // Sync supporting character portraits back
+    const map = new Map<string, string>()
+    for (const [name, portrait] of Object.entries(this.image.supportingCharacterPortraits)) {
+      if (portrait) {
+        map.set(name, portrait)
+      }
+    }
+    this.characterPortraits = map
   }
 
   // === Step 1: File Upload ===
@@ -159,6 +213,7 @@ export class STImportWizardStore {
       return
     }
     this.chatParseResult = result
+    this.importChatAsEntries = true
 
     // Auto-populate title from character name
     if (!this.storyTitle && result.characterName) {
@@ -169,6 +224,7 @@ export class STImportWizardStore {
   clearChatFile() {
     this.chatParseResult = null
     this.chatFileError = null
+    this.importChatAsEntries = false
   }
 
   async processCardFile(file: File) {
@@ -221,6 +277,7 @@ export class STImportWizardStore {
     this.cardFileError = null
     this.embeddedLorebookData = null
     this.cardImportResult = null
+    this.cardSanitized = null
     this.cardProcessError = null
   }
 
@@ -233,13 +290,14 @@ export class STImportWizardStore {
     this.cardProcessError = null
 
     try {
-      const result = await convertCardToScenario(
-        this.cardRawJson,
-        this.selectedMode,
-        this.selectedGenre,
-      )
+      // Run scenario extraction and character sanitization in parallel
+      const [result, sanitized] = await Promise.all([
+        convertCardToScenario(this.cardRawJson, this.selectedMode, this.selectedGenre),
+        sanitizeCharacterCard(this.cardRawJson),
+      ])
 
       this.cardImportResult = result
+      this.cardSanitized = sanitized
 
       if (!result.success && result.errors.length > 0) {
         this.cardProcessError = result.errors.join('; ')
@@ -254,12 +312,26 @@ export class STImportWizardStore {
         this.storyTitle = result.storyTitle
       }
 
-      if (this.importCharacters && result.npcs.length > 0) {
-        this.supportingCharacters = [...result.npcs]
-      }
-
-      if (this.importCharacters && result.primaryCharacterName) {
-        this.manualCharacterName = result.primaryCharacterName
+      if (this.importCharacters) {
+        // Use sanitized data for clean character info, fallback to raw parsed data
+        const charName = sanitized?.name || result.primaryCharacterName || this.cardParsedData!.name
+        const cardChar: GeneratedCharacter = {
+          name: charName,
+          description: sanitized?.description || 'A character from the imported card.',
+          role: 'primary',
+          relationship: '',
+          traits: sanitized?.traits?.slice(0, 8) || [],
+        }
+        this.cardCharacterName = cardChar.name
+        // Attach card portrait to the primary character
+        if (this.cardPortrait) {
+          this.characterPortraits = new Map(this.characterPortraits).set(cardChar.name, this.cardPortrait)
+        }
+        // Filter out NPCs that duplicate the primary card character
+        const dedupedNpcs = result.npcs.filter(
+          (npc) => npc.name.toLowerCase() !== cardChar.name.toLowerCase(),
+        )
+        this.supportingCharacters = [cardChar, ...dedupedNpcs]
       }
 
       // Add embedded lorebook
@@ -295,6 +367,24 @@ export class STImportWizardStore {
 
   // === Step 3: Characters ===
 
+  selectProtagonistFromVault(character: VaultCharacter) {
+    this.protagonist = {
+      name: character.name,
+      description: character.description || '',
+      background: (character.metadata as Record<string, string>)?.background || '',
+      motivation: (character.metadata as Record<string, string>)?.motivation || '',
+      traits: character.traits || [],
+    }
+    this.protagonistPortrait = character.portrait || null
+    this.manualCharacterName = character.name
+    this.manualCharacterDescription = character.description || ''
+    this.manualCharacterBackground = (character.metadata as Record<string, string>)?.background || ''
+    this.manualCharacterMotivation = (character.metadata as Record<string, string>)?.motivation || ''
+    this.manualCharacterTraits = (character.traits || []).join(', ')
+    this.showManualInput = false
+    this.showVaultPicker = false
+  }
+
   useManualCharacter() {
     if (!this.manualCharacterName.trim()) return
 
@@ -323,10 +413,30 @@ export class STImportWizardStore {
     }
     this.showManualInput = true
     this.protagonist = null
+    this.protagonistPortrait = null
+  }
+
+  updateProtagonist(protagonist: GeneratedProtagonist, portrait: string | null) {
+    this.protagonist = protagonist
+    this.protagonistPortrait = portrait
   }
 
   deleteSupportingCharacter(index: number) {
     this.supportingCharacters = this.supportingCharacters.filter((_, i) => i !== index)
+  }
+
+  updateSupportingCharacter(index: number, char: GeneratedCharacter) {
+    this.supportingCharacters = this.supportingCharacters.map((c, i) => (i === index ? char : c))
+  }
+
+  updateCharacterPortrait(name: string, portrait: string | null) {
+    const map = new Map(this.characterPortraits)
+    if (portrait) {
+      map.set(name, portrait)
+    } else {
+      map.delete(name)
+    }
+    this.characterPortraits = map
   }
 
   // === Step 4: World & Lorebook ===
@@ -512,9 +622,16 @@ export class STImportWizardStore {
 
       const storyData = await scenarioService.prepareStoryData(wizardData, opening)
 
-      // Attach portrait
-      if (storyData.protagonist && this.cardPortrait) {
-        storyData.protagonist.portrait = this.cardPortrait
+      // Attach protagonist portrait (from vault, not from card)
+      if (storyData.protagonist && this.protagonistPortrait) {
+        storyData.protagonist.portrait = this.protagonistPortrait
+      }
+
+      // Attach portraits to supporting characters
+      for (const char of storyData.characters) {
+        if (char.name && this.characterPortraits.has(char.name)) {
+          char.portrait = this.characterPortraits.get(char.name)!
+        }
       }
 
       const newStory = await story.createStoryFromWizard({

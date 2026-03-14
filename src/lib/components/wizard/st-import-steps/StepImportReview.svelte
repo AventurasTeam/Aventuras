@@ -16,7 +16,6 @@
   import { Label } from '$lib/components/ui/label'
   import { Badge } from '$lib/components/ui/badge'
   import { Switch } from '$lib/components/ui/switch'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
   import type { GeneratedProtagonist, GeneratedCharacter } from '$lib/services/ai/sdk'
   import type { ImportedLorebookItem } from '$lib/components/wizard/wizardTypes'
   import type { StoryMode, POV } from '$lib/types'
@@ -29,12 +28,12 @@
     selectedTense: Tense
     tone: string
     protagonist: GeneratedProtagonist | null
+    protagonistPortrait: string | null
     supportingCharacters: GeneratedCharacter[]
     settingSeed: string
     importedLorebooks: ImportedLorebookItem[]
     importChatAsEntries: boolean
     chatMessageCount: number
-    cardPortrait: string | null
     isCreatingStory: boolean
     createError: string | null
     saveToVault: boolean
@@ -50,12 +49,12 @@
     selectedTense,
     tone,
     protagonist,
+    protagonistPortrait,
     supportingCharacters,
     settingSeed,
     importedLorebooks,
     importChatAsEntries,
     chatMessageCount,
-    cardPortrait,
     isCreatingStory,
     createError,
     saveToVault,
@@ -82,7 +81,6 @@
   </div>
 
   <!-- Summary Cards -->
-  <ScrollArea class="max-h-[350px] pr-2">
     <div class="space-y-3">
       <!-- Mode & Style -->
       <Card.Root>
@@ -104,9 +102,9 @@
       {#if protagonist}
         <Card.Root>
           <Card.Content class="flex items-center gap-3 p-3">
-            {#if cardPortrait}
+            {#if protagonistPortrait}
               <img
-                src={cardPortrait}
+                src={protagonistPortrait}
                 alt={protagonist.name}
                 class="h-10 w-10 rounded-lg object-cover"
               />
@@ -195,7 +193,6 @@
         </Card.Root>
       {/if}
     </div>
-  </ScrollArea>
 
   <!-- Loading -->
   {#if isCreatingStory}

@@ -89,84 +89,15 @@
 
 <div class="space-y-5">
   <p class="text-muted-foreground">
-    Upload your SillyTavern chat export and optionally a character card to get started.
+    Upload your SillyTavern character card and optionally a chat export.
   </p>
-
-  <!-- Chat File Upload -->
-  <div class="space-y-2">
-    <h4 class="flex items-center gap-2 text-sm font-medium">
-      <MessageSquare class="h-4 w-4" />
-      Chat Export
-      <Badge variant="secondary" class="text-xs">Required</Badge>
-    </h4>
-
-    {#if chatParseResult}
-      <Card.Root class="border-green-500/30 bg-green-500/5">
-        <Card.Content class="flex items-center justify-between p-4">
-          <div class="flex items-center gap-3">
-            <div class="flex h-8 w-8 items-center justify-center rounded-full bg-green-500/20">
-              <Check class="h-4 w-4 text-green-400" />
-            </div>
-            <div>
-              <p class="text-sm font-medium">{chatParseResult.characterName}</p>
-              <p class="text-muted-foreground text-xs">
-                {userCount} user messages · {narrationCount} narrations
-                {#if chatParseResult.totalSkipped > 0}
-                  · {chatParseResult.totalSkipped} skipped
-                {/if}
-              </p>
-            </div>
-          </div>
-          <Button variant="ghost" size="icon" onclick={onChatFileClear}>
-            <X class="h-4 w-4" />
-          </Button>
-        </Card.Content>
-      </Card.Root>
-    {:else}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class={cn(
-          'border-border hover:border-primary/40 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-colors',
-          chatDragOver && 'border-primary bg-primary/5',
-        )}
-        ondragover={(e) => {
-          e.preventDefault()
-          chatDragOver = true
-        }}
-        ondragleave={() => (chatDragOver = false)}
-        ondrop={handleChatDrop}
-        onclick={() => chatFileInput?.click()}
-        role="button"
-        tabindex="0"
-        onkeydown={(e) => e.key === 'Enter' && chatFileInput?.click()}
-      >
-        <Upload class="text-muted-foreground mb-2 h-8 w-8" />
-        <p class="text-sm font-medium">Drop .jsonl file here or click to browse</p>
-        <p class="text-muted-foreground mt-1 text-xs">SillyTavern chat export (.jsonl)</p>
-      </div>
-      <input
-        type="file"
-        accept=".jsonl"
-        class="hidden"
-        bind:this={chatFileInput}
-        onchange={handleChatFileSelect}
-      />
-    {/if}
-
-    {#if chatFileError}
-      <Alert.Root variant="destructive">
-        <AlertCircle class="h-4 w-4" />
-        <Alert.Description>{chatFileError}</Alert.Description>
-      </Alert.Root>
-    {/if}
-  </div>
 
   <!-- Character Card Upload -->
   <div class="space-y-2">
     <h4 class="flex items-center gap-2 text-sm font-medium">
       <User class="h-4 w-4" />
       Character Card
-      <Badge variant="outline" class="text-xs">Optional</Badge>
+      <Badge variant="secondary" class="text-xs">Required</Badge>
     </h4>
 
     {#if cardParsedData}
@@ -240,6 +171,75 @@
       <Alert.Root variant="destructive">
         <AlertCircle class="h-4 w-4" />
         <Alert.Description>{cardFileError}</Alert.Description>
+      </Alert.Root>
+    {/if}
+  </div>
+
+  <!-- Chat File Upload -->
+  <div class="space-y-2">
+    <h4 class="flex items-center gap-2 text-sm font-medium">
+      <MessageSquare class="h-4 w-4" />
+      Chat Import
+      <Badge variant="outline" class="text-xs">Optional</Badge>
+    </h4>
+
+    {#if chatParseResult}
+      <Card.Root class="border-green-500/30 bg-green-500/5">
+        <Card.Content class="flex items-center justify-between p-4">
+          <div class="flex items-center gap-3">
+            <div class="flex h-8 w-8 items-center justify-center rounded-full bg-green-500/20">
+              <Check class="h-4 w-4 text-green-400" />
+            </div>
+            <div>
+              <p class="text-sm font-medium">{chatParseResult.characterName}</p>
+              <p class="text-muted-foreground text-xs">
+                {userCount} user messages · {narrationCount} narrations
+                {#if chatParseResult.totalSkipped > 0}
+                  · {chatParseResult.totalSkipped} skipped
+                {/if}
+              </p>
+            </div>
+          </div>
+          <Button variant="ghost" size="icon" onclick={onChatFileClear}>
+            <X class="h-4 w-4" />
+          </Button>
+        </Card.Content>
+      </Card.Root>
+    {:else}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class={cn(
+          'border-border hover:border-primary/40 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-colors',
+          chatDragOver && 'border-primary bg-primary/5',
+        )}
+        ondragover={(e) => {
+          e.preventDefault()
+          chatDragOver = true
+        }}
+        ondragleave={() => (chatDragOver = false)}
+        ondrop={handleChatDrop}
+        onclick={() => chatFileInput?.click()}
+        role="button"
+        tabindex="0"
+        onkeydown={(e) => e.key === 'Enter' && chatFileInput?.click()}
+      >
+        <Upload class="text-muted-foreground mb-2 h-8 w-8" />
+        <p class="text-sm font-medium">Drop .jsonl file here or click to browse</p>
+        <p class="text-muted-foreground mt-1 text-xs">SillyTavern chat file (.jsonl)</p>
+      </div>
+      <input
+        type="file"
+        accept=".jsonl"
+        class="hidden"
+        bind:this={chatFileInput}
+        onchange={handleChatFileSelect}
+      />
+    {/if}
+
+    {#if chatFileError}
+      <Alert.Root variant="destructive">
+        <AlertCircle class="h-4 w-4" />
+        <Alert.Description>{chatFileError}</Alert.Description>
       </Alert.Root>
     {/if}
   </div>

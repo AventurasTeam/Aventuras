@@ -1,5 +1,6 @@
 <script lang="ts">
   import { STImportWizardStore } from '$lib/stores/wizard/stImportWizard.svelte'
+  import { hasRequiredCredentials } from '$lib/services/ai/image'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
   import { ChevronLeft, ChevronRight, Play } from 'lucide-svelte'
@@ -12,6 +13,7 @@
     StepImportStyle,
     StepImportReview,
   } from './st-import-steps'
+  import Step6Portraits from './steps/Step6Portraits.svelte'
 
   interface Props {
     onClose: () => void
@@ -21,12 +23,15 @@
 
   const wizard = new STImportWizardStore(() => onClose())
 
+  const imageGenerationEnabled = $derived(hasRequiredCredentials())
+
   const stepTitles = [
     'Upload Files',
     'Import Selection',
     'Characters',
     'World & Lorebook',
     'Style & Chat Options',
+    'Character Portraits (Optional)',
     'Review & Create',
   ]
 </script>
@@ -69,15 +74,18 @@
           cardParsedData={wizard.cardParsedData}
           cardPortrait={wizard.cardPortrait}
           cardFileError={wizard.cardFileError}
-          onChatFileProcess={(text) => wizard.processChatFile(text)}
+          onChatFileProcess={(text: string) => wizard.processChatFile(text)}
           onChatFileClear={() => wizard.clearChatFile()}
-          onCardFileProcess={(file) => wizard.processCardFile(file)}
+          onCardFileProcess={(file: File) => wizard.processCardFile(file)}
           onCardFileClear={() => wizard.clearCardFile()}
         />
       {:else if wizard.currentStep === 2}
         <StepImportSelection
           cardParsedData={wizard.cardParsedData}
+          cardPortrait={wizard.cardPortrait}
+          sanitizedDescription={wizard.cardSanitized?.description ?? null}
           hasEmbeddedLorebook={wizard.hasEmbeddedLorebook}
+          embeddedLorebookEntryCount={wizard.embeddedLorebookData?.entries.length ?? 0}
           importCharacters={wizard.importCharacters}
           importScenario={wizard.importScenario}
           importLorebook={wizard.importLorebook}
@@ -92,14 +100,18 @@
       {:else if wizard.currentStep === 3}
         <StepImportCharacters
           protagonist={wizard.protagonist}
+          protagonistPortrait={wizard.protagonistPortrait}
           manualCharacterName={wizard.manualCharacterName}
           manualCharacterDescription={wizard.manualCharacterDescription}
           manualCharacterBackground={wizard.manualCharacterBackground}
           manualCharacterMotivation={wizard.manualCharacterMotivation}
           manualCharacterTraits={wizard.manualCharacterTraits}
           showManualInput={wizard.showManualInput}
+          showVaultPicker={wizard.showVaultPicker}
           supportingCharacters={wizard.supportingCharacters}
           cardPortrait={wizard.cardPortrait}
+          cardCharacterName={wizard.cardCharacterName}
+          characterPortraits={wizard.characterPortraits}
           onManualNameChange={(v) => (wizard.manualCharacterName = v)}
           onManualDescriptionChange={(v) => (wizard.manualCharacterDescription = v)}
           onManualBackgroundChange={(v) => (wizard.manualCharacterBackground = v)}
@@ -107,7 +119,12 @@
           onManualTraitsChange={(v) => (wizard.manualCharacterTraits = v)}
           onUseManualCharacter={() => wizard.useManualCharacter()}
           onEditCharacter={() => wizard.editCharacter()}
+          onUpdateProtagonist={(p, portrait) => wizard.updateProtagonist(p, portrait)}
+          onSelectFromVault={(c) => wizard.selectProtagonistFromVault(c)}
+          onToggleVaultPicker={(v) => (wizard.showVaultPicker = v)}
           onDeleteSupportingCharacter={(i) => wizard.deleteSupportingCharacter(i)}
+          onUpdateSupportingCharacter={(i, c) => wizard.updateSupportingCharacter(i, c)}
+          onUpdateCharacterPortrait={(name, portrait) => wizard.updateCharacterPortrait(name, portrait)}
         />
       {:else if wizard.currentStep === 4}
         <StepImportWorld
@@ -130,6 +147,7 @@
           selectedTense={wizard.selectedTense}
           tone={wizard.tone}
           importChatAsEntries={wizard.importChatAsEntries}
+          hasChatFile={wizard.chatParseResult !== null}
           hasCardOpening={!!wizard.cardImportResult?.firstMessage}
           chatMessageCount={wizard.chatMessages.length}
           onModeChange={(v) => (wizard.selectedMode = v)}
@@ -139,6 +157,41 @@
           onImportChatToggle={(v) => (wizard.importChatAsEntries = v)}
         />
       {:else if wizard.currentStep === 6}
+        <Step6Portraits
+          protagonist={wizard.protagonist}
+          supportingCharacters={wizard.supportingCharacters}
+          {imageGenerationEnabled}
+          protagonistVisualDescriptors={wizard.image.protagonistVisualDescriptors}
+          protagonistPortrait={wizard.image.protagonistPortrait}
+          isGeneratingProtagonistPortrait={wizard.image.isGeneratingProtagonistPortrait}
+          isUploadingProtagonistPortrait={wizard.image.isUploadingProtagonistPortrait}
+          supportingCharacterVisualDescriptors={wizard.image.supportingCharacterVisualDescriptors}
+          supportingCharacterPortraits={wizard.image.supportingCharacterPortraits}
+          generatingPortraitName={wizard.image.generatingPortraitName}
+          uploadingCharacterName={wizard.image.uploadingCharacterName}
+          portraitError={wizard.image.portraitError}
+          onProtagonistDescriptorsChange={(v) => (wizard.image.protagonistVisualDescriptors = v)}
+          onGenerateProtagonistPortrait={() =>
+            wizard.image.generateProtagonistPortrait(wizard.protagonist)}
+          onRemoveProtagonistPortrait={() => wizard.image.removeProtagonistPortrait()}
+          onProtagonistPortraitUpload={(e) => wizard.image.handleProtagonistPortraitUpload(e)}
+          onSupportingDescriptorsChange={(name, v) => {
+            wizard.image.supportingCharacterVisualDescriptors[name] = v
+            wizard.image.supportingCharacterVisualDescriptors = {
+              ...wizard.image.supportingCharacterVisualDescriptors,
+            }
+          }}
+          onGenerateSupportingPortrait={(name) =>
+            wizard.image.generateSupportingCharacterPortrait(
+              name,
+              wizard.supportingCharacters,
+            )}
+          onRemoveSupportingPortrait={(name) =>
+            wizard.image.removeSupportingCharacterPortrait(name)}
+          onSupportingPortraitUpload={(e, name) =>
+            wizard.image.handleSupportingCharacterPortraitUpload(e, name)}
+        />
+      {:else if wizard.currentStep === 7}
         <StepImportReview
           storyTitle={wizard.storyTitle}
           selectedMode={wizard.selectedMode}
@@ -146,12 +199,12 @@
           selectedTense={wizard.selectedTense}
           tone={wizard.tone}
           protagonist={wizard.protagonist}
+          protagonistPortrait={wizard.protagonistPortrait}
           supportingCharacters={wizard.supportingCharacters}
           settingSeed={wizard.settingSeed}
           importedLorebooks={wizard.importedLorebooks}
           importChatAsEntries={wizard.importChatAsEntries}
           chatMessageCount={wizard.chatMessages.length}
-          cardPortrait={wizard.cardPortrait}
           isCreatingStory={wizard.isCreatingStory}
           createError={wizard.createError}
           saveToVault={wizard.saveToVault}

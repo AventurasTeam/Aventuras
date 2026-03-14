@@ -15,6 +15,7 @@
     selectedTense: Tense
     tone: string
     importChatAsEntries: boolean
+    hasChatFile: boolean
     hasCardOpening: boolean
     chatMessageCount: number
     onModeChange: (mode: StoryMode) => void
@@ -30,6 +31,7 @@
     selectedTense,
     tone,
     importChatAsEntries,
+    hasChatFile,
     hasCardOpening,
     chatMessageCount,
     onModeChange,
@@ -98,11 +100,12 @@
       <button
         class="w-full text-left focus:outline-none"
         onclick={() => onImportChatToggle(true)}
+        disabled={!hasChatFile}
       >
         <Card.Root
           class="h-full transition-all {importChatAsEntries
             ? 'ring-primary border-primary ring-2'
-            : 'border-border hover:border-primary/40'}"
+            : 'border-border hover:border-primary/40'} {!hasChatFile ? 'opacity-50 cursor-not-allowed' : ''}"
         >
           <Card.Content class="flex items-center gap-3 p-3">
             <MessageSquare
@@ -111,7 +114,11 @@
             <div>
               <p class="text-sm font-medium">Import Chat</p>
               <p class="text-muted-foreground text-xs">
-                {chatMessageCount} messages as story entries
+                {#if hasChatFile}
+                  {chatMessageCount} messages as story entries
+                {:else}
+                  No chat file uploaded
+                {/if}
               </p>
             </div>
           </Card.Content>
