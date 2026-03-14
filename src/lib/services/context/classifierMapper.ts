@@ -56,20 +56,35 @@ export function mapBeats(beats: StoryBeat[]): ContextClassifierBeat[] {
   )
 }
 
+/** Options for mapChatEntries behavior */
+export interface MapChatEntriesOptions {
+  /** Truncate content to 500 chars with '...' suffix (default: true) */
+  truncate?: boolean
+  /** Strip <pic> tags from content (default: true) */
+  stripPicTags?: boolean
+}
+
 /**
  * Map an array of StoryEntry domain objects to ContextChatEntry context shapes.
  *
- * Used by ClassifierService for the chatHistory[] context variable.
+ * Used by ClassifierService and ImageAnalysisService for the chatHistory[] context variable.
  * Caller is responsible for truncating entry count before calling (service responsibility).
  *
- * - Strips pic tags from content
- * - Truncates content to 500 chars (with '...' suffix if truncated)
+ * - Optionally strips pic tags from content (default: true)
+ * - Optionally truncates content to 500 chars with '...' suffix (default: true)
  * - Formats timeStart from metadata.timeStart as 'YxDy HH:MM', or '' if not present
  */
-export function mapChatEntries(entries: StoryEntry[]): ContextChatEntry[] {
+export function mapChatEntries(
+  entries: StoryEntry[],
+  options: MapChatEntriesOptions = {},
+): ContextChatEntry[] {
+  const { truncate = true, stripPicTags: shouldStripPics = true } = options
+
   return entries.map((e) => {
-    const stripped = stripPicTags(e.content)
-    const content = stripped.length > 500 ? stripped.slice(0, 500) + '...' : stripped
+    let content = shouldStripPics ? stripPicTags(e.content) : e.content
+    if (truncate && content.length > 500) {
+      content = content.slice(0, 500) + '...'
+    }
 
     const ts = e.metadata?.timeStart
     const timeStart = ts

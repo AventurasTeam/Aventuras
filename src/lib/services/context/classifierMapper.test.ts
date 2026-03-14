@@ -239,4 +239,65 @@ describe('mapChatEntries', () => {
     const result = mapChatEntries([])
     expect(result).toHaveLength(0)
   })
+
+  describe('options', () => {
+    it('truncates by default', () => {
+      const longEntry: StoryEntry = {
+        id: 'ce-long2',
+        storyId: 'story-1',
+        type: 'narration',
+        content: 'A'.repeat(600),
+        parentId: null,
+        position: 1,
+        createdAt: 0,
+        metadata: null,
+        branchId: null,
+      }
+      const result = mapChatEntries([longEntry])
+      expect(result[0].content.length).toBe(503)
+    })
+
+    it('skips truncation when truncate: false', () => {
+      const longEntry: StoryEntry = {
+        id: 'ce-long3',
+        storyId: 'story-1',
+        type: 'narration',
+        content: 'A'.repeat(600),
+        parentId: null,
+        position: 1,
+        createdAt: 0,
+        metadata: null,
+        branchId: null,
+      }
+      const result = mapChatEntries([longEntry], { truncate: false })
+      expect(result[0].content.length).toBe(600)
+    })
+
+    it('strips pic tags by default', () => {
+      const result = mapChatEntries([chatEntries[2]])
+      expect(result[0].content).not.toContain('<pic')
+    })
+
+    it('preserves pic tags when stripPicTags: false', () => {
+      const result = mapChatEntries([chatEntries[2]], { stripPicTags: false })
+      expect(result[0].content).toContain('<pic')
+    })
+
+    it('can combine truncate: false with stripPicTags: true', () => {
+      const longWithPic: StoryEntry = {
+        id: 'ce-lp',
+        storyId: 'story-1',
+        type: 'narration',
+        content: 'A'.repeat(600) + ' <pic src="test.png" /> tail',
+        parentId: null,
+        position: 1,
+        createdAt: 0,
+        metadata: null,
+        branchId: null,
+      }
+      const result = mapChatEntries([longWithPic], { truncate: false, stripPicTags: true })
+      expect(result[0].content).not.toContain('<pic')
+      expect(result[0].content.length).toBeGreaterThan(500)
+    })
+  })
 })
