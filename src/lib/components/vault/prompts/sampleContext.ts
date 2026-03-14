@@ -635,12 +635,4 @@ export const allSamples: Record<string, unknown> = {
   ...systemSamples,
   ...runtimeSamples,
   ...structuredSamples,
-  // chatHistory is used as a plain string by image templates ({{ chatHistory }}) but as an
-  // array by the classifier template ({% for entry in chatHistory %}).  The array in
-  // structuredSamples wins the spread, which produces [object Object] in image previews.
-  // Override here with a formatted string so image template preview renders cleanly.
-  // The classifier template guards with {%- if chatHistory.size > 0 %}, so an empty-ish
-  // string won't produce garbled output — the structured test fixtures provide the real array.
-  chatHistory:
-    '[ACTION] (at Y1D15 13:45) I examine the Moonstone Pendant carefully.\n\n[NARRATIVE] (at Y1D15 13:45) The pendant pulses with a soft blue light in your hands.\n\n[ACTION] (at Y1D15 13:50) I ask Theron if he has ever seen anything like this.\n\n',
 }

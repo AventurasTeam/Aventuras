@@ -44,7 +44,7 @@ import {
   mapContextResultToArrays,
   type WorldStateArrays,
 } from '$lib/services/context/worldStateMapper'
-import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import type { ContextChatEntry, ContextLorebookEntry } from '$lib/services/context/context-types'
 import {
   EntryRetrievalService,
   type EntryRetrievalResult,
@@ -82,7 +82,7 @@ export interface ImageGenerationContext {
   userAction: string
   presentCharacters: Character[]
   currentLocation?: string
-  chatHistory?: string
+  chatHistory?: ContextChatEntry[]
   lorebookContext?: string
   translatedNarrative?: string
   translationLanguage?: string

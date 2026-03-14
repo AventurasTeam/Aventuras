@@ -9,6 +9,7 @@
  */
 
 import type { Character } from '$lib/types'
+import type { ContextChatEntry } from '$lib/services/context/context-types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
@@ -34,7 +35,7 @@ export interface ImageAnalysisContext {
   /** Maximum number of images (0 = unlimited) */
   maxImages: number
   /** Full chat history for comprehensive context */
-  chatHistory?: string
+  chatHistory?: ContextChatEntry[]
   /** Activated lorebook entries for world context */
   lorebookContext?: string
   /** Translated narrative text - use this for sourceText extraction when available */
@@ -90,7 +91,7 @@ ${context.translatedNarrative}`
       maxImages: context.maxImages === 0 ? '0 (unlimited)' : String(context.maxImages),
       narrativeResponse: context.narrativeResponse,
       userAction: context.userAction,
-      chatHistory: context.chatHistory || '',
+      chatHistory: context.chatHistory || [],
       lorebookContext: context.lorebookContext || '',
       translatedNarrativeBlock,
     })

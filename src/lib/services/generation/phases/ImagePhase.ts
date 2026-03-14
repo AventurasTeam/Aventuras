@@ -13,6 +13,7 @@ import type {
 } from '../types'
 import type { ImageGenerationContext } from '$lib/services/ai'
 import type { Character } from '$lib/types'
+import type { ContextChatEntry } from '$lib/services/context/context-types'
 
 /** Dependencies for image phase - injected to avoid tight coupling */
 export interface ImageDependencies {
@@ -37,7 +38,7 @@ export interface ImageInput {
   userAction: string
   presentCharacters: Character[]
   currentLocation?: string
-  chatHistory?: string
+  chatHistory?: ContextChatEntry[]
   lorebookContext?: string
   translatedNarrative?: string
   translationLanguage?: string

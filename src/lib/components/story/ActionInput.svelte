@@ -7,6 +7,7 @@
   import { database } from '$lib/services/database'
   import { SimpleActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
   import { type ImageGenerationContext } from '$lib/services/ai'
+  import { mapChatEntries } from '$lib/services/context/classifierMapper'
   import { hasRequiredCredentials, getProviderDisplayName } from '$lib/services/ai/image'
   import { TranslationService } from '$lib/services/ai/utils/TranslationService'
   import {
@@ -587,11 +588,6 @@
                 event.result.scene.presentCharacterNames.includes(c.name) ||
                 c.relationship === 'self',
             )
-            const imageGenChatHistory = story.visibleEntries
-              .filter((e) => e.type === 'user_action' || e.type === 'narration')
-              .map((e) => `${e.type === 'user_action' ? 'USER' : 'ASSISTANT'}:\n${e.content}`)
-              .join('\n\n')
-
             lastImageGenContext = {
               storyId: currentStoryRef.id,
               entryId: narrationEntry.id,
@@ -600,7 +596,12 @@
               presentCharacters,
               currentLocation:
                 event.result.scene.currentLocationName ?? worldState.currentLocation?.name,
-              chatHistory: imageGenChatHistory,
+              chatHistory: mapChatEntries(
+                story.visibleEntries.filter(
+                  (e) => e.type === 'user_action' || e.type === 'narration',
+                ),
+                { truncate: false, stripPicTags: true },
+              ),
               lorebookContext: undefined,
               referenceMode: currentStoryRef.settings?.referenceMode ?? false,
             }

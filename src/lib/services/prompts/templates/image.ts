@@ -104,7 +104,11 @@ Analyze the narrative and identify up to {{ maxImages }} key visual moments (0 =
 - 5-7: Character introductions, emotions
 - 3-5: Environmental shots, atmosphere`,
   userContent: `## Story Context
-{{ chatHistory }}
+{%- if chatHistory.size > 0 %}
+{% for entry in chatHistory %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.timeStart != '' %} (at {{ entry.timeStart }}){% endif %} {{ entry.content }}
+
+{% endfor %}
+{%- endif %}
 
 {{ lorebookContext }}
 
@@ -299,7 +303,11 @@ Match the angle to the emotional tone: action scenes benefit from low/dutch angl
 - 5-7: Emotional moments, reveals
 - 3-5: Environmental atmosphere`,
   userContent: `## Story Context
-{{ chatHistory }}
+{%- if chatHistory.size > 0 %}
+{% for entry in chatHistory %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.timeStart != '' %} (at {{ entry.timeStart }}){% endif %} {{ entry.content }}
+
+{% endfor %}
+{%- endif %}
 
 {{ lorebookContext }}
 
