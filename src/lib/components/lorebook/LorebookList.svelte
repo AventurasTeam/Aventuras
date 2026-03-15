@@ -2,7 +2,7 @@
   import type { Entry, EntryType } from '$lib/types'
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
-  import { Search, Plus, Download, Upload, Trash2, X, Filter, ArrowUpDown } from 'lucide-svelte'
+  import { Search, Plus, Download, Upload, Trash2, X, Filter, ArrowUpDown, Archive } from 'lucide-svelte'
   import LorebookEntryCard from './LorebookEntryCard.svelte'
 
   import { Input } from '$lib/components/ui/input'
@@ -12,6 +12,7 @@
   import {
     DropdownMenu,
     DropdownMenuContent,
+    DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuRadioGroup,
     DropdownMenuRadioItem,
@@ -21,9 +22,11 @@
 
   interface Props {
     onNewEntry?: () => void
+    onImportFromVault?: () => void
+    onSaveToVault?: () => void
   }
 
-  let { onNewEntry }: Props = $props()
+  let { onNewEntry, onImportFromVault, onSaveToVault }: Props = $props()
 
   let searchDebounceTimer: ReturnType<typeof setTimeout>
   let confirmingBulkDelete = $state(false)
@@ -236,12 +239,42 @@
       <Plus class="h-4 w-4" />
       <span class="xs:inline hidden">New Entry</span>
     </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger>
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            variant="outline"
+            size="icon"
+            disabled={isLoreManagementActive}
+            title="Vault"
+          >
+            <Archive class="h-4 w-4" />
+          </Button>
+        {/snippet}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuLabel>Vault</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onclick={onImportFromVault}>
+          <Upload class="mr-2 h-4 w-4" />
+          Import from Vault
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onclick={onSaveToVault}
+          disabled={story.lorebookEntries.length === 0}
+        >
+          <Download class="mr-2 h-4 w-4" />
+          Save to Vault
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
     <Button
       variant="outline"
       size="icon"
       onclick={() => ui.openLorebookImport()}
       disabled={isLoreManagementActive}
-      title={isLoreManagementActive ? 'Import disabled during lore management' : 'Import'}
+      title={isLoreManagementActive ? 'Import disabled during lore management' : 'Import from file'}
     >
       <Upload class="h-4 w-4" />
     </Button>
@@ -313,6 +346,17 @@
           <div class="text-muted-foreground py-8 text-center">
             <p>No lorebook entries yet.</p>
             <p class="mt-1 text-sm">Create one or import a lorebook to get started.</p>
+            {#if onImportFromVault}
+              <Button
+                variant="outline"
+                class="mt-4 gap-2"
+                onclick={onImportFromVault}
+                disabled={isLoreManagementActive}
+              >
+                <Archive class="h-4 w-4" />
+                Import from Vault
+              </Button>
+            {/if}
           </div>
         {:else}
           <div class="text-muted-foreground py-8 text-center">

@@ -486,6 +486,22 @@ export function parseLorebook(jsonString: string): LorebookImportResult {
   }
 }
 
+/**
+ * Convert a story Entry to the VaultLorebookEntry format.
+ * Used when saving story lorebook entries to the vault.
+ */
+export function entryToVaultEntry(entry: Entry): VaultLorebookEntry {
+  return {
+    name: entry.name,
+    type: entry.type,
+    description: entry.description,
+    keywords: entry.injection.keywords,
+    aliases: entry.aliases,
+    injectionMode: entry.injection.mode,
+    priority: entry.injection.priority,
+  }
+}
+
 export function convertToEntries(
   importedEntries: ImportedEntry[],
   createdBy: EntryCreator = 'import',

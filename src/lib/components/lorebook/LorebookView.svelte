@@ -2,12 +2,15 @@
   import type { Entry } from '$lib/types'
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
+  import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
+  import { entryToVaultEntry } from '$lib/services/lorebookImporter'
   import { onMount } from 'svelte'
   import LorebookList from './LorebookList.svelte'
   import LorebookDetail from './LorebookDetail.svelte'
   import LorebookEntryForm from './LorebookEntryForm.svelte'
   import LorebookImportModal from './LorebookImportModal.svelte'
   import LorebookExportModal from './LorebookExportModal.svelte'
+  import LorebookVaultImportModal from './LorebookVaultImportModal.svelte'
   import { BookOpen, Plus, ArrowLeft, Loader2, Bot } from 'lucide-svelte'
 
   import { Button } from '$lib/components/ui/button'
@@ -20,6 +23,9 @@
 
   // Track if we're in "new entry" mode
   let creatingNew = $state(false)
+
+  // Vault import modal open state
+  let vaultImportOpen = $state(false)
 
   // Breakpoint for mobile/desktop
   let isMobile = $state(false)
@@ -91,6 +97,22 @@
     }
   }
 
+  function handleImportFromVault() {
+    vaultImportOpen = true
+  }
+
+  async function handleSaveToVault() {
+    if (!story.currentStory || story.lorebookEntries.length === 0) return
+    try {
+      const vaultEntries = story.lorebookEntries.map(entryToVaultEntry)
+      const name = `${story.currentStory.title} Lorebook`
+      await lorebookVault.saveFromStory(name, vaultEntries, story.currentStory.id)
+      ui.showToast(`Saved ${vaultEntries.length} entr${vaultEntries.length === 1 ? 'y' : 'ies'} to vault as "${name}"`, 'info')
+    } catch (error) {
+      ui.showToast(error instanceof Error ? error.message : 'Failed to save to vault', 'error')
+    }
+  }
+
   function handleMobileBack() {
     if (creatingNew) {
       handleCancelNew()
@@ -142,7 +164,11 @@
           </Button>
         </div>
 
-        <LorebookList onNewEntry={handleNewEntry} />
+        <LorebookList
+          onNewEntry={handleNewEntry}
+          onImportFromVault={handleImportFromVault}
+          onSaveToVault={handleSaveToVault}
+        />
       </div>
     {/if}
 
@@ -198,3 +224,6 @@
 {#if ui.lorebookExportModalOpen}
   <LorebookExportModal />
 {/if}
+
+<!-- Vault Import Modal -->
+<LorebookVaultImportModal open={vaultImportOpen} onClose={() => (vaultImportOpen = false)} />
