@@ -53,21 +53,6 @@ export interface RetrievalContext {
 export type AgenticRetrievalContext = RetrievalContext
 
 /**
- * Settings for agentic retrieval behavior.
- */
-export interface AgenticRetrievalSettings {
-  enabled: boolean
-  maxIterations: number
-}
-
-export function getDefaultAgenticRetrievalSettings(): AgenticRetrievalSettings {
-  return {
-    enabled: true,
-    maxIterations: 30,
-  }
-}
-
-/**
  * Finish retrieval tool result type.
  */
 interface FinishRetrievalResult {
