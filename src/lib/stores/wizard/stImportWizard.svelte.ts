@@ -7,15 +7,7 @@ import {
   type STChatParseResult,
   type STChatMessage,
 } from '$lib/services/stChatImporter'
-import {
-  readCharacterCardFile,
-  parseCharacterCard,
-  convertCardToScenario,
-  sanitizeCharacterCard,
-  type ParsedCard,
-  type CardImportResult,
-  type SanitizedCharacter,
-} from '$lib/services/characterCardImporter'
+import { CharacterCardImport } from '$lib/services/characterCardImport'
 import { extractEmbeddedLorebook } from '$lib/services/lorebookImporter'
 import { replaceUserPlaceholders } from '$lib/components/wizard/wizardTypes'
 import type { ImportedLorebookItem } from '$lib/components/wizard/wizardTypes'
@@ -54,7 +46,7 @@ export class STImportWizardStore {
   customVariableValues = $state<Record<string, string>>({})
   packsLoaded = $state(false)
 
-  cardParsedData = $state<ParsedCard | null>(null)
+  cardParsedData = $state<CharacterCardImport.ParsedCard | null>(null)
   cardRawJson = $state<string | null>(null)
   cardPortrait = $state<string | null>(null) // base64 data URL from PNG
   cardFileError = $state<string | null>(null)
@@ -64,8 +56,8 @@ export class STImportWizardStore {
   importScenario = $state(true)
   importLorebook = $state(true)
   isProcessingCard = $state(false)
-  cardImportResult = $state<CardImportResult | null>(null)
-  cardSanitized = $state<SanitizedCharacter | null>(null)
+  cardImportResult = $state<CharacterCardImport.CardImportResult | null>(null)
+  cardSanitized = $state<CharacterCardImport.SanitizedCharacter | null>(null)
   cardProcessError = $state<string | null>(null)
 
   embeddedLorebookData = $state<{
@@ -309,9 +301,9 @@ export class STImportWizardStore {
         })
       }
 
-      const jsonString = await readCharacterCardFile(file)
+      const jsonString = await CharacterCardImport.readFile(file)
       this.cardRawJson = jsonString
-      const parsed = parseCharacterCard(jsonString)
+      const parsed = CharacterCardImport.parseJson(jsonString)
 
       if (!parsed) {
         this.cardFileError = 'Could not parse character card. Unsupported format.'
@@ -356,8 +348,8 @@ export class STImportWizardStore {
     try {
       // Run scenario extraction and character sanitization in parallel
       const [result, sanitized] = await Promise.all([
-        convertCardToScenario(this.cardRawJson, this.selectedMode, this.selectedGenre),
-        sanitizeCharacterCard(this.cardRawJson),
+        CharacterCardImport.clean(this.cardRawJson, this.selectedGenre),
+        CharacterCardImport.sanitize(this.cardRawJson),
       ])
 
       this.cardImportResult = result
