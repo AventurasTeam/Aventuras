@@ -8,11 +8,20 @@ const settingExpansionPromptTemplate: PromptTemplate = {
   content: `You are a world-building expert creating settings for interactive fiction. Generate rich, evocative settings that inspire creative storytelling.
 
 Be creative but grounded. Make the setting feel lived-in and full of story potential.
-{{ customInstruction }}`,
+{% if customInstruction %}
+
+AUTHOR'S GUIDANCE: {{ customInstruction }}
+{% endif %}`,
   userContent: `Create a {{ genreLabel }} setting based on this seed idea:
 
 "{{ seed }}"
-{{ lorebookContext }}
+{% if lorebookEntries.size > 0 %}
+
+## Established lore
+The content below is established canon. Keep all generated output consistent with it.
+{% for entry in lorebookEntries %}- **{{ entry.name }}** ({{ entry.type }}): {{ entry.description }}{% if entry.hiddenInfo %} [Hidden lore: {{ entry.hiddenInfo }}]{% endif %}
+{% endfor %}
+{% endif %}
 
 Expand this into a rich, detailed world that could sustain an interactive story.`,
 }
@@ -28,12 +37,27 @@ Rules:
 - Preserve existing details unless the guidance explicitly asks to change them
 - Keep the genre and tone consistent
 - Ensure tags (themes, conflicts, key locations, atmosphere) match the description
-{{ customInstruction }}`,
+{% if customInstruction %}
+
+AUTHOR'S GUIDANCE: {{ customInstruction }}
+{% endif %}`,
   userContent: `Refine this {{ genreLabel }} setting. Use the current setting data as canon and improve it where helpful.
 
 CURRENT SETTING:
-{{ currentSetting }}
-{{ lorebookContext }}`,
+NAME: {{ currentSetting.name }}
+DESCRIPTION: {{ currentSetting.description }}
+{% if currentSetting.atmosphere %}ATMOSPHERE: {{ currentSetting.atmosphere }}
+{% endif %}THEMES: {{ currentSetting.themes | join: ', ' }}
+POTENTIAL CONFLICTS: {{ currentSetting.potentialConflicts | join: ', ' }}
+{% if currentSetting.keyLocations.size > 0 %}KEY LOCATIONS:
+{% for loc in currentSetting.keyLocations %}- {{ loc.name }}: {{ loc.description }}
+{% endfor %}{% endif %}{% if lorebookEntries.size > 0 %}
+
+## Established lore
+The content below is established canon. Keep all generated output consistent with it.
+{% for entry in lorebookEntries %}- **{{ entry.name }}** ({{ entry.type }}): {{ entry.description }}{% if entry.hiddenInfo %} [Hidden lore: {{ entry.hiddenInfo }}]{% endif %}
+{% endfor %}
+{% endif %}`,
 }
 
 const protagonistGenerationPromptTemplate: PromptTemplate = {
@@ -48,8 +72,15 @@ Create a protagonist that fits naturally into the setting and has interesting st
 
 SETTING: {{ settingName }}
 {{ settingDescription }}
-
-{{ povInstruction }}
+{% if settingAtmosphere %}
+ATMOSPHERE: {{ settingAtmosphere }}
+{% endif %}{% if settingThemesText %}
+THEMES: {{ settingThemesText }}
+{% endif %}
+{% if pov == 'first' %}POV: First person (I/me/my). Create a named protagonist the player will embody using first-person perspective.
+{% elsif pov == 'second' %}POV: Second person (You/your). The protagonist's name can be left generic or "the protagonist" — the reader IS this character. Appearance is optional.
+{% else %}POV: Third person (he/she/they). Create a fully named protagonist readers will follow as a character.
+{% endif %}
 
 Create a compelling protagonist who fits naturally into this world.`,
 }
@@ -65,15 +96,21 @@ Rules:
 - Preserve everything the user specified - don't contradict or replace their ideas
 - Add depth and detail to flesh out what they provided
 - Fill in gaps they left blank with fitting suggestions
-{{ toneInstruction }}
-{{ settingInstruction }}
-{{ customInstruction }}`,
+{% if toneInstruction %}{{ toneInstruction }}
+{% endif %}{% if settingInstruction %}{{ settingInstruction }}
+{% endif %}{% if customInstruction %}
+
+AUTHOR'S GUIDANCE: {{ customInstruction }}
+{% endif %}`,
   userContent: `Elaborate on this character for a {{ genreLabel }} story:
 
-{{ characterName }}
-{{ characterDescription }}
-{{ characterBackground }}
-{{ settingContext }}
+{% if characterInput.name %}NAME: {{ characterInput.name }}{% else %}NAME: (suggest one){% endif %}
+
+{% if characterInput.description %}DESCRIPTION: {{ characterInput.description }}
+{% endif %}{% if characterInput.background %}BACKGROUND: {{ characterInput.background }}
+{% endif %}{% if characterInput.motivation %}MOTIVATION: {{ characterInput.motivation }}
+{% endif %}{% if characterInput.traits.size > 0 %}TRAITS: {{ characterInput.traits | join: ', ' }}
+{% endif %}{{ settingContext }}
 
 Expand on these details while preserving everything the user specified.`,
 }
@@ -88,14 +125,22 @@ const characterRefinementPromptTemplate: PromptTemplate = {
 Rules:
 - Preserve existing details unless the guidance explicitly asks to change them
 - Improve coherence and depth without replacing core traits
-{{ toneInstruction }}
-{{ settingInstruction }}
-{{ customInstruction }}`,
+{% if toneInstruction %}{{ toneInstruction }}
+{% endif %}{% if settingInstruction %}{{ settingInstruction }}
+{% endif %}{% if customInstruction %}
+
+AUTHOR'S GUIDANCE: {{ customInstruction }}
+{% endif %}`,
   userContent: `Refine this character for a {{ genreLabel }} story. Use the current character data as canon.
 
 CURRENT CHARACTER:
-{{ currentCharacter }}
-{{ settingContext }}`,
+NAME: {{ currentCharacter.name }}
+DESCRIPTION: {{ currentCharacter.description }}
+{% if currentCharacter.background %}BACKGROUND: {{ currentCharacter.background }}
+{% endif %}{% if currentCharacter.motivation %}MOTIVATION: {{ currentCharacter.motivation }}
+{% endif %}TRAITS: {{ currentCharacter.traits | join: ', ' }}
+{% if currentCharacter.appearance %}APPEARANCE: {{ currentCharacter.appearance }}
+{% endif %}{{ settingContext }}`,
 }
 
 const supportingCharactersPromptTemplate: PromptTemplate = {
@@ -111,8 +156,11 @@ Create diverse characters with different roles and personalities.`,
 SETTING: {{ settingName }}
 {{ settingDescription }}
 
-PROTAGONIST: {{ protagonistName }}
-{{ protagonistDescription }}
+PROTAGONIST: {{ protagonist.name }}
+{{ protagonist.description }}
+{% if protagonist.motivation %}
+MOTIVATION: {{ protagonist.motivation }}
+{% endif %}
 
 Create diverse characters with different roles (ally, antagonist, mentor, etc.) who can drive story conflict and complement the protagonist.`,
 }
@@ -189,19 +237,44 @@ Also avoid:
 - Dialogue tag overload: "said" is invisible; use fancy tags sparingly
 </prohibited_patterns>
 
-{{ outputFormat }}`,
+Respond with valid JSON:
+{
+  "scene": "string - the opening (2-3 paragraphs describing environment/situation, NOT {{ protagonistName }}'s actions)",
+  "title": "string - story title",
+  "initialLocation": {
+    "name": "string - location name",
+    "description": "string - 1-2 sentences"
+  }
+}`,
   userContent: `Create the opening scene:
 
 TITLE: {{ title }}
 GENRE: {{ genreLabel }}
 SETTING: {{ settingName }} - {{ settingDescription }}
-{{ atmosphereSection }}
+{% if atmosphere %}
+ATMOSPHERE: {{ atmosphere }}
+{% endif %}
 PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
-{{ supportingCharactersSection }}
-{{ povInstruction }}
-{{ guidanceSection }}{{ lorebookContext }}{{ openingInstruction }}
+{% if supportingCharacters.size > 0 %}
+NPCs WHO MAY APPEAR:
+{% for npc in supportingCharacters %}- {{ npc.name }} ({{ npc.role }}): {{ npc.description }}
+{% endfor %}
+{% endif %}
+{% if pov == 'first' %}POV: First person (I/me/my).{% elsif pov == 'second' %}POV: Second person (You/your).{% else %}POV: Third person (he/she/they).{% endif %}
+{% if openingGuidance %}
+AUTHOR'S GUIDANCE FOR OPENING:
+{{ openingGuidance }}
+{% endif %}{% if lorebookEntries.size > 0 %}
 
-Write an immersive opening that drops the reader into the story. Remember: describe only the environment and NPCs, NOT the protagonist's actions, dialogue, or thoughts.`,
+## Established lore
+The content below is established canon. Keep all generated output consistent with it.
+{% for entry in lorebookEntries %}- **{{ entry.name }}** ({{ entry.type }}): {{ entry.description }}{% if entry.hiddenInfo %} [Hidden lore: {{ entry.hiddenInfo }}]{% endif %}
+{% endfor %}
+{% endif %}
+
+Write an immersive opening that drops the reader into the story. Remember: describe only the environment and NPCs, NOT the protagonist's actions, dialogue, or thoughts.
+
+Describe the environment and situation. Do NOT write anything {{ protagonistName }} does, says, thinks, or perceives. End with a moment that invites action.`,
 }
 
 const openingGenerationCreativePromptTemplate: PromptTemplate = {
@@ -216,7 +289,7 @@ The person reading this opening is the AUTHOR, not a character. They sit outside
 </critical_understanding>
 
 <style>
-- POV: {{ povInstruction }}
+- POV: {% if pov == 'first' %}First person (I/me/my).{% elsif pov == 'second' %}Second person (You/your).{% else %}Third person (he/she/they).{% endif %}
 - {{ tenseInstruction }}
 - Tone: {{ tone }}
 - 2-3 paragraphs of literary prose
@@ -226,7 +299,7 @@ The person reading this opening is the AUTHOR, not a character. They sit outside
 
 <what_to_write>
 Write a compelling opening that:
-- Establishes the scene through {{ povPerspective }}
+- Establishes the scene through {% if pov == 'first' %}{{ protagonistName }}'s first-person perspective{% elsif pov == 'second' %}second-person immersion{% else %}{{ protagonistName }}'s perspective{% endif %}
 - Engages the reader with vivid, immersive prose
 - Introduces tension, stakes, or interesting elements
 - Includes other characters if appropriate, with their own actions and dialogue
@@ -241,7 +314,9 @@ Write a compelling opening that:
 - Thoughts and perceptions
 - Reactions to the environment and other characters
 
-{{ povPerspectiveInstructions }}
+{% if pov == 'first' %}Use "I/me/my" for the protagonist. Write from their internal perspective.
+{% elsif pov == 'second' %}Use "you/your" for the protagonist. Address the reader/protagonist directly.
+{% else %}NEVER use second person ("you"). Always use "{{ protagonistName }}" or "he/she/they".{% endif %}
 </protagonist_as_character>
 
 <dialogue_craft>
@@ -269,17 +344,40 @@ Also avoid:
 - Narrative bows: tying scenes with conclusions or realizations
 </prohibited_patterns>
 
-{{ outputFormat }}`,
+Respond with valid JSON:
+{
+  "scene": "string - the opening (2-3 paragraphs of {% if pov == 'first' %}first-person{% elsif pov == 'second' %}second-person{% else %}third-person{% endif %} narrative featuring {{ protagonistName }})",
+  "title": "string - story title",
+  "initialLocation": {
+    "name": "string - location name",
+    "description": "string - 1-2 sentences"
+  }
+}`,
   userContent: `Create the opening scene:
 
 TITLE: {{ title }}
 GENRE: {{ genreLabel }}
 SETTING: {{ settingName }} - {{ settingDescription }}
-{{ atmosphereSection }}
+{% if atmosphere %}
+ATMOSPHERE: {{ atmosphere }}
+{% endif %}
 PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
-{{ supportingCharactersSection }}
-{{ povInstruction }}
-{{ guidanceSection }}{{ lorebookContext }}{{ openingInstruction }}
+{% if supportingCharacters.size > 0 %}
+NPCs WHO MAY APPEAR:
+{% for npc in supportingCharacters %}- {{ npc.name }} ({{ npc.role }}): {{ npc.description }}
+{% endfor %}
+{% endif %}
+{% if pov == 'first' %}POV: First person (I/me/my).{% elsif pov == 'second' %}POV: Second person (You/your).{% else %}POV: Third person (he/she/they).{% endif %}
+{% if openingGuidance %}
+AUTHOR'S GUIDANCE FOR OPENING:
+{{ openingGuidance }}
+{% endif %}{% if lorebookEntries.size > 0 %}
+
+## Established lore
+The content below is established canon. Keep all generated output consistent with it.
+{% for entry in lorebookEntries %}- **{{ entry.name }}** ({{ entry.type }}): {{ entry.description }}{% if entry.hiddenInfo %} [Hidden lore: {{ entry.hiddenInfo }}]{% endif %}
+{% endfor %}
+{% endif %}
 
 Write an immersive opening that drops the reader into the story. Remember: the author directs the story, so write the protagonist's actions, dialogue, and thoughts as needed.`,
 }
@@ -350,20 +448,47 @@ Also avoid:
 - Dialogue tag overload: "said" is invisible; use fancy tags sparingly
 </prohibited_patterns>
 
-{{ outputFormat }}`,
+Respond with valid JSON:
+{
+  "scene": "string - the opening (2-3 paragraphs describing environment/situation, NOT {{ protagonistName }}'s actions)",
+  "title": "string - story title",
+  "initialLocation": {
+    "name": "string - location name",
+    "description": "string - 1-2 sentences"
+  }
+}`,
   userContent: `Refine the opening scene using the current draft. Preserve continuity and constraints.
 
 CURRENT OPENING:
-{{ currentOpening }}
+TITLE: {{ currentOpening.title }}
+SCENE: {{ currentOpening.scene }}
+LOCATION: {{ currentOpening.initialLocation.name }}
 
 TITLE: {{ title }}
 GENRE: {{ genreLabel }}
 SETTING: {{ settingName }} - {{ settingDescription }}
-{{ atmosphereSection }}
+{% if atmosphere %}
+ATMOSPHERE: {{ atmosphere }}
+{% endif %}
 PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
-{{ supportingCharactersSection }}
-{{ povInstruction }}
-{{ guidanceSection }}{{ lorebookContext }}{{ openingInstruction }}`,
+{% if supportingCharacters.size > 0 %}
+NPCs WHO MAY APPEAR:
+{% for npc in supportingCharacters %}- {{ npc.name }} ({{ npc.role }}): {{ npc.description }}
+{% endfor %}
+{% endif %}
+{% if pov == 'first' %}POV: First person (I/me/my).{% elsif pov == 'second' %}POV: Second person (You/your).{% else %}POV: Third person (he/she/they).{% endif %}
+{% if openingGuidance %}
+AUTHOR'S GUIDANCE FOR OPENING:
+{{ openingGuidance }}
+{% endif %}{% if lorebookEntries.size > 0 %}
+
+## Established lore
+The content below is established canon. Keep all generated output consistent with it.
+{% for entry in lorebookEntries %}- **{{ entry.name }}** ({{ entry.type }}): {{ entry.description }}{% if entry.hiddenInfo %} [Hidden lore: {{ entry.hiddenInfo }}]{% endif %}
+{% endfor %}
+{% endif %}
+
+Describe the environment and situation. Do NOT write anything {{ protagonistName }} does, says, thinks, or perceives. End with a moment that invites action.`,
 }
 
 const openingRefinementCreativePromptTemplate: PromptTemplate = {
@@ -378,7 +503,7 @@ The person reading this opening is the AUTHOR, not a character. They sit outside
 </critical_understanding>
 
 <style>
-- POV: {{ povInstruction }}
+- POV: {% if pov == 'first' %}First person (I/me/my).{% elsif pov == 'second' %}Second person (You/your).{% else %}Third person (he/she/they).{% endif %}
 - {{ tenseInstruction }}
 - Tone: {{ tone }}
 - 2-3 paragraphs of literary prose
@@ -401,7 +526,9 @@ Refine the existing opening by:
 - Thoughts and perceptions
 - Reactions to the environment and other characters
 
-{{ povPerspectiveInstructions }}
+{% if pov == 'first' %}Use "I/me/my" for the protagonist. Write from their internal perspective.
+{% elsif pov == 'second' %}Use "you/your" for the protagonist. Address the reader/protagonist directly.
+{% else %}NEVER use second person ("you"). Always use "{{ protagonistName }}" or "he/she/they".{% endif %}
 </protagonist_as_character>
 
 <dialogue_craft>
@@ -429,20 +556,45 @@ Also avoid:
 - Narrative bows: tying scenes with conclusions or realizations
 </prohibited_patterns>
 
-{{ outputFormat }}`,
+Respond with valid JSON:
+{
+  "scene": "string - the opening (2-3 paragraphs of {% if pov == 'first' %}first-person{% elsif pov == 'second' %}second-person{% else %}third-person{% endif %} narrative featuring {{ protagonistName }})",
+  "title": "string - story title",
+  "initialLocation": {
+    "name": "string - location name",
+    "description": "string - 1-2 sentences"
+  }
+}`,
   userContent: `Refine the opening scene using the current draft. Preserve continuity while improving prose and flow.
 
 CURRENT OPENING:
-{{ currentOpening }}
+TITLE: {{ currentOpening.title }}
+SCENE: {{ currentOpening.scene }}
+LOCATION: {{ currentOpening.initialLocation.name }}
 
 TITLE: {{ title }}
 GENRE: {{ genreLabel }}
 SETTING: {{ settingName }} - {{ settingDescription }}
-{{ atmosphereSection }}
+{% if atmosphere %}
+ATMOSPHERE: {{ atmosphere }}
+{% endif %}
 PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
-{{ supportingCharactersSection }}
-{{ povInstruction }}
-{{ guidanceSection }}{{ lorebookContext }}{{ openingInstruction }}`,
+{% if supportingCharacters.size > 0 %}
+NPCs WHO MAY APPEAR:
+{% for npc in supportingCharacters %}- {{ npc.name }} ({{ npc.role }}): {{ npc.description }}
+{% endfor %}
+{% endif %}
+{% if pov == 'first' %}POV: First person (I/me/my).{% elsif pov == 'second' %}POV: Second person (You/your).{% else %}POV: Third person (he/she/they).{% endif %}
+{% if openingGuidance %}
+AUTHOR'S GUIDANCE FOR OPENING:
+{{ openingGuidance }}
+{% endif %}{% if lorebookEntries.size > 0 %}
+
+## Established lore
+The content below is established canon. Keep all generated output consistent with it.
+{% for entry in lorebookEntries %}- **{{ entry.name }}** ({{ entry.type }}): {{ entry.description }}{% if entry.hiddenInfo %} [Hidden lore: {{ entry.hiddenInfo }}]{% endif %}
+{% endfor %}
+{% endif %}`,
 }
 
 const characterCardImportPromptTemplate: PromptTemplate = {
