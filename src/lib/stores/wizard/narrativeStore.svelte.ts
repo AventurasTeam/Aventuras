@@ -150,7 +150,7 @@ export class NarrativeStore {
     this.clearOpeningEditState()
     this.manualOpeningText = ''
 
-    const lorebookContext =
+    const lorebookEntries =
       this.importedEntries.length > 0
         ? this.importedEntries.map((e) => ({
             name: e.name,
@@ -164,7 +164,7 @@ export class NarrativeStore {
       this.generatedOpening = await scenarioService.generateOpening(
         wizardData,
         settings.servicePresetAssignments['wizard:openingGeneration'],
-        lorebookContext,
+        lorebookEntries,
       )
 
       await this.translateOpening()
@@ -182,7 +182,7 @@ export class NarrativeStore {
     this.isRefiningOpening = true
     this.openingError = null
 
-    const lorebookContext =
+    const lorebookEntries =
       this.importedEntries.length > 0
         ? this.importedEntries.map((e) => ({
             name: e.name,
@@ -201,7 +201,7 @@ export class NarrativeStore {
         wizardData,
         currentOpening,
         settings.servicePresetAssignments['wizard:openingRefinement'],
-        lorebookContext,
+        lorebookEntries,
       )
       this.clearOpeningEditState()
       await this.translateOpening()
