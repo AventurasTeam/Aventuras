@@ -102,6 +102,10 @@ export class STImportWizardStore {
   selectedPOV = $state<POV>('second')
   selectedTense = $state<Tense>('present')
   tone = $state('immersive and engaging')
+  visualProseMode = $state(false)
+  imageGenerationMode = $state<'none' | 'agentic' | 'inline'>('none')
+  backgroundImagesEnabled = $state(false)
+  referenceMode = $state(false)
   importChatAsEntries = $state(false) // true = import chat, false = fresh start with card opening
 
   // Step 6: Review
@@ -679,6 +683,10 @@ export class STImportWizardStore {
           pov: this.selectedPOV,
           tense: this.selectedTense,
           tone: this.tone,
+          visualProseMode: this.visualProseMode,
+          imageGenerationMode: this.imageGenerationMode,
+          backgroundImagesEnabled: this.backgroundImagesEnabled,
+          referenceMode: this.referenceMode,
         },
         title: this.storyTitle,
       }

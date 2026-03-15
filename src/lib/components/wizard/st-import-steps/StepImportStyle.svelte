@@ -13,6 +13,10 @@
     selectedPOV: POV
     selectedTense: Tense
     tone: string
+    visualProseMode: boolean
+    imageGenerationMode: 'none' | 'agentic' | 'inline'
+    backgroundImagesEnabled: boolean
+    referenceMode: boolean
     importChatAsEntries: boolean
     hasChatFile: boolean
     hasCardOpening: boolean
@@ -21,6 +25,10 @@
     onPOVChange: (v: POV) => void
     onTenseChange: (v: Tense) => void
     onToneChange: (v: string) => void
+    onVisualProseModeChange: (v: boolean) => void
+    onImageGenerationModeChange: (v: 'none' | 'agentic' | 'inline') => void
+    onBackgroundImagesEnabledChange: (v: boolean) => void
+    onReferenceModeChange: (v: boolean) => void
     onImportChatToggle: (v: boolean) => void
   }
 
@@ -29,6 +37,10 @@
     selectedPOV,
     selectedTense,
     tone,
+    visualProseMode,
+    imageGenerationMode,
+    backgroundImagesEnabled,
+    referenceMode,
     importChatAsEntries,
     hasChatFile,
     hasCardOpening,
@@ -37,10 +49,21 @@
     onPOVChange,
     onTenseChange,
     onToneChange,
+    onVisualProseModeChange,
+    onImageGenerationModeChange,
+    onBackgroundImagesEnabledChange,
+    onReferenceModeChange,
     onImportChatToggle,
   }: Props = $props()
 
   const imageGenerationEnabled = $derived(hasRequiredCredentials())
+
+  // Keep imported wizard behavior consistent with setup wizard when image generation is unavailable.
+  $effect(() => {
+    if (!imageGenerationEnabled && imageGenerationMode !== 'none') {
+      onImageGenerationModeChange('none')
+    }
+  })
 </script>
 
 <div class="flex h-full flex-col gap-5">
@@ -161,18 +184,18 @@
       {selectedPOV}
       {selectedTense}
       {tone}
-      visualProseMode={false}
+      {visualProseMode}
       {imageGenerationEnabled}
-      imageGenerationMode="none"
-      backgroundImagesEnabled={false}
-      referenceMode={false}
+      {imageGenerationMode}
+      {backgroundImagesEnabled}
+      {referenceMode}
       {onPOVChange}
       {onTenseChange}
       {onToneChange}
-      onVisualProseModeChange={() => {}}
-      onImageGenerationModeChange={() => {}}
-      onBackgroundImagesEnabledChange={() => {}}
-      onReferenceModeChange={() => {}}
+      {onVisualProseModeChange}
+      {onImageGenerationModeChange}
+      {onBackgroundImagesEnabledChange}
+      {onReferenceModeChange}
     />
   </ScrollArea>
 </div>

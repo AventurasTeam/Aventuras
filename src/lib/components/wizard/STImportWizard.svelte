@@ -156,6 +156,10 @@
           selectedPOV={wizard.selectedPOV}
           selectedTense={wizard.selectedTense}
           tone={wizard.tone}
+          visualProseMode={wizard.visualProseMode}
+          imageGenerationMode={wizard.imageGenerationMode}
+          backgroundImagesEnabled={wizard.backgroundImagesEnabled}
+          referenceMode={wizard.referenceMode}
           importChatAsEntries={wizard.importChatAsEntries}
           hasChatFile={wizard.chatParseResult !== null}
           hasCardOpening={!!wizard.cardImportResult?.firstMessage}
@@ -164,6 +168,10 @@
           onPOVChange={(v) => (wizard.selectedPOV = v)}
           onTenseChange={(v) => (wizard.selectedTense = v)}
           onToneChange={(v) => (wizard.tone = v)}
+          onVisualProseModeChange={(v) => (wizard.visualProseMode = v)}
+          onImageGenerationModeChange={(v) => (wizard.imageGenerationMode = v)}
+          onBackgroundImagesEnabledChange={(v) => (wizard.backgroundImagesEnabled = v)}
+          onReferenceModeChange={(v) => (wizard.referenceMode = v)}
           onImportChatToggle={(v) => (wizard.importChatAsEntries = v)}
         />
       {:else if wizard.currentStep === 7}
