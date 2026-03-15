@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte'
+  import { onDestroy, untrack } from 'svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import { Label } from '$lib/components/ui/label'
   import { Button } from '$lib/components/ui/button'
@@ -100,6 +100,7 @@
   // ===== Image Profile CRUD =====
   let editingProfileId = $state<string | null>(null)
   let isNewProfile = $state(false)
+  let suppressAutoSave = false
   let profileName = $state('')
   let profileProviderType = $state<ImageProviderType>('nanogpt')
   let profileApiKey = $state('')
@@ -139,12 +140,18 @@
 
   // Model info cache for active profiles
   let activeProfilesModelInfo = $state<Record<string, ImageModelInfo[]>>({})
+  const loadingProfileModelsIds = new Set<string>()
 
   // Load models for active profiles to get resolution info
   async function loadModelsForProfile(profileId: string) {
-    if (activeProfilesModelInfo[profileId]) return
-    const models = await listImageModels(profileId)
-    activeProfilesModelInfo[profileId] = models
+    if (loadingProfileModelsIds.has(profileId)) return
+    loadingProfileModelsIds.add(profileId)
+    try {
+      const models = await listImageModels(profileId)
+      activeProfilesModelInfo[profileId] = models
+    } finally {
+      loadingProfileModelsIds.delete(profileId)
+    }
   }
 
   // Effect to load models for all selected profiles
@@ -157,9 +164,15 @@
       testProfileId,
     ].filter(Boolean) as string[]
 
-    for (const id of profilesToLoad) {
-      loadModelsForProfile(id)
-    }
+    // Read profile IDs reactively above, but check cache without tracking
+    // to avoid re-running when loadModelsForProfile writes results back
+    untrack(() => {
+      for (const id of profilesToLoad) {
+        if (!activeProfilesModelInfo[id]) {
+          loadModelsForProfile(id)
+        }
+      }
+    })
   })
 
   /**
@@ -347,8 +360,8 @@
 
   $effect(() => {
     if (editingProfileId && !isNewProfile) {
-      // Monitor all relevant form fields for auto-save
-      const _ = [
+      // Touch all form fields so Svelte tracks them as dependencies
+      void [
         profileName,
         profileProviderType,
         profileApiKey,
@@ -365,6 +378,11 @@
         profileLoraStrengthModel,
         profileLoraStrengthClip,
       ]
+      // Skip the first run after startEditProfile populates the form
+      if (suppressAutoSave) {
+        suppressAutoSave = false
+        return
+      }
       triggerAutoSave()
     }
   })
@@ -406,6 +424,7 @@
     if (editingProfileId && editingProfileId !== profile.id) {
       saveEditingProfile()
     }
+    suppressAutoSave = true
     editingProfileId = profile.id
     isNewProfile = false
     profileName = profile.name
