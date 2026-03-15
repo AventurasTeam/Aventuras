@@ -350,9 +350,6 @@
   /**
    * Send an OS notification when generation completes/fails while the app is backgrounded.
    * Only called on Android when the generationNotifications experimental feature is enabled.
-   */
-  /**
-   * Send an OS notification when generation completes/fails while the app is backgrounded.
    * Both body and largeBody are set so Android BigTextStyle keeps preview text
    * visible in collapsed, expanded, and grouped notification states.
    */
