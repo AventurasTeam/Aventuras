@@ -107,6 +107,19 @@ describe('image-prompt-analysis template', () => {
     expect(result).not.toContain('**Elena**:')
     expect(result).not.toContain('**Marcus**:')
   })
+
+  it('does not render lorebookContext', () => {
+    const result = templateEngine.render(imagePromptAnalysisTemplate.userContent!, {
+      sceneCharacters,
+      maxImages: 3,
+      imageStylePrompt: 'Anime style',
+      userAction: 'The hero charges forward',
+      narrativeResponse: 'The battle begins.',
+      chatHistory: [],
+      translatedNarrativeBlock: '',
+    })
+    expect(result).not.toContain('lorebookContext')
+  })
 })
 
 // ===== image-prompt-analysis-reference =====
@@ -201,6 +214,19 @@ describe('image-prompt-analysis-reference template', () => {
     const noneInWith = result!.indexOf('None', withPortraitsIdx)
     expect(noneInWith).toBeGreaterThan(withPortraitsIdx)
     expect(noneInWith).toBeLessThan(withoutPortraitsIdx)
+  })
+
+  it('does not render lorebookContext', () => {
+    const result = templateEngine.render(imagePromptAnalysisReferenceTemplate.userContent!, {
+      sceneCharacters,
+      maxImages: 3,
+      imageStylePrompt: 'Anime style',
+      userAction: 'The hero charges forward',
+      narrativeResponse: 'The battle begins.',
+      chatHistory: [],
+      translatedNarrativeBlock: '',
+    })
+    expect(result).not.toContain('lorebookContext')
   })
 })
 
