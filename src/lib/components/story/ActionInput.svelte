@@ -351,6 +351,11 @@
    * Send an OS notification when generation completes/fails while the app is backgrounded.
    * Only called on Android when the generationNotifications experimental feature is enabled.
    */
+  /**
+   * Send an OS notification when generation completes/fails while the app is backgrounded.
+   * Both body and largeBody are set so Android BigTextStyle keeps preview text
+   * visible in collapsed, expanded, and grouped notification states.
+   */
   async function sendGenerationNotification(responseText: string, success: boolean) {
     try {
       const { sendNotification, isPermissionGranted } =
@@ -364,9 +369,6 @@
             ? responseText.slice(0, 120).replace(/[<>]/g, '') +
               (responseText.length > 120 ? '…' : '')
             : 'Tap to return to your story.'
-        // largeBody activates Android BigTextStyle so the preview is visible
-        // in both the collapsed single-notification view and when an auto-grouped
-        // notification bundle is expanded (body alone gets stripped in that case).
         sendNotification({
           title: 'Story generation complete',
           body: previewText,
@@ -381,6 +383,16 @@
       }
     } catch (e) {
       console.warn('[ActionInput] Failed to send notification:', e)
+    }
+  }
+
+  /** Send a failure notification if the user was backgrounded during this generation. */
+  async function notifyFailureIfBackgrounded() {
+    if (
+      ui.wasBackgroundedDuringGeneration &&
+      settings.experimentalFeatures.generationNotifications
+    ) {
+      await sendGenerationNotification('', false)
     }
   }
 
@@ -683,6 +695,8 @@
           userActionEntryId,
           timestamp: Date.now(),
         })
+
+        await notifyFailureIfBackgrounded()
         return
       }
 
@@ -701,14 +715,14 @@
         .runBackgroundTasks(input)
         .catch((err) => log('Background tasks failed (non-fatal)', err))
 
-      // Android: notify user that generation completed while app was backgrounded
+      // Android: notify user that generation completed while app is still backgrounded.
+      // Awaited so the foreground service isn't torn down before the notification fires.
       if (
         ui.wasBackgroundedDuringGeneration &&
         ui.isAppBackgrounded &&
-        settings.experimentalFeatures.generationNotifications &&
-        fullResponse.trim()
+        settings.experimentalFeatures.generationNotifications
       ) {
-        sendGenerationNotification(fullResponse, true)
+        await sendGenerationNotification(fullResponse, true)
       }
     } catch (error) {
       // Only suppress handling when the user explicitly requested a stop.
@@ -730,14 +744,7 @@
         timestamp: Date.now(),
       })
 
-      // Android: notify user that generation failed while backgrounded
-      if (
-        ui.wasBackgroundedDuringGeneration &&
-        ui.isAppBackgrounded &&
-        settings.experimentalFeatures.generationNotifications
-      ) {
-        sendGenerationNotification('', false)
-      }
+      await notifyFailureIfBackgrounded()
     } finally {
       ui.endStreaming()
       ui.setGenerating(false)
