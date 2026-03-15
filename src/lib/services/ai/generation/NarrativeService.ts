@@ -31,6 +31,7 @@ import type { StyleReviewResult } from './StyleReviewerService'
 import type { TimelineFillResult } from '../retrieval/TimelineFillService'
 import type { WorldStateArrays } from '$lib/services/context/worldStateMapper'
 import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import type { AgenticRetrievalFields } from '$lib/services/generation/types'
 
 const log = createLogger('Narrative')
 
@@ -62,8 +63,8 @@ export interface NarrativeOptions {
   worldStateArrays?: WorldStateArrays
   /** Style review results for avoiding repetition */
   styleReview?: StyleReviewResult | null
-  /** Agentic retrieval context from memory system (replaces retrievedChapterContext) */
-  agenticRetrievalContext?: string | null
+  /** Structured agentic retrieval fields from memory system */
+  agenticRetrieval?: AgenticRetrievalFields | null
   /** Lorebook entries for structured lorebook injection */
   lorebookEntries?: ContextLorebookEntry[]
   /** Abort signal for cancellation */
@@ -105,7 +106,7 @@ export class NarrativeService {
     const {
       worldStateArrays,
       styleReview,
-      agenticRetrievalContext,
+      agenticRetrieval,
       lorebookEntries,
       signal,
       timelineFillResult,
@@ -115,7 +116,7 @@ export class NarrativeService {
       entriesCount: entries.length,
       hasTieredContext: !!worldStateArrays,
       hasStyleReview: !!styleReview,
-      hasAgenticContext: !!agenticRetrievalContext,
+      hasAgenticContext: !!agenticRetrieval,
       hasTimelineFill: !!timelineFillResult,
       lorebookEntriesCount: lorebookEntries?.length ?? 0,
     })
@@ -130,7 +131,7 @@ export class NarrativeService {
       worldState,
       worldStateArrays,
       styleReview,
-      agenticRetrievalContext,
+      agenticRetrieval,
       lorebookEntries,
       timelineFillResult,
     )
@@ -176,8 +177,7 @@ export class NarrativeService {
     story?: Story | null,
     options: Omit<NarrativeOptions, 'timelineFillResult'> = {},
   ): Promise<string> {
-    const { worldStateArrays, styleReview, agenticRetrievalContext, lorebookEntries, signal } =
-      options
+    const { worldStateArrays, styleReview, agenticRetrieval, lorebookEntries, signal } = options
 
     log('generate', { entriesCount: entries.length })
 
@@ -191,7 +191,7 @@ export class NarrativeService {
       worldState,
       worldStateArrays,
       styleReview,
-      agenticRetrievalContext,
+      agenticRetrieval,
       lorebookEntries,
     )
 
@@ -216,7 +216,7 @@ export class NarrativeService {
     worldState: NarrativeWorldState,
     worldStateArrays?: WorldStateArrays,
     styleReview?: StyleReviewResult | null,
-    agenticRetrievalContext?: string | null,
+    agenticRetrieval?: AgenticRetrievalFields | null,
     lorebookEntries?: ContextLorebookEntry[],
     timelineFillResult?: TimelineFillResult | null,
   ): Promise<{ systemPrompt: string; userMessage: string }> {
@@ -252,8 +252,12 @@ export class NarrativeService {
     if (lorebookEntries && lorebookEntries.length > 0) {
       ctx.add({ lorebookEntries })
     }
-    if (agenticRetrievalContext) {
-      ctx.add({ agenticRetrievalContext })
+    if (agenticRetrieval) {
+      ctx.add({
+        agenticReasoning: agenticRetrieval.agenticReasoning,
+        agenticChapterSummary: agenticRetrieval.agenticChapterSummary,
+        agenticSelectedEntries: agenticRetrieval.agenticSelectedEntries,
+      })
     }
 
     // Build chapter context arrays via mapper

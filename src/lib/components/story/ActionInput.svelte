@@ -235,7 +235,6 @@
       shouldUseAgenticRetrieval: (chaptersLength: number) =>
         aiService.shouldUseAgenticRetrieval({ length: chaptersLength } as any),
       runAgenticRetrieval: aiService.runAgenticRetrieval.bind(aiService),
-      formatAgenticRetrievalForPrompt: aiService.formatAgenticRetrievalForPrompt.bind(aiService),
       runTimelineFill: aiService.runTimelineFill.bind(aiService),
       answerChapterQuestion: aiService.answerChapterQuestion.bind(aiService),
       answerChapterRangeQuestion: aiService.answerChapterRangeQuestion.bind(aiService),
