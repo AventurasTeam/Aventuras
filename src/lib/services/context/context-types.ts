@@ -16,6 +16,7 @@ import type {
   GeneratedProtagonist,
   GeneratedCharacter,
 } from '$lib/services/ai/sdk/schemas/scenario'
+import type { RuntimeVariable } from '$lib/services/packs/types'
 
 // ===== Refactored Existing Interfaces (Omit<>/Pick<> derivation) =====
 
@@ -252,4 +253,22 @@ export type ContextWizardCharacter = Pick<
 export type ContextSupportingCharacter = Pick<
   GeneratedCharacter,
   'name' | 'role' | 'description' | 'relationship' | 'traits'
+>
+
+// ===== v1.3 Classifier Context Types =====
+
+/**
+ * A runtime variable definition as seen by classifier templates (runtimeVariables{}).
+ * Picked fields match what buildCustomVarInstructions() used for instruction generation.
+ * Full RuntimeVariable objects are passed through — template ignores extra fields.
+ */
+export type ContextRuntimeVariable = Pick<
+  RuntimeVariable,
+  | 'variableName'
+  | 'variableType'
+  | 'minValue'
+  | 'maxValue'
+  | 'enumOptions'
+  | 'defaultValue'
+  | 'description'
 >
