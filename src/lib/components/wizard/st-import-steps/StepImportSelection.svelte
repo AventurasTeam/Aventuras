@@ -5,10 +5,10 @@
   import { Switch } from '$lib/components/ui/switch'
   import { Badge } from '$lib/components/ui/badge'
   import { Button } from '$lib/components/ui/button'
-  import type { ParsedCard, CardImportResult } from '$lib/services/characterCardImporter'
+  import { CharacterCardImport } from '$lib/services/characterCardImport'
 
   interface Props {
-    cardParsedData: ParsedCard | null
+    cardParsedData: CharacterCardImport.ParsedCard | null
     cardPortrait: string | null
     sanitizedDescription: string | null
     hasEmbeddedLorebook: boolean
@@ -17,7 +17,7 @@
     importScenario: boolean
     importLorebook: boolean
     isProcessingCard: boolean
-    cardImportResult: CardImportResult | null
+    cardImportResult: CharacterCardImport.CardImportResult | null
     cardProcessError: string | null
     onImportCharactersChange: (v: boolean) => void
     onImportScenarioChange: (v: boolean) => void

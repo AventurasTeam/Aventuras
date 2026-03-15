@@ -1,11 +1,7 @@
 import type { VaultCharacter, Character } from '$lib/types'
 import { database } from '$lib/services/database'
 import { discoveryService, type DiscoveryCard } from '$lib/services/discovery'
-import {
-  readCharacterCardFile,
-  parseCharacterCard,
-  sanitizeCharacterCard,
-} from '$lib/services/characterCardImporter'
+import { CharacterCardImport } from '$lib/services/characterCardImport'
 import { extractEmbeddedLorebook } from '$lib/services/lorebookImporter'
 import { lorebookVault } from './lorebookVault.svelte'
 import { ui } from './ui.svelte'
@@ -168,7 +164,7 @@ class CharacterVaultStore {
    * Import a sanitized character (from LLM processing).
    */
   async importSanitizedCharacter(
-    sanitized: import('$lib/services/characterCardImporter').SanitizedCharacter,
+    sanitized: CharacterCardImport.SanitizedCharacter,
     originalCard: {
       scenario?: string
       tags?: string[]
@@ -321,12 +317,12 @@ class CharacterVaultStore {
   ): Promise<void> {
     try {
       // Parse
-      const jsonString = await readCharacterCardFile(file)
-      const parsed = parseCharacterCard(jsonString)
+      const jsonString = await CharacterCardImport.readFile(file)
+      const parsed = CharacterCardImport.parseJson(jsonString)
       if (!parsed) throw new Error('Failed to parse character card')
 
       // Sanitize
-      const sanitized = await sanitizeCharacterCard(jsonString)
+      const sanitized = await CharacterCardImport.sanitize(jsonString)
 
       // Convert image if needed
       let portrait: string | null = null
