@@ -39,7 +39,6 @@ export interface ImageInput {
   presentCharacters: Character[]
   currentLocation?: string
   chatHistory?: ContextChatEntry[]
-  lorebookContext?: string
   translatedNarrative?: string
   translationLanguage?: string
   imageSettings: ImageSettings
@@ -68,7 +67,6 @@ export class ImagePhase {
       presentCharacters,
       currentLocation,
       chatHistory,
-      lorebookContext,
       translatedNarrative,
       translationLanguage,
       imageSettings,
@@ -121,7 +119,6 @@ export class ImagePhase {
       presentCharacters,
       currentLocation,
       chatHistory,
-      lorebookContext,
       translatedNarrative,
       translationLanguage,
       referenceMode: imageSettings.referenceMode || false,

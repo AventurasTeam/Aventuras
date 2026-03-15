@@ -83,7 +83,6 @@ export interface ImageGenerationContext {
   presentCharacters: Character[]
   currentLocation?: string
   chatHistory?: ContextChatEntry[]
-  lorebookContext?: string
   translatedNarrative?: string
   translationLanguage?: string
   referenceMode: boolean
@@ -831,7 +830,6 @@ class AIService {
       stylePrompt,
       maxImages: imageSettings.maxImagesPerMessage ?? 3,
       chatHistory: context.chatHistory,
-      lorebookContext: context.lorebookContext,
       referenceMode,
       translatedNarrative: context.translatedNarrative,
       translationLanguage: context.translationLanguage,

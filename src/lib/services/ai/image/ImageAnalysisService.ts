@@ -36,8 +36,6 @@ export interface ImageAnalysisContext {
   maxImages: number
   /** Full chat history for comprehensive context */
   chatHistory?: ContextChatEntry[]
-  /** Activated lorebook entries for world context */
-  lorebookContext?: string
   /** Translated narrative text - use this for sourceText extraction when available */
   translatedNarrative?: string
   /** Target language for translation */
@@ -92,7 +90,6 @@ ${context.translatedNarrative}`
       narrativeResponse: context.narrativeResponse,
       userAction: context.userAction,
       chatHistory: context.chatHistory || [],
-      lorebookContext: context.lorebookContext || '',
       translatedNarrativeBlock,
     })
     const { system, user: prompt } = await ctx.render(templateId)

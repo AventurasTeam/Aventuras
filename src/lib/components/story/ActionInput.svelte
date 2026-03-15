@@ -602,7 +602,6 @@
                 ),
                 { truncate: false, stripPicTags: true },
               ),
-              lorebookContext: undefined,
               referenceMode: currentStoryRef.settings?.referenceMode ?? false,
             }
           }
