@@ -327,8 +327,8 @@
             <Dialog.Header>
               <Dialog.Title>Delete all lorebook entries?</Dialog.Title>
               <Dialog.Description>
-                This will permanently delete all {story.lorebookEntries.length} entr{story.lorebookEntries.length ===
-                1
+                This will permanently delete all {story.lorebookEntries.length} entr{story
+                  .lorebookEntries.length === 1
                   ? 'y'
                   : 'ies'} from this story's lorebook. This action cannot be undone.
               </Dialog.Description>

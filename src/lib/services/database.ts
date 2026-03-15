@@ -2045,7 +2045,9 @@ class DatabaseService {
 
     for (let batchStart = 0; batchStart < entries.length; batchStart += BATCH_SIZE) {
       const batch = entries.slice(batchStart, batchStart + BATCH_SIZE)
-      const valuePlaceholders = batch.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',')
+      const valuePlaceholders = batch
+        .map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        .join(',')
       const values: unknown[] = []
 
       for (const entry of batch) {
