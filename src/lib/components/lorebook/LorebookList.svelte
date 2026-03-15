@@ -19,6 +19,7 @@
   import { Button } from '$lib/components/ui/button'
   import { ScrollArea } from '$lib/components/ui/scroll-area'
   import { Checkbox } from '$lib/components/ui/checkbox'
+  import * as Dialog from '$lib/components/ui/dialog'
   import {
     DropdownMenu,
     DropdownMenuContent,
@@ -40,6 +41,7 @@
 
   let searchDebounceTimer: ReturnType<typeof setTimeout>
   let confirmingBulkDelete = $state(false)
+  let deleteAllDialogOpen = $state(false)
   let isDeleting = $state(false)
 
   const entryTypes: Array<EntryType | 'all'> = [
@@ -147,6 +149,22 @@
 
   function handleClearSelection() {
     ui.clearBulkSelection()
+  }
+
+  async function handleDeleteAll() {
+    isDeleting = true
+    const ids = story.lorebookEntries.map((e) => e.id)
+    try {
+      await story.deleteLorebookEntries(ids)
+      ui.clearBulkSelection()
+      ui.selectLorebookEntry(null)
+      deleteAllDialogOpen = false
+      ui.showToast(`Deleted all ${ids.length} entries`, 'info')
+    } catch (error) {
+      ui.showToast(error instanceof Error ? error.message : 'Failed to delete entries', 'error')
+    } finally {
+      isDeleting = false
+    }
   }
 
   function selectEntry(entry: Entry) {
@@ -288,6 +306,52 @@
     <Button variant="outline" size="icon" onclick={() => ui.openLorebookExport()} title="Export">
       <Download class="h-4 w-4" />
     </Button>
+    {#if story.lorebookEntries.length > 0 && !isLoreManagementActive}
+      <Dialog.Root bind:open={deleteAllDialogOpen}>
+        <Dialog.Trigger>
+          {#snippet child({ props })}
+            <Button
+              {...props}
+              variant="outline"
+              size="icon"
+              class="border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+              title="Delete all entries"
+            >
+              <Trash2 class="h-4 w-4" />
+            </Button>
+          {/snippet}
+        </Dialog.Trigger>
+        <Dialog.Portal>
+          <Dialog.Overlay />
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>Delete all lorebook entries?</Dialog.Title>
+              <Dialog.Description>
+                This will permanently delete all {story.lorebookEntries.length} entr{story.lorebookEntries.length ===
+                1
+                  ? 'y'
+                  : 'ies'} from this story's lorebook. This action cannot be undone.
+              </Dialog.Description>
+            </Dialog.Header>
+            <Dialog.Footer>
+              <Dialog.Close>
+                {#snippet child({ props })}
+                  <Button {...props} variant="outline">Cancel</Button>
+                {/snippet}
+              </Dialog.Close>
+              <Button
+                class="bg-destructive text-destructive-foreground hover:bg-destructive/80"
+                onclick={handleDeleteAll}
+                disabled={isDeleting}
+              >
+                <Trash2 class="mr-2 h-4 w-4" />
+                Delete all entries
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    {/if}
   </div>
 
   <!-- Bulk selection header -->
