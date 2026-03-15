@@ -2,7 +2,17 @@
   import type { Entry, EntryType } from '$lib/types'
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
-  import { Search, Plus, Download, Upload, Trash2, X, Filter, ArrowUpDown, Archive } from 'lucide-svelte'
+  import {
+    Search,
+    Plus,
+    Download,
+    Upload,
+    Trash2,
+    X,
+    Filter,
+    ArrowUpDown,
+    Archive,
+  } from 'lucide-svelte'
   import LorebookEntryCard from './LorebookEntryCard.svelte'
 
   import { Input } from '$lib/components/ui/input'
@@ -260,10 +270,7 @@
           <Upload class="mr-2 h-4 w-4" />
           Import from Vault
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onclick={onSaveToVault}
-          disabled={story.lorebookEntries.length === 0}
-        >
+        <DropdownMenuItem onclick={onSaveToVault} disabled={story.lorebookEntries.length === 0}>
           <Download class="mr-2 h-4 w-4" />
           Save to Vault
         </DropdownMenuItem>

@@ -107,7 +107,10 @@
       const vaultEntries = story.lorebookEntries.map(entryToVaultEntry)
       const name = `${story.currentStory.title} Lorebook`
       await lorebookVault.saveFromStory(name, vaultEntries, story.currentStory.id)
-      ui.showToast(`Saved ${vaultEntries.length} entr${vaultEntries.length === 1 ? 'y' : 'ies'} to vault as "${name}"`, 'info')
+      ui.showToast(
+        `Saved ${vaultEntries.length} entr${vaultEntries.length === 1 ? 'y' : 'ies'} to vault as "${name}"`,
+        'info',
+      )
     } catch (error) {
       ui.showToast(error instanceof Error ? error.message : 'Failed to save to vault', 'error')
     }

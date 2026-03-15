@@ -26,7 +26,7 @@
         description: e.description ?? '',
         keywords: e.keywords ?? [],
         aliases: e.aliases ?? [],
-        injectionMode: e.injectionMode ?? 'keyword' as const,
+        injectionMode: e.injectionMode ?? ('keyword' as const),
         priority: e.priority ?? 100,
       }))
 
@@ -37,7 +37,10 @@
         count++
       }
 
-      ui.showToast(`Imported ${count} entr${count === 1 ? 'y' : 'ies'} from "${lorebook.name}"`, 'info')
+      ui.showToast(
+        `Imported ${count} entr${count === 1 ? 'y' : 'ies'} from "${lorebook.name}"`,
+        'info',
+      )
       onClose()
     } catch (error) {
       ui.showToast(error instanceof Error ? error.message : 'Failed to import lorebook', 'error')
