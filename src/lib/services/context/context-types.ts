@@ -259,7 +259,6 @@ export type ContextSupportingCharacter = Pick<
 
 /**
  * A runtime variable definition as seen by classifier templates (runtimeVariables{}).
- * Picked fields match what buildCustomVarInstructions() used for instruction generation.
  * Full RuntimeVariable objects are passed through — template ignores extra fields.
  */
 export type ContextRuntimeVariable = Pick<
