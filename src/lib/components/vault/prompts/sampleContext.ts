@@ -19,7 +19,6 @@ export const systemSamples: Record<string, string> = {
 export const runtimeSamples: Record<string, string> = {
   // Narrative Service
   recentContent: '[Recent story content would appear here...]',
-  agenticRetrievalContext: '[Agentic retrieval Q&A context from chapter memory...]',
   visualProseMode: 'false',
   inlineImageMode: 'false',
 
@@ -109,7 +108,12 @@ export const runtimeSamples: Record<string, string> = {
   // Interactive Lorebook (chat)
   userMessage: 'Tell me about the Crystal Caverns.',
   conversationHistory: '[Conversation history for interactive lorebook...]',
-  recentContext: '[Recent story context for agentic retrieval...]',
+
+  // Agentic Retrieval Output
+  agenticReasoning:
+    '[Agent reasoning: selected entries for current context based on scene relevance and character proximity...]',
+  agenticChapterSummary:
+    '[Chapter facts: protagonist learned about the ancient prophecy in chapter 3, encountered Elder Maren in chapter 5...]',
 }
 
 /**
@@ -337,16 +341,35 @@ export const structuredSamples: Record<string, unknown> = {
     },
   ],
 
-  // v1.2 — Retrieval Decision (recentEntries — same shape as storyEntries)
+  // v1.3 — Agentic Retrieval (recentEntries — with role, label, isLatest)
   recentEntries: [
-    { type: 'narration', content: 'The Silver Stag Inn falls quiet as evening settles in.' },
-    {
-      type: 'user_action',
-      content: 'I approach the hooded figure sitting alone in the corner.',
-    },
     {
       type: 'narration',
-      content: 'The figure looks up — piercing eyes catch the candlelight before she looks away.',
+      content: 'The lantern flickered as shadows crept along the walls.',
+      role: 'assistant',
+      label: 'Narration',
+      isLatest: false,
+    },
+    {
+      type: 'user_action',
+      content: 'I cautiously step forward, hand on my sword.',
+      role: 'user',
+      label: 'Action',
+      isLatest: true,
+    },
+  ],
+
+  // v1.3 — Agentic Retrieval Output (agenticSelectedEntries)
+  agenticSelectedEntries: [
+    {
+      name: 'The Moonstone Pendant',
+      type: 'item',
+      description: 'A pendant that glows under moonlight, said to reveal hidden paths.',
+    },
+    {
+      name: 'Elder Maren',
+      type: 'character',
+      description: 'A wandering sage who guards forgotten knowledge.',
     },
   ],
 

@@ -297,11 +297,18 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
   },
   {
-    name: 'recentContext',
-    type: 'text',
-    category: 'runtime',
-    description: 'Recent narrative context for retrieval',
+    name: 'recentEntries',
+    type: 'array' as const,
+    category: 'runtime' as const,
+    description: 'Recent story entries for agentic retrieval context (configurable count)',
     required: false,
+    infoFields: [
+      { name: 'type', type: 'string', description: 'Entry type (narration, user_action, etc.)' },
+      { name: 'content', type: 'string', description: 'Entry text content' },
+      { name: 'role', type: 'string', description: 'Entry role (assistant, user)' },
+      { name: 'label', type: 'string', description: 'Display label' },
+      { name: 'isLatest', type: 'boolean', description: 'Whether this is the most recent entry' },
+    ] satisfies VariableFieldInfo[],
   },
   {
     name: 'maxChaptersPerRetrieval',
@@ -1011,12 +1018,32 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
       },
     ] satisfies VariableFieldInfo[],
   },
+  // === Agentic Retrieval Output Fields ===
   {
-    name: 'agenticRetrievalContext',
+    name: 'agenticReasoning',
     type: 'text' as const,
     category: 'runtime' as const,
-    description: 'LLM-formatted Q&A context from agentic chapter retrieval',
+    description: "Agent's synthesis reasoning -- why these lorebook entries were selected",
     required: false,
+  },
+  {
+    name: 'agenticChapterSummary',
+    type: 'text' as const,
+    category: 'runtime' as const,
+    description: 'Summary of key facts gathered from past chapter queries',
+    required: false,
+  },
+  {
+    name: 'agenticSelectedEntries',
+    type: 'array' as const,
+    category: 'runtime' as const,
+    description: 'Lorebook entries selected by agentic retrieval (name, type, description)',
+    required: false,
+    infoFields: [
+      { name: 'name', type: 'string', description: 'Entry name' },
+      { name: 'type', type: 'string', description: 'e.g. character, location, item' },
+      { name: 'description', type: 'string', description: 'Entry description' },
+    ] satisfies VariableFieldInfo[],
   },
 
   // === Structured Context Arrays (v1.2) ===
@@ -1087,17 +1114,6 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
       { name: 'type', type: 'string', description: 'e.g. character, location, item, faction' },
       { name: 'description', type: 'string', description: 'Entry description' },
       { name: 'keywords', type: 'string', description: 'Comma-separated keywords (optional)' },
-    ] satisfies VariableFieldInfo[],
-  },
-  {
-    name: 'recentEntries',
-    type: 'array',
-    category: 'runtime',
-    description: 'Recent story entries for tier-3 and retrieval-decision templates',
-    required: false,
-    infoFields: [
-      { name: 'type', type: 'string', description: 'user_action or narration' },
-      { name: 'content', type: 'string', description: 'Entry text content' },
     ] satisfies VariableFieldInfo[],
   },
   {
