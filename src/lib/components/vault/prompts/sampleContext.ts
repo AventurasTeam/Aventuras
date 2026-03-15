@@ -658,6 +658,37 @@ export const structuredSamples: Record<string, unknown> = {
     },
   },
 
+  // v1.3 - Classifier (runtimeVariables - grouped by entity type)
+  runtimeVariables: {
+    character: [
+      {
+        variableName: 'loyalty',
+        variableType: 'number',
+        minValue: 0,
+        maxValue: 100,
+        defaultValue: '50',
+        description: 'Character loyalty level toward the protagonist',
+      },
+      {
+        variableName: 'mood',
+        variableType: 'enum',
+        enumOptions: [{ value: 'happy' }, { value: 'neutral' }, { value: 'hostile' }],
+        defaultValue: 'neutral',
+        description: 'Current emotional state',
+      },
+    ],
+    item: [
+      {
+        variableName: 'durability',
+        variableType: 'number',
+        minValue: 0,
+        maxValue: 100,
+        defaultValue: undefined,
+        description: 'Item condition as a percentage',
+      },
+    ],
+  },
+
   // v1.2 — Interactive Lorebook (focusedEntity object)
   focusedEntity: {
     entityType: 'character',

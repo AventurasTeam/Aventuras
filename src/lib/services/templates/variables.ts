@@ -793,12 +793,30 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
   },
   {
-    name: 'customVariableInstructions',
-    type: 'text',
+    name: 'runtimeVariables',
+    type: 'object',
     category: 'runtime',
     description:
-      'Custom variable extraction instructions for the classifier (auto-generated from runtime variable definitions)',
+      'Runtime variable definitions grouped by entity type for classifier extraction instructions',
     required: false,
+    infoFields: [
+      {
+        name: 'character',
+        type: 'RuntimeVariable[]',
+        description: 'Variables for character entity type',
+      },
+      {
+        name: 'location',
+        type: 'RuntimeVariable[]',
+        description: 'Variables for location entity type',
+      },
+      { name: 'item', type: 'RuntimeVariable[]', description: 'Variables for item entity type' },
+      {
+        name: 'story_beat',
+        type: 'RuntimeVariable[]',
+        description: 'Variables for story beat entity type',
+      },
+    ] satisfies VariableFieldInfo[],
   },
 
   // === Structured Context Arrays ===
