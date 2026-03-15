@@ -359,16 +359,24 @@
       if (!permitted) return
 
       if (success) {
-        const body =
+        const previewText =
           settings.experimentalFeatures.notificationPreview && responseText.length > 0
             ? responseText.slice(0, 120).replace(/[<>]/g, '') +
               (responseText.length > 120 ? '…' : '')
             : 'Tap to return to your story.'
-        sendNotification({ title: 'Story generation complete', body })
+        // largeBody activates Android BigTextStyle so the preview is visible
+        // in both the collapsed single-notification view and when an auto-grouped
+        // notification bundle is expanded (body alone gets stripped in that case).
+        sendNotification({
+          title: 'Story generation complete',
+          body: previewText,
+          largeBody: previewText,
+        })
       } else {
         sendNotification({
           title: 'Story generation failed',
           body: 'Tap to return and retry.',
+          largeBody: 'Tap to return and retry.',
         })
       }
     } catch (e) {
@@ -703,7 +711,11 @@
         sendGenerationNotification(fullResponse, true)
       }
     } catch (error) {
-      if (stopRequested || (error instanceof Error && error.name === 'AbortError')) return
+      // Only suppress handling when the user explicitly requested a stop.
+      // An AbortError that arrives with stopRequested=false means the request
+      // was cancelled externally (e.g. connection loss), so we still want to
+      // record the error entry and send a failure notification.
+      if (stopRequested) return
       console.error('[ActionInput] Generation error:', error)
       const baseMessage =
         error instanceof Error ? error.message : 'Failed to generate response. Please try again.'
