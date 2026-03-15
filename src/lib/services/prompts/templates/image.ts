@@ -110,8 +110,6 @@ Analyze the narrative and identify up to {{ maxImages }} key visual moments (0 =
 {% endfor %}
 {%- endif %}
 
-{{ lorebookContext }}
-
 ## User Action
 {{ userAction }}
 
@@ -308,8 +306,6 @@ Match the angle to the emotional tone: action scenes benefit from low/dutch angl
 
 {% endfor %}
 {%- endif %}
-
-{{ lorebookContext }}
 
 ## User Action
 {{ userAction }}

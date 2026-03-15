@@ -294,6 +294,54 @@ describe('adventure template', () => {
       expect(secondPerson).not.toEqual(thirdPerson)
     })
   })
+
+  describe('agentic retrieval fields', () => {
+    it('agenticReasoning section absent when not provided', () => {
+      const result = templateEngine.render(adventureTemplate.content, { ...adventureBase })
+      expect(result).not.toBeNull()
+      expect(result).not.toContain('[AGENT CONTEXT]')
+    })
+
+    it('agenticReasoning section present when set', () => {
+      const result = templateEngine.render(adventureTemplate.content, {
+        ...adventureBase,
+        agenticReasoning: 'Selected for relevance.',
+      })
+      expect(result).not.toBeNull()
+      expect(result).toContain('Selected for relevance.')
+    })
+
+    it('agenticChapterSummary renders when set', () => {
+      const result = templateEngine.render(adventureTemplate.content, {
+        ...adventureBase,
+        agenticChapterSummary: 'Protagonist learned about X in chapter 3.',
+      })
+      expect(result).not.toBeNull()
+      expect(result).toContain('Protagonist learned about X')
+      expect(result).toContain('## Past Story Context')
+    })
+
+    it('agenticSelectedEntries renders heading-per-entry format', () => {
+      const result = templateEngine.render(adventureTemplate.content, {
+        ...adventureBase,
+        agenticSelectedEntries: [
+          { name: 'Elder Maren', type: 'character', description: 'A wandering sage.' },
+        ],
+      })
+      expect(result).not.toBeNull()
+      expect(result).toContain('## Elder Maren (character)')
+      expect(result).toContain('A wandering sage.')
+    })
+
+    it('agenticRetrievalContext absent from template (old variable no longer rendered)', () => {
+      const result = templateEngine.render(adventureTemplate.content, {
+        ...adventureBase,
+        agenticRetrievalContext: 'STALE_STRING',
+      })
+      expect(result).not.toBeNull()
+      expect(result).not.toContain('STALE_STRING')
+    })
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -373,6 +421,54 @@ describe('creative-writing template', () => {
         tense: 'present',
       })
       expect(result).not.toBeNull()
+    })
+  })
+
+  describe('agentic retrieval fields', () => {
+    it('agenticReasoning section absent when not provided', () => {
+      const result = templateEngine.render(creativeWritingTemplate.content, { ...adventureBase })
+      expect(result).not.toBeNull()
+      expect(result).not.toContain('[AGENT CONTEXT]')
+    })
+
+    it('agenticReasoning section present when set', () => {
+      const result = templateEngine.render(creativeWritingTemplate.content, {
+        ...adventureBase,
+        agenticReasoning: 'Selected for relevance.',
+      })
+      expect(result).not.toBeNull()
+      expect(result).toContain('Selected for relevance.')
+    })
+
+    it('agenticChapterSummary renders when set', () => {
+      const result = templateEngine.render(creativeWritingTemplate.content, {
+        ...adventureBase,
+        agenticChapterSummary: 'Protagonist learned about X in chapter 3.',
+      })
+      expect(result).not.toBeNull()
+      expect(result).toContain('Protagonist learned about X')
+      expect(result).toContain('## Past Story Context')
+    })
+
+    it('agenticSelectedEntries renders heading-per-entry format', () => {
+      const result = templateEngine.render(creativeWritingTemplate.content, {
+        ...adventureBase,
+        agenticSelectedEntries: [
+          { name: 'Elder Maren', type: 'character', description: 'A wandering sage.' },
+        ],
+      })
+      expect(result).not.toBeNull()
+      expect(result).toContain('## Elder Maren (character)')
+      expect(result).toContain('A wandering sage.')
+    })
+
+    it('agenticRetrievalContext absent from template (old variable no longer rendered)', () => {
+      const result = templateEngine.render(creativeWritingTemplate.content, {
+        ...adventureBase,
+        agenticRetrievalContext: 'STALE_STRING',
+      })
+      expect(result).not.toBeNull()
+      expect(result).not.toContain('STALE_STRING')
     })
   })
 })

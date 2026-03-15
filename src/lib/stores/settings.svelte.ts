@@ -320,6 +320,7 @@ export interface AgenticRetrievalSettings {
   agenticThreshold: number // Use agentic if chapters > N
   reasoningEffort: ReasoningEffort
   manualBody: string
+  recentEntryCount: number // Number of recent story entries to include in agentic-retrieval prompt
 }
 
 export function getDefaultAgenticRetrievalSettings(): AgenticRetrievalSettings {
@@ -340,6 +341,7 @@ export function getDefaultAgenticRetrievalSettingsForProvider(
     agenticThreshold: 30,
     reasoningEffort: preset.reasoningEffort,
     manualBody: '',
+    recentEntryCount: 5,
   }
 }
 

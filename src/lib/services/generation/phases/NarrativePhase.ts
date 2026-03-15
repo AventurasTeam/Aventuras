@@ -17,6 +17,7 @@ import type {
   ErrorEvent,
   WorldState,
   RetrievalResult,
+  AgenticRetrievalFields,
 } from '../types'
 import type { Story, StoryEntry } from '$lib/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
@@ -33,7 +34,7 @@ export interface NarrativeDependencies {
     story: Story | null | undefined,
     useTieredContext: boolean,
     styleReview: StyleReviewResult | null | undefined,
-    agenticRetrievalContext: string | null | undefined,
+    agenticRetrieval: AgenticRetrievalFields | null | undefined,
     signal: AbortSignal | undefined,
     timelineFillResult: RetrievalResult['timelineFillResult'],
     lorebookEntries: ContextLorebookEntry[],
@@ -92,7 +93,7 @@ export class NarrativePhase {
           story,
           true, // useTieredContext
           styleReview,
-          retrievalResult.agenticRetrievalContext,
+          retrievalResult.agenticRetrieval,
           abortSignal,
           retrievalResult.timelineFillResult,
           retrievalResult.lorebookEntries,

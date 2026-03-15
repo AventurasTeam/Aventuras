@@ -290,7 +290,7 @@ describe('agentic-retrieval template', () => {
   it('renders agenticChapters with number and summary', () => {
     const result = templateEngine.render(agenticRetrievalTemplate.userContent!, {
       userInput: 'What did we find?',
-      recentContext: 'We stand at the cave entrance.',
+      recentEntries: [{ type: 'narration', content: 'We stand at the cave entrance.' }],
       chaptersCount: 2,
       agenticChapters: [
         { number: 1, summary: 'The cave was mapped.' },
@@ -309,7 +309,7 @@ describe('agentic-retrieval template', () => {
   it('renders agenticEntries with 0-based index, type, name', () => {
     const result = templateEngine.render(agenticRetrievalTemplate.userContent!, {
       userInput: 'Who is here?',
-      recentContext: 'A figure approaches.',
+      recentEntries: [{ type: 'narration', content: 'A figure approaches.' }],
       chaptersCount: 0,
       agenticChapters: [],
       entriesCount: 2,
@@ -326,10 +326,28 @@ describe('agentic-retrieval template', () => {
     expect(result).toContain('The Ruins')
   })
 
+  it('renders recentEntries array entries correctly', () => {
+    const result = templateEngine.render(agenticRetrievalTemplate.userContent!, {
+      userInput: 'What happened next?',
+      recentEntries: [
+        { type: 'narration', content: 'The door creaked open.' },
+        { type: 'user_action', content: 'I step inside carefully.' },
+        { type: 'narration', content: 'Dust swirled in the dim light.' },
+      ],
+      chaptersCount: 0,
+      agenticChapters: [],
+      entriesCount: 0,
+      agenticEntries: [],
+    })
+    expect(result).toContain('The door creaked open.')
+    expect(result).toContain('I step inside carefully.')
+    expect(result).toContain('Dust swirled in the dim light.')
+  })
+
   it('renders "No chapters available." fallback when agenticChapters is empty', () => {
     const result = templateEngine.render(agenticRetrievalTemplate.userContent!, {
       userInput: 'Input.',
-      recentContext: 'Scene.',
+      recentEntries: [],
       chaptersCount: 0,
       agenticChapters: [],
       entriesCount: 0,
@@ -341,7 +359,7 @@ describe('agentic-retrieval template', () => {
   it('renders "No entries available." fallback when agenticEntries is empty', () => {
     const result = templateEngine.render(agenticRetrievalTemplate.userContent!, {
       userInput: 'Input.',
-      recentContext: 'Scene.',
+      recentEntries: [],
       chaptersCount: 0,
       agenticChapters: [],
       entriesCount: 0,
@@ -350,22 +368,22 @@ describe('agentic-retrieval template', () => {
     expect(result).toContain('No entries available.')
   })
 
-  it('renders recentContext scalar correctly', () => {
+  it('does not render recentContext variable name in output', () => {
     const result = templateEngine.render(agenticRetrievalTemplate.userContent!, {
       userInput: 'Input.',
-      recentContext: 'The lantern flickered.',
+      recentEntries: [],
       chaptersCount: 0,
       agenticChapters: [],
       entriesCount: 0,
       agenticEntries: [],
     })
-    expect(result).toContain('The lantern flickered.')
+    expect(result).not.toContain('recentContext')
   })
 
   it('does not contain [object Object]', () => {
     const result = templateEngine.render(agenticRetrievalTemplate.userContent!, {
       userInput: 'Input.',
-      recentContext: 'Scene.',
+      recentEntries: [{ type: 'narration', content: 'Scene text.' }],
       chaptersCount: 1,
       agenticChapters: [{ number: 1, summary: 'Summary.' }],
       entriesCount: 1,

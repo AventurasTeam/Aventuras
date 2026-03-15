@@ -11,6 +11,8 @@ import { createLogger } from '$lib/log'
 import { createAgentFromPreset, extractTerminalToolResult, stopOnTerminalTool } from '../sdk/agents'
 import { createRetrievalTools, type RetrievalToolContext } from '../sdk/tools'
 import { ContextBuilder } from '$lib/services/context'
+import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
 
 const log = createLogger('AgenticRetrieval')
 
@@ -20,10 +22,12 @@ const log = createLogger('AgenticRetrieval')
 export interface RetrievalResult {
   /** Selected lorebook entries */
   entries: Entry[]
-  /** Formatted context string for prompt injection */
-  context: string
   /** Agent's reasoning/synthesis */
-  reasoning?: string
+  agenticReasoning: string
+  /** Summary of key facts learned from chapter queries */
+  agenticChapterSummary: string
+  /** Selected entries mapped to ContextLorebookEntry shape */
+  agenticSelectedEntries: ContextLorebookEntry[]
   /** Number of agent iterations */
   iterations: number
   /** IDs of chapters that were queried */
@@ -45,25 +49,8 @@ export interface RetrievalContext {
   queryChapter?: (chapterNumber: number, question: string) => Promise<string>
 }
 
-// Alias for export compatibility
+// Alias for export compatibility (input context, not output result)
 export type AgenticRetrievalContext = RetrievalContext
-
-/**
- * Settings for agentic retrieval behavior.
- */
-export interface AgenticRetrievalSettings {
-  enabled: boolean
-  maxIterations: number
-}
-
-export function getDefaultAgenticRetrievalSettings(): AgenticRetrievalSettings {
-  return {
-    enabled: true,
-    maxIterations: 30,
-  }
-}
-
-export type AgenticRetrievalResult = RetrievalResult
 
 /**
  * Finish retrieval tool result type.
@@ -82,10 +69,12 @@ interface FinishRetrievalResult {
  */
 export class AgenticRetrievalService extends BaseAIService {
   private maxIterations: number
+  private recentEntryCount: number
 
-  constructor(serviceId: string, maxIterations: number = 30) {
+  constructor(serviceId: string, maxIterations: number = 30, recentEntryCount: number = 5) {
     super(serviceId)
     this.maxIterations = maxIterations
+    this.recentEntryCount = recentEntryCount
   }
 
   /**
@@ -143,14 +132,19 @@ export class AgenticRetrievalService extends BaseAIService {
       type: e.type,
     }))
 
+    // Map recent entries to ContextStoryEntry shape (character budget removed — configurable count)
+    const recentEntries = mapStoryEntriesToContext(
+      context.recentEntries.slice(-this.recentEntryCount),
+      {
+        stripPicTags: false,
+      },
+    )
+
     // Render prompts through unified pipeline
     const ctx = new ContextBuilder()
     ctx.add({
       userInput: context.userInput,
-      recentContext: context.recentEntries
-        .map((e) => e.content)
-        .join('\n\n')
-        .slice(0, 2000),
+      recentEntries,
       chaptersCount: context.chapters?.length ?? 0,
       agenticChapters,
       entriesCount: context.availableEntries.length,
@@ -203,24 +197,15 @@ export class AgenticRetrievalService extends BaseAIService {
         : terminalResult.additionalContext
     }
 
-    // Build context string from selected entries and chapter summary
-    const contextParts: string[] = []
-    if (reasoning) {
-      contextParts.push(`[Retrieved Context - ${reasoning}]`)
-    }
-    // Include chapter summary if provided
-    if (terminalResult?.chapterSummary) {
-      contextParts.push(`## Past Story Context\n${terminalResult.chapterSummary}`)
-    }
-    for (const entry of selectedEntries) {
-      contextParts.push(`## ${entry.name} (${entry.type})\n${entry.description}`)
-    }
-    const contextString = contextParts.join('\n\n')
-
     return {
       entries: selectedEntries,
-      context: contextString,
-      reasoning,
+      agenticReasoning: reasoning ?? '',
+      agenticChapterSummary: terminalResult?.chapterSummary ?? '',
+      agenticSelectedEntries: selectedEntries.map((e) => ({
+        name: e.name,
+        type: e.type,
+        description: e.description,
+      })),
       iterations,
       queriedChapters: Array.from(queriedChapterIds),
       queryHistory: queryHistory.length > 0 ? queryHistory : undefined,

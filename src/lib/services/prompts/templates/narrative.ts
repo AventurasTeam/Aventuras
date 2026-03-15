@@ -298,7 +298,19 @@ Elena drew her blade, firelight dancing along the steel edge as she faced the cr
 {% endfor %}{% endif %}{% assign loreEvents = lorebookEntries | where: 'type', 'event' %}{% if loreEvents.size > 0 %}
 • Events:
 {% for entry in loreEvents %}  - {{ entry.name }}: {{ entry.description }}
-{% endfor %}{% endif %}{% endif %}{% if agenticRetrievalContext != '' %}{{ agenticRetrievalContext }}{% endif %}{% if chapters.size > 0 or timelineFill.size > 0 %}
+{% endfor %}{% endif %}{% endif %}{% if agenticReasoning %}
+
+[AGENT CONTEXT]
+{{ agenticReasoning }}
+{% endif %}{% if agenticChapterSummary %}
+
+## Past Story Context
+{{ agenticChapterSummary }}
+{% endif %}{% if agenticSelectedEntries.size > 0 %}
+{% for entry in agenticSelectedEntries %}
+## {{ entry.name }} ({{ entry.type }})
+{{ entry.description }}
+{% endfor %}{% endif %}{% if chapters.size > 0 or timelineFill.size > 0 %}
 
 <story_history>
 ## Previous Chapters
@@ -667,7 +679,19 @@ Elena drew her blade, firelight dancing along the steel edge as she faced the cr
 {% endfor %}{% endif %}{% assign loreEvents = lorebookEntries | where: 'type', 'event' %}{% if loreEvents.size > 0 %}
 • Events:
 {% for entry in loreEvents %}  - {{ entry.name }}: {{ entry.description }}
-{% endfor %}{% endif %}{% endif %}{% if agenticRetrievalContext != '' %}{{ agenticRetrievalContext }}{% endif %}{% if chapters.size > 0 or timelineFill.size > 0 %}
+{% endfor %}{% endif %}{% endif %}{% if agenticReasoning %}
+
+[AGENT CONTEXT]
+{{ agenticReasoning }}
+{% endif %}{% if agenticChapterSummary %}
+
+## Past Story Context
+{{ agenticChapterSummary }}
+{% endif %}{% if agenticSelectedEntries.size > 0 %}
+{% for entry in agenticSelectedEntries %}
+## {{ entry.name }} ({{ entry.type }})
+{{ entry.description }}
+{% endfor %}{% endif %}{% if chapters.size > 0 or timelineFill.size > 0 %}
 
 <story_history>
 ## Previous Chapters
