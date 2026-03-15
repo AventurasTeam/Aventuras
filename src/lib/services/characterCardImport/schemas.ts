@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod'
+import { visualDescriptorsSchema } from '$lib/services/ai/sdk/schemas/classifier'
 
 /**
  * NPC extracted from character card.
@@ -34,8 +35,6 @@ export const cardImportResultSchema = z.object({
   npcs: z.array(cardImportNpcSchema).describe('All significant characters from the card'),
 })
 
-import { visualDescriptorsSchema } from './classifier'
-
 /**
  * Result from vault-character-import template.
  * Extracts clean character data for the vault.
@@ -48,7 +47,3 @@ export const vaultCharacterImportSchema = z.object({
     'Physical appearance details for image generation',
   ),
 })
-
-export type CardImportNpc = z.infer<typeof cardImportNpcSchema>
-export type CardImportResult = z.infer<typeof cardImportResultSchema>
-export type VaultCharacterImport = z.infer<typeof vaultCharacterImportSchema>

@@ -5,7 +5,7 @@ import { settings } from '$lib/stores/settings.svelte'
 import { characterVault } from '$lib/stores/characterVault.svelte'
 import type { StoryMode, POV, VaultCharacter } from '$lib/types'
 import { descriptorsToString, stringToDescriptors } from '$lib/utils/visualDescriptors'
-import { convertCardToScenario, readCharacterCardFile } from '$lib/services/characterCardImporter'
+import { CharacterCardImport } from '$lib/services/characterCardImport'
 import type {
   ExpandedSetting,
   GeneratedCharacter,
@@ -564,13 +564,13 @@ export class CharacterStore {
   }
 
   // Card Import
-  async handleCardImport(file: File, selectedMode: StoryMode, selectedGenre: Genre) {
+  async handleCardImport(file: File, selectedGenre: Genre) {
     this.cardImportError = null
     this.isImportingCard = true
 
     try {
-      const content = await readCharacterCardFile(file)
-      const result = await convertCardToScenario(content, selectedMode, selectedGenre)
+      const content = await CharacterCardImport.readFile(file)
+      const result = await CharacterCardImport.clean(content, selectedGenre)
 
       if (!result.success && result.errors.length > 0) {
         this.cardImportError = result.errors.join('; ')

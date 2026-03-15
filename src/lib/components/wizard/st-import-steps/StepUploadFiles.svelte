@@ -6,12 +6,12 @@
   import { Badge } from '$lib/components/ui/badge'
   import { cn } from '$lib/utils/cn'
   import type { STChatParseResult } from '$lib/services/stChatImporter'
-  import type { ParsedCard } from '$lib/services/characterCardImporter'
+  import type { CharacterCardImport } from '$lib/services/characterCardImport'
 
   interface Props {
     chatParseResult: STChatParseResult | null
     chatFileError: string | null
-    cardParsedData: ParsedCard | null
+    cardParsedData: CharacterCardImport.ParsedCard | null
     cardPortrait: string | null
     cardFileError: string | null
     onChatFileProcess: (text: string) => void
