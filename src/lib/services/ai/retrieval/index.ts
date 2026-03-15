@@ -27,7 +27,6 @@ export {
   AgenticRetrievalService,
   getDefaultAgenticRetrievalSettings,
   type AgenticRetrievalContext,
-  type AgenticRetrievalResult,
   type AgenticRetrievalSettings,
 } from './AgenticRetrievalService'
 

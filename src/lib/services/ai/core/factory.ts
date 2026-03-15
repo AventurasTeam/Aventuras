@@ -105,7 +105,11 @@ export class ServiceFactory {
    */
   createAgenticRetrievalService(): AgenticRetrievalService {
     const agenticRetrievalSettings = settings.systemServicesSettings.agenticRetrieval
-    return new AgenticRetrievalService('agenticRetrieval', agenticRetrievalSettings.maxIterations)
+    return new AgenticRetrievalService(
+      'agenticRetrieval',
+      agenticRetrievalSettings.maxIterations,
+      agenticRetrievalSettings.recentEntryCount ?? 5,
+    )
   }
 
   /**

@@ -52,9 +52,16 @@ export interface GenerationContext {
   abortSignal?: AbortSignal
 }
 
+// Structured output fields from agentic retrieval
+export interface AgenticRetrievalFields {
+  agenticReasoning: string
+  agenticChapterSummary: string
+  agenticSelectedEntries: ContextLorebookEntry[]
+}
+
 // Output from retrieval phase
 export interface RetrievalResult {
-  agenticRetrievalContext: string | null
+  agenticRetrieval: AgenticRetrievalFields | null
   lorebookEntries: ContextLorebookEntry[]
   lorebookRetrievalResult: EntryRetrievalResult | null
   timelineFillResult: TimelineFillResult | null
