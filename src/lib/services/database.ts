@@ -2038,6 +2038,54 @@ class DatabaseService {
     return results.length > 0 ? this.mapEntry(results[0]) : null
   }
 
+  async bulkInsertEntries(entries: Entry[]): Promise<void> {
+    if (entries.length === 0) return
+    const db = await this.getDb()
+    const BATCH_SIZE = 50
+
+    for (let batchStart = 0; batchStart < entries.length; batchStart += BATCH_SIZE) {
+      const batch = entries.slice(batchStart, batchStart + BATCH_SIZE)
+      const valuePlaceholders = batch.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',')
+      const values: unknown[] = []
+
+      for (const entry of batch) {
+        values.push(
+          entry.id,
+          entry.storyId,
+          entry.name,
+          entry.type,
+          entry.description,
+          entry.hiddenInfo,
+          JSON.stringify(entry.aliases),
+          JSON.stringify(entry.state),
+          entry.adventureState ? JSON.stringify(entry.adventureState) : null,
+          entry.creativeState ? JSON.stringify(entry.creativeState) : null,
+          JSON.stringify(entry.injection),
+          entry.firstMentioned,
+          entry.lastMentioned,
+          entry.mentionCount,
+          entry.createdBy,
+          entry.createdAt,
+          entry.updatedAt,
+          entry.loreManagementBlacklisted ? 1 : 0,
+          entry.branchId || null,
+          entry.overridesId || null,
+          entry.deleted ? 1 : 0,
+        )
+      }
+
+      await db.execute(
+        `INSERT INTO entries (
+          id, story_id, name, type, description, hidden_info, aliases,
+          state, adventure_state, creative_state, injection,
+          first_mentioned, last_mentioned, mention_count, created_by,
+          created_at, updated_at, lore_management_blacklisted, branch_id, overrides_id, deleted
+        ) VALUES ${valuePlaceholders}`,
+        values,
+      )
+    }
+  }
+
   async addEntry(entry: Entry): Promise<void> {
     const db = await this.getDb()
     await db.execute(

@@ -31,11 +31,7 @@
       }))
 
       const entries = convertToEntries(importedEntries, 'import')
-      let count = 0
-      for (const entryData of entries) {
-        await story.addLorebookEntry(entryData)
-        count++
-      }
+      const count = await story.addLorebookEntries(entries)
 
       ui.showToast(
         `Imported ${count} entr${count === 1 ? 'y' : 'ies'} from "${lorebook.name}"`,

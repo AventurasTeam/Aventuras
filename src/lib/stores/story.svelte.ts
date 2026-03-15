@@ -1751,6 +1751,30 @@ class StoryStore {
     return entry
   }
 
+  async addLorebookEntries(
+    entriesData: Omit<Entry, 'id' | 'storyId' | 'createdAt' | 'updatedAt' | 'branchId'>[],
+  ): Promise<number> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    if (entriesData.length === 0) return 0
+
+    const now = Date.now()
+    const branchId = this.currentStory.currentBranchId
+    const storyId = this.currentStory.id
+    const entries: Entry[] = entriesData.map((entryData) => ({
+      ...entryData,
+      id: crypto.randomUUID(),
+      storyId,
+      createdAt: now,
+      updatedAt: now,
+      branchId,
+    }))
+
+    await database.bulkInsertEntries(entries)
+    this.lorebookEntries = [...this.lorebookEntries, ...entries]
+    log('Lorebook entries bulk added:', entries.length)
+    return entries.length
+  }
+
   /**
    * Update a lorebook entry.
    */
