@@ -159,7 +159,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     fallbackModels: [
       'deepseek/deepseek-v3.2',
       'zai-org/glm-5:thinking',
-      'stepfun-ai/step-3.5-flash:thinking',
+      'stepfun-ai/step-3.5-flash',
       'openai/gpt-oss-120b',
     ],
     services: {
@@ -170,13 +170,13 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
         reasoningEffort: 'high',
       },
       classification: {
-        model: 'stepfun-ai/step-3.5-flash:thinking',
+        model: 'stepfun-ai/step-3.5-flash',
         temperature: 0.5,
         maxTokens: 8192,
         reasoningEffort: 'high',
       },
       memory: {
-        model: 'stepfun-ai/step-3.5-flash:thinking',
+        model: 'stepfun-ai/step-3.5-flash',
         temperature: 0.5,
         maxTokens: 8192,
         reasoningEffort: 'high',
