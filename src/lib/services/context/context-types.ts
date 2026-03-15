@@ -11,6 +11,11 @@
  */
 
 import type { Character, Item, StoryBeat, Location, Entry, Chapter, StoryEntry } from '$lib/types'
+import type {
+  ExpandedSetting,
+  GeneratedProtagonist,
+  GeneratedCharacter,
+} from '$lib/services/ai/sdk/schemas/scenario'
 
 // ===== Refactored Existing Interfaces (Omit<>/Pick<> derivation) =====
 
@@ -66,10 +71,12 @@ export type ContextLocation = Pick<Location, 'name' | 'description' | 'visited'>
  * Adds `tier` and optional `disposition` for character entries.
  */
 export type ContextLorebookEntry = Pick<Entry, 'name' | 'type' | 'description'> & {
-  /** Retrieval tier — lower means higher priority in context window */
-  tier: 1 | 2 | 3
+  /** Retrieval tier — lower means higher priority. Optional: wizards omit tier. */
+  tier?: 1 | 2 | 3
   /** Current disposition — optional, character-only */
   disposition?: string
+  /** Hidden lore visible only to the AI — optional, wizard-only */
+  hiddenInfo?: string
 }
 
 /**
@@ -217,3 +224,32 @@ export type ContextAgenticChapter = ContextLoreChapter
  * Slim subset — name and type only.
  */
 export type ContextAgenticEntry = Pick<Entry, 'name' | 'type'>
+
+// ===== v1.3 Wizard Context Types =====
+
+/**
+ * A setting as seen by wizard templates (currentSetting{}).
+ * Structured object fields for Liquid field access — no pre-formatted string.
+ */
+export type ContextWizardSetting = Pick<
+  ExpandedSetting,
+  'name' | 'description' | 'atmosphere' | 'themes' | 'potentialConflicts' | 'keyLocations'
+>
+
+/**
+ * A protagonist as seen by wizard templates (currentCharacter{}, characterInput{}).
+ * Structured object fields for Liquid field access — no pre-formatted string.
+ */
+export type ContextWizardCharacter = Pick<
+  GeneratedProtagonist,
+  'name' | 'description' | 'background' | 'motivation' | 'traits' | 'appearance'
+>
+
+/**
+ * A supporting character as seen by wizard templates (supportingCharacters[]).
+ * Structured array element for Liquid for-loop iteration — no pre-joined string.
+ */
+export type ContextSupportingCharacter = Pick<
+  GeneratedCharacter,
+  'name' | 'role' | 'description' | 'relationship' | 'traits'
+>
