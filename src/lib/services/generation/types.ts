@@ -17,7 +17,10 @@ import type {
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
 import type { TimelineFillResult } from '$lib/services/ai/retrieval'
 import type { EntryRetrievalResult } from '$lib/services/ai/retrieval/EntryRetrievalService'
-import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import type {
+  ContextLorebookEntry,
+  ContextLorebookEntryBase,
+} from '$lib/services/context/context-types'
 
 // Generation Phases
 export type GenerationPhase =
@@ -52,9 +55,24 @@ export interface GenerationContext {
   abortSignal?: AbortSignal
 }
 
-// Output from retrieval phase
+// Structured output fields from agentic retrieval
+export interface AgenticRetrievalFields {
+  agenticReasoning: string
+  agenticChapterSummary: string
+  agenticSelectedEntries: ContextLorebookEntryBase[]
+}
+
+/**
+ * Output from retrieval phase.
+ *
+ * `agenticRetrieval` and `lorebookEntries`/`lorebookRetrievalResult` are mutually exclusive:
+ * - When agentic retrieval is enabled and succeeds, `agenticRetrieval` is populated and
+ *   `lorebookEntries` is empty / `lorebookRetrievalResult` is null.
+ * - When standard retrieval is used, `agenticRetrieval` is null and
+ *   `lorebookEntries` / `lorebookRetrievalResult` carry the results.
+ */
 export interface RetrievalResult {
-  agenticRetrievalContext: string | null
+  agenticRetrieval: AgenticRetrievalFields | null
   lorebookEntries: ContextLorebookEntry[]
   lorebookRetrievalResult: EntryRetrievalResult | null
   timelineFillResult: TimelineFillResult | null

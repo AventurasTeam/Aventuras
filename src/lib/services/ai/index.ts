@@ -34,10 +34,11 @@ import type { ChapterAnalysis, ChapterSummaryResult, RetrievalDecision } from '.
 import type { SuggestionsResult } from './sdk/schemas/suggestions'
 import type { ActionChoicesResult } from './sdk/schemas/actionchoices'
 import type { StyleReviewResult } from './generation/StyleReviewerService'
-import {
-  type AgenticRetrievalResult,
-  type RetrievalContext as AgenticRetrievalContext,
+import type {
+  RetrievalContext as AgenticRetrievalContext,
+  RetrievalResult as AgenticRetrievalResult,
 } from './retrieval/AgenticRetrievalService'
+import type { AgenticRetrievalFields } from '$lib/services/generation/types'
 import type { TimelineFillResult } from './retrieval/TimelineFillService'
 import { EntryInjector, type ContextResult, type ContextConfig } from './generation/EntryInjector'
 import {
@@ -83,7 +84,6 @@ export interface ImageGenerationContext {
   presentCharacters: Character[]
   currentLocation?: string
   chatHistory?: ContextChatEntry[]
-  lorebookContext?: string
   translatedNarrative?: string
   translationLanguage?: string
   referenceMode: boolean
@@ -145,7 +145,7 @@ class AIService {
     currentStory?: Story | null,
     useTieredContext = true,
     styleReview?: StyleReviewResult | null,
-    agenticRetrievalContext?: string | null,
+    agenticRetrieval?: AgenticRetrievalFields | null,
     signal?: AbortSignal,
     timelineFillResult?: TimelineFillResult | null,
     lorebookEntries: ContextLorebookEntry[] = [],
@@ -154,7 +154,7 @@ class AIService {
       entriesCount: entries.length,
       useTieredContext,
       hasStyleReview: !!styleReview,
-      hasAgenticContext: !!agenticRetrievalContext,
+      hasAgenticContext: !!agenticRetrieval,
       hasTimelineFill: !!timelineFillResult,
       lorebookEntriesCount: lorebookEntries.length,
     })
@@ -172,7 +172,7 @@ class AIService {
     yield* this.narrativeService.stream(entries, worldState, currentStory, {
       worldStateArrays,
       styleReview,
-      agenticRetrievalContext,
+      agenticRetrieval,
       lorebookEntries,
       signal,
       timelineFillResult,
@@ -606,7 +606,7 @@ class AIService {
 
     log('runAgenticRetrieval complete', {
       entriesFound: result.entries.length,
-      hasReasoning: !!result.reasoning,
+      hasReasoning: !!result.agenticReasoning,
     })
 
     return result
@@ -622,14 +622,6 @@ class AIService {
     }
     const mode = timelineFillSettings.mode ?? 'static'
     return mode === 'agentic'
-  }
-
-  /**
-   * Format agentic retrieval result for prompt injection.
-   */
-  formatAgenticRetrievalForPrompt(result: AgenticRetrievalResult): string {
-    // The service now builds the context string internally
-    return result.context || ''
   }
 
   /**
@@ -831,7 +823,6 @@ class AIService {
       stylePrompt,
       maxImages: imageSettings.maxImagesPerMessage ?? 3,
       chatHistory: context.chatHistory,
-      lorebookContext: context.lorebookContext,
       referenceMode,
       translatedNarrative: context.translatedNarrative,
       translationLanguage: context.translationLanguage,

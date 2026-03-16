@@ -28,7 +28,6 @@ const classifierBase = {
   itemLocationOptions: 'inventory, worn, ground',
   defaultItemLocation: 'inventory',
   sceneLocationDesc: '',
-  customVariableInstructions: '',
 }
 
 const styleReviewerBase = {
@@ -196,6 +195,112 @@ describe('classifier template', () => {
         makeChatEntry({ type: 'user_action', content: 'Go north', timeStart: 'Y1D1 08:00' }),
       ],
     })
+    expect(result).not.toContain('[object Object]')
+  })
+})
+
+describe('classifier template - runtimeVariables', () => {
+  const withRuntimeVars = {
+    ...classifierBase,
+    runtimeVariables: {
+      character: [
+        {
+          variableName: 'loyalty',
+          variableType: 'number',
+          minValue: 0,
+          maxValue: 100,
+          defaultValue: '50',
+          description: 'Loyalty toward protagonist',
+        },
+        {
+          variableName: 'mood',
+          variableType: 'enum',
+          enumOptions: [{ value: 'happy' }, { value: 'neutral' }, { value: 'hostile' }],
+          defaultValue: 'neutral',
+          description: 'Current emotional state',
+        },
+      ],
+      item: [
+        {
+          variableName: 'durability',
+          variableType: 'number',
+          minValue: 0,
+          maxValue: 100,
+          defaultValue: undefined,
+          description: 'Item condition as a percentage',
+        },
+      ],
+    },
+  }
+
+  const withTextVar = {
+    ...classifierBase,
+    runtimeVariables: {
+      character: [
+        {
+          variableName: 'backstory',
+          variableType: 'text',
+          defaultValue: undefined,
+          description: 'Character background story',
+        },
+      ],
+    },
+  }
+
+  it('renders ## Custom Variables to Track heading when runtimeVariables present', () => {
+    const result = templateEngine.render(classifierTemplate.userContent!, withRuntimeVars)
+    expect(result).toContain('## Custom Variables to Track')
+  })
+
+  it('renders "character updates/new characters" label for character entity type', () => {
+    const result = templateEngine.render(classifierTemplate.userContent!, withRuntimeVars)
+    expect(result).toContain('character updates/new characters')
+  })
+
+  it('renders "item updates/new items" label for item entity type', () => {
+    const result = templateEngine.render(classifierTemplate.userContent!, withRuntimeVars)
+    expect(result).toContain('item updates/new items')
+  })
+
+  it('renders variable name and number range (loyalty and number 0-100)', () => {
+    const result = templateEngine.render(classifierTemplate.userContent!, withRuntimeVars)
+    expect(result).toContain('loyalty')
+    expect(result).toContain('number 0-100')
+  })
+
+  it('renders "required" when defaultValue is absent', () => {
+    const result = templateEngine.render(classifierTemplate.userContent!, withRuntimeVars)
+    expect(result).toContain('required')
+  })
+
+  it('renders "optional" and "default: VALUE" when defaultValue is present', () => {
+    const result = templateEngine.render(classifierTemplate.userContent!, withRuntimeVars)
+    expect(result).toContain('optional')
+    expect(result).toContain('default: 50')
+  })
+
+  it('renders enum pipe-separated options (enum: happy|neutral|hostile)', () => {
+    const result = templateEngine.render(classifierTemplate.userContent!, withRuntimeVars)
+    expect(result).toContain('enum: happy|neutral|hostile')
+  })
+
+  it('renders "text" fallback for text-type variable', () => {
+    const result = templateEngine.render(classifierTemplate.userContent!, withTextVar)
+    expect(result).toContain('text')
+  })
+
+  it('renders variable description after colon', () => {
+    const result = templateEngine.render(classifierTemplate.userContent!, withRuntimeVars)
+    expect(result).toContain('Loyalty toward protagonist')
+  })
+
+  it('omits runtimeVariables section entirely when variable is absent from context', () => {
+    const result = templateEngine.render(classifierTemplate.userContent!, classifierBase)
+    expect(result).not.toContain('## Custom Variables to Track')
+  })
+
+  it('does not contain [object Object] when runtimeVariables present', () => {
+    const result = templateEngine.render(classifierTemplate.userContent!, withRuntimeVars)
     expect(result).not.toContain('[object Object]')
   })
 })

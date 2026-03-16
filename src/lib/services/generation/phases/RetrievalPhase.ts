@@ -10,10 +10,11 @@ import type {
   PhaseCompleteEvent,
   RetrievalResult,
   AbortedEvent,
+  AgenticRetrievalFields,
 } from '../types'
 import type { StoryMode, POV, Tense } from '$lib/types'
 import type { TimelineFillResult } from '$lib/services/ai/retrieval/TimelineFillService'
-import type { AgenticRetrievalResult } from '$lib/services/ai/retrieval/AgenticRetrievalService'
+import type { RetrievalResult as AgenticServiceResult } from '$lib/services/ai/retrieval/AgenticRetrievalService'
 import type {
   EntryRetrievalResult,
   ActivationTracker,
@@ -40,8 +41,7 @@ export interface RetrievalDependencies {
     mode?: StoryMode,
     pov?: POV,
     tense?: Tense,
-  ) => Promise<AgenticRetrievalResult>
-  formatAgenticRetrievalForPrompt: (result: AgenticRetrievalResult) => string
+  ) => Promise<AgenticServiceResult>
   runTimelineFill: (
     visibleEntries: GenerationContext['visibleEntries'],
     chapters: GenerationContext['worldState']['chapters'],
@@ -89,7 +89,7 @@ export class RetrievalPhase {
     const { worldState, visibleEntries, userAction, abortSignal } = context
     const { chapters, lorebookEntries, characters, locations, items, memoryConfig } = worldState
 
-    let agenticRetrievalContext: string | null = null
+    let agenticRetrieval: AgenticRetrievalFields | null = null
     let lorebookRetrievalResult: EntryRetrievalResult | null = null
     let timelineFillResult: TimelineFillResult | null = null
 
@@ -100,7 +100,7 @@ export class RetrievalPhase {
       tasks.push(
         this.runMemoryRetrieval(input)
           .then((result) => {
-            agenticRetrievalContext = result.agenticRetrievalContext
+            agenticRetrieval = result.agenticRetrieval
             timelineFillResult = result.timelineFillResult
           })
           .catch((err) => {
@@ -143,7 +143,7 @@ export class RetrievalPhase {
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'retrieval' } satisfies AbortedEvent
       return {
-        agenticRetrievalContext: null,
+        agenticRetrieval: null,
         lorebookEntries: [],
         lorebookRetrievalResult: null,
         timelineFillResult: null,
@@ -160,7 +160,7 @@ export class RetrievalPhase {
       : []
 
     const result: RetrievalResult = {
-      agenticRetrievalContext,
+      agenticRetrieval,
       lorebookEntries: mappedLorebookEntries,
       lorebookRetrievalResult,
       timelineFillResult,
@@ -171,7 +171,7 @@ export class RetrievalPhase {
   }
 
   private async runMemoryRetrieval(input: RetrievalInput): Promise<{
-    agenticRetrievalContext: string | null
+    agenticRetrieval: AgenticRetrievalFields | null
     timelineFillResult: TimelineFillResult | null
   }> {
     const { context, dependencies, storyMode, pov, tense } = input
@@ -191,16 +191,21 @@ export class RetrievalPhase {
         pov,
         tense,
       )
+      const agenticRetrieval: AgenticRetrievalFields | null = result
+        ? {
+            agenticReasoning: result.agenticReasoning,
+            agenticChapterSummary: result.agenticChapterSummary,
+            agenticSelectedEntries: result.agenticSelectedEntries,
+          }
+        : null
       return {
-        agenticRetrievalContext: result.context
-          ? dependencies.formatAgenticRetrievalForPrompt(result)
-          : null,
+        agenticRetrieval,
         timelineFillResult: null,
       }
     }
 
     return {
-      agenticRetrievalContext: null,
+      agenticRetrieval: null,
       timelineFillResult: await dependencies.runTimelineFill(visibleEntries, chapters),
     }
   }

@@ -61,15 +61,29 @@ export type ContextLocation = Pick<Location, 'name' | 'description' | 'visited'>
 }
 
 /**
- * A lorebook entry as seen by Liquid templates (lorebookEntries[]).
- * Uses Pick — only 3 fields needed from the large Entry type.
- * Adds `tier` and optional `disposition` for character entries.
+ * Base lorebook entry fields shared by all context paths (retrieval, wizard, agentic).
  */
-export type ContextLorebookEntry = Pick<Entry, 'name' | 'type' | 'description'> & {
-  /** Retrieval tier — lower means higher priority in context window */
-  tier: 1 | 2 | 3
+export type ContextLorebookEntryBase = Pick<Entry, 'name' | 'type' | 'description'> & {
   /** Current disposition — optional, character-only */
   disposition?: string
+}
+
+/**
+ * A lorebook entry for retrieval templates (lorebookEntries[]).
+ * Tier is required — retrieval always assigns priority tiers.
+ */
+export type ContextLorebookEntry = ContextLorebookEntryBase & {
+  /** Retrieval tier — lower means higher priority in context window */
+  tier: 1 | 2 | 3
+}
+
+/**
+ * A lorebook entry for wizard templates (lorebookEntries[]).
+ * No tier — wizard entries are not prioritized by retrieval.
+ */
+export type ContextWizardLorebookEntry = ContextLorebookEntryBase & {
+  /** Hidden lore visible only to the AI — optional, wizard-only */
+  hiddenInfo?: string
 }
 
 /**
@@ -109,8 +123,6 @@ export type ContextStoryEntry = {
   type: 'user_action' | 'narration'
   content: string
 }
-
-// ===== New v1.2 Interfaces =====
 
 /**
  * A character subset for classifier templates (characters[]).

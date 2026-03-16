@@ -163,8 +163,18 @@ Items: {% if items.size == 0 %}(none){% else %}{% for item in items %}{{ item.na
 - "{{ beat.title }}" [{{ beat.status }}]{% if beat.description != '' %}: {{ beat.description }}{% endif %}
 {% endif %}{% endfor %}{% endif %}
 
-{% if customVariableInstructions != '' %}
-{{ customVariableInstructions }}
+{% if runtimeVariables %}
+## Custom Variables to Track
+{% for pair in runtimeVariables %}
+{%- assign label = '' %}
+{%- if pair[0] == 'character' %}{%- assign label = 'character updates/new characters' %}
+{%- elsif pair[0] == 'location' %}{%- assign label = 'location updates/new locations' %}
+{%- elsif pair[0] == 'item' %}{%- assign label = 'item updates/new items' %}
+{%- elsif pair[0] == 'story_beat' %}{%- assign label = 'story beat updates/new story beats' %}
+{%- endif %}
+For {{ label }}, include these as direct fields alongside standard fields:
+{% for v in pair[1] %}- {{ v.variableName }} ({% if v.variableType == 'number' %}number{% if v.minValue != nil and v.maxValue != nil %} {{ v.minValue }}-{{ v.maxValue }}{% elsif v.minValue != nil %} >= {{ v.minValue }}{% elsif v.maxValue != nil %} <= {{ v.maxValue }}{% endif %}{% elsif v.variableType == 'enum' and v.enumOptions.size > 0 %}enum: {% for opt in v.enumOptions %}{{ opt.value }}{% unless forloop.last %}|{% endunless %}{% endfor %}{% else %}text{% endif %}, {% if v.defaultValue != nil %}optional, default: {{ v.defaultValue }}{% else %}required{% endif %}){% if v.description != '' %}: {{ v.description }}{% endif %}
+{% endfor %}{% endfor %}
 {% endif %}
 
 ## Your Task

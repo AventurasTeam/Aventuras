@@ -609,6 +609,31 @@
                     Maximum tool-calling rounds for the retrieval agent
                   </p>
                 </div>
+
+                <!-- Recent Entry Count -->
+                <div class="space-y-3">
+                  <div class="flex justify-between">
+                    <Label>Recent Entry Count</Label>
+                    <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
+                      {settings.systemServicesSettings.agenticRetrieval?.recentEntryCount ?? 5}
+                    </span>
+                  </div>
+                  <Slider
+                    value={settings.systemServicesSettings.agenticRetrieval?.recentEntryCount ?? 5}
+                    min={1}
+                    max={20}
+                    step={1}
+                    type="single"
+                    onValueChange={(v) => {
+                      if (!settings.systemServicesSettings.agenticRetrieval) return
+                      settings.systemServicesSettings.agenticRetrieval.recentEntryCount = v
+                      settings.saveSystemServicesSettings()
+                    }}
+                  />
+                  <p class="text-muted-foreground text-xs">
+                    Number of recent story entries to include in agentic retrieval context
+                  </p>
+                </div>
               {/if}
             {/if}
           </div>

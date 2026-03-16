@@ -79,7 +79,7 @@ export class SettingStore {
     this.settingError = null
 
     try {
-      const lorebookContext =
+      const lorebookEntries =
         importedEntries.length > 0
           ? importedEntries.map((e) => ({
               name: e.name,
@@ -94,7 +94,7 @@ export class SettingStore {
         selectedGenre,
         customGenre || undefined,
         settings.servicePresetAssignments['wizard:settingExpansion'],
-        lorebookContext,
+        lorebookEntries,
         this.settingElaborationGuidance.trim() || undefined,
       )
       this.clearSettingEditState()
@@ -120,7 +120,7 @@ export class SettingStore {
     this.settingError = null
 
     try {
-      const lorebookContext =
+      const lorebookEntries =
         importedEntries.length > 0
           ? importedEntries.map((e) => ({
               name: e.name,
@@ -135,7 +135,7 @@ export class SettingStore {
         selectedGenre,
         customGenre || undefined,
         settings.servicePresetAssignments['wizard:settingRefinement'],
-        lorebookContext,
+        lorebookEntries,
         this.settingElaborationGuidance.trim() || undefined,
       )
       this.clearSettingEditState()

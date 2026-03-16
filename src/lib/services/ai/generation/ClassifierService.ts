@@ -31,7 +31,7 @@ import {
   type ClassificationResult,
 } from '../sdk/schemas/classifier'
 import { buildExtendedClassificationSchema } from '../sdk/schemas/runtime-variables'
-import type { RuntimeVariable, RuntimeEntityType } from '$lib/services/packs/types'
+import type { RuntimeVariable } from '$lib/services/packs/types'
 import { mapCharacters, mapBeats, mapChatEntries } from '$lib/services/context/classifierMapper'
 
 const log = createLogger('Classifier')
@@ -112,10 +112,6 @@ export class ClassifierService extends BaseAIService {
       ? `Current story time: Year ${currentStoryTime.years}, Day ${currentStoryTime.days}, ${String(currentStoryTime.hours).padStart(2, '0')}:${String(currentStoryTime.minutes).padStart(2, '0')}`
       : ''
 
-    // Build custom variable instructions for the prompt
-    const customVariableInstructions =
-      runtimeVars.length > 0 ? this.buildCustomVarInstructions(runtimeVarsByType) : ''
-
     // Create ContextBuilder from story -- auto-populates mode, pov, tense, genre, etc.
     const ctx = await ContextBuilder.forStory(context.storyId)
 
@@ -137,8 +133,11 @@ export class ClassifierService extends BaseAIService {
       itemLocationOptions: 'inventory, worn, ground, or specific location name',
       defaultItemLocation: 'inventory',
       sceneLocationDesc: 'Name of current location if identifiable, null otherwise',
-      customVariableInstructions,
     })
+
+    if (runtimeVars.length > 0) {
+      ctx.add({ runtimeVariables: runtimeVarsByType })
+    }
 
     // Render through the classifier template
     const { system, user: prompt } = await ctx.render('classifier')
@@ -213,71 +212,6 @@ export class ClassifierService extends BaseAIService {
       },
       {} as Record<string, RuntimeVariable[]>,
     )
-  }
-
-  /**
-   * Build the prompt instruction block describing custom variables to track.
-   * Grouped by entity type for clarity.
-   */
-  private buildCustomVarInstructions(varsByType: Record<string, RuntimeVariable[]>): string {
-    const ENTITY_TYPE_LABELS: Record<RuntimeEntityType, { updates: string; new: string }> = {
-      character: { updates: 'character updates', new: 'new characters' },
-      location: { updates: 'location updates', new: 'new locations' },
-      item: { updates: 'item updates', new: 'new items' },
-      story_beat: { updates: 'story beat updates', new: 'new story beats' },
-    }
-
-    const sections: string[] = []
-
-    for (const [entityType, vars] of Object.entries(varsByType)) {
-      if (vars.length === 0) continue
-      const labels = ENTITY_TYPE_LABELS[entityType as RuntimeEntityType]
-      if (!labels) continue
-
-      const varLines = vars.map((v) => {
-        let line = `- ${v.variableName}`
-        const parts: string[] = []
-
-        // Type description
-        if (v.variableType === 'number') {
-          let numDesc = 'number'
-          if (v.minValue !== undefined && v.maxValue !== undefined) {
-            numDesc = `number ${v.minValue}-${v.maxValue}`
-          } else if (v.minValue !== undefined) {
-            numDesc = `number >= ${v.minValue}`
-          } else if (v.maxValue !== undefined) {
-            numDesc = `number <= ${v.maxValue}`
-          }
-          parts.push(numDesc)
-        } else if (v.variableType === 'enum' && v.enumOptions?.length) {
-          parts.push(`enum: ${v.enumOptions.map((o) => o.value).join('|')}`)
-        } else {
-          parts.push('text')
-        }
-
-        // Required vs optional
-        parts.push(
-          v.defaultValue !== undefined && v.defaultValue !== null ? 'optional' : 'required',
-        )
-
-        // Default value
-        if (v.defaultValue !== undefined && v.defaultValue !== null) {
-          parts.push(`default: ${v.defaultValue}`)
-        }
-
-        line += ` (${parts.join(', ')})`
-        if (v.description) line += `: ${v.description}`
-        return line
-      })
-
-      sections.push(
-        `For ${labels.updates}/${labels.new}, include these as direct fields alongside standard fields:\n${varLines.join('\n')}`,
-      )
-    }
-
-    if (sections.length === 0) return ''
-
-    return `## Custom Variables to Track\n${sections.join('\n\n')}`
   }
 
   /**

@@ -212,7 +212,13 @@ USER INPUT:
 "{{ userInput }}"
 
 RECENT SCENE:
-{{ recentContext }}
+{% if recentEntries.size > 0 %}
+{% for entry in recentEntries %}
+{{ entry.content }}
+{% endfor %}
+{% else %}
+No recent entries available.
+{% endif %}
 
 # Available Chapters: {{ chaptersCount }}
 {% if agenticChapters.size > 0 %}{% for c in agenticChapters %}- Chapter {{ c.number }}{% if c.title %}: {{ c.title }}{% endif %} - {{ c.summary }}
