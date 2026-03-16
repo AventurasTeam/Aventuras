@@ -21,37 +21,8 @@
  * - translate*() - TranslationService
  */
 
-import { settings } from '$lib/stores/settings.svelte'
-import { story } from '$lib/stores/story.svelte'
+import { createLogger } from '$lib/log'
 import { database } from '$lib/services/database'
-import type { StoryMode, POV, Tense } from '$lib/types'
-import type { PromptContext } from '../generation/phases/PostGenerationPhase'
-import { DEFAULT_FALLBACK_STYLE_PROMPT } from './image/constants'
-import { type ClassificationContext } from './generation/ClassifierService'
-import type { ClassificationResult } from './sdk/schemas/classifier'
-import { MemoryService, type RetrievalContext } from './generation/MemoryService'
-import type { ChapterAnalysis, ChapterSummaryResult, RetrievalDecision } from './sdk/schemas/memory'
-import type { SuggestionsResult } from './sdk/schemas/suggestions'
-import type { ActionChoicesResult } from './sdk/schemas/actionchoices'
-import type { StyleReviewResult } from './generation/StyleReviewerService'
-import {
-  type AgenticRetrievalResult,
-  type RetrievalContext as AgenticRetrievalContext,
-} from './retrieval/AgenticRetrievalService'
-import type { TimelineFillResult } from './retrieval/TimelineFillService'
-import { EntryInjector, type ContextResult, type ContextConfig } from './generation/EntryInjector'
-import {
-  EntryRetrievalService,
-  type EntryRetrievalResult,
-  type ActivationTracker,
-  getEntryRetrievalConfigFromSettings,
-} from './retrieval/EntryRetrievalService'
-import {
-  inlineImageService,
-  type InlineImageContext,
-  isImageGenerationEnabled as isImageGenerationEnabledUtil,
-  type ImageAnalysisContext,
-} from './image'
 import {
   emitImageAnalysisStarted,
   emitImageAnalysisComplete,
@@ -64,10 +35,63 @@ import {
   emitBackgroundImageQueued,
   emitBackgroundImageReady,
 } from '$lib/services/events'
-import { generateImage as registryGenerateImage } from './image/providers/registry'
+import type { PromptContext } from '$lib/services/generation'
+import { settings } from '$lib/stores/settings.svelte'
+import { story } from '$lib/stores/story.svelte'
+import type {
+  Chapter,
+  Character,
+  EmbeddedImage,
+  Entry,
+  Item,
+  Location,
+  LoreChange,
+  LoreManagementResult,
+  MemoryConfig,
+  POV,
+  Story,
+  StoryBeat,
+  StoryEntry,
+  StoryMode,
+  StorySettings,
+  Tense,
+  TimeTracker,
+} from '$lib/types'
 import { normalizeImageDataUrl, parseImageSize } from '$lib/utils/image'
-import type { ImageableScene } from './sdk/schemas/imageanalysis'
-import type { EmbeddedImage } from '$lib/types'
+import type { StreamChunk } from './core'
+import { serviceFactory } from './core/factory'
+import {
+  DEFAULT_FALLBACK_STYLE_PROMPT,
+  inlineImageService,
+  isImageGenerationEnabled as isImageGenerationEnabledUtil,
+} from './image'
+import type { InlineImageContext, ImageAnalysisContext } from './image'
+import { generateImage as registryGenerateImage } from './image/providers/registry'
+import { EntryInjector, MemoryService, NarrativeService } from './generation'
+import type {
+  ClassificationContext,
+  ContextConfig,
+  ContextResult,
+  RetrievalContext,
+  StyleReviewResult,
+  WorldStateContext,
+} from './generation'
+import { EntryRetrievalService, getEntryRetrievalConfigFromSettings } from './retrieval'
+import type { TimelineFillResult, EntryRetrievalResult, ActivationTracker } from './retrieval'
+import type {
+  AgenticRetrievalResult,
+  RetrievalContext as AgenticRetrievalContext,
+} from './retrieval/AgenticRetrievalService'
+import type {
+  ActionChoicesResult,
+  ChapterAnalysis,
+  ChapterSummaryResult,
+  ClassificationResult,
+  ImageableScene,
+  RetrievalDecision,
+  SuggestionsResult,
+} from './sdk'
+import type { TranslationResult, UITranslationItem } from './utils'
 
 // Re-export ImageGenerationContext type for backwards compatibility
 export interface ImageGenerationContext {
@@ -83,27 +107,6 @@ export interface ImageGenerationContext {
   translationLanguage?: string
   referenceMode: boolean
 }
-import type { TranslationResult, UITranslationItem } from './utils/TranslationService'
-import type { StreamChunk } from './core/types'
-import type {
-  Story,
-  StoryEntry,
-  Character,
-  Location,
-  Item,
-  StoryBeat,
-  Chapter,
-  MemoryConfig,
-  Entry,
-  LoreManagementResult,
-  LoreChange,
-  TimeTracker,
-  StorySettings,
-} from '$lib/types'
-import { createLogger } from '$lib/log'
-import { serviceFactory } from './core/factory'
-import { NarrativeService } from './generation/NarrativeService'
-import type { WorldStateContext } from './generation/NarrativeService'
 
 const log = createLogger('AIService')
 
