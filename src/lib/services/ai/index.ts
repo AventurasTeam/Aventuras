@@ -44,7 +44,7 @@ import {
   mapContextResultToArrays,
   type WorldStateArrays,
 } from '$lib/services/context/worldStateMapper'
-import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import type { ContextChatEntry, ContextLorebookEntry } from '$lib/services/context/context-types'
 import {
   EntryRetrievalService,
   type EntryRetrievalResult,
@@ -82,7 +82,7 @@ export interface ImageGenerationContext {
   userAction: string
   presentCharacters: Character[]
   currentLocation?: string
-  chatHistory?: string
+  chatHistory?: ContextChatEntry[]
   lorebookContext?: string
   translatedNarrative?: string
   translationLanguage?: string
@@ -401,7 +401,7 @@ class AIService {
     const memoryService = serviceFactory.createMemoryService()
     const context: RetrievalContext = {
       userInput,
-      recentNarrative: recentEntries.map((e) => e.content).join(' '),
+      recentEntries,
       availableChapters: chapters,
     }
     return memoryService.decideRetrieval(context, mode, pov, tense)
@@ -496,7 +496,6 @@ class AIService {
     storyId: string,
     branchId: string | null,
     entries: Entry[],
-    recentMessages: StoryEntry[],
     chapters: Chapter[],
     callbacks: {
       onCreateEntry: (entry: Entry) => Promise<void>
@@ -509,15 +508,6 @@ class AIService {
     _pov?: POV,
     _tense?: Tense,
   ): Promise<LoreManagementResult> {
-    // Extract recent user action and narrative
-    const recentNarration = recentMessages.filter((m) => m.type === 'narration')
-    const recentActions = recentMessages.filter((m) => m.type === 'user_action')
-
-    const narrativeResponse =
-      recentNarration.length > 0 ? recentNarration[recentNarration.length - 1].content : ''
-    const userAction =
-      recentActions.length > 0 ? recentActions[recentActions.length - 1].content : ''
-
     // Build chapters info for lore management
     // Deep clone to avoid Svelte proxy issues with AI SDK structured cloning
     const chapterInfos = JSON.parse(
@@ -536,8 +526,6 @@ class AIService {
     const service = serviceFactory.createLoreManagementService()
     const sessionResult = await service.runSession({
       storyId,
-      narrativeResponse,
-      userAction,
       existingEntries: entries,
       chapters: chapterInfos,
       queryChapter: callbacks.onQueryChapter,
@@ -604,13 +592,10 @@ class AIService {
 
     const service = serviceFactory.createAgenticRetrievalService()
 
-    // Build recent narrative from entries
-    const recentNarrative = recentEntries.map((e) => e.content).join('\n\n')
-
     // Build context for the service
     const context: AgenticRetrievalContext = {
       userInput,
-      recentNarrative,
+      recentEntries,
       availableEntries: entries,
       chapters,
       // Pass through the chapter query callback directly
@@ -834,15 +819,6 @@ class AIService {
     const imageSettings = settings.systemServicesSettings.imageGeneration
     const referenceMode = context.referenceMode ?? false
 
-    // Get characters with/without portraits
-    const presentCharacterNames = context.presentCharacters.map((c) => c.name.toLowerCase())
-    const charactersWithPortraits = story.characters
-      .filter((c) => presentCharacterNames.includes(c.name.toLowerCase()) && c.portrait)
-      .map((c) => c.name)
-    const charactersWithoutPortraits = story.characters
-      .filter((c) => presentCharacterNames.includes(c.name.toLowerCase()) && !c.portrait)
-      .map((c) => c.name)
-
     // Build style prompt
     const stylePrompt = await this.getStylePrompt(imageSettings.styleId)
 
@@ -850,18 +826,12 @@ class AIService {
     const analysisContext: ImageAnalysisContext = {
       narrativeResponse: context.narrativeResponse,
       userAction: context.userAction,
-      presentCharacters: context.presentCharacters.map((c) => ({
-        name: c.name,
-        visualDescriptors: c.visualDescriptors,
-        isProtagonist: c.relationship === 'self',
-      })),
+      presentCharacters: context.presentCharacters,
       currentLocation: context.currentLocation,
       stylePrompt,
       maxImages: imageSettings.maxImagesPerMessage ?? 3,
       chatHistory: context.chatHistory,
       lorebookContext: context.lorebookContext,
-      charactersWithPortraits,
-      charactersWithoutPortraits,
       referenceMode,
       translatedNarrative: context.translatedNarrative,
       translationLanguage: context.translationLanguage,

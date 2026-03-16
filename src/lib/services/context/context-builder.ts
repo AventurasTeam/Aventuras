@@ -11,7 +11,6 @@
 
 import { database } from '$lib/services/database'
 import { templateEngine } from '$lib/services/templates/engine'
-import { computeShims } from './compatShims'
 import { createLogger } from '$lib/log'
 import type { RenderResult } from './types'
 import type { Character, Location, Item, StoryBeat } from '$lib/types'
@@ -129,17 +128,6 @@ export class ContextBuilder {
       })
     }
 
-    // Inject compatibility shims for deprecated variable names
-    const systemSource = systemTemplate?.content ?? ''
-    const userSource = userTemplate?.content ?? ''
-    const combinedSource = systemSource + userSource
-    const shims = computeShims(this.context, combinedSource, templateId)
-    for (const [key, value] of Object.entries(shims)) {
-      if (!(key in this.context)) {
-        this.context[key] = value
-      }
-    }
-
     const systemResult = systemTemplate?.content
       ? templateEngine.render(systemTemplate.content, this.context)
       : ''
@@ -154,8 +142,8 @@ export class ContextBuilder {
     }
 
     return {
-      system: systemResult ?? systemTemplate?.content ?? '',
-      user: userResult ?? userTemplate?.content ?? '',
+      system: systemResult ?? '',
+      user: userResult ?? '',
     }
   }
 

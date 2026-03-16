@@ -424,7 +424,7 @@
         tense: 'present',
         protagonistName: '',
         imageStylePrompt: stylePrompt,
-        visualDescriptors: descriptors.join(', '),
+        visualDescriptors: stringToDescriptors(editVisualDescriptors),
         characterName: editName || character.name,
       })
       const { system: portraitPrompt } = await ctx.render('image-portrait-generation')

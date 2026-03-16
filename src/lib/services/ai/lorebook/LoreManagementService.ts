@@ -44,8 +44,6 @@ export interface LoreManagementChapter {
  */
 export interface LoreManagementContext {
   storyId: string
-  narrativeResponse: string
-  userAction: string
   existingEntries: Entry[]
   /** Available chapters for querying */
   chapters?: LoreManagementChapter[]
@@ -142,38 +140,24 @@ export class LoreManagementService extends BaseAIService {
     // Create tools
     const tools = createLoreManagementTools(toolContext)
 
-    // Build entry summaries for user prompt (use 0-based indices to match tool expectations)
-    const entrySummary =
-      context.existingEntries
-        .map(
-          (e, i) =>
-            `[${i}] [${e.type}] ${e.name}: ${e.description?.slice(0, 100) || 'No description'}`,
-        )
-        .join('\n') || 'No entries yet.'
-
-    // Build recent story section
-    const recentStorySection = `# Recent Story Content
-User action: ${context.userAction}
-
-Narrative:
-${context.narrativeResponse}
-
-`
-
-    // Build chapter summary from chapters array
-    const chapterSummary =
-      context.chapters && context.chapters.length > 0
-        ? context.chapters
-            .map(
-              (ch) =>
-                `Chapter ${ch.number}${ch.title ? `: ${ch.title}` : ''} - ${ch.summary.slice(0, 200)}...`,
-            )
-            .join('\n')
-        : 'No chapters available. Use list_chapters and query_chapter tools to explore story history.'
+    // Build typed arrays for template rendering
+    const loreEntries: { name: string; type: string; description: string; state?: string }[] =
+      context.existingEntries.map((e) => ({
+        name: e.name,
+        type: e.type,
+        description: e.description?.slice(0, 100) || 'No description',
+      }))
+    const loreChapters: { number: number; title: string; summary: string }[] = (
+      context.chapters ?? []
+    ).map((ch) => ({
+      number: ch.number,
+      title: ch.title ?? '',
+      summary: ch.summary.slice(0, 200) + '...',
+    }))
 
     // Render prompts through unified pipeline
     const ctx = new ContextBuilder()
-    ctx.add({ entrySummary, recentStorySection, chapterSummary })
+    ctx.add({ loreEntries, loreChapters })
     const { system: systemPrompt, user: userPrompt } = await ctx.render('lore-management')
 
     // Create the agent

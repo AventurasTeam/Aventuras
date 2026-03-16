@@ -10,6 +10,7 @@ import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
 import { styleReviewResultSchema, type PhraseAnalysis } from '../sdk/schemas/style'
+import type { ContextPassage } from '$lib/services/context/context-types'
 
 const log = createLogger('StyleReviewer')
 
@@ -60,10 +61,11 @@ export class StyleReviewerService extends BaseAIService {
       }
     }
 
-    // Format passages for analysis
-    const passages = narrationEntries
-      .map((e, i) => `--- Passage ${i + 1} ---\n${e.content}`)
-      .join('\n\n')
+    // Build typed passages array for template iteration
+    const passages: ContextPassage[] = narrationEntries.map((e) => ({
+      content: e.content,
+      entryId: e.id ?? '',
+    }))
 
     const ctx = new ContextBuilder()
     ctx.add({

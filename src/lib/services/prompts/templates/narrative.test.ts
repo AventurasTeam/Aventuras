@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { templateEngine } from '$lib/services/templates/engine'
 import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
-import { computeShims } from '$lib/services/context/compatShims'
-import { shimContext } from '../../../../test/contextFixtures'
 
 const adventureTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'adventure')!
 const creativeWritingTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'creative-writing')!
@@ -294,68 +292,6 @@ describe('adventure template', () => {
         storyEntries: [{ type: 'user_action', content: 'I open the door.' }],
       })
       expect(secondPerson).not.toEqual(thirdPerson)
-    })
-  })
-
-  describe('compat shim rendering', () => {
-    it('tieredContextBlock shim injects into template string referencing it', () => {
-      const templateSource = 'World: {{ tieredContextBlock }}'
-      const shims = computeShims(
-        shimContext as Record<string, unknown>,
-        templateSource,
-        'adventure',
-      )
-      const result = templateEngine.render(templateSource, {
-        ...(shimContext as Record<string, unknown>),
-        ...shims,
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('The Crossroads Inn')
-    })
-
-    it('chapterSummaries shim injects into template string referencing it', () => {
-      const templateSource = 'Chapters: {{ chapterSummaries }}'
-      const shims = computeShims(
-        shimContext as Record<string, unknown>,
-        templateSource,
-        'adventure',
-      )
-      const result = templateEngine.render(templateSource, {
-        ...(shimContext as Record<string, unknown>),
-        ...shims,
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('The Beginning')
-    })
-
-    it('styleGuidance shim injects into template string referencing it', () => {
-      const templateSource = 'Style: {{ styleGuidance }}'
-      const shims = computeShims(
-        shimContext as Record<string, unknown>,
-        templateSource,
-        'adventure',
-      )
-      const result = templateEngine.render(templateSource, {
-        ...(shimContext as Record<string, unknown>),
-        ...shims,
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('<style_guidance>')
-    })
-
-    it('lorebookContext shim injects into template string referencing it', () => {
-      const templateSource = 'Lore: {{ lorebookContext }}'
-      const shims = computeShims(
-        shimContext as Record<string, unknown>,
-        templateSource,
-        'adventure',
-      )
-      const result = templateEngine.render(templateSource, {
-        ...(shimContext as Record<string, unknown>),
-        ...shims,
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('The Shadow Guild')
     })
   })
 })

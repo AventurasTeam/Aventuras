@@ -14,7 +14,14 @@ import type {
   RetrievedEntry,
 } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import type { TimelineFillResult } from '$lib/services/ai/retrieval/TimelineFillService'
-import type { Chapter, StoryEntry, Entry, CharacterEntryState } from '$lib/types'
+import type {
+  Chapter,
+  StoryEntry,
+  Entry,
+  CharacterEntryState,
+  Character,
+  StoryBeat,
+} from '$lib/types'
 
 // ---------------------------------------------------------------------------
 // contextResult: ContextResult
@@ -376,66 +383,85 @@ export const rawStoryEntries: StoryEntry[] = [
 ]
 
 // ---------------------------------------------------------------------------
-// shimContext: Record<string, unknown>
+// rawCharacters: Character[]
 // ---------------------------------------------------------------------------
 
 /**
- * Context bag for computeShims() tests.
+ * Input fixture for classifierMapper and imageMapper tests.
  *
- * Fully populated to trigger all five computeShims() output keys:
- *   tieredContextBlock  — needs currentLocationObject + worldStateCharacters
- *   chapterSummaries    — needs chapters + timelineFill
- *   styleGuidance       — needs styleReview.phrases (non-empty)
- *   lorebookContext     — needs lorebookEntries (non-empty)
- *   recentContext       — needs storyEntries (non-empty)
+ * Two characters:
+ *   1. 'Aria' — fully populated with all VisualDescriptors fields
+ *   2. 'Unknown Traveler' — minimal, empty visualDescriptors (exercises empty-array fallback)
  */
-export const shimContext: Record<string, unknown> = {
-  currentLocationObject: {
-    name: 'The Crossroads Inn',
-    description: 'A weathered tavern at a busy crossroads',
+export const rawCharacters: Character[] = [
+  {
+    id: 'char-aria',
+    storyId: 'story-1',
+    name: 'Aria',
+    description: 'A skilled archer with a steady aim.',
+    relationship: 'companion',
+    traits: ['brave', 'loyal'],
+    visualDescriptors: {
+      face: 'Sharp cheekbones',
+      hair: 'Dark brown braid',
+      eyes: 'Amber',
+      build: 'Lean and athletic',
+      clothing: 'Leather travelling gear',
+      accessories: 'Quiver of arrows',
+      distinguishing: 'Scar above right eyebrow',
+    },
+    portrait: null,
+    status: 'active',
+    metadata: null,
+    branchId: null,
   },
-  worldStateCharacters: [
-    {
-      name: 'Aria',
-      relationship: 'companion',
-      description: 'A skilled archer',
-      traits: ['brave', 'loyal'],
-      appearance: [],
-      tier: 1,
-      status: 'active',
-    },
-  ],
-  worldStateInventory: [],
-  worldStateBeats: [],
-  worldStateLocations: [],
-  chapters: [
-    {
-      number: 1,
-      title: 'The Beginning',
-      summary: 'Things began.',
-      startTime: null,
-      endTime: null,
-      characters: ['Aria'],
-      locations: ['The Crossroads Inn'],
-      emotionalTone: 'hopeful',
-    },
-  ],
-  timelineFill: [],
-  storyEntries: [
-    { type: 'narration', content: 'The torches flickered.' },
-    { type: 'user_action', content: 'I draw my sword.' },
-  ],
-  styleReview: {
-    phrases: [{ phrase: "Show don't tell", tone: 'literary', pacing: 'measured' }],
-    tone: 'literary',
-    pacing: 'measured',
+  {
+    id: 'char-minimal',
+    storyId: 'story-1',
+    name: 'Unknown Traveler',
+    description: null,
+    relationship: null,
+    traits: [],
+    visualDescriptors: {},
+    portrait: null,
+    status: 'inactive',
+    metadata: null,
+    branchId: null,
   },
-  lorebookEntries: [
-    {
-      name: 'The Shadow Guild',
-      type: 'faction',
-      description: 'A secretive thieves organization',
-      tier: 2,
-    },
-  ],
-}
+]
+
+// ---------------------------------------------------------------------------
+// rawStoryBeats: StoryBeat[]
+// ---------------------------------------------------------------------------
+
+/**
+ * Input fixture for classifierMapper and imageMapper tests.
+ *
+ * Two beats:
+ *   1. 'Find the Lost Key' — fully populated quest beat
+ *   2. 'The Darkness' — minimal, description=null (exercises ?? '' path)
+ */
+export const rawStoryBeats: StoryBeat[] = [
+  {
+    id: 'beat-key',
+    storyId: 'story-1',
+    title: 'Find the Lost Key',
+    description: 'Retrieve the key to the sealed vault.',
+    type: 'quest',
+    status: 'active',
+    triggeredAt: null,
+    metadata: null,
+    branchId: null,
+  },
+  {
+    id: 'beat-minimal',
+    storyId: 'story-1',
+    title: 'The Darkness',
+    description: null,
+    type: 'revelation',
+    status: 'pending',
+    triggeredAt: null,
+    metadata: null,
+    branchId: null,
+  },
+]

@@ -54,22 +54,6 @@ export interface VariableDefinition {
   /** Available options when type is 'enum' */
   enumValues?: string[]
   /**
-   * Deprecation metadata. When present, the variable is deprecated.
-   * Shown in autocomplete with strikethrough + warning badge.
-   */
-  deprecated?: {
-    /** Comma-separated list of replacement variable names */
-    replacedBy: string
-    /** Human-readable guidance for template authors */
-    message: string
-  }
-  /**
-   * When true, suppresses the deprecation warning in the template validator.
-   * Use for variables that are deprecated for narrative templates but still
-   * live-injected by other services (e.g., recentContext by MemoryService).
-   */
-  suppressDeprecation?: boolean
-  /**
    * Sub-field descriptors for array/object variables.
    * Used by the tooltip renderer to build the mini code-block UI.
    * For simple text/boolean/enum variables, omit this field.
@@ -87,11 +71,7 @@ export type TemplateContext = Record<string, unknown>
 /**
  * Validation error type
  */
-export type ValidationErrorType =
-  | 'syntax'
-  | 'unknown_variable'
-  | 'unknown_filter'
-  | 'deprecated_variable'
+export type ValidationErrorType = 'syntax' | 'unknown_variable' | 'unknown_filter'
 
 /**
  * Validation error

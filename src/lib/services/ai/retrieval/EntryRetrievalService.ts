@@ -25,6 +25,7 @@ import { buildExtraBody } from '../core/requestOverrides'
 import { createLogger } from '$lib/log'
 import { entitySelectionSchema } from '../sdk/schemas/context'
 import { ContextBuilder } from '$lib/services/context'
+import type { ContextAvailableEntry, ContextStoryEntry } from '$lib/services/context/context-types'
 
 const log = createLogger('EntryRetrieval')
 
@@ -584,22 +585,23 @@ export class EntryRetrievalService extends BaseAIService {
       return []
     }
 
-    // Format entries for the prompt
-    const entrySummaries = availableEntries
-      .map((e, i) => {
-        const desc = e.description ? e.description.slice(0, 100) : ''
-        return `${i}. [${e.type}] ${e.name}${desc ? `: ${desc}` : ''}`
-      })
-      .join('\n')
+    // Build typed arrays for template iteration
+    const availableEntriesMapped: ContextAvailableEntry[] = availableEntries.map((e) => ({
+      name: e.name,
+      type: e.type,
+      description: e.description ? e.description.slice(0, 100) : '',
+    }))
 
-    // Build recent content for context
-    const recentContent = recentStoryEntries
+    const recentEntries: ContextStoryEntry[] = recentStoryEntries
       .slice(-this.config.recentEntriesCount)
-      .map((e) => e.content)
-      .join('\n\n')
+      .filter(
+        (e): e is typeof e & { type: 'user_action' | 'narration' } =>
+          e.type === 'user_action' || e.type === 'narration',
+      )
+      .map((e) => ({ type: e.type, content: e.content }))
 
     const ctx = new ContextBuilder()
-    ctx.add({ recentContent, userInput, entrySummaries })
+    ctx.add({ recentEntries, userInput, availableEntries: availableEntriesMapped })
     const { system, user: prompt } = await ctx.render('tier3-entry-selection')
 
     try {

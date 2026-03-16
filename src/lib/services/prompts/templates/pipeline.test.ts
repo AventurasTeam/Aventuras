@@ -131,10 +131,10 @@ describe('pipeline: action-choices', () => {
 
 describe('pipeline: chapter-summarization', () => {
   const template = PROMPT_TEMPLATES.find((t) => t.id === 'chapter-summarization')!
-  const firstChapterTitle = chapters.length > 0 ? chapters[0].title : 'The Beginning'
+  const firstChapterTitle = 'Into the Woods'
   const chapterPipelineContext = {
-    previousContext: 'Prior events summarized here.',
-    chapterContent: firstChapterTitle,
+    chapterEntries: [{ type: 'narration', content: firstChapterTitle }],
+    previousChapters: chapters,
   }
 
   it('content render is non-null', () => {

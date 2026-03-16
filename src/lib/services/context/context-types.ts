@@ -10,99 +10,88 @@
  * (worldStateCharacters[], worldStateInventory[], etc.) in the template context.
  */
 
-/** A character as seen by Liquid templates (worldStateCharacters[]) */
-export interface ContextCharacter {
-  /** Character name */
-  name: string
-  /** Relationship to the protagonist (e.g. companion, rival, ally, self) */
-  relationship: string
-  /** Character description */
-  description: string
-  /** Personality traits */
-  traits: string[]
+import type { Character, Item, StoryBeat, Location, Entry, Chapter, StoryEntry } from '$lib/types'
+
+// ===== Refactored Existing Interfaces (Omit<>/Pick<> derivation) =====
+
+/**
+ * A character as seen by Liquid templates (worldStateCharacters[]).
+ * Explicit field list — new Character fields won't leak into templates.
+ * `appearance` is normalized from VisualDescriptors; `tier` is retrieval priority.
+ */
+export type ContextCharacter = Pick<
+  Character,
+  'name' | 'description' | 'relationship' | 'traits'
+> & {
+  status: 'active' | 'inactive' | 'deceased'
   /** Visual appearance details (normalized from VisualDescriptors) */
   appearance: string[]
   /** Retrieval tier — lower means higher priority in context window */
   tier: 1 | 2 | 3
-  /** Character status */
-  status: 'active' | 'inactive' | 'deceased'
 }
 
-/** An inventory item as seen by Liquid templates (worldStateInventory[]) */
-export interface ContextItem {
-  /** Item name */
-  name: string
-  /** Item description */
-  description: string
-  /** Quantity held */
-  quantity: number
-  /** Whether the item is currently equipped */
-  equipped: boolean
+/**
+ * An inventory item as seen by Liquid templates (worldStateInventory[]).
+ * Strips internal IDs, branch tracking, location, and translation fields.
+ * Adds optional `tier` for tier-2/3 relevant items.
+ */
+export type ContextItem = Pick<Item, 'name' | 'description' | 'quantity' | 'equipped'> & {
   /** Retrieval tier — present for tier-2/3 items (worldStateRelevantItems), omitted for inventory */
   tier?: 1 | 2 | 3
 }
 
-/** A story beat/active thread as seen by Liquid templates (worldStateBeats[]) */
-export interface ContextStoryBeat {
-  /** Beat title */
-  title: string
-  /** Beat description */
-  description: string
-  /** Beat type (e.g. discovery, conflict, quest, revelation) */
-  type: string
-  /** Beat status (e.g. active, completed, failed) */
-  status: string
+/**
+ * A story beat/active thread as seen by Liquid templates (worldStateBeats[]).
+ * Strips internal IDs, branch tracking, timestamps, and translation fields.
+ * Adds optional `tier` for tier-2/3 related beats.
+ */
+export type ContextStoryBeat = Pick<StoryBeat, 'title' | 'description' | 'type' | 'status'> & {
   /** Retrieval tier — present for tier-2/3 beats (worldStateRelatedBeats), omitted for active beats */
   tier?: 1 | 2 | 3
 }
 
-/** A non-current location as seen by Liquid templates (worldStateLocations[]) */
-export interface ContextLocation {
-  /** Location name */
-  name: string
-  /** Location description */
-  description: string
-  /** Whether the protagonist has visited this location */
-  visited: boolean
+/**
+ * A non-current location as seen by Liquid templates (worldStateLocations[]).
+ * Strips internal IDs, branch tracking, connections, current flag, and translation fields.
+ * Adds `tier` for retrieval priority ordering.
+ */
+export type ContextLocation = Pick<Location, 'name' | 'description' | 'visited'> & {
   /** Retrieval tier — lower means higher priority in context window */
   tier: 1 | 2 | 3
 }
 
-/** A lorebook entry as seen by Liquid templates (lorebookEntries[]) */
-export interface ContextLorebookEntry {
-  /** Entry name */
-  name: string
-  /** Entry type (e.g. character, location, item, faction, concept, event) */
-  type: string
-  /** Entry description */
-  description: string
+/**
+ * A lorebook entry as seen by Liquid templates (lorebookEntries[]).
+ * Uses Pick — only 3 fields needed from the large Entry type.
+ * Adds `tier` and optional `disposition` for character entries.
+ */
+export type ContextLorebookEntry = Pick<Entry, 'name' | 'type' | 'description'> & {
   /** Retrieval tier — lower means higher priority in context window */
   tier: 1 | 2 | 3
   /** Current disposition — optional, character-only */
   disposition?: string
 }
 
-/** A chapter summary as seen by Liquid templates (chapters[]) */
-export interface ContextChapter {
-  /** Chapter number */
-  number: number
+/**
+ * A chapter summary as seen by Liquid templates (chapters[]).
+ * Strips internal IDs, branch tracking, entry boundary IDs, keyword/thread metadata.
+ * Converts TimeTracker startTime/endTime to formatted string | null for template rendering.
+ */
+export type ContextChapter = Pick<Chapter, 'number' | 'summary' | 'characters' | 'locations'> & {
   /** Chapter title */
   title: string
-  /** Chapter summary text */
-  summary: string
   /** Formatted start time string, or null if not recorded */
   startTime: string | null
   /** Formatted end time string, or null if not recorded */
   endTime: string | null
-  /** Character names appearing in this chapter */
-  characters: string[]
-  /** Location names appearing in this chapter */
-  locations: string[]
   /** Emotional tone of the chapter */
   emotionalTone: string
 }
 
-/** A timeline gap-fill Q&A result as seen by Liquid templates (timelineFill[]) */
+/**
+ * A timeline gap-fill Q&A result as seen by Liquid templates (timelineFill[]).
+ * No direct domain type mapping — this is a pure context construct.
+ */
 export interface ContextTimelineFill {
   /** The question posed to fill the timeline gap */
   query: string
@@ -112,10 +101,119 @@ export interface ContextTimelineFill {
   chapterNumbers: number[]
 }
 
-/** A story entry as seen by Liquid templates (storyEntries[]) */
-export interface ContextStoryEntry {
-  /** Entry type */
+/**
+ * A story entry as seen by Liquid templates (storyEntries[]).
+ * Narrow type union — system/retry types are filtered out by mappers before reaching templates.
+ */
+export type ContextStoryEntry = {
   type: 'user_action' | 'narration'
-  /** Entry text content */
   content: string
 }
+
+// ===== New v1.2 Interfaces =====
+
+/**
+ * A character subset for classifier templates (characters[]).
+ * Full character context needed for entity classification.
+ * Reuses ContextCharacter — classifier can tolerate all fields.
+ */
+export type ContextClassifierCharacter = ContextCharacter
+
+/**
+ * A story beat subset for classifier templates (storyBeats[]).
+ * Slim subset for classification — only title, description, type, status needed.
+ */
+export type ContextClassifierBeat = Pick<StoryBeat, 'title' | 'description' | 'type' | 'status'>
+
+/**
+ * A chat entry for classifier/image templates (chatHistory[]).
+ * Only type and content are needed by templates; timeStart is computed by the mapper
+ * from the source entry's metadata.timeStart.
+ */
+export type ContextChatEntry = Pick<StoryEntry, 'type' | 'content'> & {
+  /** Formatted time string for template rendering, e.g. 'Y1D3 09:30', empty string if none */
+  timeStart: string
+}
+
+/**
+ * A passage for style review templates (passages[]).
+ * No direct domain type mapping — content + reference entry ID.
+ */
+export interface ContextPassage {
+  /** Passage text content */
+  content: string
+  /** ID of the source story entry */
+  entryId: string
+}
+
+/**
+ * An available lorebook entry for tier-3 entry selection (availableEntries[]).
+ * Slim subset from Entry — name, type, description plus optional keywords string.
+ */
+export type ContextAvailableEntry = Pick<Entry, 'name' | 'type' | 'description'> & {
+  /** Comma-separated keywords for matching (optional) */
+  keywords?: string
+}
+
+/**
+ * A story entry for retrieval/memory range queries (messagesInRange[]).
+ * Same shape as ContextStoryEntry — type alias for semantic clarity.
+ */
+export type ContextMessagesInRange = ContextStoryEntry
+
+/**
+ * A story entry for chapter summarization (chapterEntries[]).
+ * Same shape as ContextStoryEntry — type alias for semantic clarity.
+ */
+export type ContextChapterEntry = ContextStoryEntry
+
+/**
+ * A previous chapter for chapter summarization context (previousChapters[]).
+ * Same shape as ContextChapter — type alias for semantic clarity.
+ */
+export type ContextPreviousChapter = ContextChapter
+
+/**
+ * A lorebook entry for lore management templates (loreEntries[]).
+ * Uses Pick — name, type, description plus optional current state.
+ */
+export type ContextLoreEntry = Pick<Entry, 'name' | 'type' | 'description'> & {
+  /** Current dynamic state of the entry (optional) */
+  state?: string
+}
+
+/**
+ * A chapter summary for lore management templates (loreChapters[]).
+ * Slim subset — only number, title, summary needed for lore context.
+ */
+export type ContextLoreChapter = Pick<Chapter, 'number' | 'title' | 'summary'>
+
+/**
+ * A character for image generation templates (sceneCharacters[]).
+ * Keeps visualDescriptors and portrait for image prompt construction.
+ */
+export type ContextSceneCharacter = Pick<
+  Character,
+  'name' | 'description' | 'relationship' | 'traits' | 'visualDescriptors' | 'portrait' | 'status'
+>
+
+/**
+ * A chapter for timeline-fill-answer templates (answerChapters[]).
+ * Slim subset with optional entries array for dual-mode rendering.
+ */
+export type ContextAnswerChapter = Pick<Chapter, 'number' | 'title' | 'summary'> & {
+  /** Optional story entries within this chapter (for detailed answer mode) */
+  entries?: ContextStoryEntry[]
+}
+
+/**
+ * A chapter for agentic retrieval templates (agenticChapters[]).
+ * Same shape as ContextLoreChapter — type alias for semantic clarity.
+ */
+export type ContextAgenticChapter = ContextLoreChapter
+
+/**
+ * A lorebook entry for agentic retrieval templates (agenticEntries[]).
+ * Slim subset — name and type only.
+ */
+export type ContextAgenticEntry = Pick<Entry, 'name' | 'type'>

@@ -134,7 +134,13 @@ Determine how much narrative time elapsed during this passage. Consider what act
 Mode: {{ mode }}
 Already tracking: {{ entityCounts }}
 {{ currentTimeInfo }}
-{{ chatHistoryBlock }}
+{%- if chatHistory.size > 0 %}
+
+## Recent Chat History
+{% for entry in chatHistory %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.timeStart != '' %} (at {{ entry.timeStart }}){% endif %} {{ entry.content }}
+
+{% endfor %}
+{%- endif %}
 ## {{ inputLabel }}
 "{{ userAction }}"
 
@@ -144,12 +150,18 @@ Already tracking: {{ entityCounts }}
 """
 
 ## Already Known Entities (check before adding duplicates)
-Characters: {{ existingCharacters }}
-Locations: {{ existingLocations }}
-Items: {{ existingItems }}
+Characters: {% if characters.size == 0 %}(none){% else %}{% for char in characters %}
+- {{ char.name }}{% if char.relationship != '' %} ({{ char.relationship }}){% endif %}{% if char.status != 'active' %} [{{ char.status }}]{% endif %}
+{% if char.appearance.size > 0 %}  Appearance: {% for a in char.appearance %}{{ a }}{% unless forloop.last %}, {% endunless %}{% endfor %}
+{% endif %}{% endfor %}{% endif %}
+Locations: {% if locations.size == 0 %}(none){% else %}{% for loc in locations %}{{ loc.name }}{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif %}
+Items: {% if items.size == 0 %}(none){% else %}{% for item in items %}{{ item.name }}{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif %}
 
 ## Active Story Beats (update these when resolved!)
-{{ existingBeats }}
+{%- assign hasActiveBeats = false %}{% for beat in storyBeats %}{% if beat.status == 'active' or beat.status == 'pending' %}{% assign hasActiveBeats = true %}{% endif %}{% endfor %}{% if hasActiveBeats == false %}
+(none){% else %}{% for beat in storyBeats %}{% if beat.status == 'active' or beat.status == 'pending' %}
+- "{{ beat.title }}" [{{ beat.status }}]{% if beat.description != '' %}: {{ beat.description }}{% endif %}
+{% endif %}{% endfor %}{% endif %}
 
 {% if customVariableInstructions != '' %}
 {{ customVariableInstructions }}
@@ -202,7 +214,11 @@ Identify overused phrases, sentence patterns, structural repetition, and stylist
 - Focus on actionable improvements`,
   userContent: `Analyze these {{ passageCount }} passages for repetitive phrases, structural patterns, and style issues. Each passage is a separate AI-generated narrative response.
 
-{{ passages }}`,
+{% for passage in passages %}--- Passage {{ forloop.index }} ---
+{{ passage.content }}
+{% unless forloop.last %}
+
+{% endunless %}{% endfor %}`,
 }
 
 const lorebookClassifierPromptTemplate: PromptTemplate = {
@@ -243,14 +259,16 @@ Consider:
 
 Only include entries that have a clear connection to the current scene or user's intended action. Do not include entries just because they exist in the world.`,
   userContent: `# Current Scene
-{{ recentContent }}
+{% for entry in recentEntries %}{{ entry.content }}{% unless forloop.last %}
+
+{% endunless %}{% endfor %}
 
 # User's Input
 "{{ userInput }}"
 
 # Available Entries
-{{ entrySummaries }}
-
+{% for entry in availableEntries %}{{ forloop.index0 }}. [{{ entry.type }}] {{ entry.name }}{% if entry.description != '' %}: {{ entry.description }}{% endif %}
+{% endfor %}
 Which entries (by number) are relevant to the current scene and user input?`,
 }
 
