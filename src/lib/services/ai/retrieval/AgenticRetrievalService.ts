@@ -11,7 +11,7 @@ import { createLogger } from '$lib/log'
 import { createAgentFromPreset, extractTerminalToolResult, stopOnTerminalTool } from '../sdk/agents'
 import { createRetrievalTools, type RetrievalToolContext } from '../sdk/tools'
 import { ContextBuilder } from '$lib/services/context'
-import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import type { ContextLorebookEntryBase } from '$lib/services/context/context-types'
 import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
 
 const log = createLogger('AgenticRetrieval')
@@ -26,8 +26,8 @@ export interface RetrievalResult {
   agenticReasoning: string
   /** Summary of key facts learned from chapter queries */
   agenticChapterSummary: string
-  /** Selected entries mapped to ContextLorebookEntry shape */
-  agenticSelectedEntries: ContextLorebookEntry[]
+  /** Selected entries mapped to ContextLorebookEntryBase shape (no tier) */
+  agenticSelectedEntries: ContextLorebookEntryBase[]
   /** Number of agent iterations */
   iterations: number
   /** IDs of chapters that were queried */

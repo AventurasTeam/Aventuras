@@ -11,12 +11,6 @@
  */
 
 import type { Character, Item, StoryBeat, Location, Entry, Chapter, StoryEntry } from '$lib/types'
-import type {
-  ExpandedSetting,
-  GeneratedProtagonist,
-  GeneratedCharacter,
-} from '$lib/services/ai/sdk/schemas/scenario'
-import type { RuntimeVariable } from '$lib/services/packs/types'
 
 // ===== Refactored Existing Interfaces (Omit<>/Pick<> derivation) =====
 
@@ -67,15 +61,27 @@ export type ContextLocation = Pick<Location, 'name' | 'description' | 'visited'>
 }
 
 /**
- * A lorebook entry as seen by Liquid templates (lorebookEntries[]).
- * Uses Pick — only 3 fields needed from the large Entry type.
- * Adds `tier` and optional `disposition` for character entries.
+ * Base lorebook entry fields shared by all context paths (retrieval, wizard, agentic).
  */
-export type ContextLorebookEntry = Pick<Entry, 'name' | 'type' | 'description'> & {
-  /** Retrieval tier — lower means higher priority. Optional: wizards omit tier. */
-  tier?: 1 | 2 | 3
+export type ContextLorebookEntryBase = Pick<Entry, 'name' | 'type' | 'description'> & {
   /** Current disposition — optional, character-only */
   disposition?: string
+}
+
+/**
+ * A lorebook entry for retrieval templates (lorebookEntries[]).
+ * Tier is required — retrieval always assigns priority tiers.
+ */
+export type ContextLorebookEntry = ContextLorebookEntryBase & {
+  /** Retrieval tier — lower means higher priority in context window */
+  tier: 1 | 2 | 3
+}
+
+/**
+ * A lorebook entry for wizard templates (lorebookEntries[]).
+ * No tier — wizard entries are not prioritized by retrieval.
+ */
+export type ContextWizardLorebookEntry = ContextLorebookEntryBase & {
   /** Hidden lore visible only to the AI — optional, wizard-only */
   hiddenInfo?: string
 }
@@ -117,8 +123,6 @@ export type ContextStoryEntry = {
   type: 'user_action' | 'narration'
   content: string
 }
-
-// ===== New v1.2 Interfaces =====
 
 /**
  * A character subset for classifier templates (characters[]).
@@ -225,49 +229,3 @@ export type ContextAgenticChapter = ContextLoreChapter
  * Slim subset — name and type only.
  */
 export type ContextAgenticEntry = Pick<Entry, 'name' | 'type'>
-
-// ===== v1.3 Wizard Context Types =====
-
-/**
- * A setting as seen by wizard templates (currentSetting{}).
- * Structured object fields for Liquid field access — no pre-formatted string.
- */
-export type ContextWizardSetting = Pick<
-  ExpandedSetting,
-  'name' | 'description' | 'atmosphere' | 'themes' | 'potentialConflicts' | 'keyLocations'
->
-
-/**
- * A protagonist as seen by wizard templates (currentCharacter{}, characterInput{}).
- * Structured object fields for Liquid field access — no pre-formatted string.
- */
-export type ContextWizardCharacter = Pick<
-  GeneratedProtagonist,
-  'name' | 'description' | 'background' | 'motivation' | 'traits' | 'appearance'
->
-
-/**
- * A supporting character as seen by wizard templates (supportingCharacters[]).
- * Structured array element for Liquid for-loop iteration — no pre-joined string.
- */
-export type ContextSupportingCharacter = Pick<
-  GeneratedCharacter,
-  'name' | 'role' | 'description' | 'relationship' | 'traits'
->
-
-// ===== v1.3 Classifier Context Types =====
-
-/**
- * A runtime variable definition as seen by classifier templates (runtimeVariables{}).
- * Full RuntimeVariable objects are passed through — template ignores extra fields.
- */
-export type ContextRuntimeVariable = Pick<
-  RuntimeVariable,
-  | 'variableName'
-  | 'variableType'
-  | 'minValue'
-  | 'maxValue'
-  | 'enumOptions'
-  | 'defaultValue'
-  | 'description'
->

@@ -301,7 +301,7 @@ export const structuredSamples: Record<string, unknown> = {
       'A cozy tavern at the crossroads, known for its warm hearth and loose-lipped travelers',
   },
 
-  // v1.2 — Style Reviewer
+  // Style Reviewer
   passages: [
     {
       content:
@@ -320,7 +320,7 @@ export const structuredSamples: Record<string, unknown> = {
     },
   ],
 
-  // v1.2 — Entry Retrieval (Tier 3)
+  // Entry Retrieval (Tier 3)
   availableEntries: [
     {
       name: 'The Whispering Woods',
@@ -341,25 +341,19 @@ export const structuredSamples: Record<string, unknown> = {
     },
   ],
 
-  // v1.3 — Agentic Retrieval (recentEntries — with role, label, isLatest)
+  // Agentic Retrieval (recentEntries)
   recentEntries: [
     {
       type: 'narration',
       content: 'The lantern flickered as shadows crept along the walls.',
-      role: 'assistant',
-      label: 'Narration',
-      isLatest: false,
     },
     {
       type: 'user_action',
       content: 'I cautiously step forward, hand on my sword.',
-      role: 'user',
-      label: 'Action',
-      isLatest: true,
     },
   ],
 
-  // v1.3 — Agentic Retrieval Output (agenticSelectedEntries)
+  // Agentic Retrieval Output (agenticSelectedEntries)
   agenticSelectedEntries: [
     {
       name: 'The Moonstone Pendant',
@@ -373,7 +367,7 @@ export const structuredSamples: Record<string, unknown> = {
     },
   ],
 
-  // v1.2 — Classifier (chatHistory — Omit<StoryEntry> + timeStart)
+  // Classifier (chatHistory — Omit<StoryEntry> + timeStart)
   chatHistory: [
     {
       type: 'user_action',
@@ -395,7 +389,7 @@ export const structuredSamples: Record<string, unknown> = {
     },
   ],
 
-  // v1.2 — Chapter Analysis (messagesInRange — same shape as storyEntries)
+  // Chapter Analysis (messagesInRange — same shape as storyEntries)
   messagesInRange: [
     { type: 'user_action', content: 'I draw my sword and step into the shadows.' },
     {
@@ -406,7 +400,7 @@ export const structuredSamples: Record<string, unknown> = {
     { type: 'user_action', content: 'I whisper to Theron to flank left.' },
   ],
 
-  // v1.2 — Chapter Summarization
+  // Chapter Summarization
   chapterEntries: [
     { type: 'narration', content: 'Aria and Theron entered the Crystal Caverns at dawn.' },
     { type: 'user_action', content: 'I run my hand along the glowing crystal wall.' },
@@ -417,7 +411,7 @@ export const structuredSamples: Record<string, unknown> = {
     },
   ],
 
-  // v1.2 — Chapter Summarization (previousChapters — same shape as chapters)
+  // Chapter Summarization (previousChapters — same shape as chapters)
   previousChapters: [
     {
       number: 1,
@@ -431,7 +425,7 @@ export const structuredSamples: Record<string, unknown> = {
     },
   ],
 
-  // v1.2 — Lore Management
+  // Lore Management
   loreEntries: [
     {
       name: 'The Whispering Woods',
@@ -452,7 +446,7 @@ export const structuredSamples: Record<string, unknown> = {
     },
   ],
 
-  // v1.2 — Lore Management (loreChapters)
+  // Lore Management (loreChapters)
   loreChapters: [
     {
       number: 1,
@@ -471,7 +465,7 @@ export const structuredSamples: Record<string, unknown> = {
     },
   ],
 
-  // v1.2 — Agentic Retrieval (agenticChapters — same shape as loreChapters)
+  // Agentic Retrieval (agenticChapters — same shape as loreChapters)
   agenticChapters: [
     {
       number: 1,
@@ -490,14 +484,14 @@ export const structuredSamples: Record<string, unknown> = {
     },
   ],
 
-  // v1.2 — Agentic Retrieval (agenticEntries — name and type only)
+  // Agentic Retrieval (agenticEntries — name and type only)
   agenticEntries: [
     { name: 'The Whispering Woods', type: 'location' },
     { name: 'The Moonstone Pendant', type: 'item' },
     { name: 'Elder Maren', type: 'character' },
   ],
 
-  // v1.2 — Image Analysis (sceneCharacters — mixed portrait state)
+  // Image Analysis (sceneCharacters — mixed portrait state)
   sceneCharacters: [
     {
       name: 'Theron',
@@ -544,7 +538,7 @@ export const structuredSamples: Record<string, unknown> = {
     },
   ],
 
-  // v1.2 — Timeline Fill Answer (answerChapters — dual-mode)
+  // Timeline Fill Answer (answerChapters — dual-mode)
   answerChapters: [
     {
       number: 1,
@@ -568,7 +562,7 @@ export const structuredSamples: Record<string, unknown> = {
     },
   ],
 
-  // v1.2 — Background Image (narrationEntries — all type narration)
+  // Background Image (narrationEntries — all type narration)
   narrationEntries: [
     {
       type: 'narration',
@@ -587,7 +581,7 @@ export const structuredSamples: Record<string, unknown> = {
     },
   ],
 
-  // v1.2 — Classifier (characters — same shape as worldStateCharacters)
+  // Classifier (characters — same shape as worldStateCharacters)
   characters: [
     {
       name: 'Theron',
@@ -609,7 +603,7 @@ export const structuredSamples: Record<string, unknown> = {
     },
   ],
 
-  // v1.2 — Classifier (storyBeats — same shape as worldStateBeats)
+  // Classifier (storyBeats — same shape as worldStateBeats)
   storyBeats: [
     {
       title: 'Discovered the Hidden Map',
@@ -625,7 +619,7 @@ export const structuredSamples: Record<string, unknown> = {
     },
   ],
 
-  // v1.3 — Wizard Service (structured objects replacing scalar strings)
+  // Wizard Service (structured objects replacing scalar strings)
   currentSetting: {
     name: 'The Whispering Woods',
     description: 'An ancient forest where trees carry memories of the world.',
@@ -681,7 +675,7 @@ export const structuredSamples: Record<string, unknown> = {
     },
   },
 
-  // v1.3 - Classifier (runtimeVariables - grouped by entity type)
+  // Classifier (runtimeVariables - grouped by entity type)
   runtimeVariables: {
     character: [
       {
@@ -712,14 +706,14 @@ export const structuredSamples: Record<string, unknown> = {
     ],
   },
 
-  // v1.2 — Interactive Lorebook (focusedEntity object)
+  // Interactive Lorebook (focusedEntity object)
   focusedEntity: {
     entityType: 'character',
     entityName: 'Theron',
     entityId: 'char-001',
   },
 
-  // v1.2 — Image Portrait (visualDescriptors object)
+  // Image Portrait (visualDescriptors object)
   visualDescriptors: {
     face: 'angular features, sharp cheekbones',
     hair: 'silver, flowing to shoulders',

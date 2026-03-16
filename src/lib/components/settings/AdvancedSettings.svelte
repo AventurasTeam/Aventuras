@@ -625,6 +625,7 @@
                     step={1}
                     type="single"
                     onValueChange={(v) => {
+                      if (!settings.systemServicesSettings.agenticRetrieval) return
                       settings.systemServicesSettings.agenticRetrieval.recentEntryCount = v
                       settings.saveSystemServicesSettings()
                     }}

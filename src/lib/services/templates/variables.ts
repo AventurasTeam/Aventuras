@@ -303,11 +303,8 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     description: 'Recent story entries for agentic retrieval context (configurable count)',
     required: false,
     infoFields: [
-      { name: 'type', type: 'string', description: 'Entry type (narration, user_action, etc.)' },
+      { name: 'type', type: 'string', description: 'Entry type (narration, user_action)' },
       { name: 'content', type: 'string', description: 'Entry text content' },
-      { name: 'role', type: 'string', description: 'Entry role (assistant, user)' },
-      { name: 'label', type: 'string', description: 'Display label' },
-      { name: 'isLatest', type: 'boolean', description: 'Whether this is the most recent entry' },
     ] satisfies VariableFieldInfo[],
   },
   {
@@ -1046,7 +1043,7 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     ] satisfies VariableFieldInfo[],
   },
 
-  // === Structured Context Arrays (v1.2) ===
+  // === Structured Context Arrays ===
   {
     name: 'characters',
     type: 'array',
