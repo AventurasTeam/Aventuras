@@ -5,3 +5,46 @@ export const settings = {
 }
 export const story = {}
 export const storyUI = {}
+export const storyContext = {
+  // Category 1 — world state
+  currentStory: null,
+  entries: [],
+  characters: [],
+  locations: [],
+  items: [],
+  storyBeats: [],
+  chapters: [],
+  lorebookEntries: [],
+
+  // Category 2 — generation inputs
+  userAction: null,
+  narrationEntryId: null,
+  abortSignal: null,
+
+  // Category 3 — generation intermediates
+  retrievalResult: null,
+  narrativeResult: null,
+  classificationResult: null,
+  translationResult: null,
+  imageResult: null,
+  postGenerationResult: null,
+  backgroundResult: null,
+
+  // Derived views (static defaults for tests)
+  visibleEntries: [],
+  pov: 'first',
+  tense: 'present',
+  storyMode: 'adventure',
+  protagonist: undefined,
+  currentLocation: undefined,
+  pendingQuests: [],
+  lastChapterEndIndex: 0,
+  currentBranchChapters: [],
+
+  // Lifecycle methods (no-ops)
+  init: () => {},
+  reset: () => {},
+  commit: () => {},
+  hydrate: () => {},
+  clear: () => {},
+}
