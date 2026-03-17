@@ -44,6 +44,7 @@ import {
 } from '$lib/services/events'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { aiService } from '$lib/services/ai'
+import { storyContext } from './storyContext.svelte'
 
 const DEBUG = true
 
@@ -456,6 +457,7 @@ class StoryStore {
     this.invalidateWordCountCache()
     this.invalidateChapterCache()
     log('Story closed')
+    storyContext.clear()
   }
 
   // Load all stories for library view
@@ -550,6 +552,19 @@ class StoryStore {
 
     // Emit event
     emitStoryLoaded(storyId, story.mode)
+
+    // Hydrate singleton with current story data
+    storyContext.hydrate({
+      story: this.currentStory!,
+      entries: this.entries,
+      characters: this.characters,
+      locations: this.locations,
+      items: this.items,
+      storyBeats: this.storyBeats,
+      chapters: this.chapters,
+      lorebookEntries: this.lorebookEntries,
+      branches: this.branches,
+    })
   }
 
   // Create a new story
@@ -650,6 +665,10 @@ class StoryStore {
     this.items = []
     this.storyBeats = []
     this.currentStory = { ...this.currentStory, timeTracker: null }
+    storyContext.currentStory = this.currentStory
+    storyContext.locations = this.locations
+    storyContext.items = this.items
+    storyContext.storyBeats = this.storyBeats
   }
 
   // Add a new story entry
@@ -693,6 +712,7 @@ class StoryStore {
     })
 
     this.entries = [...this.entries, entry]
+    storyContext.entries = this.entries
 
     // Invalidate caches
     this.invalidateWordCountCache()
@@ -737,6 +757,7 @@ class StoryStore {
     this.entries = this.entries.map((e) =>
       e.id === entryId ? { ...e, content, metadata: updatedMetadata } : e,
     )
+    storyContext.entries = this.entries
 
     // Invalidate word count cache (content changed)
     this.invalidateWordCountCache()
@@ -854,6 +875,7 @@ class StoryStore {
     // Legacy behavior: delete just this one entry (no world state changes)
     await database.deleteStoryEntry(entryId)
     this.entries = this.entries.filter((e) => e.id !== entryId)
+    storyContext.entries = this.entries
 
     // Invalidate caches
     this.invalidateWordCountCache()
@@ -890,6 +912,7 @@ class StoryStore {
     this.entries = this.entries.map((e) =>
       e.id === entryId ? { ...e, metadata: updatedMetadata } : e,
     )
+    storyContext.entries = this.entries
 
     log('Entry timeEnd updated', { entryId, timeEnd })
   }
@@ -903,6 +926,7 @@ class StoryStore {
 
     // Update in-memory state
     this.entries = this.entries.map((e) => (e.id === entryId ? { ...e, reasoning } : e))
+    storyContext.entries = this.entries
 
     // Persist to database
     await database.updateStoryEntry(entryId, { reasoning })
@@ -918,6 +942,7 @@ class StoryStore {
 
     // Update in-memory state
     this.entries = this.entries.map((e) => (e.id === entryId ? updatedEntry : e))
+    storyContext.entries = this.entries
   }
 
   /**
@@ -1366,6 +1391,7 @@ class StoryStore {
 
     await database.addCharacter(character)
     this.characters = [...this.characters, character]
+    storyContext.characters = this.characters
     return character
   }
 
@@ -1389,6 +1415,7 @@ class StoryStore {
     const { entity: owned } = await this.cowCharacter(existing)
     await database.updateCharacter(owned.id, updates)
     this.characters = this.characters.map((c) => (c.id === owned.id ? { ...c, ...updates } : c))
+    storyContext.characters = this.characters
   }
 
   // Delete a character (protagonist cannot be deleted)
@@ -1415,6 +1442,7 @@ class StoryStore {
       await database.deleteCharacter(id)
     }
     this.characters = this.characters.filter((c) => c.id !== id)
+    storyContext.characters = this.characters
   }
 
   // Add a location
@@ -1441,6 +1469,7 @@ class StoryStore {
     }
 
     this.locations = [...this.locations, location]
+    storyContext.locations = this.locations
     return location
   }
 
@@ -1481,6 +1510,7 @@ class StoryStore {
       await database.updateLocation(owned.id, updates)
       this.locations = this.locations.map((l) => (l.id === owned.id ? { ...l, ...updates } : l))
     }
+    storyContext.locations = this.locations
   }
 
   // Set current location
@@ -1514,6 +1544,7 @@ class StoryStore {
         visited: l.id === locationId ? true : l.visited,
       }))
     }
+    storyContext.locations = this.locations
   }
 
   // Toggle location visited status
@@ -1528,6 +1559,7 @@ class StoryStore {
     this.locations = this.locations.map((l) =>
       l.id === locationId ? { ...l, visited: newVisited } : l,
     )
+    storyContext.locations = this.locations
     log('Location visited toggled:', location.name, newVisited)
   }
 
@@ -1549,6 +1581,7 @@ class StoryStore {
       await database.deleteLocation(locationId)
     }
     this.locations = this.locations.filter((l) => l.id !== locationId)
+    storyContext.locations = this.locations
     log('Location deleted:', location.name)
   }
 
@@ -1570,6 +1603,7 @@ class StoryStore {
 
     await database.addItem(item)
     this.items = [...this.items, item]
+    storyContext.items = this.items
     return item
   }
 
@@ -1584,6 +1618,7 @@ class StoryStore {
     const { entity: owned } = await this.cowItem(existing)
     await database.updateItem(owned.id, updates)
     this.items = this.items.map((i) => (i.id === owned.id ? { ...i, ...updates } : i))
+    storyContext.items = this.items
   }
 
   // Delete an item
@@ -1604,6 +1639,7 @@ class StoryStore {
       await database.deleteItem(id)
     }
     this.items = this.items.filter((i) => i.id !== id)
+    storyContext.items = this.items
   }
 
   // Add a story beat
@@ -1629,6 +1665,7 @@ class StoryStore {
 
     await database.addStoryBeat(beat)
     this.storyBeats = [...this.storyBeats, beat]
+    storyContext.storyBeats = this.storyBeats
     return beat
   }
 
@@ -1656,6 +1693,7 @@ class StoryStore {
     this.storyBeats = this.storyBeats.map((b) =>
       b.id === owned.id ? { ...b, ...resolvedUpdates } : b,
     )
+    storyContext.storyBeats = this.storyBeats
   }
 
   // Delete a story beat
@@ -1676,6 +1714,7 @@ class StoryStore {
       await database.deleteStoryBeat(id)
     }
     this.storyBeats = this.storyBeats.filter((b) => b.id !== id)
+    storyContext.storyBeats = this.storyBeats
   }
 
   // Swap the protagonist to another character, updating the old label
@@ -1719,6 +1758,7 @@ class StoryStore {
       }
       return c
     })
+    storyContext.characters = this.characters
   }
 
   // ===== Lorebook Entry CRUD Methods =====
@@ -1747,6 +1787,7 @@ class StoryStore {
 
     await database.addEntry(entry)
     this.lorebookEntries = [...this.lorebookEntries, entry]
+    storyContext.lorebookEntries = this.lorebookEntries
     log('Lorebook entry added:', entry.name)
     return entry
   }
@@ -1772,6 +1813,7 @@ class StoryStore {
     this.lorebookEntries = this.lorebookEntries.map((e) =>
       e.id === owned.id ? { ...e, ...updatesWithTimestamp } : e,
     )
+    storyContext.lorebookEntries = this.lorebookEntries
     log('Lorebook entry updated:', owned.id)
   }
 
@@ -1797,6 +1839,7 @@ class StoryStore {
       await database.deleteEntry(id)
     }
     this.lorebookEntries = this.lorebookEntries.filter((e) => e.id !== id)
+    storyContext.lorebookEntries = this.lorebookEntries
     log('Lorebook entry deleted:', id)
   }
 
@@ -1825,6 +1868,7 @@ class StoryStore {
       await Promise.all(ids.map((id) => database.deleteEntry(id)))
     }
     this.lorebookEntries = this.lorebookEntries.filter((e) => !ids.includes(e.id))
+    storyContext.lorebookEntries = this.lorebookEntries
     log('Lorebook entries deleted:', ids.length)
   }
 
@@ -2678,6 +2722,13 @@ class StoryStore {
       storyBeats: this.storyBeats.length,
     })
 
+    // Sync all entity arrays to singleton after classification mutations
+    storyContext.characters = this.characters
+    storyContext.locations = this.locations
+    storyContext.items = this.items
+    storyContext.storyBeats = this.storyBeats
+    storyContext.entries = this.entries
+
     // Emit state updated event if there were any changes
     const hasChanges =
       result.entryUpdates.newCharacters.length > 0 ||
@@ -2731,6 +2782,7 @@ class StoryStore {
 
     await database.updateStory(this.currentStory.id, { mode })
     this.currentStory = { ...this.currentStory, mode }
+    storyContext.currentStory = this.currentStory
     log('Story mode updated:', mode)
 
     // Emit event
@@ -2743,6 +2795,7 @@ class StoryStore {
 
     await database.updateStory(this.currentStory.id, { memoryConfig: config })
     this.currentStory = { ...this.currentStory, memoryConfig: config }
+    storyContext.currentStory = this.currentStory
     log('Memory config updated:', config)
   }
 
@@ -2752,6 +2805,7 @@ class StoryStore {
 
     await database.addChapter(chapter)
     this.chapters = [...this.chapters, chapter]
+    storyContext.chapters = this.chapters
 
     // Invalidate chapter cache
     this.invalidateChapterCache()
@@ -2783,6 +2837,7 @@ class StoryStore {
 
     await database.updateChapter(chapterId, { summary })
     this.chapters = this.chapters.map((ch) => (ch.id === chapterId ? { ...ch, summary } : ch))
+    storyContext.chapters = this.chapters
     log('Chapter summary updated:', chapterId)
   }
 
@@ -2792,6 +2847,7 @@ class StoryStore {
 
     await database.updateChapter(chapterId, updates)
     this.chapters = this.chapters.map((ch) => (ch.id === chapterId ? { ...ch, ...updates } : ch))
+    storyContext.chapters = this.chapters
     log('Chapter updated:', chapterId, updates)
   }
 
@@ -2814,6 +2870,7 @@ class StoryStore {
 
     await database.deleteChapter(chapterId)
     this.chapters = this.chapters.filter((ch) => ch.id !== chapterId)
+    storyContext.chapters = this.chapters
 
     // Invalidate chapter cache
     this.invalidateChapterCache()
@@ -2828,6 +2885,7 @@ class StoryStore {
     const newConfig = { ...this.memoryConfig, ...updates }
     await database.updateStory(this.currentStory.id, { memoryConfig: newConfig })
     this.currentStory = { ...this.currentStory, memoryConfig: newConfig }
+    storyContext.currentStory = this.currentStory
     log('Memory config updated via updateMemoryConfig:', updates)
   }
 
@@ -2838,6 +2896,7 @@ class StoryStore {
     const newSettings = { ...(this.currentStory.settings ?? {}), ...updates }
     await database.updateStory(this.currentStory.id, { settings: newSettings })
     this.currentStory = { ...this.currentStory, settings: newSettings }
+    storyContext.currentStory = this.currentStory
     log('Story settings updated via updateStorySettings:', updates)
   }
 
@@ -2901,6 +2960,7 @@ class StoryStore {
     const normalized = this.normalizeTime(time)
     await database.saveTimeTracker(this.currentStory.id, normalized)
     this.currentStory = { ...this.currentStory, timeTracker: normalized }
+    storyContext.currentStory = this.currentStory
     log('Time tracker set:', normalized)
   }
 
@@ -2919,6 +2979,7 @@ class StoryStore {
     const normalized = this.normalizeTime(newTime)
     await database.saveTimeTracker(this.currentStory.id, normalized)
     this.currentStory = { ...this.currentStory, timeTracker: normalized }
+    storyContext.currentStory = this.currentStory
     log('Time added:', updates, '→', normalized)
   }
 
@@ -2953,6 +3014,7 @@ class StoryStore {
     if (snapshot === null) {
       await database.clearTimeTracker(this.currentStory.id)
       this.currentStory = { ...this.currentStory, timeTracker: null }
+      storyContext.currentStory = this.currentStory
       log('Time tracker cleared from snapshot')
       return
     }
@@ -2960,6 +3022,7 @@ class StoryStore {
     const normalized = this.normalizeTime(snapshot)
     await database.saveTimeTracker(this.currentStory.id, normalized)
     this.currentStory = { ...this.currentStory, timeTracker: normalized }
+    storyContext.currentStory = this.currentStory
     log('Time tracker restored from snapshot:', normalized)
   }
 
@@ -3413,6 +3476,7 @@ class StoryStore {
         ...this.currentStory!,
         timeTracker: { ...checkpoint.timeTrackerSnapshot },
       }
+      storyContext.currentStory = this.currentStory
       await database.updateStory(this.currentStory!.id, {
         timeTracker: checkpoint.timeTrackerSnapshot,
       })
@@ -3483,6 +3547,7 @@ class StoryStore {
     // Update story's current branch in database
     await database.setStoryCurrentBranch(this.currentStory.id, branchId)
     this.currentStory = { ...this.currentStory, currentBranchId: branchId }
+    storyContext.currentStory = this.currentStory
 
     // Reload entries from database if not skipping
     // When creating a new branch, we skip because we're already at the correct state
@@ -3690,6 +3755,19 @@ class StoryStore {
 
     // Restore time tracker from the last entry's metadata
     await this.restoreTimeFromLastEntry()
+
+    // Re-hydrate singleton after branch reload
+    storyContext.hydrate({
+      story: this.currentStory!,
+      entries: this.entries,
+      characters: this.characters,
+      locations: this.locations,
+      items: this.items,
+      storyBeats: this.storyBeats,
+      chapters: this.chapters,
+      lorebookEntries: this.lorebookEntries,
+      branches: this.branches,
+    })
   }
 
   /**
