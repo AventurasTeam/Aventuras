@@ -113,14 +113,14 @@ class StoryStore {
    * Returns true if repairs were made.
    */
   private async validateChapterIntegrity(): Promise<boolean> {
-    if (this.chapters.length === 0) return false
+    if (storyContext.chapters.length === 0) return false
 
     let repairsMade = false
-    const entryIdSet = new Set(this.entries.map((e) => e.id))
+    const entryIdSet = new Set(storyContext.entries.map((e) => e.id))
     const chaptersToDelete: string[] = []
 
     // Sort chapters by number for proper validation
-    const sortedChapters = [...this.chapters].sort((a, b) => a.number - b.number)
+    const sortedChapters = [...storyContext.chapters].sort((a, b) => a.number - b.number)
 
     for (const chapter of sortedChapters) {
       const hasValidStart = entryIdSet.has(chapter.startEntryId)
@@ -151,18 +151,20 @@ class StoryStore {
     }
 
     if (chaptersToDelete.length > 0) {
-      this.chapters = this.chapters.filter((ch) => !chaptersToDelete.includes(ch.id))
+      storyContext.chapters = storyContext.chapters.filter(
+        (ch) => !chaptersToDelete.includes(ch.id),
+      )
       // Invalidate chapter cache after deletions
-      this.invalidateChapterCache()
+      storyContext.invalidateChapterCache()
     }
 
     // Ensure chapters are sorted by number
-    this.chapters = [...this.chapters].sort((a, b) => a.number - b.number)
+    storyContext.chapters = [...storyContext.chapters].sort((a, b) => a.number - b.number)
 
     if (repairsMade) {
       log('Chapter integrity validation complete', {
         deletedChapters: chaptersToDelete.length,
-        remainingChapters: this.chapters.length,
+        remainingChapters: storyContext.chapters.length,
       })
     }
 
@@ -171,19 +173,9 @@ class StoryStore {
 
   // Close the current story and reset state
   closeStory(): void {
-    this.currentStory = null
-    this.entries = []
     this.currentBgImage = null
-    this.characters = []
-    this.locations = []
-    this.items = []
-    this.storyBeats = []
-    this.chapters = []
     this.checkpoints = []
-    this.lorebookEntries = []
     this.branches = []
-    this.invalidateWordCountCache()
-    this.invalidateChapterCache()
     log('Story closed')
     storyContext.clear()
   }
@@ -204,42 +196,31 @@ class StoryStore {
     // (fixes FK constraint issues from older data)
     await database.cleanupOrphanedEmbeddedImages()
 
-    this.currentStory = story
+    storyContext.currentStory = story
     this.currentBgImage = await database.getBackgroundForBranch(storyId, story.currentBranchId)
 
     // Load branch-independent data first
-    const [characters, locations, items, storyBeats, checkpoints, lorebookEntries, branches] =
-      await Promise.all([
-        database.getCharacters(storyId),
-        database.getLocations(storyId),
-        database.getItems(storyId),
-        database.getStoryBeats(storyId),
-        database.getCheckpoints(storyId),
-        database.getEntries(storyId),
-        database.getBranches(storyId),
-      ])
+    const [checkpoints, branches] = await Promise.all([
+      database.getCheckpoints(storyId),
+      database.getBranches(storyId),
+    ])
 
-    this.characters = characters
-    this.locations = locations
-    this.items = items
-    this.storyBeats = storyBeats
     this.checkpoints = checkpoints
-    this.lorebookEntries = lorebookEntries
     this.branches = branches
 
-    // Load entries and chapters based on current branch
+    // Load entries and chapters based on current branch (also hydrates storyContext)
     await this.reloadEntriesForCurrentBranch()
 
     // Reset all caches after loading
-    this.invalidateWordCountCache()
-    this.invalidateChapterCache()
+    storyContext.invalidateWordCountCache()
+    storyContext.invalidateChapterCache()
 
     log('Story loaded', {
       id: storyId,
       mode: story.mode,
-      entries: this.entries.length,
-      lorebookEntries: lorebookEntries.length,
-      chapters: this.chapters.length,
+      entries: storyContext.entries.length,
+      lorebookEntries: storyContext.lorebookEntries.length,
+      chapters: storyContext.chapters.length,
       checkpoints: checkpoints.length,
       branches: branches.length,
       currentBranchId: story.currentBranchId,
@@ -280,19 +261,6 @@ class StoryStore {
 
     // Emit event
     emitStoryLoaded(storyId, story.mode)
-
-    // Hydrate singleton with current story data
-    storyContext.hydrate({
-      story: this.currentStory!,
-      entries: this.entries,
-      characters: this.characters,
-      locations: this.locations,
-      items: this.items,
-      storyBeats: this.storyBeats,
-      chapters: this.chapters,
-      lorebookEntries: this.lorebookEntries,
-      branches: this.branches,
-    })
   }
 
   // Create a new story
@@ -331,11 +299,11 @@ class StoryStore {
    * main-branch entries. The current story must be loaded before calling this.
    */
   async importSTChat(messages: STChatMessage[]): Promise<void> {
-    if (!this.currentStory) {
+    if (!storyContext.currentStory) {
       throw new Error('No story loaded')
     }
 
-    const storyId = this.currentStory.id
+    const storyId = storyContext.currentStory.id
 
     // Branches fork off main-branch entries via fork_entry_id.
     // Deleting all main-branch entries would leave every branch with a
@@ -366,7 +334,7 @@ class StoryStore {
 
     // Bump the story's updatedAt so the library view reflects the import
     await database.updateStory(storyId, {})
-    this.currentStory.updatedAt = Date.now()
+    storyContext.currentStory = { ...storyContext.currentStory!, updatedAt: Date.now() }
 
     // Reload entries into the store
     await this.reloadEntriesForCurrentBranch()
@@ -387,16 +355,12 @@ class StoryStore {
    * Characters and lorebook entries are intentionally preserved.
    */
   async resetWorldStateAfterImport(): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
-    await database.resetWorldStateForImport(this.currentStory.id)
-    this.locations = []
-    this.items = []
-    this.storyBeats = []
-    this.currentStory = { ...this.currentStory, timeTracker: null }
-    storyContext.currentStory = this.currentStory
-    storyContext.locations = this.locations
-    storyContext.items = this.items
-    storyContext.storyBeats = this.storyBeats
+    if (!storyContext.currentStory) throw new Error('No story loaded')
+    await database.resetWorldStateForImport(storyContext.currentStory.id)
+    storyContext.locations = []
+    storyContext.items = []
+    storyContext.storyBeats = []
+    storyContext.currentStory = { ...storyContext.currentStory, timeTracker: null }
   }
 
   // Add a new story entry
@@ -409,7 +373,7 @@ class StoryStore {
     reasoning?: string,
     id?: string,
   ): Promise<StoryEntry> {
-    if (!this.currentStory) {
+    if (!storyContext.currentStory) {
       throw new Error('No story loaded')
     }
 
@@ -418,43 +382,42 @@ class StoryStore {
 
     // Capture current story time as timeStart for this entry
     // timeEnd defaults to timeStart; for narration entries, timeEnd is updated after classification
-    const timeStart = this.currentStory.timeTracker
-      ? { ...this.currentStory.timeTracker }
+    const timeStart = storyContext.currentStory.timeTracker
+      ? { ...storyContext.currentStory.timeTracker }
       : { years: 0, days: 0, hours: 0, minutes: 0 }
     const timeEnd = { ...timeStart }
 
     const position = await database.getNextEntryPosition(
-      this.currentStory.id,
-      this.currentStory.currentBranchId,
+      storyContext.currentStory.id,
+      storyContext.currentStory.currentBranchId,
     )
     const entry = await database.addStoryEntry({
       id: id ?? crypto.randomUUID(),
-      storyId: this.currentStory.id,
+      storyId: storyContext.currentStory.id,
       type,
       content,
       parentId: null,
       position,
       metadata: { ...metadata, tokenCount, timeStart, timeEnd },
-      branchId: this.currentStory.currentBranchId,
+      branchId: storyContext.currentStory.currentBranchId,
       reasoning,
     })
 
-    this.entries = [...this.entries, entry]
-    storyContext.entries = this.entries
+    storyContext.entries = [...storyContext.entries, entry]
 
     // Invalidate caches
-    this.invalidateWordCountCache()
-    this.invalidateChapterCache()
+    storyContext.invalidateWordCountCache()
+    storyContext.invalidateChapterCache()
 
     // Update story's updatedAt
-    await database.updateStory(this.currentStory.id, {})
+    await database.updateStory(storyContext.currentStory.id, {})
 
     return entry
   }
 
   // Update a story entry
   async updateEntry(entryId: string, content: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     // Prevent editing during any generation or retry restore to avoid race conditions
     // Silently return - UI should disable buttons using ui.isGenerating
@@ -463,12 +426,12 @@ class StoryStore {
       return
     }
 
-    const existingEntry = this.entries.find((e) => e.id === entryId)
+    const existingEntry = storyContext.entries.find((e) => e.id === entryId)
     if (!existingEntry) throw new Error('Entry not found')
 
     // Prevent modifying inherited entries on a branch
     // An entry is inherited if its branchId doesn't match the current branch
-    const currentBranchId = this.currentStory.currentBranchId
+    const currentBranchId = storyContext.currentStory.currentBranchId
     if ((existingEntry.branchId ?? null) !== currentBranchId) {
       throw new Error(
         'Cannot edit inherited entries. This entry belongs to ' +
@@ -482,16 +445,15 @@ class StoryStore {
     const updatedMetadata = { ...existingEntry.metadata, tokenCount }
 
     await database.updateStoryEntry(entryId, { content, metadata: updatedMetadata })
-    this.entries = this.entries.map((e) =>
+    storyContext.entries = storyContext.entries.map((e) =>
       e.id === entryId ? { ...e, content, metadata: updatedMetadata } : e,
     )
-    storyContext.entries = this.entries
 
     // Invalidate word count cache (content changed)
-    this.invalidateWordCountCache()
+    storyContext.invalidateWordCountCache()
 
     // Update story's updatedAt
-    await database.updateStory(this.currentStory.id, {})
+    await database.updateStory(storyContext.currentStory.id, {})
   }
 
   /**
@@ -499,13 +461,13 @@ class StoryStore {
    * Returns true if saved actions were found and restored, false if regeneration is needed.
    */
   private restoreSuggestedActionsAfterDelete(): boolean {
-    if (!this.currentStory) return false
+    if (!storyContext.currentStory) return false
 
     // Find the new last narration entry (actions attach to narration entries)
-    const lastNarration = [...this.entries].reverse().find((e) => e.type === 'narration')
+    const lastNarration = [...storyContext.entries].reverse().find((e) => e.type === 'narration')
 
-    const storyMode = this.storyMode
-    const storyId = this.currentStory.id
+    const storyMode = storyContext.storyMode
+    const storyId = storyContext.currentStory.id
 
     if (lastNarration) {
       const restored = ui.restoreSuggestedActionsFromEntry(
@@ -533,7 +495,7 @@ class StoryStore {
 
   // Delete a story entry
   async deleteEntry(entryId: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     // Prevent deleting during any generation or retry restore to avoid race conditions
     // Silently return - UI should disable buttons using ui.isGenerating
@@ -542,12 +504,12 @@ class StoryStore {
       return
     }
 
-    const existingEntry = this.entries.find((e) => e.id === entryId)
+    const existingEntry = storyContext.entries.find((e) => e.id === entryId)
     if (!existingEntry) throw new Error('Entry not found')
 
     // Prevent deleting inherited entries on a branch
     // An entry is inherited if its branchId doesn't match the current branch
-    const currentBranchId = this.currentStory.currentBranchId
+    const currentBranchId = storyContext.currentStory.currentBranchId
     if ((existingEntry.branchId ?? null) !== currentBranchId) {
       throw new Error(
         'Cannot delete inherited entries. This entry belongs to ' +
@@ -574,10 +536,10 @@ class StoryStore {
 
       // Run rollback to undo world state changes for this entry and all after it
       const rollbackSummary = await rollbackService.rollbackFromPosition(
-        this.currentStory.id,
+        storyContext.currentStory.id,
         currentBranchId ?? null,
         existingEntry.position,
-        this.entries,
+        storyContext.entries,
       )
 
       log('Rollback summary:', rollbackSummary)
@@ -589,9 +551,12 @@ class StoryStore {
       await this.reloadEntriesForCurrentBranch()
 
       // Also reload time tracker from the story record
-      const freshStory = await database.getStory(this.currentStory.id)
+      const freshStory = await database.getStory(storyContext.currentStory.id)
       if (freshStory) {
-        this.currentStory = { ...this.currentStory, timeTracker: freshStory.timeTracker }
+        storyContext.currentStory = {
+          ...storyContext.currentStory,
+          timeTracker: freshStory.timeTracker,
+        }
       }
 
       // Restore suggested actions from the new last narration entry
@@ -602,15 +567,14 @@ class StoryStore {
 
     // Legacy behavior: delete just this one entry (no world state changes)
     await database.deleteStoryEntry(entryId)
-    this.entries = this.entries.filter((e) => e.id !== entryId)
-    storyContext.entries = this.entries
+    storyContext.entries = storyContext.entries.filter((e) => e.id !== entryId)
 
     // Invalidate caches
-    this.invalidateWordCountCache()
-    this.invalidateChapterCache()
+    storyContext.invalidateWordCountCache()
+    storyContext.invalidateChapterCache()
 
     // Update story's updatedAt
-    await database.updateStory(this.currentStory.id, {})
+    await database.updateStory(storyContext.currentStory.id, {})
 
     // Restore suggested actions from the new last narration entry
     this.restoreSuggestedActionsAfterDelete()
@@ -621,26 +585,25 @@ class StoryStore {
    * Called after applyClassificationResult to record the story time after the entry's events.
    */
   async updateEntryTimeEnd(entryId: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const entry = this.entries.find((e) => e.id === entryId)
+    const entry = storyContext.entries.find((e) => e.id === entryId)
     if (!entry) {
       log('updateEntryTimeEnd: Entry not found', entryId)
       return
     }
 
     // Capture current story time as timeEnd
-    const timeEnd = this.currentStory.timeTracker
-      ? { ...this.currentStory.timeTracker }
+    const timeEnd = storyContext.currentStory.timeTracker
+      ? { ...storyContext.currentStory.timeTracker }
       : { years: 0, days: 0, hours: 0, minutes: 0 }
 
     const updatedMetadata = { ...entry.metadata, timeEnd }
 
     await database.updateStoryEntry(entryId, { metadata: updatedMetadata })
-    this.entries = this.entries.map((e) =>
+    storyContext.entries = storyContext.entries.map((e) =>
       e.id === entryId ? { ...e, metadata: updatedMetadata } : e,
     )
-    storyContext.entries = this.entries
 
     log('Entry timeEnd updated', { entryId, timeEnd })
   }
@@ -649,12 +612,13 @@ class StoryStore {
    * Update an entry's reasoning content and persist to database.
    */
   async updateEntryReasoning(entryId: string, reasoning: string): Promise<void> {
-    const entry = this.entries.find((e) => e.id === entryId)
+    const entry = storyContext.entries.find((e) => e.id === entryId)
     if (!entry) return
 
     // Update in-memory state
-    this.entries = this.entries.map((e) => (e.id === entryId ? { ...e, reasoning } : e))
-    storyContext.entries = this.entries
+    storyContext.entries = storyContext.entries.map((e) =>
+      e.id === entryId ? { ...e, reasoning } : e,
+    )
 
     // Persist to database
     await database.updateStoryEntry(entryId, { reasoning })
@@ -669,27 +633,24 @@ class StoryStore {
     if (!updatedEntry) return
 
     // Update in-memory state
-    this.entries = this.entries.map((e) => (e.id === entryId ? updatedEntry : e))
-    storyContext.entries = this.entries
+    storyContext.entries = storyContext.entries.map((e) => (e.id === entryId ? updatedEntry : e))
   }
 
   /**
    * Update the current background image for the story and persist to database.
    */
   async updateCurrentBackgroundImage(imageData: string | null): Promise<void> {
-    if (!this.currentStory) return
+    if (!storyContext.currentStory) return
 
     log('Updating background image...', { hasData: !!imageData })
     this.currentBgImage = imageData
 
     // Keep the currentStory object in sync to prevent any potential inconsistency
-    if (this.currentStory) {
-      this.currentStory.currentBgImage = imageData
-    }
+    storyContext.currentStory = { ...storyContext.currentStory!, currentBgImage: imageData }
 
     await database.saveBackground(
-      this.currentStory.id,
-      this.currentStory.currentBranchId,
+      storyContext.currentStory.id,
+      storyContext.currentStory.currentBranchId,
       null,
       imageData,
     )
@@ -701,10 +662,10 @@ class StoryStore {
    * Used when background processes update translations.
    */
   async refreshWorldState(): Promise<void> {
-    if (!this.currentStory) return
+    if (!storyContext.currentStory) return
 
-    const storyId = this.currentStory.id
-    const branchId = this.currentStory.currentBranchId
+    const storyId = storyContext.currentStory.id
+    const branchId = storyContext.currentStory.currentBranchId
 
     let characters: Character[]
     let locations: Location[]
@@ -749,18 +710,18 @@ class StoryStore {
       ])
     }
 
-    this.characters = characters
-    this.locations = locations
-    this.items = items
-    this.storyBeats = storyBeats
+    storyContext.characters = characters
+    storyContext.locations = locations
+    storyContext.items = items
+    storyContext.storyBeats = storyBeats
 
     // Filter out tombstoned entities when COW is enabled
     // (COW resolution already handles this for branch paths, but main branch loads raw data)
     if (settings.experimentalFeatures.lightweightBranches) {
-      this.characters = this.characters.filter((c) => !c.deleted)
-      this.locations = this.locations.filter((l) => !l.deleted)
-      this.items = this.items.filter((i) => !i.deleted)
-      this.storyBeats = this.storyBeats.filter((b) => !b.deleted)
+      storyContext.characters = storyContext.characters.filter((c) => !c.deleted)
+      storyContext.locations = storyContext.locations.filter((l) => !l.deleted)
+      storyContext.items = storyContext.items.filter((i) => !i.deleted)
+      storyContext.storyBeats = storyContext.storyBeats.filter((b) => !b.deleted)
     }
 
     log('World state refreshed', {
@@ -779,7 +740,7 @@ class StoryStore {
     position: number,
     options?: { skipRollback?: boolean },
   ): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     // Phase 2: Rollback world state before deleting entries
     // Skip if caller already performed rollback (e.g. deleteEntry)
@@ -791,10 +752,10 @@ class StoryStore {
     if (rollbackEnabled) {
       try {
         const rollbackSummary = await rollbackService.rollbackFromPosition(
-          this.currentStory.id,
-          this.currentStory.currentBranchId ?? null,
+          storyContext.currentStory.id,
+          storyContext.currentStory.currentBranchId ?? null,
           position,
-          this.entries,
+          storyContext.entries,
         )
         log('Rollback before deleteEntriesFromPosition:', rollbackSummary)
       } catch (error) {
@@ -803,18 +764,18 @@ class StoryStore {
     }
 
     // Find entries to delete (position >= the given position)
-    const entriesToDelete = this.entries.filter((e) => e.position >= position)
+    const entriesToDelete = storyContext.entries.filter((e) => e.position >= position)
     const entryIdsToDelete = new Set(entriesToDelete.map((e) => e.id))
 
     log('Deleting entries from position', {
       position,
       entriesToDelete: entriesToDelete.length,
-      totalEntries: this.entries.length,
+      totalEntries: storyContext.entries.length,
     })
 
     // Find chapters that reference any of the entries being deleted
     // (chapters have foreign keys to start_entry_id and end_entry_id)
-    const chaptersToDelete = this.chapters.filter(
+    const chaptersToDelete = storyContext.chapters.filter(
       (ch) => entryIdsToDelete.has(ch.startEntryId) || entryIdsToDelete.has(ch.endEntryId),
     )
 
@@ -828,7 +789,9 @@ class StoryStore {
       for (const chapter of chaptersToDelete) {
         await database.deleteChapter(chapter.id)
       }
-      this.chapters = this.chapters.filter((ch) => !chaptersToDelete.some((d) => d.id === ch.id))
+      storyContext.chapters = storyContext.chapters.filter(
+        (ch) => !chaptersToDelete.some((d) => d.id === ch.id),
+      )
     }
 
     // Delete embedded images for entries being deleted
@@ -843,14 +806,14 @@ class StoryStore {
     }
 
     // Update in-memory state
-    this.entries = this.entries.filter((e) => e.position < position)
+    storyContext.entries = storyContext.entries.filter((e) => e.position < position)
 
     // Invalidate caches
-    this.invalidateWordCountCache()
-    this.invalidateChapterCache()
+    storyContext.invalidateWordCountCache()
+    storyContext.invalidateChapterCache()
 
     // Update story's updatedAt
-    await database.updateStory(this.currentStory.id, {})
+    await database.updateStory(storyContext.currentStory.id, {})
 
     // Restore suggested actions from the new last narration entry
     this.restoreSuggestedActionsAfterDelete()
@@ -870,7 +833,7 @@ class StoryStore {
     storyBeatIds: string[]
     embeddedImageIds?: string[]
   }): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     const characterIdsSet = new Set(savedIds.characterIds)
     const locationIdsSet = new Set(savedIds.locationIds)
@@ -879,14 +842,16 @@ class StoryStore {
     const embeddedImageIdsSet = new Set(savedIds.embeddedImageIds ?? [])
 
     // Find entities to delete (not in saved lists)
-    const charactersToDelete = this.characters.filter((c) => !characterIdsSet.has(c.id))
-    const locationsToDelete = this.locations.filter((l) => !locationIdsSet.has(l.id))
-    const itemsToDelete = this.items.filter((i) => !itemIdsSet.has(i.id))
-    const storyBeatsToDelete = this.storyBeats.filter((sb) => !storyBeatIdsSet.has(sb.id))
+    const charactersToDelete = storyContext.characters.filter((c) => !characterIdsSet.has(c.id))
+    const locationsToDelete = storyContext.locations.filter((l) => !locationIdsSet.has(l.id))
+    const itemsToDelete = storyContext.items.filter((i) => !itemIdsSet.has(i.id))
+    const storyBeatsToDelete = storyContext.storyBeats.filter((sb) => !storyBeatIdsSet.has(sb.id))
 
     // Embedded images are not in memory - fetch from database to find ones to delete
     // Note: Many embedded images may already be deleted via CASCADE when entries are deleted
-    const currentEmbeddedImages = await database.getEmbeddedImagesForStory(this.currentStory.id)
+    const currentEmbeddedImages = await database.getEmbeddedImagesForStory(
+      storyContext.currentStory.id,
+    )
     const embeddedImagesToDelete = savedIds.embeddedImageIds
       ? currentEmbeddedImages.filter((ei) => !embeddedImageIdsSet.has(ei.id))
       : []
@@ -917,13 +882,13 @@ class StoryStore {
     }
 
     // Update in-memory state
-    this.characters = this.characters.filter((c) => characterIdsSet.has(c.id))
-    this.locations = this.locations.filter((l) => locationIdsSet.has(l.id))
-    this.items = this.items.filter((i) => itemIdsSet.has(i.id))
-    this.storyBeats = this.storyBeats.filter((sb) => storyBeatIdsSet.has(sb.id))
+    storyContext.characters = storyContext.characters.filter((c) => characterIdsSet.has(c.id))
+    storyContext.locations = storyContext.locations.filter((l) => locationIdsSet.has(l.id))
+    storyContext.items = storyContext.items.filter((i) => itemIdsSet.has(i.id))
+    storyContext.storyBeats = storyContext.storyBeats.filter((sb) => storyBeatIdsSet.has(sb.id))
 
     // Update story's updatedAt
-    await database.updateStory(this.currentStory.id, {})
+    await database.updateStory(storyContext.currentStory.id, {})
   }
 
   // ===== COW (Copy-on-Write) Branch Helpers =====
@@ -933,7 +898,10 @@ class StoryStore {
    * Returns true if on a non-main branch with lightweightBranches enabled.
    */
   private isCowBranch(): boolean {
-    return !!this.currentStory?.currentBranchId && settings.experimentalFeatures.lightweightBranches
+    return (
+      !!storyContext.currentStory?.currentBranchId &&
+      settings.experimentalFeatures.lightweightBranches
+    )
   }
 
   /**
@@ -942,7 +910,7 @@ class StoryStore {
    * Returns the owned character (either the original or the new override).
    */
   private async cowCharacter(entity: Character): Promise<{ entity: Character; wasCowed: boolean }> {
-    const branchId = this.currentStory?.currentBranchId
+    const branchId = storyContext.currentStory?.currentBranchId
     if (
       !branchId ||
       entity.branchId === branchId ||
@@ -958,7 +926,9 @@ class StoryStore {
       overridesId: entity.overridesId ?? entity.id,
     }
     await database.addCharacter(override)
-    this.characters = this.characters.map((c) => (c.id === entity.id ? override : c))
+    storyContext.characters = storyContext.characters.map((c) =>
+      c.id === entity.id ? override : c,
+    )
     log(
       'COW: Created character override',
       override.name,
@@ -973,7 +943,7 @@ class StoryStore {
    * Ensure a location is owned by the current branch (COW).
    */
   private async cowLocation(entity: Location): Promise<{ entity: Location; wasCowed: boolean }> {
-    const branchId = this.currentStory?.currentBranchId
+    const branchId = storyContext.currentStory?.currentBranchId
     if (
       !branchId ||
       entity.branchId === branchId ||
@@ -989,7 +959,7 @@ class StoryStore {
       overridesId: entity.overridesId ?? entity.id,
     }
     await database.addLocation(override)
-    this.locations = this.locations.map((l) => (l.id === entity.id ? override : l))
+    storyContext.locations = storyContext.locations.map((l) => (l.id === entity.id ? override : l))
     log(
       'COW: Created location override',
       override.name,
@@ -1004,7 +974,7 @@ class StoryStore {
    * Ensure an item is owned by the current branch (COW).
    */
   private async cowItem(entity: Item): Promise<{ entity: Item; wasCowed: boolean }> {
-    const branchId = this.currentStory?.currentBranchId
+    const branchId = storyContext.currentStory?.currentBranchId
     if (
       !branchId ||
       entity.branchId === branchId ||
@@ -1020,7 +990,7 @@ class StoryStore {
       overridesId: entity.overridesId ?? entity.id,
     }
     await database.addItem(override)
-    this.items = this.items.map((i) => (i.id === entity.id ? override : i))
+    storyContext.items = storyContext.items.map((i) => (i.id === entity.id ? override : i))
     log(
       'COW: Created item override',
       override.name,
@@ -1035,7 +1005,7 @@ class StoryStore {
    * Ensure a story beat is owned by the current branch (COW).
    */
   private async cowStoryBeat(entity: StoryBeat): Promise<{ entity: StoryBeat; wasCowed: boolean }> {
-    const branchId = this.currentStory?.currentBranchId
+    const branchId = storyContext.currentStory?.currentBranchId
     if (
       !branchId ||
       entity.branchId === branchId ||
@@ -1051,7 +1021,9 @@ class StoryStore {
       overridesId: entity.overridesId ?? entity.id,
     }
     await database.addStoryBeat(override)
-    this.storyBeats = this.storyBeats.map((b) => (b.id === entity.id ? override : b))
+    storyContext.storyBeats = storyContext.storyBeats.map((b) =>
+      b.id === entity.id ? override : b,
+    )
     log(
       'COW: Created story beat override',
       override.title,
@@ -1066,7 +1038,7 @@ class StoryStore {
    * Ensure a lorebook entry is owned by the current branch (COW).
    */
   private async cowLorebookEntry(entity: Entry): Promise<{ entity: Entry; wasCowed: boolean }> {
-    const branchId = this.currentStory?.currentBranchId
+    const branchId = storyContext.currentStory?.currentBranchId
     if (
       !branchId ||
       entity.branchId === branchId ||
@@ -1084,7 +1056,9 @@ class StoryStore {
       updatedAt: now,
     }
     await database.addEntry(override)
-    this.lorebookEntries = this.lorebookEntries.map((e) => (e.id === entity.id ? override : e))
+    storyContext.lorebookEntries = storyContext.lorebookEntries.map((e) =>
+      e.id === entity.id ? override : e,
+    )
     log(
       'COW: Created lorebook entry override',
       override.name,
@@ -1101,11 +1075,11 @@ class StoryStore {
     description?: string,
     relationship?: string,
   ): Promise<Character> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     const character: Character = {
       id: crypto.randomUUID(),
-      storyId: this.currentStory.id,
+      storyId: storyContext.currentStory.id,
       name,
       description: description ?? null,
       relationship: relationship ?? null,
@@ -1114,20 +1088,19 @@ class StoryStore {
       metadata: null,
       visualDescriptors: {},
       portrait: null,
-      branchId: this.currentStory.currentBranchId,
+      branchId: storyContext.currentStory.currentBranchId,
     }
 
     await database.addCharacter(character)
-    this.characters = [...this.characters, character]
-    storyContext.characters = this.characters
+    storyContext.characters = [...storyContext.characters, character]
     return character
   }
 
   // Update an existing character (except protagonist swap)
   async updateCharacter(id: string, updates: Partial<Character>): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const existing = this.characters.find((c) => c.id === id)
+    const existing = storyContext.characters.find((c) => c.id === id)
     if (!existing) throw new Error('Character not found')
 
     if (updates.relationship !== undefined) {
@@ -1142,15 +1115,16 @@ class StoryStore {
     // COW: ensure entity is owned by current branch before updating
     const { entity: owned } = await this.cowCharacter(existing)
     await database.updateCharacter(owned.id, updates)
-    this.characters = this.characters.map((c) => (c.id === owned.id ? { ...c, ...updates } : c))
-    storyContext.characters = this.characters
+    storyContext.characters = storyContext.characters.map((c) =>
+      c.id === owned.id ? { ...c, ...updates } : c,
+    )
   }
 
   // Delete a character (protagonist cannot be deleted)
   async deleteCharacter(id: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const existing = this.characters.find((c) => c.id === id)
+    const existing = storyContext.characters.find((c) => c.id === id)
     if (!existing) throw new Error('Character not found')
     if (existing.relationship === 'self') {
       throw new Error('Swap protagonists before deleting the current one')
@@ -1158,7 +1132,7 @@ class StoryStore {
 
     if (settings.experimentalFeatures.lightweightBranches) {
       // COD: tombstone instead of hard-deleting to preserve row for sibling/child branches
-      if (existing.branchId === this.currentStory.currentBranchId) {
+      if (existing.branchId === storyContext.currentStory.currentBranchId) {
         // Entity is owned by current branch (or main) — mark deleted in place
         await database.markCharacterDeleted(id)
       } else {
@@ -1169,43 +1143,41 @@ class StoryStore {
     } else {
       await database.deleteCharacter(id)
     }
-    this.characters = this.characters.filter((c) => c.id !== id)
-    storyContext.characters = this.characters
+    storyContext.characters = storyContext.characters.filter((c) => c.id !== id)
   }
 
   // Add a location
   async addLocation(name: string, description?: string, makeCurrent = false): Promise<Location> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     const location: Location = {
       id: crypto.randomUUID(),
-      storyId: this.currentStory.id,
+      storyId: storyContext.currentStory.id,
       name,
       description: description ?? null,
       visited: makeCurrent,
       current: makeCurrent,
       connections: [],
       metadata: null,
-      branchId: this.currentStory.currentBranchId,
+      branchId: storyContext.currentStory.currentBranchId,
     }
 
     await database.addLocation(location)
 
     if (makeCurrent) {
       // Update other locations to not be current
-      this.locations = this.locations.map((l) => ({ ...l, current: false }))
+      storyContext.locations = storyContext.locations.map((l) => ({ ...l, current: false }))
     }
 
-    this.locations = [...this.locations, location]
-    storyContext.locations = this.locations
+    storyContext.locations = [...storyContext.locations, location]
     return location
   }
 
   // Update a location's details
   async updateLocation(id: string, updates: Partial<Location>): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const existing = this.locations.find((l) => l.id === id)
+    const existing = storyContext.locations.find((l) => l.id === id)
     if (!existing) throw new Error('Location not found')
 
     // COW: ensure entity is owned by current branch before updating
@@ -1214,21 +1186,21 @@ class StoryStore {
     if (updates.current === true) {
       if (this.isCowBranch()) {
         // COW-aware: targeted updates instead of blanket clear
-        const prevCurrent = this.locations.find((l) => l.current && l.id !== owned.id)
+        const prevCurrent = storyContext.locations.find((l) => l.current && l.id !== owned.id)
         if (prevCurrent) {
           const { entity: ownedPrev } = await this.cowLocation(prevCurrent)
           await database.updateLocation(ownedPrev.id, { current: false })
-          this.locations = this.locations.map((l) =>
+          storyContext.locations = storyContext.locations.map((l) =>
             l.id === ownedPrev.id ? { ...l, current: false } : l,
           )
         }
         await database.updateLocation(owned.id, { ...updates, visited: true })
-        this.locations = this.locations.map((l) =>
+        storyContext.locations = storyContext.locations.map((l) =>
           l.id === owned.id ? { ...l, ...updates, current: true, visited: true } : l,
         )
       } else {
-        await database.setCurrentLocation(this.currentStory.id, owned.id)
-        this.locations = this.locations.map((l) => ({
+        await database.setCurrentLocation(storyContext.currentStory.id, owned.id)
+        storyContext.locations = storyContext.locations.map((l) => ({
           ...l,
           current: l.id === owned.id,
           visited: l.id === owned.id ? true : l.visited,
@@ -1236,70 +1208,69 @@ class StoryStore {
       }
     } else {
       await database.updateLocation(owned.id, updates)
-      this.locations = this.locations.map((l) => (l.id === owned.id ? { ...l, ...updates } : l))
+      storyContext.locations = storyContext.locations.map((l) =>
+        l.id === owned.id ? { ...l, ...updates } : l,
+      )
     }
-    storyContext.locations = this.locations
   }
 
   // Set current location
   async setCurrentLocation(locationId: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     if (this.isCowBranch()) {
       // COW-aware: targeted updates instead of blanket clear
-      const target = this.locations.find((l) => l.id === locationId)
-      const prevCurrent = this.locations.find((l) => l.current && l.id !== locationId)
+      const target = storyContext.locations.find((l) => l.id === locationId)
+      const prevCurrent = storyContext.locations.find((l) => l.current && l.id !== locationId)
 
       if (target) {
         const { entity: ownedTarget } = await this.cowLocation(target)
         await database.updateLocation(ownedTarget.id, { current: true, visited: true })
-        this.locations = this.locations.map((l) =>
+        storyContext.locations = storyContext.locations.map((l) =>
           l.id === ownedTarget.id ? { ...l, current: true, visited: true } : l,
         )
       }
       if (prevCurrent) {
         const { entity: ownedPrev } = await this.cowLocation(prevCurrent)
         await database.updateLocation(ownedPrev.id, { current: false })
-        this.locations = this.locations.map((l) =>
+        storyContext.locations = storyContext.locations.map((l) =>
           l.id === ownedPrev.id ? { ...l, current: false } : l,
         )
       }
     } else {
-      await database.setCurrentLocation(this.currentStory.id, locationId)
-      this.locations = this.locations.map((l) => ({
+      await database.setCurrentLocation(storyContext.currentStory.id, locationId)
+      storyContext.locations = storyContext.locations.map((l) => ({
         ...l,
         current: l.id === locationId,
         visited: l.id === locationId ? true : l.visited,
       }))
     }
-    storyContext.locations = this.locations
   }
 
   // Toggle location visited status
   async toggleLocationVisited(locationId: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const location = this.locations.find((l) => l.id === locationId)
+    const location = storyContext.locations.find((l) => l.id === locationId)
     if (!location) throw new Error('Location not found')
 
     const newVisited = !location.visited
     await database.updateLocation(locationId, { visited: newVisited })
-    this.locations = this.locations.map((l) =>
+    storyContext.locations = storyContext.locations.map((l) =>
       l.id === locationId ? { ...l, visited: newVisited } : l,
     )
-    storyContext.locations = this.locations
     log('Location visited toggled:', location.name, newVisited)
   }
 
   // Delete a location
   async deleteLocation(locationId: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const location = this.locations.find((l) => l.id === locationId)
+    const location = storyContext.locations.find((l) => l.id === locationId)
     if (!location) throw new Error('Location not found')
 
     if (settings.experimentalFeatures.lightweightBranches) {
-      if (location.branchId === this.currentStory.currentBranchId) {
+      if (location.branchId === storyContext.currentStory.currentBranchId) {
         await database.markLocationDeleted(locationId)
       } else {
         const { entity: owned } = await this.cowLocation(location)
@@ -1308,56 +1279,55 @@ class StoryStore {
     } else {
       await database.deleteLocation(locationId)
     }
-    this.locations = this.locations.filter((l) => l.id !== locationId)
-    storyContext.locations = this.locations
+    storyContext.locations = storyContext.locations.filter((l) => l.id !== locationId)
     log('Location deleted:', location.name)
   }
 
   // Add an item to inventory
   async addItem(name: string, description?: string, quantity = 1): Promise<Item> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     const item: Item = {
       id: crypto.randomUUID(),
-      storyId: this.currentStory.id,
+      storyId: storyContext.currentStory.id,
       name,
       description: description ?? null,
       quantity,
       equipped: false,
       location: 'inventory',
       metadata: null,
-      branchId: this.currentStory.currentBranchId,
+      branchId: storyContext.currentStory.currentBranchId,
     }
 
     await database.addItem(item)
-    this.items = [...this.items, item]
-    storyContext.items = this.items
+    storyContext.items = [...storyContext.items, item]
     return item
   }
 
   // Update an existing item
   async updateItem(id: string, updates: Partial<Item>): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const existing = this.items.find((i) => i.id === id)
+    const existing = storyContext.items.find((i) => i.id === id)
     if (!existing) throw new Error('Item not found')
 
     // COW: ensure entity is owned by current branch before updating
     const { entity: owned } = await this.cowItem(existing)
     await database.updateItem(owned.id, updates)
-    this.items = this.items.map((i) => (i.id === owned.id ? { ...i, ...updates } : i))
-    storyContext.items = this.items
+    storyContext.items = storyContext.items.map((i) =>
+      i.id === owned.id ? { ...i, ...updates } : i,
+    )
   }
 
   // Delete an item
   async deleteItem(id: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const existing = this.items.find((i) => i.id === id)
+    const existing = storyContext.items.find((i) => i.id === id)
     if (!existing) throw new Error('Item not found')
 
     if (settings.experimentalFeatures.lightweightBranches) {
-      if (existing.branchId === this.currentStory.currentBranchId) {
+      if (existing.branchId === storyContext.currentStory.currentBranchId) {
         await database.markItemDeleted(id)
       } else {
         const { entity: owned } = await this.cowItem(existing)
@@ -1366,8 +1336,7 @@ class StoryStore {
     } else {
       await database.deleteItem(id)
     }
-    this.items = this.items.filter((i) => i.id !== id)
-    storyContext.items = this.items
+    storyContext.items = storyContext.items.filter((i) => i.id !== id)
   }
 
   // Add a story beat
@@ -1376,11 +1345,11 @@ class StoryStore {
     type: StoryBeat['type'],
     description?: string,
   ): Promise<StoryBeat> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     const beat: StoryBeat = {
       id: crypto.randomUUID(),
-      storyId: this.currentStory.id,
+      storyId: storyContext.currentStory.id,
       title,
       description: description ?? null,
       type,
@@ -1388,20 +1357,19 @@ class StoryStore {
       triggeredAt: null,
       resolvedAt: null,
       metadata: null,
-      branchId: this.currentStory.currentBranchId,
+      branchId: storyContext.currentStory.currentBranchId,
     }
 
     await database.addStoryBeat(beat)
-    this.storyBeats = [...this.storyBeats, beat]
-    storyContext.storyBeats = this.storyBeats
+    storyContext.storyBeats = [...storyContext.storyBeats, beat]
     return beat
   }
 
   // Update a story beat
   async updateStoryBeat(id: string, updates: Partial<StoryBeat>): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const existing = this.storyBeats.find((b) => b.id === id)
+    const existing = storyContext.storyBeats.find((b) => b.id === id)
     if (!existing) throw new Error('Story beat not found')
 
     const resolvedUpdates: Partial<StoryBeat> = { ...updates }
@@ -1418,21 +1386,20 @@ class StoryStore {
     // COW: ensure entity is owned by current branch before updating
     const { entity: owned } = await this.cowStoryBeat(existing)
     await database.updateStoryBeat(owned.id, resolvedUpdates)
-    this.storyBeats = this.storyBeats.map((b) =>
+    storyContext.storyBeats = storyContext.storyBeats.map((b) =>
       b.id === owned.id ? { ...b, ...resolvedUpdates } : b,
     )
-    storyContext.storyBeats = this.storyBeats
   }
 
   // Delete a story beat
   async deleteStoryBeat(id: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const existing = this.storyBeats.find((b) => b.id === id)
+    const existing = storyContext.storyBeats.find((b) => b.id === id)
     if (!existing) throw new Error('Story beat not found')
 
     if (settings.experimentalFeatures.lightweightBranches) {
-      if (existing.branchId === this.currentStory.currentBranchId) {
+      if (existing.branchId === storyContext.currentStory.currentBranchId) {
         await database.markStoryBeatDeleted(id)
       } else {
         const { entity: owned } = await this.cowStoryBeat(existing)
@@ -1441,16 +1408,16 @@ class StoryStore {
     } else {
       await database.deleteStoryBeat(id)
     }
-    this.storyBeats = this.storyBeats.filter((b) => b.id !== id)
-    storyContext.storyBeats = this.storyBeats
+    storyContext.storyBeats = storyContext.storyBeats.filter((b) => b.id !== id)
   }
 
   // Swap the protagonist to another character, updating the old label
   async setProtagonist(newCharacterId: string, previousRelationshipLabel?: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const currentProtagonist = this.characters.find((c) => c.relationship === 'self') ?? null
-    const newProtagonist = this.characters.find((c) => c.id === newCharacterId)
+    const currentProtagonist =
+      storyContext.characters.find((c) => c.relationship === 'self') ?? null
+    const newProtagonist = storyContext.characters.find((c) => c.id === newCharacterId)
     if (!newProtagonist) throw new Error('Character not found')
 
     if (currentProtagonist?.id === newCharacterId) return
@@ -1470,7 +1437,7 @@ class StoryStore {
     const { entity: ownedNew } = await this.cowCharacter(newProtagonist)
     await database.updateCharacter(ownedNew.id, { relationship: 'self' })
 
-    this.characters = this.characters.map((c) => {
+    storyContext.characters = storyContext.characters.map((c) => {
       if (
         currentProtagonist &&
         (c.overridesId === currentProtagonist.overridesId ||
@@ -1486,7 +1453,6 @@ class StoryStore {
       }
       return c
     })
-    storyContext.characters = this.characters
   }
 
   // ===== Lorebook Entry CRUD Methods =====
@@ -1500,22 +1466,21 @@ class StoryStore {
       branchId?: string | null
     },
   ): Promise<Entry> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     const now = Date.now()
     const entry: Entry = {
       ...entryData,
       id: crypto.randomUUID(),
-      storyId: this.currentStory.id,
+      storyId: storyContext.currentStory.id,
       createdAt: now,
       updatedAt: now,
       // Use provided branchId or default to current branch
-      branchId: entryData.branchId ?? this.currentStory.currentBranchId,
+      branchId: entryData.branchId ?? storyContext.currentStory.currentBranchId,
     }
 
     await database.addEntry(entry)
-    this.lorebookEntries = [...this.lorebookEntries, entry]
-    storyContext.lorebookEntries = this.lorebookEntries
+    storyContext.lorebookEntries = [...storyContext.lorebookEntries, entry]
     log('Lorebook entry added:', entry.name)
     return entry
   }
@@ -1524,9 +1489,9 @@ class StoryStore {
    * Update a lorebook entry.
    */
   async updateLorebookEntry(id: string, updates: Partial<Entry>): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const existing = this.lorebookEntries.find((e) => e.id === id)
+    const existing = storyContext.lorebookEntries.find((e) => e.id === id)
     if (!existing) throw new Error('Lorebook entry not found')
 
     // COW: ensure entity is owned by current branch before updating
@@ -1538,10 +1503,9 @@ class StoryStore {
     }
 
     await database.updateEntry(owned.id, updatesWithTimestamp)
-    this.lorebookEntries = this.lorebookEntries.map((e) =>
+    storyContext.lorebookEntries = storyContext.lorebookEntries.map((e) =>
       e.id === owned.id ? { ...e, ...updatesWithTimestamp } : e,
     )
-    storyContext.lorebookEntries = this.lorebookEntries
     log('Lorebook entry updated:', owned.id)
   }
 
@@ -1549,12 +1513,12 @@ class StoryStore {
    * Delete a lorebook entry.
    */
   async deleteLorebookEntry(id: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     if (settings.experimentalFeatures.lightweightBranches) {
-      const existing = this.lorebookEntries.find((e) => e.id === id)
+      const existing = storyContext.lorebookEntries.find((e) => e.id === id)
       if (existing) {
-        if (existing.branchId === this.currentStory.currentBranchId) {
+        if (existing.branchId === storyContext.currentStory.currentBranchId) {
           await database.markEntryDeleted(id)
         } else {
           const { entity: owned } = await this.cowLorebookEntry(existing)
@@ -1566,8 +1530,7 @@ class StoryStore {
     } else {
       await database.deleteEntry(id)
     }
-    this.lorebookEntries = this.lorebookEntries.filter((e) => e.id !== id)
-    storyContext.lorebookEntries = this.lorebookEntries
+    storyContext.lorebookEntries = storyContext.lorebookEntries.filter((e) => e.id !== id)
     log('Lorebook entry deleted:', id)
   }
 
@@ -1575,14 +1538,14 @@ class StoryStore {
    * Delete multiple lorebook entries (bulk operation).
    */
   async deleteLorebookEntries(ids: string[]): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     if (settings.experimentalFeatures.lightweightBranches) {
       // COD: process each entry individually for correct tombstone handling
       for (const id of ids) {
-        const existing = this.lorebookEntries.find((e) => e.id === id)
+        const existing = storyContext.lorebookEntries.find((e) => e.id === id)
         if (existing) {
-          if (existing.branchId === this.currentStory.currentBranchId) {
+          if (existing.branchId === storyContext.currentStory.currentBranchId) {
             await database.markEntryDeleted(id)
           } else {
             const { entity: owned } = await this.cowLorebookEntry(existing)
@@ -1595,8 +1558,7 @@ class StoryStore {
     } else {
       await Promise.all(ids.map((id) => database.deleteEntry(id)))
     }
-    this.lorebookEntries = this.lorebookEntries.filter((e) => !ids.includes(e.id))
-    storyContext.lorebookEntries = this.lorebookEntries
+    storyContext.lorebookEntries = storyContext.lorebookEntries.filter((e) => !ids.includes(e.id))
     log('Lorebook entries deleted:', ids.length)
   }
 
@@ -1604,7 +1566,7 @@ class StoryStore {
    * Get a single lorebook entry by ID.
    */
   getLorebookEntry(id: string): Entry | undefined {
-    return this.lorebookEntries.find((e) => e.id === id)
+    return storyContext.lorebookEntries.find((e) => e.id === id)
   }
 
   /**
@@ -1634,7 +1596,7 @@ class StoryStore {
    * This is Phase 4 of the processing pipeline per design doc.
    */
   async applyClassificationResult(result: ClassificationResult, entryId?: string): Promise<void> {
-    if (!this.currentStory) {
+    if (!storyContext.currentStory) {
       log('applyClassificationResult: No story loaded, skipping')
       return
     }
@@ -1651,7 +1613,7 @@ class StoryStore {
       scene: result.scene,
     })
 
-    const storyId = this.currentStory.id
+    const storyId = storyContext.currentStory.id
     const trackingEnabled = settings.experimentalFeatures.stateTracking && !!entryId
 
     // Extract runtime variable definitions attached by ClassifierService (if any)
@@ -1674,17 +1636,17 @@ class StoryStore {
 
     if (trackingEnabled) {
       // Snapshot current location
-      const currentLoc = this.locations.find((l) => l.current)
+      const currentLoc = storyContext.locations.find((l) => l.current)
       currentLocationIdBefore = currentLoc?.id ?? null
 
       // Snapshot time tracker
-      timeTrackerBefore = this.currentStory.timeTracker
-        ? { ...this.currentStory.timeTracker }
+      timeTrackerBefore = storyContext.currentStory.timeTracker
+        ? { ...storyContext.currentStory.timeTracker }
         : null
 
       // Snapshot characters that will be updated
       for (const update of result.entryUpdates.characterUpdates) {
-        const existing = this.characters.find(
+        const existing = storyContext.characters.find(
           (c) => c.name.toLowerCase() === update.name.toLowerCase(),
         )
         if (existing) {
@@ -1702,7 +1664,7 @@ class StoryStore {
 
       // Snapshot locations that will be updated
       for (const update of result.entryUpdates.locationUpdates) {
-        const existing = this.locations.find(
+        const existing = storyContext.locations.find(
           (l) => l.name.toLowerCase() === update.name.toLowerCase(),
         )
         if (existing) {
@@ -1719,7 +1681,9 @@ class StoryStore {
 
       // Snapshot items that will be updated
       for (const update of result.entryUpdates.itemUpdates) {
-        const existing = this.items.find((i) => i.name.toLowerCase() === update.name.toLowerCase())
+        const existing = storyContext.items.find(
+          (i) => i.name.toLowerCase() === update.name.toLowerCase(),
+        )
         if (existing) {
           itemsBefore.push({
             id: existing.id,
@@ -1734,7 +1698,7 @@ class StoryStore {
 
       // Snapshot story beats that will be updated
       for (const update of result.entryUpdates.storyBeatUpdates) {
-        const existing = this.storyBeats.find(
+        const existing = storyContext.storyBeats.find(
           (b) => b.title.toLowerCase() === update.title.toLowerCase(),
         )
         if (existing) {
@@ -1752,7 +1716,7 @@ class StoryStore {
       // Also snapshot locations that might be affected by currentLocationName scene change
       if (result.scene.currentLocationName) {
         const locationName = result.scene.currentLocationName.toLowerCase()
-        const loc = this.locations.find((l) => l.name.toLowerCase() === locationName)
+        const loc = storyContext.locations.find((l) => l.name.toLowerCase() === locationName)
         if (loc && !locationsBefore.some((lb) => lb.id === loc.id)) {
           locationsBefore.push({
             id: loc.id,
@@ -1769,7 +1733,7 @@ class StoryStore {
     // Apply character updates
     for (const update of result.entryUpdates.characterUpdates) {
       await this.wrapUpdate('Update character', update.name, async () => {
-        let existing = this.characters.find(
+        let existing = storyContext.characters.find(
           (c) => c.name.toLowerCase() === update.name.toLowerCase(),
         )
 
@@ -1800,10 +1764,10 @@ class StoryStore {
             status: (newCharData?.status as Character['status']) ?? 'active',
             metadata: charMetadata,
             portrait: null,
-            branchId: this.currentStory?.currentBranchId ?? null,
+            branchId: storyContext.currentStory?.currentBranchId ?? null,
           }
           await database.addCharacter(character)
-          this.characters = [...this.characters, character]
+          storyContext.characters = [...storyContext.characters, character]
           if (trackingEnabled) createdCharacterIds.push(character.id)
           existing = character
         }
@@ -1850,7 +1814,7 @@ class StoryStore {
           // COW: ensure entity is owned by current branch before updating
           const { entity: ownedChar, wasCowed: charWasCowed } = await this.cowCharacter(existing)
           await database.updateCharacter(ownedChar.id, changes)
-          this.characters = this.characters.map((c) =>
+          storyContext.characters = storyContext.characters.map((c) =>
             c.id === ownedChar.id ? { ...c, ...changes } : c,
           )
           // If COW'd, track override as created (rollback = delete override)
@@ -1866,7 +1830,7 @@ class StoryStore {
     // Apply location updates
     for (const update of result.entryUpdates.locationUpdates) {
       await this.wrapUpdate('Update location', update.name, async () => {
-        let existing = this.locations.find(
+        let existing = storyContext.locations.find(
           (l) => l.name.toLowerCase() === update.name.toLowerCase(),
         )
 
@@ -1896,10 +1860,10 @@ class StoryStore {
             current: newLocData?.current ?? false,
             connections: [],
             metadata: locMetadata,
-            branchId: this.currentStory?.currentBranchId ?? null,
+            branchId: storyContext.currentStory?.currentBranchId ?? null,
           }
           await database.addLocation(location)
-          this.locations = [...this.locations, location]
+          storyContext.locations = [...storyContext.locations, location]
           if (trackingEnabled) createdLocationIds.push(location.id)
           existing = location
         }
@@ -1936,12 +1900,14 @@ class StoryStore {
             changes.visited = true
             if (this.isCowBranch()) {
               // COW-aware: targeted updates instead of blanket clear
-              const prevCurrent = this.locations.find((l) => l.current && l.id !== ownedLoc.id)
+              const prevCurrent = storyContext.locations.find(
+                (l) => l.current && l.id !== ownedLoc.id,
+              )
               if (prevCurrent) {
                 const { entity: ownedPrev, wasCowed: prevWasCowed } =
                   await this.cowLocation(prevCurrent)
                 await database.updateLocation(ownedPrev.id, { current: false })
-                this.locations = this.locations.map((l) =>
+                storyContext.locations = storyContext.locations.map((l) =>
                   l.id === ownedPrev.id ? { ...l, current: false } : l,
                 )
                 if (prevWasCowed && trackingEnabled) {
@@ -1951,7 +1917,7 @@ class StoryStore {
                 }
               }
               await database.updateLocation(ownedLoc.id, { ...changes, current: true })
-              this.locations = this.locations.map((l) =>
+              storyContext.locations = storyContext.locations.map((l) =>
                 l.id === ownedLoc.id ? { ...l, ...changes, current: true, visited: true } : l,
               )
             } else {
@@ -1959,7 +1925,7 @@ class StoryStore {
               if (Object.keys(changes).length > 0) {
                 await database.updateLocation(ownedLoc.id, changes)
               }
-              this.locations = this.locations.map((l) => {
+              storyContext.locations = storyContext.locations.map((l) => {
                 if (l.id === ownedLoc.id) {
                   return { ...l, ...changes, current: true, visited: true }
                 }
@@ -1985,7 +1951,7 @@ class StoryStore {
             return
           }
           await database.updateLocation(ownedLoc.id, changes)
-          this.locations = this.locations.map((l) =>
+          storyContext.locations = storyContext.locations.map((l) =>
             l.id === ownedLoc.id ? { ...l, ...changes } : l,
           )
           if (locWasCowed && trackingEnabled) {
@@ -2000,7 +1966,9 @@ class StoryStore {
     // Apply item updates
     for (const update of result.entryUpdates.itemUpdates) {
       await this.wrapUpdate('Update item', update.name, async () => {
-        let existing = this.items.find((i) => i.name.toLowerCase() === update.name.toLowerCase())
+        let existing = storyContext.items.find(
+          (i) => i.name.toLowerCase() === update.name.toLowerCase(),
+        )
 
         // If item doesn't exist yet, create it first
         if (!existing) {
@@ -2027,10 +1995,10 @@ class StoryStore {
             equipped: false,
             location: newItemData?.location ?? 'inventory',
             metadata: itemMetadata,
-            branchId: this.currentStory?.currentBranchId ?? null,
+            branchId: storyContext.currentStory?.currentBranchId ?? null,
           }
           await database.addItem(item)
-          this.items = [...this.items, item]
+          storyContext.items = [...storyContext.items, item]
           if (trackingEnabled) createdItemIds.push(item.id)
           existing = item
         }
@@ -2052,7 +2020,9 @@ class StoryStore {
           // COW: ensure entity is owned by current branch before updating
           const { entity: ownedItem, wasCowed: itemWasCowed } = await this.cowItem(existing)
           await database.updateItem(ownedItem.id, changes)
-          this.items = this.items.map((i) => (i.id === ownedItem.id ? { ...i, ...changes } : i))
+          storyContext.items = storyContext.items.map((i) =>
+            i.id === ownedItem.id ? { ...i, ...changes } : i,
+          )
           if (itemWasCowed && trackingEnabled) {
             createdItemIds.push(ownedItem.id)
             const idx = itemsBefore.findIndex((ib) => ib.id === existing.id)
@@ -2065,7 +2035,7 @@ class StoryStore {
     // Apply story beat updates (mark as completed/failed)
     for (const update of result.entryUpdates.storyBeatUpdates) {
       await this.wrapUpdate('Update story beat', update.title, async () => {
-        let existing = this.storyBeats.find(
+        let existing = storyContext.storyBeats.find(
           (b) => b.title.toLowerCase() === update.title.toLowerCase(),
         )
 
@@ -2094,10 +2064,10 @@ class StoryStore {
             status: newBeatData?.status ?? 'active',
             triggeredAt: Date.now(),
             metadata: beatMetadata,
-            branchId: this.currentStory?.currentBranchId ?? null,
+            branchId: storyContext.currentStory?.currentBranchId ?? null,
           }
           await database.addStoryBeat(beat)
-          this.storyBeats = [...this.storyBeats, beat]
+          storyContext.storyBeats = [...storyContext.storyBeats, beat]
           if (trackingEnabled) createdStoryBeatIds.push(beat.id)
           existing = beat
         }
@@ -2124,7 +2094,7 @@ class StoryStore {
           // COW: ensure entity is owned by current branch before updating
           const { entity: ownedBeat, wasCowed: beatWasCowed } = await this.cowStoryBeat(existing)
           await database.updateStoryBeat(ownedBeat.id, changes)
-          this.storyBeats = this.storyBeats.map((b) =>
+          storyContext.storyBeats = storyContext.storyBeats.map((b) =>
             b.id === ownedBeat.id ? { ...b, ...changes } : b,
           )
           if (beatWasCowed && trackingEnabled) {
@@ -2139,7 +2109,7 @@ class StoryStore {
     // Add new characters (check for duplicates)
     for (const newChar of result.entryUpdates.newCharacters) {
       await this.wrapUpdate('Add character', newChar.name, async () => {
-        const exists = this.characters.some(
+        const exists = storyContext.characters.some(
           (c) => c.name.toLowerCase() === newChar.name.toLowerCase(),
         )
         if (!exists) {
@@ -2163,10 +2133,10 @@ class StoryStore {
             status: 'active',
             metadata: charMetadata,
             portrait: null,
-            branchId: this.currentStory?.currentBranchId ?? null,
+            branchId: storyContext.currentStory?.currentBranchId ?? null,
           }
           await database.addCharacter(character)
-          this.characters = [...this.characters, character]
+          storyContext.characters = [...storyContext.characters, character]
           if (trackingEnabled) createdCharacterIds.push(character.id)
         }
       })
@@ -2177,7 +2147,7 @@ class StoryStore {
     if (result.scene.currentLocationName) {
       await this.wrapUpdate('Set scene location', result.scene.currentLocationName, async () => {
         const locationName = result.scene.currentLocationName!.toLowerCase()
-        let currentLoc = this.locations.find((l) => l.name.toLowerCase() === locationName)
+        let currentLoc = storyContext.locations.find((l) => l.name.toLowerCase() === locationName)
 
         // If location doesn't exist yet, create a stub
         if (!currentLoc) {
@@ -2194,10 +2164,10 @@ class StoryStore {
             current: false,
             connections: [],
             metadata: { source: 'classifier' },
-            branchId: this.currentStory?.currentBranchId ?? null,
+            branchId: storyContext.currentStory?.currentBranchId ?? null,
           }
           await database.addLocation(stubLocation)
-          this.locations = [...this.locations, stubLocation]
+          storyContext.locations = [...storyContext.locations, stubLocation]
           if (trackingEnabled) createdLocationIds.push(stubLocation.id)
           currentLoc = stubLocation
         }
@@ -2208,12 +2178,14 @@ class StoryStore {
             // COW-aware: targeted updates
             const { entity: ownedTarget, wasCowed: targetWasCowed } =
               await this.cowLocation(currentLoc)
-            const prevCurrent = this.locations.find((l) => l.current && l.id !== ownedTarget.id)
+            const prevCurrent = storyContext.locations.find(
+              (l) => l.current && l.id !== ownedTarget.id,
+            )
             if (prevCurrent) {
               const { entity: ownedPrev, wasCowed: prevWasCowed } =
                 await this.cowLocation(prevCurrent)
               await database.updateLocation(ownedPrev.id, { current: false })
-              this.locations = this.locations.map((l) =>
+              storyContext.locations = storyContext.locations.map((l) =>
                 l.id === ownedPrev.id ? { ...l, current: false } : l,
               )
               if (prevWasCowed && trackingEnabled) {
@@ -2223,7 +2195,7 @@ class StoryStore {
               }
             }
             await database.updateLocation(ownedTarget.id, { current: true, visited: true })
-            this.locations = this.locations.map((l) =>
+            storyContext.locations = storyContext.locations.map((l) =>
               l.id === ownedTarget.id ? { ...l, current: true, visited: true } : l,
             )
             if (targetWasCowed && trackingEnabled) {
@@ -2233,7 +2205,7 @@ class StoryStore {
             }
           } else {
             await database.setCurrentLocation(storyId, currentLoc.id)
-            this.locations = this.locations.map((l) => ({
+            storyContext.locations = storyContext.locations.map((l) => ({
               ...l,
               current: l.id === currentLoc!.id,
               visited: l.id === currentLoc!.id ? true : l.visited,
@@ -2246,7 +2218,7 @@ class StoryStore {
     // Add new locations (check for duplicates, merge into recently created)
     for (const newLoc of result.entryUpdates.newLocations) {
       await this.wrapUpdate('Add location', newLoc.name, async () => {
-        const existing = this.locations.find(
+        const existing = storyContext.locations.find(
           (l) => l.name.toLowerCase() === newLoc.name.toLowerCase(),
         )
         if (existing && createdLocationIds.includes(existing.id)) {
@@ -2274,7 +2246,7 @@ class StoryStore {
           }
           if (Object.keys(changes).length > 0) {
             await database.updateLocation(existing.id, changes)
-            this.locations = this.locations.map((l) =>
+            storyContext.locations = storyContext.locations.map((l) =>
               l.id === existing.id ? { ...l, ...changes } : l,
             )
           }
@@ -2284,17 +2256,17 @@ class StoryStore {
           if (newLoc.current) {
             if (this.isCowBranch()) {
               // COW-aware: targeted unset of previous current
-              const prevCurrent = this.locations.find((l) => l.current)
+              const prevCurrent = storyContext.locations.find((l) => l.current)
               if (prevCurrent) {
                 const { entity: ownedPrev } = await this.cowLocation(prevCurrent)
                 await database.updateLocation(ownedPrev.id, { current: false })
-                this.locations = this.locations.map((l) =>
+                storyContext.locations = storyContext.locations.map((l) =>
                   l.id === ownedPrev.id ? { ...l, current: false } : l,
                 )
               }
             } else {
-              this.locations = this.locations.map((l) => ({ ...l, current: false }))
-              for (const l of this.locations) {
+              storyContext.locations = storyContext.locations.map((l) => ({ ...l, current: false }))
+              for (const l of storyContext.locations) {
                 await database.updateLocation(l.id, { current: false })
               }
             }
@@ -2316,10 +2288,10 @@ class StoryStore {
             current: newLoc.current ?? false,
             connections: [],
             metadata: locMetadata,
-            branchId: this.currentStory?.currentBranchId ?? null,
+            branchId: storyContext.currentStory?.currentBranchId ?? null,
           }
           await database.addLocation(location)
-          this.locations = [...this.locations, location]
+          storyContext.locations = [...storyContext.locations, location]
           if (trackingEnabled) createdLocationIds.push(location.id)
         }
       })
@@ -2328,7 +2300,9 @@ class StoryStore {
     // Add new items (check for duplicates)
     for (const newItem of result.entryUpdates.newItems) {
       await this.wrapUpdate('Add item', newItem.name, async () => {
-        const exists = this.items.some((i) => i.name.toLowerCase() === newItem.name.toLowerCase())
+        const exists = storyContext.items.some(
+          (i) => i.name.toLowerCase() === newItem.name.toLowerCase(),
+        )
         if (!exists) {
           log('Adding new item:', newItem.name)
           const itemMetadata: Record<string, unknown> = { source: 'classifier' }
@@ -2348,10 +2322,10 @@ class StoryStore {
             equipped: false,
             location: newItem.location ?? 'inventory',
             metadata: itemMetadata,
-            branchId: this.currentStory?.currentBranchId ?? null,
+            branchId: storyContext.currentStory?.currentBranchId ?? null,
           }
           await database.addItem(item)
-          this.items = [...this.items, item]
+          storyContext.items = [...storyContext.items, item]
           if (trackingEnabled) createdItemIds.push(item.id)
         }
       })
@@ -2360,7 +2334,7 @@ class StoryStore {
     // Add new story beats (check for duplicates)
     for (const newBeat of result.entryUpdates.newStoryBeats) {
       await this.wrapUpdate('Add story beat', newBeat.title, async () => {
-        const exists = this.storyBeats.some(
+        const exists = storyContext.storyBeats.some(
           (b) => b.title.toLowerCase() === newBeat.title.toLowerCase(),
         )
         if (!exists) {
@@ -2382,10 +2356,10 @@ class StoryStore {
             status: newBeat.status ?? 'active',
             triggeredAt: Date.now(),
             metadata: beatMetadata,
-            branchId: this.currentStory?.currentBranchId ?? null,
+            branchId: storyContext.currentStory?.currentBranchId ?? null,
           }
           await database.addStoryBeat(beat)
-          this.storyBeats = [...this.storyBeats, beat]
+          storyContext.storyBeats = [...storyContext.storyBeats, beat]
           if (trackingEnabled) createdStoryBeatIds.push(beat.id)
         }
       })
@@ -2419,7 +2393,7 @@ class StoryStore {
 
         await database.updateStoryEntry(entryId, { worldStateDelta: delta })
         // Update in-memory entry
-        this.entries = this.entries.map((e) =>
+        storyContext.entries = storyContext.entries.map((e) =>
           e.id === entryId ? { ...e, worldStateDelta: delta } : e,
         )
 
@@ -2444,18 +2418,13 @@ class StoryStore {
     }
 
     log('applyClassificationResult complete', {
-      characters: this.characters.length,
-      locations: this.locations.length,
-      items: this.items.length,
-      storyBeats: this.storyBeats.length,
+      characters: storyContext.characters.length,
+      locations: storyContext.locations.length,
+      items: storyContext.items.length,
+      storyBeats: storyContext.storyBeats.length,
     })
 
     // Sync all entity arrays to singleton after classification mutations
-    storyContext.characters = this.characters
-    storyContext.locations = this.locations
-    storyContext.items = this.items
-    storyContext.storyBeats = this.storyBeats
-    storyContext.entries = this.entries
 
     // Emit state updated event if there were any changes
     const hasChanges =
@@ -2483,19 +2452,8 @@ class StoryStore {
 
   // Clear current story (when switching or closing)
   clearCurrentStory(): void {
-    this.currentStory = null
-    this.entries = []
-    this.lorebookEntries = []
-    this.characters = []
-    this.locations = []
-    this.items = []
-    this.storyBeats = []
-    this.chapters = []
     this.checkpoints = []
-
-    // Reset all caches
-    this.invalidateWordCountCache()
-    this.invalidateChapterCache()
+    storyContext.clear()
 
     // Clear current retry story ID (backups are kept per-story)
     ui.setCurrentRetryStoryId(null)
@@ -2506,11 +2464,10 @@ class StoryStore {
 
   // Update story mode
   async setStoryMode(mode: StoryMode): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    await database.updateStory(this.currentStory.id, { mode })
-    this.currentStory = { ...this.currentStory, mode }
-    storyContext.currentStory = this.currentStory
+    await database.updateStory(storyContext.currentStory.id, { mode })
+    storyContext.currentStory = { ...storyContext.currentStory, mode }
     log('Story mode updated:', mode)
 
     // Emit event
@@ -2519,24 +2476,22 @@ class StoryStore {
 
   // Update memory configuration
   async setMemoryConfig(config: MemoryConfig): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    await database.updateStory(this.currentStory.id, { memoryConfig: config })
-    this.currentStory = { ...this.currentStory, memoryConfig: config }
-    storyContext.currentStory = this.currentStory
+    await database.updateStory(storyContext.currentStory.id, { memoryConfig: config })
+    storyContext.currentStory = { ...storyContext.currentStory, memoryConfig: config }
     log('Memory config updated:', config)
   }
 
   // Add a chapter
   async addChapter(chapter: Chapter): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     await database.addChapter(chapter)
-    this.chapters = [...this.chapters, chapter]
-    storyContext.chapters = this.chapters
+    storyContext.chapters = [...storyContext.chapters, chapter]
 
     // Invalidate chapter cache
-    this.invalidateChapterCache()
+    storyContext.invalidateChapterCache()
 
     log('Chapter added:', chapter.number, chapter.title)
 
@@ -2546,85 +2501,80 @@ class StoryStore {
 
   // Get the next chapter number from the database (handles deletions correctly)
   async getNextChapterNumber(): Promise<number> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     // Use branch-filtered chapters to determine next chapter number
-    // this.chapters is already filtered to current branch view (inherited + branch-specific)
-    if (this.chapters.length === 0) {
+    // storyContext.chapters is already filtered to current branch view (inherited + branch-specific)
+    if (storyContext.chapters.length === 0) {
       return 1
     }
 
     // Find the maximum chapter number in the current branch view
-    const maxNumber = Math.max(...this.chapters.map((ch) => ch.number))
+    const maxNumber = Math.max(...storyContext.chapters.map((ch) => ch.number))
     return maxNumber + 1
   }
 
   // Update a chapter's summary
   async updateChapterSummary(chapterId: string, summary: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     await database.updateChapter(chapterId, { summary })
-    this.chapters = this.chapters.map((ch) => (ch.id === chapterId ? { ...ch, summary } : ch))
-    storyContext.chapters = this.chapters
+    storyContext.chapters = storyContext.chapters.map((ch) =>
+      ch.id === chapterId ? { ...ch, summary } : ch,
+    )
     log('Chapter summary updated:', chapterId)
   }
 
   // Update a chapter with multiple fields
   async updateChapter(chapterId: string, updates: Partial<Chapter>): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     await database.updateChapter(chapterId, updates)
-    this.chapters = this.chapters.map((ch) => (ch.id === chapterId ? { ...ch, ...updates } : ch))
-    storyContext.chapters = this.chapters
+    storyContext.chapters = storyContext.chapters.map((ch) =>
+      ch.id === chapterId ? { ...ch, ...updates } : ch,
+    )
     log('Chapter updated:', chapterId, updates)
   }
 
   // Get entries for a specific chapter
-  // Uses O(1) map lookups for performance
   getChapterEntries(chapter: Chapter): StoryEntry[] {
-    // Ensure index map is up to date
-    if (this._entryIdToIndex.size !== this.entries.length) {
-      this.rebuildEntryIdIndex()
-    }
-    const startIdx = this._entryIdToIndex.get(chapter.startEntryId)
-    const endIdx = this._entryIdToIndex.get(chapter.endEntryId)
-    if (startIdx === undefined || endIdx === undefined) return []
-    return this.entries.slice(startIdx, endIdx + 1)
+    const entries = storyContext.entries
+    const startIdx = entries.findIndex((e) => e.id === chapter.startEntryId)
+    const endIdx = entries.findIndex((e) => e.id === chapter.endEntryId)
+    if (startIdx === -1 || endIdx === -1) return []
+    return entries.slice(startIdx, endIdx + 1)
   }
 
   // Delete a chapter
   async deleteChapter(chapterId: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     await database.deleteChapter(chapterId)
-    this.chapters = this.chapters.filter((ch) => ch.id !== chapterId)
-    storyContext.chapters = this.chapters
+    storyContext.chapters = storyContext.chapters.filter((ch) => ch.id !== chapterId)
 
     // Invalidate chapter cache
-    this.invalidateChapterCache()
+    storyContext.invalidateChapterCache()
 
     log('Chapter deleted:', chapterId)
   }
 
   // Update memory configuration (partial updates)
   async updateMemoryConfig(updates: Partial<MemoryConfig>): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const newConfig = { ...this.memoryConfig, ...updates }
-    await database.updateStory(this.currentStory.id, { memoryConfig: newConfig })
-    this.currentStory = { ...this.currentStory, memoryConfig: newConfig }
-    storyContext.currentStory = this.currentStory
+    const newConfig = { ...storyContext.memoryConfig, ...updates }
+    await database.updateStory(storyContext.currentStory.id, { memoryConfig: newConfig })
+    storyContext.currentStory = { ...storyContext.currentStory, memoryConfig: newConfig }
     log('Memory config updated via updateMemoryConfig:', updates)
   }
 
   // Update story settings (partial updates)
   async updateStorySettings(updates: Partial<StorySettings>): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const newSettings = { ...(this.currentStory.settings ?? {}), ...updates }
-    await database.updateStory(this.currentStory.id, { settings: newSettings })
-    this.currentStory = { ...this.currentStory, settings: newSettings }
-    storyContext.currentStory = this.currentStory
+    const newSettings = { ...(storyContext.currentStory.settings ?? {}), ...updates }
+    await database.updateStory(storyContext.currentStory.id, { settings: newSettings })
+    storyContext.currentStory = { ...storyContext.currentStory, settings: newSettings }
     log('Story settings updated via updateStorySettings:', updates)
   }
 
@@ -2683,20 +2633,19 @@ class StoryStore {
 
   // Set time tracker directly
   async setTimeTracker(time: TimeTracker): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     const normalized = this.normalizeTime(time)
-    await database.saveTimeTracker(this.currentStory.id, normalized)
-    this.currentStory = { ...this.currentStory, timeTracker: normalized }
-    storyContext.currentStory = this.currentStory
+    await database.saveTimeTracker(storyContext.currentStory.id, normalized)
+    storyContext.currentStory = { ...storyContext.currentStory, timeTracker: normalized }
     log('Time tracker set:', normalized)
   }
 
   // Update time tracker with partial values (adds to current time)
   async addTime(updates: Partial<TimeTracker>): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const current = this.timeTracker
+    const current = storyContext.timeTracker
     const newTime: TimeTracker = {
       years: current.years + (updates.years ?? 0),
       days: current.days + (updates.days ?? 0),
@@ -2705,9 +2654,8 @@ class StoryStore {
     }
 
     const normalized = this.normalizeTime(newTime)
-    await database.saveTimeTracker(this.currentStory.id, normalized)
-    this.currentStory = { ...this.currentStory, timeTracker: normalized }
-    storyContext.currentStory = this.currentStory
+    await database.saveTimeTracker(storyContext.currentStory.id, normalized)
+    storyContext.currentStory = { ...storyContext.currentStory, timeTracker: normalized }
     log('Time added:', updates, '→', normalized)
   }
 
@@ -2736,21 +2684,19 @@ class StoryStore {
    * Undefined means "skip", null means "clear".
    */
   async restoreTimeTrackerSnapshot(snapshot: TimeTracker | null | undefined): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
     if (snapshot === undefined) return
 
     if (snapshot === null) {
-      await database.clearTimeTracker(this.currentStory.id)
-      this.currentStory = { ...this.currentStory, timeTracker: null }
-      storyContext.currentStory = this.currentStory
+      await database.clearTimeTracker(storyContext.currentStory.id)
+      storyContext.currentStory = { ...storyContext.currentStory, timeTracker: null }
       log('Time tracker cleared from snapshot')
       return
     }
 
     const normalized = this.normalizeTime(snapshot)
-    await database.saveTimeTracker(this.currentStory.id, normalized)
-    this.currentStory = { ...this.currentStory, timeTracker: normalized }
-    storyContext.currentStory = this.currentStory
+    await database.saveTimeTracker(storyContext.currentStory.id, normalized)
+    storyContext.currentStory = { ...storyContext.currentStory, timeTracker: normalized }
     log('Time tracker restored from snapshot:', normalized)
   }
 
@@ -2759,10 +2705,10 @@ class StoryStore {
    * Called after saving a delta. Creates a snapshot every N entries (configured interval).
    */
   private async maybeCreateAutoSnapshot(entryId: string): Promise<void> {
-    if (!this.currentStory) return
+    if (!storyContext.currentStory) return
     if (!settings.experimentalFeatures.stateTracking) return
 
-    const entry = this.entries.find((e) => e.id === entryId)
+    const entry = storyContext.entries.find((e) => e.id === entryId)
     if (!entry) return
 
     const interval = settings.experimentalFeatures.autoSnapshotInterval
@@ -2771,22 +2717,22 @@ class StoryStore {
     // Only snapshot at interval boundaries
     if (entry.position % interval !== 0) return
 
-    const branchId = this.currentStory.currentBranchId ?? null
+    const branchId = storyContext.currentStory.currentBranchId ?? null
 
     try {
       const snapshot: WorldStateSnapshot = {
         id: crypto.randomUUID(),
-        storyId: this.currentStory.id,
+        storyId: storyContext.currentStory.id,
         branchId,
         entryId,
         entryPosition: entry.position,
-        charactersSnapshot: this.characters.map((c) => ({ ...c })),
-        locationsSnapshot: this.locations.map((l) => ({ ...l })),
-        itemsSnapshot: this.items.map((i) => ({ ...i })),
-        storyBeatsSnapshot: this.storyBeats.map((b) => ({ ...b })),
-        lorebookEntriesSnapshot: this.lorebookEntries.map((e) => ({ ...e })),
-        timeTrackerSnapshot: this.currentStory.timeTracker
-          ? { ...this.currentStory.timeTracker }
+        charactersSnapshot: storyContext.characters.map((c) => ({ ...c })),
+        locationsSnapshot: storyContext.locations.map((l) => ({ ...l })),
+        itemsSnapshot: storyContext.items.map((i) => ({ ...i })),
+        storyBeatsSnapshot: storyContext.storyBeats.map((b) => ({ ...b })),
+        lorebookEntriesSnapshot: storyContext.lorebookEntries.map((e) => ({ ...e })),
+        timeTrackerSnapshot: storyContext.currentStory.timeTracker
+          ? { ...storyContext.currentStory.timeTracker }
           : null,
         createdAt: Date.now(),
       }
@@ -2801,24 +2747,26 @@ class StoryStore {
 
   // Create a manual chapter at a specific entry index
   async createManualChapter(endEntryIndex: number): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     // Find the start index (after the last chapter or beginning)
-    const startIndex = this.lastChapterEndIndex
+    const startIndex = storyContext.lastChapterEndIndex
 
     // Validate the end index
-    if (endEntryIndex <= startIndex || endEntryIndex > this.entries.length) {
+    if (endEntryIndex <= startIndex || endEntryIndex > storyContext.entries.length) {
       throw new Error('Invalid entry index for chapter creation')
     }
 
     // Get the entries for this chapter
-    const chapterEntries = this.entries.slice(startIndex, endEntryIndex)
+    const chapterEntries = storyContext.entries.slice(startIndex, endEntryIndex)
     if (chapterEntries.length === 0) {
       throw new Error('No entries to create chapter from')
     }
 
     // Get previous chapters for context (branch-filtered)
-    const previousChapters = [...this.currentBranchChapters].sort((a, b) => a.number - b.number)
+    const previousChapters = [...storyContext.currentBranchChapters].sort(
+      (a, b) => a.number - b.number,
+    )
 
     // Import aiService dynamically to avoid circular dependency
     const { aiService } = await import('$lib/services/ai')
@@ -2827,9 +2775,9 @@ class StoryStore {
     const chapterData = await aiService.summarizeChapter(
       chapterEntries,
       previousChapters,
-      this.currentStory?.mode ?? 'adventure',
-      this.pov,
-      this.tense,
+      storyContext.currentStory?.mode ?? 'adventure',
+      storyContext.pov,
+      storyContext.tense,
     )
 
     // Get the next chapter number
@@ -2844,7 +2792,7 @@ class StoryStore {
     // Create the chapter
     const chapter: Chapter = {
       id: crypto.randomUUID(),
-      storyId: this.currentStory.id,
+      storyId: storyContext.currentStory.id,
       number: chapterNumber,
       title: chapterData.title || null,
       startEntryId: chapterEntries[0].id,
@@ -2858,7 +2806,7 @@ class StoryStore {
       locations: chapterData.locations,
       plotThreads: chapterData.plotThreads,
       emotionalTone: chapterData.emotionalTone || null,
-      branchId: this.currentStory.currentBranchId,
+      branchId: storyContext.currentStory.currentBranchId,
       createdAt: Date.now(),
     }
 
@@ -2868,28 +2816,28 @@ class StoryStore {
 
   // Create a checkpoint (snapshot of current state)
   async createCheckpoint(name: string): Promise<Checkpoint> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
-    const lastEntry = this.entries[this.entries.length - 1]
+    const lastEntry = storyContext.entries[storyContext.entries.length - 1]
     if (!lastEntry) throw new Error('No entries to checkpoint')
 
     const checkpoint: Checkpoint = {
       id: crypto.randomUUID(),
-      storyId: this.currentStory.id,
+      storyId: storyContext.currentStory.id,
       name,
       lastEntryId: lastEntry.id,
       lastEntryPreview: lastEntry.content.substring(0, 100),
-      entryCount: this.entries.length,
-      entriesSnapshot: [...this.entries],
-      charactersSnapshot: [...this.characters],
-      locationsSnapshot: [...this.locations],
-      itemsSnapshot: [...this.items],
-      storyBeatsSnapshot: [...this.storyBeats],
-      chaptersSnapshot: [...this.chapters],
-      timeTrackerSnapshot: this.currentStory.timeTracker
-        ? { ...this.currentStory.timeTracker }
+      entryCount: storyContext.entries.length,
+      entriesSnapshot: [...storyContext.entries],
+      charactersSnapshot: [...storyContext.characters],
+      locationsSnapshot: [...storyContext.locations],
+      itemsSnapshot: [...storyContext.items],
+      storyBeatsSnapshot: [...storyContext.storyBeats],
+      chaptersSnapshot: [...storyContext.chapters],
+      timeTrackerSnapshot: storyContext.currentStory.timeTracker
+        ? { ...storyContext.currentStory.timeTracker }
         : null,
-      lorebookEntriesSnapshot: [...this.lorebookEntries],
+      lorebookEntriesSnapshot: [...storyContext.lorebookEntries],
       createdAt: Date.now(),
     }
 
@@ -2900,8 +2848,8 @@ class StoryStore {
     if (this.currentBgImage) {
       log('Saving background for checkpoint:', name)
       await database.saveBackground(
-        this.currentStory.id,
-        this.currentStory.currentBranchId,
+        storyContext.currentStory.id,
+        storyContext.currentStory.currentBranchId,
         checkpoint.id,
         this.currentBgImage,
       )
@@ -2944,8 +2892,8 @@ class StoryStore {
    * Get the current branch, or null if on the main branch (for legacy stories)
    */
   get currentBranch(): Branch | null {
-    if (!this.currentStory?.currentBranchId) return null
-    return this.branches.find((b) => b.id === this.currentStory!.currentBranchId) ?? null
+    if (!storyContext.currentStory?.currentBranchId) return null
+    return this.branches.find((b) => b.id === storyContext.currentStory!.currentBranchId) ?? null
   }
 
   /**
@@ -2957,7 +2905,7 @@ class StoryStore {
     forkEntryId: string,
     checkpointId: string,
   ): Promise<Branch> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     // Verify the checkpoint exists in memory
     const checkpoint = this.checkpoints.find((cp) => cp.id === checkpointId)
@@ -2981,14 +2929,14 @@ class StoryStore {
       throw new Error(`Fork entry ${forkEntryId} not found in database`)
     }
 
-    const dbStory = await database.getStory(this.currentStory.id)
+    const dbStory = await database.getStory(storyContext.currentStory.id)
     if (!dbStory) {
-      throw new Error(`Story ${this.currentStory.id} not found in database`)
+      throw new Error(`Story ${storyContext.currentStory.id} not found in database`)
     }
 
     // Determine parent branch (current branch, or null for main)
     // IMPORTANT: Ensure it's explicitly null, not undefined
-    const parentBranchId = this.currentStory.currentBranchId ?? null
+    const parentBranchId = storyContext.currentStory.currentBranchId ?? null
 
     // If there's a parent branch, verify it exists
     if (parentBranchId !== null) {
@@ -3001,7 +2949,7 @@ class StoryStore {
     // Create the branch
     const branch: Branch = {
       id: crypto.randomUUID(),
-      storyId: this.currentStory.id,
+      storyId: storyContext.currentStory.id,
       name,
       parentBranchId,
       forkEntryId,
@@ -3014,12 +2962,12 @@ class StoryStore {
 
     // Inherit background from checkpoint
     const checkpointBg = await database.getBackgroundForCheckpoint(
-      this.currentStory.id,
+      storyContext.currentStory.id,
       checkpointId,
     )
     if (checkpointBg) {
       log('Inheriting background from checkpoint for new branch:', branch.name)
-      await database.saveBackground(this.currentStory.id, branch.id, null, checkpointBg)
+      await database.saveBackground(storyContext.currentStory.id, branch.id, null, checkpointBg)
     }
 
     // Copy world state from checkpoint into database with the new branch_id
@@ -3116,7 +3064,7 @@ class StoryStore {
         try {
           const snapshot: WorldStateSnapshot = {
             id: crypto.randomUUID(),
-            storyId: this.currentStory.id,
+            storyId: storyContext.currentStory.id,
             branchId: branch.id,
             entryId: forkEntryId,
             entryPosition: dbEntry.position,
@@ -3200,12 +3148,11 @@ class StoryStore {
 
     // Restore time tracker from checkpoint
     if (checkpoint.timeTrackerSnapshot) {
-      this.currentStory = {
-        ...this.currentStory!,
+      storyContext.currentStory = {
+        ...storyContext.currentStory!,
         timeTracker: { ...checkpoint.timeTrackerSnapshot },
       }
-      storyContext.currentStory = this.currentStory
-      await database.updateStory(this.currentStory!.id, {
+      await database.updateStory(storyContext.currentStory!.id, {
         timeTracker: checkpoint.timeTrackerSnapshot,
       })
       log('Time tracker restored from checkpoint:', checkpoint.timeTrackerSnapshot)
@@ -3264,7 +3211,7 @@ class StoryStore {
    * @param skipReload - If true, skip reloading entries (used when creating new branch from current state)
    */
   async switchBranch(branchId: string | null, skipReload: boolean = false): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     // Validate branch exists (if not null)
     if (branchId !== null) {
@@ -3273,9 +3220,8 @@ class StoryStore {
     }
 
     // Update story's current branch in database
-    await database.setStoryCurrentBranch(this.currentStory.id, branchId)
-    this.currentStory = { ...this.currentStory, currentBranchId: branchId }
-    storyContext.currentStory = this.currentStory
+    await database.setStoryCurrentBranch(storyContext.currentStory.id, branchId)
+    storyContext.currentStory = { ...storyContext.currentStory, currentBranchId: branchId }
 
     // Reload entries from database if not skipping
     // When creating a new branch, we skip because we're already at the correct state
@@ -3284,11 +3230,14 @@ class StoryStore {
     }
 
     // Invalidate caches
-    this.invalidateWordCountCache()
-    this.invalidateChapterCache()
+    storyContext.invalidateWordCountCache()
+    storyContext.invalidateChapterCache()
 
     // Reload background from database for the branch
-    this.currentBgImage = await database.getBackgroundForBranch(this.currentStory.id, branchId)
+    this.currentBgImage = await database.getBackgroundForBranch(
+      storyContext.currentStory.id,
+      branchId,
+    )
 
     // Restore suggested actions from the new branch's last narration entry
     // Without this, stale actions from the previous branch persist in the UI
@@ -3304,38 +3253,38 @@ class StoryStore {
    * - For other branches: loads inherited items (null branch_id) + branch-specific items
    */
   private async reloadEntriesForCurrentBranch(): Promise<void> {
-    if (!this.currentStory) return
+    if (!storyContext.currentStory) return
 
-    const branchId = this.currentStory.currentBranchId
+    const branchId = storyContext.currentStory.currentBranchId
 
     if (branchId === null) {
       // Main branch: load all data with null branch_id
       const [entries, chapters, characters, locations, items, storyBeats, lorebookEntries] =
         await Promise.all([
-          database.getStoryEntriesForBranch(this.currentStory.id, null),
-          database.getChaptersForBranch(this.currentStory.id, null),
-          database.getCharactersForBranch(this.currentStory.id, null),
-          database.getLocationsForBranch(this.currentStory.id, null),
-          database.getItemsForBranch(this.currentStory.id, null),
-          database.getStoryBeatsForBranch(this.currentStory.id, null),
-          database.getEntriesForBranch(this.currentStory.id, null),
+          database.getStoryEntriesForBranch(storyContext.currentStory.id, null),
+          database.getChaptersForBranch(storyContext.currentStory.id, null),
+          database.getCharactersForBranch(storyContext.currentStory.id, null),
+          database.getLocationsForBranch(storyContext.currentStory.id, null),
+          database.getItemsForBranch(storyContext.currentStory.id, null),
+          database.getStoryBeatsForBranch(storyContext.currentStory.id, null),
+          database.getEntriesForBranch(storyContext.currentStory.id, null),
         ])
 
-      this.entries = entries
-      this.chapters = chapters
-      this.characters = characters
-      this.locations = locations
-      this.items = items
-      this.storyBeats = storyBeats
-      this.lorebookEntries = lorebookEntries
+      storyContext.entries = entries
+      storyContext.chapters = chapters
+      storyContext.characters = characters
+      storyContext.locations = locations
+      storyContext.items = items
+      storyContext.storyBeats = storyBeats
+      storyContext.lorebookEntries = lorebookEntries
 
       // Filter out tombstoned entities when COW is enabled
       if (settings.experimentalFeatures.lightweightBranches) {
-        this.characters = this.characters.filter((c) => !c.deleted)
-        this.locations = this.locations.filter((l) => !l.deleted)
-        this.items = this.items.filter((i) => !i.deleted)
-        this.storyBeats = this.storyBeats.filter((b) => !b.deleted)
-        this.lorebookEntries = this.lorebookEntries.filter((e) => !e.deleted)
+        storyContext.characters = storyContext.characters.filter((c) => !c.deleted)
+        storyContext.locations = storyContext.locations.filter((l) => !l.deleted)
+        storyContext.items = storyContext.items.filter((i) => !i.deleted)
+        storyContext.storyBeats = storyContext.storyBeats.filter((b) => !b.deleted)
+        storyContext.lorebookEntries = storyContext.lorebookEntries.filter((e) => !e.deleted)
       }
     } else {
       // Non-main branch: load entries across branch lineage (main -> ancestors -> current)
@@ -3346,7 +3295,7 @@ class StoryStore {
       const rootForkPosition = forkPositions.get(lineage[0].id)
 
       const inheritedEntries = await database.getStoryEntriesForBranch(
-        this.currentStory.id,
+        storyContext.currentStory.id,
         null,
         rootForkPosition ?? undefined,
       )
@@ -3357,22 +3306,24 @@ class StoryStore {
         const childForkPosition =
           i < lineage.length - 1 ? forkPositions.get(lineage[i + 1].id) : undefined
         const entries = await database.getStoryEntriesForBranch(
-          this.currentStory.id,
+          storyContext.currentStory.id,
           branch.id,
           childForkPosition ?? undefined,
         )
         branchEntries.push(...entries)
       }
 
-      this.entries = [...inheritedEntries, ...branchEntries].sort((a, b) => a.position - b.position)
+      storyContext.entries = [...inheritedEntries, ...branchEntries].sort(
+        (a, b) => a.position - b.position,
+      )
 
       const entryPositions = new SvelteMap<string, number>()
-      for (const entry of this.entries) {
+      for (const entry of storyContext.entries) {
         entryPositions.set(entry.id, entry.position)
       }
 
       const chapters: Chapter[] = []
-      const mainChapters = await database.getChaptersForBranch(this.currentStory.id, null)
+      const mainChapters = await database.getChaptersForBranch(storyContext.currentStory.id, null)
       if (rootForkPosition === null || rootForkPosition === undefined) {
         chapters.push(...mainChapters)
       } else {
@@ -3388,7 +3339,10 @@ class StoryStore {
         const branch = lineage[i]
         const childForkPosition =
           i < lineage.length - 1 ? forkPositions.get(lineage[i + 1].id) : undefined
-        const branchChapters = await database.getChaptersForBranch(this.currentStory.id, branch.id)
+        const branchChapters = await database.getChaptersForBranch(
+          storyContext.currentStory.id,
+          branch.id,
+        )
         if (childForkPosition === null || childForkPosition === undefined) {
           chapters.push(...branchChapters)
         } else {
@@ -3401,7 +3355,7 @@ class StoryStore {
         }
       }
 
-      this.chapters = chapters.sort((a, b) => a.number - b.number)
+      storyContext.chapters = chapters.sort((a, b) => a.number - b.number)
 
       // Load world state from database
       // COW branches use resolved loading (walks lineage), legacy branches use direct loading
@@ -3416,11 +3370,11 @@ class StoryStore {
         if (currentBranchInfo?.snapshotComplete) {
           // Snapshot isolation: branch has its own complete entity set
           ;[characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
-            database.getCharactersForBranch(this.currentStory.id, branchId),
-            database.getLocationsForBranch(this.currentStory.id, branchId),
-            database.getItemsForBranch(this.currentStory.id, branchId),
-            database.getStoryBeatsForBranch(this.currentStory.id, branchId),
-            database.getEntriesForBranch(this.currentStory.id, branchId),
+            database.getCharactersForBranch(storyContext.currentStory.id, branchId),
+            database.getLocationsForBranch(storyContext.currentStory.id, branchId),
+            database.getItemsForBranch(storyContext.currentStory.id, branchId),
+            database.getStoryBeatsForBranch(storyContext.currentStory.id, branchId),
+            database.getEntriesForBranch(storyContext.currentStory.id, branchId),
           ])
           // Filter out tombstoned entities
           characters = characters.filter((c) => !c.deleted)
@@ -3438,11 +3392,11 @@ class StoryStore {
         } else {
           // Legacy COW: resolve through lineage (pre-snapshot branches)
           ;[characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
-            database.getCharactersResolved(this.currentStory.id, lineage),
-            database.getLocationsResolved(this.currentStory.id, lineage),
-            database.getItemsResolved(this.currentStory.id, lineage),
-            database.getStoryBeatsResolved(this.currentStory.id, lineage),
-            database.getLorebookEntriesResolved(this.currentStory.id, lineage),
+            database.getCharactersResolved(storyContext.currentStory.id, lineage),
+            database.getLocationsResolved(storyContext.currentStory.id, lineage),
+            database.getItemsResolved(storyContext.currentStory.id, lineage),
+            database.getStoryBeatsResolved(storyContext.currentStory.id, lineage),
+            database.getLorebookEntriesResolved(storyContext.currentStory.id, lineage),
           ])
           log('COW: Resolved world state through lineage for branch:', branchId, {
             lineageDepth: lineage.length,
@@ -3456,19 +3410,19 @@ class StoryStore {
       } else {
         // Legacy path: direct branch loading (entities were fully copied at branch creation)
         ;[characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
-          database.getCharactersForBranch(this.currentStory.id, branchId),
-          database.getLocationsForBranch(this.currentStory.id, branchId),
-          database.getItemsForBranch(this.currentStory.id, branchId),
-          database.getStoryBeatsForBranch(this.currentStory.id, branchId),
-          database.getEntriesForBranch(this.currentStory.id, branchId),
+          database.getCharactersForBranch(storyContext.currentStory.id, branchId),
+          database.getLocationsForBranch(storyContext.currentStory.id, branchId),
+          database.getItemsForBranch(storyContext.currentStory.id, branchId),
+          database.getStoryBeatsForBranch(storyContext.currentStory.id, branchId),
+          database.getEntriesForBranch(storyContext.currentStory.id, branchId),
         ])
       }
 
-      this.characters = characters
-      this.locations = locations
-      this.items = items
-      this.storyBeats = storyBeats
-      this.lorebookEntries = lorebookEntries
+      storyContext.characters = characters
+      storyContext.locations = locations
+      storyContext.items = items
+      storyContext.storyBeats = storyBeats
+      storyContext.lorebookEntries = lorebookEntries
 
       // Get the current branch name from lineage for logging
       const currentBranch = lineage[lineage.length - 1]
@@ -3486,14 +3440,14 @@ class StoryStore {
 
     // Re-hydrate singleton after branch reload
     storyContext.hydrate({
-      story: this.currentStory!,
-      entries: this.entries,
-      characters: this.characters,
-      locations: this.locations,
-      items: this.items,
-      storyBeats: this.storyBeats,
-      chapters: this.chapters,
-      lorebookEntries: this.lorebookEntries,
+      story: storyContext.currentStory!,
+      entries: storyContext.entries,
+      characters: storyContext.characters,
+      locations: storyContext.locations,
+      items: storyContext.items,
+      storyBeats: storyContext.storyBeats,
+      chapters: storyContext.chapters,
+      lorebookEntries: storyContext.lorebookEntries,
       branches: this.branches,
     })
   }
@@ -3503,15 +3457,15 @@ class StoryStore {
    * Called after loading entries for a branch to ensure time consistency.
    */
   private async restoreTimeFromLastEntry(): Promise<void> {
-    if (!this.currentStory || this.entries.length === 0) return
+    if (!storyContext.currentStory || storyContext.entries.length === 0) return
 
-    const lastEntry = this.entries[this.entries.length - 1]
+    const lastEntry = storyContext.entries[storyContext.entries.length - 1]
     const timeEnd = lastEntry.metadata?.timeEnd
 
     if (timeEnd && typeof timeEnd === 'object') {
       const newTime = timeEnd as TimeTracker
       // Only update if different to avoid unnecessary DB writes
-      const current = this.currentStory.timeTracker
+      const current = storyContext.currentStory.timeTracker
       if (
         !current ||
         current.years !== newTime.years ||
@@ -3519,8 +3473,8 @@ class StoryStore {
         current.hours !== newTime.hours ||
         current.minutes !== newTime.minutes
       ) {
-        this.currentStory = { ...this.currentStory, timeTracker: newTime }
-        await database.updateStory(this.currentStory.id, { timeTracker: newTime })
+        storyContext.currentStory = { ...storyContext.currentStory, timeTracker: newTime }
+        await database.updateStory(storyContext.currentStory.id, { timeTracker: newTime })
         log('Time tracker restored from last entry:', newTime)
       }
     }
@@ -3540,10 +3494,10 @@ class StoryStore {
    * Cannot delete the main branch (null), the current branch, or branches with children.
    */
   async deleteBranch(branchId: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     // Cannot delete current branch
-    if (this.currentStory.currentBranchId === branchId) {
+    if (storyContext.currentStory.currentBranchId === branchId) {
       throw new Error('Cannot delete the current branch')
     }
 
@@ -3580,10 +3534,10 @@ class StoryStore {
    * Get the total entry count for a branch including inherited history.
    */
   async getBranchEntryCount(branchId: string | null): Promise<number> {
-    if (!this.currentStory) return 0
+    if (!storyContext.currentStory) return 0
 
     if (branchId === null) {
-      const entries = await database.getStoryEntriesForBranch(this.currentStory.id, null)
+      const entries = await database.getStoryEntriesForBranch(storyContext.currentStory.id, null)
       return entries.length
     }
 
@@ -3595,7 +3549,7 @@ class StoryStore {
 
     let count = 0
     const mainEntries = await database.getStoryEntriesForBranch(
-      this.currentStory.id,
+      storyContext.currentStory.id,
       null,
       rootForkPosition ?? undefined,
     )
@@ -3606,7 +3560,7 @@ class StoryStore {
       const childForkPosition =
         i < lineage.length - 1 ? forkPositions.get(lineage[i + 1].id) : undefined
       const entries = await database.getStoryEntriesForBranch(
-        this.currentStory.id,
+        storyContext.currentStory.id,
         branch.id,
         childForkPosition ?? undefined,
       )
@@ -3656,7 +3610,7 @@ class StoryStore {
     timeTracker?: TimeTracker | null
     entryCountBeforeAction: number
   }): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!storyContext.currentStory) throw new Error('No story loaded')
 
     // Lock editing during retry restore to prevent race conditions
     this._isRetryInProgress = true
@@ -3664,7 +3618,7 @@ class StoryStore {
 
     try {
       // Debug: Log character visual descriptors before restore
-      const currentCharDescriptors = this.characters.map((c) => ({
+      const currentCharDescriptors = storyContext.characters.map((c) => ({
         name: c.name,
         visualDescriptors: c.visualDescriptors,
       }))
@@ -3678,14 +3632,14 @@ class StoryStore {
       })
 
       // Determine entries to delete (those added since the backup)
-      const entriesToDelete = this.entries.filter(
+      const entriesToDelete = storyContext.entries.filter(
         (e) => e.position >= backup.entryCountBeforeAction,
       )
       const entryIdsToDelete = entriesToDelete.map((e) => e.id)
 
       log('Restoring from retry backup...', {
         entriesCount: backup.entries.length,
-        currentEntriesCount: this.entries.length,
+        currentEntriesCount: storyContext.entries.length,
         entriesToDelete: entryIdsToDelete.length,
         embeddedImagesCount: backup.embeddedImages.length,
       })
@@ -3693,8 +3647,8 @@ class StoryStore {
       // Restore to database (branch-aware: only delete/restore world state for current branch)
       await database.restoreRetryBackup(
         entryIdsToDelete,
-        this.currentStory.id,
-        this.currentStory.currentBranchId,
+        storyContext.currentStory.id,
+        storyContext.currentStory.currentBranchId,
         backup.characters,
         backup.locations,
         backup.items,
@@ -3705,7 +3659,7 @@ class StoryStore {
       await this.reloadEntriesForCurrentBranch()
 
       // Debug: Log what we got back from database
-      const dbCharDescriptors = this.characters.map((c) => ({
+      const dbCharDescriptors = storyContext.characters.map((c) => ({
         name: c.name,
         visualDescriptors: c.visualDescriptors,
       }))
@@ -3714,11 +3668,11 @@ class StoryStore {
       })
 
       // Invalidate caches after state restore
-      this.invalidateWordCountCache()
-      this.invalidateChapterCache()
+      storyContext.invalidateWordCountCache()
+      storyContext.invalidateChapterCache()
 
       // Debug: Verify memory state matches
-      const finalCharDescriptors = this.characters.map((c) => ({
+      const finalCharDescriptors = storyContext.characters.map((c) => ({
         name: c.name,
         visualDescriptors: c.visualDescriptors,
       }))
@@ -3730,9 +3684,9 @@ class StoryStore {
       await this.restoreTimeTrackerSnapshot(backup.timeTracker)
 
       log('Retry backup restored', {
-        entries: this.entries.length,
-        characters: this.characters.length,
-        locations: this.locations.length,
+        entries: storyContext.entries.length,
+        characters: storyContext.characters.length,
+        locations: storyContext.locations.length,
         embeddedImages: backup.embeddedImages.length,
       })
     } finally {
@@ -3766,17 +3720,17 @@ class StoryStore {
    */
   async restoreCharacterSnapshots(snapshots?: PersistentCharacterSnapshot[]): Promise<void> {
     log('restoreCharacterSnapshots called', {
-      hasCurrentStory: !!this.currentStory,
+      hasCurrentStory: !!storyContext.currentStory,
       snapshotsCount: snapshots?.length ?? 0,
       snapshots: snapshots?.map((s) => ({ id: s.id, visualDescriptors: s.visualDescriptors })),
-      currentCharacters: this.characters.map((c) => ({
+      currentCharacters: storyContext.characters.map((c) => ({
         id: c.id,
         name: c.name,
         visualDescriptors: c.visualDescriptors,
       })),
     })
 
-    if (!this.currentStory || !snapshots || snapshots.length === 0) {
+    if (!storyContext.currentStory || !snapshots || snapshots.length === 0) {
       log('restoreCharacterSnapshots: early return - no story or no snapshots')
       return
     }
@@ -3784,7 +3738,7 @@ class StoryStore {
     const snapshotById = new Map(snapshots.map((snapshot) => [snapshot.id, snapshot]))
     const updates: Array<{ id: string; updates: Partial<Character> }> = []
 
-    for (const character of this.characters) {
+    for (const character of storyContext.characters) {
       const snapshot = snapshotById.get(character.id)
       if (!snapshot) continue
 
@@ -3809,7 +3763,7 @@ class StoryStore {
       await database.updateCharacter(update.id, update.updates)
     }
 
-    this.characters = this.characters.map((character) => {
+    storyContext.characters = storyContext.characters.map((character) => {
       const snapshot = snapshotById.get(character.id)
       if (!snapshot) return character
 
@@ -3830,7 +3784,7 @@ class StoryStore {
 
     log('restoreCharacterSnapshots complete', {
       updatedCount: updates.length,
-      finalCharacters: this.characters.map((c) => ({
+      finalCharacters: storyContext.characters.map((c) => ({
         id: c.id,
         name: c.name,
         visualDescriptors: c.visualDescriptors,
@@ -3843,7 +3797,7 @@ class StoryStore {
     await database.deleteStory(storyId)
     this.allStories = this.allStories.filter((s) => s.id !== storyId)
 
-    if (this.currentStory?.id === storyId) {
+    if (storyContext.currentStory?.id === storyId) {
       this.clearCurrentStory()
     }
   }
@@ -3936,7 +3890,7 @@ class StoryStore {
     this.allStories = [storyData, ...this.allStories]
     const storyId = storyData.id
 
-    this.currentStory = storyData
+    storyContext.currentStory = storyData
 
     // Add protagonist
     if (data.protagonist.name) {
