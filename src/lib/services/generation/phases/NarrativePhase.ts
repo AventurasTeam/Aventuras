@@ -15,16 +15,37 @@ import type {
   NarrativeChunkEvent,
   AbortedEvent,
   ErrorEvent,
-  WorldState,
   AgenticRetrievalFields,
 } from '../types'
-import type { Story, StoryEntry } from '$lib/types'
+import type {
+  Story,
+  StoryEntry,
+  Character,
+  Location,
+  Item,
+  StoryBeat,
+  Chapter,
+  MemoryConfig,
+  Entry,
+} from '$lib/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
 import type { StreamChunk } from '$lib/services/ai/core/types'
 import type { ContextLorebookEntry } from '$lib/services/context/context-types'
 import type { RetrievalResult } from '../types'
 import { storyContext } from '$lib/stores/storyContext.svelte'
 import { DEFAULT_MEMORY_CONFIG } from '$lib/services/ai/generation/MemoryService'
+
+/** Local WorldState interface for streamNarrative callback — deleted from types.ts in Phase 23, Phase 25 removes this need */
+interface WorldState {
+  characters: Character[]
+  locations: Location[]
+  items: Item[]
+  storyBeats: StoryBeat[]
+  currentLocation?: Location
+  chapters: Chapter[]
+  memoryConfig: MemoryConfig
+  lorebookEntries: Entry[]
+}
 
 const MAX_EMPTY_RESPONSE_RETRIES = 3
 

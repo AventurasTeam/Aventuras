@@ -3,17 +3,6 @@
  * Core types for the generation pipeline. Events use a discriminated union pattern.
  */
 
-import type {
-  Story,
-  StoryEntry,
-  Chapter,
-  Character,
-  Location,
-  Item,
-  StoryBeat,
-  MemoryConfig,
-  Entry,
-} from '$lib/types'
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
 import type { TimelineFillResult } from '$lib/services/ai/retrieval'
 import type { EntryRetrievalResult } from '$lib/services/ai/retrieval/EntryRetrievalService'
@@ -31,29 +20,6 @@ export type GenerationPhase =
   | 'translation' // Narration and world state translation
   | 'image' // Image generation
   | 'post' // Suggestions, action choices, lore management
-
-// World state passed to pipeline
-export interface WorldState {
-  characters: Character[]
-  locations: Location[]
-  items: Item[]
-  storyBeats: StoryBeat[]
-  currentLocation?: Location
-  chapters: Chapter[]
-  memoryConfig: MemoryConfig
-  lorebookEntries: Entry[]
-}
-
-// Input context for the pipeline
-export interface GenerationContext {
-  story: Story
-  visibleEntries: StoryEntry[]
-  allEntries: StoryEntry[]
-  worldState: WorldState
-  userAction: { entryId: string; content: string; rawInput: string }
-  narrationEntryId?: string
-  abortSignal?: AbortSignal
-}
 
 // Structured output fields from agentic retrieval
 export interface AgenticRetrievalFields {

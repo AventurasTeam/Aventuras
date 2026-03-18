@@ -14,11 +14,33 @@ import type {
   AbortedEvent,
   ErrorEvent,
   ClassificationCompleteEvent,
-  WorldState,
 } from '../types'
-import type { Story, StoryEntry, TimeTracker } from '$lib/types'
+import type {
+  Story,
+  StoryEntry,
+  TimeTracker,
+  Character,
+  Location,
+  Item,
+  StoryBeat,
+  Chapter,
+  MemoryConfig,
+  Entry,
+} from '$lib/types'
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
 import { storyContext } from '$lib/stores/storyContext.svelte'
+
+/** Local WorldState interface for classifyResponse callback — deleted from types.ts in Phase 23, Phase 25 removes this need */
+interface WorldState {
+  characters: Character[]
+  locations: Location[]
+  items: Item[]
+  storyBeats: StoryBeat[]
+  currentLocation?: Location
+  chapters: Chapter[]
+  memoryConfig: MemoryConfig
+  lorebookEntries: Entry[]
+}
 
 /** Dependencies for classification phase - injected to avoid tight coupling */
 export interface ClassificationDependencies {
