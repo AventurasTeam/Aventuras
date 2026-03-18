@@ -41,20 +41,22 @@ beforeEach(() => {
     timeTracker: { years: 1, days: 5, hours: 14, minutes: 30 },
   } as any
 
-  storyContext.pov = 'second' as any
-  storyContext.tense = 'past' as any
-  storyContext.storyMode = 'adventure' as any
+  // pov, tense, storyMode, protagonist, currentLocation are readonly getters on the real class
+  // but writable plain properties on the stores-stub. Cast to any for test setup.
+  ;(storyContext as any).pov = 'second'
+  ;(storyContext as any).tense = 'past'
+  ;(storyContext as any).storyMode = 'adventure'
 
   storyContext.characters = [
     { id: 'char-1', name: 'Hero', relationship: 'self', description: 'The hero' } as any,
     { id: 'char-2', name: 'Ally', relationship: 'companion', description: 'A friend' } as any,
   ]
-  storyContext.protagonist = storyContext.characters[0] as any
+  ;(storyContext as any).protagonist = storyContext.characters[0]
 
   storyContext.locations = [
     { id: 'loc-1', name: 'Castle', description: 'A grand castle', current: true } as any,
   ]
-  storyContext.currentLocation = storyContext.locations[0] as any
+  ;(storyContext as any).currentLocation = storyContext.locations[0]
 
   storyContext.items = []
   storyContext.storyBeats = []
@@ -66,11 +68,11 @@ afterEach(() => {
   storyContext.locations = []
   storyContext.items = []
   storyContext.storyBeats = []
-  storyContext.protagonist = undefined as any
-  storyContext.currentLocation = undefined as any
-  storyContext.pov = 'first' as any
-  storyContext.tense = 'present' as any
-  storyContext.storyMode = 'adventure' as any
+  ;(storyContext as any).protagonist = undefined
+  ;(storyContext as any).currentLocation = undefined
+  ;(storyContext as any).pov = 'first'
+  ;(storyContext as any).tense = 'present'
+  ;(storyContext as any).storyMode = 'adventure'
   vi.clearAllMocks()
 })
 
