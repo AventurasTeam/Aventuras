@@ -6,14 +6,9 @@ import { extractEmbeddedLorebook } from '$lib/services/lorebookImporter'
 import { lorebookVault } from './lorebookVault.svelte'
 import type { Genre } from '$lib/services/ai/wizard/ScenarioService'
 import { ui } from './ui.svelte'
+import { createLogger } from '$lib/log'
 
-const DEBUG = true
-
-function log(...args: any[]) {
-  if (DEBUG) {
-    console.log('[ScenarioVault]', ...args)
-  }
-}
+const log = createLogger('ScenarioVault')
 
 /**
  * Store for managing the global Scenario Vault.

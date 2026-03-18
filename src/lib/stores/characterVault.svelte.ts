@@ -5,14 +5,9 @@ import { CharacterCardImport } from '$lib/services/characterCardImport'
 import { extractEmbeddedLorebook } from '$lib/services/lorebookImporter'
 import { lorebookVault } from './lorebookVault.svelte'
 import { ui } from './ui.svelte'
+import { createLogger } from '$lib/log'
 
-const DEBUG = true
-
-function log(...args: any[]) {
-  if (DEBUG) {
-    console.log('[CharacterVault]', ...args)
-  }
-}
+const log = createLogger('CharacterVault')
 
 /**
  * Store for managing the global Character Vault.

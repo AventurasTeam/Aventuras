@@ -5,10 +5,9 @@
 
 import type { StoryEntry, StoryMode, POV, Tense } from '$lib/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
+import { createLogger } from '$lib/log'
 
-function log(...args: unknown[]) {
-  console.log('[StyleReviewScheduler]', ...args)
-}
+const log = createLogger('StyleReviewScheduler')
 
 export interface StyleReviewCheckInput {
   storyId: string

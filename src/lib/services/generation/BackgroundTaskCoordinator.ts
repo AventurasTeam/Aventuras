@@ -25,10 +25,10 @@ import {
   type StyleReviewCheckInput,
   type StyleReviewCheckResult,
 } from './StyleReviewScheduler'
+import { createLogger } from '$lib/log'
 
-function log(...args: unknown[]) {
-  console.log('[BackgroundTaskCoordinator]', ...args)
-}
+const log = createLogger('BackgroundTaskCoordinator')
+
 
 export interface BackgroundTaskDependencies {
   chapterService: ChapterServiceDependencies

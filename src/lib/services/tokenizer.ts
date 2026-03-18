@@ -7,14 +7,9 @@
  * than simple character-based estimation.
  */
 import { countTokens as gptCountTokens, encode } from 'gpt-tokenizer'
+import { createLogger } from '$lib/log'
 
-const DEBUG = false
-
-function log(...args: unknown[]) {
-  if (DEBUG) {
-    console.log('[Tokenizer]', ...args)
-  }
-}
+const log = createLogger('Tokenizer')
 
 /**
  * Count tokens in a text string.

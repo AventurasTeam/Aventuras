@@ -18,10 +18,9 @@ import type {
   ActionInputType,
   PersistentCharacterSnapshot,
 } from '$lib/types'
+import { createLogger } from '$lib/log'
 
-function log(...args: unknown[]) {
-  console.log('[RetryService]', ...args)
-}
+const log = createLogger('RetryService')
 
 /**
  * Backup data structure - mirrors RetryBackup from ui.svelte.ts

@@ -4,10 +4,9 @@
  */
 
 import type { Entry, Chapter, LoreManagementResult, StoryMode, POV, Tense } from '$lib/types'
+import { createLogger } from '$lib/log'
 
-function log(...args: unknown[]) {
-  console.log('[LoreManagementCoordinator]', ...args)
-}
+const log = createLogger('LoreManagementCoordinator')
 
 export interface LoreManagementCallbacks {
   onCreateEntry: (entry: Entry) => Promise<void>

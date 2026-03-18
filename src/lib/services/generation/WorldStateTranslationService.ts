@@ -6,10 +6,9 @@
 import type { Character, Location, Item, StoryBeat } from '$lib/types'
 import type { UITranslationItem } from '$lib/services/ai/utils/TranslationService'
 import { hasDescriptors, descriptorsToString } from '$lib/utils/visualDescriptors'
+import { createLogger } from '$lib/log'
 
-function log(...args: unknown[]) {
-  console.log('[WorldStateTranslationService]', ...args)
-}
+const log = createLogger('WorldStateTranslationService')
 
 /** New entities from classification result. */
 export interface ClassificationNewEntities {

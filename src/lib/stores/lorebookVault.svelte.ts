@@ -4,14 +4,9 @@ import { database } from '$lib/services/database'
 import { discoveryService, type DiscoveryCard } from '$lib/services/discovery'
 import { parseLorebook, classifyEntriesWithLLM } from '$lib/services/lorebookImporter'
 import { ui } from './ui.svelte'
+import { createLogger } from '$lib/log'
 
-const DEBUG = true
-
-function log(...args: any[]) {
-  if (DEBUG) {
-    console.log('[LorebookVault]', ...args)
-  }
-}
+const log = createLogger('LorebookVault')
 
 /**
  * Store for managing the global Lorebook Vault.

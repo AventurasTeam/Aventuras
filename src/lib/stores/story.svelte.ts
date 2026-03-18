@@ -44,14 +44,9 @@ import {
 } from '$lib/services/events'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { aiService } from '$lib/services/ai'
+import { createLogger } from '$lib/log'
 
-const DEBUG = true
-
-function log(...args: any[]) {
-  if (DEBUG) {
-    console.log('[StoryStore]', ...args)
-  }
-}
+const log = createLogger('StoryStore')
 
 /**
  * Merge LLM-extracted inline runtime vars into entity metadata.runtimeVars.

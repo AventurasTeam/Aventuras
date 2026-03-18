@@ -1,18 +1,14 @@
 import { LocalLinter, BinaryModule, type Lint, type Suggestion, type LintConfig } from 'harper.js'
 import wasmUrl from 'harper.js/dist/harper_wasm_bg.wasm?url'
 import { database } from '$lib/services/database'
+import { createLogger } from '$lib/log'
 
-const DEBUG = false
+const log = createLogger('Grammar')
+
 const CUSTOM_DICTIONARY_KEY = 'harper_custom_dictionary_words'
 
 export type AddWordResult = 'added' | 'exists' | 'invalid'
 export type RemoveWordResult = 'removed' | 'not_found' | 'invalid'
-
-function log(...args: unknown[]) {
-  if (DEBUG) {
-    console.log('[Grammar]', ...args)
-  }
-}
 
 export interface GrammarIssue {
   message: string
