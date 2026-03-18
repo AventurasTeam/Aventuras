@@ -1,9 +1,10 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
+  import { storyContext } from '$lib/stores/storyContext.svelte'
   import { hasRequiredCredentials } from '$lib/services/ai/image'
   import WritingStyleFields from '$lib/components/shared/WritingStyleFields.svelte'
 
-  const storySettings = $derived(story.currentStory?.settings ?? {})
+  const storySettings = $derived(storyContext.currentStory?.settings ?? {})
   const imageGenEnabled = $derived(hasRequiredCredentials())
 </script>
 

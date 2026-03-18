@@ -1,5 +1,6 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
+  import { storyContext } from '$lib/stores/storyContext.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { Plus, MapPin, Navigation, Pencil, ChevronDown, Save, X } from 'lucide-svelte'
   import type { Location } from '$lib/types'
@@ -25,15 +26,15 @@
   let editRuntimeVars = $state<RuntimeVarsMap>({})
 
   $effect(() => {
-    if (story.currentStory) {
+    if (storyContext.currentStory) {
       loadRuntimeVarDefs()
     }
   })
 
   async function loadRuntimeVarDefs() {
-    if (!story.currentStory) return
+    if (!storyContext.currentStory) return
     try {
-      const packId = await database.getStoryPackId(story.currentStory.id)
+      const packId = await database.getStoryPackId(storyContext.currentStory.id)
       if (packId) {
         runtimeVarDefs = await database.getRuntimeVariablesByEntityType(packId, 'location')
       } else {
@@ -62,7 +63,7 @@
 
   async function addLocation() {
     if (!newName.trim()) return
-    const makeCurrent = story.locations.length === 0
+    const makeCurrent = storyContext.locations.length === 0
     await story.addLocation(newName.trim(), newDescription.trim() || undefined, makeCurrent)
     newName = ''
     newDescription = ''
@@ -160,8 +161,8 @@
   {/if}
 
   <!-- Current Location -->
-  {#if story.currentLocation}
-    {@const currentLocation = story.currentLocation}
+  {#if storyContext.currentLocation}
+    {@const currentLocation = storyContext.currentLocation}
     {@const isEditing = editingId === currentLocation.id}
     {@const isCollapsed = ui.isEntityCollapsed(currentLocation.id)}
 
@@ -316,7 +317,7 @@
   {/if}
 
   <!-- Location List -->
-  {#if story.locations.filter((l) => !l.current).length === 0 && !story.currentLocation}
+  {#if storyContext.locations.filter((l) => !l.current).length === 0 && !storyContext.currentLocation}
     <div
       class="border-border bg-muted/20 flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center"
     >
@@ -335,7 +336,7 @@
     </div>
   {:else}
     <div class="flex flex-col gap-2">
-      {#each story.locations.filter((l) => !l.current) as location (location.id)}
+      {#each storyContext.locations.filter((l) => !l.current) as location (location.id)}
         {@const isCollapsed = ui.isEntityCollapsed(location.id)}
         {@const isEditing = editingId === location.id}
 

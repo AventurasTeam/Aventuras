@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { StoryEntry, EmbeddedImage } from '$lib/types'
   import { story } from '$lib/stores/story.svelte'
+  import { storyContext } from '$lib/stores/storyContext.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import {
@@ -74,12 +75,12 @@
   )
 
   // Check if Visual Prose mode is enabled for this story
-  const visualProseMode = $derived(story.currentStory?.settings?.visualProseMode ?? false)
+  const visualProseMode = $derived(storyContext.currentStory?.settings?.visualProseMode ?? false)
 
   // Check if this is the latest narration entry (for retry button)
   const isLatestNarration = $derived.by(() => {
     if (entry.type !== 'narration') return false
-    const narrations = story.entries.filter((e) => e.type === 'narration')
+    const narrations = storyContext.entries.filter((e) => e.type === 'narration')
     if (narrations.length === 0) return false
     return narrations[narrations.length - 1].id === entry.id
   })
@@ -88,8 +89,8 @@
   const canRetry = $derived(
     isLatestNarration &&
       ui.retryBackup &&
-      story.currentStory &&
-      ui.retryBackup.storyId === story.currentStory.id &&
+      storyContext.currentStory &&
+      ui.retryBackup.storyId === storyContext.currentStory.id &&
       !ui.isGenerating &&
       !ui.lastGenerationError,
   )
@@ -128,7 +129,7 @@
 
     // For legacy/untracked errors, find the previous user action and set up retry
     console.log('[StoryEntry] Legacy error, finding previous user action')
-    const entryIndex = story.entries.findIndex((e) => e.id === entry.id)
+    const entryIndex = storyContext.entries.findIndex((e) => e.id === entry.id)
     if (entryIndex <= 0) {
       console.log('[StoryEntry] Entry not found or is first entry')
       return
@@ -137,8 +138,8 @@
     // Find the most recent user action before this error
     let userActionEntry = null
     for (let i = entryIndex - 1; i >= 0; i--) {
-      if (story.entries[i].type === 'user_action') {
-        userActionEntry = story.entries[i]
+      if (storyContext.entries[i].type === 'user_action') {
+        userActionEntry = storyContext.entries[i]
         break
       }
     }
@@ -207,7 +208,7 @@
 
   // Check if this entry has an associated checkpoint (can be branched from)
   // Only show checkpoints that belong to the current branch to prevent incorrect branch lineage
-  const currentBranchId = $derived(story.currentStory?.currentBranchId ?? null)
+  const currentBranchId = $derived(storyContext.currentStory?.currentBranchId ?? null)
   const entryCheckpoint = $derived(
     story.checkpoints.find(
       (cp) => cp.lastEntryId === entry.id && getCheckpointBranchId(cp) === currentBranchId,
@@ -243,7 +244,8 @@
 
   // Check if this is the latest entry (checkpoints can only be created at the latest entry)
   const isLatestEntry = $derived(
-    story.entries.length > 0 && story.entries[story.entries.length - 1].id === entry.id,
+    storyContext.entries.length > 0 &&
+      storyContext.entries[storyContext.entries.length - 1].id === entry.id,
   )
 
   // Can create checkpoint: latest entry, not a system entry, and no checkpoint exists yet
@@ -278,16 +280,16 @@
 
   // Handle creating missing inline images (stuck/lost records)
   async function handleCreateMissingImage() {
-    if (!story.currentStory) return
+    if (!storyContext.currentStory) return
 
     // Trigger scanning of this entry
     // We pass the full content, the service will find tags and create missing records
     const context = {
-      storyId: story.currentStory.id,
+      storyId: storyContext.currentStory.id,
       entryId: entry.id,
       narrativeContent: entry.translatedContent ?? entry.content,
-      presentCharacters: story.characters, // Use all story characters for lookup
-      referenceMode: story.currentStory.settings?.referenceMode ?? false,
+      presentCharacters: storyContext.characters, // Use all story characters for lookup
+      referenceMode: storyContext.currentStory.settings?.referenceMode ?? false,
     }
 
     await inlineImageService.processNarrativeForInlineImages(context)
@@ -930,8 +932,8 @@
       if (
         isLastUserAction &&
         ui.retryBackup &&
-        story.currentStory &&
-        ui.retryBackup.storyId === story.currentStory.id
+        storyContext.currentStory &&
+        ui.retryBackup.storyId === storyContext.currentStory.id
       ) {
         // Update the backup with the new content and trigger retry
         console.log('[StoryEntry] Editing last user action, triggering retry with new content')
@@ -954,7 +956,7 @@
    */
   function isLastUserActionEntry(): boolean {
     // Find all user_action entries
-    const userActions = story.entries.filter((e) => e.type === 'user_action')
+    const userActions = storyContext.entries.filter((e) => e.type === 'user_action')
     if (userActions.length === 0) return false
 
     // Check if this entry is the last one
@@ -1023,16 +1025,16 @@
   let isGeneratingStoryImages = $state(false)
 
   async function handleGenerateStoryImages() {
-    if (!story.currentStory || isGeneratingStoryImages) return
+    if (!storyContext.currentStory || isGeneratingStoryImages) return
     isGeneratingStoryImages = true
     try {
       const context = {
-        storyId: story.currentStory.id,
+        storyId: storyContext.currentStory.id,
         entryId: entry.id,
         narrativeResponse: entry.content,
         userAction: '',
-        presentCharacters: story.characters,
-        referenceMode: story.currentStory.settings?.referenceMode ?? false,
+        presentCharacters: storyContext.characters,
+        referenceMode: storyContext.currentStory.settings?.referenceMode ?? false,
         translatedNarrative: entry.translatedContent ?? undefined,
       }
       await aiService.generateImagesForNarrative(context)
@@ -1169,7 +1171,7 @@
             <Volume2 class="h-4 w-4" />
           {/if}
         </Button>
-        {#if isLatestNarration && story.currentStory?.settings?.imageGenerationMode === 'agentic'}
+        {#if isLatestNarration && storyContext.currentStory?.settings?.imageGenerationMode === 'agentic'}
           <Button
             variant="text"
             size="icon"

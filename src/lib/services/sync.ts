@@ -3,6 +3,7 @@ import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '$lib/
 import type { AventuraExport } from './export'
 import { database } from './database'
 import { story } from '$lib/stores/story.svelte'
+import { storyContext } from '$lib/stores/storyContext.svelte'
 
 /**
  * Service for local network sync functionality
@@ -79,7 +80,7 @@ class SyncService {
    */
   async createPreSyncBackup(storyId: string): Promise<void> {
     // Load the story if not already loaded
-    if (story.currentStory?.id !== storyId) {
+    if (storyContext.currentStory?.id !== storyId) {
       await story.loadStory(storyId)
     }
     // Create a checkpoint named "Pre-sync backup"

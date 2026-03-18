@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { storyContext } from '$lib/stores/storyContext.svelte'
   import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
   import { lorebookImportService, type ImportProgress } from '$lib/services/lorebook'
   import type { LorebookImportResult } from '$lib/services/lorebookImporter'
   import { open } from '@tauri-apps/plugin-dialog'
@@ -117,16 +117,16 @@
   }
 
   async function handleImport() {
-    if (!parseResult || !story.currentStory) return
+    if (!parseResult || !storyContext.currentStory) return
 
     importing = true
     importProgress = null
 
     try {
       const result = await lorebookImportService.importEntries(parseResult, {
-        storyId: story.currentStory.id,
+        storyId: storyContext.currentStory.id,
         useAIClassification,
-        storyMode: story.currentStory.mode ?? 'adventure',
+        storyMode: storyContext.currentStory.mode ?? 'adventure',
         onProgress: (progress) => {
           importProgress = progress
         },
@@ -134,8 +134,8 @@
 
       if (result.success) {
         // Reload entries into store
-        const allEntries = await lorebookImportService.getStoryEntries(story.currentStory.id)
-        story.lorebookEntries = allEntries
+        const allEntries = await lorebookImportService.getStoryEntries(storyContext.currentStory.id)
+        storyContext.lorebookEntries = allEntries
 
         ui.showToast(`Successfully imported ${result.entriesImported} entries`, 'info')
         ui.closeLorebookImport()

@@ -2,6 +2,7 @@
   import type { Entry } from '$lib/types'
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
+  import { storyContext } from '$lib/stores/storyContext.svelte'
   import { onMount } from 'svelte'
   import LorebookList from './LorebookList.svelte'
   import LorebookDetail from './LorebookDetail.svelte'
@@ -28,7 +29,7 @@
   const selectedEntry = $derived.by(() => {
     const id = ui.selectedLorebookEntryId
     if (!id) return null
-    return story.lorebookEntries.find((e) => e.id === id) ?? null
+    return storyContext.lorebookEntries.find((e) => e.id === id) ?? null
   })
 
   // Show detail panel on desktop when entry selected, or on mobile when showing detail

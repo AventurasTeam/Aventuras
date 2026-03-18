@@ -1,5 +1,6 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
+  import { storyContext } from '$lib/stores/storyContext.svelte'
   import { ask } from '@tauri-apps/plugin-dialog'
   import {
     GitBranch,
@@ -93,7 +94,7 @@
 
   function getLatestCheckpoint() {
     if (story.checkpoints.length === 0) return null
-    const currentBranchId = story.currentStory?.currentBranchId ?? null
+    const currentBranchId = storyContext.currentStory?.currentBranchId ?? null
     const eligible = story.checkpoints.filter(
       (checkpoint) => getCheckpointBranchId(checkpoint) === currentBranchId,
     )
@@ -136,7 +137,7 @@
   }
 
   async function refreshEntryCounts() {
-    if (!story.currentStory) return
+    if (!storyContext.currentStory) return
     const runId = ++entryCountsRun
     const counts: Record<string, number> = {}
 
@@ -157,10 +158,10 @@
 
   $effect(() => {
     const _ = [
-      story.currentStory?.id,
-      story.currentStory?.currentBranchId,
+      storyContext.currentStory?.id,
+      storyContext.currentStory?.currentBranchId,
       story.branches.length,
-      story.entries.length,
+      storyContext.entries.length,
     ]
     refreshEntryCounts()
   })
@@ -172,7 +173,7 @@
 
   // Check if branch is current
   function isCurrent(branchId: string | null): boolean {
-    return story.currentStory?.currentBranchId === branchId
+    return storyContext.currentStory?.currentBranchId === branchId
   }
 </script>
 

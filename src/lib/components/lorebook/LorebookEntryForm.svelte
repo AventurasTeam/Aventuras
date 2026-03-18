@@ -7,7 +7,7 @@
     AdventureEntryState,
     CreativeEntryState,
   } from '$lib/types'
-  import { story } from '$lib/stores/story.svelte'
+  import { storyContext } from '$lib/stores/storyContext.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { ChevronDown, ChevronUp, Plus, X } from 'lucide-svelte'
 
@@ -180,7 +180,7 @@
       const now = Date.now()
       const entryData: Entry = {
         id: entry?.id ?? crypto.randomUUID(),
-        storyId: story.currentStory?.id ?? '',
+        storyId: storyContext.currentStory?.id ?? '',
         name: name.trim(),
         type,
         description: description.trim(),
@@ -201,7 +201,7 @@
         createdAt: entry?.createdAt ?? now,
         updatedAt: now,
         loreManagementBlacklisted,
-        branchId: entry?.branchId ?? story.currentStory?.currentBranchId ?? null,
+        branchId: entry?.branchId ?? storyContext.currentStory?.currentBranchId ?? null,
       }
 
       onSave(entryData)

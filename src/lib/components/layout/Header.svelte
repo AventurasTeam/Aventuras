@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
+  import { storyContext } from '$lib/stores/storyContext.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import { exportService, gatherStoryData } from '$lib/services/export'
   import { Button } from '$lib/components/ui/button'
@@ -87,7 +88,7 @@
   })
 
   async function handleExport(exportFn: () => Promise<boolean>, formatName: string) {
-    if (!story.currentStory) return
+    if (!storyContext.currentStory) return
     showExportMenu = false
     try {
       const success = await exportFn()
@@ -106,7 +107,7 @@
   }
 
   async function exportAventuras() {
-    const currentStory = story.currentStory
+    const currentStory = storyContext.currentStory
     if (!currentStory) return
     const data = await gatherStoryData(currentStory.id)
     await handleExport(
@@ -129,15 +130,15 @@
   }
 
   async function exportMarkdown() {
-    const currentStory = story.currentStory
+    const currentStory = storyContext.currentStory
     if (!currentStory) return
     await handleExport(
       () =>
         exportService.exportToMarkdown(
           currentStory,
-          story.entries,
-          story.characters,
-          story.locations,
+          storyContext.entries,
+          storyContext.characters,
+          storyContext.locations,
           true,
         ),
       'Markdown (.md)',
@@ -145,10 +146,10 @@
   }
 
   async function exportText() {
-    const currentStory = story.currentStory
+    const currentStory = storyContext.currentStory
     if (!currentStory) return
     await handleExport(
-      () => exportService.exportToText(currentStory, story.entries),
+      () => exportService.exportToText(currentStory, storyContext.entries),
       'Plain Text (.txt)',
     )
   }
@@ -166,12 +167,12 @@
         role="img"
         aria-label="Aventuras"
       ></div>
-      {#if story.currentStory}
+      {#if storyContext.currentStory}
         <div class="flex min-w-0 items-center gap-2">
           <span
             class="text-foreground max-w-40 truncate text-sm font-semibold sm:max-w-none sm:translate-y-[-1.5px] sm:text-base"
           >
-            {story.currentStory.title}
+            {storyContext.currentStory.title}
           </span>
           {#if ui.isGenerating}
             <div
@@ -181,7 +182,7 @@
         </div>
         {#if settings.uiSettings.showWordCount}
           <span class="text-muted-foreground hidden text-sm sm:-translate-y-px lg:inline"
-            >({story.wordCount} words)</span
+            >({storyContext.wordCount} words)</span
           >
         {/if}
       {:else}
@@ -225,7 +226,7 @@
     </div>
 
     <!-- Back to Library Button (right side) -->
-    {#if story.currentStory}
+    {#if storyContext.currentStory}
       <Button
         icon={Library}
         label="Library"
@@ -239,7 +240,7 @@
       />
     {/if}
 
-    {#if story.currentStory}
+    {#if storyContext.currentStory}
       <!-- Gallery Button -->
       <Button
         icon={ImageIcon}
@@ -294,7 +295,7 @@
       </DropdownMenu.Root>
     {/if}
 
-    {#if story.currentStory && story.lorebookEntries.length > 0}
+    {#if storyContext.currentStory && storyContext.lorebookEntries.length > 0}
       <Button
         variant="text"
         class="text-muted-foreground hover:text-primary relative hidden min-h-11 min-w-11 sm:flex"
@@ -312,7 +313,7 @@
       </Button>
     {/if}
 
-    {#if !story.currentStory}
+    {#if !storyContext.currentStory}
       <Button
         href="https://discord.gg/DqVzhSPC46"
         target="_blank"
@@ -337,7 +338,7 @@
       onclick={() => ui.openSettings()}
     />
 
-    {#if story.currentStory}
+    {#if storyContext.currentStory}
       <Button
         icon={PanelRight}
         variant="text"
