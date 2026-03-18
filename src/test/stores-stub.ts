@@ -41,6 +41,13 @@ export const storyContext = {
   pendingQuests: [],
   lastChapterEndIndex: 0,
   currentBranchChapters: [],
+  promptContext: {
+    mode: 'adventure',
+    pov: 'first',
+    tense: 'present',
+    protagonistName: 'the protagonist',
+    genre: undefined,
+  },
 
   // Lifecycle methods (no-ops)
   init: () => {},

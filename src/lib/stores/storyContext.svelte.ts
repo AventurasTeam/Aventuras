@@ -15,7 +15,10 @@ import type { NarrativeResult } from '$lib/services/generation/phases/NarrativeP
 import type { ClassificationPhaseResult } from '$lib/services/generation/phases/ClassificationPhase'
 import type { TranslationResult2 } from '$lib/services/generation/phases/TranslationPhase'
 import type { ImageResult } from '$lib/services/generation/phases/ImagePhase'
-import type { PostGenerationResult } from '$lib/services/generation/phases/PostGenerationPhase'
+import type {
+  PostGenerationResult,
+  PromptContext,
+} from '$lib/services/generation/phases/PostGenerationPhase'
 import type { BackgroundImageResult } from '$lib/services/generation/phases/BackgroundImagePhase'
 import type { PreGenerationResult } from '$lib/services/generation/phases/PreGenerationPhase'
 import { SvelteSet } from 'svelte/reactivity'
@@ -106,6 +109,16 @@ class StoryContextSingleton {
 
   get storyMode(): StoryMode {
     return this.currentStory?.mode || 'adventure'
+  }
+
+  get promptContext(): PromptContext {
+    return {
+      mode: this.storyMode,
+      pov: this.pov,
+      tense: this.tense,
+      protagonistName: this.protagonist?.name ?? 'the protagonist',
+      genre: this.currentStory?.genre ?? undefined,
+    }
   }
 
   /**
