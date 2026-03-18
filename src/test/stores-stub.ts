@@ -20,6 +20,12 @@ export const storyContext = {
   userAction: null,
   narrationEntryId: null,
   abortSignal: null,
+  embeddedImages: [],
+  rawInput: '',
+  actionType: 'do',
+  wasRawActionChoice: false,
+  styleReview: null,
+  activationTracker: null,
 
   // Category 3 — generation intermediates
   retrievalResult: null,

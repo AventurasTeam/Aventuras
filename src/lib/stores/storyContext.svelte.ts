@@ -9,7 +9,11 @@ import type {
   Entry,
   Branch,
   StoryMode,
+  EmbeddedImage,
+  ActionInputType,
 } from '$lib/types'
+import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
+import type { ActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import type { RetrievalResult } from '$lib/services/generation/types'
 import type { NarrativeResult } from '$lib/services/generation/phases/NarrativePhase'
 import type { ClassificationPhaseResult } from '$lib/services/generation/phases/ClassificationPhase'
@@ -50,6 +54,12 @@ class StoryContextSingleton {
   userAction = $state.raw<{ entryId: string; content: string; rawInput: string } | null>(null)
   narrationEntryId = $state.raw<string | null>(null)
   abortSignal = $state.raw<AbortSignal | null>(null)
+  embeddedImages = $state.raw<EmbeddedImage[]>([])
+  rawInput = $state.raw<string>('')
+  actionType = $state.raw<ActionInputType>('do')
+  wasRawActionChoice = $state.raw<boolean>(false)
+  styleReview = $state.raw<StyleReviewResult | null>(null)
+  activationTracker = $state.raw<ActivationTracker | null>(null)
 
   // Category 3 — Generation intermediates ($state.raw, replaced wholesale)
   retrievalResult = $state.raw<RetrievalResult | null>(null)
@@ -258,6 +268,12 @@ class StoryContextSingleton {
     this.userAction = null
     this.narrationEntryId = null
     this.abortSignal = null
+    this.embeddedImages = []
+    this.rawInput = ''
+    this.actionType = 'do'
+    this.wasRawActionChoice = false
+    this.styleReview = null
+    this.activationTracker = null
     this.retrievalResult = null
     this.narrativeResult = null
     this.classificationResult = null
