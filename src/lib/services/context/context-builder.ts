@@ -12,6 +12,7 @@
 import { database } from '$lib/services/database'
 import { templateEngine } from '$lib/services/templates/engine'
 import { createLogger } from '$lib/log'
+import { storyContext } from '$lib/stores/storyContext.svelte'
 import type { RenderResult } from './types'
 import type { Character, Location, Item, StoryBeat } from '$lib/types'
 import type { RuntimeVariable, RuntimeVarsMap } from '$lib/services/packs/types'
@@ -29,8 +30,18 @@ export class ContextBuilder {
   /**
    * Convenience factory: create a ContextBuilder pre-populated from a story.
    * Loads story settings, protagonist, location, time, and pack custom variables.
+   *
+   * Auto-detects singleton: if storyContext.currentStory.id matches storyId,
+   * delegates to fromSingleton() to skip 5 DB queries (getStory, getCharacters,
+   * getLocations, getItems, getStoryBeats). Falls back to DB path otherwise.
    */
   static async forStory(storyId: string, packIdOverride?: string): Promise<ContextBuilder> {
+    // Singleton detection: if story is loaded in singleton, skip DB queries
+    if (storyContext.currentStory?.id === storyId) {
+      return ContextBuilder.fromSingleton(storyId, packIdOverride)
+    }
+
+    // DB path (non-generation callers, story not loaded in singleton)
     const story = await database.getStory(storyId)
     if (!story) {
       log('forStory: story not found', { storyId })
@@ -94,6 +105,84 @@ export class ContextBuilder {
     await builder.loadRuntimeVariableContext(characters, locations, items, storyBeats, protagonist)
 
     log('forStory complete', {
+      storyId,
+      packId,
+      contextKeys: Object.keys(builder.context).length,
+      storyVarOverrides: storyVarValues ? Object.keys(storyVarValues).length : 0,
+    })
+    return builder
+  }
+
+  /**
+   * Build a ContextBuilder from the storyContext singleton, skipping 5 DB queries.
+   * Called by forStory() when the singleton has the matching story loaded.
+   * Pack config (variables, runtime vars) still comes from DB.
+   */
+  private static async fromSingleton(
+    storyId: string,
+    packIdOverride?: string,
+  ): Promise<ContextBuilder> {
+    const story = storyContext.currentStory! // guaranteed non-null by caller check
+
+    const packId = packIdOverride || (await database.getStoryPackId(storyId)) || 'default-pack'
+    const builder = new ContextBuilder(packId)
+
+    // Story settings from singleton (replaces getStory DB query)
+    builder.add({
+      mode: story.mode || 'adventure',
+      pov: storyContext.pov,
+      tense: storyContext.tense,
+      genre: story.genre || '',
+      tone: story.settings?.tone || '',
+      themes: story.settings?.themes?.join(', ') || '',
+      settingDescription: story.description || '',
+      visualProseMode: story.settings?.visualProseMode || false,
+      inlineImageMode: story.settings?.imageGenerationMode === 'inline',
+    })
+
+    // Protagonist from singleton derived getter (replaces getCharacters + find)
+    const protagonist = storyContext.protagonist
+    builder.add({
+      protagonistName: protagonist?.name || 'the protagonist',
+      protagonistDescription: protagonist?.description || '',
+    })
+
+    // Current location from singleton derived getter (replaces getLocations + find)
+    const currentLocation = storyContext.currentLocation
+    builder.add({ currentLocation: currentLocation?.name || '' })
+    builder.add({
+      currentLocationObject: currentLocation
+        ? { name: currentLocation.name, description: currentLocation.description || '' }
+        : null,
+    })
+
+    // Story time from singleton
+    if (story.timeTracker) {
+      const t = story.timeTracker
+      builder.add({
+        storyTime: `Year ${t.years + 1}, Day ${t.days + 1}, ${t.hours} hours ${t.minutes} minutes`,
+      })
+    }
+
+    // Pack custom variable defaults (still from DB)
+    await builder.loadCustomVariables()
+
+    // Override pack variable defaults with story-specific values (still from DB)
+    const storyVarValues = await database.getStoryCustomVariables(story.id)
+    if (storyVarValues) {
+      builder.add(storyVarValues)
+    }
+
+    // Runtime variable values from singleton entity arrays (replaces getItems + getStoryBeats queries)
+    await builder.loadRuntimeVariableContext(
+      storyContext.characters,
+      storyContext.locations,
+      storyContext.items,
+      storyContext.storyBeats,
+      protagonist,
+    )
+
+    log('fromSingleton complete', {
       storyId,
       packId,
       contextKeys: Object.keys(builder.context).length,
