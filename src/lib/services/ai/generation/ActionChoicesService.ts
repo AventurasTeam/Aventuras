@@ -11,6 +11,8 @@ import type { StoryEntry, Character, Location, Item, StoryBeat } from '$lib/type
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { getLorebookConfig } from '../core/config'
+import { storyContext } from '$lib/stores/storyContext.svelte'
+import { ui } from '$lib/stores/ui.svelte'
 import { createLogger } from '$lib/log'
 import { actionChoicesResultSchema, type ActionChoice } from '../sdk/schemas/actionchoices'
 import type { ContextLorebookEntry } from '$lib/services/context/context-types'
@@ -47,9 +49,54 @@ export class ActionChoicesService extends BaseAIService {
   }
 
   /**
+   * Zero-arg overload: reads all context from storyContext singleton.
+   * Used by the generation pipeline.
+   */
+  async generateChoices(): Promise<ActionChoice[]>
+  /**
+   * Parameterized overload: explicit context for non-pipeline callers.
+   */
+  async generateChoices(context: ActionChoicesContext): Promise<ActionChoice[]>
+  async generateChoices(context?: ActionChoicesContext): Promise<ActionChoice[]> {
+    if (context === undefined) {
+      // Zero-arg: build context from singleton
+      const story = storyContext.currentStory
+      const entries = storyContext.visibleEntries
+      const lastUserAction = [...entries].filter((e) => e.type === 'user_action').pop()
+      const protagonist = storyContext.protagonist
+      const presentCharacters = storyContext.characters.filter(
+        (c) => c.relationship !== 'self' && c.status === 'active',
+      )
+      const inventory = storyContext.items.filter((i) => i.equipped)
+      const activeQuests = storyContext.pendingQuests
+      const lorebookEntries = storyContext.retrievalResult?.lorebookEntries ?? []
+
+      const ctx: ActionChoicesContext = {
+        storyId: story?.id,
+        narrativeResponse: storyContext.narrativeResult?.content ?? '',
+        userAction: lastUserAction?.content ?? '',
+        recentEntries: entries.slice(-10),
+        protagonistName: protagonist?.name ?? 'the protagonist',
+        protagonistDescription: protagonist?.description,
+        mode: storyContext.storyMode,
+        pov: storyContext.pov,
+        tense: storyContext.tense,
+        currentLocation: storyContext.currentLocation,
+        presentCharacters,
+        inventory,
+        activeQuests,
+        lorebookEntries,
+        styleReview: ui.lastStyleReview,
+      }
+      return this._generateChoicesInternal(ctx)
+    }
+    return this._generateChoicesInternal(context)
+  }
+
+  /**
    * Generate action choices based on current narrative context.
    */
-  async generateChoices(context: ActionChoicesContext): Promise<ActionChoice[]> {
+  private async _generateChoicesInternal(context: ActionChoicesContext): Promise<ActionChoice[]> {
     log('generateChoices called', {
       narrativeLength: context.narrativeResponse.length,
       recentEntriesCount: context.recentEntries.length,

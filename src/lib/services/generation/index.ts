@@ -109,9 +109,4 @@ export type { NarrativeDependencies, NarrativeResult } from './phases'
 export type { ClassificationDependencies, ClassificationPhaseResult } from './phases'
 export type { TranslationDependencies, TranslationResult2 } from './phases'
 export type { ImageDependencies, ImageSettings, ImageResult } from './phases'
-export type {
-  PromptContext,
-  PostWorldState,
-  PostGenerationDependencies,
-  PostGenerationResult,
-} from './phases'
+export type { PromptContext, PostGenerationDependencies, PostGenerationResult } from './phases'

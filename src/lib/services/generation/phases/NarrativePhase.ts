@@ -15,58 +15,20 @@ import type {
   NarrativeChunkEvent,
   AbortedEvent,
   ErrorEvent,
-  AgenticRetrievalFields,
 } from '../types'
-import type {
-  Story,
-  StoryEntry,
-  Character,
-  Location,
-  Item,
-  StoryBeat,
-  Chapter,
-  MemoryConfig,
-  Entry,
-} from '$lib/types'
-import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
 import type { StreamChunk } from '$lib/services/ai/core/types'
-import type { ContextLorebookEntry } from '$lib/services/context/context-types'
-import type { RetrievalResult } from '../types'
 import { storyContext } from '$lib/stores/storyContext.svelte'
-import { DEFAULT_MEMORY_CONFIG } from '$lib/services/ai/generation/MemoryService'
-
-/** Local WorldState interface for streamNarrative callback — deleted from types.ts in Phase 23, Phase 25 removes this need */
-interface WorldState {
-  characters: Character[]
-  locations: Location[]
-  items: Item[]
-  storyBeats: StoryBeat[]
-  currentLocation?: Location
-  chapters: Chapter[]
-  memoryConfig: MemoryConfig
-  lorebookEntries: Entry[]
-}
 
 const MAX_EMPTY_RESPONSE_RETRIES = 3
 
 /** Dependencies for narrative phase - injected to avoid tight coupling */
 export interface NarrativeDependencies {
-  streamNarrative: (
-    entries: StoryEntry[],
-    worldState: WorldState,
-    story: Story | null | undefined,
-    useTieredContext: boolean,
-    styleReview: StyleReviewResult | null | undefined,
-    agenticRetrieval: AgenticRetrievalFields | null | undefined,
-    signal: AbortSignal | undefined,
-    timelineFillResult: RetrievalResult['timelineFillResult'],
-    lorebookEntries: ContextLorebookEntry[],
-  ) => AsyncIterable<StreamChunk>
+  streamNarrative: () => AsyncIterable<StreamChunk>
 }
 
 /** Input for the narrative phase */
 export interface NarrativeInput {
-  styleReview: StyleReviewResult | null | undefined
+  styleReview?: unknown // kept for interface compatibility; NarrativeService reads from ui store
 }
 
 /** Result from narrative phase */
@@ -88,24 +50,8 @@ export class NarrativePhase {
   async *execute(input: NarrativeInput): AsyncGenerator<GenerationEvent, NarrativeResult | null> {
     yield { type: 'phase_start', phase: 'narrative' } satisfies PhaseStartEvent
 
-    const { styleReview } = input
-    const visibleEntries = storyContext.visibleEntries
-    const story = storyContext.currentStory
-    const retrievalResult = storyContext.retrievalResult!
+    void input // styleReview is now read from ui store inside NarrativeService.stream()
     const abortSignal = storyContext.abortSignal ?? undefined
-
-    // Build WorldState object for the streamNarrative callback
-    // Phase 25 will remove the need for this intermediate object
-    const worldState: WorldState = {
-      characters: storyContext.characters,
-      locations: storyContext.locations,
-      items: storyContext.items,
-      storyBeats: storyContext.storyBeats,
-      currentLocation: storyContext.currentLocation,
-      chapters: storyContext.currentBranchChapters,
-      memoryConfig: storyContext.currentStory?.memoryConfig ?? DEFAULT_MEMORY_CONFIG,
-      lorebookEntries: storyContext.lorebookEntries,
-    }
 
     let fullResponse = ''
     let fullReasoning = ''
@@ -123,17 +69,7 @@ export class NarrativePhase {
       chunkCount = 0
 
       try {
-        for await (const chunk of this.deps.streamNarrative(
-          visibleEntries,
-          worldState,
-          story,
-          true, // useTieredContext
-          styleReview,
-          retrievalResult.agenticRetrieval,
-          abortSignal,
-          retrievalResult.timelineFillResult,
-          retrievalResult.lorebookEntries,
-        )) {
+        for await (const chunk of this.deps.streamNarrative()) {
           if (abortSignal?.aborted) {
             yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
             return null

@@ -24,7 +24,6 @@ export type { ImageDependencies, ImageSettings, ImageResult } from './ImagePhase
 export { PostGenerationPhase } from './PostGenerationPhase'
 export type {
   PromptContext,
-  PostWorldState,
   PostGenerationDependencies,
   PostGenerationResult,
 } from './PostGenerationPhase'

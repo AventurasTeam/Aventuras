@@ -755,34 +755,7 @@
           return
         }
 
-        const protagonist = story.characters.find((c) => c.relationship === 'self')
-        const promptContext: import('$lib/services/generation/phases/PostGenerationPhase').PromptContext =
-          {
-            mode: 'adventure',
-            pov: story.pov,
-            tense: story.tense,
-            protagonistName: protagonist?.name || 'the protagonist',
-            genre: story.currentStory.genre ?? undefined,
-            settingDescription: story.currentStory.description ?? undefined,
-            tone: story.currentStory.settings?.tone ?? undefined,
-            themes: story.currentStory.settings?.themes ?? undefined,
-          }
-
-        const worldState = {
-          characters: story.characters,
-          locations: story.locations,
-          items: story.items,
-          storyBeats: story.storyBeats,
-        }
-
-        const result = await aiService.generateActionChoices(
-          story.entries,
-          worldState,
-          lastNarration.content,
-          [], // TODO: Temporary measure, to be fixed by unified context later in epic #254
-          promptContext,
-          story.pov,
-        )
+        const result = await aiService.generateActionChoices()
 
         if (result.choices.length > 0) {
           ui.setActionChoices(result.choices, story.currentStory!.id)
@@ -818,18 +791,8 @@
         translateSuggestions: aiService.translateSuggestions.bind(aiService),
       })
       const result = await service.refresh({
-        storyId: story.currentStory.id,
-        entries: story.entries,
-        pendingQuests: story.pendingQuests,
         storyMode: story.storyMode,
-        pov: story.pov,
-        tense: story.tense,
-        protagonistName,
-        genre: story.currentStory.genre ?? undefined,
-        settingDescription: story.currentStory.description ?? undefined,
-        tone: story.currentStory.settings?.tone ?? undefined,
-        themes: story.currentStory.settings?.themes ?? undefined,
-        lastLorebookRetrieval: ui.lastLorebookRetrieval?.all ?? null,
+        hasEntries: story.entries.length > 0,
         translationSettings: settings.translationSettings,
       })
       ui.setSuggestions(result.suggestions, story.currentStory.id)

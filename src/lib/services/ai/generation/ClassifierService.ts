@@ -23,6 +23,7 @@ import type {
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { database } from '$lib/services/database'
+import { storyContext } from '$lib/stores/storyContext.svelte'
 import { createLogger } from '$lib/log'
 import { stripPicTags } from '$lib/utils/inlineImageParser'
 import {
@@ -50,6 +51,24 @@ export interface ClassificationContext {
   existingStoryBeats: StoryBeat[]
 }
 
+const EMPTY_CLASSIFICATION_RESULT: ClassificationResult = {
+  entryUpdates: {
+    characterUpdates: [],
+    locationUpdates: [],
+    itemUpdates: [],
+    storyBeatUpdates: [],
+    newCharacters: [],
+    newLocations: [],
+    newItems: [],
+    newStoryBeats: [],
+  },
+  scene: {
+    currentLocationName: null,
+    presentCharacterNames: [],
+    timeProgression: 'none',
+  },
+}
+
 /**
  * Service that classifies narrative responses to extract world state changes.
  */
@@ -62,11 +81,43 @@ export class ClassifierService extends BaseAIService {
   }
 
   /**
-   * Classify a narrative response to extract world state changes.
-   * When the story's pack defines runtime variables, the schema is dynamically
-   * extended to include inline runtime variable extraction in the same LLM pass.
+   * Zero-arg classify() — reads all context from storyContext singleton.
+   * This is the primary method used by the generation pipeline.
    */
-  async classify(
+  async classify(): Promise<ClassificationResult> {
+    const story = storyContext.currentStory
+    if (!story) {
+      log('classify: No story in singleton, returning empty result')
+      return { ...EMPTY_CLASSIFICATION_RESULT }
+    }
+
+    const context: ClassificationContext = {
+      storyId: story.id,
+      story,
+      narrativeResponse: storyContext.narrativeResult?.content ?? '',
+      userAction: storyContext.userAction?.content ?? '',
+      existingCharacters: storyContext.characters,
+      existingLocations: storyContext.locations,
+      existingItems: storyContext.items,
+      existingStoryBeats: storyContext.storyBeats,
+    }
+
+    // Filter out the current narration entry to avoid sending it twice
+    // (once in chatHistory, once as narrativeResponse in ClassificationContext).
+    // This mirrors the filtering previously done in ClassificationPhase.execute().
+    const narrationEntryId = storyContext.narrationEntryId
+    const visibleEntries = narrationEntryId
+      ? storyContext.visibleEntries.filter((e) => e.id !== narrationEntryId)
+      : storyContext.visibleEntries
+
+    return this._classifyInternal(context, visibleEntries, story.timeTracker)
+  }
+
+  /**
+   * Internal classify implementation with explicit parameters.
+   * Called by the zero-arg classify() and may also be called directly for non-pipeline use.
+   */
+  private async _classifyInternal(
     context: ClassificationContext,
     visibleEntries?: StoryEntry[],
     currentStoryTime?: TimeTracker | null,
@@ -179,24 +230,7 @@ export class ClassifierService extends BaseAIService {
       return result
     } catch (error) {
       log('classify failed', error)
-      // Return empty result on failure
-      return {
-        entryUpdates: {
-          characterUpdates: [],
-          locationUpdates: [],
-          itemUpdates: [],
-          storyBeatUpdates: [],
-          newCharacters: [],
-          newLocations: [],
-          newItems: [],
-          newStoryBeats: [],
-        },
-        scene: {
-          currentLocationName: null,
-          presentCharacterNames: [],
-          timeProgression: 'none',
-        },
-      }
+      return { ...EMPTY_CLASSIFICATION_RESULT }
     }
   }
 

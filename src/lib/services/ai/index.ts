@@ -25,9 +25,7 @@ import { settings } from '$lib/stores/settings.svelte'
 import { story } from '$lib/stores/story.svelte'
 import { database } from '$lib/services/database'
 import type { StoryMode, POV, Tense } from '$lib/types'
-import type { PromptContext } from '../generation/phases/PostGenerationPhase'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from './image/constants'
-import { type ClassificationContext } from './generation/ClassifierService'
 import type { ClassificationResult } from './sdk/schemas/classifier'
 import { MemoryService, type RetrievalContext } from './generation/MemoryService'
 import type { ChapterAnalysis, ChapterSummaryResult, RetrievalDecision } from './sdk/schemas/memory'
@@ -38,14 +36,10 @@ import type {
   RetrievalContext as AgenticRetrievalContext,
   RetrievalResult as AgenticRetrievalResult,
 } from './retrieval/AgenticRetrievalService'
-import type { AgenticRetrievalFields } from '$lib/services/generation/types'
 import type { TimelineFillResult } from './retrieval/TimelineFillService'
 import { EntryInjector, type ContextResult, type ContextConfig } from './generation/EntryInjector'
-import {
-  mapContextResultToArrays,
-  type WorldStateArrays,
-} from '$lib/services/context/worldStateMapper'
-import type { ContextChatEntry, ContextLorebookEntry } from '$lib/services/context/context-types'
+
+import type { ContextChatEntry } from '$lib/services/context/context-types'
 import {
   EntryRetrievalService,
   type EntryRetrievalResult,
@@ -102,17 +96,22 @@ import type {
   Entry,
   LoreManagementResult,
   LoreChange,
-  TimeTracker,
   StorySettings,
 } from '$lib/types'
 import { createLogger } from '$lib/log'
 import { serviceFactory } from './core/factory'
 import { NarrativeService } from './generation/NarrativeService'
-import type { WorldStateContext } from './generation/NarrativeService'
 
 const log = createLogger('AIService')
 
-interface WorldState extends WorldStateContext {
+/** World state for non-streaming methods (generateNarrative, buildTieredContext). */
+interface WorldState {
+  characters: Character[]
+  locations: Location[]
+  items: Item[]
+  storyBeats: StoryBeat[]
+  currentLocation?: Location
+  chapters?: Chapter[]
   memoryConfig?: MemoryConfig
   lorebookEntries?: Entry[]
 }
@@ -127,197 +126,48 @@ class AIService {
   /**
    * Generate a complete narrative response (non-streaming).
    */
-  async generateNarrative(
-    entries: StoryEntry[],
-    worldState: WorldState,
-    story?: Story | null,
-  ): Promise<string> {
-    return this.narrativeService.generate(entries, worldState, story)
+  async generateNarrative(entries: StoryEntry[], story?: Story | null): Promise<string> {
+    return this.narrativeService.generate(entries, story)
   }
 
   /**
-   * Stream a narrative response.
+   * Stream a narrative response (zero-arg).
+   * Reads all story data from the storyContext singleton.
    * This is the primary method for real-time story generation.
    */
-  async *streamNarrative(
-    entries: StoryEntry[],
-    worldState: WorldState,
-    currentStory?: Story | null,
-    useTieredContext = true,
-    styleReview?: StyleReviewResult | null,
-    agenticRetrieval?: AgenticRetrievalFields | null,
-    signal?: AbortSignal,
-    timelineFillResult?: TimelineFillResult | null,
-    lorebookEntries: ContextLorebookEntry[] = [],
-  ): AsyncIterable<StreamChunk> {
-    log('streamNarrative called', {
-      entriesCount: entries.length,
-      useTieredContext,
-      hasStyleReview: !!styleReview,
-      hasAgenticContext: !!agenticRetrieval,
-      hasTimelineFill: !!timelineFillResult,
-      lorebookEntriesCount: lorebookEntries.length,
-    })
-
-    // Build tiered context if requested
-    let worldStateArrays: WorldStateArrays | undefined
-    if (useTieredContext) {
-      const lastEntry = entries[entries.length - 1]
-      const userInput = lastEntry?.content ?? ''
-      const contextResult = await this.buildTieredContext(worldState, userInput, entries)
-      worldStateArrays = mapContextResultToArrays(contextResult)
-    }
-
-    // Delegate to NarrativeService
-    yield* this.narrativeService.stream(entries, worldState, currentStory, {
-      worldStateArrays,
-      styleReview,
-      agenticRetrieval,
-      lorebookEntries,
-      signal,
-      timelineFillResult,
-    })
+  async *streamNarrative(): AsyncIterable<StreamChunk> {
+    log('streamNarrative called (zero-arg delegate)')
+    yield* this.narrativeService.stream()
   }
 
   /**
-   * Classify a narrative response to extract world state changes.
+   * Classify a narrative response to extract world state changes (zero-arg).
+   * Reads all context from the storyContext singleton.
    */
-  async classifyResponse(
-    narrativeResponse: string,
-    userAction: string,
-    worldState: WorldState,
-    story?: Story | null,
-    visibleEntries?: StoryEntry[],
-    currentStoryTime?: TimeTracker | null,
-  ): Promise<ClassificationResult> {
-    log('classifyResponse called', {
-      narrativeLength: narrativeResponse.length,
-      userActionLength: userAction.length,
-      hasStory: !!story,
-      hasVisibleEntries: !!visibleEntries,
-    })
-
-    if (!story) {
-      log('classifyResponse: No story provided, returning empty result')
-      return {
-        entryUpdates: {
-          characterUpdates: [],
-          locationUpdates: [],
-          itemUpdates: [],
-          storyBeatUpdates: [],
-          newCharacters: [],
-          newLocations: [],
-          newItems: [],
-          newStoryBeats: [],
-        },
-        scene: {
-          currentLocationName: null,
-          presentCharacterNames: [],
-          timeProgression: 'none',
-        },
-      }
-    }
-
+  async classifyResponse(): Promise<ClassificationResult> {
+    log('classifyResponse called (zero-arg delegate)')
     const classifierService = serviceFactory.createClassifierService()
-    const context: ClassificationContext = {
-      storyId: story.id,
-      story,
-      narrativeResponse,
-      userAction,
-      existingCharacters: worldState.characters,
-      existingLocations: worldState.locations,
-      existingItems: worldState.items,
-      existingStoryBeats: worldState.storyBeats ?? [],
-    }
-
-    return classifierService.classify(context, visibleEntries, currentStoryTime)
+    return classifierService.classify()
   }
 
   /**
-   * Generate story direction suggestions for creative writing mode.
+   * Generate story direction suggestions for creative writing mode (zero-arg).
+   * Reads all context from the storyContext singleton.
    */
-  async generateSuggestions(
-    entries: StoryEntry[],
-    activeThreads: StoryBeat[],
-    lorebookEntries?: ContextLorebookEntry[],
-    promptContext?: PromptContext,
-    latestNarrativeResponse?: string,
-  ): Promise<SuggestionsResult> {
-    log('generateSuggestions called', {
-      entriesCount: entries.length,
-      threadsCount: activeThreads.length,
-      hasPromptContext: !!promptContext,
-      lorebookEntriesCount: lorebookEntries?.length ?? 0,
-      latestNarrativeLength: latestNarrativeResponse?.length ?? 0,
-    })
-
+  async generateSuggestions(): Promise<SuggestionsResult> {
+    log('generateSuggestions called (zero-arg delegate)')
     const suggestionsService = serviceFactory.createSuggestionsService()
-    return await suggestionsService.generateSuggestions(
-      entries,
-      activeThreads,
-      lorebookEntries,
-      story.currentStory?.id,
-      latestNarrativeResponse,
-    )
+    return suggestionsService.generateSuggestions()
   }
 
   /**
-   * Generate RPG-style action choices for adventure mode.
+   * Generate RPG-style action choices for adventure mode (zero-arg).
+   * Reads all context from the storyContext singleton.
    */
-  async generateActionChoices(
-    entries: StoryEntry[],
-    worldState: WorldState,
-    narrativeResponse: string,
-    lorebookEntries?: ContextLorebookEntry[],
-    promptContext?: PromptContext,
-    pov?: 'first' | 'second' | 'third',
-    styleReview?: StyleReviewResult | null,
-  ): Promise<ActionChoicesResult> {
-    log('generateActionChoices called', {
-      entriesCount: entries.length,
-      narrativeLength: narrativeResponse.length,
-      hasPromptContext: !!promptContext,
-      lorebookEntriesCount: lorebookEntries?.length ?? 0,
-    })
-
+  async generateActionChoices(): Promise<ActionChoicesResult> {
+    log('generateActionChoices called (zero-arg delegate)')
     const actionChoicesService = serviceFactory.createActionChoicesService()
-
-    // Find protagonist
-    const protagonist = worldState.characters?.find((c) => c.relationship === 'self')
-
-    // Find last user action
-    const lastUserAction = entries.filter((e) => e.type === 'user_action').pop()
-
-    // Get present characters (NPCs, excluding the protagonist)
-    const presentCharacters = worldState.characters?.filter(
-      (c) => c.relationship !== 'self' && c.status === 'active',
-    )
-
-    // Get inventory items (those that are equipped)
-    const inventory = worldState.items?.filter((i) => i.equipped)
-
-    // Build context for the service
-    const context = {
-      storyId: story.currentStory?.id,
-      narrativeResponse,
-      userAction: lastUserAction?.content ?? '',
-      recentEntries: entries.slice(-10),
-      protagonistName: protagonist?.name ?? promptContext?.protagonistName ?? 'the protagonist',
-      protagonistDescription: protagonist?.description,
-      mode: promptContext?.mode ?? 'adventure',
-      pov: pov ?? promptContext?.pov ?? 'second',
-      tense: promptContext?.tense ?? 'present',
-      currentLocation: worldState.currentLocation,
-      presentCharacters,
-      inventory,
-      activeQuests: worldState.storyBeats?.filter(
-        (b) => b.status === 'pending' || b.status === 'active',
-      ),
-      lorebookEntries,
-      styleReview,
-    }
-
-    const choices = await actionChoicesService.generateChoices(context)
+    const choices = await actionChoicesService.generateChoices()
     return { choices }
   }
 

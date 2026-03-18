@@ -16,12 +16,7 @@
 export { aiService } from '../index'
 
 // Narrative generation
-export {
-  NarrativeService,
-  type NarrativeWorldState,
-  type NarrativeOptions,
-  type WorldStateContext,
-} from './NarrativeService'
+export { NarrativeService, type NarrativeOptions } from './NarrativeService'
 
 // Chapter context mapper (formatStoryTime moved here from NarrativeService)
 export { mapChaptersToContext, formatStoryTime } from '$lib/services/context/chapterMapper'

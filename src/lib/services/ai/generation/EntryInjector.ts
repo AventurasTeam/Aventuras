@@ -14,6 +14,7 @@ import { AI_CONFIG } from '../core/config'
 import { createLogger } from '$lib/log'
 import { entitySelectionSchema } from '../sdk/schemas/context'
 import { ContextBuilder as ContextPipeline } from '$lib/services/context'
+import { storyContext } from '$lib/stores/storyContext.svelte'
 
 const log = createLogger('EntryInjector')
 
@@ -76,9 +77,39 @@ export class EntryInjector extends BaseAIService {
 
   /**
    * Build context from world state using tiered injection.
+   * Zero-arg overload reads all data from the storyContext singleton.
    * NOTE: Tier 3 is currently disabled pending SDK migration.
    */
+  async buildContext(): Promise<ContextResult>
   async buildContext(
+    worldState: WorldState,
+    userInput: string,
+    recentEntries: StoryEntry[],
+  ): Promise<ContextResult>
+  async buildContext(
+    worldState?: WorldState,
+    userInput?: string,
+    recentEntries?: StoryEntry[],
+  ): Promise<ContextResult> {
+    if (worldState === undefined) {
+      // Zero-arg: read from singleton — storyContext is the generation singleton
+      const ws: WorldState = {
+        characters: storyContext.characters,
+        locations: storyContext.locations,
+        items: storyContext.items,
+        storyBeats: storyContext.storyBeats,
+        currentLocation: storyContext.currentLocation,
+        chapters: storyContext.currentBranchChapters,
+      }
+      const entries = storyContext.visibleEntries
+      const lastEntry = entries[entries.length - 1]
+      const input = lastEntry?.content ?? ''
+      return this.buildContext(ws, input, entries)
+    }
+    return this._buildContextInternal(worldState, userInput!, recentEntries!)
+  }
+
+  private async _buildContextInternal(
     worldState: WorldState,
     userInput: string,
     recentEntries: StoryEntry[],

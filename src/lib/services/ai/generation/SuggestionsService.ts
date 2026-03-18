@@ -11,6 +11,7 @@ import type { StoryEntry, StoryBeat } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { getContextConfig, getLorebookConfig } from '../core/config'
+import { storyContext } from '$lib/stores/storyContext.svelte'
 import { createLogger } from '$lib/log'
 import { suggestionsResultSchema, type SuggestionsResult } from '../sdk/schemas/suggestions'
 import type { ContextLorebookEntry } from '$lib/services/context/context-types'
@@ -35,7 +36,47 @@ export class SuggestionsService extends BaseAIService {
   }
 
   /**
-   * Generate story direction suggestions for creative writing mode.
+   * Zero-arg overload: reads all context from storyContext singleton.
+   * Used by the generation pipeline.
+   */
+  async generateSuggestions(): Promise<SuggestionsResult>
+  /**
+   * Parameterized overload: explicit parameters for non-pipeline callers.
+   */
+  async generateSuggestions(
+    recentEntries: StoryEntry[],
+    activeThreads: StoryBeat[],
+    lorebookEntries?: ContextLorebookEntry[],
+    storyId?: string,
+    latestNarrativeResponse?: string,
+  ): Promise<SuggestionsResult>
+  async generateSuggestions(
+    recentEntries?: StoryEntry[],
+    activeThreads?: StoryBeat[],
+    lorebookEntries?: ContextLorebookEntry[],
+    storyId?: string,
+    latestNarrativeResponse?: string,
+  ): Promise<SuggestionsResult> {
+    if (recentEntries === undefined) {
+      // Zero-arg path: read from singleton
+      const entries = storyContext.visibleEntries
+      const threads = storyContext.pendingQuests
+      const lbEntries = storyContext.retrievalResult?.lorebookEntries ?? []
+      const id = storyContext.currentStory?.id
+      const narrative = storyContext.narrativeResult?.content
+      return this._generateSuggestionsInternal(entries, threads, lbEntries, id, narrative)
+    }
+    return this._generateSuggestionsInternal(
+      recentEntries,
+      activeThreads!,
+      lorebookEntries,
+      storyId,
+      latestNarrativeResponse,
+    )
+  }
+
+  /**
+   * Internal implementation for suggestion generation.
    * Per design doc section 4.2: Suggestions System
    *
    * @param recentEntries - Recent story entries for context
@@ -44,7 +85,7 @@ export class SuggestionsService extends BaseAIService {
    * @param storyId - Story ID for ContextBuilder (optional, falls back to manual context)
    * @param latestNarrativeResponse - Latest generated narration (optional, used when entries are stale)
    */
-  async generateSuggestions(
+  private async _generateSuggestionsInternal(
     recentEntries: StoryEntry[],
     activeThreads: StoryBeat[],
     lorebookEntries?: ContextLorebookEntry[],

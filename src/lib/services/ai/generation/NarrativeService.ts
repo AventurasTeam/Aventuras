@@ -16,62 +16,28 @@ import { ContextBuilder } from '$lib/services/context'
 import { mapChaptersToContext } from '$lib/services/context/chapterMapper'
 import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
 import { storyContext } from '$lib/stores/storyContext.svelte'
+import { ui } from '$lib/stores/ui.svelte'
+import {
+  mapContextResultToArrays,
+  type WorldStateArrays,
+} from '$lib/services/context/worldStateMapper'
+import { EntryInjector } from './EntryInjector'
 import { createLogger } from '$lib/log'
 import type { StreamChunk } from '../core/types'
-import type {
-  Story,
-  StoryEntry,
-  Entry,
-  Character,
-  Location,
-  Item,
-  StoryBeat,
-  Chapter,
-} from '$lib/types'
+import type { Story, StoryEntry } from '$lib/types'
 import type { StyleReviewResult } from './StyleReviewerService'
-import type { TimelineFillResult } from '../retrieval/TimelineFillService'
-import type { WorldStateArrays } from '$lib/services/context/worldStateMapper'
 import type { ContextLorebookEntry } from '$lib/services/context/context-types'
 import type { AgenticRetrievalFields } from '$lib/services/generation/types'
 
 const log = createLogger('Narrative')
 
 /**
- * World state context for prompt building
- */
-export interface WorldStateContext {
-  characters: Character[]
-  locations: Location[]
-  items: Item[]
-  storyBeats: StoryBeat[]
-  currentLocation?: Location
-  chapters?: Chapter[]
-}
-
-/**
- * World state context for narrative generation.
- * Extends the base WorldStateContext with lorebook entries.
- */
-export interface NarrativeWorldState extends WorldStateContext {
-  lorebookEntries?: Entry[]
-}
-
-/**
- * Options for narrative generation.
+ * Options for streaming narrative generation.
+ * All story data is read from the storyContext singleton.
  */
 export interface NarrativeOptions {
-  /** World state arrays from the tiered context mapper */
-  worldStateArrays?: WorldStateArrays
-  /** Style review results for avoiding repetition */
-  styleReview?: StyleReviewResult | null
-  /** Structured agentic retrieval fields from memory system */
-  agenticRetrieval?: AgenticRetrievalFields | null
-  /** Lorebook entries for structured lorebook injection */
-  lorebookEntries?: ContextLorebookEntry[]
   /** Abort signal for cancellation */
   signal?: AbortSignal
-  /** Timeline fill result for Q&A injection — kept for API compatibility; Phase 25 will clean up */
-  timelineFillResult?: TimelineFillResult | null
 }
 
 /**
@@ -93,75 +59,67 @@ export class NarrativeService {
   }
 
   /**
-   * Stream a narrative response.
+   * Stream a narrative response (zero-arg).
    *
+   * Reads all story data from the storyContext singleton.
    * This is the primary method used by the UI for real-time narrative generation.
    * Yields StreamChunk objects as text arrives from the model.
    */
-  async *stream(
-    entries: StoryEntry[],
-    worldState: NarrativeWorldState,
-    story?: Story | null,
-    options: NarrativeOptions = {},
-  ): AsyncIterable<StreamChunk> {
-    const {
-      worldStateArrays,
-      styleReview,
-      agenticRetrieval,
-      lorebookEntries,
-      signal,
-      timelineFillResult,
-    } = options
+  async *stream(signal?: AbortSignal): AsyncIterable<StreamChunk> {
+    const entries = storyContext.visibleEntries
+    const story = storyContext.currentStory
+    const retrievalResult = storyContext.retrievalResult
+    const agenticRetrieval = retrievalResult?.agenticRetrieval ?? null
+    const lorebookEntries = retrievalResult?.lorebookEntries ?? []
+    const styleReview = ui.lastStyleReview
 
     log('stream', {
       entriesCount: entries.length,
-      hasTieredContext: !!worldStateArrays,
-      hasStyleReview: !!styleReview,
       hasAgenticContext: !!agenticRetrieval,
-      hasTimelineFill: !!timelineFillResult,
-      lorebookEntriesCount: lorebookEntries?.length ?? 0,
+      lorebookEntriesCount: lorebookEntries.length,
     })
+
+    // Build tiered context from singleton
+    const lastEntry = entries[entries.length - 1]
+    const userInput = lastEntry?.content ?? ''
+    const injector = new EntryInjector({}, 'entryRetrieval')
+    const worldState = {
+      characters: storyContext.characters,
+      locations: storyContext.locations,
+      items: storyContext.items,
+      storyBeats: storyContext.storyBeats,
+      currentLocation: storyContext.currentLocation,
+      chapters: storyContext.currentBranchChapters,
+    }
+    const contextResult = await injector.buildContext(worldState, userInput, entries)
+    const worldStateArrays = mapContextResultToArrays(contextResult)
 
     const inlineImageMode = story?.settings?.imageGenerationMode === 'inline'
 
-    // Build system prompt and user message via ContextBuilder pipeline
     const { systemPrompt, userMessage } = await this.buildPrompts(
       entries,
       inlineImageMode,
       story,
-      worldState,
       worldStateArrays,
-      styleReview,
       agenticRetrieval,
       lorebookEntries,
+      styleReview,
     )
 
     try {
-      // Stream using the main narrative profile
-      const stream = streamNarrative({
-        system: systemPrompt,
-        prompt: userMessage,
-        signal,
-      })
+      const stream = streamNarrative({ system: systemPrompt, prompt: userMessage, signal })
 
-      // Use fullStream to capture both text and reasoning
-      // - Native reasoning providers (Anthropic, OpenAI) emit reasoning-delta parts
-      // - Models using <think> tags have reasoning extracted by extractReasoningMiddleware
       for await (const part of stream.fullStream) {
         if (part.type === 'reasoning-delta') {
-          // Reasoning delta from native providers or extracted from <think> tags
           yield { content: '', reasoning: (part as { text?: string }).text, done: false }
         } else if (part.type === 'text-delta') {
-          // Regular text content
           yield { content: (part as { text?: string }).text || '', done: false }
         }
-        // Ignore other part types (reasoning-start, reasoning-end, tool calls, finish, etc.)
       }
 
       yield { content: '', done: true }
     } catch (error) {
       log('stream error', error)
-      // Re-throw to let caller handle the error
       throw error
     }
   }
@@ -173,9 +131,14 @@ export class NarrativeService {
    */
   async generate(
     entries: StoryEntry[],
-    worldState: NarrativeWorldState,
     story?: Story | null,
-    options: Omit<NarrativeOptions, 'timelineFillResult'> = {},
+    options: {
+      worldStateArrays?: WorldStateArrays
+      styleReview?: StyleReviewResult | null
+      agenticRetrieval?: AgenticRetrievalFields | null
+      lorebookEntries?: ContextLorebookEntry[]
+      signal?: AbortSignal
+    } = {},
   ): Promise<string> {
     const { worldStateArrays, styleReview, agenticRetrieval, lorebookEntries, signal } = options
 
@@ -183,16 +146,14 @@ export class NarrativeService {
 
     const inlineImageMode = story?.settings?.imageGenerationMode === 'inline'
 
-    // Build system prompt and user message via ContextBuilder pipeline
     const { systemPrompt, userMessage } = await this.buildPrompts(
       entries,
       inlineImageMode,
       story,
-      worldState,
       worldStateArrays,
-      styleReview,
       agenticRetrieval,
       lorebookEntries,
+      styleReview,
     )
 
     return generateNarrative({
@@ -213,11 +174,10 @@ export class NarrativeService {
     entries: StoryEntry[],
     inlineImageMode: boolean,
     story: Story | null | undefined,
-    worldState: NarrativeWorldState,
     worldStateArrays?: WorldStateArrays,
-    styleReview?: StyleReviewResult | null,
     agenticRetrieval?: AgenticRetrievalFields | null,
     lorebookEntries?: ContextLorebookEntry[],
+    styleReview?: StyleReviewResult | null,
   ): Promise<{ systemPrompt: string; userMessage: string }> {
     const mode = story?.mode ?? 'adventure'
 
