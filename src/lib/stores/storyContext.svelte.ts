@@ -11,6 +11,8 @@ import type {
   StoryMode,
   EmbeddedImage,
   ActionInputType,
+  MemoryConfig,
+  TimeTracker,
 } from '$lib/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
 import type { ActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
@@ -25,6 +27,8 @@ import type {
 } from '$lib/services/generation/phases/PostGenerationPhase'
 import type { BackgroundImageResult } from '$lib/services/generation/phases/BackgroundImagePhase'
 import type { PreGenerationResult } from '$lib/services/generation/phases/PreGenerationPhase'
+import { DEFAULT_MEMORY_CONFIG } from '$lib/services/ai/generation/MemoryService'
+import { countTokens } from '$lib/services/tokenizer'
 import { SvelteSet } from 'svelte/reactivity'
 
 export interface StoryContextHydrateData {
@@ -79,6 +83,10 @@ class StoryContextSingleton {
   private _lastEntriesLength: number = 0
   private _entryIdToIndex: Map<string, number> = new Map()
 
+  // wordCount dirty-flag cache (plain booleans — not reactive, only read inside getter)
+  private _cachedWordCount: number = 0
+  private _wordCountDirty: boolean = true
+
   // Derived getters
 
   get currentLocation(): Location | undefined {
@@ -131,6 +139,36 @@ class StoryContextSingleton {
     }
   }
 
+  get activeCharacters(): Character[] {
+    return this.characters.filter((c) => c.status === 'active')
+  }
+
+  get inventoryItems(): Item[] {
+    return this.items.filter((i) => i.location === 'inventory')
+  }
+
+  get equippedItems(): Item[] {
+    return this.items.filter((i) => i.equipped)
+  }
+
+  get wordCount(): number {
+    if (this._wordCountDirty) {
+      this._cachedWordCount = this.entries.reduce((count, entry) => {
+        return count + entry.content.split(/\s+/).filter(Boolean).length
+      }, 0)
+      this._wordCountDirty = false
+    }
+    return this._cachedWordCount
+  }
+
+  get memoryConfig(): MemoryConfig {
+    return this.currentStory?.memoryConfig || DEFAULT_MEMORY_CONFIG
+  }
+
+  get timeTracker(): TimeTracker {
+    return this.currentStory?.timeTracker || { years: 0, days: 0, hours: 0, minutes: 0 }
+  }
+
   /**
    * Get chapters filtered by current branch and its lineage.
    * Includes main branch chapters plus any ancestor/current branch chapters.
@@ -169,6 +207,44 @@ class StoryContextSingleton {
     }
 
     return this._cachedLastChapterEndIndex
+  }
+
+  get messagesSinceLastChapter(): number {
+    return this.entries.length - this.lastChapterEndIndex
+  }
+
+  /**
+   * Calculate token count since last chapter.
+   * Uses stored token count (accurate) or calculates via tokenizer for legacy entries.
+   */
+  get tokensSinceLastChapter(): number {
+    const visibleEntries = this.entries.slice(this.lastChapterEndIndex)
+    return visibleEntries.reduce((total, entry) => {
+      if (entry.metadata?.tokenCount) {
+        return total + entry.metadata.tokenCount
+      }
+      return total + countTokens(entry.content)
+    }, 0)
+  }
+
+  /**
+   * Get token count for entries outside the buffer (eligible for summarization).
+   * Returns 0 if no entries exist outside the buffer.
+   */
+  get tokensOutsideBuffer(): number {
+    const bufferSize = this.memoryConfig.chapterBuffer
+    const visibleEntries = this.entries.slice(this.lastChapterEndIndex)
+    if (visibleEntries.length <= bufferSize) {
+      return 0
+    }
+    const entriesOutsideBuffer =
+      bufferSize === 0 ? visibleEntries : visibleEntries.slice(0, -bufferSize)
+    return entriesOutsideBuffer.reduce((total, entry) => {
+      if (entry.metadata?.tokenCount) {
+        return total + entry.metadata.tokenCount
+      }
+      return total + countTokens(entry.content)
+    }, 0)
   }
 
   /**
@@ -237,9 +313,16 @@ class StoryContextSingleton {
   /**
    * Invalidate lastChapterEndIndex cache - call when chapters change
    */
-  private invalidateChapterCache(): void {
+  invalidateChapterCache(): void {
     this._lastChapterEndIndexDirty = true
     this._entryIdToIndex.clear() // Force rebuild on next access
+  }
+
+  /**
+   * Invalidate wordCount cache - call when entries are added/removed/modified
+   */
+  invalidateWordCountCache(): void {
+    this._wordCountDirty = true
   }
 
   private _buildBranchLineage(branchId: string): Branch[] {
@@ -304,6 +387,7 @@ class StoryContextSingleton {
     this.chapters = data.chapters
     this.lorebookEntries = data.lorebookEntries
     this._branches = data.branches
+    this._wordCountDirty = true
     this.invalidateChapterCache()
   }
 
@@ -320,6 +404,8 @@ class StoryContextSingleton {
     this.chapters = []
     this.lorebookEntries = []
     this._branches = []
+    this._cachedWordCount = 0
+    this._wordCountDirty = true
     this.init()
     this.invalidateChapterCache()
   }
