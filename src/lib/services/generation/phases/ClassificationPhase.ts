@@ -18,6 +18,7 @@ import type {
 } from '../types'
 import type { Story, StoryEntry, TimeTracker } from '$lib/types'
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
+import { storyContext } from '$lib/stores/storyContext.svelte'
 
 /** Dependencies for classification phase - injected to avoid tight coupling */
 export interface ClassificationDependencies {
@@ -31,15 +32,9 @@ export interface ClassificationDependencies {
   ) => Promise<ClassificationResult>
 }
 
-/** Input for the classification phase */
+/** Input for the classification phase — all story data comes from singleton snapshot */
 export interface ClassificationInput {
-  narrativeContent: string
-  narrativeEntryId: string
-  userActionContent: string
-  worldState: WorldState
-  story: Story | null | undefined
-  visibleEntries: StoryEntry[]
-  abortSignal?: AbortSignal
+  // Empty — all data comes from singleton snapshot
 }
 
 /** Result from classification phase */
@@ -56,20 +51,34 @@ export class ClassificationPhase {
   constructor(private deps: ClassificationDependencies) {}
 
   /** Execute the classification phase - yields events and returns result */
-  async *execute(
-    input: ClassificationInput,
-  ): AsyncGenerator<GenerationEvent, ClassificationPhaseResult | null> {
-    yield { type: 'phase_start', phase: 'classification' } satisfies PhaseStartEvent
+  async *execute(): AsyncGenerator<GenerationEvent, ClassificationPhaseResult | null> {
+    // === CONCURRENT PHASE SAFETY: Snapshot ALL singleton inputs before first yield ===
+    const narrativeContent = storyContext.narrativeResult?.content ?? ''
+    const narrativeEntryId = storyContext.narrationEntryId ?? ''
+    const userActionContent = storyContext.userAction?.content ?? ''
+    const story = storyContext.currentStory
+    const visibleEntries = storyContext.visibleEntries
+    const abortSignal = storyContext.abortSignal ?? undefined
+    // Build WorldState for classifyResponse callback (Phase 25 will remove this need)
+    const worldState: WorldState = {
+      characters: [...storyContext.characters],
+      locations: [...storyContext.locations],
+      items: [...storyContext.items],
+      storyBeats: [...storyContext.storyBeats],
+      currentLocation: storyContext.currentLocation,
+      chapters: storyContext.currentBranchChapters,
+      memoryConfig: storyContext.currentStory?.memoryConfig ?? {
+        enableRetrieval: true,
+        autoSummarize: false,
+        tokenThreshold: 4000,
+        chapterBuffer: 200,
+        maxChaptersPerRetrieval: 3,
+      },
+      lorebookEntries: storyContext.lorebookEntries,
+    }
+    // === End snapshot block — NO storyContext.* reads below this line ===
 
-    const {
-      narrativeContent,
-      narrativeEntryId,
-      userActionContent,
-      worldState,
-      story,
-      visibleEntries,
-      abortSignal,
-    } = input
+    yield { type: 'phase_start', phase: 'classification' } satisfies PhaseStartEvent
 
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'classification' } satisfies AbortedEvent
@@ -112,6 +121,7 @@ export class ClassificationPhase {
         result,
       } satisfies PhaseCompleteEvent
 
+      storyContext.classificationResult = result
       return result
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {

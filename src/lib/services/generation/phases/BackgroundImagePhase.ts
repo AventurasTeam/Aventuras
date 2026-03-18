@@ -12,6 +12,7 @@ import type {
   ErrorEvent,
 } from '../types'
 import type { StoryEntry } from '$lib/types'
+import { storyContext } from '$lib/stores/storyContext.svelte'
 
 /** Dependencies for image phase - injected to avoid tight coupling */
 export interface BackgroundImageDependencies {
@@ -33,10 +34,7 @@ export interface BackgroundImageSettings {
 
 /** Input for the image phase */
 export interface BackgroundImageInput {
-  storyId: string
-  storyEntries: StoryEntry[]
   imageSettings: BackgroundImageSettings
-  abortSignal?: AbortSignal
 }
 
 /** Result from image phase */
@@ -53,14 +51,20 @@ export class BackgroundImagePhase {
   async *execute(
     input: BackgroundImageInput,
   ): AsyncGenerator<GenerationEvent, BackgroundImageResult> {
+    // === CONCURRENT PHASE SAFETY: Snapshot ALL singleton inputs before first yield ===
+    const storyId = storyContext.currentStory?.id ?? ''
+    const storyEntries = storyContext.visibleEntries
+    const abortSignal = storyContext.abortSignal ?? undefined
+    // === End snapshot block ===
+    const { imageSettings } = input
+
     console.log('BackgroundImagePhase.execute')
     yield { type: 'phase_start', phase: 'image' } satisfies PhaseStartEvent
-
-    const { storyId, storyEntries, imageSettings, abortSignal } = input
 
     // Check if background image generation is disabled
     if (imageSettings.backgroundImagesEnabled === false) {
       const result: BackgroundImageResult = { started: false, skippedReason: 'disabled' }
+      storyContext.backgroundResult = result
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
       return result
     }
@@ -68,6 +72,7 @@ export class BackgroundImagePhase {
     // Skip in inline mode - we don't want agentic background analysis in pure inline mode
     if (imageSettings.imageGenerationMode === 'inline') {
       const result: BackgroundImageResult = { started: false, skippedReason: 'inline_mode' }
+      storyContext.backgroundResult = result
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
       return result
     }
@@ -75,6 +80,7 @@ export class BackgroundImagePhase {
     // Check if image generation is actually configured (profile exists)
     if (!this.deps.isImageGenerationEnabled(imageSettings, 'background')) {
       const result: BackgroundImageResult = { started: false, skippedReason: 'not_configured' }
+      storyContext.backgroundResult = result
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
       return result
     }
@@ -88,6 +94,7 @@ export class BackgroundImagePhase {
       await this.deps.analyzeBackgroundChangeAndGenerateImage(storyId, storyEntries)
 
       const result: BackgroundImageResult = { started: true }
+      storyContext.backgroundResult = result
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
       return result
     } catch (error) {
