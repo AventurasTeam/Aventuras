@@ -4,17 +4,16 @@
  * Uses zero-arg generateSuggestions() that reads from storyContext singleton.
  */
 
-import type { StoryMode, TranslationSettings } from '$lib/types'
+import type { TranslationSettings } from '$lib/types'
 import type { Suggestion, SuggestionsResult } from '$lib/services/ai/sdk/schemas/suggestions'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
+import { storyContext } from '$lib/stores/storyContext.svelte'
 
 function log(...args: unknown[]) {
   console.log('[SuggestionsRefreshService]', ...args)
 }
 
 export interface SuggestionsRefreshInput {
-  storyMode: StoryMode
-  hasEntries: boolean
   translationSettings: TranslationSettings
 }
 
@@ -41,9 +40,11 @@ export class SuggestionsRefreshService {
    * Returns empty array if not in creative mode or no entries exist.
    */
   async refresh(input: SuggestionsRefreshInput): Promise<SuggestionsRefreshResult> {
-    const { storyMode, hasEntries, translationSettings } = input
+    const { translationSettings } = input
 
     // Only generate suggestions in creative writing mode with entries
+    const storyMode = storyContext.storyMode
+    const hasEntries = storyContext.entries.length > 0
     if (storyMode !== 'creative-writing' || !hasEntries) {
       log('Skipping refresh', { storyMode, hasEntries })
       return { suggestions: [], translated: false }

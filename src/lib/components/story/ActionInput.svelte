@@ -780,8 +780,6 @@
         translateSuggestions: aiService.translateSuggestions.bind(aiService),
       })
       const result = await service.refresh({
-        storyMode: story.storyMode,
-        hasEntries: story.entries.length > 0,
         translationSettings: settings.translationSettings,
       })
       ui.setSuggestions(result.suggestions, story.currentStory.id)
