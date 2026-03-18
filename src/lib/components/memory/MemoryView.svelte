@@ -97,6 +97,7 @@
               chapterNumber,
               question,
               story.currentBranchChapters,
+              story.getChapterEntries.bind(story),
             )
           },
         },

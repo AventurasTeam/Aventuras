@@ -26,6 +26,7 @@ import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '$lib/constants/timeout'
 import { SvelteSet, SvelteMap } from 'svelte/reactivity'
 import { dedupeTextModels, type TextModel } from '$lib/services/ai/sdk/providers'
+import type { ImageGenerationServiceSettings, TimelineFillSettings } from '$lib/services/ai'
 
 // Provider preset type (used by WelcomeScreen)
 export type ProviderPreset = 'openrouter' | 'nanogpt' | 'openai-compatible'
@@ -343,19 +344,6 @@ export function getDefaultAgenticRetrievalSettingsForProvider(
   }
 }
 
-// Timeline Fill service settings (per design doc section 3.1.4: Static Retrieval)
-export interface TimelineFillSettings {
-  presetId?: string
-  profileId: string | null // API profile to use (null = use default profile)
-  enabled: boolean
-  mode: 'static' | 'agentic' // 'static' is default, 'agentic' for tool-calling retrieval
-  model: string
-  temperature: number
-  maxQueries: number
-  reasoningEffort: ReasoningEffort
-  manualBody: string
-}
-
 export function getDefaultTimelineFillSettings(): TimelineFillSettings {
   return getDefaultTimelineFillSettingsForProvider('openrouter')
 }
@@ -447,39 +435,6 @@ export function getDefaultUpdateSettings(): UpdateSettings {
     checkInterval: 24, // Check every 24 hours
     lastChecked: null,
   }
-}
-
-// Image Generation settings (automatic image generation for narrative)
-export interface ImageGenerationServiceSettings {
-  // Profile-based image generation (profiles must have supportsImageGeneration capability)
-  profileId: string | null // API profile for standard image generation
-  size: string // Regular image size
-
-  // Reference model settings (for image-to-image with portrait references)
-  referenceProfileId: string | null // API profile for image-to-image with portrait references
-  referenceSize: string // Reference image size
-
-  // General story image settings
-  styleId: string // Selected image style template
-  maxImagesPerMessage: number // Max images per narrative (0 = unlimited, default: 3)
-
-  // Portrait model settings (character reference images)
-  portraitProfileId: string | null // API profile for generating character portraits
-  portraitStyleId: string // Selected character portrait style template
-  portraitSize: string // Portrait image size
-
-  // Scene analysis model settings (for identifying imageable scenes)
-  promptProfileId: string | null // API profile for scene analysis
-  promptModel: string // Model for scene analysis (empty = use profile default)
-  promptTemperature: number
-  promptMaxTokens: number
-  reasoningEffort: ReasoningEffort
-  manualBody: string
-
-  // Background image settings
-  backgroundProfileId: string | null // API profile for background image generation
-  backgroundSize: string // Background image size (default: '1280x720')
-  backgroundBlur: number // Background blur amount in pixels (default: 0)
 }
 
 export function getDefaultImageGenerationSettings(): ImageGenerationServiceSettings {

@@ -1034,6 +1034,10 @@
         presentCharacters: story.characters,
         referenceMode: story.currentStory.settings?.referenceMode ?? false,
         translatedNarrative: entry.translatedContent ?? undefined,
+        imageGenerationMode: story.currentStory.settings?.imageGenerationMode,
+        allCharacters: story.characters,
+        imageSettings: settings.systemServicesSettings.imageGeneration,
+        getImageProfile: (id: string) => settings.getImageProfile(id),
       }
       await aiService.generateImagesForNarrative(context)
     } catch (error) {

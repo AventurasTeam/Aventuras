@@ -232,25 +232,53 @@
   function buildPipelineDependencies(): PipelineDependencies {
     return {
       shouldUseAgenticRetrieval: (chaptersLength: number) =>
-        aiService.shouldUseAgenticRetrieval({ length: chaptersLength } as any),
+        aiService.shouldUseAgenticRetrieval(
+          { length: chaptersLength } as any,
+          settings.systemServicesSettings.timelineFill,
+        ),
       runAgenticRetrieval: aiService.runAgenticRetrieval.bind(aiService),
       formatAgenticRetrievalForPrompt: aiService.formatAgenticRetrievalForPrompt.bind(aiService),
-      runTimelineFill: aiService.runTimelineFill.bind(aiService),
-      answerChapterQuestion: aiService.answerChapterQuestion.bind(aiService),
-      answerChapterRangeQuestion: aiService.answerChapterRangeQuestion.bind(aiService),
+      runTimelineFill: (visibleEntries, chapters) =>
+        aiService.runTimelineFill(visibleEntries, chapters, story.getChapterEntries.bind(story)),
+      answerChapterQuestion: (chapterNumber, question, chapters) =>
+        aiService.answerChapterQuestion(
+          chapterNumber,
+          question,
+          chapters,
+          story.getChapterEntries.bind(story),
+        ),
+      answerChapterRangeQuestion: (startChapter, endChapter, question, chapters) =>
+        aiService.answerChapterRangeQuestion(
+          startChapter,
+          endChapter,
+          question,
+          chapters,
+          story.getChapterEntries.bind(story),
+        ),
       getRelevantLorebookEntries: aiService.getRelevantLorebookEntries.bind(aiService),
       streamNarrative: aiService.streamNarrative.bind(aiService),
       classifyResponse: aiService.classifyResponse.bind(aiService),
       translateNarration: aiService.translateNarration.bind(aiService),
-      generateImagesForNarrative: aiService.generateImagesForNarrative.bind(aiService),
-      isImageGenerationEnabled: (settings, type) =>
-        aiService.isImageGenerationEnabled(settings, type),
+      generateImagesForNarrative: (ctx) =>
+        aiService.generateImagesForNarrative({
+          ...ctx,
+          imageGenerationMode: story.currentStory?.settings?.imageGenerationMode,
+          allCharacters: story.characters,
+          imageSettings: settings.systemServicesSettings.imageGeneration,
+          getImageProfile: (id) => settings.getImageProfile(id),
+        }),
+      isImageGenerationEnabled: (storySettings, type) =>
+        aiService.isImageGenerationEnabled(storySettings, type),
       generateSuggestions: aiService.generateSuggestions.bind(aiService),
       translateSuggestions: aiService.translateSuggestions.bind(aiService),
       generateActionChoices: aiService.generateActionChoices.bind(aiService),
       translateActionChoices: aiService.translateActionChoices.bind(aiService),
-      analyzeBackgroundChangeAndGenerateImage:
-        aiService.analyzeBackgroundChangeAndGenerateImage.bind(aiService),
+      analyzeBackgroundChangeAndGenerateImage: (storyId, visibleEntries) =>
+        aiService.analyzeBackgroundChangeAndGenerateImage(
+          storyId,
+          visibleEntries,
+          story.updateCurrentBackgroundImage.bind(story),
+        ),
     }
   }
 
@@ -332,6 +360,7 @@
             chapterNumber,
             question,
             story.currentBranchChapters,
+            story.getChapterEntries.bind(story),
           )
         },
       },
@@ -816,6 +845,7 @@
           lorebookEntries,
           promptContext,
           story.pov,
+          story.currentStory?.id,
         )
 
         if (result.choices.length > 0) {
@@ -898,7 +928,13 @@
     if (!storySettings || storySettings.imageGenerationMode === 'none') return
     isManualImageGenRunning = true
     try {
-      await aiService.generateImagesForNarrative(lastImageGenContext)
+      await aiService.generateImagesForNarrative({
+        ...lastImageGenContext,
+        imageGenerationMode: story.currentStory?.settings?.imageGenerationMode,
+        allCharacters: story.characters,
+        imageSettings: settings.systemServicesSettings.imageGeneration,
+        getImageProfile: (id) => settings.getImageProfile(id),
+      })
     } catch (error) {
       log('Manual image generation failed (non-fatal)', error)
     } finally {
