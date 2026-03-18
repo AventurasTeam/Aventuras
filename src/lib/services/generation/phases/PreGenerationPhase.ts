@@ -48,16 +48,6 @@ export interface PreGenerationResult {
 }
 
 /**
- * Additional context needed for pre-generation
- */
-export interface PreGenerationInput {
-  embeddedImages: EmbeddedImage[]
-  rawInput: string
-  actionType: ActionInputType
-  wasRawActionChoice: boolean
-}
-
-/**
  * PreGenerationPhase service
  *
  * Prepares the retry backup data and initializes generation context.
@@ -69,14 +59,17 @@ export class PreGenerationPhase {
    * Execute the pre-generation phase
    * Yields phase events and returns prepared data
    */
-  async *execute(input: PreGenerationInput): AsyncGenerator<GenerationEvent, PreGenerationResult> {
+  async *execute(): AsyncGenerator<GenerationEvent, PreGenerationResult> {
     // Emit phase start
     yield {
       type: 'phase_start',
       phase: 'pre',
     } satisfies PhaseStartEvent
 
-    const { embeddedImages, rawInput, actionType, wasRawActionChoice } = input
+    const embeddedImages = storyContext.embeddedImages
+    const rawInput = storyContext.rawInput
+    const actionType = storyContext.actionType
+    const wasRawActionChoice = storyContext.wasRawActionChoice
 
     // Prepare retry backup data — shallow copies break Svelte proxy chains.
     // This is safe because Svelte's reactivity pattern always creates NEW arrays/objects

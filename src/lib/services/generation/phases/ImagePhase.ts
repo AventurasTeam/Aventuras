@@ -32,11 +32,6 @@ export interface ImageSettings {
   referenceMode?: boolean
 }
 
-/** Input for the image phase */
-export interface ImageInput {
-  imageSettings: ImageSettings
-}
-
 /** Result from image phase */
 export interface ImageResult {
   started: boolean
@@ -48,10 +43,13 @@ export class ImagePhase {
   constructor(private deps: ImageDependencies) {}
 
   /** Execute the image phase - yields events and returns result */
-  async *execute(input: ImageInput): AsyncGenerator<GenerationEvent, ImageResult> {
+  async *execute(): AsyncGenerator<GenerationEvent, ImageResult> {
     yield { type: 'phase_start', phase: 'image' } satisfies PhaseStartEvent
 
-    const { imageSettings } = input
+    const imageSettings: ImageSettings = {
+      imageGenerationMode: storyContext.currentStory?.settings?.imageGenerationMode ?? 'agentic',
+      referenceMode: storyContext.currentStory?.settings?.referenceMode ?? false,
+    }
 
     // Read all data from singleton
     const storyId = storyContext.currentStory?.id ?? ''

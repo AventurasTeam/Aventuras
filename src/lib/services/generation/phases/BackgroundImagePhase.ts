@@ -32,11 +32,6 @@ export interface BackgroundImageSettings {
   imageGenerationMode?: 'none' | 'agentic' | 'inline'
 }
 
-/** Input for the image phase */
-export interface BackgroundImageInput {
-  imageSettings: BackgroundImageSettings
-}
-
 /** Result from image phase */
 export interface BackgroundImageResult {
   started: boolean
@@ -48,15 +43,17 @@ export class BackgroundImagePhase {
   constructor(private deps: BackgroundImageDependencies) {}
 
   /** Execute the image phase - yields events and returns result */
-  async *execute(
-    input: BackgroundImageInput,
-  ): AsyncGenerator<GenerationEvent, BackgroundImageResult> {
+  async *execute(): AsyncGenerator<GenerationEvent, BackgroundImageResult> {
     // === CONCURRENT PHASE SAFETY: Snapshot ALL singleton inputs before first yield ===
     const storyId = storyContext.currentStory?.id ?? ''
     const storyEntries = storyContext.visibleEntries
     const abortSignal = storyContext.abortSignal ?? undefined
+    const imageSettings: BackgroundImageSettings = {
+      backgroundImagesEnabled:
+        storyContext.currentStory?.settings?.backgroundImagesEnabled ?? false,
+      imageGenerationMode: storyContext.currentStory?.settings?.imageGenerationMode ?? 'agentic',
+    }
     // === End snapshot block ===
-    const { imageSettings } = input
 
     console.log('BackgroundImagePhase.execute')
     yield { type: 'phase_start', phase: 'image' } satisfies PhaseStartEvent

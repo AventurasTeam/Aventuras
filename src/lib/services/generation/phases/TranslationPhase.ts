@@ -17,10 +17,10 @@ import type {
   AbortedEvent,
   ErrorEvent,
 } from '../types'
-import type { TranslationSettings } from '$lib/types'
 import type { TranslationResult } from '$lib/services/ai/utils/TranslationService'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 import { storyContext } from '$lib/stores/storyContext.svelte'
+import { settings } from '$lib/stores/settings.svelte'
 
 /** Dependencies for translation phase - injected to avoid tight coupling */
 export interface TranslationDependencies {
@@ -29,12 +29,6 @@ export interface TranslationDependencies {
     targetLanguage: string,
     isVisualProse: boolean,
   ) => Promise<TranslationResult>
-}
-
-/** Input for the translation phase */
-export interface TranslationInput {
-  isVisualProse: boolean
-  translationSettings: TranslationSettings
 }
 
 /** Result from translation phase */
@@ -53,12 +47,13 @@ export class TranslationPhase {
   constructor(private deps: TranslationDependencies) {}
 
   /** Execute the translation phase - yields events and returns result */
-  async *execute(input: TranslationInput): AsyncGenerator<GenerationEvent, TranslationResult2> {
+  async *execute(): AsyncGenerator<GenerationEvent, TranslationResult2> {
     yield { type: 'phase_start', phase: 'translation' } satisfies PhaseStartEvent
 
     const narrativeContent = storyContext.narrativeResult?.content ?? ''
     const abortSignal = storyContext.abortSignal ?? undefined
-    const { isVisualProse, translationSettings } = input
+    const isVisualProse = storyContext.preGenerationResult?.visualProseMode ?? false
+    const translationSettings = settings.translationSettings
 
     // Check if translation should be skipped
     if (!TranslationService.shouldTranslateNarration(translationSettings)) {

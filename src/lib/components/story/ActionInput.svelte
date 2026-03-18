@@ -44,8 +44,6 @@
     WorldStateTranslationService,
     handleEvent,
     SuggestionsRefreshService,
-    type PipelineDependencies,
-    type PipelineConfig,
     type RetrievalResult,
     type BackgroundTaskDependencies,
     type BackgroundTaskInput,
@@ -230,30 +228,6 @@
   // Builder Functions
   // ============================================================================
 
-  function buildPipelineDependencies(): PipelineDependencies {
-    return {
-      shouldUseAgenticRetrieval: (chaptersLength: number) =>
-        aiService.shouldUseAgenticRetrieval({ length: chaptersLength } as any),
-      runAgenticRetrieval: aiService.runAgenticRetrieval.bind(aiService),
-      runTimelineFill: aiService.runTimelineFill.bind(aiService),
-      answerChapterQuestion: aiService.answerChapterQuestion.bind(aiService),
-      answerChapterRangeQuestion: aiService.answerChapterRangeQuestion.bind(aiService),
-      getRelevantLorebookEntries: aiService.getRelevantLorebookEntries.bind(aiService),
-      streamNarrative: aiService.streamNarrative.bind(aiService),
-      classifyResponse: aiService.classifyResponse.bind(aiService),
-      translateNarration: aiService.translateNarration.bind(aiService),
-      generateImagesForNarrative: aiService.generateImagesForNarrative.bind(aiService),
-      isImageGenerationEnabled: (settings, type) =>
-        aiService.isImageGenerationEnabled(settings, type),
-      generateSuggestions: aiService.generateSuggestions.bind(aiService),
-      translateSuggestions: aiService.translateSuggestions.bind(aiService),
-      generateActionChoices: aiService.generateActionChoices.bind(aiService),
-      translateActionChoices: aiService.translateActionChoices.bind(aiService),
-      analyzeBackgroundChangeAndGenerateImage:
-        aiService.analyzeBackgroundChangeAndGenerateImage.bind(aiService),
-    }
-  }
-
   function buildBackgroundTaskDependencies(): BackgroundTaskDependencies {
     return {
       chapterService: {
@@ -437,34 +411,20 @@
       const activationTracker = ui.getActivationTracker(storyPosition) as SimpleActivationTracker
       const embeddedImages = await database.getEmbeddedImagesForStory(currentStoryRef.id)
 
-      const cfg: PipelineConfig = {
-        embeddedImages,
-        rawInput: userActionContent,
-        actionType,
-        wasRawActionChoice: false,
-        timelineFillEnabled: settings.systemServicesSettings.timelineFill?.enabled ?? true,
-        storyMode: currentStoryRef.mode ?? 'adventure',
-        pov: story.pov,
-        tense: story.tense,
-        styleReview: ui.lastStyleReview,
-        activationTracker,
-        translationSettings: settings.translationSettings,
-        imageSettings: {
-          imageGenerationMode: currentStoryRef.settings?.imageGenerationMode ?? 'agentic',
-          backgroundImagesEnabled: currentStoryRef.settings?.backgroundImagesEnabled ?? false,
-          referenceMode: currentStoryRef.settings?.referenceMode ?? false,
-        },
-        disableSuggestions: settings.uiSettings.disableSuggestions,
-      }
+      storyContext.embeddedImages = embeddedImages
+      storyContext.rawInput = userActionContent
+      storyContext.actionType = actionType
+      storyContext.wasRawActionChoice = false
+      storyContext.styleReview = ui.lastStyleReview
+      storyContext.activationTracker = activationTracker
 
-      const deps = buildPipelineDependencies()
-      const pipeline = new GenerationPipeline(deps)
+      const pipeline = GenerationPipeline.create()
 
       let fullResponse = ''
       let fullReasoning = ''
       let narrationEntry: Awaited<ReturnType<typeof story.addEntry>> | null = null
 
-      for await (const event of pipeline.execute(cfg)) {
+      for await (const event of pipeline.execute()) {
         if (stopRequested) break
 
         const eventState: PipelineEventState = {

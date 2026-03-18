@@ -32,6 +32,7 @@ import { getEntryRetrievalConfigFromSettings } from '$lib/services/ai/retrieval/
 import { mapEntryRetrievalToLorebookEntries } from '$lib/services/context/lorebookMapper'
 import type { ContextLorebookEntry } from '$lib/services/context/context-types'
 import { storyContext } from '$lib/stores/storyContext.svelte'
+import { settings } from '$lib/stores/settings.svelte'
 import { DEFAULT_MEMORY_CONFIG } from '$lib/services/ai/generation/MemoryService'
 
 /** Dependencies injected from AIService - phase calls these methods rather than duplicating logic */
@@ -84,18 +85,15 @@ export interface RetrievalDependencies {
 
 export interface RetrievalInput {
   dependencies: RetrievalDependencies
-  timelineFillEnabled: boolean
-  activationTracker?: ActivationTracker
-  storyMode: StoryMode
-  pov?: POV
-  tense?: Tense
 }
 
 export class RetrievalPhase {
   async *execute(input: RetrievalInput): AsyncGenerator<GenerationEvent, RetrievalResult> {
     yield { type: 'phase_start', phase: 'retrieval' } satisfies PhaseStartEvent
 
-    const { dependencies, timelineFillEnabled, activationTracker } = input
+    const { dependencies } = input
+    const timelineFillEnabled = settings.systemServicesSettings.timelineFill?.enabled ?? true
+    const activationTracker = storyContext.activationTracker ?? undefined
     const visibleEntries = storyContext.visibleEntries
     const userAction = storyContext.userAction!
     const abortSignal = storyContext.abortSignal ?? undefined
@@ -115,7 +113,7 @@ export class RetrievalPhase {
     // Task 1: Memory retrieval (timeline fill or agentic)
     if (chapters.length > 0 && timelineFillEnabled && memoryConfig.enableRetrieval) {
       tasks.push(
-        this.runMemoryRetrieval(input)
+        this.runMemoryRetrieval(input.dependencies)
           .then((result) => {
             agenticRetrieval = result.agenticRetrieval
             timelineFillResult = result.timelineFillResult
@@ -191,25 +189,27 @@ export class RetrievalPhase {
     return result
   }
 
-  private async runMemoryRetrieval(input: RetrievalInput): Promise<{
+  private async runMemoryRetrieval(deps: RetrievalDependencies): Promise<{
     agenticRetrieval: AgenticRetrievalFields | null
     timelineFillResult: TimelineFillResult | null
   }> {
-    const { dependencies, storyMode, pov, tense } = input
+    const storyMode = storyContext.storyMode
+    const pov = storyContext.pov
+    const tense = storyContext.tense
     const visibleEntries = storyContext.visibleEntries
     const userAction = storyContext.userAction!
     const abortSignal = storyContext.abortSignal ?? undefined
     const chapters = storyContext.currentBranchChapters
     const lorebookEntries = storyContext.lorebookEntries
 
-    if (dependencies.shouldUseAgenticRetrieval(chapters.length)) {
-      const result = await dependencies.runAgenticRetrieval(
+    if (deps.shouldUseAgenticRetrieval(chapters.length)) {
+      const result = await deps.runAgenticRetrieval(
         userAction.content,
         visibleEntries,
         chapters,
         lorebookEntries,
-        (num, q) => dependencies.answerChapterQuestion(num, q, chapters),
-        (start, end, q) => dependencies.answerChapterRangeQuestion(start, end, q, chapters),
+        (num, q) => deps.answerChapterQuestion(num, q, chapters),
+        (start, end, q) => deps.answerChapterRangeQuestion(start, end, q, chapters),
         abortSignal,
         storyMode,
         pov,
@@ -230,7 +230,7 @@ export class RetrievalPhase {
 
     return {
       agenticRetrieval: null,
-      timelineFillResult: await dependencies.runTimelineFill(visibleEntries, chapters),
+      timelineFillResult: await deps.runTimelineFill(visibleEntries, chapters),
     }
   }
 }

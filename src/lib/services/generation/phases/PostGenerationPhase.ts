@@ -21,6 +21,7 @@ import type { TranslationSettings } from '$lib/types'
 import type { Suggestion, ActionChoice } from '$lib/services/ai/sdk/schemas'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 import { storyContext } from '$lib/stores/storyContext.svelte'
+import { settings } from '$lib/stores/settings.svelte'
 
 /** Prompt context for macro expansion */
 export interface PromptContext {
@@ -45,12 +46,6 @@ export interface PostGenerationDependencies {
   ) => Promise<ActionChoice[]>
 }
 
-/** Input for the post-generation phase */
-export interface PostGenerationInput {
-  disableSuggestions: boolean
-  translationSettings: TranslationSettings
-}
-
 /** Result from post-generation phase */
 export interface PostGenerationResult {
   suggestions: Suggestion[] | null
@@ -65,15 +60,12 @@ export interface PostGenerationResult {
 export class PostGenerationPhase {
   constructor(private deps: PostGenerationDependencies) {}
 
-  async *execute(
-    input: PostGenerationInput,
-  ): AsyncGenerator<GenerationEvent, PostGenerationResult> {
+  async *execute(): AsyncGenerator<GenerationEvent, PostGenerationResult> {
     yield { type: 'phase_start', phase: 'post' } satisfies PhaseStartEvent
 
     const isCreativeMode = storyContext.storyMode === 'creative-writing'
     const abortSignal = storyContext.abortSignal ?? undefined
-
-    const { disableSuggestions } = input
+    const disableSuggestions = settings.uiSettings.disableSuggestions
 
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'post' } satisfies AbortedEvent
@@ -85,13 +77,13 @@ export class PostGenerationPhase {
     if (!disableSuggestions) {
       if (isCreativeMode) {
         try {
-          result.suggestions = await this.generateSuggestions(input.translationSettings)
+          result.suggestions = await this.generateSuggestions(settings.translationSettings)
         } catch (error) {
           yield this.errorEvent(error)
         }
       } else {
         try {
-          result.actionChoices = await this.generateActionChoices(input.translationSettings)
+          result.actionChoices = await this.generateActionChoices(settings.translationSettings)
         } catch (error) {
           yield this.errorEvent(error)
         }

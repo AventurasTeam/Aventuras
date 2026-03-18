@@ -26,11 +26,6 @@ export interface NarrativeDependencies {
   streamNarrative: () => AsyncIterable<StreamChunk>
 }
 
-/** Input for the narrative phase */
-export interface NarrativeInput {
-  styleReview?: unknown // kept for interface compatibility; NarrativeService reads from ui store
-}
-
 /** Result from narrative phase */
 export interface NarrativeResult {
   content: string
@@ -47,10 +42,9 @@ export class NarrativePhase {
   constructor(private deps: NarrativeDependencies) {}
 
   /** Execute the narrative phase - yields chunk events and phase events */
-  async *execute(input: NarrativeInput): AsyncGenerator<GenerationEvent, NarrativeResult | null> {
+  async *execute(): AsyncGenerator<GenerationEvent, NarrativeResult | null> {
     yield { type: 'phase_start', phase: 'narrative' } satisfies PhaseStartEvent
 
-    void input // styleReview is now read from ui store inside NarrativeService.stream()
     const abortSignal = storyContext.abortSignal ?? undefined
 
     let fullResponse = ''

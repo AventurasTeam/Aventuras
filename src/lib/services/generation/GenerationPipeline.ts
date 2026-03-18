@@ -4,10 +4,6 @@
  */
 
 import type { GenerationEvent, ErrorEvent } from './types'
-import type { EmbeddedImage, ActionInputType, TranslationSettings } from '$lib/types'
-import type { StoryMode, POV, Tense } from '$lib/types'
-import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
-import type { ActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import {
   PreGenerationPhase,
   RetrievalPhase,
@@ -22,15 +18,14 @@ import {
   type TranslationDependencies,
   type ImageDependencies,
   type PostGenerationDependencies,
-  type ImageSettings,
 } from './phases'
 import {
   BackgroundImagePhase,
   type BackgroundImageDependencies,
-  type BackgroundImageSettings,
 } from './phases/BackgroundImagePhase'
 import { mergeGenerators } from '$lib/utils/async'
 import { storyContext } from '$lib/stores/storyContext.svelte'
+import { aiService } from '$lib/services/ai'
 
 export interface PipelineDependencies
   extends
@@ -41,22 +36,6 @@ export interface PipelineDependencies
     TranslationDependencies,
     ImageDependencies,
     PostGenerationDependencies {}
-
-export interface PipelineConfig {
-  embeddedImages: EmbeddedImage[]
-  rawInput: string
-  actionType: ActionInputType
-  wasRawActionChoice: boolean
-  timelineFillEnabled: boolean
-  storyMode: StoryMode
-  pov: POV
-  tense: Tense
-  styleReview: StyleReviewResult | null
-  activationTracker?: ActivationTracker
-  translationSettings: TranslationSettings
-  imageSettings: ImageSettings & BackgroundImageSettings
-  disableSuggestions: boolean
-}
 
 export class GenerationPipeline {
   private prePhase = new PreGenerationPhase()
@@ -77,56 +56,60 @@ export class GenerationPipeline {
     this.postPhase = new PostGenerationPhase(deps)
   }
 
-  async *execute(
-    cfg: PipelineConfig,
-  ): AsyncGenerator<GenerationEvent, { aborted: boolean; fatalError: Error | null }> {
+  static create(): GenerationPipeline {
+    const deps: PipelineDependencies = {
+      shouldUseAgenticRetrieval: (chaptersLength: number) =>
+        aiService.shouldUseAgenticRetrieval(new Array(chaptersLength)),
+      runAgenticRetrieval: aiService.runAgenticRetrieval.bind(aiService),
+      runTimelineFill: aiService.runTimelineFill.bind(aiService),
+      answerChapterQuestion: aiService.answerChapterQuestion.bind(aiService),
+      answerChapterRangeQuestion: aiService.answerChapterRangeQuestion.bind(aiService),
+      getRelevantLorebookEntries: aiService.getRelevantLorebookEntries.bind(aiService),
+      streamNarrative: aiService.streamNarrative.bind(aiService),
+      classifyResponse: aiService.classifyResponse.bind(aiService),
+      translateNarration: aiService.translateNarration.bind(aiService),
+      generateImagesForNarrative: aiService.generateImagesForNarrative.bind(aiService),
+      isImageGenerationEnabled: (storySettings, type) =>
+        aiService.isImageGenerationEnabled(storySettings, type),
+      generateSuggestions: aiService.generateSuggestions.bind(aiService),
+      translateSuggestions: aiService.translateSuggestions.bind(aiService),
+      generateActionChoices: aiService.generateActionChoices.bind(aiService),
+      translateActionChoices: aiService.translateActionChoices.bind(aiService),
+      analyzeBackgroundChangeAndGenerateImage:
+        aiService.analyzeBackgroundChangeAndGenerateImage.bind(aiService),
+    }
+    return new GenerationPipeline(deps)
+  }
+
+  async *execute(): AsyncGenerator<
+    GenerationEvent,
+    { aborted: boolean; fatalError: Error | null }
+  > {
     const status = { aborted: false, fatalError: null as Error | null }
 
     try {
-      yield* this.prePhase.execute({
-        embeddedImages: cfg.embeddedImages,
-        rawInput: cfg.rawInput,
-        actionType: cfg.actionType,
-        wasRawActionChoice: cfg.wasRawActionChoice,
-      })
+      yield* this.prePhase.execute()
       if (storyContext.abortSignal?.aborted) return { ...status, aborted: true }
 
-      yield* this.retrievalPhase.execute({
-        dependencies: this.deps,
-        timelineFillEnabled: cfg.timelineFillEnabled,
-        activationTracker: cfg.activationTracker,
-        storyMode: cfg.storyMode,
-        pov: cfg.pov,
-        tense: cfg.tense,
-      })
+      yield* this.retrievalPhase.execute({ dependencies: this.deps })
       if (storyContext.abortSignal?.aborted) return { ...status, aborted: true }
 
-      const narrative = yield* this.narrativePhase.execute({
-        styleReview: cfg.styleReview,
-      })
+      const narrative = yield* this.narrativePhase.execute()
       if (!narrative || storyContext.abortSignal?.aborted) return { ...status, aborted: true }
 
       yield* mergeGenerators({
-        background: this.backgroundPhase.execute({
-          imageSettings: cfg.imageSettings,
-        }),
+        background: this.backgroundPhase.execute(),
         classification: this.classificationPhase.execute(),
       })
       if (storyContext.abortSignal?.aborted) return { ...status, aborted: true }
 
-      yield* this.translationPhase.execute({
-        isVisualProse: storyContext.preGenerationResult?.visualProseMode ?? false,
-        translationSettings: cfg.translationSettings,
-      })
+      yield* this.translationPhase.execute()
       if (storyContext.abortSignal?.aborted) return { ...status, aborted: true }
 
-      yield* this.imagePhase.execute({ imageSettings: cfg.imageSettings })
+      yield* this.imagePhase.execute()
       if (storyContext.abortSignal?.aborted) return { ...status, aborted: true }
 
-      yield* this.postPhase.execute({
-        disableSuggestions: cfg.disableSuggestions,
-        translationSettings: cfg.translationSettings,
-      })
+      yield* this.postPhase.execute()
       if (storyContext.abortSignal?.aborted) return { ...status, aborted: true }
 
       return status
