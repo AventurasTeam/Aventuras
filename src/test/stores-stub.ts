@@ -55,6 +55,21 @@ export const storyContext = {
     genre: undefined,
   },
 
+  // New derived getters (Phase 27)
+  activeCharacters: [],
+  inventoryItems: [],
+  equippedItems: [],
+  wordCount: 0,
+  memoryConfig: { tokenThreshold: 2000, chapterBuffer: 3, autoSummarize: false },
+  timeTracker: { years: 0, days: 0, hours: 0, minutes: 0 },
+  messagesSinceLastChapter: 0,
+  tokensSinceLastChapter: 0,
+  tokensOutsideBuffer: 0,
+
+  // Cache invalidation methods (no-ops for tests)
+  invalidateWordCountCache: () => {},
+  invalidateChapterCache: () => {},
+
   // Lifecycle methods (no-ops)
   init: () => {},
   reset: () => {},
