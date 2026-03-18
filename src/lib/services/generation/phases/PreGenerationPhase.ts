@@ -7,12 +7,7 @@
  * - Yield phase events
  */
 
-import type {
-  GenerationContext,
-  GenerationEvent,
-  PhaseStartEvent,
-  PhaseCompleteEvent,
-} from '../types'
+import type { GenerationEvent, PhaseStartEvent, PhaseCompleteEvent } from '../types'
 import type {
   StoryEntry,
   Character,
@@ -23,6 +18,7 @@ import type {
   TimeTracker,
   ActionInputType,
 } from '$lib/types'
+import { storyContext } from '$lib/stores/storyContext.svelte'
 
 /**
  * Data needed for retry backup - prepared by this phase, applied by caller
@@ -47,7 +43,6 @@ export interface RetryBackupData {
  */
 export interface PreGenerationResult {
   retryBackupData: RetryBackupData
-  worldState: GenerationContext['worldState']
   visualProseMode: boolean
   streamingEntryId: string
 }
@@ -56,7 +51,6 @@ export interface PreGenerationResult {
  * Additional context needed for pre-generation
  */
 export interface PreGenerationInput {
-  context: GenerationContext
   embeddedImages: EmbeddedImage[]
   rawInput: string
   actionType: ActionInputType
@@ -82,35 +76,41 @@ export class PreGenerationPhase {
       phase: 'pre',
     } satisfies PhaseStartEvent
 
-    const { context, embeddedImages, rawInput, actionType, wasRawActionChoice } = input
-    const { story, worldState } = context
+    const { embeddedImages, rawInput, actionType, wasRawActionChoice } = input
 
-    // Prepare retry backup data
-    // The actual backup is created by the caller using ui.createRetryBackup()
+    // Prepare retry backup data — shallow copies break Svelte proxy chains.
+    // This is safe because Svelte's reactivity pattern always creates NEW arrays/objects
+    // on mutation rather than mutating in place (see ui.svelte.ts createRetryBackup).
     const retryBackupData: RetryBackupData = {
-      storyId: story.id,
-      entries: [...context.allEntries],
-      characters: [...worldState.characters],
-      locations: [...worldState.locations],
-      items: [...worldState.items],
-      storyBeats: [...worldState.storyBeats],
+      storyId: storyContext.currentStory!.id,
+      entries: [...storyContext.entries],
+      characters: storyContext.characters.map((c) => ({
+        ...c,
+        traits: [...(c.traits || [])],
+        visualDescriptors: { ...(c.visualDescriptors || {}) },
+      })),
+      locations: storyContext.locations.map((l) => ({
+        ...l,
+        connections: [...(l.connections || [])],
+      })),
+      items: storyContext.items.map((item) => ({ ...item })),
+      storyBeats: storyContext.storyBeats.map((b) => ({ ...b })),
       embeddedImages: [...embeddedImages],
-      userActionContent: context.userAction.content,
+      userActionContent: storyContext.userAction?.content ?? '',
       rawInput,
       actionType,
       wasRawActionChoice,
-      timeTracker: story.timeTracker ?? null,
+      timeTracker: storyContext.currentStory?.timeTracker ?? null,
     }
 
     // Check if Visual Prose mode is enabled for this story
-    const visualProseMode = story.settings?.visualProseMode ?? false
+    const visualProseMode = storyContext.currentStory?.settings?.visualProseMode ?? false
 
     // Generate a temp entry ID for Visual Prose CSS scoping during streaming
     const streamingEntryId = crypto.randomUUID()
 
     const result: PreGenerationResult = {
       retryBackupData,
-      worldState,
       visualProseMode,
       streamingEntryId,
     }
@@ -121,6 +121,9 @@ export class PreGenerationPhase {
       phase: 'pre',
       result,
     } satisfies PhaseCompleteEvent
+
+    // Write result to singleton before returning
+    storyContext.preGenerationResult = result
 
     return result
   }

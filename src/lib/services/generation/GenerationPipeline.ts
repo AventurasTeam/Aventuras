@@ -123,7 +123,6 @@ export class GenerationPipeline {
 
     try {
       r.preGeneration = yield* this.prePhase.execute({
-        context: ctx,
         embeddedImages: cfg.embeddedImages,
         rawInput: cfg.rawInput,
         actionType: cfg.actionType,
