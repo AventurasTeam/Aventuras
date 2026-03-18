@@ -44,9 +44,6 @@
     WorldStateTranslationService,
     handleEvent,
     SuggestionsRefreshService,
-    type RetrievalResult,
-    type BackgroundTaskDependencies,
-    type BackgroundTaskInput,
     type PipelineUICallbacks,
     type PipelineEventState,
   } from '$lib/services/generation'
@@ -225,99 +222,6 @@
   })
 
   // ============================================================================
-  // Builder Functions
-  // ============================================================================
-
-  function buildBackgroundTaskDependencies(): BackgroundTaskDependencies {
-    return {
-      chapterService: {
-        analyzeForChapter: aiService.analyzeForChapter.bind(aiService),
-        summarizeChapter: aiService.summarizeChapter.bind(aiService),
-        getNextChapterNumber: story.getNextChapterNumber.bind(story),
-        addChapter: story.addChapter.bind(story),
-      },
-      loreManagement: {
-        runLoreManagement: aiService.runLoreManagement.bind(aiService),
-      },
-      styleReview: { analyzeStyle: aiService.analyzeStyle.bind(aiService) },
-    }
-  }
-
-  function buildBackgroundTaskInput(
-    countStyleReview: boolean,
-    styleReviewSource: string,
-  ): BackgroundTaskInput {
-    const storyId = story.currentStory?.id ?? ''
-    const mode = story.currentStory?.mode ?? 'adventure'
-
-    return {
-      styleReview: {
-        storyId,
-        entries: story.entries,
-        mode,
-        pov: story.pov,
-        tense: story.tense,
-        enabled: settings.systemServicesSettings.styleReviewer.enabled,
-        triggerInterval: settings.systemServicesSettings.styleReviewer.triggerInterval,
-        currentCounter: ui.messagesSinceLastStyleReview,
-        shouldIncrement: countStyleReview,
-        source: styleReviewSource,
-      },
-      styleReviewCallbacks: {
-        incrementCounter: ui.incrementStyleReviewCounter.bind(ui),
-        setLoading: ui.setStyleReviewLoading.bind(ui),
-        setResult: ui.setStyleReview.bind(ui),
-      },
-      chapterCheck: {
-        storyId,
-        currentBranchId: story.currentStory?.currentBranchId ?? null,
-        entries: story.entries,
-        lastChapterEndIndex: story.lastChapterEndIndex,
-        tokensSinceLastChapter: story.tokensSinceLastChapter,
-        tokensOutsideBuffer: story.tokensOutsideBuffer,
-        messagesSinceLastChapter: story.messagesSinceLastChapter,
-        memoryConfig: story.memoryConfig,
-        currentBranchChapters: story.currentBranchChapters,
-        mode,
-        pov: story.pov,
-        tense: story.tense,
-      },
-      loreSession: {
-        storyId,
-        currentBranchId: story.currentStory?.currentBranchId ?? null,
-        lorebookEntries: story.lorebookEntries,
-        chapters: story.currentBranchChapters,
-        mode,
-        pov: story.pov,
-        tense: story.tense,
-      },
-      loreCallbacks: {
-        onCreateEntry: async (entry) => {
-          await story.addLorebookEntry(entry)
-        },
-        onUpdateEntry: story.updateLorebookEntry.bind(story),
-        onDeleteEntry: story.deleteLorebookEntry.bind(story),
-        onMergeEntries: async (entryIds, mergedEntry) => {
-          await story.deleteLorebookEntries(entryIds)
-          await story.addLorebookEntry(mergedEntry)
-        },
-        onQueryChapter: async (chapterNumber, question) => {
-          return aiService.answerChapterQuestion(
-            chapterNumber,
-            question,
-            story.currentBranchChapters,
-          )
-        },
-      },
-      loreUICallbacks: {
-        onStart: ui.startLoreManagement.bind(ui),
-        onProgress: ui.updateLoreManagementProgress.bind(ui),
-        onComplete: ui.finishLoreManagement.bind(ui),
-      },
-    }
-  }
-
-  // ============================================================================
   // Core Generation
   // ============================================================================
 
@@ -478,8 +382,7 @@
         handleEvent(event, eventState, eventCallbacks)
 
         if (event.type === 'phase_complete' && event.phase === 'retrieval') {
-          const retrievalResult = event.result as RetrievalResult | undefined
-          ui.setLastLorebookRetrieval(retrievalResult?.lorebookRetrievalResult ?? null)
+          ui.setLastLorebookRetrieval(storyContext.retrievalResult?.lorebookRetrievalResult ?? null)
         }
 
         if (event.type === 'narrative_chunk') {
@@ -618,12 +521,9 @@
         emitTTSQueued(narrationEntry.id, fullResponse)
       }
 
-      const coordinator = new BackgroundTaskCoordinator(buildBackgroundTaskDependencies())
-      const input = buildBackgroundTaskInput(countStyleReview, styleReviewSource)
-      if (!story.memoryConfig.autoSummarize) input.chapterCheck.tokensOutsideBuffer = 0
-      coordinator
-        .runBackgroundTasks(input)
-        .catch((err) => log('Background tasks failed (non-fatal)', err))
+      BackgroundTaskCoordinator.run(countStyleReview, styleReviewSource).catch((err) =>
+        log('Background tasks failed (non-fatal)', err),
+      )
 
       // Android: notify user that generation completed while app was backgrounded
       if (
