@@ -12,6 +12,7 @@
 import type { Chapter, TimeTracker } from '$lib/types'
 import type { TimelineFillResult } from '$lib/services/ai/retrieval/TimelineFillService'
 import type { ContextChapter, ContextTimelineFill } from './context-types'
+import { storyContext } from '$lib/stores/storyContext.svelte'
 
 /**
  * Format a TimeTracker into a human-readable string for the narrative prompt.
@@ -41,20 +42,40 @@ export interface ChapterContextArrays {
  * Map Chapter[] and optional TimelineFillResult into typed context arrays
  * suitable for Liquid template injection.
  *
+ * Two overloads are provided:
+ * - Zero-arg (generation path): reads chapters and timelineFillResult from the
+ *   storyContext singleton. Use this inside the AI generation pipeline.
+ * - Parameterized: accepts explicit Chapter[] and optional TimelineFillResult.
+ *   Use this for non-generation callers (MemoryService, TimelineFillService).
+ *
  * - chapters[]: each Chapter mapped to ContextChapter with pre-formatted time strings
  * - timelineFill[]: each TimelineQueryResult mapped to ContextTimelineFill
  *
  * Raw arrays (characters[], locations[]) are passed through unchanged so
  * templates can apply their own formatting (join, conditionals, etc.).
  *
- * @param chapters - Raw Chapter[] from the world state
- * @param timelineFillResult - Optional timeline gap-fill result from TimelineFillService
  * @returns ChapterContextArrays bag ready for template context injection
  */
+// Overload 1: zero-arg, reads from storyContext singleton (generation path)
+export function mapChaptersToContext(): ChapterContextArrays
+// Overload 2: parameterized (non-generation callers: MemoryService, TimelineFillService)
 export function mapChaptersToContext(
   chapters: Chapter[],
   timelineFillResult?: TimelineFillResult | null,
+): ChapterContextArrays
+// Implementation
+export function mapChaptersToContext(
+  chapters?: Chapter[],
+  timelineFillResult?: TimelineFillResult | null,
 ): ChapterContextArrays {
+  if (chapters === undefined) {
+    // Zero-arg path: read from singleton and delegate to parameterized overload
+    return mapChaptersToContext(
+      storyContext.currentBranchChapters,
+      storyContext.retrievalResult?.timelineFillResult ?? null,
+    )
+  }
+
   const contextChapters: ContextChapter[] = chapters.map((c) => ({
     number: c.number,
     title: c.title ?? '',

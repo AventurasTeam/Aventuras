@@ -1,6 +1,14 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { mapChaptersToContext, formatStoryTime } from './chapterMapper'
+import { storyContext } from '$lib/stores/storyContext.svelte'
 import { rawChapters, timelineFillResult } from '../../../test/contextFixtures'
+
+// Typed accessor for stub fields that are read-only on the real singleton but
+// writable on the stores-stub used in tests (vitest alias resolves to stores-stub.ts).
+const stubContext = storyContext as {
+  currentBranchChapters: typeof storyContext.currentBranchChapters
+  retrievalResult: typeof storyContext.retrievalResult
+}
 
 describe('mapChaptersToContext', () => {
   describe('chapter mapping', () => {
@@ -75,6 +83,40 @@ describe('mapChaptersToContext', () => {
       const { timelineFill } = mapChaptersToContext(rawChapters, null)
       expect(timelineFill).toHaveLength(0)
     })
+  })
+})
+
+describe('mapChaptersToContext — zero-arg overload', () => {
+  afterEach(() => {
+    stubContext.currentBranchChapters = []
+    stubContext.retrievalResult = null
+  })
+
+  it('returns same chapter output as parameterized call when singleton is hydrated', () => {
+    stubContext.currentBranchChapters = rawChapters
+    const zeroArgResult = mapChaptersToContext()
+    const paramResult = mapChaptersToContext(rawChapters)
+    expect(zeroArgResult.chapters).toEqual(paramResult.chapters)
+  })
+
+  it('reads timelineFillResult from singleton retrievalResult', () => {
+    stubContext.currentBranchChapters = rawChapters
+    stubContext.retrievalResult = {
+      timelineFillResult,
+      agenticRetrieval: null,
+      lorebookEntries: [],
+      lorebookRetrievalResult: null,
+    } as any
+    const zeroArgResult = mapChaptersToContext()
+    const paramResult = mapChaptersToContext(rawChapters, timelineFillResult)
+    expect(zeroArgResult.timelineFill).toEqual(paramResult.timelineFill)
+  })
+
+  it('returns empty chapters when singleton has no chapters', () => {
+    // stubContext.currentBranchChapters defaults to [] via afterEach / stores-stub
+    const result = mapChaptersToContext()
+    expect(result.chapters).toHaveLength(0)
+    expect(result.timelineFill).toHaveLength(0)
   })
 })
 

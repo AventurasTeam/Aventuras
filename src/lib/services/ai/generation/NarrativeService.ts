@@ -15,6 +15,7 @@ import { streamNarrative, generateNarrative } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
 import { mapChaptersToContext } from '$lib/services/context/chapterMapper'
 import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
+import { storyContext } from '$lib/stores/storyContext.svelte'
 import { createLogger } from '$lib/log'
 import type { StreamChunk } from '../core/types'
 import type {
@@ -69,7 +70,7 @@ export interface NarrativeOptions {
   lorebookEntries?: ContextLorebookEntry[]
   /** Abort signal for cancellation */
   signal?: AbortSignal
-  /** Timeline fill result for Q&A injection */
+  /** Timeline fill result for Q&A injection — kept for API compatibility; Phase 25 will clean up */
   timelineFillResult?: TimelineFillResult | null
 }
 
@@ -133,7 +134,6 @@ export class NarrativeService {
       styleReview,
       agenticRetrieval,
       lorebookEntries,
-      timelineFillResult,
     )
 
     try {
@@ -218,7 +218,6 @@ export class NarrativeService {
     styleReview?: StyleReviewResult | null,
     agenticRetrieval?: AgenticRetrievalFields | null,
     lorebookEntries?: ContextLorebookEntry[],
-    timelineFillResult?: TimelineFillResult | null,
   ): Promise<{ systemPrompt: string; userMessage: string }> {
     const mode = story?.mode ?? 'adventure'
 
@@ -260,12 +259,10 @@ export class NarrativeService {
       })
     }
 
-    // Build chapter context arrays via mapper
-    if (worldState.chapters && worldState.chapters.length > 0) {
-      const { chapters, timelineFill } = mapChaptersToContext(
-        worldState.chapters,
-        timelineFillResult,
-      )
+    // Build chapter context arrays via zero-arg overload (reads from singleton)
+    const singletonChapters = storyContext.currentBranchChapters
+    if (singletonChapters && singletonChapters.length > 0) {
+      const { chapters, timelineFill } = mapChaptersToContext()
       ctx.add({ chapters, timelineFill })
     }
 
