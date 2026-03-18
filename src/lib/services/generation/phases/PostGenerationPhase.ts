@@ -49,12 +49,6 @@ export interface PostGenerationDependencies {
 export interface PostGenerationInput {
   disableSuggestions: boolean
   translationSettings: TranslationSettings
-  /** @deprecated kept for GenerationPipeline compatibility; services read from singleton */
-  styleReview?: unknown
-  /** @deprecated kept for GenerationPipeline compatibility; services read from singleton */
-  promptContext?: PromptContext
-  /** @deprecated kept for GenerationPipeline compatibility; services read from singleton */
-  pov?: 'first' | 'second' | 'third'
 }
 
 /** Result from post-generation phase */

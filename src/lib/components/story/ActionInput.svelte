@@ -436,7 +436,6 @@
       const storyPosition = story.entries.length
       const activationTracker = ui.getActivationTracker(storyPosition) as SimpleActivationTracker
       const embeddedImages = await database.getEmbeddedImagesForStory(currentStoryRef.id)
-      const protagonist = story.characters.find((c) => c.relationship === 'self')
 
       const cfg: PipelineConfig = {
         embeddedImages,
@@ -454,16 +453,6 @@
           imageGenerationMode: currentStoryRef.settings?.imageGenerationMode ?? 'agentic',
           backgroundImagesEnabled: currentStoryRef.settings?.backgroundImagesEnabled ?? false,
           referenceMode: currentStoryRef.settings?.referenceMode ?? false,
-        },
-        promptContext: {
-          mode: story.storyMode,
-          pov: story.pov,
-          tense: story.tense,
-          protagonistName: protagonist?.name || 'the protagonist',
-          genre: currentStoryRef.genre ?? undefined,
-          settingDescription: currentStoryRef.description ?? undefined,
-          tone: currentStoryRef.settings?.tone ?? undefined,
-          themes: currentStoryRef.settings?.themes ?? undefined,
         },
         disableSuggestions: settings.uiSettings.disableSuggestions,
       }

@@ -22,7 +22,6 @@ import {
   type TranslationDependencies,
   type ImageDependencies,
   type PostGenerationDependencies,
-  type PromptContext,
   type ImageSettings,
 } from './phases'
 import {
@@ -56,7 +55,6 @@ export interface PipelineConfig {
   activationTracker?: ActivationTracker
   translationSettings: TranslationSettings
   imageSettings: ImageSettings & BackgroundImageSettings
-  promptContext: PromptContext
   disableSuggestions: boolean
 }
 
@@ -127,9 +125,6 @@ export class GenerationPipeline {
 
       yield* this.postPhase.execute({
         disableSuggestions: cfg.disableSuggestions,
-        styleReview: cfg.styleReview,
-        promptContext: cfg.promptContext,
-        pov: cfg.pov,
         translationSettings: cfg.translationSettings,
       })
       if (storyContext.abortSignal?.aborted) return { ...status, aborted: true }
