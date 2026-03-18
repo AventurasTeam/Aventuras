@@ -29,7 +29,7 @@ export type {
 
 // Pipeline orchestrator
 export { GenerationPipeline } from './GenerationPipeline'
-export type { PipelineDependencies, PipelineConfig, PipelineResult } from './GenerationPipeline'
+export type { PipelineDependencies, PipelineConfig } from './GenerationPipeline'
 
 // Phase services
 export {

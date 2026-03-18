@@ -481,7 +481,6 @@
           themes: currentStoryRef.settings?.themes ?? undefined,
         },
         disableSuggestions: settings.uiSettings.disableSuggestions,
-        activeThreads: story.pendingQuests,
       }
 
       const deps = buildPipelineDependencies()
@@ -491,7 +490,7 @@
       let fullReasoning = ''
       let narrationEntry: Awaited<ReturnType<typeof story.addEntry>> | null = null
 
-      for await (const event of pipeline.execute(ctx, cfg)) {
+      for await (const event of pipeline.execute(cfg)) {
         if (stopRequested) break
 
         const eventState: PipelineEventState = {

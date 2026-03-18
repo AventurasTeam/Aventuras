@@ -29,6 +29,7 @@ import type { ContextLorebookEntry } from '$lib/services/context/context-types'
 import type { Suggestion, ActionChoice } from '$lib/services/ai/sdk/schemas'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
+import { storyContext } from '$lib/stores/storyContext.svelte'
 
 /** Prompt context for macro expansion */
 export interface PromptContext {
@@ -77,18 +78,11 @@ export interface PostGenerationDependencies {
 
 /** Input for the post-generation phase */
 export interface PostGenerationInput {
-  isCreativeMode: boolean
   disableSuggestions: boolean
-  entries: StoryEntry[]
-  activeThreads: StoryBeat[]
-  lorebookEntries: ContextLorebookEntry[]
   styleReview?: StyleReviewResult | null
   promptContext: PromptContext
-  worldState: PostWorldState
-  narrativeResponse: string
   pov: 'first' | 'second' | 'third'
   translationSettings: TranslationSettings
-  abortSignal?: AbortSignal
 }
 
 /** Result from post-generation phase */
@@ -110,7 +104,20 @@ export class PostGenerationPhase {
   ): AsyncGenerator<GenerationEvent, PostGenerationResult> {
     yield { type: 'phase_start', phase: 'post' } satisfies PhaseStartEvent
 
-    const { isCreativeMode, disableSuggestions, abortSignal } = input
+    const isCreativeMode = storyContext.storyMode === 'creative-writing'
+    const entries = storyContext.visibleEntries
+    const activeThreads = storyContext.pendingQuests
+    const lorebookEntries = storyContext.retrievalResult?.lorebookEntries ?? []
+    const narrativeResponse = storyContext.narrativeResult?.content ?? ''
+    const abortSignal = storyContext.abortSignal ?? undefined
+    const worldState: PostWorldState = {
+      characters: storyContext.characters,
+      locations: storyContext.locations,
+      items: storyContext.items,
+      storyBeats: storyContext.storyBeats,
+    }
+
+    const { disableSuggestions } = input
 
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'post' } satisfies AbortedEvent
@@ -122,32 +129,44 @@ export class PostGenerationPhase {
     if (!disableSuggestions) {
       if (isCreativeMode) {
         try {
-          result.suggestions = await this.generateSuggestions(input)
+          result.suggestions = await this.generateSuggestions(
+            entries,
+            activeThreads,
+            lorebookEntries,
+            narrativeResponse,
+            input,
+          )
         } catch (error) {
           yield this.errorEvent(error)
         }
       } else {
         try {
-          result.actionChoices = await this.generateActionChoices(input)
+          result.actionChoices = await this.generateActionChoices(
+            entries,
+            worldState,
+            narrativeResponse,
+            lorebookEntries,
+            input,
+          )
         } catch (error) {
           yield this.errorEvent(error)
         }
       }
     }
 
+    storyContext.postGenerationResult = result
     yield { type: 'phase_complete', phase: 'post', result } satisfies PhaseCompleteEvent
     return result
   }
 
-  private async generateSuggestions(input: PostGenerationInput): Promise<Suggestion[]> {
-    const {
-      entries,
-      activeThreads,
-      lorebookEntries,
-      promptContext,
-      narrativeResponse,
-      translationSettings,
-    } = input
+  private async generateSuggestions(
+    entries: StoryEntry[],
+    activeThreads: StoryBeat[],
+    lorebookEntries: ContextLorebookEntry[],
+    narrativeResponse: string,
+    input: PostGenerationInput,
+  ): Promise<Suggestion[]> {
+    const { promptContext, translationSettings } = input
     const { suggestions } = await this.deps.generateSuggestions(
       entries,
       activeThreads,
@@ -166,17 +185,14 @@ export class PostGenerationPhase {
     return suggestions
   }
 
-  private async generateActionChoices(input: PostGenerationInput): Promise<ActionChoice[]> {
-    const {
-      entries,
-      lorebookEntries,
-      styleReview,
-      promptContext,
-      worldState,
-      narrativeResponse,
-      pov,
-      translationSettings,
-    } = input
+  private async generateActionChoices(
+    entries: StoryEntry[],
+    worldState: PostWorldState,
+    narrativeResponse: string,
+    lorebookEntries: ContextLorebookEntry[],
+    input: PostGenerationInput,
+  ): Promise<ActionChoice[]> {
+    const { styleReview, promptContext, pov, translationSettings } = input
     const { choices } = await this.deps.generateActionChoices(
       entries,
       worldState,
