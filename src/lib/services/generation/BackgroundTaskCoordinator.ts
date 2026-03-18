@@ -29,7 +29,6 @@ import { createLogger } from '$lib/log'
 
 const log = createLogger('BackgroundTaskCoordinator')
 
-
 export interface BackgroundTaskDependencies {
   chapterService: ChapterServiceDependencies
   loreManagement: LoreManagementDependencies

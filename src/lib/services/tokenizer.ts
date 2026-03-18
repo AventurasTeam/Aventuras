@@ -10,6 +10,7 @@ import { countTokens as gptCountTokens, encode } from 'gpt-tokenizer'
 import { createLogger } from '$lib/log'
 
 const log = createLogger('Tokenizer')
+const logTokenCounts = false
 
 /**
  * Count tokens in a text string.
@@ -20,7 +21,9 @@ export function countTokens(text: string): number {
   if (!text) return 0
 
   const count = gptCountTokens(text)
-  log('countTokens', { textLength: text.length, tokenCount: count })
+  if (logTokenCounts) {
+    log('countTokens', { textLength: text.length, tokenCount: count })
+  }
   return count
 }
 
