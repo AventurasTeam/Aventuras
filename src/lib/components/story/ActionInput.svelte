@@ -46,13 +46,13 @@
     SuggestionsRefreshService,
     type PipelineDependencies,
     type PipelineConfig,
-    type GenerationContext,
     type RetrievalResult,
     type BackgroundTaskDependencies,
     type BackgroundTaskInput,
     type PipelineUICallbacks,
     type PipelineEventState,
   } from '$lib/services/generation'
+  import { storyContext } from '$lib/stores/storyContext.svelte'
   import { InlineImageTracker } from '$lib/services/ai/image'
 
   function log(...args: any[]) {
@@ -423,35 +423,20 @@
     ui.resetBackgroundedFlag()
 
     try {
-      const worldState = {
-        characters: story.characters,
-        locations: story.locations,
-        items: story.items,
-        storyBeats: story.storyBeats,
-        currentLocation: story.currentLocation,
-        chapters: story.currentBranchChapters,
-        memoryConfig: story.memoryConfig,
-        lorebookEntries: story.lorebookEntries,
+      // Populate singleton for pipeline phases to read
+      storyContext.init() // Clear previous generation intermediates
+      storyContext.userAction = {
+        entryId: userActionEntryId,
+        content: userActionContent,
+        rawInput: userActionContent,
       }
+      storyContext.narrationEntryId = narrationEntryId
+      storyContext.abortSignal = activeAbortController.signal
 
       const storyPosition = story.entries.length
       const activationTracker = ui.getActivationTracker(storyPosition) as SimpleActivationTracker
       const embeddedImages = await database.getEmbeddedImagesForStory(currentStoryRef.id)
       const protagonist = story.characters.find((c) => c.relationship === 'self')
-
-      const ctx: GenerationContext = {
-        story: currentStoryRef,
-        visibleEntries: story.visibleEntries,
-        allEntries: story.entries,
-        worldState,
-        userAction: {
-          entryId: userActionEntryId,
-          content: userActionContent,
-          rawInput: userActionContent,
-        },
-        narrationEntryId,
-        abortSignal: activeAbortController.signal,
-      }
 
       const cfg: PipelineConfig = {
         embeddedImages,
@@ -593,7 +578,7 @@
               userAction: userActionContent,
               presentCharacters,
               currentLocation:
-                event.result.scene.currentLocationName ?? worldState.currentLocation?.name,
+                event.result.scene.currentLocationName ?? storyContext.currentLocation?.name,
               chatHistory: mapChatEntries(
                 story.visibleEntries.filter(
                   (e) => e.type === 'user_action' || e.type === 'narration',
