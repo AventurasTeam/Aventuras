@@ -17,6 +17,7 @@ import type { TranslationResult2 } from '$lib/services/generation/phases/Transla
 import type { ImageResult } from '$lib/services/generation/phases/ImagePhase'
 import type { PostGenerationResult } from '$lib/services/generation/phases/PostGenerationPhase'
 import type { BackgroundImageResult } from '$lib/services/generation/phases/BackgroundImagePhase'
+import type { PreGenerationResult } from '$lib/services/generation/phases/PreGenerationPhase'
 import { SvelteSet } from 'svelte/reactivity'
 
 export interface StoryContextHydrateData {
@@ -55,6 +56,7 @@ class StoryContextSingleton {
   imageResult = $state.raw<ImageResult | null>(null)
   postGenerationResult = $state.raw<PostGenerationResult | null>(null)
   backgroundResult = $state.raw<BackgroundImageResult | null>(null)
+  preGenerationResult = $state.raw<PreGenerationResult | null>(null)
 
   // Private fields — NOT reactive, plain class fields
   private _branches: Branch[] = []
@@ -250,6 +252,7 @@ class StoryContextSingleton {
     this.imageResult = null
     this.postGenerationResult = null
     this.backgroundResult = null
+    this.preGenerationResult = null
   }
 
   /**
@@ -257,14 +260,6 @@ class StoryContextSingleton {
    */
   reset(): void {
     this.init()
-  }
-
-  /**
-   * Persist the current singleton state.
-   * No-op in Phase 22 — Phase 23 will implement actual semantics
-   */
-  commit(): void {
-    // No-op in Phase 22 — Phase 23 will implement actual semantics
   }
 
   /**

@@ -29,6 +29,7 @@ export const storyContext = {
   imageResult: null,
   postGenerationResult: null,
   backgroundResult: null,
+  preGenerationResult: null,
 
   // Derived views (static defaults for tests)
   visibleEntries: [],
@@ -44,7 +45,6 @@ export const storyContext = {
   // Lifecycle methods (no-ops)
   init: () => {},
   reset: () => {},
-  commit: () => {},
   hydrate: () => {},
   clear: () => {},
 }
