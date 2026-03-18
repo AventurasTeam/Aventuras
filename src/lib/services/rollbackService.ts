@@ -11,7 +11,6 @@
  */
 
 import type { WorldStateDelta, StoryEntry, TimeTracker } from '$lib/types'
-import { settings } from '$lib/stores/settings.svelte'
 import { database } from './database'
 import { createLogger } from '$lib/log'
 

@@ -41,4 +41,3 @@ export {
   type TimelineQueryResult,
   type TimelineChapterInfo,
 } from './TimelineFillService'
-export type { TimelineQuery } from '../sdk/schemas/timeline'
