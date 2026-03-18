@@ -16,13 +16,15 @@ import type {
   AbortedEvent,
   ErrorEvent,
   WorldState,
-  RetrievalResult,
   AgenticRetrievalFields,
 } from '../types'
 import type { Story, StoryEntry } from '$lib/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
 import type { StreamChunk } from '$lib/services/ai/core/types'
 import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import type { RetrievalResult } from '../types'
+import { storyContext } from '$lib/stores/storyContext.svelte'
+import { DEFAULT_MEMORY_CONFIG } from '$lib/services/ai/generation/MemoryService'
 
 const MAX_EMPTY_RESPONSE_RETRIES = 3
 
@@ -43,12 +45,7 @@ export interface NarrativeDependencies {
 
 /** Input for the narrative phase */
 export interface NarrativeInput {
-  visibleEntries: StoryEntry[]
-  worldState: WorldState
-  story: Story | null | undefined
-  retrievalResult: RetrievalResult
   styleReview: StyleReviewResult | null | undefined
-  abortSignal?: AbortSignal
 }
 
 /** Result from narrative phase */
@@ -70,7 +67,25 @@ export class NarrativePhase {
   async *execute(input: NarrativeInput): AsyncGenerator<GenerationEvent, NarrativeResult | null> {
     yield { type: 'phase_start', phase: 'narrative' } satisfies PhaseStartEvent
 
-    const { visibleEntries, worldState, story, retrievalResult, styleReview, abortSignal } = input
+    const { styleReview } = input
+    const visibleEntries = storyContext.visibleEntries
+    const story = storyContext.currentStory
+    const retrievalResult = storyContext.retrievalResult!
+    const abortSignal = storyContext.abortSignal ?? undefined
+
+    // Build WorldState object for the streamNarrative callback
+    // Phase 25 will remove the need for this intermediate object
+    const worldState: WorldState = {
+      characters: storyContext.characters,
+      locations: storyContext.locations,
+      items: storyContext.items,
+      storyBeats: storyContext.storyBeats,
+      currentLocation: storyContext.currentLocation,
+      chapters: storyContext.currentBranchChapters,
+      memoryConfig: storyContext.currentStory?.memoryConfig ?? DEFAULT_MEMORY_CONFIG,
+      lorebookEntries: storyContext.lorebookEntries,
+    }
+
     let fullResponse = ''
     let fullReasoning = ''
     let chunkCount = 0
@@ -172,6 +187,9 @@ export class NarrativePhase {
       phase: 'narrative',
       result,
     } satisfies PhaseCompleteEvent
+
+    // Write result to singleton before returning (only on success path)
+    storyContext.narrativeResult = result
 
     return result
   }

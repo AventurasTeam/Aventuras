@@ -131,7 +131,6 @@ export class GenerationPipeline {
       if (ctx.abortSignal?.aborted) return { ...r, aborted: true }
 
       const retrieval = yield* this.retrievalPhase.execute({
-        context: ctx,
         dependencies: this.deps,
         timelineFillEnabled: cfg.timelineFillEnabled,
         activationTracker: cfg.activationTracker,
@@ -142,12 +141,7 @@ export class GenerationPipeline {
       if (ctx.abortSignal?.aborted) return { ...r, aborted: true }
 
       r.narrative = yield* this.narrativePhase.execute({
-        visibleEntries: ctx.visibleEntries,
-        worldState: ctx.worldState,
-        story: ctx.story,
-        retrievalResult: retrieval,
         styleReview: cfg.styleReview,
-        abortSignal: ctx.abortSignal,
       })
       if (!r.narrative || ctx.abortSignal?.aborted) return { ...r, aborted: true }
 
