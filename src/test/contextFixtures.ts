@@ -8,7 +8,7 @@
  *   import { ... } from '../../test/contextFixtures'
  */
 
-import type { ContextResult, WorldState } from '$lib/services/ai/generation/EntryInjector'
+import type { ContextResult } from '$lib/services/ai/generation/EntryInjector'
 import type {
   EntryRetrievalResult,
   RetrievedEntry,
@@ -159,18 +159,6 @@ export const contextResult: ContextResult = {
   ...contextResult.tier2,
   ...contextResult.tier3,
 ]
-
-// ---------------------------------------------------------------------------
-// emptyWorldState: WorldState
-// ---------------------------------------------------------------------------
-
-/** Minimal WorldState for mapper tests that don't need populated world data. */
-export const emptyWorldState: WorldState = {
-  characters: [],
-  locations: [],
-  items: [],
-  storyBeats: [],
-}
 
 // ---------------------------------------------------------------------------
 // entryRetrievalResult: EntryRetrievalResult

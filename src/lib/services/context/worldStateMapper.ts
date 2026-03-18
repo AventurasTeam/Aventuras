@@ -8,7 +8,7 @@
  * and the template context builder (ContextBuilder).
  */
 
-import type { ContextResult, WorldState } from '$lib/services/ai/generation/EntryInjector'
+import type { ContextResult } from '$lib/services/ai/generation/EntryInjector'
 import type {
   ContextCharacter,
   ContextItem,
@@ -54,13 +54,9 @@ export interface WorldStateArrays {
  * - worldStateLocations:   tier-2+3, type=location, not current
  *
  * @param result - Output from EntryInjector.buildContext()
- * @param _worldState - Full world state (reserved for future enrichment, e.g. character status)
  * @returns WorldStateArrays bag ready for template context injection
  */
-export function mapContextResultToArrays(
-  result: ContextResult,
-  _worldState: WorldState,
-): WorldStateArrays {
+export function mapContextResultToArrays(result: ContextResult): WorldStateArrays {
   const { tier1, tier2, tier3 } = result
   const tier23 = [...tier2, ...tier3]
 

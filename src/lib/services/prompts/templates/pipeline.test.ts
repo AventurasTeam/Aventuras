@@ -7,7 +7,6 @@ import {
   rawChapters,
   timelineFillResult,
   rawStoryEntries,
-  emptyWorldState,
 } from '../../../../test/contextFixtures'
 import { mapContextResultToArrays } from '$lib/services/context/worldStateMapper'
 import { mapEntryRetrievalToLorebookEntries } from '$lib/services/context/lorebookMapper'
@@ -18,7 +17,7 @@ import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper
 // Shared mapped context (built once at module level from real mapper output)
 // ---------------------------------------------------------------------------
 
-const worldStateArrays = mapContextResultToArrays(contextResult, emptyWorldState)
+const worldStateArrays = mapContextResultToArrays(contextResult)
 const lorebookEntries = mapEntryRetrievalToLorebookEntries(entryRetrievalResult, 0)
 const { chapters, timelineFill } = mapChaptersToContext(rawChapters, timelineFillResult)
 const storyEntries = mapStoryEntriesToContext(rawStoryEntries, { stripPicTags: true })

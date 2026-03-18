@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { mapContextResultToArrays, normalizeAppearance } from './worldStateMapper'
-import { contextResult, emptyWorldState } from '../../../test/contextFixtures'
+import { contextResult } from '../../../test/contextFixtures'
 
 describe('mapContextResultToArrays', () => {
-  const result = mapContextResultToArrays(contextResult, emptyWorldState)
+  const result = mapContextResultToArrays(contextResult)
 
   describe('characters', () => {
     it('worldStateCharacters[0].name equals Aria (tier-1 character)', () => {

@@ -165,7 +165,7 @@ class AIService {
       const lastEntry = entries[entries.length - 1]
       const userInput = lastEntry?.content ?? ''
       const contextResult = await this.buildTieredContext(worldState, userInput, entries)
-      worldStateArrays = mapContextResultToArrays(contextResult, worldState)
+      worldStateArrays = mapContextResultToArrays(contextResult)
     }
 
     // Delegate to NarrativeService
