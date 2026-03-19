@@ -23,6 +23,7 @@
 
 import { settings } from '$lib/stores/settings.svelte'
 import { story } from '$lib/stores/story.svelte'
+import { storyContext } from '$lib/stores/storyContext.svelte'
 import { database } from '$lib/services/database'
 import type { StoryMode, POV, Tense } from '$lib/types'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from './image/constants'
@@ -626,7 +627,7 @@ class AIService {
     }
 
     // Check if inline image mode is enabled for this story
-    const inlineImageMode = story.currentStory?.settings?.imageGenerationMode === 'inline'
+    const inlineImageMode = storyContext.currentStory?.settings?.imageGenerationMode === 'inline'
     try {
       if (inlineImageMode) {
         // Use inline image generation (process <pic> tags from AI response)
@@ -731,7 +732,7 @@ class AIService {
     presentCharacters: Character[],
   ): Promise<void> {
     const imageId = crypto.randomUUID()
-    const referenceMode = story.currentStory?.settings?.referenceMode ?? false
+    const referenceMode = storyContext.currentStory?.settings?.referenceMode ?? false
 
     // Determine profile and model
     let profileId = imageSettings.profileId

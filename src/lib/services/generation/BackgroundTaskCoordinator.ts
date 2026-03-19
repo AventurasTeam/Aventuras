@@ -27,6 +27,7 @@ import {
 } from './StyleReviewScheduler'
 import { aiService } from '$lib/services/ai'
 import { story } from '$lib/stores/story.svelte'
+import { storyContext } from '$lib/stores/storyContext.svelte'
 import { settings } from '$lib/stores/settings.svelte'
 import { ui } from '$lib/stores/ui.svelte'
 
@@ -76,8 +77,8 @@ export class BackgroundTaskCoordinator {
    * Called from ActionInput after pipeline.execute() completes.
    */
   static async run(countStyleReview: boolean, styleReviewSource: string): Promise<void> {
-    const storyId = story.currentStory?.id ?? ''
-    const mode = story.currentStory?.mode ?? 'adventure'
+    const storyId = storyContext.currentStory?.id ?? ''
+    const mode = storyContext.currentStory?.mode ?? 'adventure'
 
     const deps: BackgroundTaskDependencies = {
       chapterService: {
@@ -95,10 +96,10 @@ export class BackgroundTaskCoordinator {
     const input: BackgroundTaskInput = {
       styleReview: {
         storyId,
-        entries: story.entries,
+        entries: storyContext.entries,
         mode,
-        pov: story.pov,
-        tense: story.tense,
+        pov: storyContext.pov,
+        tense: storyContext.tense,
         enabled: settings.systemServicesSettings.styleReviewer.enabled,
         triggerInterval: settings.systemServicesSettings.styleReviewer.triggerInterval,
         currentCounter: ui.messagesSinceLastStyleReview,
@@ -112,26 +113,26 @@ export class BackgroundTaskCoordinator {
       },
       chapterCheck: {
         storyId,
-        currentBranchId: story.currentStory?.currentBranchId ?? null,
-        entries: story.entries,
-        lastChapterEndIndex: story.lastChapterEndIndex,
-        tokensSinceLastChapter: story.tokensSinceLastChapter,
-        tokensOutsideBuffer: story.tokensOutsideBuffer,
-        messagesSinceLastChapter: story.messagesSinceLastChapter,
-        memoryConfig: story.memoryConfig,
-        currentBranchChapters: story.currentBranchChapters,
+        currentBranchId: storyContext.currentStory?.currentBranchId ?? null,
+        entries: storyContext.entries,
+        lastChapterEndIndex: storyContext.lastChapterEndIndex,
+        tokensSinceLastChapter: storyContext.tokensSinceLastChapter,
+        tokensOutsideBuffer: storyContext.tokensOutsideBuffer,
+        messagesSinceLastChapter: storyContext.messagesSinceLastChapter,
+        memoryConfig: storyContext.memoryConfig,
+        currentBranchChapters: storyContext.currentBranchChapters,
         mode,
-        pov: story.pov,
-        tense: story.tense,
+        pov: storyContext.pov,
+        tense: storyContext.tense,
       },
       loreSession: {
         storyId,
-        currentBranchId: story.currentStory?.currentBranchId ?? null,
-        lorebookEntries: story.lorebookEntries,
-        chapters: story.currentBranchChapters,
+        currentBranchId: storyContext.currentStory?.currentBranchId ?? null,
+        lorebookEntries: storyContext.lorebookEntries,
+        chapters: storyContext.currentBranchChapters,
         mode,
-        pov: story.pov,
-        tense: story.tense,
+        pov: storyContext.pov,
+        tense: storyContext.tense,
       },
       loreCallbacks: {
         onCreateEntry: async (entry) => {
@@ -147,7 +148,7 @@ export class BackgroundTaskCoordinator {
           return aiService.answerChapterQuestion(
             chapterNumber,
             question,
-            story.currentBranchChapters,
+            storyContext.currentBranchChapters,
           )
         },
       },
@@ -158,7 +159,7 @@ export class BackgroundTaskCoordinator {
       },
     }
 
-    if (!story.memoryConfig.autoSummarize) input.chapterCheck.tokensOutsideBuffer = 0
+    if (!storyContext.memoryConfig.autoSummarize) input.chapterCheck.tokensOutsideBuffer = 0
 
     const coordinator = new BackgroundTaskCoordinator(deps)
     await coordinator.runBackgroundTasks(input)
