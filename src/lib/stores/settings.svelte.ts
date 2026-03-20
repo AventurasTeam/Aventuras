@@ -1,16 +1,18 @@
 import type {
-  APISettings,
-  UISettings,
-  ThemeId,
-  FontSource,
-  UpdateSettings,
   APIProfile,
+  APISettings,
+  ExperimentalFeatures,
+  FontSource,
   GenerationPreset,
-  TranslationSettings,
-  ProviderType,
   ImageProfile,
   ImageProviderType,
-  ExperimentalFeatures,
+  ProviderType,
+  ReasoningEffort,
+  TextModel,
+  ThemeId,
+  TranslationSettings,
+  UISettings,
+  UpdateSettings,
 } from '$lib/types'
 import { database } from '$lib/services/database'
 import {
@@ -20,12 +22,11 @@ import {
 } from '$lib/services/ai/wizard/ScenarioService'
 import { grammarService } from '$lib/services/grammar'
 import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
-import type { ReasoningEffort } from '$lib/types'
 import { ui } from '$lib/stores/ui.svelte'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '$lib/constants/timeout'
 import { SvelteSet, SvelteMap } from 'svelte/reactivity'
-import { dedupeTextModels, type TextModel } from '$lib/services/ai/sdk/providers'
+import { dedupeTextModels } from '$lib/services/ai/sdk/providers'
 import type { ImageGenerationServiceSettings, TimelineFillSettings } from '$lib/services/ai'
 import { debug } from './debug.svelte'
 
@@ -1205,13 +1206,13 @@ class SettingsStore {
       const profilesJson = await database.getSetting('api_profiles')
       if (profilesJson) {
         try {
-          const parsed = JSON.parse(profilesJson) as (import('$lib/types').APIProfile & {
+          const parsed = JSON.parse(profilesJson) as (APIProfile & {
             reasoningModels?: string[]
           })[]
           // Ensure new fields have defaults for profiles saved before these fields existed
           this.apiSettings.profiles = parsed.map((p) => {
             // Migrate fetchedModels: old format was string[], new format is TextModel[]
-            let fetchedModels: import('$lib/services/ai/sdk/providers').TextModel[] = []
+            let fetchedModels: TextModel[] = []
             if (Array.isArray(p.fetchedModels) && p.fetchedModels.length > 0) {
               if (typeof p.fetchedModels[0] === 'string') {
                 // Old format: string[] + optional reasoningModels string[]

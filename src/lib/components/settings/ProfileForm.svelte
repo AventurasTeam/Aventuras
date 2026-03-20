@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ProviderType } from '$lib/types'
+  import type { ProviderType, TextModel } from '$lib/types'
   import { PROVIDERS, hasDefaultEndpoint } from '$lib/services/ai/sdk/providers/config'
   import ProviderTypeSelector from './ProviderTypeSelector.svelte'
   import { isMobileDevice } from '$lib/utils/swipe'
@@ -23,7 +23,6 @@
     Star,
   } from 'lucide-svelte'
   import X from '@lucide/svelte/icons/x'
-  import type { TextModel } from '$lib/services/ai/sdk/providers'
 
   interface Props {
     // Form fields (bindable)

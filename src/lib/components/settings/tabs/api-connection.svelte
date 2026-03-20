@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { settings } from '$lib/stores/settings.svelte'
-  import type { APIProfile, ProviderType } from '$lib/types'
-  import { fetchModelsFromProvider, type TextModel } from '$lib/services/ai/sdk/providers'
+  import type { APIProfile, ProviderType, TextModel } from '$lib/types'
+  import { fetchModelsFromProvider } from '$lib/services/ai/sdk/providers'
   import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
   import { Plus, Check, ChevronRight, Key as KeyIcon, Star } from 'lucide-svelte'
 

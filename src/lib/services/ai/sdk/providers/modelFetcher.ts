@@ -6,14 +6,7 @@
 
 import { createTimeoutFetch } from './fetch'
 import { PROVIDERS, getBaseUrl } from './config'
-import type { ProviderType } from '$lib/types'
-
-/** Result from fetching models, including which ones support reasoning */
-export interface TextModel {
-  id: string
-  reasoning?: boolean
-  structuredOutput?: boolean
-}
+import type { ProviderType, TextModel } from '$lib/types'
 
 export function dedupeTextModels(models: TextModel[]): TextModel[] {
   const deduped = new Map<string, TextModel>()

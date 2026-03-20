@@ -675,6 +675,13 @@ export type ProviderType =
   | 'deepseek' // @ai-sdk/deepseek
   | 'mistral' // @ai-sdk/mistral
 
+/** Result from fetching models, including which ones support reasoning */
+export interface TextModel {
+  id: string
+  reasoning?: boolean
+  structuredOutput?: boolean
+}
+
 // API Profile for saving OpenAI-compatible endpoint configurations
 export interface APIProfile {
   id: string // UUID
@@ -711,7 +718,6 @@ export interface APISettings {
 
 export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high'
 
-import type { TextModel } from '$lib/services/ai/sdk/providers'
 import type { ThemeId as ThemeIdImport } from '../../themes/themes'
 export type ThemeId = ThemeIdImport
 

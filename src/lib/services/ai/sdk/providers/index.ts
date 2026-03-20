@@ -5,7 +5,7 @@
  */
 
 export { createProviderFromProfile } from './registry'
-export { dedupeTextModels, fetchModelsFromProvider, type TextModel } from './modelFetcher'
+export { dedupeTextModels, fetchModelsFromProvider } from './modelFetcher'
 export {
   PROVIDERS,
   getBaseUrl,
@@ -21,4 +21,3 @@ export {
   type ProviderCapabilities,
   type ImageDefaults,
 } from './config'
-export type { ProviderType, APIProfile } from '$lib/types'
