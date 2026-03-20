@@ -571,7 +571,7 @@
   {#each sections as section (section.id)}
     <TabsContent
       value={section.id}
-      class="m-0 flex-1 overflow-hidden p-0 outline-none data-[state=inactive]:hidden"
+      class="m-0 min-h-0 flex-1 overflow-hidden p-0 outline-none data-[state=inactive]:hidden"
     >
       <ScrollArea class="h-full">
         <div class="flex min-h-full flex-col px-4 pb-36 sm:pb-16">
@@ -639,7 +639,7 @@
   <!-- Prompts Tab Content -->
   <TabsContent
     value="prompts"
-    class="m-0 flex-1 overflow-hidden p-0 outline-none data-[state=inactive]:hidden"
+    class="m-0 min-h-0 flex-1 overflow-hidden p-0 outline-none data-[state=inactive]:hidden"
   >
     {#if promptsViewState.mode === 'browsing'}
       <ScrollArea class="h-full">

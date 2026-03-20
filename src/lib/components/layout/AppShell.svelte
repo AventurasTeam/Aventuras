@@ -200,10 +200,10 @@
     {/if}
 
     <!-- Main content area -->
-    <div class="flex flex-1 flex-col overflow-hidden">
+    <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
       <Header />
 
-      <main class="flex-1 overflow-hidden">
+      <main class="min-h-0 flex-1 overflow-hidden">
         {#if ui.activePanel === 'story' && story.currentStory}
           <StoryView />
         {:else if ui.activePanel === 'gallery' && story.currentStory}
