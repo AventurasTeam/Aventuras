@@ -3,7 +3,37 @@ export const settings = {
   getPresetConfig: () => ({}),
   serviceSpecificSettings: null,
 }
-export const story = {}
+export const story = {
+  currentStory: null as any,
+  chapter: {
+    currentBranchChapters: [] as any[],
+    chapters: [] as any[],
+  },
+  character: {
+    characters: [] as any[],
+    protagonist: undefined as any,
+  },
+  location: {
+    locations: [] as any[],
+    currentLocation: undefined as any,
+  },
+  item: {
+    items: [] as any[],
+  },
+  storyBeat: {
+    storyBeats: [] as any[],
+  },
+  time: {
+    timeTracker: null as any,
+  },
+  generationContext: {
+    pov: 'first' as string,
+    tense: 'present' as string,
+    storyMode: 'adventure' as string,
+    retrievalResult: null as any,
+    clear: () => {},
+  },
+}
 export const storyUI = {}
 export const storyContext = {
   // Category 1 — world state

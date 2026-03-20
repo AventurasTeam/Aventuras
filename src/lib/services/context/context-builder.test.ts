@@ -41,25 +41,26 @@ beforeEach(() => {
     timeTracker: { years: 1, days: 5, hours: 14, minutes: 30 },
   } as any
 
-  // pov, tense, storyMode, protagonist, currentLocation are readonly getters on the real class
-  // but writable plain properties on the stores-stub. Cast to any for test setup.
-  ;(story as any).pov = 'second'
-  ;(story as any).tense = 'past'
-  ;(story as any).storyMode = 'adventure'
+  // pov, tense, storyMode are readonly getters on the real class
+  // but writable plain properties on the stores-stub.
+  ;(story.generationContext as any).pov = 'second'
+  ;(story.generationContext as any).tense = 'past'
+  ;(story.generationContext as any).storyMode = 'adventure'
 
   story.character.characters = [
     { id: 'char-1', name: 'Hero', relationship: 'self', description: 'The hero' } as any,
     { id: 'char-2', name: 'Ally', relationship: 'companion', description: 'A friend' } as any,
   ]
-  ;(story as any).protagonist = story.character.characters[0]
+  ;(story.character as any).protagonist = story.character.characters[0]
 
   story.location.locations = [
     { id: 'loc-1', name: 'Castle', description: 'A grand castle', current: true } as any,
   ]
-  ;(story as any).currentLocation = story.location.locations[0]
+  ;(story.location as any).currentLocation = story.location.locations[0]
 
   story.item.items = []
   story.storyBeat.storyBeats = []
+  ;(story.time as any).timeTracker = { years: 1, days: 5, hours: 14, minutes: 30 }
 })
 
 afterEach(() => {
@@ -68,11 +69,12 @@ afterEach(() => {
   story.location.locations = []
   story.item.items = []
   story.storyBeat.storyBeats = []
-  ;(story as any).protagonist = undefined
-  ;(story as any).currentLocation = undefined
-  ;(story as any).pov = 'first'
-  ;(story as any).tense = 'present'
-  ;(story as any).storyMode = 'adventure'
+  ;(story.character as any).protagonist = undefined
+  ;(story.location as any).currentLocation = undefined
+  ;(story.generationContext as any).pov = 'first'
+  ;(story.generationContext as any).tense = 'present'
+  ;(story.generationContext as any).storyMode = 'adventure'
+  ;(story.time as any).timeTracker = null
   vi.clearAllMocks()
 })
 
@@ -90,21 +92,14 @@ describe('ContextBuilder.forStory singleton auto-detection', () => {
     expect(database.getStoryPackId).toHaveBeenCalledWith(TEST_STORY_ID)
   })
 
-  it('DB path is used when storyContext.currentStory.id does not match', async () => {
-    const { database } = await import('$lib/services/database')
-
-    await ContextBuilder.forStory('different-story-id')
-
-    expect(database.getStory).toHaveBeenCalledWith('different-story-id')
+  it('throws when storyContext.currentStory.id does not match', async () => {
+    await expect(ContextBuilder.forStory('different-story-id')).rejects.toThrow('story not loaded')
   })
 
-  it('DB path is used when storyContext.currentStory is null', async () => {
-    const { database } = await import('$lib/services/database')
+  it('throws when storyContext.currentStory is null', async () => {
     story.currentStory = null
 
-    await ContextBuilder.forStory(TEST_STORY_ID)
-
-    expect(database.getStory).toHaveBeenCalledWith(TEST_STORY_ID)
+    await expect(ContextBuilder.forStory(TEST_STORY_ID)).rejects.toThrow('story not loaded')
   })
 
   it('singleton path populates story settings correctly', async () => {
