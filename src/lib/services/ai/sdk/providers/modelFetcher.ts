@@ -4,32 +4,10 @@
  * Fetches available models from AI providers.
  */
 
+import type { ProviderType, TextModel } from '$lib/types'
+import { dedupeTextModels } from '$lib/utils/dedupeTextModels'
 import { createTimeoutFetch } from './fetch'
 import { PROVIDERS, getBaseUrl } from './config'
-import type { ProviderType, TextModel } from '$lib/types'
-
-export function dedupeTextModels(models: TextModel[]): TextModel[] {
-  const deduped = new Map<string, TextModel>()
-
-  for (const model of models) {
-    const id = model.id.trim()
-    if (!id) continue
-
-    const existing = deduped.get(id)
-    if (existing) {
-      deduped.set(id, {
-        ...existing,
-        reasoning: existing.reasoning || model.reasoning || undefined,
-        structuredOutput: existing.structuredOutput || model.structuredOutput || undefined,
-      })
-      continue
-    }
-
-    deduped.set(id, { ...model, id })
-  }
-
-  return Array.from(deduped.values())
-}
 
 /** URLs that don't require authentication for model fetching */
 const NO_AUTH_PATTERNS = ['nano-gpt.com', 'gen.pollinations.ai', '127.0.0.1', 'localhost']
