@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { storyContext } from '$lib/stores/storyContext.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import Sidebar from './Sidebar.svelte'
@@ -25,7 +25,7 @@
 
   // Swipe handlers for mobile sidebar toggle
   function handleSwipeLeft() {
-    if (storyContext.currentStory && !ui.sidebarOpen) {
+    if (story.currentStory && !ui.sidebarOpen) {
       ui.toggleSidebar()
     }
   }
@@ -183,7 +183,7 @@
   <!-- Main app container -->
   <div class="flex min-h-0 flex-1">
     <!-- Mobile sidebar overlay (tap to close) -->
-    {#if ui.sidebarOpen && storyContext.currentStory}
+    {#if ui.sidebarOpen && story.currentStory}
       <button
         class="mobile-sidebar-overlay"
         onclick={() => ui.toggleSidebar()}
@@ -192,7 +192,7 @@
     {/if}
 
     <!-- Right edge swipe zone for opening sidebar (when closed) -->
-    {#if !ui.sidebarOpen && storyContext.currentStory}
+    {#if !ui.sidebarOpen && story.currentStory}
       <div
         class="swipe-edge-zone"
         use:swipe={{ onSwipeLeft: handleSwipeLeft, threshold: 30 }}
@@ -204,17 +204,17 @@
       <Header />
 
       <main class="flex-1 overflow-hidden">
-        {#if ui.activePanel === 'story' && storyContext.currentStory}
+        {#if ui.activePanel === 'story' && story.currentStory}
           <StoryView />
-        {:else if ui.activePanel === 'gallery' && storyContext.currentStory}
+        {:else if ui.activePanel === 'gallery' && story.currentStory}
           <GalleryTab />
-        {:else if ui.activePanel === 'lorebook' && storyContext.currentStory}
+        {:else if ui.activePanel === 'lorebook' && story.currentStory}
           <LorebookView />
-        {:else if ui.activePanel === 'memory' && storyContext.currentStory}
+        {:else if ui.activePanel === 'memory' && story.currentStory}
           <MemoryView />
         {:else if ui.activePanel === 'vault'}
           <VaultPanel />
-        {:else if ui.activePanel === 'library' || !storyContext.currentStory}
+        {:else if ui.activePanel === 'library' || !story.currentStory}
           <LibraryView />
         {:else if children}
           {@render children()}
@@ -223,7 +223,7 @@
     </div>
 
     <!-- Sidebar (Right aligned) -->
-    {#if ui.sidebarOpen && storyContext.currentStory}
+    {#if ui.sidebarOpen && story.currentStory}
       <div class="sidebar-container relative flex h-full">
         <!-- Resizer Handle (Desktop only) -->
         <button

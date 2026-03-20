@@ -12,7 +12,7 @@
 import type { Chapter, TimeTracker } from '$lib/types'
 import type { TimelineFillResult } from '$lib/services/ai/retrieval/TimelineFillService'
 import type { ContextChapter, ContextTimelineFill } from './context-types'
-import { storyContext } from '$lib/stores/storyContext.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 
 /**
  * Format a TimeTracker into a human-readable string for the narrative prompt.
@@ -71,8 +71,8 @@ export function mapChaptersToContext(
   if (chapters === undefined) {
     // Zero-arg path: read from singleton and delegate to parameterized overload
     return mapChaptersToContext(
-      storyContext.currentBranchChapters,
-      storyContext.retrievalResult?.timelineFillResult ?? null,
+      story.chapter.currentBranchChapters,
+      story.generationContext.retrievalResult?.timelineFillResult ?? null,
     )
   }
 

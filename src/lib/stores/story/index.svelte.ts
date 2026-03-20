@@ -1,0 +1,704 @@
+import type {
+  Story,
+  StoryEntry,
+  Character,
+  Location,
+  Item,
+  StoryBeat,
+  MemoryConfig,
+  StoryMode,
+  StorySettings,
+  Entry,
+  WorldStateSnapshot,
+} from '$lib/types'
+import { database } from '$lib/services/database'
+import { ui } from '../ui.svelte'
+import { settings } from '../settings.svelte'
+import { DEFAULT_MEMORY_CONFIG } from '$lib/services/ai/generation/MemoryService'
+import { convertToEntries, type ImportedEntry } from '$lib/services/lorebookImporter'
+import { countTokens } from '$lib/services/tokenizer'
+import {
+  eventBus,
+  emitStoryLoaded,
+  emitModeChanged,
+  type StoryCreatedEvent,
+} from '$lib/services/events'
+import { aiService } from '$lib/services/ai'
+import { StoryCharacterStore } from './character.svelte'
+import { StoryEntryStore } from './entry.svelte'
+import { StoryBranchStore } from './branch.svelte'
+import { StoryChapterStore } from './chapter.svelte'
+import { StoryCheckpointStore } from './checkpoint.svelte'
+import { StoryClassification } from './classification.svelte'
+import { StoryItemStore } from './item.svelte'
+import { StoryLocationStore } from './location.svelte'
+import { StoryLorebookStore } from './lorebook.svelte'
+import { StoryRetryStore } from './retry.svelte'
+import { StoryStoryBeatStore } from './storyBeat.svelte'
+import { StoryTimeStore } from './time.svelte'
+import { StoryGenerationContextStore } from './generationContext.svelte'
+
+const DEBUG = true
+
+function log(...args: any[]) {
+  if (DEBUG) {
+    console.log('[StoryStore]', ...args)
+  }
+}
+
+// Story Store using Svelte 5 runes
+class StoryStore {
+  currentBgImage = $state<string | null>(null)
+
+  // Story library
+  allStories = $state<Story[]>([])
+  currentStory = $state<Story | null>(null)
+
+  branch = new StoryBranchStore(this)
+  chapter = new StoryChapterStore(this)
+  character = new StoryCharacterStore(this)
+  checkpoint = new StoryCheckpointStore(this)
+  classification = new StoryClassification(this)
+  generationContext = new StoryGenerationContextStore(this)
+  entry = new StoryEntryStore(this)
+  item = new StoryItemStore(this)
+  location = new StoryLocationStore(this)
+  lorebook = new StoryLorebookStore(this)
+  retry = new StoryRetryStore(this)
+  storyBeat = new StoryStoryBeatStore(this)
+  time = new StoryTimeStore(this)
+
+  // Close the current story and reset state
+  closeStory(): void {
+    this.currentBgImage = null
+    this.checkpoint.checkpoints = []
+    this.branch.branches = []
+    log('Story closed')
+    this.generationContext.clear()
+  }
+
+  // Load all stories for library view
+  async loadAllStories(): Promise<void> {
+    this.allStories = await database.getAllStories()
+  }
+
+  // Load a specific story with all its data
+  async loadStory(storyId: string): Promise<void> {
+    const story = await database.getStory(storyId)
+    if (!story) {
+      throw new Error(`Story not found: ${storyId}`)
+    }
+
+    // Clean up any orphaned embedded_images before loading
+    // (fixes FK constraint issues from older data)
+    await database.cleanupOrphanedEmbeddedImages()
+
+    this.currentStory = story
+    this.currentBgImage = await database.getBackgroundForBranch(storyId, story.currentBranchId)
+
+    // Load branch-independent data first
+    const [checkpoints, branches] = await Promise.all([
+      database.getCheckpoints(storyId),
+      database.getBranches(storyId),
+    ])
+
+    this.checkpoint.checkpoints = checkpoints
+    this.branch.branches = branches
+
+    // Load entries and chapters based on current branch (also hydrates storyContext)
+    await this.branch.reloadEntriesForCurrentBranch()
+
+    // Reset all caches after loading
+    this.generationContext.invalidateWordCountCache()
+    this.chapter.invalidateChapterCache()
+
+    log('Story loaded', {
+      id: storyId,
+      mode: story.mode,
+      entries: this.entry.entries.length,
+      lorebookEntries: this.lorebook.lorebookEntries.length,
+      chapters: this.chapter.chapters.length,
+      checkpoints: checkpoints.length,
+      branches: branches.length,
+      currentBranchId: story.currentBranchId,
+    })
+
+    // Load persisted activation data for this story (stickiness tracking)
+    await ui.loadActivationData(storyId)
+
+    // Clear stale lorebook retrieval from previous story to prevent cross-story contamination
+    ui.setLastLorebookRetrieval(null)
+
+    // Set current story ID for retry backup tracking
+    ui.setCurrentRetryStoryId(storyId)
+
+    // Load retry state from DB if we don't have an in-memory backup for this story
+    if (story.retryState) {
+      ui.loadRetryBackupFromPersistent(storyId, story.retryState)
+    }
+
+    // Load style review state from DB
+    ui.loadStyleReviewState(storyId, story.styleReviewState)
+
+    // Validate and repair chapter integrity (handles orphaned references)
+    await this.chapter.validateChapterIntegrity()
+
+    // Load persisted action choices for adventure mode
+    if (story.mode === 'adventure') {
+      await ui.loadActionChoices(storyId)
+    }
+
+    // Load persisted suggestions for creative-writing mode
+    if (story.mode === 'creative-writing') {
+      await ui.loadSuggestions(storyId)
+    }
+
+    // Set mobile-friendly defaults (close sidebar, etc.)
+    ui.setMobileDefaults()
+
+    // Emit event
+    emitStoryLoaded(storyId, story.mode)
+  }
+
+  // Create a new story
+  async createStory(
+    title: string,
+    templateId?: string,
+    genre?: string,
+    mode: StoryMode = 'adventure',
+  ): Promise<Story> {
+    const storyData = await database.createStory({
+      id: crypto.randomUUID(),
+      title,
+      description: null,
+      genre: genre ?? null,
+      templateId: templateId ?? null,
+      mode,
+      settings: null,
+      memoryConfig: DEFAULT_MEMORY_CONFIG,
+      retryState: null,
+      styleReviewState: null,
+      timeTracker: null,
+      currentBranchId: null,
+      currentBgImage: null,
+    })
+
+    this.allStories = [storyData, ...this.allStories]
+
+    // Emit event
+    eventBus.emit<StoryCreatedEvent>({ type: 'StoryCreated', storyId: storyData.id, mode })
+
+    return storyData
+  }
+
+  /**
+   * Reset mutable world state after a SillyTavern chat import.
+   * Clears locations, items, story beats, and the time tracker.
+   * Characters and lorebook entries are intentionally preserved.
+   */
+  async resetWorldStateAfterImport(): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    await database.resetWorldStateForImport(this.currentStory.id)
+    this.location.locations = []
+    this.item.items = []
+    this.storyBeat.storyBeats = []
+    this.currentStory = { ...this.currentStory, timeTracker: null }
+  }
+
+  /**
+   * Restore suggested actions from the new last narration entry after time-travel (delete).
+   * Returns true if saved actions were found and restored, false if regeneration is needed.
+   */
+  restoreSuggestedActionsAfterDelete(): boolean {
+    if (!this.currentStory) return false
+
+    // Find the new last narration entry (actions attach to narration entries)
+    const lastNarration = [...this.entry.entries].reverse().find((e) => e.type === 'narration')
+
+    const storyMode = this.generationContext.storyMode
+    const storyId = this.currentStory.id
+
+    if (lastNarration) {
+      const restored = ui.restoreSuggestedActionsFromEntry(
+        storyMode,
+        lastNarration.suggestedActions,
+        storyId,
+      )
+      if (restored) {
+        log('Restored suggested actions from entry at position', lastNarration.position)
+        return true
+      }
+    }
+
+    // No saved actions found — clear current ones so stale actions don't persist
+    if (storyMode === 'adventure') {
+      ui.clearActionChoices(storyId)
+    } else {
+      ui.clearSuggestions(storyId)
+    }
+    // Request auto-regeneration from the UI component
+    ui.suggestionsRegenerationNeeded = true
+    log('No saved suggested actions found after delete — requesting regeneration')
+    return false
+  }
+
+  /**
+   * Update the current background image for the story and persist to database.
+   */
+  async updateCurrentBackgroundImage(imageData: string | null): Promise<void> {
+    if (!this.currentStory) return
+
+    log('Updating background image...', { hasData: !!imageData })
+    this.currentBgImage = imageData
+
+    // Keep the currentStory object in sync to prevent any potential inconsistency
+    this.currentStory = { ...this.currentStory, currentBgImage: imageData }
+
+    await database.saveBackground(
+      this.currentStory.id,
+      this.currentStory.currentBranchId,
+      null,
+      imageData,
+    )
+    log('Background image updated and persisted')
+  }
+
+  /**
+   * Refresh world state (characters, locations, items, story beats) from the database.
+   * Used when background processes update translations.
+   */
+  async refreshWorldState(): Promise<void> {
+    if (!this.currentStory) return
+
+    const storyId = this.currentStory.id
+    const branchId = this.currentStory.currentBranchId
+
+    let characters: Character[]
+    let locations: Location[]
+    let items: Item[]
+    let storyBeats: StoryBeat[]
+
+    if (branchId && settings.experimentalFeatures.lightweightBranches) {
+      const currentBranch = this.branch.branches.find((b) => b.id === branchId)
+      if (currentBranch?.snapshotComplete) {
+        // Snapshot isolation: branch has its own complete entity set
+        ;[characters, locations, items, storyBeats] = await Promise.all([
+          database.getCharactersForBranch(storyId, branchId),
+          database.getLocationsForBranch(storyId, branchId),
+          database.getItemsForBranch(storyId, branchId),
+          database.getStoryBeatsForBranch(storyId, branchId),
+        ])
+      } else {
+        // Legacy COW: resolve through lineage (pre-snapshot branches)
+        const lineage = this.branch.buildBranchLineage(branchId)
+        ;[characters, locations, items, storyBeats] = await Promise.all([
+          database.getCharactersResolved(storyId, lineage),
+          database.getLocationsResolved(storyId, lineage),
+          database.getItemsResolved(storyId, lineage),
+          database.getStoryBeatsResolved(storyId, lineage),
+        ])
+      }
+    } else if (branchId) {
+      // Legacy branch: direct loading
+      ;[characters, locations, items, storyBeats] = await Promise.all([
+        database.getCharactersForBranch(storyId, branchId),
+        database.getLocationsForBranch(storyId, branchId),
+        database.getItemsForBranch(storyId, branchId),
+        database.getStoryBeatsForBranch(storyId, branchId),
+      ])
+    } else {
+      // Main branch — only load entities with null branch_id
+      ;[characters, locations, items, storyBeats] = await Promise.all([
+        database.getCharactersForBranch(storyId, null),
+        database.getLocationsForBranch(storyId, null),
+        database.getItemsForBranch(storyId, null),
+        database.getStoryBeatsForBranch(storyId, null),
+      ])
+    }
+
+    this.character.characters = characters
+    this.location.locations = locations
+    this.item.items = items
+    this.storyBeat.storyBeats = storyBeats
+
+    // Filter out tombstoned entities when COW is enabled
+    // (COW resolution already handles this for branch paths, but main branch loads raw data)
+    if (settings.experimentalFeatures.lightweightBranches) {
+      this.character.characters = this.character.characters.filter((c) => !c.deleted)
+      this.location.locations = this.location.locations.filter((l) => !l.deleted)
+      this.item.items = this.item.items.filter((i) => !i.deleted)
+      this.storyBeat.storyBeats = this.storyBeat.storyBeats.filter((b) => !b.deleted)
+    }
+
+    log('World state refreshed', {
+      characters: characters.length,
+      locations: locations.length,
+      items: items.length,
+      storyBeats: storyBeats.length,
+    })
+  }
+
+  // Clear current story (when switching or closing)
+  clearCurrentStory(): void {
+    this.checkpoint.checkpoints = []
+    this.generationContext.clear()
+
+    // Clear current retry story ID (backups are kept per-story)
+    ui.setCurrentRetryStoryId(null)
+
+    // Clear style review state (will be loaded fresh for next story)
+    ui.clearStyleReviewState()
+  }
+
+  // Update story mode
+  async setStoryMode(mode: StoryMode): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+
+    await database.updateStory(this.currentStory.id, { mode })
+    this.currentStory = { ...this.currentStory, mode }
+    log('Story mode updated:', mode)
+
+    // Emit event
+    emitModeChanged(mode)
+  }
+
+  // Update memory configuration
+  async setMemoryConfig(config: MemoryConfig): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+
+    await database.updateStory(this.currentStory.id, { memoryConfig: config })
+    this.currentStory = { ...this.currentStory, memoryConfig: config }
+    log('Memory config updated:', config)
+  }
+
+  // Update memory configuration (partial updates)
+  async updateMemoryConfig(updates: Partial<MemoryConfig>): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+
+    const newConfig = { ...this.currentStory.memoryConfig, ...updates }
+    // TODO: check typesafety
+    await database.updateStory(this.currentStory.id, { memoryConfig: newConfig as MemoryConfig })
+    this.currentStory = { ...this.currentStory, memoryConfig: newConfig as MemoryConfig }
+    log('Memory config updated via updateMemoryConfig:', updates)
+  }
+
+  // Update story settings (partial updates)
+  async updateStorySettings(updates: Partial<StorySettings>): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+
+    const newSettings = { ...(this.currentStory.settings ?? {}), ...updates }
+    await database.updateStory(this.currentStory.id, { settings: newSettings })
+    this.currentStory = { ...this.currentStory, settings: newSettings }
+    log('Story settings updated via updateStorySettings:', updates)
+  }
+
+  /**
+   * Phase 1: Maybe create an automatic world state snapshot.
+   * Called after saving a delta. Creates a snapshot every N entries (configured interval).
+   */
+  async maybeCreateAutoSnapshot(entryId: string): Promise<void> {
+    if (!this.currentStory) return
+    if (!settings.experimentalFeatures.stateTracking) return
+
+    const entry = this.entry.entries.find((e) => e.id === entryId)
+    if (!entry) return
+
+    const interval = settings.experimentalFeatures.autoSnapshotInterval
+    if (interval <= 0) return
+
+    // Only snapshot at interval boundaries
+    if (entry.position % interval !== 0) return
+
+    const branchId = this.currentStory.currentBranchId ?? null
+
+    try {
+      const snapshot: WorldStateSnapshot = {
+        id: crypto.randomUUID(),
+        storyId: this.currentStory.id,
+        branchId,
+        entryId,
+        entryPosition: entry.position,
+        charactersSnapshot: this.character.characters.map((c) => ({ ...c })),
+        locationsSnapshot: this.location.locations.map((l) => ({ ...l })),
+        itemsSnapshot: this.item.items.map((i) => ({ ...i })),
+        storyBeatsSnapshot: this.storyBeat.storyBeats.map((b) => ({ ...b })),
+        lorebookEntriesSnapshot: this.lorebook.lorebookEntries.map((e) => ({ ...e })),
+        // TODO: currentStory.timeTracker vs time.timeTracker - consolidate to one source of truth
+        timeTrackerSnapshot: this.currentStory.timeTracker
+          ? { ...this.currentStory.timeTracker }
+          : null,
+        createdAt: Date.now(),
+      }
+
+      await database.createWorldStateSnapshot(snapshot)
+      log('Auto-snapshot created at position', entry.position)
+    } catch (error) {
+      console.error('[StoryStore] Failed to create auto-snapshot:', error)
+      // Non-fatal
+    }
+  }
+
+  // Delete a story
+  async deleteStory(storyId: string): Promise<void> {
+    await database.deleteStory(storyId)
+    this.allStories = this.allStories.filter((s) => s.id !== storyId)
+
+    if (this.currentStory?.id === storyId) {
+      this.clearCurrentStory()
+    }
+  }
+
+  /**
+   * Create a new story from wizard data.
+   * This handles the full initialization from the setup wizard including
+   * dynamically generated settings, protagonist, characters, and opening scene.
+   */
+  async createStoryFromWizard(data: {
+    title: string
+    genre: string
+    description?: string
+    mode: StoryMode
+    settings: {
+      pov: 'first' | 'second' | 'third'
+      tense: 'past' | 'present'
+      tone?: string
+      themes?: string[]
+      visualProseMode?: boolean
+      imageGenerationMode?: 'none' | 'agentic' | 'inline'
+      backgroundImagesEnabled?: boolean
+      referenceMode?: boolean
+    }
+    protagonist: Partial<Character>
+    startingLocation: Partial<Location>
+    initialItems: Partial<Item>[]
+    openingScene: string
+    characters: Partial<Character>[]
+    importedEntries?: ImportedEntry[]
+    // Translation data (optional)
+    translations?: {
+      language: string
+      openingScene?: string
+      protagonist?: {
+        name?: string
+        description?: string
+        traits?: string[]
+        visualDescriptors?: string[]
+      }
+      startingLocation?: { name?: string; description?: string }
+      characters?: {
+        [originalName: string]: {
+          name?: string
+          description?: string
+          relationship?: string
+          traits?: string[]
+          visualDescriptors?: string[]
+        }
+      }
+    }
+  }): Promise<Story> {
+    log('createStoryFromWizard called', {
+      title: data.title,
+      genre: data.genre,
+      mode: data.mode,
+      pov: data.settings.pov,
+      visualProseMode: data.settings.visualProseMode,
+      imageGenerationMode: data.settings.imageGenerationMode,
+      backgroundImagesEnabled: data.settings.backgroundImagesEnabled,
+      referenceMode: data.settings.referenceMode,
+    })
+
+    // Create the base story with custom system prompt stored in settings
+    const storyData = await database.createStory({
+      id: crypto.randomUUID(),
+      title: data.title,
+      description: data.description ?? null,
+      genre: data.genre,
+      templateId: 'wizard-generated',
+      mode: data.mode,
+      settings: {
+        pov: data.settings.pov,
+        tense: data.settings.tense,
+        tone: data.settings.tone,
+        themes: data.settings.themes,
+        visualProseMode: data.settings.visualProseMode,
+        imageGenerationMode: data.settings.imageGenerationMode,
+        backgroundImagesEnabled: data.settings.backgroundImagesEnabled,
+        referenceMode: data.settings.referenceMode,
+      },
+      memoryConfig: DEFAULT_MEMORY_CONFIG,
+      retryState: null,
+      styleReviewState: null,
+      timeTracker: null,
+      currentBranchId: null,
+      currentBgImage: null,
+    })
+
+    this.allStories = [storyData, ...this.allStories]
+    const storyId = storyData.id
+
+    this.currentStory = storyData
+
+    // Add protagonist
+    if (data.protagonist.name) {
+      const protagonistTranslation = data.translations?.protagonist
+      const protagonist: Character = {
+        id: crypto.randomUUID(),
+        storyId,
+        name: data.protagonist.name,
+        description: data.protagonist.description ?? null,
+        relationship: 'self',
+        traits: data.protagonist.traits ?? [],
+        status: 'active',
+        metadata: { source: 'wizard' },
+        visualDescriptors: data.protagonist.visualDescriptors ?? {},
+        portrait: data.protagonist.portrait ?? null,
+        branchId: null, // New stories start on main branch
+        translatedName: protagonistTranslation?.name ?? null,
+        translatedDescription: protagonistTranslation?.description ?? null,
+        translatedTraits: protagonistTranslation?.traits ?? null,
+        translatedVisualDescriptors: undefined, // Translations not supported for structured visual descriptors yet
+        translationLanguage: protagonistTranslation ? (data.translations?.language ?? null) : null,
+      }
+      await database.addCharacter(protagonist)
+      log('Added protagonist:', protagonist.name)
+    }
+
+    // Add starting location
+    if (data.startingLocation.name) {
+      const locationTranslation = data.translations?.startingLocation
+      log('Starting location translation data:', {
+        hasTranslations: !!data.translations,
+        hasStartingLocation: !!locationTranslation,
+        translatedName: locationTranslation?.name,
+        translatedDesc: locationTranslation?.description?.substring(0, 50),
+      })
+      const location: Location = {
+        id: crypto.randomUUID(),
+        storyId,
+        name: data.startingLocation.name,
+        description: data.startingLocation.description ?? null,
+        visited: true,
+        current: true,
+        connections: [],
+        metadata: { source: 'wizard' },
+        branchId: null, // New stories start on main branch
+        translatedName: locationTranslation?.name ?? null,
+        translatedDescription: locationTranslation?.description ?? null,
+        translationLanguage: locationTranslation ? (data.translations?.language ?? null) : null,
+      }
+      log('Location object being stored:', {
+        name: location.name,
+        translatedName: location.translatedName,
+        translatedDesc: location.translatedDescription?.substring(0, 50),
+        translationLanguage: location.translationLanguage,
+      })
+      await database.addLocation(location)
+      log(
+        'Added starting location:',
+        location.name,
+        'with translation:',
+        !!location.translatedDescription,
+      )
+    }
+
+    // Add initial items
+    for (const itemData of data.initialItems) {
+      if (!itemData.name) continue
+      const item: Item = {
+        id: crypto.randomUUID(),
+        storyId,
+        name: itemData.name,
+        description: itemData.description ?? null,
+        quantity: itemData.quantity ?? 1,
+        equipped: itemData.equipped ?? false,
+        location: itemData.location ?? 'inventory',
+        metadata: { source: 'wizard' },
+        branchId: null, // New stories start on main branch
+      }
+      await database.addItem(item)
+    }
+
+    // Add supporting characters
+    for (const charData of data.characters) {
+      if (!charData.name) continue
+      const charTranslation = data.translations?.characters?.[charData.name]
+      const character: Character = {
+        id: crypto.randomUUID(),
+        storyId,
+        name: charData.name,
+        description: charData.description ?? null,
+        relationship: charData.relationship ?? null,
+        traits: charData.traits ?? [],
+        status: 'active',
+        metadata: { source: 'wizard' },
+        visualDescriptors: charData.visualDescriptors ?? {},
+        portrait: charData.portrait ?? null,
+        branchId: null, // New stories start on main branch
+        translatedName: charTranslation?.name ?? null,
+        translatedDescription: charTranslation?.description ?? null,
+        translatedRelationship: charTranslation?.relationship ?? null,
+        translatedTraits: charTranslation?.traits ?? null,
+        translatedVisualDescriptors: undefined, // Translations not supported for structured visual descriptors yet
+        translationLanguage: charTranslation ? (data.translations?.language ?? null) : null,
+      }
+      await database.addCharacter(character)
+      log('Added supporting character:', character.name)
+    }
+
+    // Add opening scene as first narration entry
+    let openingEntry: StoryEntry | undefined = undefined
+    if (data.openingScene) {
+      const tokenCount = countTokens(data.openingScene)
+      const baseTime = storyData.timeTracker ?? { years: 0, days: 0, hours: 0, minutes: 0 }
+      openingEntry = await database.addStoryEntry({
+        id: crypto.randomUUID(),
+        storyId,
+        type: 'narration',
+        content: data.openingScene,
+        parentId: null,
+        position: 0,
+        metadata: {
+          source: 'wizard',
+          tokenCount,
+          timeStart: { ...baseTime },
+          timeEnd: { ...baseTime },
+        },
+        branchId: null,
+        translatedContent: data.translations?.openingScene ?? null,
+        translationLanguage: data.translations?.openingScene
+          ? (data.translations?.language ?? null)
+          : null,
+      })
+      log('Added opening scene')
+    }
+
+    // Add imported lorebook entries
+    if (data.importedEntries && data.importedEntries.length > 0) {
+      const entries = convertToEntries(data.importedEntries, 'import')
+      for (const entryData of entries) {
+        const entry: Entry = {
+          ...entryData,
+          id: crypto.randomUUID(),
+          storyId,
+        }
+        await database.addEntry(entry)
+      }
+      log('Added imported entries:', data.importedEntries.length)
+    }
+
+    // Generate background image from opening scene
+    if (data.openingScene && openingEntry && storyData.settings?.backgroundImagesEnabled) {
+      aiService.analyzeBackgroundChangeAndGenerateImage(storyId, [openingEntry])
+      log('Generated background image')
+    }
+
+    // Emit event
+    eventBus.emit<StoryCreatedEvent>({ type: 'StoryCreated', storyId, mode: data.mode })
+
+    log('Story created from wizard:', storyId)
+    return storyData
+  }
+}
+
+export const story = new StoryStore()
+export type { StoryStore }

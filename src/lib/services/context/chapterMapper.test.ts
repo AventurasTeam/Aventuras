@@ -1,14 +1,11 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { mapChaptersToContext, formatStoryTime } from './chapterMapper'
-import { storyContext } from '$lib/stores/storyContext.svelte'
+import { story, type StoryStore } from '$lib/stores/story/index.svelte'
 import { rawChapters, timelineFillResult } from '../../../test/contextFixtures'
 
 // Typed accessor for stub fields that are read-only on the real singleton but
 // writable on the stores-stub used in tests (vitest alias resolves to stores-stub.ts).
-const stubContext = storyContext as {
-  currentBranchChapters: typeof storyContext.currentBranchChapters
-  retrievalResult: typeof storyContext.retrievalResult
-}
+const stubContext = story as Pick<StoryStore, 'chapter' | 'generationContext'>
 
 describe('mapChaptersToContext', () => {
   describe('chapter mapping', () => {
@@ -88,20 +85,20 @@ describe('mapChaptersToContext', () => {
 
 describe('mapChaptersToContext — zero-arg overload', () => {
   afterEach(() => {
-    stubContext.currentBranchChapters = []
-    stubContext.retrievalResult = null
+    stubContext.chapter.currentBranchChapters = []
+    stubContext.generationContext.retrievalResult = null
   })
 
   it('returns same chapter output as parameterized call when singleton is hydrated', () => {
-    stubContext.currentBranchChapters = rawChapters
+    stubContext.chapter.currentBranchChapters = rawChapters
     const zeroArgResult = mapChaptersToContext()
     const paramResult = mapChaptersToContext(rawChapters)
     expect(zeroArgResult.chapters).toEqual(paramResult.chapters)
   })
 
   it('reads timelineFillResult from singleton retrievalResult', () => {
-    stubContext.currentBranchChapters = rawChapters
-    stubContext.retrievalResult = {
+    stubContext.chapter.currentBranchChapters = rawChapters
+    stubContext.generationContext.retrievalResult = {
       timelineFillResult,
       agenticRetrieval: null,
       lorebookEntries: [],

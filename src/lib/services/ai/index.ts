@@ -22,8 +22,7 @@
  */
 
 import { settings } from '$lib/stores/settings.svelte'
-import { story } from '$lib/stores/story.svelte'
-import { storyContext } from '$lib/stores/storyContext.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 import { database } from '$lib/services/database'
 import type { StoryMode, POV, Tense } from '$lib/types'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from './image/constants'
@@ -86,7 +85,6 @@ export interface ImageGenerationContext {
 import type { TranslationResult, UITranslationItem } from './utils/TranslationService'
 import type { StreamChunk } from './core/types'
 import type {
-  Story,
   StoryEntry,
   Character,
   Location,
@@ -122,13 +120,6 @@ class AIService {
 
   constructor() {
     this.narrativeService = serviceFactory.createNarrativeService()
-  }
-
-  /**
-   * Generate a complete narrative response (non-streaming).
-   */
-  async generateNarrative(entries: StoryEntry[], story?: Story | null): Promise<string> {
-    return this.narrativeService.generate(entries, story)
   }
 
   /**
@@ -265,7 +256,7 @@ class AIService {
   buildRetrievedContextBlock(chapters: Chapter[], decision: RetrievalDecision): string {
     const memory = new MemoryService('memory')
     // Pass callback to fetch full chapter entries for richer context
-    const getChapterEntries = (chapter: Chapter) => story.getChapterEntries(chapter)
+    const getChapterEntries = (chapter: Chapter) => story.chapter.getChapterEntries(chapter)
     return memory.buildRetrievedContextBlock(chapters, decision, getChapterEntries)
   }
 
@@ -489,7 +480,7 @@ class AIService {
 
     const timelineFillService = serviceFactory.createTimelineFillService()
     // Pass callback to fetch full chapter entries for richer context
-    const getChapterEntries = (chapter: Chapter) => story.getChapterEntries(chapter)
+    const getChapterEntries = (chapter: Chapter) => story.chapter.getChapterEntries(chapter)
     return timelineFillService.runTimelineFill(visibleEntries, chapters, getChapterEntries)
   }
 
@@ -509,7 +500,7 @@ class AIService {
 
     const chapterQueryService = serviceFactory.createChapterQueryService()
     // Pass callback to fetch full chapter entries for richer context
-    const getChapterEntries = (chapter: Chapter) => story.getChapterEntries(chapter)
+    const getChapterEntries = (chapter: Chapter) => story.chapter.getChapterEntries(chapter)
     const answer = await chapterQueryService.answerQuestion(
       question,
       chapters,
@@ -543,7 +534,7 @@ class AIService {
 
     const chapterQueryService = serviceFactory.createChapterQueryService()
     // Pass callback to fetch full chapter entries for richer context
-    const getChapterEntries = (chapter: Chapter) => story.getChapterEntries(chapter)
+    const getChapterEntries = (chapter: Chapter) => story.chapter.getChapterEntries(chapter)
     const answer = await chapterQueryService.answerQuestion(
       question,
       chapters,
@@ -627,7 +618,7 @@ class AIService {
     }
 
     // Check if inline image mode is enabled for this story
-    const inlineImageMode = storyContext.currentStory?.settings?.imageGenerationMode === 'inline'
+    const inlineImageMode = story.currentStory?.settings?.imageGenerationMode === 'inline'
     try {
       if (inlineImageMode) {
         // Use inline image generation (process <pic> tags from AI response)
@@ -732,7 +723,7 @@ class AIService {
     presentCharacters: Character[],
   ): Promise<void> {
     const imageId = crypto.randomUUID()
-    const referenceMode = storyContext.currentStory?.settings?.referenceMode ?? false
+    const referenceMode = story.currentStory?.settings?.referenceMode ?? false
 
     // Determine profile and model
     let profileId = imageSettings.profileId

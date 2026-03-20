@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { storyContext } from '$lib/stores/storyContext.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -17,8 +17,8 @@
   // Get entries available for chapter creation
   // These are entries after the last chapter
   const availableEntries = $derived(() => {
-    const lastChapterEndIndex = storyContext.lastChapterEndIndex
-    return storyContext.entries.slice(lastChapterEndIndex)
+    const lastChapterEndIndex = story.chapter.lastChapterEndIndex
+    return story.entry.entries.slice(lastChapterEndIndex)
   })
 
   const entries = $derived(availableEntries())
@@ -36,7 +36,7 @@
   function handleConfirm() {
     if (entries.length === 0) return
     // Convert to absolute index
-    const absoluteIndex = storyContext.lastChapterEndIndex + selectedIndex + 1
+    const absoluteIndex = story.chapter.lastChapterEndIndex + selectedIndex + 1
     onConfirm(absoluteIndex)
   }
 </script>

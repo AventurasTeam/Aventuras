@@ -20,31 +20,9 @@ import type {
 import type { TranslationSettings } from '$lib/types'
 import type { Suggestion, ActionChoice } from '$lib/services/ai/sdk/schemas'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
-import { storyContext } from '$lib/stores/storyContext.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 import { settings } from '$lib/stores/settings.svelte'
-
-/** Prompt context for macro expansion */
-export interface PromptContext {
-  mode: 'adventure' | 'creative-writing'
-  pov: 'first' | 'second' | 'third'
-  tense: 'past' | 'present'
-  protagonistName: string
-  genre?: string
-  settingDescription?: string
-  tone?: string
-  themes?: string[]
-}
-
-/** Dependencies for post-generation phase */
-export interface PostGenerationDependencies {
-  generateSuggestions: () => Promise<{ suggestions: Suggestion[] }>
-  translateSuggestions: (suggestions: Suggestion[], targetLanguage: string) => Promise<Suggestion[]>
-  generateActionChoices: () => Promise<{ choices: ActionChoice[] }>
-  translateActionChoices: (
-    choices: ActionChoice[],
-    targetLanguage: string,
-  ) => Promise<ActionChoice[]>
-}
+import { aiService } from '$lib/services/ai'
 
 /** Result from post-generation phase */
 export interface PostGenerationResult {
@@ -58,13 +36,11 @@ export interface PostGenerationResult {
  * Errors are non-fatal - generation continues even if suggestions fail.
  */
 export class PostGenerationPhase {
-  constructor(private deps: PostGenerationDependencies) {}
-
   async *execute(): AsyncGenerator<GenerationEvent, PostGenerationResult> {
     yield { type: 'phase_start', phase: 'post' } satisfies PhaseStartEvent
 
-    const isCreativeMode = storyContext.storyMode === 'creative-writing'
-    const abortSignal = storyContext.abortSignal ?? undefined
+    const isCreativeWritingMode = story.generationContext.storyMode === 'creative-writing'
+    const abortSignal = story.generationContext.abortSignal ?? undefined
     const disableSuggestions = settings.uiSettings.disableSuggestions
 
     if (abortSignal?.aborted) {
@@ -75,7 +51,7 @@ export class PostGenerationPhase {
     const result: PostGenerationResult = { suggestions: null, actionChoices: null }
 
     if (!disableSuggestions) {
-      if (isCreativeMode) {
+      if (isCreativeWritingMode) {
         try {
           result.suggestions = await this.generateSuggestions(settings.translationSettings)
         } catch (error) {
@@ -90,7 +66,7 @@ export class PostGenerationPhase {
       }
     }
 
-    storyContext.postGenerationResult = result
+    story.generationContext.postGenerationResult = result
     yield { type: 'phase_complete', phase: 'post', result } satisfies PhaseCompleteEvent
     return result
   }
@@ -98,11 +74,11 @@ export class PostGenerationPhase {
   private async generateSuggestions(
     translationSettings: TranslationSettings,
   ): Promise<Suggestion[]> {
-    const { suggestions } = await this.deps.generateSuggestions()
+    const { suggestions } = await aiService.generateSuggestions()
 
     if (TranslationService.shouldTranslate(translationSettings)) {
       try {
-        return await this.deps.translateSuggestions(suggestions, translationSettings.targetLanguage)
+        return await aiService.translateSuggestions(suggestions, translationSettings.targetLanguage)
       } catch {
         return suggestions
       }
@@ -113,11 +89,11 @@ export class PostGenerationPhase {
   private async generateActionChoices(
     translationSettings: TranslationSettings,
   ): Promise<ActionChoice[]> {
-    const { choices } = await this.deps.generateActionChoices()
+    const { choices } = await aiService.generateActionChoices()
 
     if (TranslationService.shouldTranslate(translationSettings)) {
       try {
-        return await this.deps.translateActionChoices(choices, translationSettings.targetLanguage)
+        return await aiService.translateActionChoices(choices, translationSettings.targetLanguage)
       } catch {
         return choices
       }

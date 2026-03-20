@@ -14,7 +14,7 @@ import { AI_CONFIG } from '../core/config'
 import { createLogger } from '$lib/log'
 import { entitySelectionSchema } from '../sdk/schemas/context'
 import { ContextBuilder as ContextPipeline } from '$lib/services/context'
-import { storyContext } from '$lib/stores/storyContext.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 
 const log = createLogger('EntryInjector')
 
@@ -94,14 +94,14 @@ export class EntryInjector extends BaseAIService {
     if (worldState === undefined) {
       // Zero-arg: read from singleton — storyContext is the generation singleton
       const ws: WorldState = {
-        characters: storyContext.characters,
-        locations: storyContext.locations,
-        items: storyContext.items,
-        storyBeats: storyContext.storyBeats,
-        currentLocation: storyContext.currentLocation,
-        chapters: storyContext.currentBranchChapters,
+        characters: story.character.characters,
+        locations: story.location.locations,
+        items: story.item.items,
+        storyBeats: story.storyBeat.storyBeats,
+        currentLocation: story.location.currentLocation,
+        chapters: story.chapter.currentBranchChapters,
       }
-      const entries = storyContext.visibleEntries
+      const entries = story.entry.visibleEntries
       const lastEntry = entries[entries.length - 1]
       const input = lastEntry?.content ?? ''
       return this.buildContext(ws, input, entries)

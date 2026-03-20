@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { storyContext } from '$lib/stores/storyContext.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { RefreshCw, AlertTriangle } from 'lucide-svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
@@ -15,12 +15,14 @@
 
   let { chapterId, onConfirm, onClose }: Props = $props()
 
-  const chapter = $derived(chapterId ? storyContext.chapters.find((c) => c.id === chapterId) : null)
+  const chapter = $derived(
+    chapterId ? story.chapter.chapters.find((c) => c.id === chapterId) : null,
+  )
 
   // Get previous chapters (for context display)
   const previousChapters = $derived(
     chapter
-      ? storyContext.chapters
+      ? story.chapter.chapters
           .filter((c) => c.number < chapter.number)
           .sort((a, b) => a.number - b.number)
       : [],

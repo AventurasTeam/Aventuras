@@ -16,15 +16,10 @@ import type {
   AbortedEvent,
   ErrorEvent,
 } from '../types'
-import type { StreamChunk } from '$lib/services/ai/core/types'
-import { storyContext } from '$lib/stores/storyContext.svelte'
+import { story } from '$lib/stores/story/index.svelte'
+import { aiService } from '$lib/services/ai'
 
 const MAX_EMPTY_RESPONSE_RETRIES = 3
-
-/** Dependencies for narrative phase - injected to avoid tight coupling */
-export interface NarrativeDependencies {
-  streamNarrative: () => AsyncIterable<StreamChunk>
-}
 
 /** Result from narrative phase */
 export interface NarrativeResult {
@@ -39,13 +34,11 @@ export interface NarrativeResult {
  * Handles automatic retry on empty responses (up to 3 attempts).
  */
 export class NarrativePhase {
-  constructor(private deps: NarrativeDependencies) {}
-
   /** Execute the narrative phase - yields chunk events and phase events */
-  async *execute(): AsyncGenerator<GenerationEvent, NarrativeResult | null> {
+  async *execute(): AsyncGenerator<GenerationEvent, boolean> {
     yield { type: 'phase_start', phase: 'narrative' } satisfies PhaseStartEvent
 
-    const abortSignal = storyContext.abortSignal ?? undefined
+    const abortSignal = story.generationContext.abortSignal ?? undefined
 
     let fullResponse = ''
     let fullReasoning = ''
@@ -55,7 +48,7 @@ export class NarrativePhase {
     while (retryCount < MAX_EMPTY_RESPONSE_RETRIES) {
       if (abortSignal?.aborted) {
         yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
-        return null
+        return false
       }
 
       fullResponse = ''
@@ -63,10 +56,10 @@ export class NarrativePhase {
       chunkCount = 0
 
       try {
-        for await (const chunk of this.deps.streamNarrative()) {
+        for await (const chunk of aiService.streamNarrative()) {
           if (abortSignal?.aborted) {
             yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
-            return null
+            return false
           }
 
           chunkCount++
@@ -100,7 +93,7 @@ export class NarrativePhase {
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
           yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
-          return null
+          return false
         }
         yield {
           type: 'error',
@@ -108,13 +101,13 @@ export class NarrativePhase {
           error: error instanceof Error ? error : new Error(String(error)),
           fatal: true,
         } satisfies ErrorEvent
-        return null
+        return false
       }
     }
 
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
-      return null
+      return false
     }
 
     if (!fullResponse.trim()) {
@@ -124,7 +117,7 @@ export class NarrativePhase {
         error: new Error(`Empty response after ${MAX_EMPTY_RESPONSE_RETRIES} attempts`),
         fatal: true,
       } satisfies ErrorEvent
-      return null
+      return false
     }
 
     const result: NarrativeResult = {
@@ -136,12 +129,11 @@ export class NarrativePhase {
     yield {
       type: 'phase_complete',
       phase: 'narrative',
-      result,
     } satisfies PhaseCompleteEvent
 
     // Write result to singleton before returning (only on success path)
-    storyContext.narrativeResult = result
+    story.generationContext.narrativeResult = result
 
-    return result
+    return true
   }
 }

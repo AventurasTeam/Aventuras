@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { storyContext } from '$lib/stores/storyContext.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 import { ContextBuilder } from './context-builder'
 
 vi.mock('$lib/services/database', () => ({
@@ -25,7 +25,7 @@ vi.mock('$lib/services/templates/engine', () => ({
 const TEST_STORY_ID = 'story-singleton-test'
 
 beforeEach(() => {
-  storyContext.currentStory = {
+  story.currentStory = {
     id: TEST_STORY_ID,
     mode: 'adventure',
     genre: 'fantasy',
@@ -43,36 +43,36 @@ beforeEach(() => {
 
   // pov, tense, storyMode, protagonist, currentLocation are readonly getters on the real class
   // but writable plain properties on the stores-stub. Cast to any for test setup.
-  ;(storyContext as any).pov = 'second'
-  ;(storyContext as any).tense = 'past'
-  ;(storyContext as any).storyMode = 'adventure'
+  ;(story as any).pov = 'second'
+  ;(story as any).tense = 'past'
+  ;(story as any).storyMode = 'adventure'
 
-  storyContext.characters = [
+  story.character.characters = [
     { id: 'char-1', name: 'Hero', relationship: 'self', description: 'The hero' } as any,
     { id: 'char-2', name: 'Ally', relationship: 'companion', description: 'A friend' } as any,
   ]
-  ;(storyContext as any).protagonist = storyContext.characters[0]
+  ;(story as any).protagonist = story.character.characters[0]
 
-  storyContext.locations = [
+  story.location.locations = [
     { id: 'loc-1', name: 'Castle', description: 'A grand castle', current: true } as any,
   ]
-  ;(storyContext as any).currentLocation = storyContext.locations[0]
+  ;(story as any).currentLocation = story.location.locations[0]
 
-  storyContext.items = []
-  storyContext.storyBeats = []
+  story.item.items = []
+  story.storyBeat.storyBeats = []
 })
 
 afterEach(() => {
-  storyContext.currentStory = null
-  storyContext.characters = []
-  storyContext.locations = []
-  storyContext.items = []
-  storyContext.storyBeats = []
-  ;(storyContext as any).protagonist = undefined
-  ;(storyContext as any).currentLocation = undefined
-  ;(storyContext as any).pov = 'first'
-  ;(storyContext as any).tense = 'present'
-  ;(storyContext as any).storyMode = 'adventure'
+  story.currentStory = null
+  story.character.characters = []
+  story.location.locations = []
+  story.item.items = []
+  story.storyBeat.storyBeats = []
+  ;(story as any).protagonist = undefined
+  ;(story as any).currentLocation = undefined
+  ;(story as any).pov = 'first'
+  ;(story as any).tense = 'present'
+  ;(story as any).storyMode = 'adventure'
   vi.clearAllMocks()
 })
 
@@ -100,7 +100,7 @@ describe('ContextBuilder.forStory singleton auto-detection', () => {
 
   it('DB path is used when storyContext.currentStory is null', async () => {
     const { database } = await import('$lib/services/database')
-    storyContext.currentStory = null
+    story.currentStory = null
 
     await ContextBuilder.forStory(TEST_STORY_ID)
 

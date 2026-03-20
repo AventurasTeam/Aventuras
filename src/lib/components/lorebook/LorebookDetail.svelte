@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Entry, EntryType } from '$lib/types'
   import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import {
     Users,
     MapPin,
@@ -60,7 +60,7 @@
     if (entry.id) {
       // Update existing
       const { id: _id, storyId: _storyId, createdAt: _createdAt, ...updates } = updatedEntry
-      await story.updateLorebookEntry(entry.id, updates)
+      await story.lorebook.updateLorebookEntry(entry.id, updates)
     }
     ui.setLorebookEditMode(false)
   }
@@ -68,7 +68,7 @@
   async function handleDelete() {
     deleting = true
     try {
-      await story.deleteLorebookEntry(entry.id)
+      await story.lorebook.deleteLorebookEntry(entry.id)
       if (isMobile) {
         ui.hideLorebookDetail()
       } else {

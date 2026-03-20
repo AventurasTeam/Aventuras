@@ -11,7 +11,7 @@ import type { StoryEntry, Character, Location, Item, StoryBeat } from '$lib/type
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { getLorebookConfig } from '../core/config'
-import { storyContext } from '$lib/stores/storyContext.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 import { ui } from '$lib/stores/ui.svelte'
 import { createLogger } from '$lib/log'
 import { actionChoicesResultSchema, type ActionChoice } from '../sdk/schemas/actionchoices'
@@ -60,28 +60,28 @@ export class ActionChoicesService extends BaseAIService {
   async generateChoices(context?: ActionChoicesContext): Promise<ActionChoice[]> {
     if (context === undefined) {
       // Zero-arg: build context from singleton
-      const story = storyContext.currentStory
-      const entries = storyContext.visibleEntries
+
+      const entries = story.entry.visibleEntries
       const lastUserAction = [...entries].filter((e) => e.type === 'user_action').pop()
-      const protagonist = storyContext.protagonist
-      const presentCharacters = storyContext.characters.filter(
+      const protagonist = story.character?.protagonist
+      const presentCharacters = story.character?.characters.filter(
         (c) => c.relationship !== 'self' && c.status === 'active',
       )
-      const inventory = storyContext.items.filter((i) => i.equipped)
-      const activeQuests = storyContext.pendingQuests
-      const lorebookEntries = storyContext.retrievalResult?.lorebookEntries ?? []
+      const inventory = story.item.items.filter((i) => i.equipped)
+      const activeQuests = story.storyBeat.pendingQuests
+      const lorebookEntries = story.generationContext.retrievalResult?.lorebookEntries ?? []
 
       const ctx: ActionChoicesContext = {
-        storyId: story?.id,
-        narrativeResponse: storyContext.narrativeResult?.content ?? '',
+        storyId: story.currentStory?.id,
+        narrativeResponse: story.generationContext.narrativeResult?.content ?? '',
         userAction: lastUserAction?.content ?? '',
         recentEntries: entries.slice(-10),
         protagonistName: protagonist?.name ?? 'the protagonist',
         protagonistDescription: protagonist?.description,
-        mode: storyContext.storyMode,
-        pov: storyContext.pov,
-        tense: storyContext.tense,
-        currentLocation: storyContext.currentLocation,
+        mode: story.generationContext.storyMode,
+        pov: story.generationContext.pov,
+        tense: story.generationContext.tense,
+        currentLocation: story.location.currentLocation,
         presentCharacters,
         inventory,
         activeQuests,

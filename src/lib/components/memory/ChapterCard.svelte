@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Chapter, StoryEntry, TimeTracker } from '$lib/types'
   import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import ChapterEntryList from './ChapterEntryList.svelte'
   import {
     ChevronDown,
@@ -75,7 +75,7 @@
 
   async function saveEdit() {
     if (editedSummary !== chapter.summary) {
-      await story.updateChapterSummary(chapter.id, editedSummary)
+      await story.chapter.updateChapterSummary(chapter.id, editedSummary)
     }
     ui.setMemoryEditingChapter(null)
   }
@@ -97,7 +97,7 @@
       },
     )
     if (confirmed) {
-      await story.deleteChapter(chapter.id)
+      await story.chapter.deleteChapter(chapter.id)
     }
   }
 </script>

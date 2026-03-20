@@ -11,20 +11,8 @@ import type {
   AbortedEvent,
   ErrorEvent,
 } from '../types'
-import type { StoryEntry } from '$lib/types'
-import { storyContext } from '$lib/stores/storyContext.svelte'
-
-/** Dependencies for image phase - injected to avoid tight coupling */
-export interface BackgroundImageDependencies {
-  analyzeBackgroundChangeAndGenerateImage: (
-    storyId: string,
-    visibleEntries: StoryEntry[],
-  ) => Promise<void>
-  isImageGenerationEnabled: (
-    storySettings?: any,
-    type?: 'standard' | 'background' | 'portrait' | 'reference',
-  ) => boolean
-}
+import { story } from '$lib/stores/story/index.svelte'
+import { aiService } from '$lib/services/ai'
 
 /** Settings needed for image phase decision making */
 export interface BackgroundImageSettings {
@@ -40,18 +28,15 @@ export interface BackgroundImageResult {
 
 /** Coordinates image generation. Errors are non-fatal. */
 export class BackgroundImagePhase {
-  constructor(private deps: BackgroundImageDependencies) {}
-
   /** Execute the image phase - yields events and returns result */
   async *execute(): AsyncGenerator<GenerationEvent, BackgroundImageResult> {
     // === CONCURRENT PHASE SAFETY: Snapshot ALL singleton inputs before first yield ===
-    const storyId = storyContext.currentStory?.id ?? ''
-    const storyEntries = storyContext.visibleEntries
-    const abortSignal = storyContext.abortSignal ?? undefined
+    const storyId = story.currentStory?.id ?? ''
+    const storyEntries = story.entry.visibleEntries
+    const abortSignal = story.generationContext.abortSignal ?? undefined
     const imageSettings: BackgroundImageSettings = {
-      backgroundImagesEnabled:
-        storyContext.currentStory?.settings?.backgroundImagesEnabled ?? false,
-      imageGenerationMode: storyContext.currentStory?.settings?.imageGenerationMode ?? 'agentic',
+      backgroundImagesEnabled: story.currentStory?.settings?.backgroundImagesEnabled ?? false,
+      imageGenerationMode: story.currentStory?.settings?.imageGenerationMode ?? 'agentic',
     }
     // === End snapshot block ===
 
@@ -61,7 +46,7 @@ export class BackgroundImagePhase {
     // Check if background image generation is disabled
     if (imageSettings.backgroundImagesEnabled === false) {
       const result: BackgroundImageResult = { started: false, skippedReason: 'disabled' }
-      storyContext.backgroundResult = result
+      story.generationContext.backgroundResult = result
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
       return result
     }
@@ -69,15 +54,15 @@ export class BackgroundImagePhase {
     // Skip in inline mode - we don't want agentic background analysis in pure inline mode
     if (imageSettings.imageGenerationMode === 'inline') {
       const result: BackgroundImageResult = { started: false, skippedReason: 'inline_mode' }
-      storyContext.backgroundResult = result
+      story.generationContext.backgroundResult = result
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
       return result
     }
 
     // Check if image generation is actually configured (profile exists)
-    if (!this.deps.isImageGenerationEnabled(imageSettings, 'background')) {
+    if (!aiService.isImageGenerationEnabled(imageSettings, 'background')) {
       const result: BackgroundImageResult = { started: false, skippedReason: 'not_configured' }
-      storyContext.backgroundResult = result
+      story.generationContext.backgroundResult = result
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
       return result
     }
@@ -88,10 +73,10 @@ export class BackgroundImagePhase {
     }
 
     try {
-      await this.deps.analyzeBackgroundChangeAndGenerateImage(storyId, storyEntries)
+      await aiService.analyzeBackgroundChangeAndGenerateImage(storyId, storyEntries)
 
       const result: BackgroundImageResult = { started: true }
-      storyContext.backgroundResult = result
+      story.generationContext.backgroundResult = result
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
       return result
     } catch (error) {

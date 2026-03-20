@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { storyContext } from '$lib/stores/storyContext.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { Plus, MapPin, Navigation, Pencil, ChevronDown, Save, X } from 'lucide-svelte'
   import type { Location } from '$lib/types'
@@ -26,15 +25,15 @@
   let editRuntimeVars = $state<RuntimeVarsMap>({})
 
   $effect(() => {
-    if (storyContext.currentStory) {
+    if (story.currentStory) {
       loadRuntimeVarDefs()
     }
   })
 
   async function loadRuntimeVarDefs() {
-    if (!storyContext.currentStory) return
+    if (!story.currentStory) return
     try {
-      const packId = await database.getStoryPackId(storyContext.currentStory.id)
+      const packId = await database.getStoryPackId(story.currentStory.id)
       if (packId) {
         runtimeVarDefs = await database.getRuntimeVariablesByEntityType(packId, 'location')
       } else {
@@ -63,23 +62,27 @@
 
   async function addLocation() {
     if (!newName.trim()) return
-    const makeCurrent = storyContext.locations.length === 0
-    await story.addLocation(newName.trim(), newDescription.trim() || undefined, makeCurrent)
+    const makeCurrent = story.location.locations.length === 0
+    await story.location.addLocation(
+      newName.trim(),
+      newDescription.trim() || undefined,
+      makeCurrent,
+    )
     newName = ''
     newDescription = ''
     showAddForm = false
   }
 
   async function goToLocation(locationId: string) {
-    await story.setCurrentLocation(locationId)
+    await story.location.setCurrentLocation(locationId)
   }
 
   async function toggleVisited(locationId: string) {
-    await story.toggleLocationVisited(locationId)
+    await story.location.toggleLocationVisited(locationId)
   }
 
   async function deleteLocation(location: Location) {
-    await story.deleteLocation(location.id)
+    await story.location.deleteLocation(location.id)
   }
 
   function startEdit(location: Location) {
@@ -115,7 +118,7 @@
         }
       : location.metadata
 
-    await story.updateLocation(location.id, {
+    await story.location.updateLocation(location.id, {
       name,
       description: editDescription.trim() || null,
       metadata: updatedMetadata,
@@ -161,8 +164,8 @@
   {/if}
 
   <!-- Current Location -->
-  {#if storyContext.currentLocation}
-    {@const currentLocation = storyContext.currentLocation}
+  {#if story.location.currentLocation}
+    {@const currentLocation = story.location.currentLocation}
     {@const isEditing = editingId === currentLocation.id}
     {@const isCollapsed = ui.isEntityCollapsed(currentLocation.id)}
 
@@ -317,7 +320,7 @@
   {/if}
 
   <!-- Location List -->
-  {#if storyContext.locations.filter((l) => !l.current).length === 0 && !storyContext.currentLocation}
+  {#if story.location.locations.filter((l) => !l.current).length === 0 && !story.location.currentLocation}
     <div
       class="border-border bg-muted/20 flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center"
     >
@@ -336,7 +339,7 @@
     </div>
   {:else}
     <div class="flex flex-col gap-2">
-      {#each storyContext.locations.filter((l) => !l.current) as location (location.id)}
+      {#each story.location.locations.filter((l) => !l.current) as location (location.id)}
         {@const isCollapsed = ui.isEntityCollapsed(location.id)}
         {@const isEditing = editingId === location.id}
 

@@ -26,8 +26,7 @@ import {
   type StyleReviewCheckResult,
 } from './StyleReviewScheduler'
 import { aiService } from '$lib/services/ai'
-import { story } from '$lib/stores/story.svelte'
-import { storyContext } from '$lib/stores/storyContext.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 import { settings } from '$lib/stores/settings.svelte'
 import { ui } from '$lib/stores/ui.svelte'
 
@@ -77,15 +76,15 @@ export class BackgroundTaskCoordinator {
    * Called from ActionInput after pipeline.execute() completes.
    */
   static async run(countStyleReview: boolean, styleReviewSource: string): Promise<void> {
-    const storyId = storyContext.currentStory?.id ?? ''
-    const mode = storyContext.currentStory?.mode ?? 'adventure'
+    const storyId = story.currentStory?.id ?? ''
+    const mode = story.currentStory?.mode ?? 'adventure'
 
     const deps: BackgroundTaskDependencies = {
       chapterService: {
         analyzeForChapter: aiService.analyzeForChapter.bind(aiService),
         summarizeChapter: aiService.summarizeChapter.bind(aiService),
-        getNextChapterNumber: story.getNextChapterNumber.bind(story),
-        addChapter: story.addChapter.bind(story),
+        getNextChapterNumber: story.chapter.getNextChapterNumber.bind(story),
+        addChapter: story.chapter.addChapter.bind(story),
       },
       loreManagement: {
         runLoreManagement: aiService.runLoreManagement.bind(aiService),
@@ -96,10 +95,10 @@ export class BackgroundTaskCoordinator {
     const input: BackgroundTaskInput = {
       styleReview: {
         storyId,
-        entries: storyContext.entries,
+        entries: story.entry.entries,
         mode,
-        pov: storyContext.pov,
-        tense: storyContext.tense,
+        pov: story.generationContext.pov,
+        tense: story.generationContext.tense,
         enabled: settings.systemServicesSettings.styleReviewer.enabled,
         triggerInterval: settings.systemServicesSettings.styleReviewer.triggerInterval,
         currentCounter: ui.messagesSinceLastStyleReview,
@@ -113,42 +112,42 @@ export class BackgroundTaskCoordinator {
       },
       chapterCheck: {
         storyId,
-        currentBranchId: storyContext.currentStory?.currentBranchId ?? null,
-        entries: storyContext.entries,
-        lastChapterEndIndex: storyContext.lastChapterEndIndex,
-        tokensSinceLastChapter: storyContext.tokensSinceLastChapter,
-        tokensOutsideBuffer: storyContext.tokensOutsideBuffer,
-        messagesSinceLastChapter: storyContext.messagesSinceLastChapter,
-        memoryConfig: storyContext.memoryConfig,
-        currentBranchChapters: storyContext.currentBranchChapters,
+        currentBranchId: story.currentStory?.currentBranchId ?? null,
+        entries: story.entry.entries,
+        lastChapterEndIndex: story.chapter.lastChapterEndIndex,
+        tokensSinceLastChapter: story.generationContext.tokensSinceLastChapter,
+        tokensOutsideBuffer: story.generationContext.tokensOutsideBuffer,
+        messagesSinceLastChapter: story.chapter.messagesSinceLastChapter,
+        memoryConfig: story.generationContext.memoryConfig,
+        currentBranchChapters: story.chapter.currentBranchChapters,
         mode,
-        pov: storyContext.pov,
-        tense: storyContext.tense,
+        pov: story.generationContext.pov,
+        tense: story.generationContext.tense,
       },
       loreSession: {
         storyId,
-        currentBranchId: storyContext.currentStory?.currentBranchId ?? null,
-        lorebookEntries: storyContext.lorebookEntries,
-        chapters: storyContext.currentBranchChapters,
+        currentBranchId: story.currentStory?.currentBranchId ?? null,
+        lorebookEntries: story.lorebook.lorebookEntries,
+        chapters: story.chapter.currentBranchChapters,
         mode,
-        pov: storyContext.pov,
-        tense: storyContext.tense,
+        pov: story.generationContext.pov,
+        tense: story.generationContext.tense,
       },
       loreCallbacks: {
         onCreateEntry: async (entry) => {
-          await story.addLorebookEntry(entry)
+          await story.lorebook.addLorebookEntry(entry)
         },
-        onUpdateEntry: story.updateLorebookEntry.bind(story),
-        onDeleteEntry: story.deleteLorebookEntry.bind(story),
+        onUpdateEntry: story.lorebook.updateLorebookEntry.bind(story),
+        onDeleteEntry: story.lorebook.deleteLorebookEntry.bind(story),
         onMergeEntries: async (entryIds, mergedEntry) => {
-          await story.deleteLorebookEntries(entryIds)
-          await story.addLorebookEntry(mergedEntry)
+          await story.lorebook.deleteLorebookEntries(entryIds)
+          await story.lorebook.addLorebookEntry(mergedEntry)
         },
         onQueryChapter: async (chapterNumber, question) => {
           return aiService.answerChapterQuestion(
             chapterNumber,
             question,
-            storyContext.currentBranchChapters,
+            story.chapter.currentBranchChapters,
           )
         },
       },
@@ -159,7 +158,8 @@ export class BackgroundTaskCoordinator {
       },
     }
 
-    if (!storyContext.memoryConfig.autoSummarize) input.chapterCheck.tokensOutsideBuffer = 0
+    if (!story.generationContext.memoryConfig.autoSummarize)
+      input.chapterCheck.tokensOutsideBuffer = 0
 
     const coordinator = new BackgroundTaskCoordinator(deps)
     await coordinator.runBackgroundTasks(input)

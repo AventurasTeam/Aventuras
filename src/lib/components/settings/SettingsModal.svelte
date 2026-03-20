@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import { getVersion } from '@tauri-apps/api/app'
   import { ask } from '@tauri-apps/plugin-dialog'
-  import { storyContext } from '$lib/stores/storyContext.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import {
@@ -50,11 +50,11 @@
 
   const storyTab = { id: 'story-settings' as const, label: 'Story', icon: BookOpen }
 
-  let tabs = $derived(storyContext.currentStory ? [storyTab, ...baseTabs] : baseTabs)
+  let tabs = $derived(story.currentStory ? [storyTab, ...baseTabs] : baseTabs)
 
   // Fall back to 'api' if story tab is active but story is unloaded
   $effect(() => {
-    if (ui.settingsTab === 'story-settings' && !storyContext.currentStory) {
+    if (ui.settingsTab === 'story-settings' && !story.currentStory) {
       ui.setSettingsTab('api')
     }
   })

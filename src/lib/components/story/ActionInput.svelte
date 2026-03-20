@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import { aiService } from '$lib/services/ai'
   import { database } from '$lib/services/database'
@@ -47,7 +47,6 @@
     type PipelineUICallbacks,
     type PipelineEventState,
   } from '$lib/services/generation'
-  import { storyContext } from '$lib/stores/storyContext.svelte'
   import { InlineImageTracker } from '$lib/services/ai/image'
 
   function log(...args: any[]) {
@@ -99,7 +98,7 @@
   // ============================================================================
 
   const canShowManualImageGen = $derived(
-    storyContext.currentStory?.settings?.imageGenerationMode === 'none' && !!lastImageGenContext,
+    story.currentStory?.settings?.imageGenerationMode === 'none' && !!lastImageGenContext,
   )
 
   const manualImageGenDisabled = $derived.by(() => {
@@ -107,7 +106,7 @@
     return !hasRequiredCredentials()
   })
 
-  const isCreativeMode = $derived(storyContext.storyMode === 'creative-writing')
+  const isCreativeWritingMode = $derived(story.generationContext.isCreativeWritingMode)
 
   const sendKeyHint = $derived(
     isTouchDevice() ? 'Shift+Enter to send' : 'Enter to send, Shift+Enter for new line',
@@ -158,9 +157,10 @@
 
   // POV-based prefixes/suffixes
   const protagonistName = $derived.by(
-    () => storyContext.characters.find((c) => c.relationship === 'self')?.name ?? 'The protagonist',
+    () =>
+      story.character.characters.find((c) => c.relationship === 'self')?.name ?? 'The protagonist',
   )
-  const pov = $derived(storyContext.pov)
+  const pov = $derived(story.generationContext.pov)
 
   const actionPrefixes = $derived.by(() => {
     switch (pov) {
@@ -189,7 +189,7 @@
   // ============================================================================
 
   $effect(() => {
-    const storyId = storyContext.currentStory?.id ?? null
+    const storyId = story.currentStory?.id ?? null
     if (!storyId || (lastImageGenContext && lastImageGenContext.storyId !== storyId))
       lastImageGenContext = null
   })
@@ -215,7 +215,7 @@
 
   // Auto-regenerate suggestions/actions after time-travel delete when no saved actions found
   $effect(() => {
-    if (ui.suggestionsRegenerationNeeded && !ui.isGenerating && storyContext.entries.length > 0) {
+    if (ui.suggestionsRegenerationNeeded && !ui.isGenerating && story.entry.entries.length > 0) {
       ui.suggestionsRegenerationNeeded = false
       regenerateActionsAfterDelete()
     }
@@ -263,29 +263,29 @@
     const styleReviewSource =
       options?.styleReviewSource ?? (countStyleReview ? 'new' : 'regenerate')
 
-    if (!storyContext.currentStory) return
+    if (!story.currentStory) return
 
     stopRequested = false
     activeAbortController = new AbortController()
 
-    const visualProseMode = storyContext.currentStory.settings?.visualProseMode ?? false
-    const inlineImageMode = storyContext.currentStory.settings?.imageGenerationMode === 'inline'
+    const visualProseMode = story.currentStory.settings?.visualProseMode ?? false
+    const inlineImageMode = story.currentStory.settings?.imageGenerationMode === 'inline'
     const streamingEntryId = crypto.randomUUID()
     const narrationEntryId = crypto.randomUUID()
 
     ui.setGenerating(true)
     ui.clearGenerationError()
-    ui.clearActionChoices(storyContext.currentStory.id)
+    ui.clearActionChoices(story.currentStory.id)
     ui.startStreaming(visualProseMode, streamingEntryId)
 
-    const currentStoryRef = storyContext.currentStory
+    const currentStoryRef = story.currentStory
 
     let inlineImageTracker: InlineImageTracker | null = null
     if (inlineImageMode) {
       inlineImageTracker = new InlineImageTracker(
         currentStoryRef.id,
         narrationEntryId,
-        () => storyContext.characters,
+        () => story.character.characters,
       )
     }
 
@@ -302,31 +302,31 @@
 
     try {
       // Populate singleton for pipeline phases to read
-      storyContext.init() // Clear previous generation intermediates
-      storyContext.userAction = {
+      story.generationContext.clearIntermediates() // Clear previous generation intermediates
+      story.generationContext.userAction = {
         entryId: userActionEntryId,
         content: userActionContent,
         rawInput: userActionContent,
       }
-      storyContext.narrationEntryId = narrationEntryId
-      storyContext.abortSignal = activeAbortController.signal
+      story.generationContext.narrationEntryId = narrationEntryId
+      story.generationContext.abortSignal = activeAbortController.signal
 
-      const storyPosition = storyContext.entries.length
+      const storyPosition = story.entry.entries.length
       const activationTracker = ui.getActivationTracker(storyPosition) as SimpleActivationTracker
       const embeddedImages = await database.getEmbeddedImagesForStory(currentStoryRef.id)
 
-      storyContext.embeddedImages = embeddedImages
-      storyContext.rawInput = userActionContent
-      storyContext.actionType = actionType
-      storyContext.wasRawActionChoice = false
-      storyContext.styleReview = ui.lastStyleReview
-      storyContext.activationTracker = activationTracker
+      story.generationContext.embeddedImages = embeddedImages
+      story.generationContext.rawInput = userActionContent
+      story.generationContext.actionType = actionType
+      story.generationContext.wasRawActionChoice = false
+      story.generationContext.styleReview = ui.lastStyleReview
+      story.generationContext.activationTracker = activationTracker
 
-      const pipeline = GenerationPipeline.create()
+      const pipeline = new GenerationPipeline()
 
       let fullResponse = ''
       let fullReasoning = ''
-      let narrationEntry: Awaited<ReturnType<typeof story.addEntry>> | null = null
+      let narrationEntry: Awaited<ReturnType<typeof story.entry.addEntry>> | null = null
 
       for await (const event of pipeline.execute()) {
         if (stopRequested) break
@@ -336,7 +336,7 @@
           fullReasoning: () => fullReasoning,
           streamingEntryId,
           visualProseMode,
-          isCreativeMode,
+          isCreativeWritingMode: isCreativeWritingMode,
           storyId: currentStoryRef.id,
         }
 
@@ -382,7 +382,9 @@
         handleEvent(event, eventState, eventCallbacks)
 
         if (event.type === 'phase_complete' && event.phase === 'retrieval') {
-          ui.setLastLorebookRetrieval(storyContext.retrievalResult?.lorebookRetrievalResult ?? null)
+          ui.setLastLorebookRetrieval(
+            story.generationContext.retrievalResult?.lorebookRetrievalResult ?? null,
+          )
         }
 
         if (event.type === 'narrative_chunk') {
@@ -397,7 +399,7 @@
 
         if (event.type === 'phase_complete' && event.phase === 'narrative' && fullResponse.trim()) {
           ui.endStreaming()
-          narrationEntry = await story.addEntry(
+          narrationEntry = await story.entry.addEntry(
             'narration',
             fullResponse,
             undefined,
@@ -414,11 +416,11 @@
             messageId: narrationEntry.id,
             result: event.result,
           })
-          await story.applyClassificationResult(event.result, narrationEntry.id)
-          await story.updateEntryTimeEnd(narrationEntry.id)
+          await story.classification.applyClassificationResult(event.result, narrationEntry.id)
+          await story.entry.updateEntryTimeEnd(narrationEntry.id)
 
           if (currentStoryRef.settings?.imageGenerationMode !== 'none') {
-            const presentCharacters = storyContext.characters.filter(
+            const presentCharacters = story.character.characters.filter(
               (c) =>
                 event.result.scene.presentCharacterNames.includes(c.name) ||
                 c.relationship === 'self',
@@ -430,9 +432,9 @@
               userAction: userActionContent,
               presentCharacters,
               currentLocation:
-                event.result.scene.currentLocationName ?? storyContext.currentLocation?.name,
+                event.result.scene.currentLocationName ?? story.location.currentLocation?.name,
               chatHistory: mapChatEntries(
-                storyContext.visibleEntries.filter(
+                story.entry.visibleEntries.filter(
                   (e) => e.type === 'user_action' || e.type === 'narration',
                 ),
                 { truncate: false, stripPicTags: true },
@@ -456,10 +458,10 @@
                     newStoryBeats: event.result.entryUpdates.newStoryBeats,
                   },
                   worldState: {
-                    characters: storyContext.characters,
-                    locations: storyContext.locations,
-                    items: storyContext.items,
-                    storyBeats: storyContext.storyBeats,
+                    characters: story.character.characters,
+                    locations: story.location.locations,
+                    items: story.item.items,
+                    storyBeats: story.storyBeat.storyBeats,
                   },
                   targetLanguage: translationSettings.targetLanguage,
                 },
@@ -488,7 +490,7 @@
               translatedContent: translationResult.translatedContent,
               translationLanguage: translationResult.targetLanguage,
             })
-            await story.refreshEntry(narrationEntry.id)
+            await story.entry.refreshEntry(narrationEntry.id)
           }
         }
 
@@ -503,7 +505,7 @@
 
       if (!fullResponse.trim()) {
         const errorMessage = 'The AI returned an empty response after 3 attempts. Please try again.'
-        const errorEntry = await story.addEntry('system', errorMessage)
+        const errorEntry = await story.entry.addEntry('system', errorMessage)
         ui.setGenerationError({
           message: errorMessage,
           errorEntryId: errorEntry.id,
@@ -542,7 +544,7 @@
       const errorMessage = ui.wasBackgroundedDuringGeneration
         ? `Generation may have been interrupted while the app was in the background. ${baseMessage}`
         : baseMessage
-      const errorEntry = await story.addEntry('system', `Generation failed: ${errorMessage}`)
+      const errorEntry = await story.entry.addEntry('system', `Generation failed: ${errorMessage}`)
       ui.setGenerationError({
         message: errorMessage,
         errorEntryId: errorEntry.id,
@@ -585,9 +587,9 @@
    * when no previously saved actions were found on the restored entry.
    */
   async function regenerateActionsAfterDelete() {
-    if (!storyContext.currentStory || storyContext.entries.length === 0) return
+    if (!story.currentStory || story.entry.entries.length === 0) return
 
-    const storyMode = storyContext.storyMode
+    const storyMode = story.generationContext.storyMode
 
     if (storyMode === 'creative-writing') {
       // For creative-writing mode, use the existing refresh mechanism
@@ -598,9 +600,7 @@
 
       ui.setActionChoicesLoading(true)
       try {
-        const lastNarration = [...storyContext.entries]
-          .reverse()
-          .find((e) => e.type === 'narration')
+        const lastNarration = [...story.entry.entries].reverse().find((e) => e.type === 'narration')
         if (!lastNarration) {
           ui.setActionChoicesLoading(false)
           return
@@ -609,7 +609,7 @@
         const result = await aiService.generateActionChoices()
 
         if (result.choices.length > 0) {
-          ui.setActionChoices(result.choices, storyContext.currentStory!.id)
+          ui.setActionChoices(result.choices, story.currentStory!.id)
           // Also save to the last narration entry for future time-travel
           database
             .updateStoryEntry(lastNarration.id, {
@@ -628,10 +628,13 @@
   }
 
   async function refreshSuggestions() {
-    if (!storyContext.currentStory) return
+    if (!story.currentStory) return
 
-    if (storyContext.storyMode !== 'creative-writing' || storyContext.entries.length === 0) {
-      ui.clearSuggestions(storyContext.currentStory.id)
+    if (
+      story.generationContext.storyMode !== 'creative-writing' ||
+      story.entry.entries.length === 0
+    ) {
+      ui.clearSuggestions(story.currentStory.id)
       return
     }
 
@@ -644,10 +647,10 @@
       const result = await service.refresh({
         translationSettings: settings.translationSettings,
       })
-      ui.setSuggestions(result.suggestions, storyContext.currentStory.id)
+      ui.setSuggestions(result.suggestions, story.currentStory.id)
       emitSuggestionsReady(result.suggestions.map((s) => ({ text: s.text, type: s.type })))
       // Persist refreshed suggestions to the latest narration entry for time-travel restore
-      const lastNarration = [...storyContext.entries].reverse().find((e) => e.type === 'narration')
+      const lastNarration = [...story.entry.entries].reverse().find((e) => e.type === 'narration')
       if (lastNarration && result.suggestions.length > 0) {
         database
           .updateStoryEntry(lastNarration.id, {
@@ -659,7 +662,7 @@
       }
     } catch (error) {
       log('Failed to generate suggestions:', error)
-      ui.clearSuggestions(storyContext.currentStory.id)
+      ui.clearSuggestions(story.currentStory.id)
     } finally {
       ui.setSuggestionsLoading(false)
     }
@@ -672,7 +675,7 @@
 
   async function handleManualImageGeneration() {
     if (!lastImageGenContext || manualImageGenDisabled) return
-    const storySettings = storyContext.currentStory?.settings
+    const storySettings = story.currentStory?.settings
     if (!storySettings || storySettings.imageGenerationMode === 'none') return
     isManualImageGenRunning = true
     try {
@@ -685,37 +688,37 @@
   }
 
   async function handleSubmit() {
-    if (!inputValue.trim() || ui.isGenerating || !storyContext.currentStory) return
+    if (!inputValue.trim() || ui.isGenerating || !story.currentStory) return
 
     ui.clearGenerationError()
     ui.resetScrollBreak()
-    ui.clearSuggestions(storyContext.currentStory.id)
+    ui.clearSuggestions(story.currentStory.id)
 
     const rawInput = inputValue.trim()
     const wasRawActionChoice = isRawActionChoice
     const forceFreeMode = settings.uiSettings.disableActionPrefixes
 
     let content: string
-    if (isCreativeMode || wasRawActionChoice || forceFreeMode) content = rawInput
+    if (isCreativeWritingMode || wasRawActionChoice || forceFreeMode) content = rawInput
     else content = actionPrefixes[actionType] + rawInput + actionSuffixes[actionType]
 
     isRawActionChoice = false
     inputValue = ''
 
-    const embeddedImages = await database.getEmbeddedImagesForStory(storyContext.currentStory.id)
+    const embeddedImages = await database.getEmbeddedImagesForStory(story.currentStory.id)
     ui.createRetryBackup(
-      storyContext.currentStory.id,
-      storyContext.entries,
-      storyContext.characters,
-      storyContext.locations,
-      storyContext.items,
-      storyContext.storyBeats,
+      story.currentStory.id,
+      story.entry.entries,
+      story.character.characters,
+      story.location.locations,
+      story.item.items,
+      story.storyBeat.storyBeats,
       embeddedImages,
       content,
       rawInput,
       actionType,
       wasRawActionChoice,
-      storyContext.currentStory.timeTracker,
+      story.currentStory.timeTracker,
     )
 
     const { promptContent, originalInput } = await translateUserInput(
@@ -723,14 +726,17 @@
       settings.translationSettings,
     )
 
-    const userActionEntry = await story.addEntry('user_action', promptContent)
+    const userActionEntry = await story.entry.addEntry('user_action', promptContent)
 
     if (originalInput) {
       await database.updateStoryEntry(userActionEntry.id, { originalInput })
-      await story.refreshEntry(userActionEntry.id)
+      await story.entry.refreshEntry(userActionEntry.id)
     }
 
-    emitUserInput(content, isCreativeMode ? 'direction' : forceFreeMode ? 'free' : actionType)
+    emitUserInput(
+      content,
+      isCreativeWritingMode ? 'direction' : forceFreeMode ? 'free' : actionType,
+    )
     await tick()
 
     await generateResponse(userActionEntry.id, content)
@@ -745,14 +751,14 @@
     ui.setGenerating(false)
 
     const backup = ui.retryBackup
-    if (!backup || !storyContext.currentStory || backup.storyId !== storyContext.currentStory.id) {
+    if (!backup || !story.currentStory || backup.storyId !== story.currentStory.id) {
       if (backup) ui.clearRetryBackup()
       return
     }
 
     ui.clearGenerationError()
-    ui.clearSuggestions(storyContext.currentStory.id)
-    ui.clearActionChoices(storyContext.currentStory.id)
+    ui.clearSuggestions(story.currentStory.id)
+    ui.clearActionChoices(story.currentStory.id)
 
     if (backup.hasFullState) {
       ui.restoreActivationData(backup.activationData, backup.storyPosition)
@@ -762,21 +768,21 @@
     const result = await retryService.handleStopGeneration(
       backup,
       {
-        restoreFromRetryBackup: story.restoreFromRetryBackup.bind(story),
-        deleteEntriesFromPosition: story.deleteEntriesFromPosition.bind(story),
-        deleteEntitiesCreatedAfterBackup: story.deleteEntitiesCreatedAfterBackup.bind(story),
-        restoreCharacterSnapshots: story.restoreCharacterSnapshots.bind(story),
-        restoreTimeTrackerSnapshot: story.restoreTimeTrackerSnapshot.bind(story),
-        lockRetryInProgress: story.lockRetryInProgress.bind(story),
-        unlockRetryInProgress: story.unlockRetryInProgress.bind(story),
+        restoreFromRetryBackup: story.retry.restoreFromRetryBackup.bind(story),
+        deleteEntriesFromPosition: story.entry.deleteEntriesFromPosition.bind(story),
+        deleteEntitiesCreatedAfterBackup: story.entry.deleteEntitiesCreatedAfterBackup.bind(story),
+        restoreCharacterSnapshots: story.character.restoreCharacterSnapshots.bind(story),
+        restoreTimeTrackerSnapshot: story.time.restoreTimeTrackerSnapshot.bind(story),
+        lockRetryInProgress: story.retry.lockRetryInProgress.bind(story),
+        unlockRetryInProgress: story.retry.unlockRetryInProgress.bind(story),
         restoreActivationData: ui.restoreActivationData.bind(ui),
         clearActivationData: () => ui.clearActivationData(),
         setLastLorebookRetrieval: ui.setLastLorebookRetrieval.bind(ui),
       },
       {
         clearGenerationError: () => ui.clearGenerationError(),
-        clearSuggestions: () => ui.clearSuggestions(storyContext.currentStory!.id),
-        clearActionChoices: () => ui.clearActionChoices(storyContext.currentStory!.id),
+        clearSuggestions: () => ui.clearSuggestions(story.currentStory!.id),
+        clearActionChoices: () => ui.clearActionChoices(story.currentStory!.id),
       },
     )
 
@@ -793,13 +799,13 @@
     const error = ui.lastGenerationError
     if (!error || ui.isGenerating) return
 
-    const userActionEntry = storyContext.entries.find((e) => e.id === error.userActionEntryId)
+    const userActionEntry = story.entry.entries.find((e) => e.id === error.userActionEntryId)
     if (!userActionEntry) {
       ui.clearGenerationError()
       return
     }
 
-    await story.deleteEntry(error.errorEntryId)
+    await story.entry.deleteEntry(error.errorEntryId)
     ui.clearGenerationError()
 
     await generateResponse(userActionEntry.id, userActionEntry.content, {
@@ -814,13 +820,13 @@
 
   async function handleRetryLastMessage() {
     const backup = ui.retryBackup
-    if (!backup || ui.isGenerating || !storyContext.currentStory) return
-    if (backup.storyId !== storyContext.currentStory.id) {
+    if (!backup || ui.isGenerating || !story.currentStory) return
+    if (backup.storyId !== story.currentStory.id) {
       ui.clearRetryBackup(false)
       return
     }
 
-    const storyId = storyContext.currentStory.id
+    const storyId = story.currentStory.id
 
     ui.clearGenerationError()
     ui.clearSuggestions(storyId)
@@ -831,13 +837,13 @@
     const result = await retryService.handleRetryLastMessage(
       backup,
       {
-        restoreFromRetryBackup: story.restoreFromRetryBackup.bind(story),
-        deleteEntriesFromPosition: story.deleteEntriesFromPosition.bind(story),
-        deleteEntitiesCreatedAfterBackup: story.deleteEntitiesCreatedAfterBackup.bind(story),
-        restoreCharacterSnapshots: story.restoreCharacterSnapshots.bind(story),
-        restoreTimeTrackerSnapshot: story.restoreTimeTrackerSnapshot.bind(story),
-        lockRetryInProgress: story.lockRetryInProgress.bind(story),
-        unlockRetryInProgress: story.unlockRetryInProgress.bind(story),
+        restoreFromRetryBackup: story.retry.restoreFromRetryBackup.bind(story),
+        deleteEntriesFromPosition: story.entry.deleteEntriesFromPosition.bind(story),
+        deleteEntitiesCreatedAfterBackup: story.entry.deleteEntitiesCreatedAfterBackup.bind(story),
+        restoreCharacterSnapshots: story.character.restoreCharacterSnapshots.bind(story),
+        restoreTimeTrackerSnapshot: story.time.restoreTimeTrackerSnapshot.bind(story),
+        lockRetryInProgress: story.retry.lockRetryInProgress.bind(story),
+        unlockRetryInProgress: story.retry.unlockRetryInProgress.bind(story),
         restoreActivationData: ui.restoreActivationData.bind(ui),
         clearActivationData: () => ui.clearActivationData(),
         setLastLorebookRetrieval: ui.setLastLorebookRetrieval.bind(ui),
@@ -860,14 +866,14 @@
       backup.userActionContent,
       settings.translationSettings,
     )
-    const userActionEntry = await story.addEntry('user_action', promptContent)
+    const userActionEntry = await story.entry.addEntry('user_action', promptContent)
 
     if (originalInput) {
       await database.updateStoryEntry(userActionEntry.id, { originalInput })
-      await story.refreshEntry(userActionEntry.id)
+      await story.entry.refreshEntry(userActionEntry.id)
     }
 
-    emitUserInput(backup.userActionContent, isCreativeMode ? 'direction' : backup.actionType)
+    emitUserInput(backup.userActionContent, isCreativeWritingMode ? 'direction' : backup.actionType)
     await tick()
 
     ui.setRetryingLastMessage(true)
@@ -935,7 +941,7 @@
 
   <GrammarCheck text={inputValue} onApplySuggestion={(newText) => (inputValue = newText)} />
 
-  {#if isCreativeMode}
+  {#if isCreativeWritingMode}
     <div
       class="sm:border-border rounded-lg border-l-0 sm:border sm:border-l-4 sm:shadow-sm {ui.isGenerating
         ? 'sm:border-l-surface-600 bg-surface-400/5'
@@ -947,7 +953,7 @@
           <div
             class="bg-surface-800 border-surface-500/30 text-surface-400 rounded-tl-md border border-b-0 px-2 py-0.5 text-sm"
           >
-            {storyContext.wordCount} words
+            {story.generationContext.wordCount} words
           </div>
         </div>{/if}
       {#if !settings.uiSettings.disableSuggestions}<div class="border-surface-700/30 sm:border-b">
@@ -1000,7 +1006,7 @@
           <div
             class="bg-surface-800 border-surface-500/30 text-surface-400 rounded-tl-md border border-b-0 px-2 py-0.5 text-sm"
           >
-            {storyContext.wordCount} words
+            {story.generationContext.wordCount} words
           </div>
         </div>{/if}
       {#if !settings.uiSettings.disableActionPrefixes}

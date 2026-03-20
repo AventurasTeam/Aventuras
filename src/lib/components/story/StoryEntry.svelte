@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { StoryEntry, EmbeddedImage } from '$lib/types'
-  import { story } from '$lib/stores/story.svelte'
-  import { storyContext } from '$lib/stores/storyContext.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import {
@@ -75,13 +74,13 @@
   )
 
   // Check if Visual Prose mode is enabled for this story
-  const visualProseMode = $derived(storyContext.currentStory?.settings?.visualProseMode ?? false)
+  const visualProseMode = $derived(story.currentStory?.settings?.visualProseMode ?? false)
 
   // Check if this is the latest narration entry (for retry button)
   const isLatestNarration = $derived.by(() => {
     if (entry.type !== 'narration') return false
-    const narrations = storyContext.entries.filter((e) => e.type === 'narration')
-    if (narrations.length === 0) return false
+    const narrations = story.entry.entries.filter((e) => e.type === 'narration')
+    if (narrations?.length === 0) return false
     return narrations[narrations.length - 1].id === entry.id
   })
 
@@ -89,8 +88,8 @@
   const canRetry = $derived(
     isLatestNarration &&
       ui.retryBackup &&
-      storyContext.currentStory &&
-      ui.retryBackup.storyId === storyContext.currentStory.id &&
+      story.currentStory &&
+      ui.retryBackup.storyId === story.currentStory.id &&
       !ui.isGenerating &&
       !ui.lastGenerationError,
   )
@@ -102,7 +101,7 @@
     if (ui.lastGenerationError?.errorEntryId === entry.id) {
       ui.clearGenerationError()
     }
-    await story.deleteEntry(entry.id)
+    await story.entry.deleteEntry(entry.id)
   }
 
   /**
@@ -129,7 +128,7 @@
 
     // For legacy/untracked errors, find the previous user action and set up retry
     console.log('[StoryEntry] Legacy error, finding previous user action')
-    const entryIndex = storyContext.entries.findIndex((e) => e.id === entry.id)
+    const entryIndex = story.entry.entries.findIndex((e) => e.id === entry.id)
     if (entryIndex <= 0) {
       console.log('[StoryEntry] Entry not found or is first entry')
       return
@@ -138,8 +137,8 @@
     // Find the most recent user action before this error
     let userActionEntry = null
     for (let i = entryIndex - 1; i >= 0; i--) {
-      if (storyContext.entries[i].type === 'user_action') {
-        userActionEntry = storyContext.entries[i]
+      if (story.entry.entries[i].type === 'user_action') {
+        userActionEntry = story.entry.entries[i]
         break
       }
     }
@@ -208,9 +207,9 @@
 
   // Check if this entry has an associated checkpoint (can be branched from)
   // Only show checkpoints that belong to the current branch to prevent incorrect branch lineage
-  const currentBranchId = $derived(storyContext.currentStory?.currentBranchId ?? null)
+  const currentBranchId = $derived(story.currentStory?.currentBranchId ?? null)
   const entryCheckpoint = $derived(
-    story.checkpoints.find(
+    story.checkpoint.checkpoints.find(
       (cp) => cp.lastEntryId === entry.id && getCheckpointBranchId(cp) === currentBranchId,
     ),
   )
@@ -224,7 +223,7 @@
       return
     }
     try {
-      await story.createBranchFromCheckpoint(branchName.trim(), entry.id, entryCheckpoint.id)
+      await story.branch.createBranchFromCheckpoint(branchName.trim(), entry.id, entryCheckpoint.id)
       isBranching = false
       branchName = ''
     } catch (error) {
@@ -244,8 +243,8 @@
 
   // Check if this is the latest entry (checkpoints can only be created at the latest entry)
   const isLatestEntry = $derived(
-    storyContext.entries.length > 0 &&
-      storyContext.entries[storyContext.entries.length - 1].id === entry.id,
+    story.entry.entries.length > 0 &&
+      story.entry.entries[story.entry.entries.length - 1].id === entry.id,
   )
 
   // Can create checkpoint: latest entry, not a system entry, and no checkpoint exists yet
@@ -254,7 +253,7 @@
   async function handleCreateCheckpoint() {
     if (!checkpointName.trim()) return
     try {
-      await story.createCheckpoint(checkpointName.trim())
+      await story.checkpoint.createCheckpoint(checkpointName.trim())
       isCreatingCheckpoint = false
       checkpointName = ''
     } catch (error) {
@@ -280,16 +279,16 @@
 
   // Handle creating missing inline images (stuck/lost records)
   async function handleCreateMissingImage() {
-    if (!storyContext.currentStory) return
+    if (!story.currentStory) return
 
     // Trigger scanning of this entry
     // We pass the full content, the service will find tags and create missing records
     const context = {
-      storyId: storyContext.currentStory.id,
+      storyId: story.currentStory.id,
       entryId: entry.id,
       narrativeContent: entry.translatedContent ?? entry.content,
-      presentCharacters: storyContext.characters, // Use all story characters for lookup
-      referenceMode: storyContext.currentStory.settings?.referenceMode ?? false,
+      presentCharacters: story.character.characters, // Use all story characters for lookup
+      referenceMode: story.currentStory.settings?.referenceMode ?? false,
     }
 
     await inlineImageService.processNarrativeForInlineImages(context)
@@ -932,8 +931,8 @@
       if (
         isLastUserAction &&
         ui.retryBackup &&
-        storyContext.currentStory &&
-        ui.retryBackup.storyId === storyContext.currentStory.id
+        story.currentStory &&
+        ui.retryBackup.storyId === story.currentStory.id
       ) {
         // Update the backup with the new content and trigger retry
         console.log('[StoryEntry] Editing last user action, triggering retry with new content')
@@ -942,7 +941,7 @@
         await ui.triggerRetryLastMessage()
       } else {
         // Normal edit - just update the entry
-        await story.updateEntry(entry.id, newContent)
+        await story.entry.updateEntry(entry.id, newContent)
         isEditing = false
       }
     } catch (error) {
@@ -956,7 +955,7 @@
    */
   function isLastUserActionEntry(): boolean {
     // Find all user_action entries
-    const userActions = storyContext.entries.filter((e) => e.type === 'user_action')
+    const userActions = story.entry.entries.filter((e) => e.type === 'user_action')
     if (userActions.length === 0) return false
 
     // Check if this entry is the last one
@@ -1025,16 +1024,16 @@
   let isGeneratingStoryImages = $state(false)
 
   async function handleGenerateStoryImages() {
-    if (!storyContext.currentStory || isGeneratingStoryImages) return
+    if (!story.currentStory || isGeneratingStoryImages) return
     isGeneratingStoryImages = true
     try {
       const context = {
-        storyId: storyContext.currentStory.id,
+        storyId: story.currentStory.id,
         entryId: entry.id,
         narrativeResponse: entry.content,
         userAction: '',
-        presentCharacters: storyContext.characters,
-        referenceMode: storyContext.currentStory.settings?.referenceMode ?? false,
+        presentCharacters: story.character.characters,
+        referenceMode: story.currentStory.settings?.referenceMode ?? false,
         translatedNarrative: entry.translatedContent ?? undefined,
       }
       await aiService.generateImagesForNarrative(context)
@@ -1053,7 +1052,7 @@
 
   async function confirmDelete() {
     try {
-      await story.deleteEntry(entry.id)
+      await story.entry.deleteEntry(entry.id)
       isDeleting = false
     } catch (error) {
       console.error('[StoryEntry] Failed to delete entry:', error)
@@ -1171,7 +1170,7 @@
             <Volume2 class="h-4 w-4" />
           {/if}
         </Button>
-        {#if isLatestNarration && storyContext.currentStory?.settings?.imageGenerationMode === 'agentic'}
+        {#if isLatestNarration && story.currentStory?.settings?.imageGenerationMode === 'agentic'}
           <Button
             variant="text"
             size="icon"

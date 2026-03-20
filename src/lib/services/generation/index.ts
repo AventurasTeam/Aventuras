@@ -27,11 +27,9 @@ export type {
 
 // Pipeline orchestrator
 export { GenerationPipeline } from './GenerationPipeline'
-export type { PipelineDependencies } from './GenerationPipeline'
 
 // Phase services
 export {
-  PreGenerationPhase,
   RetrievalPhase,
   NarrativePhase,
   ClassificationPhase,
@@ -39,7 +37,6 @@ export {
   ImagePhase,
   PostGenerationPhase,
 } from './phases'
-export type { RetryBackupData as PhaseRetryBackupData, PreGenerationResult } from './phases'
 
 // Retry service
 export { RetryService, retryService } from './RetryService'
@@ -104,9 +101,8 @@ export type {
 // Pipeline event handler
 export { handleEvent } from './PipelineEventHandler'
 export type { PipelineUICallbacks, PipelineEventState } from './PipelineEventHandler'
-export type { RetrievalDependencies } from './phases'
-export type { NarrativeDependencies, NarrativeResult } from './phases'
-export type { ClassificationDependencies, ClassificationPhaseResult } from './phases'
-export type { TranslationDependencies, TranslationResult2 } from './phases'
-export type { ImageDependencies, ImageSettings, ImageResult } from './phases'
-export type { PromptContext, PostGenerationDependencies, PostGenerationResult } from './phases'
+export type { NarrativeResult } from './phases'
+export type { ClassificationPhaseResult } from './phases'
+export type { TranslationResult2 } from './phases'
+export type { ImageSettings, ImageResult } from './phases'
+export type { PostGenerationResult } from './phases'

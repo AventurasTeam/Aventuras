@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { storyContext } from '$lib/stores/storyContext.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ask } from '@tauri-apps/plugin-dialog'
   import {
     GitBranch,
@@ -44,7 +43,7 @@
 
   async function handleSwitchBranch(branchId: string | null) {
     try {
-      await story.switchBranch(branchId)
+      await story.branch.switchBranch(branchId)
     } catch (error) {
       console.error('Failed to switch branch:', error)
     }
@@ -58,7 +57,7 @@
   async function confirmRename() {
     if (renamingBranchId && renameValue.trim()) {
       try {
-        await story.renameBranch(renamingBranchId, renameValue.trim())
+        await story.branch.renameBranch(renamingBranchId, renameValue.trim())
       } catch (error) {
         console.error('Failed to rename branch:', error)
       }
@@ -79,7 +78,7 @@
     )
     if (!confirmed) return
     try {
-      await story.deleteBranch(branchId)
+      await story.branch.deleteBranch(branchId)
     } catch (error) {
       console.error('Failed to delete branch:', error)
       alert(error instanceof Error ? error.message : 'Failed to delete branch')
@@ -93,9 +92,9 @@
   }
 
   function getLatestCheckpoint() {
-    if (story.checkpoints.length === 0) return null
-    const currentBranchId = storyContext.currentStory?.currentBranchId ?? null
-    const eligible = story.checkpoints.filter(
+    if (story.checkpoint.checkpoints.length === 0) return null
+    const currentBranchId = story.currentStory?.currentBranchId ?? null
+    const eligible = story.checkpoint.checkpoints.filter(
       (checkpoint) => getCheckpointBranchId(checkpoint) === currentBranchId,
     )
     if (eligible.length === 0) return null
@@ -118,7 +117,7 @@
 
     try {
       // Create branch from the most recent checkpoint
-      await story.createBranchFromCheckpoint(
+      await story.branch.createBranchFromCheckpoint(
         newBranchName.trim(),
         latestCheckpoint.lastEntryId,
         latestCheckpoint.id,
@@ -133,19 +132,19 @@
 
   // Get children of a branch (or main branch if null)
   function getChildBranches(parentId: string | null): Branch[] {
-    return story.branches.filter((b) => b.parentBranchId === parentId)
+    return story.branch.branches.filter((b) => b.parentBranchId === parentId)
   }
 
   async function refreshEntryCounts() {
-    if (!storyContext.currentStory) return
+    if (!story.currentStory) return
     const runId = ++entryCountsRun
     const counts: Record<string, number> = {}
 
-    counts.main = await story.getBranchEntryCount(null)
+    counts.main = await story.branch.getBranchEntryCount(null)
     const branchCounts = await Promise.all(
-      story.branches.map(async (branch) => ({
+      story.branch.branches.map(async (branch) => ({
         id: branch.id,
-        count: await story.getBranchEntryCount(branch.id),
+        count: await story.branch.getBranchEntryCount(branch.id),
       })),
     )
     for (const result of branchCounts) {
@@ -158,10 +157,10 @@
 
   $effect(() => {
     const _ = [
-      storyContext.currentStory?.id,
-      storyContext.currentStory?.currentBranchId,
-      story.branches.length,
-      storyContext.entries.length,
+      story.currentStory?.id,
+      story.currentStory?.currentBranchId,
+      story.branch.branches.length,
+      story.entry.entries.length,
     ]
     refreshEntryCounts()
   })
@@ -173,7 +172,7 @@
 
   // Check if branch is current
   function isCurrent(branchId: string | null): boolean {
-    return storyContext.currentStory?.currentBranchId === branchId
+    return story.currentStory?.currentBranchId === branchId
   }
 </script>
 
@@ -381,7 +380,7 @@
   </div>
 
   <!-- Empty state -->
-  {#if story.branches.length === 0}
+  {#if story.branch.branches.length === 0}
     <p class="text-surface-400 py-4 text-center text-sm">
       {#if canCreateBranch}
         No branches yet. Create one to explore alternate storylines.

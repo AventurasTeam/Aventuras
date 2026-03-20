@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { storyContext } from '$lib/stores/storyContext.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { Plus, Settings } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
@@ -16,11 +15,11 @@
 
   let { onCreateChapter }: Props = $props()
 
-  const tokensOutsideBuffer = $derived(storyContext.tokensOutsideBuffer)
-  const threshold = $derived(storyContext.memoryConfig.tokenThreshold)
-  const autoSummarize = $derived(storyContext.memoryConfig.autoSummarize)
-  const messagesSinceLastChapter = $derived(storyContext.messagesSinceLastChapter)
-  const bufferSize = $derived(storyContext.memoryConfig.chapterBuffer)
+  const tokensOutsideBuffer = $derived(story.generationContext.tokensOutsideBuffer)
+  const threshold = $derived(story.generationContext.memoryConfig.tokenThreshold)
+  const autoSummarize = $derived(story.generationContext.memoryConfig.autoSummarize)
+  const messagesSinceLastChapter = $derived(story.chapter.messagesSinceLastChapter)
+  const bufferSize = $derived(story.generationContext.memoryConfig.chapterBuffer)
 
   const percentage = $derived(
     threshold > 0 ? Math.min(100, Math.round((tokensOutsideBuffer / threshold) * 100)) : 0,

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { storyContext } from '$lib/stores/storyContext.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { exportLorebook, getFormatInfo, type ExportFormat } from '$lib/services/lorebookExporter'
   import { Download, FileJson, FileText, Loader2 } from 'lucide-svelte'
@@ -18,9 +18,9 @@
 
   const entriesToExport = $derived(() => {
     if (exportSelected && ui.lorebookBulkSelection.size > 0) {
-      return storyContext.lorebookEntries.filter((e) => ui.lorebookBulkSelection.has(e.id))
+      return story.lorebook.lorebookEntries.filter((e) => ui.lorebookBulkSelection.has(e.id))
     }
-    return storyContext.lorebookEntries
+    return story.lorebook.lorebookEntries
   })
 
   const entryCount = $derived(entriesToExport().length)
@@ -38,9 +38,7 @@
       await exportLorebook({
         format: selectedFormat,
         entries: entriesToExport(),
-        filename: storyContext.currentStory?.title
-          ? `${storyContext.currentStory.title}-lorebook`
-          : undefined,
+        filename: story.currentStory?.title ? `${story.currentStory.title}-lorebook` : undefined,
       })
       ui.showToast('Export successful', 'info')
       ui.closeLorebookExport()
@@ -84,7 +82,7 @@
               <Label for="scope-all" class="flex-1 cursor-pointer">
                 <div class="font-medium">All entries</div>
                 <div class="text-muted-foreground text-xs">
-                  {storyContext.lorebookEntries.length} entries
+                  {story.lorebook.lorebookEntries.length} entries
                 </div>
               </Label>
             </div>
@@ -108,7 +106,7 @@
       {:else}
         <div class="bg-muted/50 rounded-lg border p-3">
           <div class="text-foreground font-medium">
-            {storyContext.lorebookEntries.length} entries
+            {story.lorebook.lorebookEntries.length} entries
           </div>
           <div class="text-muted-foreground text-xs">All lorebook entries will be exported</div>
         </div>

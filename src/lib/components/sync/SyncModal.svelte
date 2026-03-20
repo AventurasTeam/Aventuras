@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { syncService } from '$lib/services/sync'
   import { exportService } from '$lib/services/export'
   import { getVersion } from '@tauri-apps/api/app'

@@ -11,11 +11,11 @@
  * Uses ContextBuilder for prompt generation through the unified Liquid template pipeline.
  */
 
-import { streamNarrative, generateNarrative } from '../sdk/generate'
+import { streamNarrative } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
 import { mapChaptersToContext } from '$lib/services/context/chapterMapper'
 import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
-import { storyContext } from '$lib/stores/storyContext.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 import { ui } from '$lib/stores/ui.svelte'
 import {
   mapContextResultToArrays,
@@ -28,6 +28,7 @@ import type { Story, StoryEntry } from '$lib/types'
 import type { StyleReviewResult } from './StyleReviewerService'
 import type { ContextLorebookEntry } from '$lib/services/context/context-types'
 import type { AgenticRetrievalFields } from '$lib/services/generation/types'
+import type { StoryChapterStore } from '$lib/stores/story/chapter.svelte'
 
 const log = createLogger('Narrative')
 
@@ -66,9 +67,8 @@ export class NarrativeService {
    * Yields StreamChunk objects as text arrives from the model.
    */
   async *stream(signal?: AbortSignal): AsyncIterable<StreamChunk> {
-    const entries = storyContext.visibleEntries
-    const story = storyContext.currentStory
-    const retrievalResult = storyContext.retrievalResult
+    const entries = story.entry.visibleEntries
+    const retrievalResult = story.generationContext.retrievalResult
     const agenticRetrieval = retrievalResult?.agenticRetrieval ?? null
     const lorebookEntries = retrievalResult?.lorebookEntries ?? []
     const styleReview = ui.lastStyleReview
@@ -84,26 +84,27 @@ export class NarrativeService {
     const userInput = lastEntry?.content ?? ''
     const injector = new EntryInjector({}, 'entryRetrieval')
     const worldState = {
-      characters: storyContext.characters,
-      locations: storyContext.locations,
-      items: storyContext.items,
-      storyBeats: storyContext.storyBeats,
-      currentLocation: storyContext.currentLocation,
-      chapters: storyContext.currentBranchChapters,
+      characters: story.character.characters,
+      locations: story.location.locations,
+      items: story.item.items,
+      storyBeats: story.storyBeat.storyBeats,
+      currentLocation: story.location.currentLocation,
+      chapters: story.chapter.currentBranchChapters,
     }
     const contextResult = await injector.buildContext(worldState, userInput, entries)
     const worldStateArrays = mapContextResultToArrays(contextResult)
 
-    const inlineImageMode = story?.settings?.imageGenerationMode === 'inline'
+    const inlineImageMode = story?.currentStory?.settings?.imageGenerationMode === 'inline'
 
     const { systemPrompt, userMessage } = await this.buildPrompts(
       entries,
       inlineImageMode,
-      story,
+      story.currentStory,
       worldStateArrays,
       agenticRetrieval,
       lorebookEntries,
       styleReview,
+      story.chapter.currentBranchChapters,
     )
 
     try {
@@ -125,45 +126,6 @@ export class NarrativeService {
   }
 
   /**
-   * Generate a complete narrative response (non-streaming).
-   *
-   * Used for scenarios where streaming is not needed or supported.
-   */
-  async generate(
-    entries: StoryEntry[],
-    story?: Story | null,
-    options: {
-      worldStateArrays?: WorldStateArrays
-      styleReview?: StyleReviewResult | null
-      agenticRetrieval?: AgenticRetrievalFields | null
-      lorebookEntries?: ContextLorebookEntry[]
-      signal?: AbortSignal
-    } = {},
-  ): Promise<string> {
-    const { worldStateArrays, styleReview, agenticRetrieval, lorebookEntries, signal } = options
-
-    log('generate', { entriesCount: entries.length })
-
-    const inlineImageMode = story?.settings?.imageGenerationMode === 'inline'
-
-    const { systemPrompt, userMessage } = await this.buildPrompts(
-      entries,
-      inlineImageMode,
-      story,
-      worldStateArrays,
-      agenticRetrieval,
-      lorebookEntries,
-      styleReview,
-    )
-
-    return generateNarrative({
-      system: systemPrompt,
-      prompt: userMessage,
-      signal,
-    })
-  }
-
-  /**
    * Build system and priming prompts through the ContextBuilder pipeline.
    *
    * Creates a ContextBuilder from the story, adds runtime variables
@@ -178,6 +140,7 @@ export class NarrativeService {
     agenticRetrieval?: AgenticRetrievalFields | null,
     lorebookEntries?: ContextLorebookEntry[],
     styleReview?: StyleReviewResult | null,
+    currentBranchChapters?: StoryChapterStore['currentBranchChapters'],
   ): Promise<{ systemPrompt: string; userMessage: string }> {
     const mode = story?.mode ?? 'adventure'
 
@@ -220,8 +183,7 @@ export class NarrativeService {
     }
 
     // Build chapter context arrays via zero-arg overload (reads from singleton)
-    const singletonChapters = storyContext.currentBranchChapters
-    if (singletonChapters && singletonChapters.length > 0) {
+    if (currentBranchChapters && currentBranchChapters.length > 0) {
       const { chapters, timelineFill } = mapChaptersToContext()
       ctx.add({ chapters, timelineFill })
     }

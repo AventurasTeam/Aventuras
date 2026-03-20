@@ -1,4 +1,4 @@
-import { story } from '$lib/stores/story.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 import { ui } from '$lib/stores/ui.svelte'
 import { settings } from '$lib/stores/settings.svelte'
 import { aiService } from '$lib/services/ai'

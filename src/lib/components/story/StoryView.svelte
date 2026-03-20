@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { storyContext } from '$lib/stores/storyContext.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import { Loader2, BookOpen, ChevronDown, ChevronUp } from 'lucide-svelte'
@@ -54,17 +53,17 @@
 
   // Reset window when story changes
   $effect(() => {
-    const currentStoryId = storyContext.currentStory?.id ?? null
+    const currentStoryId = story.currentStory?.id ?? null
 
     if (currentStoryId !== lastStoryId) {
       lastStoryId = currentStoryId
-      anchorToBottom(storyContext.entries.length)
+      anchorToBottom(story.entry.entries.length)
     }
   })
 
   // Compute which entries to render
   const displayedEntries = $derived.by(() => {
-    const entries = storyContext.entries
+    const entries = story.entry.entries
     const total = entries.length
     const start = Math.max(0, Math.min(windowStart, total))
     const end = Math.min(total, Math.max(windowEnd, start))
@@ -107,7 +106,7 @@
 
   // Load later entries below, then trim the top if it's safely off-screen.
   async function showMoreBelow() {
-    const total = storyContext.entries.length
+    const total = story.entry.entries.length
 
     // Phase 1: expand window downward (no scroll compensation needed — adding below doesn't shift content)
     windowEnd = Math.min(total, windowEnd + LOAD_MORE_BATCH)
@@ -147,7 +146,7 @@
   }
 
   function scrollToBottom() {
-    anchorToBottom(storyContext.entries.length)
+    anchorToBottom(story.entry.entries.length)
     requestAnimationFrame(() => {
       performScroll(storyContainer?.scrollHeight ?? 0)
     })
@@ -156,7 +155,7 @@
   async function scrollToTop() {
     ui.setScrollBreak(true)
     suppressScrollHandler = true
-    anchorToTop(storyContext.entries.length)
+    anchorToTop(story.entry.entries.length)
     await tick()
     performScroll(0)
     requestAnimationFrame(() => {
@@ -202,7 +201,7 @@
   // Auto-scroll to bottom when new entries are added or streaming content changes
   $effect(() => {
     // Track primary scroll-inducing changes
-    const currentCount = storyContext.entries.length
+    const currentCount = story.entry.entries.length
     const _ = innerHeight
     const __ = containerHeight
 
@@ -213,7 +212,7 @@
     // Detect if we should scroll:
     // 1. We are NOT user-scrolled-up (pinned mode)
     // 2. OR on user action send message/retry
-    const lastEntry = storyContext.entries[storyContext.entries.length - 1]
+    const lastEntry = story.entry.entries[story.entry.entries.length - 1]
     const shouldScroll =
       settings.uiSettings.autoScroll &&
       (!ui.userScrolledUp ||
@@ -272,7 +271,7 @@
     onscroll={handleScroll}
   >
     <div class="mx-auto max-w-3xl space-y-2.5 sm:space-y-3" bind:clientHeight={innerHeight}>
-      {#if storyContext.entries.length === 0 && !ui.isStreaming}
+      {#if story.entry.entries.length === 0 && !ui.isStreaming}
         <EmptyState
           icon={BookOpen}
           title="Your adventure begins here..."
@@ -319,7 +318,7 @@
         {/if}
 
         <!-- Show RPG-style action choices after narration (adventure mode only) -->
-        {#if !ui.isStreaming && !ui.isGenerating && storyContext.storyMode === 'adventure' && !settings.uiSettings.disableSuggestions}
+        {#if !ui.isStreaming && !ui.isGenerating && story.generationContext.storyMode === 'adventure' && !settings.uiSettings.disableSuggestions}
           <ActionChoices />
         {/if}
 
@@ -345,7 +344,7 @@
     </div>
 
     <!-- Scroll navigation buttons (floating at bottom of scroll container) -->
-    {#if storyContext.entries.length > 0}
+    {#if story.entry.entries.length > 0}
       {@const buttonClasses = 'h-8 w-8 rounded-full shadow-lg disabled:opacity-50 sm:h-9 sm:w-9'}
       {@const iconClasses = 'h-4 w-4 sm:h-5 sm:w-5'}
 

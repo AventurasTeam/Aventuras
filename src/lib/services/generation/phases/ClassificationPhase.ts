@@ -16,12 +16,8 @@ import type {
   ClassificationCompleteEvent,
 } from '../types'
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
-import { storyContext } from '$lib/stores/storyContext.svelte'
-
-/** Dependencies for classification phase - injected to avoid tight coupling */
-export interface ClassificationDependencies {
-  classifyResponse: () => Promise<ClassificationResult>
-}
+import { story } from '$lib/stores/story/index.svelte'
+import { aiService } from '$lib/services/ai'
 
 /** Result from classification phase */
 export interface ClassificationPhaseResult {
@@ -34,13 +30,11 @@ export interface ClassificationPhaseResult {
  * Extracts world state changes from narrative using AI classifier.
  */
 export class ClassificationPhase {
-  constructor(private deps: ClassificationDependencies) {}
-
   /** Execute the classification phase - yields events and returns result */
   async *execute(): AsyncGenerator<GenerationEvent, ClassificationPhaseResult | null> {
     // === CONCURRENT PHASE SAFETY: Snapshot singleton inputs before first yield ===
-    const narrativeEntryId = storyContext.narrationEntryId ?? ''
-    const abortSignal = storyContext.abortSignal ?? undefined
+    const narrativeEntryId = story.generationContext.narrationEntryId ?? ''
+    const abortSignal = story.generationContext.abortSignal ?? undefined
     // === End snapshot block ===
 
     yield { type: 'phase_start', phase: 'classification' } satisfies PhaseStartEvent
@@ -52,7 +46,7 @@ export class ClassificationPhase {
 
     try {
       // ClassifierService.classify() reads all data from singleton (narrationEntryId filtering included)
-      const classificationResult = await this.deps.classifyResponse()
+      const classificationResult = await aiService.classifyResponse()
 
       if (abortSignal?.aborted) {
         yield { type: 'aborted', phase: 'classification' } satisfies AbortedEvent
@@ -76,7 +70,7 @@ export class ClassificationPhase {
         result,
       } satisfies PhaseCompleteEvent
 
-      storyContext.classificationResult = result
+      story.generationContext.classificationResult = result
       return result
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { storyContext } from '$lib/stores/storyContext.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { Lightbulb, ArrowRight, Loader2, RefreshCw, ChevronDown, ChevronUp } from 'lucide-svelte'
   import type { Suggestion } from '$lib/services/ai/sdk/schemas/suggestions'
   import { swipe } from '$lib/utils/swipe'
@@ -44,7 +44,7 @@
   }
 </script>
 
-{#if storyContext.storyMode === 'creative-writing'}
+{#if story.generationContext?.storyMode === 'creative-writing'}
   <div
     class="px-2 pt-0.5 pb-2 sm:py-2 {!collapsed ? '-mt-2' : ''}"
     use:swipe={{

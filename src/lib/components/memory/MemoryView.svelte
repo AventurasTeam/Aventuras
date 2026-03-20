@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Chapter } from '$lib/types'
-  import { story } from '$lib/stores/story.svelte'
-  import { storyContext } from '$lib/stores/storyContext.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { aiService } from '$lib/services/ai'
   import MemoryHeader from './MemoryHeader.svelte'
@@ -15,11 +14,11 @@
 
   // Get chapters sorted by number (descending - newest first)
 
-  const sortedChapters = $derived([...storyContext.chapters].sort((a, b) => b.number - a.number))
+  const sortedChapters = $derived([...story.chapter.chapters].sort((a, b) => b.number - a.number))
 
   // Get entries for each chapter
   function getChapterEntries(chapter: Chapter) {
-    return story.getChapterEntries(chapter)
+    return story.chapter.getChapterEntries(chapter)
   }
 
   /**
@@ -27,7 +26,7 @@
    * Same as ActionInput's lore management, triggered per design doc section 3.4.
    */
   async function runLoreManagement() {
-    if (!storyContext.currentStory) return
+    if (!story.currentStory) return
 
     console.log('[MemoryView] Starting lore management...')
     ui.startLoreManagement()
@@ -40,13 +39,13 @@
 
     try {
       const result = await aiService.runLoreManagement(
-        storyContext.currentStory.id,
-        storyContext.currentStory.currentBranchId,
-        [...storyContext.lorebookEntries],
-        storyContext.chapters,
+        story.currentStory.id,
+        story.currentStory.currentBranchId,
+        [...story.lorebook.lorebookEntries],
+        story.chapter.chapters,
         {
           onCreateEntry: async (entry) => {
-            await story.addLorebookEntry({
+            await story.lorebook.addLorebookEntry({
               name: entry.name,
               type: entry.type,
               description: entry.description,
@@ -65,16 +64,16 @@
             ui.updateLoreManagementProgress('Creating entries...', bumpChanges())
           },
           onUpdateEntry: async (id, updates) => {
-            await story.updateLorebookEntry(id, updates)
+            await story.lorebook.updateLorebookEntry(id, updates)
             ui.updateLoreManagementProgress('Updating entries...', bumpChanges())
           },
           onDeleteEntry: async (id) => {
-            await story.deleteLorebookEntry(id)
+            await story.lorebook.deleteLorebookEntry(id)
             ui.updateLoreManagementProgress('Cleaning up entries...', bumpChanges())
           },
           onMergeEntries: async (entryIds, mergedEntry) => {
-            await story.deleteLorebookEntries(entryIds)
-            await story.addLorebookEntry({
+            await story.lorebook.deleteLorebookEntries(entryIds)
+            await story.lorebook.addLorebookEntry({
               name: mergedEntry.name,
               type: mergedEntry.type,
               description: mergedEntry.description,
@@ -96,13 +95,13 @@
             return aiService.answerChapterQuestion(
               chapterNumber,
               question,
-              storyContext.currentBranchChapters,
+              story.chapter.currentBranchChapters,
             )
           },
         },
-        storyContext.currentStory?.mode ?? 'adventure',
-        storyContext.pov,
-        storyContext.tense,
+        story.currentStory?.mode ?? 'adventure',
+        story.generationContext.pov,
+        story.generationContext.tense,
       )
 
       console.log('[MemoryView] Lore management complete', {
@@ -122,7 +121,7 @@
   async function handleCreateManualChapter(endEntryIndex: number) {
     ui.setMemoryLoading(true)
     try {
-      await story.createManualChapter(endEntryIndex)
+      await story.chapter.createManualChapter(endEntryIndex)
       ui.closeManualChapterModal()
 
       // Trigger lore management after successful chapter creation
@@ -144,7 +143,7 @@
     const chapterId = ui.resummarizeChapterId
     if (!chapterId) return
 
-    const chapter = storyContext.chapters.find((c) => c.id === chapterId)
+    const chapter = story.chapter.chapters.find((c) => c.id === chapterId)
     if (!chapter) return
 
     ui.setMemoryLoading(true)
@@ -153,14 +152,14 @@
       const newSummary = await aiService.resummarizeChapter(
         chapter,
         entries,
-        storyContext.chapters,
-        storyContext.currentStory?.mode ?? 'adventure',
-        storyContext.pov,
-        storyContext.tense,
+        story.chapter.chapters,
+        story.generationContext.storyMode ?? 'adventure',
+        story.generationContext.pov,
+        story.generationContext.tense,
       )
 
       // Update the chapter with new summary and metadata
-      await story.updateChapter(chapter.id, {
+      await story.chapter.updateChapter(chapter.id, {
         summary: newSummary.summary,
         title: newSummary.title,
         keywords: newSummary.keywords,

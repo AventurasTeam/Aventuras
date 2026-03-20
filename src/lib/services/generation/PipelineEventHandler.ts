@@ -22,7 +22,7 @@ export interface PipelineEventState {
   fullReasoning: () => string
   streamingEntryId: string
   visualProseMode: boolean
-  isCreativeMode: boolean
+  isCreativeWritingMode: boolean
   storyId?: string
 }
 
@@ -39,9 +39,9 @@ export function handleEvent(
         callbacks.setGenerationStatus('Updating world...')
       } else if (event.phase === 'post') {
         callbacks.setGenerationStatus(
-          state.isCreativeMode ? 'Generating suggestions...' : 'Generating actions...',
+          state.isCreativeWritingMode ? 'Generating suggestions...' : 'Generating actions...',
         )
-        if (state.isCreativeMode) {
+        if (state.isCreativeWritingMode) {
           callbacks.setSuggestionsLoading(true)
         } else {
           callbacks.setActionChoicesLoading(true)

@@ -23,7 +23,7 @@ import type {
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { database } from '$lib/services/database'
-import { storyContext } from '$lib/stores/storyContext.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 import { createLogger } from '$lib/log'
 import { stripPicTags } from '$lib/utils/inlineImageParser'
 import {
@@ -85,32 +85,31 @@ export class ClassifierService extends BaseAIService {
    * This is the primary method used by the generation pipeline.
    */
   async classify(): Promise<ClassificationResult> {
-    const story = storyContext.currentStory
-    if (!story) {
+    if (!story.currentStory) {
       log('classify: No story in singleton, returning empty result')
       return { ...EMPTY_CLASSIFICATION_RESULT }
     }
 
     const context: ClassificationContext = {
-      storyId: story.id,
-      story,
-      narrativeResponse: storyContext.narrativeResult?.content ?? '',
-      userAction: storyContext.userAction?.content ?? '',
-      existingCharacters: storyContext.characters,
-      existingLocations: storyContext.locations,
-      existingItems: storyContext.items,
-      existingStoryBeats: storyContext.storyBeats,
+      storyId: story.currentStory.id,
+      story: story.currentStory,
+      narrativeResponse: story.generationContext.narrativeResult?.content ?? '',
+      userAction: story.generationContext.userAction?.content ?? '',
+      existingCharacters: story.character.characters,
+      existingLocations: story.location.locations,
+      existingItems: story.item.items,
+      existingStoryBeats: story.storyBeat.storyBeats,
     }
 
     // Filter out the current narration entry to avoid sending it twice
     // (once in chatHistory, once as narrativeResponse in ClassificationContext).
     // This mirrors the filtering previously done in ClassificationPhase.execute().
-    const narrationEntryId = storyContext.narrationEntryId
+    const narrationEntryId = story.generationContext.narrationEntryId
     const visibleEntries = narrationEntryId
-      ? storyContext.visibleEntries.filter((e) => e.id !== narrationEntryId)
-      : storyContext.visibleEntries
+      ? story.entry.visibleEntries.filter((e) => e.id !== narrationEntryId)
+      : story.entry.visibleEntries
 
-    return this._classifyInternal(context, visibleEntries, story.timeTracker)
+    return this._classifyInternal(context, visibleEntries, story.time.timeTracker)
   }
 
   /**

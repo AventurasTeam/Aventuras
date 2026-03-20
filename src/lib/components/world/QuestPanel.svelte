@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
-  import { storyContext } from '$lib/stores/storyContext.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import {
     Plus,
@@ -41,15 +40,15 @@
   let editRuntimeVars = $state<RuntimeVarsMap>({})
 
   $effect(() => {
-    if (storyContext.currentStory) {
+    if (story.currentStory) {
       loadRuntimeVarDefs()
     }
   })
 
   async function loadRuntimeVarDefs() {
-    if (!storyContext.currentStory) return
+    if (!story.currentStory) return
     try {
-      const packId = await database.getStoryPackId(storyContext.currentStory.id)
+      const packId = await database.getStoryPackId(story.currentStory.id)
       if (packId) {
         runtimeVarDefs = await database.getRuntimeVariablesByEntityType(packId, 'story_beat')
       } else {
@@ -78,7 +77,7 @@
 
   async function addBeat() {
     if (!newTitle.trim()) return
-    await story.addStoryBeat(newTitle.trim(), newType, newDescription.trim() || undefined)
+    await story.storyBeat.addStoryBeat(newTitle.trim(), newType, newDescription.trim() || undefined)
     newTitle = ''
     newDescription = ''
     newType = 'quest'
@@ -122,7 +121,7 @@
         }
       : beat.metadata
 
-    await story.updateStoryBeat(beat.id, {
+    await story.storyBeat.updateStoryBeat(beat.id, {
       title,
       description: editDescription.trim() || null,
       type: editType,
@@ -133,7 +132,7 @@
   }
 
   async function deleteBeat(beat: StoryBeat) {
-    await story.deleteStoryBeat(beat.id)
+    await story.storyBeat.deleteStoryBeat(beat.id)
   }
 
   type LucideIcon = typeof Circle
@@ -239,12 +238,12 @@
   {/if}
 
   <!-- Active Quests -->
-  {#if storyContext.pendingQuests.length > 0}
+  {#if story.storyBeat.pendingQuests.length > 0}
     <div class="mb-4 flex flex-col gap-2">
       <h4 class="text-muted-foreground pl-1 text-xs font-semibold tracking-wider uppercase">
         Active
       </h4>
-      {#each storyContext.pendingQuests as beat (beat.id)}
+      {#each story.storyBeat.pendingQuests as beat (beat.id)}
         {@const statusConfig = getStatusConfig(beat.status)}
         {@const isCollapsed = ui.isEntityCollapsed(beat.id)}
         {@const isEditing = editingId === beat.id}
@@ -449,7 +448,7 @@
   {/if}
 
   <!-- History / Empty State -->
-  {#if storyContext.storyBeats.length === 0 && storyContext.pendingQuests.length === 0}
+  {#if story.storyBeat.storyBeats.length === 0 && story.storyBeat.pendingQuests.length === 0}
     <div
       class="border-border bg-muted/20 flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center"
     >
@@ -468,7 +467,7 @@
       </Button>
     </div>
   {:else}
-    {@const completedBeats = storyContext.storyBeats.filter(
+    {@const completedBeats = story.storyBeat.storyBeats.filter(
       (b) => b.status === 'completed' || b.status === 'failed',
     )}
 

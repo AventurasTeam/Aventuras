@@ -11,7 +11,7 @@ import type { StoryEntry, StoryBeat } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { getContextConfig, getLorebookConfig } from '../core/config'
-import { storyContext } from '$lib/stores/storyContext.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 import { createLogger } from '$lib/log'
 import { suggestionsResultSchema, type SuggestionsResult } from '../sdk/schemas/suggestions'
 import type { ContextLorebookEntry } from '$lib/services/context/context-types'
@@ -59,11 +59,11 @@ export class SuggestionsService extends BaseAIService {
   ): Promise<SuggestionsResult> {
     if (recentEntries === undefined) {
       // Zero-arg path: read from singleton
-      const entries = storyContext.visibleEntries
-      const threads = storyContext.pendingQuests
-      const lbEntries = storyContext.retrievalResult?.lorebookEntries ?? []
-      const id = storyContext.currentStory?.id
-      const narrative = storyContext.narrativeResult?.content
+      const entries = story.entry.visibleEntries
+      const threads = story.storyBeat.pendingQuests
+      const lbEntries = story.generationContext.retrievalResult?.lorebookEntries ?? []
+      const id = story.currentStory?.id
+      const narrative = story.generationContext.narrativeResult?.content
       return this._generateSuggestionsInternal(entries, threads, lbEntries, id, narrative)
     }
     return this._generateSuggestionsInternal(

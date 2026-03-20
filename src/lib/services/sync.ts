@@ -2,8 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '$lib/types/sync'
 import type { AventuraExport } from './export'
 import { database } from './database'
-import { story } from '$lib/stores/story.svelte'
-import { storyContext } from '$lib/stores/storyContext.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 
 /**
  * Service for local network sync functionality
@@ -80,11 +79,11 @@ class SyncService {
    */
   async createPreSyncBackup(storyId: string): Promise<void> {
     // Load the story if not already loaded
-    if (storyContext.currentStory?.id !== storyId) {
+    if (story.currentStory?.id !== storyId) {
       await story.loadStory(storyId)
     }
     // Create a checkpoint named "Pre-sync backup"
-    await story.createCheckpoint('Pre-sync backup')
+    await story.checkpoint.createCheckpoint('Pre-sync backup')
   }
 
   /**

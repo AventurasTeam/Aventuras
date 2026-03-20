@@ -1,7 +1,6 @@
 <script lang="ts">
   import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
-  import { storyContext } from '$lib/stores/storyContext.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { BookOpen, Volume2, Pencil, Trash2 } from 'lucide-svelte'
   import { parseMarkdown } from '$lib/utils/markdown'
   import ReasoningBlock from './ReasoningBlock.svelte'
@@ -15,9 +14,7 @@
   let isVisualProse = $derived(ui.isVisualProseStreaming())
 
   // Check if inline image mode is enabled
-  let inlineImageMode = $derived(
-    storyContext.currentStory?.settings?.imageGenerationMode === 'inline',
-  )
+  let inlineImageMode = $derived(story.currentStory?.settings?.imageGenerationMode === 'inline')
 
   // For Visual Prose, content is already wrapped HTML; for regular, parse as markdown
   // Also process <pic> tags to show generating placeholders when inline mode is enabled
