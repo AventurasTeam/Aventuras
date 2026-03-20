@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
-  import { type DebugLogEntry } from '$lib/stores/ui.svelte'
+  import { type DebugLogEntry } from '$lib/stores/debug.svelte'
   import DebugLogView from '$lib/components/debug/DebugLogView.svelte'
   import { Button } from '$lib/components/ui/button'
   import { Minimize2 } from 'lucide-svelte'

@@ -7,7 +7,7 @@
  */
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
-import { ui } from '$lib/stores/ui.svelte'
+import { debug } from '$lib/stores/debug.svelte'
 
 const DEFAULT_IMAGE_TIMEOUT = 5 * 60 * 1000 // 5 minutes
 
@@ -57,7 +57,7 @@ export async function imageFetch(options: {
     debugBody = { formData: keys }
   }
 
-  const debugId = ui.addDebugRequest(serviceId, { url, method, body: debugBody })
+  const debugId = debug.addDebugRequest(serviceId, { url, method, body: debugBody })
 
   try {
     let response: Response
@@ -96,7 +96,7 @@ export async function imageFetch(options: {
       } catch {
         errorPayload = errorText
       }
-      ui.addDebugResponse(
+      debug.addDebugResponse(
         debugId,
         serviceId,
         { status: response.status, error: errorPayload, statusText: response.statusText },
@@ -116,7 +116,7 @@ export async function imageFetch(options: {
     } catch {
       responsePayload = { size: text.length }
     }
-    ui.addDebugResponse(debugId, serviceId, { body: responsePayload }, startTime)
+    debug.addDebugResponse(debugId, serviceId, { body: responsePayload }, startTime)
 
     // Return a new response with the consumed text
     return new Response(text, {
@@ -149,7 +149,7 @@ export async function imageGetFetch(
   signal?.addEventListener('abort', () => controller.abort())
 
   const startTime = Date.now()
-  const debugId = ui.addDebugRequest(serviceId, { url, method: 'GET', body: {} })
+  const debugId = debug.addDebugRequest(serviceId, { url, method: 'GET', body: {} })
 
   try {
     const response = await tauriHttpFetch(url, {
@@ -160,7 +160,7 @@ export async function imageGetFetch(
 
     if (!response.ok) {
       const errorText = await response.text()
-      ui.addDebugResponse(
+      debug.addDebugResponse(
         debugId,
         serviceId,
         { status: response.status, error: errorText },
@@ -170,7 +170,7 @@ export async function imageGetFetch(
       throw new Error(`Image API error ${response.status}: ${errorText}`)
     }
 
-    ui.addDebugResponse(debugId, serviceId, { status: response.status }, startTime)
+    debug.addDebugResponse(debugId, serviceId, { status: response.status }, startTime)
     return response
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {

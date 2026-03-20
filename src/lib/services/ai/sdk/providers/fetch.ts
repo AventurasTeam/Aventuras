@@ -5,10 +5,10 @@
  * Patches common provider response issues before SDK validation.
  */
 
-import { ui } from '$lib/stores/ui.svelte'
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { LLM_TIMEOUT_DEFAULT } from '$lib/constants/timeout'
 import { parseManualBody } from '$lib/services/ai/core/requestOverrides'
+import { debug } from '$lib/stores/debug.svelte'
 
 function normalizeHeaders(headers: RequestInit['headers']): Record<string, string> {
   if (!headers) return {}
@@ -82,7 +82,7 @@ export function createTimeoutFetch(
       parsedBody = undefined
     }
 
-    const debugId = ui.addDebugRequest(
+    const debugId = debug.addDebugRequest(
       serviceId,
       {
         url: input.toString(),
@@ -106,7 +106,7 @@ export function createTimeoutFetch(
         } catch {
           errorPayload = error
         }
-        ui.addDebugResponse(
+        debug.addDebugResponse(
           debugId,
           serviceId,
           { status: response.status, error: errorPayload, statusText: response.statusText },
@@ -229,7 +229,7 @@ export function createTimeoutFetch(
               // Fallback to raw text
             }
 
-            ui.addDebugResponse(
+            debug.addDebugResponse(
               debugId,
               serviceId,
               {
@@ -257,7 +257,7 @@ export function createTimeoutFetch(
         } catch {
           responsePayload = text
         }
-        ui.addDebugResponse(
+        debug.addDebugResponse(
           debugId,
           serviceId,
           {
@@ -269,7 +269,7 @@ export function createTimeoutFetch(
         )
       }
 
-      ui.addDebugResponse(
+      debug.addDebugResponse(
         debugId,
         serviceId,
         {

@@ -27,6 +27,7 @@ import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '$lib/cons
 import { SvelteSet, SvelteMap } from 'svelte/reactivity'
 import { dedupeTextModels, type TextModel } from '$lib/services/ai/sdk/providers'
 import type { ImageGenerationServiceSettings, TimelineFillSettings } from '$lib/services/ai'
+import { debug } from './debug.svelte'
 
 // Provider preset type (used by WelcomeScreen)
 export type ProviderPreset = 'openrouter' | 'nanogpt' | 'openai-compatible'
@@ -1353,7 +1354,7 @@ class SettingsStore {
         this.uiSettings.showScrollToBottom = showScrollToBottom === 'true'
 
       const debugMode = await database.getSetting('debug_mode')
-      if (debugMode !== null) this.uiSettings.debugMode = debugMode === 'true'
+      if (debugMode !== null) debug.isActive = this.uiSettings.debugMode = debugMode === 'true'
 
       const sidebarWidth = await database.getSetting('sidebar_width')
       if (sidebarWidth) this.uiSettings.sidebarWidth = parseInt(sidebarWidth, 10)

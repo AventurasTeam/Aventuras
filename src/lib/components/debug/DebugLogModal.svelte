@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ui, type DebugLogEntry } from '$lib/stores/ui.svelte'
+  import { debug, type DebugLogEntry } from '$lib/stores/debug.svelte'
   import { ExternalLink, RefreshCcw } from 'lucide-svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -12,7 +12,7 @@
 
   // Update throttled logs when modal opens or logs change (throttled)
   $effect(() => {
-    if (!ui.debugModalOpen || ui.debugWindowActive) {
+    if (!debug.debugModalOpen || debug.debugWindowActive) {
       if (pendingUpdate) {
         clearTimeout(pendingUpdate)
         pendingUpdate = null
@@ -20,7 +20,7 @@
       return
     }
 
-    const logs = ui.debugLogs
+    const logs = debug.debugLogs
     const now = Date.now()
     const timeSinceLastUpdate = now - lastUpdateTime
 
@@ -33,7 +33,7 @@
       }
     } else if (!pendingUpdate) {
       pendingUpdate = setTimeout(() => {
-        throttledLogs = [...ui.debugLogs]
+        throttledLogs = [...debug.debugLogs]
         lastUpdateTime = Date.now()
         pendingUpdate = null
       }, 500 - timeSinceLastUpdate)
@@ -42,26 +42,26 @@
 
   // Sync immediately when modal opens
   $effect(() => {
-    if (ui.debugModalOpen && !ui.debugWindowActive) {
-      throttledLogs = [...ui.debugLogs]
+    if (debug.debugModalOpen && !debug.debugWindowActive) {
+      throttledLogs = [...debug.debugLogs]
       lastUpdateTime = Date.now()
     }
   })
 
   function handleClearLogs() {
-    ui.clearDebugLogs()
+    debug.clearDebugLogs()
   }
 
   async function handlePopOut() {
-    await ui.popOutDebug()
+    await debug.popOutDebug()
   }
 
   async function handlePopIn() {
-    await ui.popInDebug()
+    await debug.popInDebug()
   }
 </script>
 
-<ResponsiveModal.Root bind:open={ui.debugModalOpen}>
+<ResponsiveModal.Root bind:open={debug.debugModalOpen}>
   <ResponsiveModal.Content class="flex h-[85vh] max-h-[85vh] flex-col gap-0 p-0 sm:max-w-4xl">
     <ResponsiveModal.Header class="border-border border-b px-6 py-4">
       <div class="flex w-full items-center justify-between">
@@ -71,11 +71,11 @@
             <span
               class="bg-secondary text-secondary-foreground rounded px-2 py-0.5 font-mono text-xs"
             >
-              {ui.debugLogs.length}
+              {debug.debugLogs.length}
             </span>
           </div>
 
-          {#if !ui.debugWindowActive}
+          {#if !debug.debugWindowActive}
             <Button
               variant="ghost"
               size="icon"
@@ -94,7 +94,7 @@
     </ResponsiveModal.Header>
 
     <div class="flex flex-1 flex-col overflow-hidden">
-      {#if ui.debugWindowActive}
+      {#if debug.debugWindowActive}
         <div class="flex flex-1 flex-col items-center justify-center space-y-4 p-8 text-center">
           <div class="rounded-full bg-blue-500/10 p-4 text-blue-400">
             <ExternalLink class="h-8 w-8" />
@@ -115,8 +115,8 @@
         <DebugLogView
           logs={throttledLogs}
           onClear={handleClearLogs}
-          renderNewlines={ui.debugRenderNewlines}
-          onToggleRenderNewlines={() => ui.toggleDebugRenderNewlines()}
+          renderNewlines={debug.debugRenderNewlines}
+          onToggleRenderNewlines={() => debug.toggleDebugRenderNewlines()}
         />
       {/if}
     </div>

@@ -24,7 +24,7 @@ import { createLogger } from '$lib/log'
 import { createProviderFromProfile } from './providers'
 import { PROVIDERS, getReasoningExtraction } from './providers/config'
 import { promptSchemaMiddleware, patchResponseMiddleware, loggingMiddleware } from './middleware'
-import { ui } from '$lib/stores/ui.svelte'
+import { debug } from '$lib/stores/debug.svelte'
 import type { OpenAICompatibleProviderOptions } from '@ai-sdk/openai-compatible'
 import type { DeepSeekChatOptions } from '@ai-sdk/deepseek'
 import type { XaiProviderOptions } from '@ai-sdk/xai'
@@ -472,7 +472,7 @@ export function streamPlainText(options: BaseGenerateOptions, serviceId: string)
     providerOptions,
     abortSignal: signal,
     onFinish: (result) => {
-      ui.addDebugResponse(
+      debug.addDebugResponse(
         debugId,
         serviceId,
         {
@@ -515,7 +515,7 @@ export function streamStructured<T extends z.ZodType>(
     providerOptions,
     abortSignal: signal,
     onFinish: (result) => {
-      ui.addDebugResponse(
+      debug.addDebugResponse(
         debugId,
         serviceId,
         {
@@ -558,7 +558,7 @@ export function streamNarrative(options: NarrativeGenerateOptions) {
     providerOptions,
     abortSignal: signal,
     onFinish: (result) => {
-      ui.addDebugResponse(
+      debug.addDebugResponse(
         debugId,
         'narrative',
         {
