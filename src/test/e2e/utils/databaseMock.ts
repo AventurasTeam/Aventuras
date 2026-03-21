@@ -201,11 +201,16 @@ export function createDatabaseMock() {
     getRuntimeVariables: vi.fn().mockResolvedValue([]),
     getRuntimeVariableValues: vi.fn().mockResolvedValue({}),
 
-    // Lorebook
+    // Lorebook / entries (named differently from StoryEntries)
     getLorebookEntries: vi.fn().mockResolvedValue([]),
     addLorebookEntry: vi.fn().mockResolvedValue(undefined),
     updateLorebookEntry: vi.fn().mockResolvedValue(undefined),
     deleteLorebookEntry: vi.fn().mockResolvedValue(undefined),
+    getEntriesForBranch: vi.fn().mockResolvedValue([]),
+    addEntry: vi.fn().mockResolvedValue(undefined),
+    updateEntry: vi.fn().mockResolvedValue(undefined),
+    deleteEntry: vi.fn().mockResolvedValue(undefined),
+    getEntries: vi.fn().mockResolvedValue([]),
 
     // Misc
     init: vi.fn().mockResolvedValue(undefined),
