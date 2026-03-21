@@ -15,11 +15,6 @@ import type {
   UpdateSettings,
 } from '$lib/types'
 import { database } from '$lib/services/database'
-import {
-  type AdvancedWizardSettings,
-  getDefaultAdvancedSettings,
-  getDefaultAdvancedSettingsForProvider,
-} from '$lib/services/ai/wizard/ScenarioService'
 import { grammarService } from '$lib/services/grammar'
 import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
 import { ui } from '$lib/stores/ui.svelte'
@@ -56,6 +51,122 @@ function normalizeProfile(profile: APIProfile): APIProfile {
 }
 
 // ===== System Services Settings =====
+
+// Advanced settings for customizing generation processes
+interface ProcessSettings {
+  profileId?: string | null
+  presetId?: string
+  model?: string
+  temperature?: number
+  topP?: number
+  maxTokens?: number
+  reasoningEffort?: ReasoningEffort
+  manualBody?: string
+}
+
+interface AdvancedWizardSettings {
+  settingExpansion: ProcessSettings
+  settingRefinement: ProcessSettings
+  protagonistGeneration: ProcessSettings
+  characterElaboration: ProcessSettings
+  characterRefinement: ProcessSettings
+  supportingCharacters: ProcessSettings
+  openingGeneration: ProcessSettings
+  openingRefinement: ProcessSettings
+}
+
+function getDefaultAdvancedWizardSettings(): AdvancedWizardSettings {
+  return getDefaultAdvancedSettingsForProvider('openrouter')
+}
+
+export function getDefaultAdvancedSettingsForProvider(
+  provider: ProviderType,
+): AdvancedWizardSettings {
+  const preset = getPresetDefaults(provider, 'wizard')
+
+  return {
+    settingExpansion: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    settingRefinement: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    protagonistGeneration: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    characterElaboration: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    characterRefinement: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    supportingCharacters: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    openingGeneration: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    openingRefinement: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+  }
+}
 
 export interface AdvancedRequestSettings {
   manualMode: boolean
@@ -1066,7 +1177,7 @@ class SettingsStore {
   advancedRequestSettings = $state<AdvancedRequestSettings>(getDefaultAdvancedRequestSettings())
 
   // Advanced wizard settings for scenario generation
-  wizardSettings = $state<AdvancedWizardSettings>(getDefaultAdvancedSettings())
+  wizardSettings = $state<AdvancedWizardSettings>(getDefaultAdvancedWizardSettings())
 
   // System services settings (classifier, memory, suggestions)
   systemServicesSettings = $state<SystemServicesSettings>(getDefaultSystemServicesSettings())
@@ -1371,7 +1482,7 @@ class SettingsStore {
         try {
           const loaded = JSON.parse(wizardSettingsJson)
           // Merge with defaults to ensure all fields exist
-          const defaults = getDefaultAdvancedSettings()
+          const defaults = getDefaultAdvancedWizardSettings()
           this.wizardSettings = {
             settingExpansion: { ...defaults.settingExpansion, ...loaded.settingExpansion },
             settingRefinement: { ...defaults.settingRefinement, ...loaded.settingRefinement },
@@ -1393,7 +1504,7 @@ class SettingsStore {
           }
         } catch {
           // If parsing fails, use defaults
-          this.wizardSettings = getDefaultAdvancedSettings()
+          this.wizardSettings = getDefaultAdvancedWizardSettings()
         }
       }
 
