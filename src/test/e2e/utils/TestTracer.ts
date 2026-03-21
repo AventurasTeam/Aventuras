@@ -135,6 +135,7 @@ class AutoTracerImpl implements AutoTracer {
   }
 
   export(): AutoTraceStep[] {
+    this.finalize()
     return this.steps
   }
 }

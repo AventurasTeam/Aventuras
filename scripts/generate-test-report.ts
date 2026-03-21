@@ -149,11 +149,23 @@ function buildTestHtml(test: any, suiteIndex: number, testIndex: number): string
             </details>`
         : ''
 
+      const mockData = step.mockedResponse
+      const displayResponse =
+        mockData == null
+          ? null
+          : typeof mockData === 'string'
+            ? mockData
+            : mockData.type === 'stream'
+              ? mockData.text
+              : mockData.type === 'error'
+                ? `Error ${mockData.status}: ${mockData.message}`
+                : JSON.stringify(mockData.type === 'json' ? mockData.data : mockData, null, 2)
+
       const responseHtml =
-        step.mockedResponse != null
+        displayResponse != null
           ? `<div class="response-block">
               <strong>Mocked Response:</strong>
-              <pre><code>${esc(typeof step.mockedResponse === 'string' ? step.mockedResponse : JSON.stringify(step.mockedResponse, null, 2))}</code></pre>
+              <pre><code>${esc(displayResponse)}</code></pre>
             </div>`
           : ''
 
