@@ -1,11 +1,14 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { mapChaptersToContext, formatStoryTime } from './chapterMapper'
-import { story, type StoryStore } from '$lib/stores/story/index.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 import { rawChapters, timelineFillResult } from '../../../test/contextFixtures'
 
-// Typed accessor for stub fields that are read-only on the real singleton but
-// writable on the stores-stub used in tests (vitest alias resolves to stores-stub.ts).
-const stubContext = story as Pick<StoryStore, 'chapter' | 'generationContext'>
+// The stores-stub used in tests has plain writable properties, unlike the real
+// singleton where `currentBranchChapters` is a getter. Cast to allow assignment.
+const stubContext = story as unknown as {
+  chapter: { currentBranchChapters: any[]; chapters: any[] }
+  generationContext: { retrievalResult: any }
+}
 
 describe('mapChaptersToContext', () => {
   describe('chapter mapping', () => {

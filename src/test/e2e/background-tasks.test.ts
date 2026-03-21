@@ -338,11 +338,6 @@ describe('BackgroundTaskCoordinator E2E', () => {
 
   // --------------------------------------------------------------------------
   // 2. Chapter creation (via BackgroundTaskCoordinator.run())
-  //
-  // NOTE: run() uses story.chapter.addChapter.bind(story) — a known binding
-  // bug that makes addChapter throw at runtime (wrong `this` context).
-  // We assert that the AI requests ARE made (analysis + summarization),
-  // and that the coordinator still completes despite the addChapter failure.
   // --------------------------------------------------------------------------
 
   describe('chapter creation (via static run())', () => {
@@ -353,8 +348,18 @@ describe('BackgroundTaskCoordinator E2E', () => {
       settings.systemServicesSettings.styleReviewer.enabled = false
 
       interceptor.on('chapter-analysis', respondWithJSON(chapterAnalysisCreateChapter))
-      // Summarization is called before the (broken) addChapter — so it fires
       interceptor.on('chapter-summarization', respondWithJSON(chapterSummaryResult))
+      // Lore management fires after chapter creation — provide a no-op handler
+      interceptor.on(
+        'lore-management',
+        respondWithToolCall('finish_lore_management', {
+          summary: 'No changes.',
+          entriesCreated: 0,
+          entriesUpdated: 0,
+          entriesDeleted: 0,
+          entriesMerged: 0,
+        }),
+      )
 
       await BackgroundTaskCoordinator.run(false, 'new')
 

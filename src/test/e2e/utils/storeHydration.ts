@@ -101,6 +101,9 @@ export function loadTestSettings(overrides: LoadTestSettingsOptions = {}): void 
   // Disable translation by default (most tests don't need it)
   settings.translationSettings.enabled = overrides.translationEnabled ?? false
 
+  // Disable style reviewer by default (avoids unhandled fetch requests in tests)
+  settings.systemServicesSettings.styleReviewer.enabled = false
+
   // UI settings
   if (overrides.disableSuggestions !== undefined) {
     settings.uiSettings.disableSuggestions = overrides.disableSuggestions
