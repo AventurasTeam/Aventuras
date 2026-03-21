@@ -42,6 +42,7 @@ import { FetchInterceptor, respondWithStream, respondWithToolCall } from './util
 import { createDatabaseMock } from './utils/databaseMock'
 import { GenerationPipeline } from '$lib/services/generation'
 import type { GenerationEvent } from '$lib/services/generation'
+import { createTracer } from './utils/TestTracer'
 
 describe('GenerationPipeline smoke test', () => {
   let interceptor: FetchInterceptor
@@ -105,7 +106,8 @@ describe('GenerationPipeline smoke test', () => {
     clearTestStory()
   })
 
-  it('runs the pipeline and yields narrative + classification events', async () => {
+  it('runs the pipeline and yields narrative + classification events', async ({ task }) => {
+    const tracer = createTracer()
     const narrativeText = 'The darkness envelops you as you step inside the cave.'
 
     // Register fetch handlers for narrative (streaming) and classifier (tool call)
@@ -129,6 +131,18 @@ describe('GenerationPipeline smoke test', () => {
       }),
     )
 
+    tracer.beginStep('narrative')
+    tracer.traceInput({
+      templateInputs: {
+        mode: 'adventure',
+        pov: 'second',
+        tense: 'past',
+        characters: ['Hero'],
+        userAction: 'I enter the cave',
+      },
+    })
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
     // Run the pipeline
     const pipeline = new GenerationPipeline()
     const events: GenerationEvent[] = []
@@ -136,6 +150,10 @@ describe('GenerationPipeline smoke test', () => {
     for await (const event of pipeline.execute()) {
       events.push(event)
     }
+
+    tracer.traceOutput({ mockedResponse: narrativeText })
+    tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
     // Assert: we got the expected event sequence
     const eventTypes = events.map((e) => e.type)
@@ -164,9 +182,12 @@ describe('GenerationPipeline smoke test', () => {
     // Verify the fetch interceptor captured the narrative request
     const narrativeRequests = interceptor.getRequests('narrative')
     expect(narrativeRequests.length).toBeGreaterThan(0)
+
+    task.meta.traceData = tracer.getTraceData()
   })
 
-  it('handles abort correctly', async () => {
+  it('handles abort correctly', async ({ task }) => {
+    const tracer = createTracer()
     const abortController = new AbortController()
     story.generationContext.abortSignal = abortController.signal
 
@@ -189,5 +210,7 @@ describe('GenerationPipeline smoke test', () => {
       (e) => e.type === 'phase_complete' && e.phase === 'narrative',
     )
     expect(narrativeComplete).toBeUndefined()
+
+    task.meta.traceData = tracer.getTraceData()
   })
 })
