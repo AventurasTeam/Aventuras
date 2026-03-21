@@ -116,6 +116,39 @@ function formatPromptBody(captured: any): string {
   return parts.join('')
 }
 
+/**
+ * Render a store snapshot as individually collapsible property sections.
+ * Each top-level key (entries, characters, generationContext, etc.) gets
+ * its own <details> block so large snapshots are navigable.
+ */
+function renderCollapsibleSnapshot(label: string, snapshot: any): string {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return `<div><strong>${esc(label)}:</strong><pre><code>${esc(JSON.stringify(snapshot, null, 2))}</code></pre></div>`
+  }
+
+  const keys = Object.keys(snapshot)
+  if (keys.length === 0) {
+    return `<div><strong>${esc(label)}:</strong><p class="empty">Empty</p></div>`
+  }
+
+  const sections = keys.map((key) => {
+    const value = snapshot[key]
+    const preview = Array.isArray(value)
+      ? `[${value.length} items]`
+      : value === null
+        ? 'null'
+        : typeof value === 'object'
+          ? `{${Object.keys(value).length} keys}`
+          : String(value)
+    return `<details class="snapshot-prop">
+      <summary class="snapshot-prop-summary">${esc(key)} <span class="snapshot-prop-preview">${esc(preview)}</span></summary>
+      <pre><code>${esc(JSON.stringify(value, null, 2))}</code></pre>
+    </details>`
+  }).join('')
+
+  return `<div><strong>${esc(label)}:</strong>${sections}</div>`
+}
+
 function buildTestHtml(test: any, suiteIndex: number, testIndex: number): string {
   const id = `test-${suiteIndex}-${testIndex}`
   const badge =
@@ -192,8 +225,8 @@ function buildTestHtml(test: any, suiteIndex: number, testIndex: number): string
             <details class="snapshot-details">
               <summary>Full snapshots</summary>
               <div class="snapshot-panels">
-                <div><strong>Before:</strong><pre><code>${esc(JSON.stringify(diff.before, null, 2))}</code></pre></div>
-                <div><strong>After:</strong><pre><code>${esc(JSON.stringify(diff.after, null, 2))}</code></pre></div>
+                ${renderCollapsibleSnapshot('Before', diff.before)}
+                ${renderCollapsibleSnapshot('After', diff.after)}
               </div>
             </details>
           </div>`
@@ -301,13 +334,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .step{border:1px solid #21262d;border-radius:4px;padding:12px;margin-bottom:10px}
 .step-header{font-size:13px;font-weight:600;margin-bottom:10px;color:#58a6ff}
 .panels{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.panel{background:#161b22;border-radius:4px;padding:10px}
+.panel{background:#161b22;border-radius:4px;padding:10px;min-width:0;overflow:hidden}
 .panel h4{font-size:12px;text-transform:uppercase;color:#8b949e;margin-bottom:8px;letter-spacing:.05em}
 .kv-table,.diff-table{width:100%;border-collapse:collapse;font-size:12px}
 .kv-table th,.diff-table th{text-align:left;color:#8b949e;padding:4px 8px;border-bottom:1px solid #30363d}
-.kv-table td,.diff-table td{padding:4px 8px;border-bottom:1px solid #21262d;word-break:break-word}
+.kv-table td,.diff-table td{padding:4px 8px;border-bottom:1px solid #21262d;word-break:break-all;max-width:0;overflow:hidden;text-overflow:ellipsis}
+.diff-table{table-layout:fixed} .diff-table th:first-child{width:30%} .diff-table th:nth-child(2),.diff-table th:nth-child(3){width:35%}
 .diff-old{color:#f85149} .diff-new{color:#3fb950} .diff-path{color:#d2a8ff}
-pre{background:#0d1117;border:1px solid #21262d;border-radius:4px;padding:8px;overflow-x:auto;font-size:12px;line-height:1.5}
+pre{background:#0d1117;border:1px solid #21262d;border-radius:4px;padding:8px;overflow-x:auto;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word;max-width:100%}
 code{font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace}
 details{margin-top:8px}
 summary{cursor:pointer;font-size:13px;color:#58a6ff}
@@ -333,6 +367,12 @@ summary:hover{text-decoration:underline}
 .raw-json-details pre{white-space:pre-wrap;word-break:break-word;max-width:100%}
 .response-block{margin-bottom:8px} .response-block strong{font-size:12px;color:#8b949e}
 .store-diff{margin-top:8px} .store-diff strong{font-size:12px}
+.snapshot-prop{margin:4px 0;border:1px solid #21262d;border-radius:4px;overflow:hidden}
+.snapshot-prop-summary{cursor:pointer;font-size:12px;font-weight:600;padding:4px 8px;background:#161b22;color:#79c0ff;list-style:none}
+.snapshot-prop-summary::-webkit-details-marker{display:none}
+.snapshot-prop-summary::before{content:'\\25B6 ';font-size:9px;margin-right:4px}
+.snapshot-prop[open]>.snapshot-prop-summary::before{content:'\\25BC '}
+.snapshot-prop-preview{color:#484f58;font-weight:400;margin-left:6px}
 @media(max-width:900px){.panels{grid-template-columns:1fr}.snapshot-panels{grid-template-columns:1fr}.sidebar{display:none}}
 </style>
 </head>

@@ -60,6 +60,17 @@ function getStoreState() {
     items: structuredClone(story.item.items),
     storyBeats: structuredClone(story.storyBeat.storyBeats),
     chapters: structuredClone(story.chapter.chapters),
+    generationContext: {
+      userAction: structuredClone(story.generationContext.userAction),
+      narrationEntryId: story.generationContext.narrationEntryId,
+      retrievalResult: structuredClone(story.generationContext.retrievalResult),
+      narrativeResult: structuredClone(story.generationContext.narrativeResult),
+      classificationResult: structuredClone(story.generationContext.classificationResult),
+      translationResult: structuredClone(story.generationContext.translationResult),
+      imageResult: structuredClone(story.generationContext.imageResult),
+      postGenerationResult: structuredClone(story.generationContext.postGenerationResult),
+      backgroundResult: structuredClone(story.generationContext.backgroundResult),
+    },
   }
 }
 
