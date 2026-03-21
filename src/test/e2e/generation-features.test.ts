@@ -48,6 +48,7 @@ import {
   ActionInputController,
   type ActionInputCallbacks,
 } from '$lib/services/generation/ActionInputController'
+import { createTracer } from './utils/TestTracer'
 
 // ============================================================================
 // Helpers
@@ -173,7 +174,8 @@ describe('Generation Feature Toggles', () => {
   // --------------------------------------------------------------------------
 
   describe('Translation toggle', () => {
-    it('translation enabled: translation request is made after narrative generation', async () => {
+    it('translation enabled: translation request is made after narrative generation', async ({ task }) => {
+      const tracer = createTracer()
       const testStory = buildAdventureStory()
       loadTestStory({
         story: testStory,
@@ -199,13 +201,31 @@ describe('Generation Feature Toggles', () => {
 
       const callbacks = buildMockCallbacks()
       const controller = new ActionInputController(callbacks)
+
+      tracer.beginStep('narrative')
+      tracer.traceInput({
+        templateInputs: {
+          translationEnabled: true,
+          targetLanguage: 'cs',
+          userAction: 'I look around',
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+
+      tracer.traceOutput({ mockedResponse: 'The story continues.' })
+      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
       // Translation request must have been made
       expect(interceptor.getRequests('translate-narration').length).toBeGreaterThan(0)
+
+      task.meta.traceData = tracer.getTraceData()
     })
 
-    it('translation disabled (default): no translation request is made', async () => {
+    it('translation disabled (default): no translation request is made', async ({ task }) => {
+      const tracer = createTracer()
       const testStory = buildAdventureStory()
       loadTestStory({
         story: testStory,
@@ -227,10 +247,26 @@ describe('Generation Feature Toggles', () => {
 
       const callbacks = buildMockCallbacks()
       const controller = new ActionInputController(callbacks)
+
+      tracer.beginStep('narrative')
+      tracer.traceInput({
+        templateInputs: {
+          translationEnabled: false,
+          userAction: 'I look around',
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+
+      tracer.traceOutput({ mockedResponse: 'The story continues.' })
+      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
       // No translation request should be made
       expectNoRequest(interceptor, 'translate-narration')
+
+      task.meta.traceData = tracer.getTraceData()
     })
   })
 
@@ -239,7 +275,8 @@ describe('Generation Feature Toggles', () => {
   // --------------------------------------------------------------------------
 
   describe('Image mode toggle', () => {
-    it("image mode 'agentic': image analysis request is made", async () => {
+    it("image mode 'agentic': image analysis request is made", async ({ task }) => {
+      const tracer = createTracer()
       const testStory = buildAdventureStory({ imageGenerationMode: 'agentic' })
       loadTestStory({
         story: testStory,
@@ -291,13 +328,30 @@ describe('Generation Feature Toggles', () => {
 
       const callbacks = buildMockCallbacks()
       const controller = new ActionInputController(callbacks)
+
+      tracer.beginStep('narrative')
+      tracer.traceInput({
+        templateInputs: {
+          imageGenerationMode: 'agentic',
+          userAction: 'I look around',
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+
+      tracer.traceOutput({ mockedResponse: 'The story continues.' })
+      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
       // Image analysis request must have been made
       expect(interceptor.getRequests('image-prompt-analysis').length).toBeGreaterThan(0)
+
+      task.meta.traceData = tracer.getTraceData()
     })
 
-    it("image mode 'none' (default): no image analysis request is made", async () => {
+    it("image mode 'none' (default): no image analysis request is made", async ({ task }) => {
+      const tracer = createTracer()
       const testStory = buildAdventureStory({ imageGenerationMode: 'none' })
       loadTestStory({
         story: testStory,
@@ -318,10 +372,26 @@ describe('Generation Feature Toggles', () => {
 
       const callbacks = buildMockCallbacks()
       const controller = new ActionInputController(callbacks)
+
+      tracer.beginStep('narrative')
+      tracer.traceInput({
+        templateInputs: {
+          imageGenerationMode: 'none',
+          userAction: 'I look around',
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+
+      tracer.traceOutput({ mockedResponse: 'The story continues.' })
+      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
       // No image analysis request should be made
       expectNoRequest(interceptor, 'image-prompt-analysis')
+
+      task.meta.traceData = tracer.getTraceData()
     })
   })
 
@@ -330,7 +400,8 @@ describe('Generation Feature Toggles', () => {
   // --------------------------------------------------------------------------
 
   describe('Lorebook retrieval toggle', () => {
-    it('lorebook entries present: tier3 entry selection LLM call is made', async () => {
+    it('lorebook entries present: tier3 entry selection LLM call is made', async ({ task }) => {
+      const tracer = createTracer()
       const testStory = buildAdventureStory()
       // Load lorebook entries that will not be matched by tier1/tier2 (no keywords matching input)
       const lorebookEntry = buildLorebookEntry({
@@ -364,13 +435,30 @@ describe('Generation Feature Toggles', () => {
 
       const callbacks = buildMockCallbacks()
       const controller = new ActionInputController(callbacks)
+
+      tracer.beginStep('narrative')
+      tracer.traceInput({
+        templateInputs: {
+          lorebookEntries: ['Ancient Prophecy'],
+          userAction: 'I walk forward slowly',
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+
+      tracer.traceOutput({ mockedResponse: 'The story continues.' })
+      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
       // Tier3 LLM selection should have been called since entry wasn't matched by keywords
       expect(interceptor.getRequests('tier3-entry-selection').length).toBeGreaterThan(0)
+
+      task.meta.traceData = tracer.getTraceData()
     })
 
-    it('no lorebook entries and no world state: no tier3 entry selection call is made', async () => {
+    it('no lorebook entries and no world state: no tier3 entry selection call is made', async ({ task }) => {
+      const tracer = createTracer()
       const testStory = buildAdventureStory()
       // Minimal story — no lorebook entries, no world state entities
       loadTestStory({
@@ -392,13 +480,30 @@ describe('Generation Feature Toggles', () => {
 
       const callbacks = buildMockCallbacks()
       const controller = new ActionInputController(callbacks)
+
+      tracer.beginStep('narrative')
+      tracer.traceInput({
+        templateInputs: {
+          lorebookEntries: [],
+          userAction: 'I walk forward slowly',
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+
+      tracer.traceOutput({ mockedResponse: 'The story continues.' })
+      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
       // No tier3 LLM selection should be made with no lore content
       expectNoRequest(interceptor, 'tier3-entry-selection')
+
+      task.meta.traceData = tracer.getTraceData()
     })
 
-    it('chapters present: timeline fill LLM call is made during retrieval', async () => {
+    it('chapters present: timeline fill LLM call is made during retrieval', async ({ task }) => {
+      const tracer = createTracer()
       const testStory = buildAdventureStory()
       const chapter = buildChapter({
         storyId: testStory.id,
@@ -428,10 +533,26 @@ describe('Generation Feature Toggles', () => {
 
       const callbacks = buildMockCallbacks()
       const controller = new ActionInputController(callbacks)
+
+      tracer.beginStep('narrative')
+      tracer.traceInput({
+        templateInputs: {
+          chapters: [1],
+          userAction: 'I press on',
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+
+      tracer.traceOutput({ mockedResponse: 'The story continues.' })
+      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
       // Generation completed (narrative + classifier ran)
       expect(interceptor.getRequests('narrative').length).toBeGreaterThan(0)
+
+      task.meta.traceData = tracer.getTraceData()
     })
   })
 
@@ -440,7 +561,8 @@ describe('Generation Feature Toggles', () => {
   // --------------------------------------------------------------------------
 
   describe('Style review injection', () => {
-    it('when ui.lastStyleReview is set, narrative prompt includes style feedback phrases', async () => {
+    it('when ui.lastStyleReview is set, narrative prompt includes style feedback phrases', async ({ task }) => {
+      const tracer = createTracer()
       const testStory = buildAdventureStory()
       loadTestStory({
         story: testStory,
@@ -477,7 +599,21 @@ describe('Generation Feature Toggles', () => {
 
       const callbacks = buildMockCallbacks()
       const controller = new ActionInputController(callbacks)
+
+      tracer.beginStep('narrative')
+      tracer.traceInput({
+        templateInputs: {
+          lastStyleReview: { phrases: ['passive constructions'], overallAssessment: 'Avoid passive voice.' },
+          userAction: 'I advance forward',
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+
+      tracer.traceOutput({ mockedResponse: 'The story continues.' })
+      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
       // Narrative request was made
       expect(interceptor.getRequests('narrative').length).toBeGreaterThan(0)
@@ -497,6 +633,8 @@ describe('Generation Feature Toggles', () => {
         .join('\n')
 
       expect(allContent).toContain('passive constructions')
+
+      task.meta.traceData = tracer.getTraceData()
     })
   })
 })
