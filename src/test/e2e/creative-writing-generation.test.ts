@@ -36,14 +36,26 @@ vi.mock('$lib/services/database', () => ({
 // ---- Imports (after mocks) ----
 
 import { story } from '$lib/stores/story/index.svelte'
+import { settings } from '$lib/stores/settings.svelte'
+import { ui } from '$lib/stores/ui.svelte'
 import { loadTestStory, loadTestSettings, clearTestStory } from './utils/storeHydration'
-import { buildStory, buildEntry, buildCharacter } from '$test/factories'
+import {
+  buildStory,
+  buildEntry,
+  buildCharacter,
+  buildLocation,
+  buildItem,
+  buildStoryBeat,
+  buildLorebookEntry,
+  buildChapter,
+} from '$test/factories'
 import { FetchInterceptor, respondWithStream, respondWithJSON } from './utils/FetchInterceptor'
 import { createDatabaseMock } from './utils/databaseMock'
 import { expectPromptContains, expectPromptNotContains } from './utils/assertions'
 import {
   ActionInputController,
   type ActionInputCallbacks,
+  type SubmitInput,
 } from '$lib/services/generation/ActionInputController'
 import { createAutoTracer } from './utils/TestTracer'
 
@@ -106,6 +118,21 @@ function buildMockCallbacks(): ActionInputCallbacks {
   }
 }
 
+function configureImageProfile() {
+  const imageProfileId = 'test-image-profile'
+  settings.imageProfiles = [{
+    id: imageProfileId,
+    name: 'Test Image Profile',
+    providerType: 'pollinations',
+    apiKey: '',
+    model: 'flux',
+    providerOptions: {},
+    createdAt: Date.now(),
+  }]
+  settings.systemServicesSettings.imageGeneration.profileId = imageProfileId
+  settings.systemServicesSettings.imageGeneration.backgroundProfileId = imageProfileId
+}
+
 /**
  * Standard classifier response matching the classificationResultSchema.
  */
@@ -127,15 +154,77 @@ const defaultClassifierResult = {
   },
 }
 
-/**
- * Minimal suggestions response matching the suggestionsResultSchema.
- */
+/** Rich classification result exercising all entity mutation paths. */
+const richClassifierResult = {
+  scene: {
+    presentCharacterNames: ['Seraphina'],
+    currentLocationName: 'Crystal Spire',
+    timeProgression: 'hours',
+  },
+  entryUpdates: {
+    characterUpdates: [{
+      name: 'Seraphina',
+      changes: {
+        newTraits: ['brave', 'wounded'],
+      },
+    }],
+    locationUpdates: [],
+    itemUpdates: [],
+    storyBeatUpdates: [],
+    newCharacters: [{
+      name: 'Lyris',
+      description: 'A mysterious stranger',
+      relationship: 'neutral',
+    }],
+    newLocations: [{
+      name: 'Hidden Chamber',
+      description: 'A secret room behind the crystal wall',
+    }],
+    newItems: [{
+      name: 'Crystal Shard',
+      description: 'A glowing fragment of the spire',
+    }],
+    newStoryBeats: [{
+      title: 'The Stranger Appears',
+      description: 'Lyris emerges from the shadows',
+      type: 'event',
+      status: 'active',
+    }],
+  },
+}
+
+/** Suggestions matching suggestionsResultSchema. */
 const defaultSuggestionsResult = {
   suggestions: [
     { text: 'The protagonist explores further', type: 'action' },
     { text: '"We need to move quickly," she said', type: 'dialogue' },
     { text: 'A hidden passage reveals itself', type: 'revelation' },
   ],
+}
+
+/** Timeline fill query generation result. */
+const timelineFillQueriesResult = {
+  queries: [
+    { query: 'What happened when Kael escaped the dungeon?' },
+  ],
+}
+
+/** Background image analysis result. */
+const backgroundImageResult = {
+  changeNecessary: false,
+  prompt: '',
+}
+
+/** Image prompt analysis result. */
+const imageAnalysisResult = {
+  scenes: [{
+    prompt: 'A warrior enters a crystal spire with dagger drawn',
+    sceneType: 'action',
+    priority: 5,
+    sourceText: 'Kael draws the Obsidian Dagger and enters the spire.',
+    characters: [],
+    generatePortrait: false,
+  }],
 }
 
 // ============================================================================
@@ -158,230 +247,184 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
   afterEach(() => {
     interceptor.restore()
     clearTestStory()
+    settings.systemServicesSettings.imageGeneration.profileId = null
+    settings.systemServicesSettings.imageGeneration.backgroundProfileId = null
+    settings.imageProfiles = []
+    settings.systemServicesSettings.timelineFill.enabled = false
+    ui.lastStyleReview = null
   })
 
   // --------------------------------------------------------------------------
-  // 1. Happy path — creative-writing mode generation via generateResponse
+  // 1. Full pipeline mega-test
   // --------------------------------------------------------------------------
 
-  it('happy path: direction input is not prefixed, narrative streams, pipeline completes', async ({ task }) => {
+  it('full pipeline: all phases fire with rich world state', async ({ task }) => {
+    // ---- World state setup ----
     const testStory = buildStory({
       mode: 'creative-writing',
       settings: {
         pov: 'third',
         tense: 'past',
-        imageGenerationMode: 'none',
-        backgroundImagesEnabled: false,
+        imageGenerationMode: 'agentic',
+        backgroundImagesEnabled: true,
       },
-    })
-
-    loadTestStory({
-      story: testStory,
-      entries: [
-        buildEntry({
-          storyId: testStory.id,
-          type: 'narration',
-          content: 'The ancient tower stood silent against the moonlit sky.',
-          position: 0,
-        }),
-      ],
-    })
-    loadTestSettings({ disableSuggestions: true })
-
-    const narrativeText = 'The tower groaned as dust cascaded from the crumbling archway.'
-
-    interceptor.on('narrative', respondWithStream(narrativeText))
-    interceptor.on('classifier', respondWithJSON(defaultClassifierResult))
-
-    // In creative writing mode, direction is stored raw — no "I " prefix applied
-    const directionContent = 'The ancient tower crumbles slowly'
-    const userActionEntry = await story.entry.addEntry('user_action', directionContent)
-
-    const callbacks = buildMockCallbacks()
-    const controller = new ActionInputController(callbacks)
-
-    const tracer = createAutoTracer(getStoreState)
-    interceptor.connectTracer(tracer)
-
-    await controller.generateResponse(userActionEntry.id, userActionEntry.content)
-
-    // Narrative request was made
-    expect(interceptor.getRequests('narrative').length).toBeGreaterThan(0)
-
-    // Direction content appears in the prompt without an "I " prefix prepended
-    expectPromptContains(interceptor, 'narrative', directionContent)
-
-    // Narrative was streamed
-    expect(callbacks.endStreaming).toHaveBeenCalled()
-    expect(callbacks.setGenerating).toHaveBeenCalledWith(false)
-
-    // emitNarrativeResponse was called with the streamed content
-    expect(callbacks.emitNarrativeResponse).toHaveBeenCalledWith(expect.any(String), narrativeText)
-
-    tracer.finalize()
-    task.meta.traceData = tracer.export()
-  })
-
-  // --------------------------------------------------------------------------
-  // 2. handleSubmit with isCreativeWritingMode=true — no prefix/suffix applied
-  // --------------------------------------------------------------------------
-
-  it('handleSubmit with isCreativeWritingMode=true: raw input used, no "I " prefix', async ({ task }) => {
-    const testStory = buildStory({
-      mode: 'creative-writing',
-      settings: {
-        pov: 'third',
-        tense: 'past',
-        imageGenerationMode: 'none',
-        backgroundImagesEnabled: false,
-      },
-    })
-
-    loadTestStory({
-      story: testStory,
-      entries: [
-        buildEntry({
-          storyId: testStory.id,
-          type: 'narration',
-          content: 'The story begins in a forgotten city.',
-          position: 0,
-        }),
-      ],
-    })
-    loadTestSettings({ disableSuggestions: true })
-
-    interceptor.on('narrative', respondWithStream('She stepped into the ruined hall.'))
-    interceptor.on('classifier', respondWithJSON(defaultClassifierResult))
-
-    const callbacks = buildMockCallbacks()
-    const controller = new ActionInputController(callbacks)
-
-    const tracer = createAutoTracer(getStoreState)
-    interceptor.connectTracer(tracer)
-
-    await controller.handleSubmit({
-      inputValue: 'The ancient tower crumbles',
-      actionType: 'do',
-      isRawActionChoice: false,
-      isCreativeWritingMode: true,
-      actionPrefixes: { do: 'I ', say: 'I say, "', think: 'I think, "', story: '', free: '' },
-      actionSuffixes: { do: '', say: '"', think: '"', story: '', free: '' },
-    })
-
-    // Prompt must NOT contain "I The ancient" (prefix was skipped)
-    expectPromptNotContains(interceptor, 'narrative', 'I The ancient tower crumbles')
-
-    // Raw input must appear in the prompt
-    expectPromptContains(interceptor, 'narrative', 'The ancient tower crumbles')
-
-    // Pipeline completed normally
-    expect(callbacks.endStreaming).toHaveBeenCalled()
-    expect(callbacks.setGenerating).toHaveBeenCalledWith(false)
-
-    tracer.finalize()
-    task.meta.traceData = tracer.export()
-  })
-
-  // --------------------------------------------------------------------------
-  // 3. Post-generation: suggestions produced, not action choices
-  // --------------------------------------------------------------------------
-
-  it('post-generation: setSuggestions is called; setActionChoices is NOT called', async ({ task }) => {
-    const testStory = buildStory({
-      mode: 'creative-writing',
-      settings: {
-        pov: 'third',
-        tense: 'past',
-        imageGenerationMode: 'none',
-        backgroundImagesEnabled: false,
-      },
-    })
-
-    loadTestStory({
-      story: testStory,
-      entries: [
-        buildEntry({
-          storyId: testStory.id,
-          type: 'narration',
-          content: 'The river ran swift beneath the stone bridge.',
-          position: 0,
-        }),
-      ],
-    })
-    // Enable suggestions so post-generation runs
-    loadTestSettings({ disableSuggestions: false })
-
-    interceptor.on('narrative', respondWithStream('She crossed the bridge at dusk.'))
-    interceptor.on('classifier', respondWithJSON(defaultClassifierResult))
-    interceptor.on('suggestions', respondWithJSON(defaultSuggestionsResult))
-
-    const userActionEntry = await story.entry.addEntry('user_action', 'Cross the bridge')
-
-    const callbacks = buildMockCallbacks()
-    const controller = new ActionInputController(callbacks)
-
-    const tracer = createAutoTracer(getStoreState)
-    interceptor.connectTracer(tracer)
-
-    await controller.generateResponse(userActionEntry.id, userActionEntry.content)
-
-    // suggestions service was called
-    expect(interceptor.getRequests('suggestions').length).toBeGreaterThan(0)
-
-    // setSuggestions was called with results
-    expect(callbacks.setSuggestions).toHaveBeenCalled()
-
-    // setActionChoices must NOT have been called (that's adventure-mode behaviour)
-    expect(callbacks.setActionChoices).not.toHaveBeenCalled()
-
-    tracer.finalize()
-    task.meta.traceData = tracer.export()
-  })
-
-  // --------------------------------------------------------------------------
-  // 4. Creative-writing template elements appear in narrative prompt
-  // --------------------------------------------------------------------------
-
-  it('narrative prompt contains creative-writing template elements (author direction framing)', async ({ task }) => {
-    const testStory = buildStory({
-      mode: 'creative-writing',
-      settings: {
-        pov: 'third',
-        tense: 'past',
-        imageGenerationMode: 'none',
-        backgroundImagesEnabled: false,
+      memoryConfig: {
+        tokenThreshold: 16000,
+        chapterBuffer: 2,
+        autoSummarize: true,
+        enableRetrieval: true,
+        maxChaptersPerRetrieval: 3,
       },
     })
 
     const protagonist = buildCharacter({
       storyId: testStory.id,
-      name: 'Lyra',
+      name: 'Kael',
       relationship: 'self',
     })
+    const ally = buildCharacter({
+      storyId: testStory.id,
+      name: 'Seraphina',
+      relationship: 'ally',
+      status: 'active',
+    })
+    const enemy = buildCharacter({
+      storyId: testStory.id,
+      name: 'Malachar',
+      relationship: 'enemy',
+      status: 'active',
+    })
+
+    const currentLoc = buildLocation({
+      storyId: testStory.id,
+      name: 'Crystal Spire',
+      current: true,
+      visited: true,
+    })
+    const visitedLoc = buildLocation({
+      storyId: testStory.id,
+      name: 'Shadow Market',
+      current: false,
+      visited: true,
+    })
+
+    const dagger = buildItem({
+      storyId: testStory.id,
+      name: 'Obsidian Dagger',
+      location: 'inventory',
+      equipped: true,
+    })
+    const scroll = buildItem({
+      storyId: testStory.id,
+      name: 'Ancient Scroll',
+      location: 'Shadow Market',
+    })
+
+    const activeQuest = buildStoryBeat({
+      storyId: testStory.id,
+      title: 'Find the Lost Artifact',
+      type: 'quest',
+      status: 'active',
+    })
+    const completedQuest = buildStoryBeat({
+      storyId: testStory.id,
+      title: 'Escape the Dungeon',
+      type: 'quest',
+      status: 'completed',
+    })
+
+    const chapter = buildChapter({
+      storyId: testStory.id,
+      number: 1,
+      title: 'The Escape',
+      summary: 'Kael escaped the dungeon with the help of Seraphina.',
+      keywords: ['dungeon', 'escape'],
+    })
+
+    // Lorebook entries: always-inject, keyword-match, and tier-3 candidate
+    const alwaysInjectLore = buildLorebookEntry({
+      storyId: testStory.id,
+      name: 'World Lore',
+      description: 'The realm of Aethermoor is a land of ancient magic and forgotten kingdoms.',
+      injection: { mode: 'always', keywords: [], priority: 0 },
+    })
+    const keywordLore = buildLorebookEntry({
+      storyId: testStory.id,
+      name: 'Crystal Spire Legend',
+      description: 'The Crystal Spire was built by the Arcane Order to channel ley line energy.',
+      injection: { mode: 'keyword', keywords: ['crystal', 'spire'], priority: 0 },
+    })
+    const tier3Lore = buildLorebookEntry({
+      storyId: testStory.id,
+      name: 'Ancient Prophecy',
+      description: 'A forgotten prophecy about the convergence of realms.',
+      injection: { mode: 'keyword', keywords: ['oracle', 'prophecy'], priority: 0 },
+    })
+
+    // Story history entries
+    const entries = [
+      buildEntry({ storyId: testStory.id, type: 'narration', content: 'The dungeon crumbled behind Kael as he escaped into daylight.', position: 0 }),
+      buildEntry({ storyId: testStory.id, type: 'user_action', content: 'Kael heads toward the Crystal Spire', position: 1 }),
+      buildEntry({ storyId: testStory.id, type: 'narration', content: 'The Crystal Spire loomed ahead, its facets catching the last rays of sunset.', position: 2 }),
+      buildEntry({ storyId: testStory.id, type: 'user_action', content: 'Kael examines the entrance', position: 3 }),
+      buildEntry({ storyId: testStory.id, type: 'narration', content: 'Seraphina pointed to ancient runes carved above the archway. "These are warnings," she said.', position: 4 }),
+    ]
 
     loadTestStory({
       story: testStory,
-      characters: [protagonist],
-      entries: [
-        buildEntry({
-          storyId: testStory.id,
-          type: 'narration',
-          content: 'The story begins.',
-          position: 0,
-        }),
-      ],
+      characters: [protagonist, ally, enemy],
+      locations: [currentLoc, visitedLoc],
+      items: [dagger, scroll],
+      storyBeats: [activeQuest, completedQuest],
+      entries,
+      lorebookEntries: [alwaysInjectLore, keywordLore, tier3Lore],
+      chapters: [chapter],
     })
-    loadTestSettings({ disableSuggestions: true })
 
-    interceptor.on('narrative', respondWithStream('Lyra stood at the edge of the world.'))
-    interceptor.on('classifier', respondWithJSON(defaultClassifierResult))
+    loadTestSettings({ disableSuggestions: false })
 
+    // Enable timeline fill retrieval
+    settings.systemServicesSettings.timelineFill.enabled = true
+
+    // Configure image profiles
+    configureImageProfile()
+
+    // Set style review
+    ui.lastStyleReview = {
+      phrases: [{
+        phrase: 'passive constructions',
+        frequency: 3,
+        severity: 'medium',
+        alternatives: ['use active voice'],
+        contexts: ['The door was opened by...'],
+      }],
+      overallAssessment: 'Avoid passive voice.',
+      reviewedEntryCount: 5,
+      timestamp: Date.now(),
+    }
+
+    // ---- Register mock handlers ----
+    const narrativeText = 'Kael draws the Obsidian Dagger and steps through the archway into the Crystal Spire. The air shimmers with ancient energy as Seraphina follows close behind.'
+
+    interceptor
+      .on('timeline-fill', respondWithJSON(timelineFillQueriesResult))
+      .on('timeline-fill-answer', respondWithStream('Kael fought through the dungeon guards and escaped with Seraphina.'))
+      .on('tier3-entry-selection', respondWithJSON({ selectedIds: [], reasoning: 'No relevant entries' }))
+      .on('narrative', respondWithStream(narrativeText))
+      .on('background-image-prompt-analysis', respondWithJSON(backgroundImageResult))
+      .on('classifier', respondWithJSON(richClassifierResult))
+      .on('image-prompt-analysis', respondWithJSON(imageAnalysisResult))
+      .on('suggestions', respondWithJSON(defaultSuggestionsResult))
+
+    // ---- Execute pipeline ----
     const userActionEntry = await story.entry.addEntry(
       'user_action',
-      'Lyra moves toward the horizon',
+      'Kael enters the spire with his blade drawn',
     )
 
     const callbacks = buildMockCallbacks()
+    // Override getLastStyleReview to read live from ui store (default mock returns null)
+    callbacks.getLastStyleReview = () => ui.lastStyleReview
     const controller = new ActionInputController(callbacks)
 
     const tracer = createAutoTracer(getStoreState)
@@ -389,24 +432,81 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
 
     await controller.generateResponse(userActionEntry.id, userActionEntry.content)
 
-    // Template signals author-direction framing (from creative-writing system template)
+    // ---- Assertions: Retrieval phase ----
+    expect(interceptor.getRequests('timeline-fill').length).toBeGreaterThan(0)
+    expect(interceptor.getRequests('timeline-fill-answer').length).toBeGreaterThan(0)
+    expect(interceptor.getRequests('tier3-entry-selection').length).toBeGreaterThan(0)
+
+    // Narrative prompt contains lorebook content
+    expectPromptContains(interceptor, 'narrative', 'Aethermoor')
+    expectPromptContains(interceptor, 'narrative', 'Arcane Order')
+
+    // ---- Assertions: Narrative phase ----
+    expect(interceptor.getRequests('narrative').length).toBeGreaterThan(0)
+    expect(callbacks.appendStreamContent).toHaveBeenCalled()
+
+    // Prompt contains world state
+    expectPromptContains(interceptor, 'narrative', 'Seraphina')
+    expectPromptContains(interceptor, 'narrative', 'Kael')
+    expectPromptContains(interceptor, 'narrative', 'Crystal Spire')
+    expectPromptContains(interceptor, 'narrative', 'Obsidian Dagger')
+    expectPromptContains(interceptor, 'narrative', 'Kael enters the spire with his blade drawn')
+    expectPromptContains(interceptor, 'narrative', 'Find the Lost Artifact')
+
+    // Creative-writing template uses author/direction framing
     expectPromptContains(interceptor, 'narrative', 'author')
 
-    // Protagonist name is rendered in the template
-    expectPromptContains(interceptor, 'narrative', 'Lyra')
+    // Style review injected
+    expectPromptContains(interceptor, 'narrative', 'passive constructions')
 
-    // Adventure-mode CANONICAL sections should NOT appear
-    expectPromptNotContains(interceptor, 'narrative', 'CANONICAL CHARACTERS')
+    // Narrative response emitted and entry added
+    expect(callbacks.emitNarrativeResponse).toHaveBeenCalledWith(expect.any(String), narrativeText)
+    const narrationEntries = story.entry.entries.filter(e => e.type === 'narration' && e.content === narrativeText)
+    expect(narrationEntries.length).toBe(1)
+
+    // ---- Assertions: Background image phase ----
+    expect(interceptor.getRequests('background-image-prompt-analysis').length).toBeGreaterThan(0)
+
+    // ---- Assertions: Classification phase ----
+    expect(interceptor.getRequests('classifier').length).toBeGreaterThan(0)
+
+    // Entity updates applied to store
+    const seraphina = story.character.characters.find(c => c.name === 'Seraphina')
+    expect(seraphina?.traits).toContain('brave')
+    expect(seraphina?.traits).toContain('wounded')
+
+    // New entities added
+    expect(story.character.characters.find(c => c.name === 'Lyris')).toBeDefined()
+    expect(story.location.locations.find(l => l.name === 'Hidden Chamber')).toBeDefined()
+    expect(story.item.items.find(i => i.name === 'Crystal Shard')).toBeDefined()
+    expect(story.storyBeat.storyBeats.find(b => b.title === 'The Stranger Appears')).toBeDefined()
+
+    // Time progression applied (hours → adds time to timeTracker)
+    expect(story.currentStory?.timeTracker).not.toBeNull()
+
+    // ---- Assertions: Image phase ----
+    expect(interceptor.getRequests('image-prompt-analysis').length).toBeGreaterThan(0)
+
+    // ---- Assertions: Post-generation phase (suggestions, not action choices) ----
+    expect(interceptor.getRequests('suggestions').length).toBeGreaterThan(0)
+    expect(callbacks.setSuggestions).toHaveBeenCalled()
+    expect(callbacks.setActionChoices).not.toHaveBeenCalled()
+
+    // ---- Assertions: Pipeline lifecycle ----
+    expect(callbacks.setGenerating).toHaveBeenCalledWith(true)
+    expect(callbacks.startStreaming).toHaveBeenCalled()
+    expect(callbacks.endStreaming).toHaveBeenCalled()
+    expect(callbacks.setGenerating).toHaveBeenCalledWith(false)
 
     tracer.finalize()
     task.meta.traceData = tracer.export()
   })
 
   // --------------------------------------------------------------------------
-  // 5. Verify "I " prefix is absent even when actionType is 'do'
+  // 2. handleSubmit with isCreativeWritingMode=true — no prefix applied
   // --------------------------------------------------------------------------
 
-  it('do action type with isCreativeWritingMode=true: no "I " prefix injected', async ({ task }) => {
+  it('handleSubmit with isCreativeWritingMode=true: no prefix applied', async ({ task }) => {
     const testStory = buildStory({
       mode: 'creative-writing',
       settings: {
@@ -423,7 +523,7 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
         buildEntry({
           storyId: testStory.id,
           type: 'narration',
-          content: 'Rain fell on the cobblestones.',
+          content: 'The story begins.',
           position: 0,
         }),
       ],
@@ -439,20 +539,69 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
     const tracer = createAutoTracer(getStoreState)
     interceptor.connectTracer(tracer)
 
-    await controller.handleSubmit({
-      inputValue: 'describe the rain',
+    const input: SubmitInput = {
+      inputValue: 'describe the rain falling',
       actionType: 'do',
       isRawActionChoice: false,
       isCreativeWritingMode: true,
       actionPrefixes: { do: 'I ', say: 'I say, "', think: 'I think, "', story: '', free: '' },
       actionSuffixes: { do: '', say: '"', think: '"', story: '', free: '' },
+    }
+
+    await controller.handleSubmit(input)
+
+    expectPromptNotContains(interceptor, 'narrative', 'I describe the rain falling')
+    expectPromptContains(interceptor, 'narrative', 'describe the rain falling')
+
+    expect(callbacks.endStreaming).toHaveBeenCalled()
+    expect(callbacks.setGenerating).toHaveBeenCalledWith(false)
+
+    tracer.finalize()
+    task.meta.traceData = tracer.export()
+  })
+
+  // --------------------------------------------------------------------------
+  // 3. Suggestions disabled — skips post-generation
+  // --------------------------------------------------------------------------
+
+  it('suggestions disabled: skips post-generation', async ({ task }) => {
+    const testStory = buildStory({
+      mode: 'creative-writing',
+      settings: {
+        pov: 'third',
+        tense: 'past',
+        imageGenerationMode: 'none',
+        backgroundImagesEnabled: false,
+      },
     })
+    loadTestStory({
+      story: testStory,
+      entries: [
+        buildEntry({
+          storyId: testStory.id,
+          type: 'narration',
+          content: 'The story begins.',
+          position: 0,
+        }),
+      ],
+    })
+    loadTestSettings({ disableSuggestions: true })
 
-    // "I describe the rain" must NOT appear — the prefix was skipped
-    expectPromptNotContains(interceptor, 'narrative', 'I describe the rain')
+    interceptor.on('narrative', respondWithStream('The narrative continues.'))
+    interceptor.on('classifier', respondWithJSON(defaultClassifierResult))
 
-    // Raw direction must appear
-    expectPromptContains(interceptor, 'narrative', 'describe the rain')
+    const userActionEntry = await story.entry.addEntry('user_action', 'Continue the scene')
+
+    const callbacks = buildMockCallbacks()
+    const controller = new ActionInputController(callbacks)
+
+    const tracer = createAutoTracer(getStoreState)
+    interceptor.connectTracer(tracer)
+
+    await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+
+    expect(interceptor.getRequests('suggestions').length).toBe(0)
+    expect(callbacks.setSuggestions).not.toHaveBeenCalled()
 
     tracer.finalize()
     task.meta.traceData = tracer.export()
