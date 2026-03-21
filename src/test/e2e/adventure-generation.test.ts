@@ -46,6 +46,7 @@ import {
   type ActionInputCallbacks,
   type SubmitInput,
 } from '$lib/services/generation/ActionInputController'
+import { createTracer } from './utils/TestTracer'
 
 // ============================================================================
 // Helpers
@@ -143,7 +144,9 @@ describe('Adventure Mode — ActionInputController E2E', () => {
   // 1. Happy path — full pipeline with characters, locations, items
   // --------------------------------------------------------------------------
 
-  it('happy path: narrative prompt includes world state and user action, streams, classifies', async () => {
+  it('happy path: narrative prompt includes world state and user action, streams, classifies', async ({ task }) => {
+    const tracer = createTracer()
+
     const testStory = buildStory({
       mode: 'adventure',
       settings: {
@@ -201,7 +204,26 @@ describe('Adventure Mode — ActionInputController E2E', () => {
 
     const callbacks = buildMockCallbacks()
     const controller = new ActionInputController(callbacks)
+
+    tracer.beginStep('narrative')
+    tracer.traceInput({
+      templateInputs: {
+        mode: 'adventure',
+        pov: 'second',
+        tense: 'past',
+        characters: ['Seraphina'],
+        locations: ['Crystal Spire'],
+        items: ['Obsidian Dagger'],
+        userAction: 'I enter the spire with my blade drawn',
+      },
+    })
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
     await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+
+    tracer.traceOutput({ mockedResponse: narrativeText })
+    tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
     // Narrative request was made and streamed
     expect(interceptor.getRequests('narrative').length).toBeGreaterThan(0)
@@ -221,13 +243,17 @@ describe('Adventure Mode — ActionInputController E2E', () => {
 
     // emitNarrativeResponse was called with the accumulated content
     expect(callbacks.emitNarrativeResponse).toHaveBeenCalledWith(expect.any(String), narrativeText)
+
+    task.meta.traceData = tracer.getTraceData()
   })
 
   // --------------------------------------------------------------------------
   // 2. Minimal story — first entry, empty world state
   // --------------------------------------------------------------------------
 
-  it('minimal story: no world state — narrative still succeeds, no CANONICAL section', async () => {
+  it('minimal story: no world state — narrative still succeeds, no CANONICAL section', async ({ task }) => {
+    const tracer = createTracer()
+
     const testStory = buildStory({
       mode: 'adventure',
       settings: {
@@ -250,7 +276,23 @@ describe('Adventure Mode — ActionInputController E2E', () => {
 
     const callbacks = buildMockCallbacks()
     const controller = new ActionInputController(callbacks)
+
+    tracer.beginStep('narrative')
+    tracer.traceInput({
+      templateInputs: {
+        mode: 'adventure',
+        pov: 'second',
+        tense: 'past',
+        userAction: 'I look around',
+      },
+    })
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
     await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+
+    tracer.traceOutput({ mockedResponse: narrativeText })
+    tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
     expect(interceptor.getRequests('narrative').length).toBeGreaterThan(0)
 
@@ -261,6 +303,8 @@ describe('Adventure Mode — ActionInputController E2E', () => {
 
     expect(callbacks.endStreaming).toHaveBeenCalled()
     expect(callbacks.setGenerating).toHaveBeenCalledWith(false)
+
+    task.meta.traceData = tracer.getTraceData()
   })
 
   // --------------------------------------------------------------------------
@@ -333,41 +377,131 @@ describe('Adventure Mode — ActionInputController E2E', () => {
       return callbacks
     }
 
-    it('do: prompt contains "I " + input', async () => {
+    it('do: prompt contains "I " + input', async ({ task }) => {
+      const tracer = createTracer()
       setupAdventureStory()
       setupHandlers()
+
+      tracer.beginStep('narrative')
+      tracer.traceInput({
+        templateInputs: {
+          actionType: 'do',
+          inputValue: 'run toward the exit',
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await runHandleSubmit('run toward the exit', 'do')
+
+      tracer.traceOutput({ mockedResponse: 'The narrative continues.' })
+      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       expectPromptContains(interceptor, 'narrative', 'I run toward the exit')
+
+      task.meta.traceData = tracer.getTraceData()
     })
 
-    it("say: prompt contains 'I say, \"' + input + '\"'", async () => {
+    it("say: prompt contains 'I say, \"' + input + '\"'", async ({ task }) => {
+      const tracer = createTracer()
       setupAdventureStory()
       setupHandlers()
+
+      tracer.beginStep('narrative')
+      tracer.traceInput({
+        templateInputs: {
+          actionType: 'say',
+          inputValue: 'Hello there',
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await runHandleSubmit('Hello there', 'say')
+
+      tracer.traceOutput({ mockedResponse: 'The narrative continues.' })
+      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       expectPromptContains(interceptor, 'narrative', 'I say, "Hello there"')
+
+      task.meta.traceData = tracer.getTraceData()
     })
 
-    it("think: prompt contains 'I think to myself, \"' + input + '\"'", async () => {
+    it("think: prompt contains 'I think to myself, \"' + input + '\"'", async ({ task }) => {
+      const tracer = createTracer()
       setupAdventureStory()
       setupHandlers()
+
+      tracer.beginStep('narrative')
+      tracer.traceInput({
+        templateInputs: {
+          actionType: 'think',
+          inputValue: 'this is dangerous',
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await runHandleSubmit('this is dangerous', 'think')
+
+      tracer.traceOutput({ mockedResponse: 'The narrative continues.' })
+      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       expectPromptContains(interceptor, 'narrative', 'I think to myself, "this is dangerous"')
+
+      task.meta.traceData = tracer.getTraceData()
     })
 
-    it('story: prompt contains raw input without prefix', async () => {
+    it('story: prompt contains raw input without prefix', async ({ task }) => {
+      const tracer = createTracer()
       setupAdventureStory()
       setupHandlers()
+
+      tracer.beginStep('narrative')
+      tracer.traceInput({
+        templateInputs: {
+          actionType: 'story',
+          inputValue: 'Suddenly the lights went out',
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await runHandleSubmit('Suddenly the lights went out', 'story')
+
+      tracer.traceOutput({ mockedResponse: 'The narrative continues.' })
+      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       expectPromptContains(interceptor, 'narrative', 'Suddenly the lights went out')
       expectPromptNotContains(interceptor, 'narrative', 'I Suddenly')
+
+      task.meta.traceData = tracer.getTraceData()
     })
 
-    it('free: prompt contains raw input without prefix', async () => {
+    it('free: prompt contains raw input without prefix', async ({ task }) => {
+      const tracer = createTracer()
       setupAdventureStory()
       setupHandlers()
+
+      tracer.beginStep('narrative')
+      tracer.traceInput({
+        templateInputs: {
+          actionType: 'free',
+          inputValue: 'Anything goes here',
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await runHandleSubmit('Anything goes here', 'free')
+
+      tracer.traceOutput({ mockedResponse: 'The narrative continues.' })
+      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       expectPromptContains(interceptor, 'narrative', 'Anything goes here')
       expectPromptNotContains(interceptor, 'narrative', 'I Anything')
+
+      task.meta.traceData = tracer.getTraceData()
     })
   })
 
@@ -381,7 +515,9 @@ describe('Adventure Mode — ActionInputController E2E', () => {
       interceptor.on('classifier', respondWithJSON(defaultClassifierResult))
     }
 
-    it('second person: prompt contains "I " prefix for do action', async () => {
+    it('second person: prompt contains "I " prefix for do action', async ({ task }) => {
+      const tracer = createTracer()
+
       const testStory = buildStory({
         mode: 'adventure',
         settings: {
@@ -403,12 +539,29 @@ describe('Adventure Mode — ActionInputController E2E', () => {
       const userActionEntry = await story.entry.addEntry('user_action', 'I move forward')
       const callbacks = buildMockCallbacks()
       const controller = new ActionInputController(callbacks)
+
+      tracer.beginStep('narrative')
+      tracer.traceInput({
+        templateInputs: {
+          pov: 'second',
+          inputValue: 'I move forward',
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await controller.generateResponse(userActionEntry.id, userActionEntry.content)
 
+      tracer.traceOutput({ mockedResponse: 'The narrative continues.' })
+      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       expectPromptContains(interceptor, 'narrative', 'I move forward')
+
+      task.meta.traceData = tracer.getTraceData()
     })
 
-    it('third person: handleSubmit with third-person prefix uses protagonist name', async () => {
+    it('third person: handleSubmit with third-person prefix uses protagonist name', async ({ task }) => {
+      const tracer = createTracer()
       const testStory = buildStory({
         mode: 'adventure',
         settings: {
@@ -458,6 +611,16 @@ describe('Adventure Mode — ActionInputController E2E', () => {
       const callbacks = buildMockCallbacks()
       const controller = new ActionInputController(callbacks)
 
+      tracer.beginStep('narrative')
+      tracer.traceInput({
+        templateInputs: {
+          pov: 'third',
+          protagonistName: 'Kael',
+          inputValue: 'steps forward',
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await controller.handleSubmit({
         inputValue: 'steps forward',
         actionType: 'do',
@@ -467,10 +630,16 @@ describe('Adventure Mode — ActionInputController E2E', () => {
         actionSuffixes,
       })
 
+      tracer.traceOutput({ mockedResponse: 'The narrative continues.' })
+      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       // Third-person: prompt should contain "Kael steps forward"
       expectPromptContains(interceptor, 'narrative', 'Kael steps forward')
       // Should NOT contain the second-person "I " prefix form
       expectPromptNotContains(interceptor, 'narrative', 'I steps forward')
+
+      task.meta.traceData = tracer.getTraceData()
     })
   })
 })
