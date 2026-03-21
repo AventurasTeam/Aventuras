@@ -1,5 +1,7 @@
 // src/test/e2e/utils/TestTracer.ts
 
+import type { CapturedRequest } from './FetchInterceptor'
+
 export interface StoreDiff {
   storeName: string
   before: Record<string, unknown>
@@ -26,6 +28,25 @@ export interface TestTracer {
   snapshotStore(storeName: string, storeData: Record<string, unknown>): void
   attachCapturedPrompt(capturedRequest: unknown): void
   getTraceData(): TraceStep[]
+}
+
+export interface AutoTraceStep {
+  serviceId: string
+  capturedPrompt: CapturedRequest
+  mockedResponse: unknown
+  templateInputs?: Record<string, unknown>
+  storeDiff: {
+    before: Record<string, unknown>
+    after: Record<string, unknown>
+    changes: Array<{ path: string; old: unknown; new: unknown }>
+  }
+}
+
+export interface AutoTracer {
+  onRequest(serviceId: string, request: CapturedRequest, mockData: unknown): void
+  enrichStep(serviceId: string, templateInputs: Record<string, unknown>): void
+  finalize(): void
+  export(): AutoTraceStep[]
 }
 
 /**
@@ -152,6 +173,68 @@ class TestTracerImpl implements TestTracer {
   }
 }
 
+class AutoTracerImpl implements AutoTracer {
+  private steps: AutoTraceStep[] = []
+  private lastSnapshot: Record<string, unknown> | null = null
+  private getStoreState: () => Record<string, unknown>
+
+  constructor(getStoreState: () => Record<string, unknown>) {
+    this.getStoreState = getStoreState
+  }
+
+  onRequest(serviceId: string, request: CapturedRequest, mockData: unknown): void {
+    const currentSnapshot = this.getStoreState()
+
+    // Close previous step's diff
+    if (this.steps.length > 0 && this.lastSnapshot) {
+      const prevStep = this.steps[this.steps.length - 1]
+      prevStep.storeDiff = {
+        before: this.lastSnapshot,
+        after: currentSnapshot,
+        changes: computeDiff(this.lastSnapshot, currentSnapshot),
+      }
+    }
+
+    // Create new step
+    this.steps.push({
+      serviceId,
+      capturedPrompt: request,
+      mockedResponse: mockData ?? null,
+      storeDiff: {
+        before: currentSnapshot,
+        after: currentSnapshot,
+        changes: [],
+      },
+    })
+
+    this.lastSnapshot = currentSnapshot
+  }
+
+  enrichStep(serviceId: string, templateInputs: Record<string, unknown>): void {
+    for (let i = this.steps.length - 1; i >= 0; i--) {
+      if (this.steps[i].serviceId === serviceId) {
+        this.steps[i].templateInputs = templateInputs
+        return
+      }
+    }
+  }
+
+  finalize(): void {
+    if (this.steps.length === 0) return
+    const currentSnapshot = this.getStoreState()
+    const lastStep = this.steps[this.steps.length - 1]
+    lastStep.storeDiff = {
+      before: this.lastSnapshot ?? currentSnapshot,
+      after: currentSnapshot,
+      changes: computeDiff(this.lastSnapshot ?? currentSnapshot, currentSnapshot),
+    }
+  }
+
+  export(): AutoTraceStep[] {
+    return this.steps
+  }
+}
+
 /**
  * Create a new TestTracer instance.
  *
@@ -160,4 +243,10 @@ class TestTracerImpl implements TestTracer {
  */
 export function createTracer(): TestTracer {
   return new TestTracerImpl()
+}
+
+export function createAutoTracer(
+  getStoreState: () => Record<string, unknown>,
+): AutoTracer {
+  return new AutoTracerImpl(getStoreState)
 }

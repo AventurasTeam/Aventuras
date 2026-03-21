@@ -5,6 +5,8 @@
  * can read the currently installed interceptor at call time.
  */
 
+import type { AutoTracer } from './TestTracer'
+
 export interface CapturedRequest {
   serviceId: string
   url: string
@@ -17,19 +19,15 @@ export interface ResponseHandler {
   __mockData?: unknown
 }
 
-interface TracerNotifiable {
-  onRequest(serviceId: string, request: CapturedRequest, mockData: unknown): void
-}
-
 /** Mutable ref read by the hoisted vi.mock factory in test files. */
 export const _interceptorRef: { current: FetchInterceptor | null } = { current: null }
 
 export class FetchInterceptor {
   private handlers = new Map<string, ResponseHandler>()
   private captured = new Map<string, CapturedRequest[]>()
-  private tracer: TracerNotifiable | null = null
+  private tracer: AutoTracer | null = null
 
-  connectTracer(tracer: TracerNotifiable): void {
+  connectTracer(tracer: AutoTracer): void {
     this.tracer = tracer
   }
 
