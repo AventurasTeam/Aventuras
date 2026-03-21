@@ -190,7 +190,10 @@ export function createDatabaseMock() {
     createPack: vi.fn().mockImplementation((p: any) => {
       return Promise.resolve({ ...p, createdAt: Date.now(), updatedAt: Date.now() })
     }),
-    getPackTemplate: vi.fn().mockResolvedValue(null),
+    getPackTemplate: vi.fn().mockImplementation((packId: string, templateId: string) => {
+      const found = defaultTemplates.find((t) => t.packId === packId && t.templateId === templateId)
+      return Promise.resolve(found ?? null)
+    }),
     setPackTemplateContent: vi.fn().mockResolvedValue(undefined),
     setStoryPack: vi.fn().mockResolvedValue(undefined),
     getStoryCustomVariables: vi.fn().mockResolvedValue(null),

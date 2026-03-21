@@ -271,7 +271,7 @@ function buildResponsesApiJSON(content: string): Response {
         type: 'message',
         id: 'msg_test_001',
         role: 'assistant',
-        content: [{ type: 'output_text', text: content }],
+        content: [{ type: 'output_text', text: content, annotations: [] }],
       },
     ],
     usage: {
