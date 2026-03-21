@@ -26,6 +26,96 @@ function formatDuration(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(2)}s`
 }
 
+function extractMessageContent(content: any): string {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    return content
+      .map((b: any) => {
+        if (typeof b === 'string') return b
+        // Responses API: input_text / output_text
+        if (b.type === 'input_text' || b.type === 'output_text') return b.text ?? ''
+        // Messages API: text blocks
+        if (b.type === 'text') return b.text ?? ''
+        return JSON.stringify(b, null, 2)
+      })
+      .join('\n')
+  }
+  if (content && typeof content === 'object') {
+    // Single content block
+    if (content.type === 'input_text' || content.type === 'text') return content.text ?? ''
+    return JSON.stringify(content, null, 2)
+  }
+  return JSON.stringify(content, null, 2)
+}
+
+function formatPromptBody(captured: any): string {
+  if (!captured || typeof captured !== 'object') return esc(JSON.stringify(captured, null, 2))
+
+  // The captured prompt wraps { serviceId, url, headers, body }
+  // The actual API payload is in .body; fall back to treating the whole object as the payload
+  const hasWrapper = captured.body && typeof captured.body === 'object'
+  const payload = hasWrapper ? captured.body : captured
+  const messages: any[] = payload.messages ?? payload.input ?? []
+  const skipKeys = new Set(['messages', 'input', 'system'])
+
+  const parts: string[] = []
+
+  // Show request metadata (url, serviceId) if wrapped — collapsed by default
+  if (hasWrapper) {
+    const reqMeta: Record<string, any> = {}
+    if (captured.serviceId) reqMeta.serviceId = captured.serviceId
+    if (captured.url) reqMeta.url = captured.url
+    if (Object.keys(reqMeta).length > 0) {
+      parts.push(
+        `<details class="prompt-section"><summary class="prompt-section-summary section-meta">Request</summary><pre><code>${esc(JSON.stringify(reqMeta, null, 2))}</code></pre></details>`,
+      )
+    }
+  }
+
+  // Show model parameters (model, temperature, etc.) — collapsed by default
+  const params: Record<string, any> = {}
+  for (const [k, v] of Object.entries(payload)) {
+    if (!skipKeys.has(k)) params[k] = v
+  }
+  if (Object.keys(params).length > 0) {
+    parts.push(
+      `<details class="prompt-section"><summary class="prompt-section-summary section-meta">Parameters</summary><pre><code>${esc(JSON.stringify(params, null, 2))}</code></pre></details>`,
+    )
+  }
+
+  // Render system prompt (Messages API top-level system field) — open by default
+  if (payload.system) {
+    const systemText =
+      typeof payload.system === 'string'
+        ? payload.system
+        : Array.isArray(payload.system)
+          ? payload.system
+              .map((b: any) => (typeof b === 'string' ? b : b.text ?? JSON.stringify(b)))
+              .join('\n')
+          : JSON.stringify(payload.system, null, 2)
+    parts.push(
+      `<details class="prompt-section prompt-message role-system" open><summary class="prompt-section-summary prompt-role">system</summary><pre class="prompt-content"><code>${esc(systemText)}</code></pre></details>`,
+    )
+  }
+
+  // Render messages/input array — open by default
+  if (Array.isArray(messages)) {
+    for (const msg of messages) {
+      const role = msg.role ?? 'unknown'
+      const roleClass = `role-${role}`
+      const content = extractMessageContent(msg.content)
+      parts.push(
+        `<details class="prompt-section prompt-message ${roleClass}" open><summary class="prompt-section-summary prompt-role">${esc(role)}</summary><pre class="prompt-content"><code>${esc(content)}</code></pre></details>`,
+      )
+    }
+  }
+
+  if (parts.length === 0) {
+    return `<pre><code>${esc(JSON.stringify(captured, null, 2))}</code></pre>`
+  }
+  return parts.join('')
+}
+
 function buildTestHtml(test: any, suiteIndex: number, testIndex: number): string {
   const id = `test-${suiteIndex}-${testIndex}`
   const badge =
@@ -51,7 +141,11 @@ function buildTestHtml(test: any, suiteIndex: number, testIndex: number): string
       const promptHtml = step.input?.capturedPrompt
         ? `<details class="prompt-details">
             <summary>Captured Prompt</summary>
-            <pre><code>${esc(JSON.stringify(step.input.capturedPrompt, null, 2))}</code></pre>
+            <div class="prompt-body">${formatPromptBody(step.input.capturedPrompt)}</div>
+            <details class="raw-json-details">
+              <summary>Raw JSON</summary>
+              <pre><code>${esc(JSON.stringify(step.input.capturedPrompt, null, 2))}</code></pre>
+            </details>
           </details>`
         : ''
 
@@ -213,6 +307,21 @@ summary:hover{text-decoration:underline}
 .error-block{background:#3d1a1e;border:1px solid #f85149;border-radius:4px;padding:10px;margin-bottom:10px;font-size:13px}
 .error-block .stack{margin-top:8px;font-size:11px;color:#f0a0a0;background:transparent;border:none}
 .empty{font-size:12px;color:#484f58;font-style:italic}
+.prompt-body{margin-top:8px}
+.prompt-section{margin-bottom:8px;border:1px solid #21262d;border-radius:4px;overflow:hidden}
+.prompt-section-summary{cursor:pointer;font-size:11px;font-weight:700;text-transform:uppercase;padding:6px 10px;letter-spacing:.05em;list-style:none}
+.prompt-section-summary::-webkit-details-marker{display:none}
+.prompt-section-summary::before{content:'▶ ';font-size:9px;margin-right:4px}
+.prompt-section[open]>.prompt-section-summary::before{content:'▼ '}
+.section-meta{background:#161b22;color:#8b949e}
+.role-system>.prompt-section-summary{background:#1a2233;color:#79c0ff}
+.role-user>.prompt-section-summary{background:#1a2d1a;color:#3fb950}
+.role-assistant>.prompt-section-summary{background:#2d1a2d;color:#d2a8ff}
+.role-unknown>.prompt-section-summary{background:#272c33;color:#8b949e}
+.prompt-content{margin:0;border:none;border-radius:0;white-space:pre-wrap;word-wrap:break-word;max-height:600px;overflow-y:auto}
+.raw-json-details{margin-top:8px;overflow:hidden}
+.raw-json-details summary{font-size:11px;color:#484f58}
+.raw-json-details pre{white-space:pre-wrap;word-break:break-word;max-width:100%}
 .response-block{margin-bottom:8px} .response-block strong{font-size:12px;color:#8b949e}
 .store-diff{margin-top:8px} .store-diff strong{font-size:12px}
 @media(max-width:900px){.panels{grid-template-columns:1fr}.snapshot-panels{grid-template-columns:1fr}.sidebar{display:none}}
