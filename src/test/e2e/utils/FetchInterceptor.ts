@@ -12,7 +12,10 @@ export interface CapturedRequest {
   body: any
 }
 
-export type ResponseHandler = (req: CapturedRequest) => Response | Promise<Response>
+export interface ResponseHandler {
+  (req: CapturedRequest): Response | Promise<Response>
+  __mockData?: unknown
+}
 
 /** Mutable ref read by the hoisted vi.mock factory in test files. */
 export const _interceptorRef: { current: FetchInterceptor | null } = { current: null }
@@ -135,12 +138,14 @@ function isResponsesApi(url: string): boolean {
  * Text is split into word-sized pieces.
  */
 export function respondWithStream(text: string): ResponseHandler {
-  return (req: CapturedRequest): Response => {
+  const handler: ResponseHandler = (req: CapturedRequest): Response => {
     if (isResponsesApi(req.url)) {
       return buildResponsesApiStream(text)
     }
     return buildChatCompletionsStream(text)
   }
+  handler.__mockData = { type: 'stream', text }
+  return handler
 }
 
 /** Build an SSE stream in the OpenAI Responses API format. */
@@ -251,12 +256,14 @@ function buildChatCompletionsStream(text: string): Response {
  * Auto-detects Responses API vs Chat Completions API based on request URL.
  */
 export function respondWithJSON(data: unknown): ResponseHandler {
-  return (req: CapturedRequest): Response => {
+  const handler: ResponseHandler = (req: CapturedRequest): Response => {
     if (isResponsesApi(req.url)) {
       return buildResponsesApiJSON(JSON.stringify(data))
     }
     return buildChatCompletionsJSON(JSON.stringify(data))
   }
+  handler.__mockData = { type: 'json', data }
+  return handler
 }
 
 function buildResponsesApiJSON(content: string): Response {
@@ -316,12 +323,14 @@ function buildChatCompletionsJSON(content: string): Response {
  * Useful for services using `generateObject()` via tool calls.
  */
 export function respondWithToolCall(name: string, args: unknown): ResponseHandler {
-  return (req: CapturedRequest): Response => {
+  const handler: ResponseHandler = (req: CapturedRequest): Response => {
     if (isResponsesApi(req.url)) {
       return buildResponsesApiToolCall(name, args)
     }
     return buildChatCompletionsToolCall(name, args)
   }
+  handler.__mockData = { type: 'tool_call', name, args }
+  return handler
 }
 
 function buildResponsesApiToolCall(name: string, args: unknown): Response {
@@ -392,10 +401,12 @@ function buildChatCompletionsToolCall(name: string, args: unknown): Response {
  * Returns a handler that responds with a non-200 error response.
  */
 export function respondWithError(status: number, message: string): ResponseHandler {
-  return (_req: CapturedRequest): Response => {
+  const handler: ResponseHandler = (_req: CapturedRequest): Response => {
     return new Response(JSON.stringify({ error: { message } }), {
       status,
       headers: { 'content-type': 'application/json' },
     })
   }
+  handler.__mockData = { type: 'error', status, message }
+  return handler
 }
