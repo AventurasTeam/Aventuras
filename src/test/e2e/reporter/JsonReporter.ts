@@ -112,4 +112,4 @@ class JsonReporter implements Reporter {
   }
 }
 
-export default new JsonReporter()
+export default JsonReporter

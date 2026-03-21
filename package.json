@@ -17,6 +17,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:e2e": "vitest run --project e2e",
+    "test:e2e:report": "vitest run --project e2e --reporter ./src/test/e2e/reporter/JsonReporter.ts && npx tsx scripts/generate-test-report.ts",
     "test:watch": "vitest"
   },
   "license": "AGPL-3.0",
