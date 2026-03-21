@@ -11,8 +11,8 @@ vi.mock('$lib/services/ai/sdk/providers/fetch', () => {
     createTimeoutFetch: (
       timeout: number,
       serviceId: string,
-      manualBody?: string,
-      debugId?: string,
+      _manualBody?: string,
+      _debugId?: string,
     ) => {
       return (
         interceptorRef.current?.createFetchForService(serviceId) ??

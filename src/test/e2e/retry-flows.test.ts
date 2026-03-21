@@ -214,7 +214,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
     })
 
     it('clears error entry and retries generation on error entry found', async () => {
-      const testStory = setupAdventureStory()
+      setupAdventureStory()
 
       // Add a user_action entry representing a prior user action
       const userActionEntry = await story.entry.addEntry('user_action', 'I move forward')
@@ -349,7 +349,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
     })
 
     it('returns empty object and clears backup when backup storyId does not match', async () => {
-      const testStory = setupAdventureStory()
+      setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
       // Backup for a different story
@@ -401,13 +401,10 @@ describe('Retry Flows — ActionInputController E2E', () => {
     })
 
     it('fires abort signal when stopRequested is set', async () => {
-      const testStory = setupAdventureStory()
-
-      // We need to intercept the abort. Capture the abort controller.
-      let capturedAbortController: AbortController | null = null
+      setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
-      const backup = buildRetryBackup(testStory.id, {
+      const backup = buildRetryBackup(story.currentStory!.id, {
         hasFullState: true,
         entries: [...story.entry.entries],
         entryCountBeforeAction: story.entry.entries.length,
@@ -419,7 +416,6 @@ describe('Retry Flows — ActionInputController E2E', () => {
       // Simulate an in-flight abort controller
       const abortController = new AbortController()
       controller.activeAbortController = abortController
-      capturedAbortController = abortController
 
       const abortSpy = vi.spyOn(abortController, 'abort')
 
@@ -472,8 +468,8 @@ describe('Retry Flows — ActionInputController E2E', () => {
       // 1: user_action
       // 2: narration (the one we want to retry)
       const initialNarration = story.entry.entries[0]
-      const userActionEntry = await story.entry.addEntry('user_action', 'I walk forward')
-      const narratedEntry = await story.entry.addEntry('narration', 'You walk forward.')
+      await story.entry.addEntry('user_action', 'I walk forward')
+      await story.entry.addEntry('narration', 'You walk forward.')
 
       // Set up handlers for the new generation
       interceptor.on('narrative', respondWithStream('You stride confidently forward.'))
@@ -559,7 +555,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
     })
 
     it('consults getRetryBackup callback, not store directly', async () => {
-      const testStory = setupAdventureStory()
+      setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
       const getRetryBackupSpy = vi.fn().mockReturnValue(null)

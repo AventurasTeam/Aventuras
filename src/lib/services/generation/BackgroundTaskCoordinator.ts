@@ -83,8 +83,8 @@ export class BackgroundTaskCoordinator {
       chapterService: {
         analyzeForChapter: aiService.analyzeForChapter.bind(aiService),
         summarizeChapter: aiService.summarizeChapter.bind(aiService),
-        getNextChapterNumber: story.chapter.getNextChapterNumber.bind(story),
-        addChapter: story.chapter.addChapter.bind(story),
+        getNextChapterNumber: story.chapter.getNextChapterNumber.bind(story.chapter),
+        addChapter: story.chapter.addChapter.bind(story.chapter),
       },
       loreManagement: {
         runLoreManagement: aiService.runLoreManagement.bind(aiService),
@@ -137,8 +137,8 @@ export class BackgroundTaskCoordinator {
         onCreateEntry: async (entry) => {
           await story.lorebook.addLorebookEntry(entry)
         },
-        onUpdateEntry: story.lorebook.updateLorebookEntry.bind(story),
-        onDeleteEntry: story.lorebook.deleteLorebookEntry.bind(story),
+        onUpdateEntry: story.lorebook.updateLorebookEntry.bind(story.lorebook),
+        onDeleteEntry: story.lorebook.deleteLorebookEntry.bind(story.lorebook),
         onMergeEntries: async (entryIds, mergedEntry) => {
           await story.lorebook.deleteLorebookEntries(entryIds)
           await story.lorebook.addLorebookEntry(mergedEntry)
