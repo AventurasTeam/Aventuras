@@ -411,10 +411,7 @@ export class WizardStore {
         referenceMode: this.narrative.referenceMode,
       },
       title: this.narrative.storyTitle,
-      openingGuidance:
-        this.narrative.selectedMode === 'creative-writing' && this.narrative.openingGuidance.trim()
-          ? this.narrative.openingGuidance.trim()
-          : undefined,
+      openingGuidance: this.narrative.openingGuidance.trim() || undefined,
     }
 
     const storyData = await scenarioService.prepareStoryData(wizardData, processedOpening)
