@@ -228,7 +228,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       expect(callbacks.clearGenerationError).not.toHaveBeenCalled()
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
     it('clears error entry and retries generation on error entry found', async ({ task }) => {
@@ -281,7 +281,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       )
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
     it('clears error and no-ops when userActionEntry not found', async ({ task }) => {
@@ -310,10 +310,12 @@ describe('Retry Flows — ActionInputController E2E', () => {
       expect(interceptor.getRequests('narrative')).toHaveLength(0)
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
-    it('creates error entry and calls setGenerationError when narrative fails', async ({ task }) => {
+    it('creates error entry and calls setGenerationError when narrative fails', async ({
+      task,
+    }) => {
       setupAdventureStory()
 
       const userActionEntry = await story.entry.addEntry('user_action', 'I try something risky')
@@ -350,7 +352,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       )
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
   })
 
@@ -375,7 +377,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       expect(result).toEqual({})
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
     it('returns empty object when no backup exists', async ({ task }) => {
@@ -398,10 +400,12 @@ describe('Retry Flows — ActionInputController E2E', () => {
       expect(callbacks.endStreaming).toHaveBeenCalled()
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
-    it('returns empty object and clears backup when backup storyId does not match', async ({ task }) => {
+    it('returns empty object and clears backup when backup storyId does not match', async ({
+      task,
+    }) => {
       setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
@@ -421,7 +425,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       expect(callbacks.clearRetryBackup).toHaveBeenCalled()
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
     it('restores state from backup and returns restored values', async ({ task }) => {
@@ -463,7 +467,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       expect(result.restoredWasRawActionChoice).toBe(false)
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
     it('fires abort signal when stopRequested is set', async ({ task }) => {
@@ -493,7 +497,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       expect(abortSpy).toHaveBeenCalled()
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
   })
 
@@ -519,10 +523,12 @@ describe('Retry Flows — ActionInputController E2E', () => {
       expect(interceptor.getRequests('narrative')).toHaveLength(0)
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
-    it('clears backup and no-ops when backup storyId does not match current story', async ({ task }) => {
+    it('clears backup and no-ops when backup storyId does not match current story', async ({
+      task,
+    }) => {
       setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
@@ -543,10 +549,12 @@ describe('Retry Flows — ActionInputController E2E', () => {
       expect(interceptor.getRequests('narrative')).toHaveLength(0)
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
-    it('rolls back state and creates new user_action entry and new narrative request', async ({ task }) => {
+    it('rolls back state and creates new user_action entry and new narrative request', async ({
+      task,
+    }) => {
       const testStory = setupAdventureStory()
 
       // Pre-populate entries as if a previous generation happened:
@@ -608,7 +616,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       )
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
     it('sets retryingLastMessage to false even if generation throws', async ({ task }) => {
@@ -651,7 +659,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       expect(callbacks.setRetryingLastMessage).toHaveBeenCalledWith(false)
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
     it('consults getRetryBackup callback, not store directly', async ({ task }) => {
@@ -672,7 +680,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       expect(getRetryBackupSpy).toHaveBeenCalled()
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
   })
 })

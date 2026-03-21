@@ -185,7 +185,9 @@ describe('Generation Feature Toggles', () => {
   // --------------------------------------------------------------------------
 
   describe('Translation toggle', () => {
-    it('translation enabled: translation request is made after narrative generation', async ({ task }) => {
+    it('translation enabled: translation request is made after narrative generation', async ({
+      task,
+    }) => {
       const testStory = buildAdventureStory()
       loadTestStory({
         story: testStory,
@@ -221,7 +223,7 @@ describe('Generation Feature Toggles', () => {
       expect(interceptor.getRequests('translate-narration').length).toBeGreaterThan(0)
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
     it('translation disabled (default): no translation request is made', async ({ task }) => {
@@ -256,7 +258,7 @@ describe('Generation Feature Toggles', () => {
       expectNoRequest(interceptor, 'translate-narration')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
   })
 
@@ -327,7 +329,7 @@ describe('Generation Feature Toggles', () => {
       expect(interceptor.getRequests('image-prompt-analysis').length).toBeGreaterThan(0)
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
     it("image mode 'none' (default): no image analysis request is made", async ({ task }) => {
@@ -361,7 +363,7 @@ describe('Generation Feature Toggles', () => {
       expectNoRequest(interceptor, 'image-prompt-analysis')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
   })
 
@@ -414,10 +416,12 @@ describe('Generation Feature Toggles', () => {
       expect(interceptor.getRequests('tier3-entry-selection').length).toBeGreaterThan(0)
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
-    it('no lorebook entries and no world state: no tier3 entry selection call is made', async ({ task }) => {
+    it('no lorebook entries and no world state: no tier3 entry selection call is made', async ({
+      task,
+    }) => {
       const testStory = buildAdventureStory()
       // Minimal story — no lorebook entries, no world state entities
       loadTestStory({
@@ -449,7 +453,7 @@ describe('Generation Feature Toggles', () => {
       expectNoRequest(interceptor, 'tier3-entry-selection')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
     it('chapters present: timeline fill LLM call is made during retrieval', async ({ task }) => {
@@ -492,7 +496,7 @@ describe('Generation Feature Toggles', () => {
       expect(interceptor.getRequests('narrative').length).toBeGreaterThan(0)
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
   })
 
@@ -501,7 +505,9 @@ describe('Generation Feature Toggles', () => {
   // --------------------------------------------------------------------------
 
   describe('Style review injection', () => {
-    it('when ui.lastStyleReview is set, narrative prompt includes style feedback phrases', async ({ task }) => {
+    it('when ui.lastStyleReview is set, narrative prompt includes style feedback phrases', async ({
+      task,
+    }) => {
       const testStory = buildAdventureStory()
       loadTestStory({
         story: testStory,
@@ -564,7 +570,7 @@ describe('Generation Feature Toggles', () => {
       expect(allContent).toContain('passive constructions')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
   })
 })

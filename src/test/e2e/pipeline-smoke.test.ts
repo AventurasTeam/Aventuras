@@ -185,7 +185,7 @@ describe('GenerationPipeline smoke test', () => {
     expect(narrativeRequests.length).toBeGreaterThan(0)
 
     tracer.finalize()
-    task.meta.traceData = tracer.export()
+    ;(task.meta as any).traceData = tracer.export()
   })
 
   it('handles abort correctly', async ({ task }) => {
@@ -216,6 +216,6 @@ describe('GenerationPipeline smoke test', () => {
     expect(narrativeComplete).toBeUndefined()
 
     tracer.finalize()
-    task.meta.traceData = tracer.export()
+    ;(task.meta as any).traceData = tracer.export()
   })
 })

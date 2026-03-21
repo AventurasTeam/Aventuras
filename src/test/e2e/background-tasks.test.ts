@@ -308,7 +308,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       await BackgroundTaskCoordinator.run(true, 'new')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
 
       expect(interceptor.getRequests('style-reviewer').length).toBeGreaterThan(0)
     })
@@ -337,7 +337,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       await BackgroundTaskCoordinator.run(true, 'new')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
 
       expect(interceptor.getRequests('style-reviewer').length).toBe(0)
     })
@@ -364,7 +364,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       await BackgroundTaskCoordinator.run(true, 'new')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
 
       expect(interceptor.getRequests('style-reviewer').length).toBe(0)
     })
@@ -401,7 +401,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       await BackgroundTaskCoordinator.run(false, 'new')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
 
       expect(interceptor.getRequests('chapter-analysis').length).toBeGreaterThan(0)
       expect(interceptor.getRequests('chapter-summarization').length).toBeGreaterThan(0)
@@ -421,7 +421,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       await BackgroundTaskCoordinator.run(false, 'new')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
 
       expect(interceptor.getRequests('chapter-analysis').length).toBeGreaterThan(0)
       expect(interceptor.getRequests('chapter-summarization').length).toBe(0)
@@ -463,7 +463,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       await BackgroundTaskCoordinator.run(false, 'new')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
 
       expect(interceptor.getRequests('chapter-analysis').length).toBe(0)
     })
@@ -504,7 +504,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       await BackgroundTaskCoordinator.run(false, 'new')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
 
       expect(interceptor.getRequests('chapter-analysis').length).toBe(0)
     })
@@ -546,7 +546,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       const result = await coordinator.runBackgroundTasks(input)
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
 
       expect(interceptor.getRequests('chapter-analysis').length).toBeGreaterThan(0)
       expect(interceptor.getRequests('chapter-summarization').length).toBeGreaterThan(0)
@@ -573,7 +573,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       const result = await coordinator.runBackgroundTasks(input)
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
 
       expect(result.chapterCreation.created).toBe(false)
       expect(result.chapterCreation.loreManagementTriggered).toBe(false)
@@ -590,7 +590,9 @@ describe('BackgroundTaskCoordinator E2E', () => {
   // --------------------------------------------------------------------------
 
   describe('non-fatal failure handling', () => {
-    it('completes without throwing when style review encounters a client error', async ({ task }) => {
+    it('completes without throwing when style review encounters a client error', async ({
+      task,
+    }) => {
       const testStory = buildStory({
         mode: 'adventure',
         settings: {
@@ -630,10 +632,12 @@ describe('BackgroundTaskCoordinator E2E', () => {
       await expect(BackgroundTaskCoordinator.run(true, 'new')).resolves.toBeUndefined()
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
-    it('completes without throwing when chapter analysis encounters a client error', async ({ task }) => {
+    it('completes without throwing when chapter analysis encounters a client error', async ({
+      task,
+    }) => {
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
@@ -651,10 +655,12 @@ describe('BackgroundTaskCoordinator E2E', () => {
       await expect(BackgroundTaskCoordinator.run(false, 'new')).resolves.toBeUndefined()
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
-    it('completes without throwing when lore management encounters a client error', async ({ task }) => {
+    it('completes without throwing when lore management encounters a client error', async ({
+      task,
+    }) => {
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
@@ -677,7 +683,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       await expect(coordinator.runBackgroundTasks(input)).resolves.toBeDefined()
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
     it('continues to run chapter check even after style review failure', async ({ task }) => {
@@ -704,7 +710,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       await BackgroundTaskCoordinator.run(true, 'new')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
 
       // Despite style review failure, chapter analysis still ran
       expect(interceptor.getRequests('chapter-analysis').length).toBeGreaterThan(0)

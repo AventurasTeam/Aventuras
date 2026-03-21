@@ -120,15 +120,17 @@ function buildMockCallbacks(): ActionInputCallbacks {
 
 function configureImageProfile() {
   const imageProfileId = 'test-image-profile'
-  settings.imageProfiles = [{
-    id: imageProfileId,
-    name: 'Test Image Profile',
-    providerType: 'pollinations',
-    apiKey: '',
-    model: 'flux',
-    providerOptions: {},
-    createdAt: Date.now(),
-  }]
+  settings.imageProfiles = [
+    {
+      id: imageProfileId,
+      name: 'Test Image Profile',
+      providerType: 'pollinations',
+      apiKey: '',
+      model: 'flux',
+      providerOptions: {},
+      createdAt: Date.now(),
+    },
+  ]
   settings.systemServicesSettings.imageGeneration.profileId = imageProfileId
   settings.systemServicesSettings.imageGeneration.backgroundProfileId = imageProfileId
 }
@@ -163,34 +165,44 @@ const richClassifierResult = {
     timeProgression: 'hours',
   },
   entryUpdates: {
-    characterUpdates: [{
-      name: 'Seraphina',
-      changes: {
-        newTraits: ['brave', 'wounded'],
+    characterUpdates: [
+      {
+        name: 'Seraphina',
+        changes: {
+          newTraits: ['brave', 'wounded'],
+        },
       },
-    }],
+    ],
     locationUpdates: [],
     itemUpdates: [],
     storyBeatUpdates: [],
-    newCharacters: [{
-      name: 'Lyris',
-      description: 'A mysterious stranger',
-      relationship: 'neutral',
-    }],
-    newLocations: [{
-      name: 'Hidden Chamber',
-      description: 'A secret room behind the crystal wall',
-    }],
-    newItems: [{
-      name: 'Crystal Shard',
-      description: 'A glowing fragment of the spire',
-    }],
-    newStoryBeats: [{
-      title: 'The Stranger Appears',
-      description: 'Lyris emerges from the shadows',
-      type: 'event',
-      status: 'active',
-    }],
+    newCharacters: [
+      {
+        name: 'Lyris',
+        description: 'A mysterious stranger',
+        relationship: 'neutral',
+      },
+    ],
+    newLocations: [
+      {
+        name: 'Hidden Chamber',
+        description: 'A secret room behind the crystal wall',
+      },
+    ],
+    newItems: [
+      {
+        name: 'Crystal Shard',
+        description: 'A glowing fragment of the spire',
+      },
+    ],
+    newStoryBeats: [
+      {
+        title: 'The Stranger Appears',
+        description: 'Lyris emerges from the shadows',
+        type: 'event',
+        status: 'active',
+      },
+    ],
   },
 }
 
@@ -205,9 +217,7 @@ const defaultActionChoicesResult = {
 
 /** Timeline fill query generation result matching timelineQueriesResultSchema. */
 const timelineFillQueriesResult = {
-  queries: [
-    { query: 'What happened when Kael escaped the dungeon?' },
-  ],
+  queries: [{ query: 'What happened when Kael escaped the dungeon?' }],
 }
 
 /** Background image analysis result matching backgroundImageAnalysisResultSchema. */
@@ -218,14 +228,16 @@ const backgroundImageResult = {
 
 /** Image prompt analysis result matching sceneAnalysisResultSchema. */
 const imageAnalysisResult = {
-  scenes: [{
-    prompt: 'A warrior enters a crystal spire with dagger drawn',
-    sceneType: 'action',
-    priority: 5,
-    sourceText: 'You draw the Obsidian Dagger and enter the spire.',
-    characters: [],
-    generatePortrait: false,
-  }],
+  scenes: [
+    {
+      prompt: 'A warrior enters a crystal spire with dagger drawn',
+      sceneType: 'action',
+      priority: 5,
+      sourceText: 'You draw the Obsidian Dagger and enter the spire.',
+      characters: [],
+      generatePortrait: false,
+    },
+  ],
 }
 
 // ============================================================================
@@ -364,11 +376,37 @@ describe('Adventure Mode — ActionInputController E2E', () => {
 
     // Story history entries
     const entries = [
-      buildEntry({ storyId: testStory.id, type: 'narration', content: 'The dungeon crumbled behind you as you escaped into daylight.', position: 0 }),
-      buildEntry({ storyId: testStory.id, type: 'user_action', content: 'I head toward the Crystal Spire', position: 1 }),
-      buildEntry({ storyId: testStory.id, type: 'narration', content: 'The Crystal Spire loomed ahead, its facets catching the last rays of sunset.', position: 2 }),
-      buildEntry({ storyId: testStory.id, type: 'user_action', content: 'I examine the entrance', position: 3 }),
-      buildEntry({ storyId: testStory.id, type: 'narration', content: 'Seraphina pointed to ancient runes carved above the archway. "These are warnings," she said.', position: 4 }),
+      buildEntry({
+        storyId: testStory.id,
+        type: 'narration',
+        content: 'The dungeon crumbled behind you as you escaped into daylight.',
+        position: 0,
+      }),
+      buildEntry({
+        storyId: testStory.id,
+        type: 'user_action',
+        content: 'I head toward the Crystal Spire',
+        position: 1,
+      }),
+      buildEntry({
+        storyId: testStory.id,
+        type: 'narration',
+        content: 'The Crystal Spire loomed ahead, its facets catching the last rays of sunset.',
+        position: 2,
+      }),
+      buildEntry({
+        storyId: testStory.id,
+        type: 'user_action',
+        content: 'I examine the entrance',
+        position: 3,
+      }),
+      buildEntry({
+        storyId: testStory.id,
+        type: 'narration',
+        content:
+          'Seraphina pointed to ancient runes carved above the archway. "These are warnings," she said.',
+        position: 4,
+      }),
     ]
 
     loadTestStory({
@@ -392,25 +430,34 @@ describe('Adventure Mode — ActionInputController E2E', () => {
 
     // Set style review
     ui.lastStyleReview = {
-      phrases: [{
-        phrase: 'passive constructions',
-        frequency: 3,
-        severity: 'medium',
-        alternatives: ['use active voice'],
-        contexts: ['The door was opened by...'],
-      }],
+      phrases: [
+        {
+          phrase: 'passive constructions',
+          frequency: 3,
+          severity: 'medium',
+          alternatives: ['use active voice'],
+          contexts: ['The door was opened by...'],
+        },
+      ],
       overallAssessment: 'Avoid passive voice.',
       reviewedEntryCount: 5,
       timestamp: Date.now(),
     }
 
     // ---- Register mock handlers ----
-    const narrativeText = 'You draw the Obsidian Dagger and step through the archway into the Crystal Spire. The air shimmers with ancient energy as Seraphina follows close behind.'
+    const narrativeText =
+      'You draw the Obsidian Dagger and step through the archway into the Crystal Spire. The air shimmers with ancient energy as Seraphina follows close behind.'
 
     interceptor
       .on('timeline-fill', respondWithJSON(timelineFillQueriesResult))
-      .on('timeline-fill-answer', respondWithStream('Kael fought through the dungeon guards and escaped with Seraphina.'))
-      .on('tier3-entry-selection', respondWithJSON({ selectedIds: [], reasoning: 'No relevant entries' }))
+      .on(
+        'timeline-fill-answer',
+        respondWithStream('Kael fought through the dungeon guards and escaped with Seraphina.'),
+      )
+      .on(
+        'tier3-entry-selection',
+        respondWithJSON({ selectedIds: [], reasoning: 'No relevant entries' }),
+      )
       .on('narrative', respondWithStream(narrativeText))
       .on('background-image-prompt-analysis', respondWithJSON(backgroundImageResult))
       .on('classifier', respondWithJSON(richClassifierResult))
@@ -459,7 +506,9 @@ describe('Adventure Mode — ActionInputController E2E', () => {
 
     // Narrative response emitted and entry added
     expect(callbacks.emitNarrativeResponse).toHaveBeenCalledWith(expect.any(String), narrativeText)
-    const narrationEntries = story.entry.entries.filter(e => e.type === 'narration' && e.content === narrativeText)
+    const narrationEntries = story.entry.entries.filter(
+      (e) => e.type === 'narration' && e.content === narrativeText,
+    )
     expect(narrationEntries.length).toBe(1)
 
     // ---- Assertions: Background image phase ----
@@ -469,15 +518,18 @@ describe('Adventure Mode — ActionInputController E2E', () => {
     expect(interceptor.getRequests('classifier').length).toBeGreaterThan(0)
 
     // Entity updates applied to store
-    const seraphina = story.character.characters.find(c => c.name === 'Seraphina')
+    const seraphina = story.character.characters.find((c) => c.name === 'Seraphina')
     expect(seraphina?.traits).toContain('brave')
     expect(seraphina?.traits).toContain('wounded')
 
     // New entities added
-    expect(story.character.characters.find(c => c.name === 'Lyris')).toBeDefined()
-    expect(story.location.locations.find(l => l.name === 'Hidden Chamber')).toBeDefined()
-    expect(story.item.items.find(i => i.name === 'Crystal Shard')).toBeDefined()
-    expect(story.storyBeat.storyBeats.find(b => b.title === 'The Stranger Appears')).toBeDefined()
+    expect(story.character.characters.find((c) => c.name === 'Lyris')).toBeDefined()
+    expect(story.location.locations.find((l) => l.name === 'Hidden Chamber')).toBeDefined()
+    expect(story.item.items.find((i) => i.name === 'Crystal Shard')).toBeDefined()
+    expect(story.storyBeat.storyBeats.find((b) => b.title === 'The Stranger Appears')).toBeDefined()
+
+    // Time progression applied (hours → adds 2 hours to timeTracker)
+    expect(story.currentStory?.timeTracker).not.toBeNull()
 
     // ---- Assertions: Image phase ----
     expect(interceptor.getRequests('image-prompt-analysis').length).toBeGreaterThan(0)
@@ -494,7 +546,7 @@ describe('Adventure Mode — ActionInputController E2E', () => {
     expect(callbacks.setGenerating).toHaveBeenCalledWith(false)
 
     tracer.finalize()
-    task.meta.traceData = tracer.export()
+    ;(task.meta as any).traceData = tracer.export()
   })
 
   // --------------------------------------------------------------------------
@@ -579,7 +631,7 @@ describe('Adventure Mode — ActionInputController E2E', () => {
       expectPromptContains(interceptor, 'narrative', 'I run toward the exit')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
     it("say: prompt contains 'I say, \"' + input + '\"'", async ({ task }) => {
@@ -594,7 +646,7 @@ describe('Adventure Mode — ActionInputController E2E', () => {
       expectPromptContains(interceptor, 'narrative', 'I say, "Hello there"')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
     it("think: prompt contains 'I think to myself, \"' + input + '\"'", async ({ task }) => {
@@ -609,7 +661,7 @@ describe('Adventure Mode — ActionInputController E2E', () => {
       expectPromptContains(interceptor, 'narrative', 'I think to myself, "this is dangerous"')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
     it('story: prompt contains raw input without prefix', async ({ task }) => {
@@ -625,7 +677,7 @@ describe('Adventure Mode — ActionInputController E2E', () => {
       expectPromptNotContains(interceptor, 'narrative', 'I Suddenly')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
 
     it('free: prompt contains raw input without prefix', async ({ task }) => {
@@ -641,7 +693,7 @@ describe('Adventure Mode — ActionInputController E2E', () => {
       expectPromptNotContains(interceptor, 'narrative', 'I Anything')
 
       tracer.finalize()
-      task.meta.traceData = tracer.export()
+      ;(task.meta as any).traceData = tracer.export()
     })
   })
 
@@ -689,6 +741,6 @@ describe('Adventure Mode — ActionInputController E2E', () => {
     expect(callbacks.setActionChoices).not.toHaveBeenCalled()
 
     tracer.finalize()
-    task.meta.traceData = tracer.export()
+    ;(task.meta as any).traceData = tracer.export()
   })
 })
