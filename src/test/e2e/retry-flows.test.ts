@@ -46,11 +46,22 @@ import {
   type ActionInputCallbacks,
 } from '$lib/services/generation/ActionInputController'
 import type { RetryBackupData } from '$lib/services/generation/RetryService'
-import { createTracer } from './utils/TestTracer'
+import { createAutoTracer } from './utils/TestTracer'
 
 // ============================================================================
 // Helpers
 // ============================================================================
+
+function getStoreState() {
+  return {
+    entries: structuredClone(story.entry.entries),
+    characters: structuredClone(story.character.characters),
+    locations: structuredClone(story.location.locations),
+    items: structuredClone(story.item.items),
+    storyBeats: structuredClone(story.storyBeat.storyBeats),
+    chapters: structuredClone(story.chapter.chapters),
+  }
+}
 
 function buildMockCallbacks(): ActionInputCallbacks {
   return {
@@ -201,12 +212,14 @@ describe('Retry Flows — ActionInputController E2E', () => {
 
   describe('handleRetry', () => {
     it('no-op when getLastGenerationError returns null', async ({ task }) => {
-      const tracer = createTracer()
       setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
       // getLastGenerationError returns null by default
       const controller = new ActionInputController(callbacks)
+
+      const tracer = createAutoTracer(getStoreState)
+      interceptor.connectTracer(tracer)
 
       await controller.handleRetry()
 
@@ -214,11 +227,11 @@ describe('Retry Flows — ActionInputController E2E', () => {
       expect(interceptor.getRequests('narrative')).toHaveLength(0)
       expect(callbacks.clearGenerationError).not.toHaveBeenCalled()
 
-      task.meta.traceData = tracer.getTraceData()
+      tracer.finalize()
+      task.meta.traceData = tracer.export()
     })
 
     it('clears error entry and retries generation on error entry found', async ({ task }) => {
-      const tracer = createTracer()
       setupAdventureStory()
 
       // Add a user_action entry representing a prior user action
@@ -246,17 +259,10 @@ describe('Retry Flows — ActionInputController E2E', () => {
 
       const controller = new ActionInputController(callbacks)
 
-      tracer.beginStep('narrative')
-      tracer.traceInput({
-        templateInputs: { retryType: 'error', userAction: 'I move forward' },
-      })
-      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+      const tracer = createAutoTracer(getStoreState)
+      interceptor.connectTracer(tracer)
 
       await controller.handleRetry()
-
-      tracer.traceOutput({ mockedResponse: 'You move forward carefully.' })
-      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
-      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
       // clearGenerationError was called
       expect(callbacks.clearGenerationError).toHaveBeenCalled()
@@ -274,11 +280,11 @@ describe('Retry Flows — ActionInputController E2E', () => {
         'You move forward carefully.',
       )
 
-      task.meta.traceData = tracer.getTraceData()
+      tracer.finalize()
+      task.meta.traceData = tracer.export()
     })
 
     it('clears error and no-ops when userActionEntry not found', async ({ task }) => {
-      const tracer = createTracer()
       setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
@@ -291,6 +297,10 @@ describe('Retry Flows — ActionInputController E2E', () => {
       })
 
       const controller = new ActionInputController(callbacks)
+
+      const tracer = createAutoTracer(getStoreState)
+      interceptor.connectTracer(tracer)
+
       await controller.handleRetry()
 
       // clearGenerationError is called even though entry not found
@@ -299,11 +309,11 @@ describe('Retry Flows — ActionInputController E2E', () => {
       // No narrative request should be made since user action wasn't found
       expect(interceptor.getRequests('narrative')).toHaveLength(0)
 
-      task.meta.traceData = tracer.getTraceData()
+      tracer.finalize()
+      task.meta.traceData = tracer.export()
     })
 
     it('creates error entry and calls setGenerationError when narrative fails', async ({ task }) => {
-      const tracer = createTracer()
       setupAdventureStory()
 
       const userActionEntry = await story.entry.addEntry('user_action', 'I try something risky')
@@ -329,24 +339,18 @@ describe('Retry Flows — ActionInputController E2E', () => {
 
       const controller = new ActionInputController(callbacks)
 
-      tracer.beginStep('narrative')
-      tracer.traceInput({
-        templateInputs: { retryType: 'error', userAction: 'I try something risky', expectFailure: true },
-      })
-      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+      const tracer = createAutoTracer(getStoreState)
+      interceptor.connectTracer(tracer)
 
       await controller.handleRetry()
-
-      tracer.traceOutput({ mockedResponse: null })
-      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
-      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
       // setGenerationError was called because the retry also failed
       expect(callbacks.setGenerationError).toHaveBeenCalledWith(
         expect.objectContaining({ message: expect.any(String) }),
       )
 
-      task.meta.traceData = tracer.getTraceData()
+      tracer.finalize()
+      task.meta.traceData = tracer.export()
     })
   })
 
@@ -356,28 +360,35 @@ describe('Retry Flows — ActionInputController E2E', () => {
 
   describe('handleStopGeneration', () => {
     it('returns empty object when isRetryingLastMessage is true', async ({ task }) => {
-      const tracer = createTracer()
       setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
       callbacks.isRetryingLastMessage = vi.fn().mockReturnValue(true)
 
       const controller = new ActionInputController(callbacks)
+
+      const tracer = createAutoTracer(getStoreState)
+      interceptor.connectTracer(tracer)
+
       const result = await controller.handleStopGeneration()
 
       expect(result).toEqual({})
 
-      task.meta.traceData = tracer.getTraceData()
+      tracer.finalize()
+      task.meta.traceData = tracer.export()
     })
 
     it('returns empty object when no backup exists', async ({ task }) => {
-      const tracer = createTracer()
       setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
       callbacks.getRetryBackup = vi.fn().mockReturnValue(null)
 
       const controller = new ActionInputController(callbacks)
+
+      const tracer = createAutoTracer(getStoreState)
+      interceptor.connectTracer(tracer)
+
       const result = await controller.handleStopGeneration()
 
       expect(result).toEqual({})
@@ -386,11 +397,11 @@ describe('Retry Flows — ActionInputController E2E', () => {
       // endStreaming is called
       expect(callbacks.endStreaming).toHaveBeenCalled()
 
-      task.meta.traceData = tracer.getTraceData()
+      tracer.finalize()
+      task.meta.traceData = tracer.export()
     })
 
     it('returns empty object and clears backup when backup storyId does not match', async ({ task }) => {
-      const tracer = createTracer()
       setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
@@ -399,17 +410,21 @@ describe('Retry Flows — ActionInputController E2E', () => {
       callbacks.getRetryBackup = vi.fn().mockReturnValue(backup)
 
       const controller = new ActionInputController(callbacks)
+
+      const tracer = createAutoTracer(getStoreState)
+      interceptor.connectTracer(tracer)
+
       const result = await controller.handleStopGeneration()
 
       expect(result).toEqual({})
       // clearRetryBackup should be called to discard the stale backup
       expect(callbacks.clearRetryBackup).toHaveBeenCalled()
 
-      task.meta.traceData = tracer.getTraceData()
+      tracer.finalize()
+      task.meta.traceData = tracer.export()
     })
 
     it('restores state from backup and returns restored values', async ({ task }) => {
-      const tracer = createTracer()
       const testStory = setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
@@ -429,6 +444,9 @@ describe('Retry Flows — ActionInputController E2E', () => {
       controller.stopRequested = false
       controller.activeAbortController = new AbortController()
 
+      const tracer = createAutoTracer(getStoreState)
+      interceptor.connectTracer(tracer)
+
       // Call handleStopGeneration while "generating"
       const result = await controller.handleStopGeneration()
 
@@ -444,11 +462,11 @@ describe('Retry Flows — ActionInputController E2E', () => {
       expect(result.restoredActionType).toBe('do')
       expect(result.restoredWasRawActionChoice).toBe(false)
 
-      task.meta.traceData = tracer.getTraceData()
+      tracer.finalize()
+      task.meta.traceData = tracer.export()
     })
 
     it('fires abort signal when stopRequested is set', async ({ task }) => {
-      const tracer = createTracer()
       setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
@@ -467,11 +485,15 @@ describe('Retry Flows — ActionInputController E2E', () => {
 
       const abortSpy = vi.spyOn(abortController, 'abort')
 
+      const tracer = createAutoTracer(getStoreState)
+      interceptor.connectTracer(tracer)
+
       await controller.handleStopGeneration()
 
       expect(abortSpy).toHaveBeenCalled()
 
-      task.meta.traceData = tracer.getTraceData()
+      tracer.finalize()
+      task.meta.traceData = tracer.export()
     })
   })
 
@@ -481,23 +503,26 @@ describe('Retry Flows — ActionInputController E2E', () => {
 
   describe('handleRetryLastMessage', () => {
     it('no-op when getRetryBackup returns null', async ({ task }) => {
-      const tracer = createTracer()
       setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
       callbacks.getRetryBackup = vi.fn().mockReturnValue(null)
 
       const controller = new ActionInputController(callbacks)
+
+      const tracer = createAutoTracer(getStoreState)
+      interceptor.connectTracer(tracer)
+
       await controller.handleRetryLastMessage()
 
       // No narrative request should be made
       expect(interceptor.getRequests('narrative')).toHaveLength(0)
 
-      task.meta.traceData = tracer.getTraceData()
+      tracer.finalize()
+      task.meta.traceData = tracer.export()
     })
 
     it('clears backup and no-ops when backup storyId does not match current story', async ({ task }) => {
-      const tracer = createTracer()
       setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
@@ -505,6 +530,10 @@ describe('Retry Flows — ActionInputController E2E', () => {
       callbacks.getRetryBackup = vi.fn().mockReturnValue(backup)
 
       const controller = new ActionInputController(callbacks)
+
+      const tracer = createAutoTracer(getStoreState)
+      interceptor.connectTracer(tracer)
+
       await controller.handleRetryLastMessage()
 
       // clearRetryBackup(false) is called (not clearing from DB)
@@ -513,11 +542,11 @@ describe('Retry Flows — ActionInputController E2E', () => {
       // No narrative request should be made
       expect(interceptor.getRequests('narrative')).toHaveLength(0)
 
-      task.meta.traceData = tracer.getTraceData()
+      tracer.finalize()
+      task.meta.traceData = tracer.export()
     })
 
     it('rolls back state and creates new user_action entry and new narrative request', async ({ task }) => {
-      const tracer = createTracer()
       const testStory = setupAdventureStory()
 
       // Pre-populate entries as if a previous generation happened:
@@ -554,17 +583,10 @@ describe('Retry Flows — ActionInputController E2E', () => {
 
       const controller = new ActionInputController(callbacks)
 
-      tracer.beginStep('narrative')
-      tracer.traceInput({
-        templateInputs: { retryType: 'retryLastMessage', userAction: 'I walk forward' },
-      })
-      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+      const tracer = createAutoTracer(getStoreState)
+      interceptor.connectTracer(tracer)
 
       await controller.handleRetryLastMessage()
-
-      tracer.traceOutput({ mockedResponse: 'You stride confidently forward.' })
-      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
-      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
       // A new narrative request was made (regeneration happened)
       expect(interceptor.getRequests('narrative').length).toBeGreaterThan(0)
@@ -585,11 +607,11 @@ describe('Retry Flows — ActionInputController E2E', () => {
         'You stride confidently forward.',
       )
 
-      task.meta.traceData = tracer.getTraceData()
+      tracer.finalize()
+      task.meta.traceData = tracer.export()
     })
 
     it('sets retryingLastMessage to false even if generation throws', async ({ task }) => {
-      const tracer = createTracer()
       const testStory = setupAdventureStory()
 
       const initialNarration = story.entry.entries[0]
@@ -620,26 +642,19 @@ describe('Retry Flows — ActionInputController E2E', () => {
 
       const controller = new ActionInputController(callbacks)
 
-      tracer.beginStep('narrative')
-      tracer.traceInput({
-        templateInputs: { retryType: 'retryLastMessage', userAction: 'I fail', expectFailure: true },
-      })
-      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+      const tracer = createAutoTracer(getStoreState)
+      interceptor.connectTracer(tracer)
 
       await controller.handleRetryLastMessage()
-
-      tracer.traceOutput({ mockedResponse: null })
-      tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
-      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
       // setRetryingLastMessage(false) must be called in finally even on error
       expect(callbacks.setRetryingLastMessage).toHaveBeenCalledWith(false)
 
-      task.meta.traceData = tracer.getTraceData()
+      tracer.finalize()
+      task.meta.traceData = tracer.export()
     })
 
     it('consults getRetryBackup callback, not store directly', async ({ task }) => {
-      const tracer = createTracer()
       setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
@@ -647,12 +662,17 @@ describe('Retry Flows — ActionInputController E2E', () => {
       callbacks.getRetryBackup = getRetryBackupSpy
 
       const controller = new ActionInputController(callbacks)
+
+      const tracer = createAutoTracer(getStoreState)
+      interceptor.connectTracer(tracer)
+
       await controller.handleRetryLastMessage()
 
       // Should have called getRetryBackup at least once
       expect(getRetryBackupSpy).toHaveBeenCalled()
 
-      task.meta.traceData = tracer.getTraceData()
+      tracer.finalize()
+      task.meta.traceData = tracer.export()
     })
   })
 })
