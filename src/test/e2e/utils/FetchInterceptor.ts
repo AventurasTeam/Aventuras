@@ -17,12 +17,21 @@ export interface ResponseHandler {
   __mockData?: unknown
 }
 
+interface TracerNotifiable {
+  onRequest(serviceId: string, request: CapturedRequest, mockData: unknown): void
+}
+
 /** Mutable ref read by the hoisted vi.mock factory in test files. */
 export const _interceptorRef: { current: FetchInterceptor | null } = { current: null }
 
 export class FetchInterceptor {
   private handlers = new Map<string, ResponseHandler>()
   private captured = new Map<string, CapturedRequest[]>()
+  private tracer: TracerNotifiable | null = null
+
+  connectTracer(tracer: TracerNotifiable): void {
+    this.tracer = tracer
+  }
 
   /**
    * Register a response handler for the given serviceId.
@@ -93,6 +102,11 @@ export class FetchInterceptor {
       const handler = this.handlers.get(serviceId)
       if (!handler) {
         return new Response(`No handler registered for serviceId: ${serviceId}`, { status: 404 })
+      }
+
+      // Notify tracer before calling handler (snapshots stores at this boundary)
+      if (this.tracer) {
+        this.tracer.onRequest(serviceId, req, handler.__mockData)
       }
 
       return handler(req)
