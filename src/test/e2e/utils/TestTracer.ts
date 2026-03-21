@@ -22,7 +22,7 @@ export interface TraceStep {
 export interface TestTracer {
   beginStep(serviceId: string): void
   traceInput(data: { templateInputs: Record<string, unknown> }): void
-  traceOutput(data: { mockedResponse: string | Record<string, unknown> }): void
+  traceOutput(data: { mockedResponse: string | Record<string, unknown> | null }): void
   snapshotStore(storeName: string, storeData: Record<string, unknown>): void
   attachCapturedPrompt(capturedRequest: unknown): void
   getTraceData(): TraceStep[]
@@ -105,7 +105,7 @@ class TestTracerImpl implements TestTracer {
     this.currentStep.input.templateInputs = data.templateInputs
   }
 
-  traceOutput(data: { mockedResponse: string | Record<string, unknown> }): void {
+  traceOutput(data: { mockedResponse: string | Record<string, unknown> | null }): void {
     if (!this.currentStep) throw new Error('Call beginStep() before traceOutput()')
     this.currentStep.output.mockedResponse = data.mockedResponse
   }
