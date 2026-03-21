@@ -106,3 +106,7 @@ export type { ClassificationPhaseResult } from './phases'
 export type { TranslationResult2 } from './phases'
 export type { ImageSettings, ImageResult } from './phases'
 export type { PostGenerationResult } from './phases'
+
+// ActionInput controller
+export { ActionInputController, translateUserInput } from './ActionInputController'
+export type { ActionInputCallbacks, SubmitInput, ActionType } from './ActionInputController'

@@ -84,6 +84,7 @@ export function loadTestSettings(overrides: LoadTestSettingsOptions = {}): void 
   // Set up API settings with test profile
   settings.apiSettings.profiles = [testProfile]
   settings.apiSettings.mainNarrativeProfileId = testProfile.id
+  settings.apiSettings.defaultModel = 'gpt-4o-mini'
 
   // Build one preset per standard service category
   const serviceIds = ['classification', 'memory', 'suggestions', 'agentic', 'wizard', 'translation']

@@ -117,121 +117,275 @@ export class FetchInterceptor {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** True when the intercepted URL targets the OpenAI Responses API. */
+function isResponsesApi(url: string): boolean {
+  return url.includes('/responses')
+}
+
+// ---------------------------------------------------------------------------
 // Response builder functions
 // ---------------------------------------------------------------------------
 
 /**
  * Returns a handler that streams `text` as OpenAI-compatible SSE chunks.
+ * Auto-detects Responses API vs Chat Completions API based on request URL.
  * Text is split into word-sized pieces.
  */
 export function respondWithStream(text: string): ResponseHandler {
-  return (_req: CapturedRequest): Response => {
-    const words = text.split(' ')
-
-    const stream = new ReadableStream({
-      start(controller) {
-        const encoder = new TextEncoder()
-
-        for (const word of words) {
-          // Emit a space before each word except the first
-          const content = words.indexOf(word) === 0 ? word : ` ${word}`
-          const chunk = JSON.stringify({
-            id: 'gen-test',
-            object: 'chat.completion.chunk',
-            choices: [
-              {
-                index: 0,
-                delta: { content },
-              },
-            ],
-          })
-          controller.enqueue(encoder.encode(`data: ${chunk}\n\n`))
-        }
-
-        // Stop chunk
-        const stopChunk = JSON.stringify({
-          id: 'gen-test',
-          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
-        })
-        controller.enqueue(encoder.encode(`data: ${stopChunk}\n\n`))
-
-        // DONE sentinel
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-        controller.close()
-      },
-    })
-
-    return new Response(stream, {
-      status: 200,
-      headers: { 'content-type': 'text/event-stream' },
-    })
+  return (req: CapturedRequest): Response => {
+    if (isResponsesApi(req.url)) {
+      return buildResponsesApiStream(text)
+    }
+    return buildChatCompletionsStream(text)
   }
 }
 
+/** Build an SSE stream in the OpenAI Responses API format. */
+function buildResponsesApiStream(text: string): Response {
+  const words = text.split(' ')
+  const itemId = 'msg_test_001'
+  const responseId = 'resp_test_001'
+
+  const stream = new ReadableStream({
+    start(controller) {
+      const encoder = new TextEncoder()
+      const emit = (data: unknown) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+      }
+
+      // 1. response.created
+      emit({
+        type: 'response.created',
+        response: {
+          id: responseId,
+          created_at: Math.floor(Date.now() / 1000),
+          model: 'gpt-4o-mini',
+          service_tier: null,
+        },
+      })
+
+      // 2. output_item.added (message)
+      emit({
+        type: 'response.output_item.added',
+        output_index: 0,
+        item: { type: 'message', id: itemId },
+      })
+
+      // 3. text deltas
+      for (let i = 0; i < words.length; i++) {
+        const delta = i === 0 ? words[i] : ` ${words[i]}`
+        emit({
+          type: 'response.output_text.delta',
+          item_id: itemId,
+          delta,
+        })
+      }
+
+      // 4. response.completed
+      emit({
+        type: 'response.completed',
+        response: {
+          usage: {
+            input_tokens: 10,
+            output_tokens: words.length,
+            input_tokens_details: null,
+            output_tokens_details: null,
+          },
+          service_tier: null,
+          incomplete_details: null,
+        },
+      })
+
+      controller.close()
+    },
+  })
+
+  return new Response(stream, {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  })
+}
+
+/** Build an SSE stream in the classic Chat Completions API format. */
+function buildChatCompletionsStream(text: string): Response {
+  const words = text.split(' ')
+
+  const stream = new ReadableStream({
+    start(controller) {
+      const encoder = new TextEncoder()
+
+      for (let i = 0; i < words.length; i++) {
+        const content = i === 0 ? words[i] : ` ${words[i]}`
+        const chunk = JSON.stringify({
+          id: 'gen-test',
+          object: 'chat.completion.chunk',
+          choices: [{ index: 0, delta: { content } }],
+        })
+        controller.enqueue(encoder.encode(`data: ${chunk}\n\n`))
+      }
+
+      // Stop chunk
+      const stopChunk = JSON.stringify({
+        id: 'gen-test',
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      })
+      controller.enqueue(encoder.encode(`data: ${stopChunk}\n\n`))
+
+      // DONE sentinel
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+      controller.close()
+    },
+  })
+
+  return new Response(stream, {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  })
+}
+
 /**
- * Returns a handler that wraps `data` in an OpenAI chat completion JSON envelope.
+ * Returns a handler that wraps `data` in an OpenAI response envelope.
+ * Auto-detects Responses API vs Chat Completions API based on request URL.
  */
 export function respondWithJSON(data: unknown): ResponseHandler {
-  return (_req: CapturedRequest): Response => {
-    const body = JSON.stringify({
-      id: 'gen-test',
-      object: 'chat.completion',
-      choices: [
-        {
-          index: 0,
-          message: {
-            role: 'assistant',
-            content: JSON.stringify(data),
-          },
-          finish_reason: 'stop',
-        },
-      ],
-      usage: { input_tokens: 0, output_tokens: 0 },
-    })
-
-    return new Response(body, {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    })
+  return (req: CapturedRequest): Response => {
+    if (isResponsesApi(req.url)) {
+      return buildResponsesApiJSON(JSON.stringify(data))
+    }
+    return buildChatCompletionsJSON(JSON.stringify(data))
   }
+}
+
+function buildResponsesApiJSON(content: string): Response {
+  const body = JSON.stringify({
+    id: 'resp_test_001',
+    object: 'response',
+    created_at: Math.floor(Date.now() / 1000),
+    model: 'gpt-4o-mini',
+    status: 'completed',
+    output: [
+      {
+        type: 'message',
+        id: 'msg_test_001',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: content }],
+      },
+    ],
+    usage: {
+      input_tokens: 10,
+      output_tokens: 20,
+      input_tokens_details: null,
+      output_tokens_details: null,
+    },
+    service_tier: null,
+    incomplete_details: null,
+  })
+
+  return new Response(body, {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+function buildChatCompletionsJSON(content: string): Response {
+  const body = JSON.stringify({
+    id: 'gen-test',
+    object: 'chat.completion',
+    choices: [
+      {
+        index: 0,
+        message: { role: 'assistant', content },
+        finish_reason: 'stop',
+      },
+    ],
+    usage: { input_tokens: 0, output_tokens: 0 },
+  })
+
+  return new Response(body, {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  })
 }
 
 /**
  * Returns a handler that produces an OpenAI tool-call response envelope.
+ * Auto-detects Responses API vs Chat Completions API based on request URL.
  * Useful for services using `generateObject()` via tool calls.
  */
 export function respondWithToolCall(name: string, args: unknown): ResponseHandler {
-  return (_req: CapturedRequest): Response => {
-    const body = JSON.stringify({
-      id: 'gen-test',
-      object: 'chat.completion',
-      choices: [
-        {
-          index: 0,
-          message: {
-            role: 'assistant',
-            tool_calls: [
-              {
-                id: 'call-1',
-                type: 'function',
-                function: {
-                  name,
-                  arguments: JSON.stringify(args),
-                },
-              },
-            ],
-          },
-          finish_reason: 'tool_calls',
-        },
-      ],
-      usage: { input_tokens: 0, output_tokens: 0 },
-    })
-
-    return new Response(body, {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    })
+  return (req: CapturedRequest): Response => {
+    if (isResponsesApi(req.url)) {
+      return buildResponsesApiToolCall(name, args)
+    }
+    return buildChatCompletionsToolCall(name, args)
   }
+}
+
+function buildResponsesApiToolCall(name: string, args: unknown): Response {
+  const body = JSON.stringify({
+    id: 'resp_test_001',
+    object: 'response',
+    created_at: Math.floor(Date.now() / 1000),
+    model: 'gpt-4o-mini',
+    status: 'completed',
+    output: [
+      {
+        type: 'function_call',
+        id: 'fc_test_001',
+        call_id: 'call-1',
+        name,
+        arguments: JSON.stringify(args),
+      },
+    ],
+    usage: {
+      input_tokens: 10,
+      output_tokens: 20,
+      input_tokens_details: null,
+      output_tokens_details: null,
+    },
+    service_tier: null,
+    incomplete_details: null,
+  })
+
+  return new Response(body, {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+function buildChatCompletionsToolCall(name: string, args: unknown): Response {
+  const body = JSON.stringify({
+    id: 'gen-test',
+    object: 'chat.completion',
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          tool_calls: [
+            {
+              id: 'call-1',
+              type: 'function',
+              function: {
+                name,
+                arguments: JSON.stringify(args),
+              },
+            },
+          ],
+        },
+        finish_reason: 'tool_calls',
+      },
+    ],
+    usage: { input_tokens: 0, output_tokens: 0 },
+  })
+
+  return new Response(body, {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  })
 }
 
 /**
