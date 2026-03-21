@@ -274,10 +274,7 @@ export class WizardStore {
         tone: this.narrative.tone,
       },
       title: this.narrative.storyTitle,
-      openingGuidance:
-        this.narrative.selectedMode === 'creative-writing' && this.narrative.openingGuidance.trim()
-          ? this.narrative.openingGuidance.trim()
-          : undefined,
+      openingGuidance: this.narrative.openingGuidance.trim() || undefined,
     }
 
     await this.narrative.generateOpeningScene(wizardData)
@@ -302,10 +299,7 @@ export class WizardStore {
         tone: this.narrative.tone,
       },
       title: this.narrative.storyTitle,
-      openingGuidance:
-        this.narrative.selectedMode === 'creative-writing' && this.narrative.openingGuidance.trim()
-          ? this.narrative.openingGuidance.trim()
-          : undefined,
+      openingGuidance: this.narrative.openingGuidance.trim() || undefined,
     }
 
     await this.narrative.refineOpeningScene(wizardData)

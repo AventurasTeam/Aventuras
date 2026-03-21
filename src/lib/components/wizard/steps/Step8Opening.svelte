@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { FileJson, Feather, Loader2, Check, Sparkles, PenTool, Book, X } from 'lucide-svelte'
+  import { slide } from 'svelte/transition'
+  import { FileJson, Loader2, Check, Sparkles, PenTool, Book, X, ChevronDown } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import { Label } from '$lib/components/ui/label'
   import { Textarea } from '$lib/components/ui/textarea'
   import * as Card from '$lib/components/ui/card'
-  import { Separator } from '$lib/components/ui/separator'
   import * as ScrollArea from '$lib/components/ui/scroll-area'
   import { Badge } from '$lib/components/ui/badge'
 
@@ -99,6 +99,8 @@
     onClearGenerated,
     onManualOpeningChange,
   }: Props = $props()
+
+  let showExpandOptions = $state(false)
 
   // POV options for summary
   const povOptions: POVOption[] = [
@@ -206,30 +208,6 @@
     </Card.Root>
   {/if}
 
-  <!-- Opening Scene Guidance (Creative Writing Mode Only) -->
-  {#if selectedMode === 'creative-writing'}
-    <Card.Root class="bg-surface-900 border-surface-700">
-      <Card.Content class="space-y-3 p-4">
-        <div class="flex items-center gap-2">
-          <Feather class="text-secondary-400 h-4 w-4" />
-          <h4 class="text-foreground font-medium">Opening Scene Guidance</h4>
-          <span class="text-muted-foreground text-xs">(Optional)</span>
-        </div>
-        <p class="text-muted-foreground text-sm">
-          As the author, describe what you want to happen in the opening scene. Include setting
-          details, character positions, mood, or specific events.
-        </p>
-        <Textarea
-          value={openingGuidance}
-          oninput={(e) => onGuidanceChange(e.currentTarget.value)}
-          placeholder="e.g., The scene opens at night in a crowded tavern. Sarah sits alone in a corner, nursing a drink, when a mysterious stranger approaches her table with urgent news about her missing brother..."
-          class="min-h-[100px] resize-y text-sm"
-          rows={4}
-        />
-      </Card.Content>
-    </Card.Root>
-  {/if}
-
   <!-- Manual Opening Entry or AI Generation -->
   {#if storyTitle.trim()}
     <Card.Root class="bg-surface-900 border-surface-700">
@@ -259,47 +237,74 @@
           {/if}
         </div>
 
-        <!-- Divider -->
-        <div class="flex items-center gap-3">
-          <Separator class="flex-1" />
-          <span class="text-muted-foreground text-xs">OR</span>
-          <Separator class="flex-1" />
+        <!-- Expand with AI -->
+        <div class="flex items-center gap-2 pt-1">
+          <Button
+            variant="outline"
+            size="sm"
+            class="text-muted-foreground gap-2"
+            onclick={() => (showExpandOptions = !showExpandOptions)}
+          >
+            <Sparkles class="h-3.5 w-3.5" />
+            {showExpandOptions ? 'Hide AI Options' : 'Expand with AI'}
+            <ChevronDown
+              class="h-3 w-3 transition-transform {showExpandOptions ? 'rotate-180' : ''}"
+            />
+          </Button>
         </div>
 
-        <!-- AI Generation Button -->
-        <div class="flex flex-col gap-3">
-          <div class="flex gap-2">
-            <Button
-              variant="secondary"
-              class="flex-1 gap-2"
-              onclick={onGenerateOpening}
-              disabled={isGeneratingOpening || isRefiningOpening}
-            >
-              {#if isGeneratingOpening}
-                <Loader2 class="h-4 w-4 animate-spin" />
-                Generating Opening...
-              {:else}
-                <PenTool class="h-4 w-4" />
-                {generatedOpening ? 'Regenerate with AI' : 'Generate Opening with AI'}
-              {/if}
-            </Button>
-            {#if generatedOpening}
+        <!-- AI Expansion Panel -->
+        {#if showExpandOptions}
+          <div
+            class="text-card-foreground bg-muted/10 space-y-3 rounded-lg border px-3 pt-1 pb-3 shadow-sm"
+            transition:slide={{ duration: 150 }}
+          >
+            <div class="space-y-1.5">
+              <Label for="opening-ai-guidance" class="text-xs">AI Guidance (Optional)</Label>
+              <Textarea
+                id="opening-ai-guidance"
+                value={openingGuidance}
+                oninput={(e) => onGuidanceChange(e.currentTarget.value)}
+                placeholder="e.g., Start with a dramatic confrontation, set the scene in a rainy alley..."
+                class="mt-1 h-16 resize-none text-sm"
+              />
+            </div>
+            <div class="flex gap-2">
               <Button
                 variant="secondary"
-                size="icon"
-                onclick={onClearGenerated}
-                title="Clear AI-generated opening"
+                size="sm"
+                class="w-full gap-2"
+                onclick={onGenerateOpening}
+                disabled={isGeneratingOpening || isRefiningOpening}
               >
-                <X class="h-4 w-4" />
+                {#if isGeneratingOpening}
+                  <Loader2 class="h-3.5 w-3.5 animate-spin" />
+                  Generating...
+                {:else}
+                  <Sparkles class="h-3.5 w-3.5" />
+                  {generatedOpening ? 'Regenerate Opening' : 'Generate Opening with AI'}
+                {/if}
               </Button>
-            {/if}
+              {#if generatedOpening}
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  class="shrink-0"
+                  onclick={onClearGenerated}
+                  title="Clear AI-generated opening"
+                >
+                  <X class="h-4 w-4" />
+                </Button>
+              {/if}
+            </div>
           </div>
-          {#if !generatedOpening && !isGeneratingOpening && !manualOpeningText.trim() && !cardImportedFirstMessage}
-            <span class="text-center text-sm text-amber-400">
-              Either write your own opening or generate one with AI
-            </span>
-          {/if}
-        </div>
+        {/if}
+
+        {#if !generatedOpening && !isGeneratingOpening && !manualOpeningText.trim() && !cardImportedFirstMessage}
+          <span class="text-center text-sm text-amber-400">
+            Either write your own opening or generate one with AI
+          </span>
+        {/if}
       </Card.Content>
     </Card.Root>
   {:else}
