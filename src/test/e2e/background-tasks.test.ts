@@ -55,6 +55,7 @@ import {
   type BackgroundTaskInput,
 } from '$lib/services/generation/BackgroundTaskCoordinator'
 import { aiService } from '$lib/services/ai'
+import { createTracer } from './utils/TestTracer'
 
 // ============================================================================
 // Test data helpers
@@ -256,7 +257,8 @@ describe('BackgroundTaskCoordinator E2E', () => {
   // --------------------------------------------------------------------------
 
   describe('style review', () => {
-    it('triggers style review when counter reaches triggerInterval', async () => {
+    it('triggers style review when counter reaches triggerInterval', async ({ task }) => {
+      const tracer = createTracer()
       const testStory = buildStory({
         mode: 'adventure',
         settings: {
@@ -286,12 +288,23 @@ describe('BackgroundTaskCoordinator E2E', () => {
 
       interceptor.on('style-reviewer', respondWithJSON(styleReviewResult))
 
+      tracer.beginStep('style-review')
+      tracer.traceInput({ templateInputs: { enabled: true, triggerInterval: 5, counter: 4 } })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await BackgroundTaskCoordinator.run(true, 'new')
+
+      tracer.traceOutput({ mockedResponse: styleReviewResult })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+      tracer.attachCapturedPrompt(interceptor.getRequest('style-reviewer'))
+
+      task.meta.traceData = tracer.getTraceData()
 
       expect(interceptor.getRequests('style-reviewer').length).toBeGreaterThan(0)
     })
 
-    it('skips style review when counter is below triggerInterval', async () => {
+    it('skips style review when counter is below triggerInterval', async ({ task }) => {
+      const tracer = createTracer()
       const testStory = buildStory({
         mode: 'adventure',
         settings: {
@@ -309,12 +322,24 @@ describe('BackgroundTaskCoordinator E2E', () => {
       settings.systemServicesSettings.styleReviewer.triggerInterval = 5
       ui.messagesSinceLastStyleReview = 0
 
+      tracer.beginStep('style-review')
+      tracer.traceInput({
+        templateInputs: { enabled: true, triggerInterval: 5, counter: 0, expectSkipped: true },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await BackgroundTaskCoordinator.run(true, 'new')
+
+      tracer.traceOutput({ mockedResponse: null })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
+      task.meta.traceData = tracer.getTraceData()
 
       expect(interceptor.getRequests('style-reviewer').length).toBe(0)
     })
 
-    it('skips style review when disabled', async () => {
+    it('skips style review when disabled', async ({ task }) => {
+      const tracer = createTracer()
       const testStory = buildStory({
         mode: 'adventure',
         settings: {
@@ -330,7 +355,18 @@ describe('BackgroundTaskCoordinator E2E', () => {
       settings.systemServicesSettings.styleReviewer.enabled = false
       ui.messagesSinceLastStyleReview = 100 // High counter but disabled
 
+      tracer.beginStep('style-review')
+      tracer.traceInput({
+        templateInputs: { enabled: false, counter: 100, expectSkipped: true },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await BackgroundTaskCoordinator.run(true, 'new')
+
+      tracer.traceOutput({ mockedResponse: null })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
+      task.meta.traceData = tracer.getTraceData()
 
       expect(interceptor.getRequests('style-reviewer').length).toBe(0)
     })
@@ -341,7 +377,8 @@ describe('BackgroundTaskCoordinator E2E', () => {
   // --------------------------------------------------------------------------
 
   describe('chapter creation (via static run())', () => {
-    it('fires chapter-analysis request when tokens exceed threshold', async () => {
+    it('fires chapter-analysis request when tokens exceed threshold', async ({ task }) => {
+      const tracer = createTracer()
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
@@ -361,13 +398,26 @@ describe('BackgroundTaskCoordinator E2E', () => {
         }),
       )
 
+      tracer.beginStep('chapter-analysis')
+      tracer.traceInput({
+        templateInputs: { tokenThreshold: 500, entryCount: 7, chapterBuffer: 2 },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await BackgroundTaskCoordinator.run(false, 'new')
+
+      tracer.traceOutput({ mockedResponse: chapterAnalysisCreateChapter })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+      tracer.attachCapturedPrompt(interceptor.getRequest('chapter-analysis'))
+
+      task.meta.traceData = tracer.getTraceData()
 
       expect(interceptor.getRequests('chapter-analysis').length).toBeGreaterThan(0)
       expect(interceptor.getRequests('chapter-summarization').length).toBeGreaterThan(0)
     })
 
-    it('skips chapter analysis when AI decides no chapter is needed', async () => {
+    it('skips chapter analysis when AI decides no chapter is needed', async ({ task }) => {
+      const tracer = createTracer()
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
@@ -375,13 +425,26 @@ describe('BackgroundTaskCoordinator E2E', () => {
 
       interceptor.on('chapter-analysis', respondWithJSON(chapterAnalysisNoChapter))
 
+      tracer.beginStep('chapter-analysis')
+      tracer.traceInput({
+        templateInputs: { tokenThreshold: 500, entryCount: 7, chapterBuffer: 2 },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await BackgroundTaskCoordinator.run(false, 'new')
+
+      tracer.traceOutput({ mockedResponse: chapterAnalysisNoChapter })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+      tracer.attachCapturedPrompt(interceptor.getRequest('chapter-analysis'))
+
+      task.meta.traceData = tracer.getTraceData()
 
       expect(interceptor.getRequests('chapter-analysis').length).toBeGreaterThan(0)
       expect(interceptor.getRequests('chapter-summarization').length).toBe(0)
     })
 
-    it('skips chapter analysis when no entries are outside the buffer', async () => {
+    it('skips chapter analysis when no entries are outside the buffer', async ({ task }) => {
+      const tracer = createTracer()
       // chapterBuffer=10, only 3 entries → all inside buffer → tokensOutsideBuffer=0
       const testStory = buildStory({
         mode: 'adventure',
@@ -411,12 +474,29 @@ describe('BackgroundTaskCoordinator E2E', () => {
       loadTestSettings({ disableSuggestions: true })
       settings.systemServicesSettings.styleReviewer.enabled = false
 
+      tracer.beginStep('chapter-analysis')
+      tracer.traceInput({
+        templateInputs: {
+          tokenThreshold: 16000,
+          entryCount: 3,
+          chapterBuffer: 10,
+          expectSkipped: true,
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await BackgroundTaskCoordinator.run(false, 'new')
+
+      tracer.traceOutput({ mockedResponse: null })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
+      task.meta.traceData = tracer.getTraceData()
 
       expect(interceptor.getRequests('chapter-analysis').length).toBe(0)
     })
 
-    it('skips chapter creation when autoSummarize is disabled', async () => {
+    it('skips chapter creation when autoSummarize is disabled', async ({ task }) => {
+      const tracer = createTracer()
       const testStory = buildStory({
         mode: 'adventure',
         settings: {
@@ -445,8 +525,19 @@ describe('BackgroundTaskCoordinator E2E', () => {
       loadTestSettings({ disableSuggestions: true })
       settings.systemServicesSettings.styleReviewer.enabled = false
 
+      tracer.beginStep('chapter-analysis')
+      tracer.traceInput({
+        templateInputs: { autoSummarize: false, expectSkipped: true },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       // run() zeroes tokensOutsideBuffer when autoSummarize=false
       await BackgroundTaskCoordinator.run(false, 'new')
+
+      tracer.traceOutput({ mockedResponse: null })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
+      task.meta.traceData = tracer.getTraceData()
 
       expect(interceptor.getRequests('chapter-analysis').length).toBe(0)
     })
@@ -460,7 +551,8 @@ describe('BackgroundTaskCoordinator E2E', () => {
   // --------------------------------------------------------------------------
 
   describe('chapter + lore management pipeline (via runBackgroundTasks())', () => {
-    it('runs lore management when chapter creation triggers it', async () => {
+    it('runs lore management when chapter creation triggers it', async ({ task }) => {
+      const tracer = createTracer()
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
@@ -481,8 +573,20 @@ describe('BackgroundTaskCoordinator E2E', () => {
         }),
       )
 
+      tracer.beginStep('chapter-analysis')
+      tracer.traceInput({
+        templateInputs: { fullPipeline: true, expectLoreManagement: true },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       const coordinator = new BackgroundTaskCoordinator(deps)
       const result = await coordinator.runBackgroundTasks(input)
+
+      tracer.traceOutput({ mockedResponse: chapterAnalysisCreateChapter })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+      tracer.attachCapturedPrompt(interceptor.getRequest('chapter-analysis'))
+
+      task.meta.traceData = tracer.getTraceData()
 
       expect(interceptor.getRequests('chapter-analysis').length).toBeGreaterThan(0)
       expect(interceptor.getRequests('chapter-summarization').length).toBeGreaterThan(0)
@@ -492,7 +596,8 @@ describe('BackgroundTaskCoordinator E2E', () => {
       expect(interceptor.getRequests('lore-management').length).toBeGreaterThan(0)
     })
 
-    it('skips lore management when chapter creation did not trigger it', async () => {
+    it('skips lore management when chapter creation did not trigger it', async ({ task }) => {
+      const tracer = createTracer()
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
@@ -502,8 +607,20 @@ describe('BackgroundTaskCoordinator E2E', () => {
 
       interceptor.on('chapter-analysis', respondWithJSON(chapterAnalysisNoChapter))
 
+      tracer.beginStep('chapter-analysis')
+      tracer.traceInput({
+        templateInputs: { fullPipeline: true, expectLoreManagement: false },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       const coordinator = new BackgroundTaskCoordinator(deps)
       const result = await coordinator.runBackgroundTasks(input)
+
+      tracer.traceOutput({ mockedResponse: chapterAnalysisNoChapter })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+      tracer.attachCapturedPrompt(interceptor.getRequest('chapter-analysis'))
+
+      task.meta.traceData = tracer.getTraceData()
 
       expect(result.chapterCreation.created).toBe(false)
       expect(result.chapterCreation.loreManagementTriggered).toBe(false)
@@ -520,7 +637,8 @@ describe('BackgroundTaskCoordinator E2E', () => {
   // --------------------------------------------------------------------------
 
   describe('non-fatal failure handling', () => {
-    it('completes without throwing when style review encounters a client error', async () => {
+    it('completes without throwing when style review encounters a client error', async ({ task }) => {
+      const tracer = createTracer()
       const testStory = buildStory({
         mode: 'adventure',
         settings: {
@@ -554,10 +672,20 @@ describe('BackgroundTaskCoordinator E2E', () => {
         () => new Response(JSON.stringify({ error: { message: 'Bad request' } }), { status: 400 }),
       )
 
+      tracer.beginStep('style-review')
+      tracer.traceInput({ templateInputs: { expectFailure: true } })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await expect(BackgroundTaskCoordinator.run(true, 'new')).resolves.toBeUndefined()
+
+      tracer.traceOutput({ mockedResponse: null })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
+      task.meta.traceData = tracer.getTraceData()
     })
 
-    it('completes without throwing when chapter analysis encounters a client error', async () => {
+    it('completes without throwing when chapter analysis encounters a client error', async ({ task }) => {
+      const tracer = createTracer()
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
@@ -569,10 +697,20 @@ describe('BackgroundTaskCoordinator E2E', () => {
         () => new Response(JSON.stringify({ error: { message: 'Bad request' } }), { status: 400 }),
       )
 
+      tracer.beginStep('chapter-analysis')
+      tracer.traceInput({ templateInputs: { expectFailure: true } })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await expect(BackgroundTaskCoordinator.run(false, 'new')).resolves.toBeUndefined()
+
+      tracer.traceOutput({ mockedResponse: null })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
+      task.meta.traceData = tracer.getTraceData()
     })
 
-    it('completes without throwing when lore management encounters a client error', async () => {
+    it('completes without throwing when lore management encounters a client error', async ({ task }) => {
+      const tracer = createTracer()
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
@@ -588,11 +726,21 @@ describe('BackgroundTaskCoordinator E2E', () => {
         () => new Response(JSON.stringify({ error: { message: 'Bad request' } }), { status: 400 }),
       )
 
+      tracer.beginStep('lore-management')
+      tracer.traceInput({ templateInputs: { expectFailure: true } })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       const coordinator = new BackgroundTaskCoordinator(deps)
       await expect(coordinator.runBackgroundTasks(input)).resolves.toBeDefined()
+
+      tracer.traceOutput({ mockedResponse: null })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
+      task.meta.traceData = tracer.getTraceData()
     })
 
-    it('continues to run chapter check even after style review failure', async () => {
+    it('continues to run chapter check even after style review failure', async ({ task }) => {
+      const tracer = createTracer()
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
@@ -610,7 +758,21 @@ describe('BackgroundTaskCoordinator E2E', () => {
       // Chapter analysis fires and succeeds
       interceptor.on('chapter-analysis', respondWithJSON(chapterAnalysisNoChapter))
 
+      tracer.beginStep('style-review')
+      tracer.traceInput({
+        templateInputs: {
+          expectFailure: true,
+          expectChapterAnalysisContinues: true,
+        },
+      })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
       await BackgroundTaskCoordinator.run(true, 'new')
+
+      tracer.traceOutput({ mockedResponse: null })
+      tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
+      task.meta.traceData = tracer.getTraceData()
 
       // Despite style review failure, chapter analysis still ran
       expect(interceptor.getRequests('chapter-analysis').length).toBeGreaterThan(0)
