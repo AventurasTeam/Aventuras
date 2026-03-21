@@ -116,10 +116,6 @@ function formatPromptBody(captured: any): string {
   return parts.join('')
 }
 
-function isAutoTraceStep(step: any): boolean {
-  return 'capturedPrompt' in step && !('input' in step)
-}
-
 function buildTestHtml(test: any, suiteIndex: number, testIndex: number): string {
   const id = `test-${suiteIndex}-${testIndex}`
   const badge =
@@ -132,20 +128,18 @@ function buildTestHtml(test: any, suiteIndex: number, testIndex: number): string
   let stepsHtml = ''
   if (test.steps?.length > 0) {
     for (const step of test.steps) {
-      if (isAutoTraceStep(step)) {
-        // New format: step.capturedPrompt, step.mockedResponse, step.templateInputs?, step.storeDiff
-        const templateInputsHtml =
-          step.templateInputs && Object.keys(step.templateInputs).length > 0
-            ? `<table class="kv-table">
+      const templateInputsHtml =
+        step.templateInputs && Object.keys(step.templateInputs).length > 0
+          ? `<table class="kv-table">
               <thead><tr><th>Key</th><th>Value</th></tr></thead>
               <tbody>${Object.entries(step.templateInputs)
                 .map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(JSON.stringify(v))}</td></tr>`)
                 .join('')}</tbody>
             </table>`
-            : ''
+          : ''
 
-        const promptHtml = step.capturedPrompt
-          ? `<details class="prompt-details">
+      const promptHtml = step.capturedPrompt
+        ? `<details class="prompt-details">
               <summary>Captured Prompt</summary>
               <div class="prompt-body">${formatPromptBody(step.capturedPrompt)}</div>
               <details class="raw-json-details">
@@ -153,19 +147,19 @@ function buildTestHtml(test: any, suiteIndex: number, testIndex: number): string
                 <pre><code>${esc(JSON.stringify(step.capturedPrompt, null, 2))}</code></pre>
               </details>
             </details>`
-          : ''
+        : ''
 
-        const responseHtml =
-          step.mockedResponse != null
-            ? `<div class="response-block">
+      const responseHtml =
+        step.mockedResponse != null
+          ? `<div class="response-block">
               <strong>Mocked Response:</strong>
               <pre><code>${esc(typeof step.mockedResponse === 'string' ? step.mockedResponse : JSON.stringify(step.mockedResponse, null, 2))}</code></pre>
             </div>`
-            : ''
+          : ''
 
-        const diff = step.storeDiff
-        const diffHtml = diff
-          ? `<div class="store-diff">
+      const diff = step.storeDiff
+      const diffHtml = diff
+        ? `<div class="store-diff">
             ${
               diff.changes?.length > 0
                 ? `<table class="diff-table">
@@ -191,9 +185,9 @@ function buildTestHtml(test: any, suiteIndex: number, testIndex: number): string
               </div>
             </details>
           </div>`
-          : ''
+        : ''
 
-        stepsHtml += `<div class="step">
+      stepsHtml += `<div class="step">
           <div class="step-header">Service: <strong>${esc(step.serviceId)}</strong></div>
           <div class="panels">
             <div class="panel input-panel">
@@ -208,86 +202,6 @@ function buildTestHtml(test: any, suiteIndex: number, testIndex: number): string
             </div>
           </div>
         </div>`
-      } else {
-        // Old format: step.input.capturedPrompt, step.input.templateInputs, step.output.mockedResponse, step.output.storeDiffs[]
-        const templateInputsHtml =
-          Object.keys(step.input?.templateInputs ?? {}).length > 0
-            ? `<table class="kv-table">
-              <thead><tr><th>Key</th><th>Value</th></tr></thead>
-              <tbody>${Object.entries(step.input.templateInputs)
-                .map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(JSON.stringify(v))}</td></tr>`)
-                .join('')}</tbody>
-            </table>`
-            : '<p class="empty">No template inputs recorded</p>'
-
-        const promptHtml = step.input?.capturedPrompt
-          ? `<details class="prompt-details">
-              <summary>Captured Prompt</summary>
-              <div class="prompt-body">${formatPromptBody(step.input.capturedPrompt)}</div>
-              <details class="raw-json-details">
-                <summary>Raw JSON</summary>
-                <pre><code>${esc(JSON.stringify(step.input.capturedPrompt, null, 2))}</code></pre>
-              </details>
-            </details>`
-          : ''
-
-        const responseHtml =
-          step.output?.mockedResponse != null
-            ? `<div class="response-block">
-              <strong>Mocked Response:</strong>
-              <pre><code>${esc(typeof step.output.mockedResponse === 'string' ? step.output.mockedResponse : JSON.stringify(step.output.mockedResponse, null, 2))}</code></pre>
-            </div>`
-            : ''
-
-        const diffsHtml = (step.output?.storeDiffs ?? [])
-          .map(
-            (diff: any) => `
-          <div class="store-diff">
-            <strong>Store: ${esc(diff.storeName)}</strong>
-            ${
-              diff.changes?.length > 0
-                ? `<table class="diff-table">
-                  <thead><tr><th>Path</th><th>Before</th><th>After</th></tr></thead>
-                  <tbody>${diff.changes
-                    .map(
-                      (c: any) =>
-                        `<tr>
-                      <td class="diff-path">${esc(c.path)}</td>
-                      <td class="diff-old">${esc(JSON.stringify(c.old))}</td>
-                      <td class="diff-new">${esc(JSON.stringify(c.new))}</td>
-                    </tr>`,
-                    )
-                    .join('')}</tbody>
-                </table>`
-                : '<p class="empty">No changes detected</p>'
-            }
-            <details class="snapshot-details">
-              <summary>Full snapshots</summary>
-              <div class="snapshot-panels">
-                <div><strong>Before:</strong><pre><code>${esc(JSON.stringify(diff.before, null, 2))}</code></pre></div>
-                <div><strong>After:</strong><pre><code>${esc(JSON.stringify(diff.after, null, 2))}</code></pre></div>
-              </div>
-            </details>
-          </div>`,
-          )
-          .join('')
-
-        stepsHtml += `<div class="step">
-          <div class="step-header">Service: <strong>${esc(step.serviceId)}</strong></div>
-          <div class="panels">
-            <div class="panel input-panel">
-              <h4>Input</h4>
-              ${templateInputsHtml}
-              ${promptHtml}
-            </div>
-            <div class="panel output-panel">
-              <h4>Output</h4>
-              ${responseHtml}
-              ${diffsHtml}
-            </div>
-          </div>
-        </div>`
-      }
     }
   }
 
