@@ -45,6 +45,7 @@ import {
   ActionInputController,
   type ActionInputCallbacks,
 } from '$lib/services/generation/ActionInputController'
+import { createTracer } from './utils/TestTracer'
 
 // ============================================================================
 // Helpers
@@ -152,7 +153,9 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
   // 1. Happy path — creative-writing mode generation via generateResponse
   // --------------------------------------------------------------------------
 
-  it('happy path: direction input is not prefixed, narrative streams, pipeline completes', async () => {
+  it('happy path: direction input is not prefixed, narrative streams, pipeline completes', async ({ task }) => {
+    const tracer = createTracer()
+
     const testStory = buildStory({
       mode: 'creative-writing',
       settings: {
@@ -187,7 +190,23 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
 
     const callbacks = buildMockCallbacks()
     const controller = new ActionInputController(callbacks)
+
+    tracer.beginStep('narrative')
+    tracer.traceInput({
+      templateInputs: {
+        mode: 'creative-writing',
+        pov: 'third',
+        tense: 'past',
+        userInput: 'The ancient tower crumbles slowly',
+      },
+    })
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
     await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+
+    tracer.traceOutput({ mockedResponse: narrativeText })
+    tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
     // Narrative request was made
     expect(interceptor.getRequests('narrative').length).toBeGreaterThan(0)
@@ -201,13 +220,15 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
 
     // emitNarrativeResponse was called with the streamed content
     expect(callbacks.emitNarrativeResponse).toHaveBeenCalledWith(expect.any(String), narrativeText)
+
+    task.meta.traceData = tracer.getTraceData()
   })
 
   // --------------------------------------------------------------------------
   // 2. handleSubmit with isCreativeWritingMode=true — no prefix/suffix applied
   // --------------------------------------------------------------------------
 
-  it('handleSubmit with isCreativeWritingMode=true: raw input used, no "I " prefix', async () => {
+  it('handleSubmit with isCreativeWritingMode=true: raw input used, no "I " prefix', async ({ task }) => {
     const testStory = buildStory({
       mode: 'creative-writing',
       settings: {
@@ -236,6 +257,20 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
 
     const callbacks = buildMockCallbacks()
     const controller = new ActionInputController(callbacks)
+    const tracer = createTracer()
+
+    tracer.beginStep('narrative')
+    tracer.traceInput({
+      templateInputs: {
+        mode: 'creative-writing',
+        pov: 'third',
+        tense: 'past',
+        isCreativeWritingMode: true,
+        actionType: 'do',
+        userInput: 'The ancient tower crumbles',
+      },
+    })
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
     await controller.handleSubmit({
       inputValue: 'The ancient tower crumbles',
@@ -246,6 +281,10 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
       actionSuffixes: { do: '', say: '"', think: '"', story: '', free: '' },
     })
 
+    tracer.traceOutput({ mockedResponse: 'She stepped into the ruined hall.' })
+    tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
     // Prompt must NOT contain "I The ancient" (prefix was skipped)
     expectPromptNotContains(interceptor, 'narrative', 'I The ancient tower crumbles')
 
@@ -255,13 +294,15 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
     // Pipeline completed normally
     expect(callbacks.endStreaming).toHaveBeenCalled()
     expect(callbacks.setGenerating).toHaveBeenCalledWith(false)
+
+    task.meta.traceData = tracer.getTraceData()
   })
 
   // --------------------------------------------------------------------------
   // 3. Post-generation: suggestions produced, not action choices
   // --------------------------------------------------------------------------
 
-  it('post-generation: setSuggestions is called; setActionChoices is NOT called', async () => {
+  it('post-generation: setSuggestions is called; setActionChoices is NOT called', async ({ task }) => {
     const testStory = buildStory({
       mode: 'creative-writing',
       settings: {
@@ -294,7 +335,25 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
 
     const callbacks = buildMockCallbacks()
     const controller = new ActionInputController(callbacks)
+    const tracer = createTracer()
+
+    tracer.beginStep('narrative')
+    tracer.traceInput({
+      templateInputs: {
+        mode: 'creative-writing',
+        pov: 'third',
+        tense: 'past',
+        suggestionsEnabled: true,
+        userInput: 'Cross the bridge',
+      },
+    })
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
     await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+
+    tracer.traceOutput({ mockedResponse: 'She crossed the bridge at dusk.' })
+    tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
     // suggestions service was called
     expect(interceptor.getRequests('suggestions').length).toBeGreaterThan(0)
@@ -304,13 +363,15 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
 
     // setActionChoices must NOT have been called (that's adventure-mode behaviour)
     expect(callbacks.setActionChoices).not.toHaveBeenCalled()
+
+    task.meta.traceData = tracer.getTraceData()
   })
 
   // --------------------------------------------------------------------------
   // 4. Creative-writing template elements appear in narrative prompt
   // --------------------------------------------------------------------------
 
-  it('narrative prompt contains creative-writing template elements (author direction framing)', async () => {
+  it('narrative prompt contains creative-writing template elements (author direction framing)', async ({ task }) => {
     const testStory = buildStory({
       mode: 'creative-writing',
       settings: {
@@ -351,7 +412,25 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
 
     const callbacks = buildMockCallbacks()
     const controller = new ActionInputController(callbacks)
+    const tracer = createTracer()
+
+    tracer.beginStep('narrative')
+    tracer.traceInput({
+      templateInputs: {
+        mode: 'creative-writing',
+        pov: 'third',
+        tense: 'past',
+        characters: ['Lyra'],
+        userInput: 'Lyra moves toward the horizon',
+      },
+    })
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
     await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+
+    tracer.traceOutput({ mockedResponse: 'Lyra stood at the edge of the world.' })
+    tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
     // Template signals author-direction framing (from creative-writing system template)
     expectPromptContains(interceptor, 'narrative', 'author')
@@ -361,13 +440,15 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
 
     // Adventure-mode CANONICAL sections should NOT appear
     expectPromptNotContains(interceptor, 'narrative', 'CANONICAL CHARACTERS')
+
+    task.meta.traceData = tracer.getTraceData()
   })
 
   // --------------------------------------------------------------------------
   // 5. Verify "I " prefix is absent even when actionType is 'do'
   // --------------------------------------------------------------------------
 
-  it('do action type with isCreativeWritingMode=true: no "I " prefix injected', async () => {
+  it('do action type with isCreativeWritingMode=true: no "I " prefix injected', async ({ task }) => {
     const testStory = buildStory({
       mode: 'creative-writing',
       settings: {
@@ -396,6 +477,20 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
 
     const callbacks = buildMockCallbacks()
     const controller = new ActionInputController(callbacks)
+    const tracer = createTracer()
+
+    tracer.beginStep('narrative')
+    tracer.traceInput({
+      templateInputs: {
+        mode: 'creative-writing',
+        pov: 'third',
+        tense: 'past',
+        isCreativeWritingMode: true,
+        actionType: 'do',
+        userInput: 'describe the rain',
+      },
+    })
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
 
     await controller.handleSubmit({
       inputValue: 'describe the rain',
@@ -406,10 +501,16 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
       actionSuffixes: { do: '', say: '"', think: '"', story: '', free: '' },
     })
 
+    tracer.traceOutput({ mockedResponse: 'The rain intensified.' })
+    tracer.attachCapturedPrompt(interceptor.getRequest('narrative'))
+    tracer.snapshotStore('story', { entries: structuredClone(story.entry.entries) })
+
     // "I describe the rain" must NOT appear — the prefix was skipped
     expectPromptNotContains(interceptor, 'narrative', 'I describe the rain')
 
     // Raw direction must appear
     expectPromptContains(interceptor, 'narrative', 'describe the rain')
+
+    task.meta.traceData = tracer.getTraceData()
   })
 })
