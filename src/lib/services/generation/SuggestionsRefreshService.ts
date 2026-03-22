@@ -43,7 +43,7 @@ export class SuggestionsRefreshService {
     const { translationSettings } = input
 
     // Only generate suggestions in creative writing mode with entries
-    const storyMode = story.currentStory?.mode
+    const storyMode = story.mode
     const hasEntries = story.entry.entries.length > 0
     if (storyMode !== 'creative-writing' || !hasEntries) {
       log('Skipping refresh', { storyMode, hasEntries })

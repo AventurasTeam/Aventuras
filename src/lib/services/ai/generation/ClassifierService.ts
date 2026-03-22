@@ -12,8 +12,8 @@ import { generateStructured } from '../sdk/generate'
  */
 
 import type {
-  Story,
   StoryEntry,
+  StoryMode,
   Character,
   Location,
   Item,
@@ -42,7 +42,8 @@ const log = createLogger('Classifier')
  */
 export interface ClassificationContext {
   storyId: string
-  story: Story
+  mode: StoryMode
+  genre: string | null
   narrativeResponse: string
   userAction: string
   existingCharacters: Character[]
@@ -85,14 +86,15 @@ export class ClassifierService extends BaseAIService {
    * This is the primary method used by the generation pipeline.
    */
   async classify(): Promise<ClassificationResult> {
-    if (!story.currentStory) {
+    if (!story.isLoaded) {
       log('classify: No story in singleton, returning empty result')
       return { ...EMPTY_CLASSIFICATION_RESULT }
     }
 
     const context: ClassificationContext = {
-      storyId: story.currentStory.id,
-      story: story.currentStory,
+      storyId: story.id!,
+      mode: story.mode,
+      genre: story.genre,
       narrativeResponse: story.generationContext.narrativeResult?.content ?? '',
       userAction: story.generationContext.userAction?.content ?? '',
       existingCharacters: story.character.characters,
@@ -129,7 +131,7 @@ export class ClassifierService extends BaseAIService {
       existingStoryBeats: context.existingStoryBeats.length,
     })
 
-    const mode = context.story.mode ?? 'adventure'
+    const mode = context.mode ?? 'adventure'
 
     // Load runtime variable definitions for the story's pack (if any)
     let runtimeVars: RuntimeVariable[] = []
@@ -167,7 +169,7 @@ export class ClassifierService extends BaseAIService {
 
     // Add all runtime variables explicitly via ctx.add()
     ctx.add({
-      genre: context.story.genre ? `Genre: ${context.story.genre}` : '',
+      genre: context.genre ? `Genre: ${context.genre}` : '',
       mode,
       entityCounts: `${context.existingCharacters.length} characters, ${context.existingLocations.length} locations, ${context.existingItems.length} items`,
       currentTimeInfo,

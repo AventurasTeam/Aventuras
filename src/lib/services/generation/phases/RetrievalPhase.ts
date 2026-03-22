@@ -18,7 +18,6 @@ import { mapEntryRetrievalToLorebookEntries } from '$lib/services/context/lorebo
 import type { ContextLorebookEntry } from '$lib/services/context/context-types'
 import { story } from '$lib/stores/story/index.svelte'
 import { settings } from '$lib/stores/settings.svelte'
-import { DEFAULT_MEMORY_CONFIG } from '$lib/services/ai/generation/MemoryService'
 import { aiService } from '$lib/services/ai'
 
 export class RetrievalPhase {
@@ -31,7 +30,7 @@ export class RetrievalPhase {
     const characters = story.character.characters
     const locations = story.location.locations
     const items = story.item.items
-    const memoryConfig = story.currentStory?.memoryConfig ?? DEFAULT_MEMORY_CONFIG
+    const memoryConfig = story.settings.memoryConfig
 
     let agenticRetrieval: AgenticRetrievalFields | null = null
     let lorebookRetrievalResult: EntryRetrievalResult | null = null
@@ -127,9 +126,9 @@ export class RetrievalPhase {
         (num, q) => aiService.answerChapterQuestion(num, q, chapters),
         (start, end, q) => aiService.answerChapterRangeQuestion(start, end, q, chapters),
         story.generationContext.abortSignal ?? undefined,
-        story.generationContext.storyMode,
-        story.generationContext.pov,
-        story.generationContext.tense,
+        story.mode,
+        story.settings.pov,
+        story.settings.tense,
       )
       const agenticRetrieval: AgenticRetrievalFields | null = result
         ? {

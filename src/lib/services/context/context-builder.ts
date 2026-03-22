@@ -32,7 +32,7 @@ export class ContextBuilder {
    * Loads story settings, protagonist, location, time, and pack custom variables.
    */
   static async forStory(storyId: string, packIdOverride?: string): Promise<ContextBuilder> {
-    if (story.currentStory?.id === storyId) {
+    if (story.id === storyId) {
       return ContextBuilder.fromSingleton(packIdOverride)
     }
     throw new Error('ContextBuilder.forStory: story not loaded. Expected storyId: ' + storyId)
@@ -44,22 +44,21 @@ export class ContextBuilder {
    * Pack config (variables, runtime vars) still comes from DB.
    */
   private static async fromSingleton(packIdOverride?: string): Promise<ContextBuilder> {
-    const currentStory = story.currentStory!
-    const packId =
-      packIdOverride || (await database.getStoryPackId(currentStory.id)) || 'default-pack'
+    const storyId = story.id!
+    const packId = packIdOverride || (await database.getStoryPackId(storyId)) || 'default-pack'
     const builder = new ContextBuilder(packId)
 
     // Story settings from singleton (replaces getStory DB query)
     builder.add({
-      mode: story.generationContext.storyMode || 'adventure',
-      pov: story.generationContext.pov,
-      tense: story.generationContext.tense,
-      genre: currentStory.genre || '',
-      tone: currentStory.settings!.tone || '',
-      themes: currentStory.settings!.themes?.join(', ') || '',
-      settingDescription: currentStory.description || '',
-      visualProseMode: currentStory.settings?.visualProseMode || false,
-      inlineImageMode: currentStory.settings?.imageGenerationMode === 'inline',
+      mode: story.mode || 'adventure',
+      pov: story.settings.pov,
+      tense: story.settings.tense,
+      genre: story.genre || '',
+      tone: story.settings.tone || '',
+      themes: story.settings.themes?.join(', ') || '',
+      settingDescription: story.description || '',
+      visualProseMode: story.settings.visualProseMode || false,
+      inlineImageMode: story.settings.imageGenerationMode === 'inline',
     })
 
     // Protagonist from singleton derived getter (replaces getCharacters + find)
@@ -90,7 +89,7 @@ export class ContextBuilder {
     await builder.loadCustomVariables()
 
     // Override pack variable defaults with story-specific values (still from DB)
-    const storyVarValues = await database.getStoryCustomVariables(currentStory.id)
+    const storyVarValues = await database.getStoryCustomVariables(storyId)
     if (storyVarValues) {
       builder.add(storyVarValues)
     }
@@ -105,7 +104,7 @@ export class ContextBuilder {
     )
 
     log('fromSingleton complete', {
-      storyId: currentStory.id,
+      storyId,
       packId,
       contextKeys: Object.keys(builder.context).length,
       storyVarOverrides: storyVarValues ? Object.keys(storyVarValues).length : 0,

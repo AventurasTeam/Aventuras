@@ -177,27 +177,27 @@ export class ActionInputController {
     const styleReviewSource =
       options?.styleReviewSource ?? (countStyleReview ? 'new' : 'regenerate')
 
-    if (!story.currentStory) return
+    if (!story.isLoaded) return
 
     this.stopRequested = false
     this.activeAbortController = new AbortController()
 
-    const visualProseMode = story.currentStory.settings?.visualProseMode ?? false
-    const inlineImageMode = story.currentStory.settings?.imageGenerationMode === 'inline'
+    const visualProseMode = story.settings.visualProseMode ?? false
+    const inlineImageMode = story.settings.imageGenerationMode === 'inline'
     const streamingEntryId = crypto.randomUUID()
     const narrationEntryId = crypto.randomUUID()
 
     this.callbacks.setGenerating(true)
     this.callbacks.clearGenerationError()
-    this.callbacks.clearActionChoices(story.currentStory.id)
+    this.callbacks.clearActionChoices(story.id!)
     this.callbacks.startStreaming(visualProseMode, streamingEntryId)
 
-    const currentStoryRef = story.currentStory
+    const storyId = story.id!
 
     let inlineImageTracker: InlineImageTracker | null = null
     if (inlineImageMode) {
       inlineImageTracker = new InlineImageTracker(
-        currentStoryRef.id,
+        storyId,
         narrationEntryId,
         () => story.character.characters,
       )
@@ -225,16 +225,14 @@ export class ActionInputController {
       const activationTracker = this.callbacks.getActivationTracker(
         storyPosition,
       ) as SimpleActivationTracker
-      const embeddedImages = await database.getEmbeddedImagesForStory(currentStoryRef.id)
 
-      story.generationContext.embeddedImages = embeddedImages
       story.generationContext.rawInput = userActionContent
       story.generationContext.actionType = this.currentActionType ?? 'do'
       story.generationContext.wasRawActionChoice = false
       story.generationContext.styleReview = this.callbacks.getLastStyleReview()
       story.generationContext.activationTracker = activationTracker
 
-      const isCreativeWritingMode = story.generationContext.isCreativeWritingMode
+      const isCreativeWritingMode = story.mode === 'creative-writing'
 
       const pipeline = new GenerationPipeline()
 
@@ -251,7 +249,7 @@ export class ActionInputController {
           streamingEntryId,
           visualProseMode,
           isCreativeWritingMode,
-          storyId: currentStoryRef.id,
+          storyId,
         }
 
         const persistSuggestedActions = (actions: unknown[], type: 'suggestions' | 'choices') => {
@@ -274,11 +272,11 @@ export class ActionInputController {
           setSuggestionsLoading: this.callbacks.setSuggestionsLoading,
           setActionChoicesLoading: this.callbacks.setActionChoicesLoading,
           setSuggestions: (suggestions, storyId) => {
-            this.callbacks.setSuggestions(suggestions, storyId ?? currentStoryRef.id)
+            this.callbacks.setSuggestions(suggestions, storyId ?? story.id!)
             persistSuggestedActions(suggestions, 'suggestions')
           },
           setActionChoices: (choices, storyId) => {
-            this.callbacks.setActionChoices(choices, storyId ?? currentStoryRef.id)
+            this.callbacks.setActionChoices(choices, storyId ?? story.id!)
             persistSuggestedActions(choices, 'choices')
           },
           emitResponseStreaming: (chunk, accumulated) => {
@@ -301,10 +299,7 @@ export class ActionInputController {
           fullResponse += event.content
           if (event.reasoning) fullReasoning += event.reasoning
           if (inlineImageTracker)
-            inlineImageTracker.processChunk(
-              fullResponse,
-              currentStoryRef.settings?.referenceMode ?? false,
-            )
+            inlineImageTracker.processChunk(fullResponse, story.settings.referenceMode ?? false)
         }
 
         if (event.type === 'phase_complete' && event.phase === 'narrative' && fullResponse.trim()) {
@@ -329,14 +324,14 @@ export class ActionInputController {
           await story.classification.applyClassificationResult(event.result, narrationEntry.id)
           await story.entry.updateEntryTimeEnd(narrationEntry.id)
 
-          if (currentStoryRef.settings?.imageGenerationMode !== 'none') {
+          if (story.settings.imageGenerationMode !== 'none') {
             const presentCharacters = story.character.characters.filter(
               (c) =>
                 event.result.scene.presentCharacterNames.includes(c.name) ||
                 c.relationship === 'self',
             )
             this.lastImageGenContext = {
-              storyId: currentStoryRef.id,
+              storyId,
               entryId: narrationEntry.id,
               narrativeResponse: fullResponse,
               userAction: userActionContent,
@@ -349,7 +344,7 @@ export class ActionInputController {
                 ),
                 { truncate: false, stripPicTags: true },
               ),
-              referenceMode: currentStoryRef.settings?.referenceMode ?? false,
+              referenceMode: story.settings.referenceMode ?? false,
             }
           }
 
@@ -410,7 +405,7 @@ export class ActionInputController {
         }
       }
 
-      this.callbacks.updateActivationData(activationTracker, currentStoryRef.id)
+      this.callbacks.updateActivationData(activationTracker, storyId)
       if (this.stopRequested) return
 
       if (!fullResponse.trim()) {
@@ -489,7 +484,7 @@ export class ActionInputController {
   // --------------------------------------------------------------------------
 
   async handleSubmit(input: SubmitInput) {
-    if (!story.currentStory) return
+    if (!story.isLoaded) return
 
     const {
       inputValue,
@@ -508,9 +503,9 @@ export class ActionInputController {
     // Store the action type for generationContext
     this.currentActionType = actionType
 
-    const embeddedImages = await database.getEmbeddedImagesForStory(story.currentStory.id)
+    const embeddedImages = await database.getEmbeddedImagesForStory(story.id!)
     this.callbacks.createRetryBackup(
-      story.currentStory.id,
+      story.id!,
       story.entry.entries,
       story.character.characters,
       story.location.locations,
@@ -521,7 +516,7 @@ export class ActionInputController {
       inputValue,
       actionType,
       isRawActionChoice,
-      story.currentStory.timeTracker,
+      story.time.timeTracker,
     )
 
     const { promptContent, originalInput } = await translateUserInput(
@@ -562,14 +557,14 @@ export class ActionInputController {
     this.callbacks.setGenerating(false)
 
     const backup = this.callbacks.getRetryBackup()
-    if (!backup || !story.currentStory || backup.storyId !== story.currentStory.id) {
+    if (!backup || !story.isLoaded || backup.storyId !== story.id) {
       if (backup) this.callbacks.clearRetryBackup()
       return {}
     }
 
     this.callbacks.clearGenerationError()
-    this.callbacks.clearSuggestions(story.currentStory.id)
-    this.callbacks.clearActionChoices(story.currentStory.id)
+    this.callbacks.clearSuggestions(story.id!)
+    this.callbacks.clearActionChoices(story.id!)
 
     if (backup.hasFullState) {
       this.callbacks.restoreActivationData(backup.activationData, backup.storyPosition)
@@ -594,8 +589,8 @@ export class ActionInputController {
       },
       {
         clearGenerationError: () => this.callbacks.clearGenerationError(),
-        clearSuggestions: () => this.callbacks.clearSuggestions(story.currentStory!.id),
-        clearActionChoices: () => this.callbacks.clearActionChoices(story.currentStory!.id),
+        clearSuggestions: () => this.callbacks.clearSuggestions(story.id!),
+        clearActionChoices: () => this.callbacks.clearActionChoices(story.id!),
       },
     )
 
@@ -646,13 +641,13 @@ export class ActionInputController {
 
   async handleRetryLastMessage() {
     const backup = this.callbacks.getRetryBackup()
-    if (!backup || !story.currentStory) return
-    if (backup.storyId !== story.currentStory.id) {
+    if (!backup || !story.isLoaded) return
+    if (backup.storyId !== story.id) {
       this.callbacks.clearRetryBackup(false)
       return
     }
 
-    const storyId = story.currentStory.id
+    const storyId = story.id!
 
     this.callbacks.clearGenerationError()
     this.callbacks.clearSuggestions(storyId)
@@ -690,7 +685,7 @@ export class ActionInputController {
 
     await tick()
 
-    const isCreativeWritingMode = story.generationContext.isCreativeWritingMode
+    const isCreativeWritingMode = story.mode === 'creative-writing'
 
     const { promptContent, originalInput } = await translateUserInput(
       backup.userActionContent,
@@ -725,9 +720,9 @@ export class ActionInputController {
   // --------------------------------------------------------------------------
 
   async regenerateActionsAfterDelete() {
-    if (!story.currentStory || story.entry.entries.length === 0) return
+    if (!story.isLoaded || story.entry.entries.length === 0) return
 
-    const storyMode = story.generationContext.storyMode
+    const storyMode = story.mode
 
     if (storyMode === 'creative-writing') {
       await this.refreshSuggestions()
@@ -745,7 +740,7 @@ export class ActionInputController {
         const result = await aiService.generateActionChoices()
 
         if (result.choices.length > 0) {
-          this.callbacks.setActionChoices(result.choices, story.currentStory!.id)
+          this.callbacks.setActionChoices(result.choices, story.id!)
           database
             .updateStoryEntry(lastNarration.id, {
               suggestedActions: JSON.stringify(result.choices),
@@ -763,13 +758,10 @@ export class ActionInputController {
   }
 
   async refreshSuggestions() {
-    if (!story.currentStory) return
+    if (!story.isLoaded) return
 
-    if (
-      story.generationContext.storyMode !== 'creative-writing' ||
-      story.entry.entries.length === 0
-    ) {
-      this.callbacks.clearSuggestions(story.currentStory.id)
+    if (story.mode !== 'creative-writing' || story.entry.entries.length === 0) {
+      this.callbacks.clearSuggestions(story.id!)
       return
     }
 
@@ -782,7 +774,7 @@ export class ActionInputController {
       const result = await service.refresh({
         translationSettings: settings.translationSettings,
       })
-      this.callbacks.setSuggestions(result.suggestions, story.currentStory.id)
+      this.callbacks.setSuggestions(result.suggestions, story.id!)
       this.callbacks.emitSuggestionsReady(
         result.suggestions.map((s) => ({ text: s.text, type: s.type })),
       )
@@ -799,7 +791,7 @@ export class ActionInputController {
       }
     } catch (error) {
       log('Failed to generate suggestions:', error)
-      this.callbacks.clearSuggestions(story.currentStory.id)
+      this.callbacks.clearSuggestions(story.id!)
     } finally {
       this.callbacks.setSuggestionsLoading(false)
     }

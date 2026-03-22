@@ -24,7 +24,7 @@ import {
 import { EntryInjector } from './EntryInjector'
 import { createLogger } from '$lib/log'
 import type { StreamChunk } from '../core/types'
-import type { Story, StoryEntry } from '$lib/types'
+import type { StoryEntry } from '$lib/types'
 import type { StyleReviewResult } from './StyleReviewerService'
 import type { ContextLorebookEntry } from '$lib/services/context/context-types'
 import type { AgenticRetrievalFields } from '$lib/services/generation/types'
@@ -94,12 +94,11 @@ export class NarrativeService {
     const contextResult = await injector.buildContext(worldState, userInput, entries)
     const worldStateArrays = mapContextResultToArrays(contextResult)
 
-    const inlineImageMode = story?.currentStory?.settings?.imageGenerationMode === 'inline'
+    const inlineImageMode = story.settings.imageGenerationMode === 'inline'
 
     const { systemPrompt, userMessage } = await this.buildPrompts(
       entries,
       inlineImageMode,
-      story.currentStory,
       worldStateArrays,
       agenticRetrieval,
       lorebookEntries,
@@ -135,28 +134,27 @@ export class NarrativeService {
   private async buildPrompts(
     entries: StoryEntry[],
     inlineImageMode: boolean,
-    story: Story | null | undefined,
     worldStateArrays?: WorldStateArrays,
     agenticRetrieval?: AgenticRetrievalFields | null,
     lorebookEntries?: ContextLorebookEntry[],
     styleReview?: StyleReviewResult | null,
     currentBranchChapters?: StoryChapterStore['currentBranchChapters'],
   ): Promise<{ systemPrompt: string; userMessage: string }> {
-    const mode = story?.mode ?? 'adventure'
+    const mode = story.mode ?? 'adventure'
 
     // Create ContextBuilder -- forStory auto-populates mode, pov, tense, genre,
     // protagonistName, protagonistDescription, currentLocation, storyTime, etc.
     let ctx: ContextBuilder
 
-    if (story?.id) {
+    if (story.id) {
       ctx = await ContextBuilder.forStory(story.id)
     } else {
       // Fallback for edge cases where story doesn't exist yet
       ctx = new ContextBuilder()
       ctx.add({
         mode,
-        pov: story?.settings?.pov ?? 'second',
-        tense: story?.settings?.tense ?? 'present',
+        pov: story.settings.pov ?? 'second',
+        tense: story.settings.tense ?? 'present',
         protagonistName: 'the protagonist',
       })
     }

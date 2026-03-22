@@ -618,7 +618,7 @@ class AIService {
     }
 
     // Check if inline image mode is enabled for this story
-    const inlineImageMode = story.currentStory?.settings?.imageGenerationMode === 'inline'
+    const inlineImageMode = story.settings.imageGenerationMode === 'inline'
     try {
       if (inlineImageMode) {
         // Use inline image generation (process <pic> tags from AI response)
@@ -723,7 +723,7 @@ class AIService {
     presentCharacters: Character[],
   ): Promise<void> {
     const imageId = crypto.randomUUID()
-    const referenceMode = story.currentStory?.settings?.referenceMode ?? false
+    const referenceMode = story.settings.referenceMode ?? false
 
     // Determine profile and model
     let profileId = imageSettings.profileId
@@ -925,7 +925,7 @@ class AIService {
         if (image) {
           emitBackgroundImageReady()
           log('Background image generated successfully', { image })
-          story.updateCurrentBackgroundImage(image)
+          story.image.updateBackgroundImage(image)
         } else {
           log('Background image generation failed')
         }

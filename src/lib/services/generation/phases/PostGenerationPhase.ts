@@ -39,7 +39,7 @@ export class PostGenerationPhase {
   async *execute(): AsyncGenerator<GenerationEvent, PostGenerationResult> {
     yield { type: 'phase_start', phase: 'post' } satisfies PhaseStartEvent
 
-    const isCreativeWritingMode = story.generationContext.storyMode === 'creative-writing'
+    const isCreativeWritingMode = story.mode === 'creative-writing'
     const abortSignal = story.generationContext.abortSignal ?? undefined
     const disableSuggestions = settings.uiSettings.disableSuggestions
 

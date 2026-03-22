@@ -62,7 +62,7 @@ export class SuggestionsService extends BaseAIService {
       const entries = story.entry.visibleEntries
       const threads = story.storyBeat.pendingQuests
       const lbEntries = story.generationContext.retrievalResult?.lorebookEntries ?? []
-      const id = story.currentStory?.id
+      const id = story.id ?? undefined
       const narrative = story.generationContext.narrativeResult?.content
       return this._generateSuggestionsInternal(entries, threads, lbEntries, id, narrative)
     }

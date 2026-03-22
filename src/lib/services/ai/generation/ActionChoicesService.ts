@@ -72,15 +72,15 @@ export class ActionChoicesService extends BaseAIService {
       const lorebookEntries = story.generationContext.retrievalResult?.lorebookEntries ?? []
 
       const ctx: ActionChoicesContext = {
-        storyId: story.currentStory?.id,
+        storyId: story.id ?? undefined,
         narrativeResponse: story.generationContext.narrativeResult?.content ?? '',
         userAction: lastUserAction?.content ?? '',
         recentEntries: entries.slice(-10),
         protagonistName: protagonist?.name ?? 'the protagonist',
         protagonistDescription: protagonist?.description,
-        mode: story.generationContext.storyMode,
-        pov: story.generationContext.pov,
-        tense: story.generationContext.tense,
+        mode: story.mode,
+        pov: story.settings.pov,
+        tense: story.settings.tense,
         currentLocation: story.location.currentLocation,
         presentCharacters,
         inventory,

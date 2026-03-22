@@ -31,12 +31,12 @@ export class BackgroundImagePhase {
   /** Execute the image phase - yields events and returns result */
   async *execute(): AsyncGenerator<GenerationEvent, BackgroundImageResult> {
     // === CONCURRENT PHASE SAFETY: Snapshot ALL singleton inputs before first yield ===
-    const storyId = story.currentStory?.id ?? ''
+    const storyId = story.id ?? ''
     const storyEntries = story.entry.visibleEntries
     const abortSignal = story.generationContext.abortSignal ?? undefined
     const imageSettings: BackgroundImageSettings = {
-      backgroundImagesEnabled: story.currentStory?.settings?.backgroundImagesEnabled ?? false,
-      imageGenerationMode: story.currentStory?.settings?.imageGenerationMode ?? 'agentic',
+      backgroundImagesEnabled: story.settings.backgroundImagesEnabled ?? false,
+      imageGenerationMode: story.settings.imageGenerationMode ?? 'agentic',
     }
     // === End snapshot block ===
 

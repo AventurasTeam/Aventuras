@@ -41,7 +41,7 @@ export class TranslationPhase {
 
     const narrativeContent = story.generationContext.narrativeResult?.content ?? ''
     const abortSignal = story.generationContext.abortSignal ?? undefined
-    const isVisualProse = story.currentStory?.settings?.visualProseMode ?? false
+    const isVisualProse = story.settings.visualProseMode ?? false
     const translationSettings = settings.translationSettings
 
     // Check if translation should be skipped

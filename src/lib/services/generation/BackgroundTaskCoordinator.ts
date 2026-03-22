@@ -76,8 +76,8 @@ export class BackgroundTaskCoordinator {
    * Called from ActionInput after pipeline.execute() completes.
    */
   static async run(countStyleReview: boolean, styleReviewSource: string): Promise<void> {
-    const storyId = story.currentStory?.id ?? ''
-    const mode = story.currentStory?.mode ?? 'adventure'
+    const storyId = story.id ?? ''
+    const mode = story.mode
 
     const deps: BackgroundTaskDependencies = {
       chapterService: {
@@ -97,8 +97,8 @@ export class BackgroundTaskCoordinator {
         storyId,
         entries: story.entry.entries,
         mode,
-        pov: story.generationContext.pov,
-        tense: story.generationContext.tense,
+        pov: story.settings.pov,
+        tense: story.settings.tense,
         enabled: settings.systemServicesSettings.styleReviewer.enabled,
         triggerInterval: settings.systemServicesSettings.styleReviewer.triggerInterval,
         currentCounter: ui.messagesSinceLastStyleReview,
@@ -112,26 +112,26 @@ export class BackgroundTaskCoordinator {
       },
       chapterCheck: {
         storyId,
-        currentBranchId: story.currentStory?.currentBranchId ?? null,
+        currentBranchId: story.branch.currentBranchId,
         entries: story.entry.entries,
         lastChapterEndIndex: story.chapter.lastChapterEndIndex,
         tokensSinceLastChapter: story.generationContext.tokensSinceLastChapter,
         tokensOutsideBuffer: story.generationContext.tokensOutsideBuffer,
         messagesSinceLastChapter: story.chapter.messagesSinceLastChapter,
-        memoryConfig: story.generationContext.memoryConfig,
+        memoryConfig: story.settings.memoryConfig,
         currentBranchChapters: story.chapter.currentBranchChapters,
         mode,
-        pov: story.generationContext.pov,
-        tense: story.generationContext.tense,
+        pov: story.settings.pov,
+        tense: story.settings.tense,
       },
       loreSession: {
         storyId,
-        currentBranchId: story.currentStory?.currentBranchId ?? null,
+        currentBranchId: story.branch.currentBranchId,
         lorebookEntries: story.lorebook.lorebookEntries,
         chapters: story.chapter.currentBranchChapters,
         mode,
-        pov: story.generationContext.pov,
-        tense: story.generationContext.tense,
+        pov: story.settings.pov,
+        tense: story.settings.tense,
       },
       loreCallbacks: {
         onCreateEntry: async (entry) => {
@@ -158,8 +158,7 @@ export class BackgroundTaskCoordinator {
       },
     }
 
-    if (!story.generationContext.memoryConfig.autoSummarize)
-      input.chapterCheck.tokensOutsideBuffer = 0
+    if (!story.settings.memoryConfig.autoSummarize) input.chapterCheck.tokensOutsideBuffer = 0
 
     const coordinator = new BackgroundTaskCoordinator(deps)
     await coordinator.runBackgroundTasks(input)

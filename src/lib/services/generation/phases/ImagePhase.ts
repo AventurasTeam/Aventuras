@@ -36,12 +36,12 @@ export class ImagePhase {
     yield { type: 'phase_start', phase: 'image' } satisfies PhaseStartEvent
 
     const imageSettings: ImageSettings = {
-      imageGenerationMode: story.currentStory?.settings?.imageGenerationMode ?? 'agentic',
-      referenceMode: story.currentStory?.settings?.referenceMode ?? false,
+      imageGenerationMode: story.settings.imageGenerationMode ?? 'agentic',
+      referenceMode: story.settings.referenceMode ?? false,
     }
 
     // Read all data from singleton
-    const storyId = story.currentStory?.id ?? ''
+    const storyId = story.id ?? ''
     const entryId =
       story.generationContext.narrationEntryId ?? story.generationContext.userAction?.entryId ?? ''
     const narrativeContent = story.generationContext.narrativeResult?.content ?? ''
