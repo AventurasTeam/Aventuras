@@ -4,7 +4,8 @@ import { aiService } from '$lib/services/ai'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 import { settings } from '$lib/stores/settings.svelte'
 import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
-import type { ImportedEntry, GeneratedCharacter } from '$lib/components/wizard/wizardTypes'
+import type { ImportedEntry } from '$lib/services/lorebookImporter'
+import type { GeneratedCharacter } from '$lib/services/ai/sdk'
 
 export class SettingStore {
   settingSeed = $state('')

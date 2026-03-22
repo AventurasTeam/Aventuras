@@ -10,7 +10,7 @@ import { writeTextFile } from '@tauri-apps/plugin-fs'
 
 export type ExportFormat = 'aventura' | 'sillytavern' | 'text'
 
-export interface LorebookExportOptions {
+interface LorebookExportOptions {
   format: ExportFormat
   entries: Entry[]
   filename?: string

@@ -9,16 +9,14 @@
   import * as ScrollArea from '$lib/components/ui/scroll-area'
   import { Badge } from '$lib/components/ui/badge'
 
+  import type { StoryMode, POV, Tense } from '$lib/types'
   import type {
-    StoryMode,
-    Genre,
-    POV,
-    Tense,
     ExpandedSetting,
-    GeneratedProtagonist,
     GeneratedOpening,
-    POVOption,
-  } from '../wizardTypes'
+    GeneratedProtagonist,
+  } from '$lib/services/ai/sdk'
+  import type { Genre } from '$lib/services/ai/wizard'
+  import type { POVOption } from '../wizardTypes'
   import { styleUserPlaceholders, tenseOptions } from '../wizardTypes'
 
   interface Props {

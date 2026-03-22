@@ -17,9 +17,9 @@
   import { Badge } from '$lib/components/ui/badge'
   import { Switch } from '$lib/components/ui/switch'
   import type { GeneratedProtagonist, GeneratedCharacter } from '$lib/services/ai/sdk'
-  import type { ImportedLorebookItem } from '$lib/components/wizard/wizardTypes'
+  import type { ImportedLorebookItem } from '../wizardTypes'
   import type { StoryMode, POV } from '$lib/types'
-  import type { Tense } from '$lib/services/ai/wizard/ScenarioService'
+  import type { Tense } from '$lib/services/ai/wizard'
 
   interface Props {
     storyTitle: string
