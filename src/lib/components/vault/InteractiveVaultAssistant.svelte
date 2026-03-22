@@ -20,7 +20,6 @@
     Send,
     Loader2,
     User,
-    Brain,
     ChevronDown,
     ChevronUp,
     Wrench,
@@ -48,8 +47,8 @@
   import * as Dialog from '$lib/components/ui/dialog'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { parseMarkdown } from '$lib/utils/markdown'
-  import { cn } from '$lib/utils/cn'
   import { isTouchDevice } from '$lib/utils/swipe'
+  import { cn } from '$lib/utils/cn'
   import { SvelteSet } from 'svelte/reactivity'
   import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
 
@@ -84,6 +83,19 @@
 
   // In-flight pending changes (shown in chat before step message arrives)
   let streamingChanges = $state<VaultPendingChange[]>([])
+
+  // ID of the message currently being streamed into
+  let streamingMessageId = $state<string | null>(null)
+
+  // RAF-throttled scroll for frequent text deltas
+  let scrollRAF: number | null = null
+  function scrollToBottomThrottled() {
+    if (scrollRAF) return
+    scrollRAF = requestAnimationFrame(() => {
+      scrollToBottom()
+      scrollRAF = null
+    })
+  }
 
   // Conversation history selector
   let conversations = $state<VaultConversation[]>([])
@@ -230,6 +242,7 @@
     isThinking = false
     activeToolCalls = []
     streamingChanges = []
+    streamingMessageId = null
     // Auto-save current conversation before starting new one
     if (messages.some((m) => !m.isGreeting)) {
       await service
@@ -253,6 +266,7 @@
     isThinking = false
     activeToolCalls = []
     streamingChanges = []
+    streamingMessageId = null
     // Auto-save current before switching
     if (messages.some((m) => !m.isGreeting)) {
       await service
@@ -381,10 +395,55 @@
         userMessage,
         abortController.signal,
       )) {
+        // Ensure a streaming placeholder message exists in the messages array
+        function ensureStreamingMessage() {
+          if (!streamingMessageId) {
+            const id = `streaming-${Date.now()}`
+            streamingMessageId = id
+            messages = [
+              ...messages,
+              {
+                id,
+                role: 'assistant',
+                content: '',
+                timestamp: Date.now(),
+              },
+            ]
+          }
+        }
+
+        // Update the last message (the streaming placeholder) in place
+        function updateStreamingMessage(updater: (msg: ChatMessage) => ChatMessage) {
+          const idx = messages.findIndex((m) => m.id === streamingMessageId)
+          if (idx === -1) return
+          const updated = updater(messages[idx])
+          messages = [...messages.slice(0, idx), updated, ...messages.slice(idx + 1)]
+        }
+
         switch (event.type) {
           case 'thinking':
             isThinking = true
             activeToolCalls = []
+            ensureStreamingMessage()
+            break
+
+          case 'text_delta':
+            isThinking = false
+            ensureStreamingMessage()
+            updateStreamingMessage((msg) => ({
+              ...msg,
+              content: msg.content + event.text,
+            }))
+            scrollToBottomThrottled()
+            break
+
+          case 'reasoning_delta':
+            isThinking = false
+            ensureStreamingMessage()
+            updateStreamingMessage((msg) => ({
+              ...msg,
+              reasoning: (msg.reasoning || '') + event.text,
+            }))
             break
 
           case 'tool_start':
@@ -436,7 +495,18 @@
             // Clear streaming changes that are now attached to this message
             const msgChangeIds = new Set(event.message.pendingChanges?.map((c) => c.id) ?? [])
             streamingChanges = streamingChanges.filter((c) => !msgChangeIds.has(c.id))
-            messages = [...messages, event.message]
+            // Replace the streaming placeholder with the final message
+            if (streamingMessageId) {
+              const idx = messages.findIndex((m) => m.id === streamingMessageId)
+              if (idx !== -1) {
+                messages = [...messages.slice(0, idx), event.message, ...messages.slice(idx + 1)]
+              } else {
+                messages = [...messages, event.message]
+              }
+            } else {
+              messages = [...messages, event.message]
+            }
+            streamingMessageId = null
             activeToolCalls = []
             isThinking = true
             await tick()
@@ -496,6 +566,7 @@
       isThinking = false
       activeToolCalls = []
       streamingChanges = []
+      streamingMessageId = null
       abortController = null
       // Always save conversation (success, error, or abort)
       if (service && messages.some((m) => !m.isGreeting)) {
@@ -848,6 +919,7 @@
           <!-- Messages -->
           <div class="flex-1 space-y-3 overflow-y-auto px-4 py-3" bind:this={messagesContainer}>
             {#each messages as message (message.id)}
+              {@const isStreaming = message.id === streamingMessageId}
               <div in:fade={{ duration: 150 }}>
                 <div
                   class={cn(
@@ -870,51 +942,106 @@
                           : 'bg-surface-800 border-surface-700 border px-3.5 py-2.5',
                       )}
                     >
-                      <!-- Icon + content -->
-                      <div class="flex items-start gap-2.5">
-                        {#if message.role === 'assistant'}
-                          <div
-                            class="bg-accent-500/15 mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md"
-                          >
-                            <Bot class="text-accent-400 h-3 w-3" />
+                      {#if message.role === 'assistant'}
+                        <!-- Reasoning row: icon + toggle, vertically centered -->
+                        {#if message.reasoning}
+                          <div class="flex items-center gap-2.5">
+                            <div
+                              class="bg-accent-500/15 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md"
+                            >
+                              <Bot class="text-accent-400 h-3 w-3" />
+                            </div>
+                            <button
+                              class="text-surface-400 hover:text-foreground flex items-center gap-1.5 text-xs transition-colors"
+                              onclick={() => toggleReasoning(message.id)}
+                            >
+                              <span>Reasoning</span>
+                              {#if expandedReasoning.has(message.id)}
+                                <ChevronUp class="h-3 w-3" />
+                              {:else}
+                                <ChevronDown class="h-3 w-3" />
+                              {/if}
+                            </button>
                           </div>
-                        {:else}
-                          <div
-                            class="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-white/10"
-                          >
-                            <User class="h-3 w-3 opacity-90" />
-                          </div>
-                        {/if}
-                        <div class="min-w-0 flex-1">
-                          <div class="chat-markdown prose-content break-words">
-                            {@html parseMarkdown(message.content)}
-                          </div>
-                        </div>
-                      </div>
-
-                      <!-- Reasoning (collapsible) -->
-                      {#if message.role === 'assistant' && message.reasoning}
-                        <div class="border-surface-700 mt-2 border-t pt-2">
-                          <button
-                            class="text-surface-400 hover:text-foreground flex items-center gap-1.5 text-xs transition-colors"
-                            onclick={() => toggleReasoning(message.id)}
-                          >
-                            <Brain class="h-3 w-3" />
-                            <span>Reasoning</span>
-                            {#if expandedReasoning.has(message.id)}
-                              <ChevronUp class="h-3 w-3" />
-                            {:else}
-                              <ChevronDown class="h-3 w-3" />
-                            {/if}
-                          </button>
                           {#if expandedReasoning.has(message.id)}
                             <div
-                              class="bg-surface-900 text-surface-400 mt-2 rounded-lg p-2.5 font-mono text-xs whitespace-pre-wrap"
+                              class="bg-surface-900 text-surface-400 mt-2 ml-[1.875rem] max-h-40 overflow-y-auto rounded-lg p-2.5 font-mono text-xs whitespace-pre-wrap"
                               in:slide
                             >
                               {message.reasoning}
                             </div>
                           {/if}
+                        {/if}
+
+                        <!-- Content row -->
+                        <div
+                          class={message.reasoning
+                            ? 'mt-2 ml-[1.875rem]'
+                            : 'flex items-start gap-2.5'}
+                        >
+                          {#if !message.reasoning}
+                            <div
+                              class="bg-accent-500/15 mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md"
+                            >
+                              <Bot class="text-accent-400 h-3 w-3" />
+                            </div>
+                          {/if}
+                          <div class="min-w-0 flex-1">
+                            {#if message.content}
+                              <div
+                                class={cn(
+                                  'chat-markdown prose-content break-words',
+                                  isStreaming && 'streaming-content',
+                                )}
+                              >
+                                {@html parseMarkdown(message.content)}{#if isStreaming}<span
+                                    class="streaming-cursor"
+                                  ></span>{/if}
+                              </div>
+                            {:else if isStreaming && isThinking && !message.reasoning}
+                              <div class="text-surface-400 flex items-center gap-2 text-sm">
+                                <Loader2 class="text-accent-400 h-3.5 w-3.5 animate-spin" />
+                                <span>Thinking...</span>
+                              </div>
+                            {/if}
+
+                            <!-- Active tool calls (only on streaming message) -->
+                            {#if isStreaming && activeToolCalls.length > 0}
+                              <div class={message.content ? 'mt-2 space-y-1' : 'space-y-1'}>
+                                {#each activeToolCalls as toolCall (toolCall.id)}
+                                  <div
+                                    class="border-surface-700 bg-surface-900 flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs"
+                                    in:fade
+                                  >
+                                    {#if toolCall.result === '...'}
+                                      <Loader2
+                                        class="text-accent-400 h-3 w-3 flex-shrink-0 animate-spin"
+                                      />
+                                    {:else}
+                                      <Wrench class="text-surface-500 h-3 w-3 flex-shrink-0" />
+                                    {/if}
+                                    <span class="text-surface-300 font-medium"
+                                      >{formatToolCallName(toolCall.name)}</span
+                                    >
+                                  </div>
+                                {/each}
+                              </div>
+                            {/if}
+                          </div>
+                        </div>
+                      {:else}
+                        <!-- User message -->
+                        <div class="flex items-start gap-2.5">
+                          <div
+                            class="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-white/10"
+                          >
+                            <User class="h-3 w-3 opacity-90" />
+                          </div>
+                          <div class="min-w-0 flex-1">
+                            <div class="chat-markdown prose-content break-words">
+                              {@html parseMarkdown(message.content)}
+                            </div>
+                          </div>
                         </div>
                       {/if}
                     </div>
@@ -1011,64 +1138,19 @@
               </div>
             {/each}
 
-            <!-- Progress indicator -->
-            {#if isGenerating}
-              <div class="flex justify-start" in:fade>
-                <div class="max-w-[90%] md:max-w-[85%]">
-                  <div class="border-surface-700 bg-surface-800 rounded-xl border px-3.5 py-2.5">
-                    <div class="flex items-start gap-2.5">
-                      <div
-                        class="bg-accent-500/15 mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md"
-                      >
-                        <Bot class="text-accent-400 h-3 w-3" />
-                      </div>
-                      <div class="min-w-0 flex-1">
-                        {#if activeToolCalls.length > 0}
-                          <div class="space-y-1">
-                            {#each activeToolCalls as toolCall (toolCall.id)}
-                              <div
-                                class="border-surface-700 bg-surface-900 flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs"
-                                in:fade
-                              >
-                                {#if toolCall.result === '...'}
-                                  <Loader2
-                                    class="text-accent-400 h-3 w-3 flex-shrink-0 animate-spin"
-                                  />
-                                {:else}
-                                  <Wrench class="text-surface-500 h-3 w-3 flex-shrink-0" />
-                                {/if}
-                                <span class="text-surface-300 font-medium"
-                                  >{formatToolCallName(toolCall.name)}</span
-                                >
-                              </div>
-                            {/each}
-                          </div>
-                        {:else if isThinking}
-                          <div class="text-surface-400 flex items-center gap-2 text-sm">
-                            <Loader2 class="text-accent-400 h-3.5 w-3.5 animate-spin" />
-                            <span>Thinking...</span>
-                          </div>
-                        {/if}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            <!-- Streaming diff cards (shown before step message arrives) -->
+            {#if streamingChanges.length > 0}
+              <div class="mt-3 space-y-2">
+                {#each streamingChanges as change (change.id)}
+                  {@const liveChange = vaultEditor.getLiveChange(change.id) ?? change}
+                  <VaultDiffView
+                    change={liveChange}
+                    onApprove={() => handleApprove(liveChange)}
+                    onReject={() => handleReject(liveChange)}
+                    onEdit={() => handleEdit(liveChange)}
+                  />
+                {/each}
               </div>
-
-              <!-- Streaming diff cards (shown before step message arrives) -->
-              {#if streamingChanges.length > 0}
-                <div class="mt-3 space-y-2">
-                  {#each streamingChanges as change (change.id)}
-                    {@const liveChange = vaultEditor.getLiveChange(change.id) ?? change}
-                    <VaultDiffView
-                      change={liveChange}
-                      onApprove={() => handleApprove(liveChange)}
-                      onReject={() => handleReject(liveChange)}
-                      onEdit={() => handleEdit(liveChange)}
-                    />
-                  {/each}
-                </div>
-              {/if}
             {/if}
           </div>
 
@@ -1166,3 +1248,30 @@
     </button>
   </Dialog.Content>
 </Dialog.Root>
+
+<style>
+  @keyframes blink {
+    0%,
+    50% {
+      opacity: 1;
+    }
+    51%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  .streaming-cursor {
+    display: inline-block;
+    width: 0.5rem;
+    height: 1rem;
+    margin-left: 0.125rem;
+    background-color: var(--color-accent-400, #60a5fa);
+    animation: blink 1s infinite;
+    vertical-align: text-bottom;
+  }
+
+  :global(.streaming-content > *:last-child) {
+    display: inline;
+  }
+</style>

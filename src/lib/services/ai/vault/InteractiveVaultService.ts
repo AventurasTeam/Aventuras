@@ -126,6 +126,8 @@ export type StreamEvent =
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: Record<string, unknown> }
   | { type: 'tool_end'; toolCall: ToolCallDisplay }
   | { type: 'thinking' }
+  | { type: 'text_delta'; text: string }
+  | { type: 'reasoning_delta'; text: string }
   | { type: 'message'; message: ChatMessage }
   | { type: 'done'; result: SendMessageResult }
   | { type: 'error'; error: string }
@@ -581,15 +583,16 @@ export class InteractiveVaultService extends BaseAIService {
             break
 
           case 'reasoning-start':
-          case 'reasoning-delta':
-            if (event.type === 'reasoning-delta') {
-              stepReasoning = (stepReasoning || '') + event.text
-            }
             yield { type: 'thinking' }
+            break
+          case 'reasoning-delta':
+            stepReasoning = (stepReasoning || '') + event.text
+            yield { type: 'reasoning_delta', text: event.text }
             break
 
           case 'text-delta':
             stepContent += event.text
+            yield { type: 'text_delta', text: event.text }
             break
 
           case 'tool-call':
