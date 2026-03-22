@@ -178,12 +178,12 @@
     vaultEditor.reset()
   })
 
-  function initializeService() {
+  async function initializeService() {
     try {
       service = new InteractiveVaultService('interactiveVault')
 
       const allLorebooks = lorebookVault.items
-      service.initialize(
+      await service.initialize(
         {
           characterCount: characterVault.items.length,
           lorebookCount: allLorebooks.length,
@@ -221,21 +221,43 @@
 
   async function handleNewConversation() {
     if (!service) return
+    // Abort any ongoing generation first
+    if (abortController) {
+      abortController.abort()
+      abortController = null
+    }
+    isGenerating = false
+    isThinking = false
+    activeToolCalls = []
+    streamingChanges = []
     // Auto-save current conversation before starting new one
     if (messages.some((m) => !m.isGreeting)) {
-      await service.saveConversation(messages, vaultEditor.pendingChanges).catch(() => {})
+      await service
+        .saveConversation(messages, vaultEditor.pendingChanges)
+        .catch((e) => console.error('[VaultAssistant] Save failed:', e))
     }
     service.reset()
     vaultEditor.reset()
-    initializeService()
+    await initializeService()
     await loadConversationsList()
   }
 
   async function handleSwitchConversation(id: string) {
     if (!service) return
+    // Abort any ongoing generation first
+    if (abortController) {
+      abortController.abort()
+      abortController = null
+    }
+    isGenerating = false
+    isThinking = false
+    activeToolCalls = []
+    streamingChanges = []
     // Auto-save current before switching
     if (messages.some((m) => !m.isGreeting)) {
-      await service.saveConversation(messages, vaultEditor.pendingChanges).catch(() => {})
+      await service
+        .saveConversation(messages, vaultEditor.pendingChanges)
+        .catch((e) => console.error('[VaultAssistant] Save failed:', e))
     }
     const loaded = await service.loadConversation(id)
     if (loaded) {
@@ -315,6 +337,12 @@
         timestamp: Date.now(),
       }
       messages = [...messages, userMsg]
+
+      // Eagerly save so the conversation appears in history immediately
+      service
+        .saveConversation(messages, vaultEditor.pendingChanges)
+        .then(() => loadConversationsList())
+        .catch((e) => console.error('[VaultAssistant] Eager save failed:', e))
     }
     await tick()
     scrollToBottom()
@@ -433,44 +461,49 @@
             }
             break
 
-          case 'done':
-            // Save full UI state so user can continue exactly where they left off
-            service
-              .saveConversation(messages, vaultEditor.pendingChanges)
-              .then(() => loadConversationsList())
-              .catch(() => {})
-            break
-
           case 'error':
             error = event.error
-            const errorMsg: ChatMessage = {
-              id: crypto.randomUUID(),
-              role: 'assistant',
-              content: `Sorry, I encountered an error: ${event.error}`,
-              timestamp: Date.now(),
-            }
-            messages = [...messages, errorMsg]
+            messages = [
+              ...messages,
+              {
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                content: `Sorry, I encountered an error: ${event.error}`,
+                timestamp: Date.now(),
+              },
+            ]
+            break
+
+          case 'done':
             break
         }
       }
     } catch (e) {
-      if (e instanceof Error && e.name === 'AbortError') {
-        return
+      if (e instanceof Error && e.name !== 'AbortError') {
+        error = e instanceof Error ? e.message : 'Failed to get response'
+        messages = [
+          ...messages,
+          {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: `Sorry, I encountered an error: ${error}`,
+            timestamp: Date.now(),
+          },
+        ]
       }
-      error = e instanceof Error ? e.message : 'Failed to get response'
-      const errorMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: `Sorry, I encountered an error: ${error}`,
-        timestamp: Date.now(),
-      }
-      messages = [...messages, errorMsg]
     } finally {
       isGenerating = false
       isThinking = false
       activeToolCalls = []
       streamingChanges = []
       abortController = null
+      // Always save conversation (success, error, or abort)
+      if (service && messages.some((m) => !m.isGreeting)) {
+        service
+          .saveConversation(messages, vaultEditor.pendingChanges)
+          .then(() => loadConversationsList())
+          .catch((e) => console.error('[VaultAssistant] Save failed:', e))
+      }
     }
   }
 
