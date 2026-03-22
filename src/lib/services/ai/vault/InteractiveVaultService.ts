@@ -7,7 +7,8 @@
  */
 
 import type { VaultCharacter, VaultLorebook, VaultLorebookEntry, VaultScenario } from '$lib/types'
-import type { ModelMessage, TextPart, ToolSet } from 'ai'
+import { tool, type ModelMessage, type TextPart, type ToolSet } from 'ai'
+import { z } from 'zod'
 import { settings } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { characterVault } from '$lib/stores/characterVault.svelte'
@@ -37,6 +38,55 @@ import { database } from '$lib/services/database'
 import { createStreamingAgenticAssistant } from '../sdk/agents/factory'
 
 const log = createLogger('InteractiveVault')
+
+// ============================================================================
+// Dynamic Tool Loading
+// ============================================================================
+
+type ToolCategory = 'characters' | 'scenarios' | 'lorebooks' | 'images' | 'fandom'
+
+const TOOL_CATEGORIES: Record<ToolCategory, string[]> = {
+  characters: [
+    'list_characters',
+    'read_character',
+    'create_character',
+    'update_character',
+    'delete_character',
+  ],
+  scenarios: [
+    'list_scenarios',
+    'read_scenario',
+    'create_scenario',
+    'update_scenario',
+    'delete_scenario',
+    'add_scenario_npc',
+    'update_scenario_npc',
+    'remove_scenario_npc',
+  ],
+  lorebooks: [
+    'list_lorebooks',
+    'read_lorebook_summary',
+    'create_lorebook',
+    'list_entries',
+    'read_entry',
+    'create_entry',
+    'update_entry',
+    'delete_entry',
+    'merge_entries',
+    'link_character_to_lorebook',
+    'create_lorebook_entry_from_character',
+  ],
+  images: ['generate_standard_image', 'generate_portrait', 'set_portrait'],
+  fandom: ['search_fandom', 'get_fandom_article_info', 'fetch_fandom_section'],
+}
+
+const ALWAYS_ACTIVE_TOOLS = ['load_toolset', 'show_entity']
+
+const toolCategorySchema = z.enum(['characters', 'scenarios', 'lorebooks', 'images', 'fandom'])
+
+function getActiveToolNames(loaded: Set<ToolCategory>): string[] {
+  return [...ALWAYS_ACTIVE_TOOLS, ...[...loaded].flatMap((c) => TOOL_CATEGORIES[c])]
+}
 
 // ============================================================================
 // Types
@@ -132,6 +182,9 @@ export class InteractiveVaultService extends BaseAIService {
   private systemPrompt: string = ''
   private conversationId: string | null = null
 
+  /** Currently loaded tool categories — persists across messages in a session */
+  readonly loadedCategories: Set<ToolCategory> = new Set()
+
   /** Session-level map of generated images: imageId → base64 data URL */
   readonly generatedImages: Map<string, string> = new Map()
 
@@ -161,6 +214,18 @@ export class InteractiveVaultService extends BaseAIService {
   async initialize(vaultSummary: VaultSummary, focusedEntity?: FocusedEntity): Promise<void> {
     this.conversationHistory = []
 
+    // Seed loaded categories from focused entity context
+    this.loadedCategories.clear()
+    if (focusedEntity) {
+      const categoryMap: Record<string, ToolCategory> = {
+        character: 'characters',
+        lorebook: 'lorebooks',
+        scenario: 'scenarios',
+      }
+      const seeded = categoryMap[focusedEntity.entityType]
+      if (seeded) this.loadedCategories.add(seeded)
+    }
+
     const template = await database.getPackTemplate('default-pack', 'interactive-lorebook')
 
     let content = template?.content ?? ''
@@ -172,11 +237,15 @@ export class InteractiveVaultService extends BaseAIService {
     this.systemPrompt = content
 
     if (focusedEntity) {
-      this.systemPrompt += `\n\n## Active Context\nThe user opened this assistant from the ${focusedEntity.entityType} editor for "${focusedEntity.entityName}" (ID: \`${focusedEntity.entityId}\`). When the user refers to "this character", "this lorebook", "this scenario", or uses pronouns referencing an entity without naming it, assume they mean this one.`
+      this.systemPrompt += `\n\n## Active Context\nThe user opened this assistant from the ${focusedEntity.entityType} editor for "${focusedEntity.entityName}" (ID: \`${focusedEntity.entityId}\`). The \`${focusedEntity.entityType}s\` toolset is pre-loaded. When the user refers to "this character", "this lorebook", "this scenario", or uses pronouns referencing an entity without naming it, assume they mean this one.`
     }
 
     this.initialized = true
-    log('Initialized conversation', { ...vaultSummary, model: this.preset.model })
+    log('Initialized conversation', {
+      ...vaultSummary,
+      model: this.preset.model,
+      loadedCategories: [...this.loadedCategories],
+    })
   }
 
   /**
@@ -396,8 +465,40 @@ export class InteractiveVaultService extends BaseAIService {
     }
     const imageTools = createImageTools(imageContext)
 
-    // Combine all tools
+    // Dynamic tool loading tool
+    const loadToolsetTool = {
+      load_toolset: tool({
+        description:
+          'Load tool categories to enable their tools. This REPLACES the current set — include all categories you need. Available: characters, scenarios, lorebooks, images, fandom.',
+        inputSchema: z.object({
+          categories: z
+            .array(toolCategorySchema)
+            .describe('Categories to load. Replaces any previously loaded categories.'),
+        }),
+        execute: async ({ categories }: { categories: ToolCategory[] }) => {
+          const previous = [...this.loadedCategories]
+          this.loadedCategories.clear()
+          for (const cat of categories) {
+            this.loadedCategories.add(cat)
+          }
+          const loaded = [...this.loadedCategories]
+          log('Tool categories updated', { previous, loaded })
+          return {
+            success: true,
+            loaded,
+            toolCount: loaded.reduce((sum, c) => sum + TOOL_CATEGORIES[c].length, 0),
+            message:
+              loaded.length > 0
+                ? `Loaded: ${loaded.join(', ')}. You now have access to those tools.`
+                : 'All categories unloaded. Only base tools available.',
+          }
+        },
+      }),
+    }
+
+    // Combine all tools (all registered, activeTools controls visibility)
     const tools: Record<string, unknown> = {
+      ...loadToolsetTool,
       ...characterTools,
       ...scenarioTools,
       ...lorebookTools,
@@ -423,6 +524,9 @@ export class InteractiveVaultService extends BaseAIService {
           tools: tools as ToolSet,
           stopWhen: stopWhenDone(50),
           signal,
+          prepareStep: () => ({
+            activeTools: getActiveToolNames(this.loadedCategories) as Array<keyof typeof tools>,
+          }),
         },
         'interactive-vault',
       )
@@ -911,6 +1015,7 @@ export class InteractiveVaultService extends BaseAIService {
     this.systemPrompt = ''
     this.initialized = false
     this.conversationId = null
+    this.loadedCategories.clear()
     this.generatedImages.clear()
   }
 
