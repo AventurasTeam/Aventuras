@@ -10,10 +10,20 @@ function log(...args: any[]) {
 }
 
 export class StoryTimeStore {
+  private _timeTracker = $state<TimeTracker | null>(null)
+
   constructor(private ctx: StoryStore) {}
 
   get timeTracker(): TimeTracker {
-    return this.ctx.currentStory?.timeTracker || { years: 0, days: 0, hours: 0, minutes: 0 }
+    return this._timeTracker || { years: 0, days: 0, hours: 0, minutes: 0 }
+  }
+
+  load(timeTracker: TimeTracker | null): void {
+    this._timeTracker = timeTracker
+  }
+
+  clear(): void {
+    this._timeTracker = null
   }
 
   /**
@@ -75,7 +85,7 @@ export class StoryTimeStore {
 
     const normalized = this.normalizeTime(time)
     await database.saveTimeTracker(this.ctx.currentStory.id, normalized)
-    this.ctx.currentStory = { ...this.ctx.currentStory, timeTracker: normalized }
+    this._timeTracker = normalized
     log('Time tracker set:', normalized)
   }
 
@@ -93,7 +103,7 @@ export class StoryTimeStore {
 
     const normalized = this.normalizeTime(newTime)
     await database.saveTimeTracker(this.ctx.currentStory.id, normalized)
-    this.ctx.currentStory = { ...this.ctx.currentStory, timeTracker: normalized }
+    this._timeTracker = normalized
     log('Time added:', updates, '→', normalized)
   }
 
@@ -127,14 +137,14 @@ export class StoryTimeStore {
 
     if (snapshot === null) {
       await database.clearTimeTracker(this.ctx.currentStory.id)
-      this.ctx.currentStory = { ...this.ctx.currentStory, timeTracker: null }
+      this._timeTracker = null
       log('Time tracker cleared from snapshot')
       return
     }
 
     const normalized = this.normalizeTime(snapshot)
     await database.saveTimeTracker(this.ctx.currentStory.id, normalized)
-    this.ctx.currentStory = { ...this.ctx.currentStory, timeTracker: normalized }
+    this._timeTracker = normalized
     log('Time tracker restored from snapshot:', normalized)
   }
 }
