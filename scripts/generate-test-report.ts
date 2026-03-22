@@ -90,7 +90,7 @@ function formatPromptBody(captured: any): string {
         ? payload.system
         : Array.isArray(payload.system)
           ? payload.system
-              .map((b: any) => (typeof b === 'string' ? b : b.text ?? JSON.stringify(b)))
+              .map((b: any) => (typeof b === 'string' ? b : (b.text ?? JSON.stringify(b))))
               .join('\n')
           : JSON.stringify(payload.system, null, 2)
     parts.push(
@@ -131,20 +131,22 @@ function renderCollapsibleSnapshot(label: string, snapshot: any): string {
     return `<div><strong>${esc(label)}:</strong><p class="empty">Empty</p></div>`
   }
 
-  const sections = keys.map((key) => {
-    const value = snapshot[key]
-    const preview = Array.isArray(value)
-      ? `[${value.length} items]`
-      : value === null
-        ? 'null'
-        : typeof value === 'object'
-          ? `{${Object.keys(value).length} keys}`
-          : String(value)
-    return `<details class="snapshot-prop">
+  const sections = keys
+    .map((key) => {
+      const value = snapshot[key]
+      const preview = Array.isArray(value)
+        ? `[${value.length} items]`
+        : value === null
+          ? 'null'
+          : typeof value === 'object'
+            ? `{${Object.keys(value).length} keys}`
+            : String(value)
+      return `<details class="snapshot-prop">
       <summary class="snapshot-prop-summary">${esc(key)} <span class="snapshot-prop-preview">${esc(preview)}</span></summary>
       <pre><code>${esc(JSON.stringify(value, null, 2))}</code></pre>
     </details>`
-  }).join('')
+    })
+    .join('')
 
   return `<div><strong>${esc(label)}:</strong>${sections}</div>`
 }
