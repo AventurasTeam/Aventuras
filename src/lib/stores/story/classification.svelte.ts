@@ -59,7 +59,7 @@ function mergeRuntimeVars(
 }
 
 export class StoryClassification {
-  constructor(private ctx: StoryStore) {}
+  constructor(private story: StoryStore) {}
 
   /**
    * Helper to wrap entity updates in try-catch with toast notifications.
@@ -88,7 +88,7 @@ export class StoryClassification {
    * This is Phase 4 of the processing pipeline per design doc.
    */
   async applyClassificationResult(result: ClassificationResult, entryId?: string): Promise<void> {
-    if (!this.ctx.currentStory) {
+    if (!this.story.id) {
       log('applyClassificationResult: No story loaded, skipping')
       return
     }
@@ -105,7 +105,7 @@ export class StoryClassification {
       scene: result.scene,
     })
 
-    const storyId = this.ctx.currentStory.id
+    const storyId = this.story.id!
     const trackingEnabled = settings.experimentalFeatures.stateTracking && !!entryId
 
     // Extract runtime variable definitions attached by ClassifierService (if any)
@@ -128,17 +128,17 @@ export class StoryClassification {
 
     if (trackingEnabled) {
       // Snapshot current location
-      const currentLoc = this.ctx.location.locations.find((l) => l.current)
+      const currentLoc = this.story.location.locations.find((l) => l.current)
       currentLocationIdBefore = currentLoc?.id ?? null
 
       // Snapshot time tracker
-      timeTrackerBefore = this.ctx.currentStory.timeTracker
-        ? { ...this.ctx.currentStory.timeTracker }
+      timeTrackerBefore = this.story.time.timeTracker
+        ? { ...this.story.time.timeTracker }
         : null
 
       // Snapshot characters that will be updated
       for (const update of result.entryUpdates.characterUpdates) {
-        const existing = this.ctx.character.characters.find(
+        const existing = this.story.character.characters.find(
           (c) => c.name.toLowerCase() === update.name.toLowerCase(),
         )
         if (existing) {
@@ -156,7 +156,7 @@ export class StoryClassification {
 
       // Snapshot locations that will be updated
       for (const update of result.entryUpdates.locationUpdates) {
-        const existing = this.ctx.location.locations.find(
+        const existing = this.story.location.locations.find(
           (l) => l.name.toLowerCase() === update.name.toLowerCase(),
         )
         if (existing) {
@@ -173,7 +173,7 @@ export class StoryClassification {
 
       // Snapshot items that will be updated
       for (const update of result.entryUpdates.itemUpdates) {
-        const existing = this.ctx.item.items.find(
+        const existing = this.story.item.items.find(
           (i) => i.name.toLowerCase() === update.name.toLowerCase(),
         )
         if (existing) {
@@ -190,7 +190,7 @@ export class StoryClassification {
 
       // Snapshot story beats that will be updated
       for (const update of result.entryUpdates.storyBeatUpdates) {
-        const existing = this.ctx.storyBeat.storyBeats.find(
+        const existing = this.story.storyBeat.storyBeats.find(
           (b) => b.title.toLowerCase() === update.title.toLowerCase(),
         )
         if (existing) {
@@ -208,7 +208,7 @@ export class StoryClassification {
       // Also snapshot locations that might be affected by currentLocationName scene change
       if (result.scene.currentLocationName) {
         const locationName = result.scene.currentLocationName.toLowerCase()
-        const loc = this.ctx.location.locations.find((l) => l.name.toLowerCase() === locationName)
+        const loc = this.story.location.locations.find((l) => l.name.toLowerCase() === locationName)
         if (loc && !locationsBefore.some((lb) => lb.id === loc.id)) {
           locationsBefore.push({
             id: loc.id,
@@ -225,7 +225,7 @@ export class StoryClassification {
     // Apply character updates
     for (const update of result.entryUpdates.characterUpdates) {
       await this.wrapUpdate('Update character', update.name, async () => {
-        let existing = this.ctx.character.characters.find(
+        let existing = this.story.character.characters.find(
           (c) => c.name.toLowerCase() === update.name.toLowerCase(),
         )
 
@@ -256,10 +256,10 @@ export class StoryClassification {
             status: (newCharData?.status as Character['status']) ?? 'active',
             metadata: charMetadata,
             portrait: null,
-            branchId: this.ctx.currentStory?.currentBranchId ?? null,
+            branchId: this.story.branch.currentBranchId,
           }
           await database.addCharacter(character)
-          this.ctx.character.characters = [...this.ctx.character.characters, character]
+          this.story.character.characters = [...this.story.character.characters, character]
           if (trackingEnabled) createdCharacterIds.push(character.id)
           existing = character
         }
@@ -305,9 +305,9 @@ export class StoryClassification {
           }
           // COW: ensure entity is owned by current branch before updating
           const { entity: ownedChar, wasCowed: charWasCowed } =
-            await this.ctx.character.cowCharacter(existing)
+            await this.story.character.cowCharacter(existing)
           await database.updateCharacter(ownedChar.id, changes)
-          this.ctx.character.characters = this.ctx.character.characters.map((c) =>
+          this.story.character.characters = this.story.character.characters.map((c) =>
             c.id === ownedChar.id ? { ...c, ...changes } : c,
           )
           // If COW'd, track override as created (rollback = delete override)
@@ -323,7 +323,7 @@ export class StoryClassification {
     // Apply location updates
     for (const update of result.entryUpdates.locationUpdates) {
       await this.wrapUpdate('Update location', update.name, async () => {
-        let existing = this.ctx.location.locations.find(
+        let existing = this.story.location.locations.find(
           (l) => l.name.toLowerCase() === update.name.toLowerCase(),
         )
 
@@ -353,10 +353,10 @@ export class StoryClassification {
             current: newLocData?.current ?? false,
             connections: [],
             metadata: locMetadata,
-            branchId: this.ctx.currentStory?.currentBranchId ?? null,
+            branchId: this.story.branch.currentBranchId,
           }
           await database.addLocation(location)
-          this.ctx.location.locations = [...this.ctx.location.locations, location]
+          this.story.location.locations = [...this.story.location.locations, location]
           if (trackingEnabled) createdLocationIds.push(location.id)
           existing = location
         }
@@ -388,20 +388,20 @@ export class StoryClassification {
 
           // COW: ensure entity is owned by current branch before updating
           const { entity: ownedLoc, wasCowed: locWasCowed } =
-            await this.ctx.location.cowLocation(existing)
+            await this.story.location.cowLocation(existing)
 
           if (update.changes.current === true) {
             changes.visited = true
-            if (this.ctx.branch.isCowBranch()) {
+            if (this.story.branch.isCowBranch()) {
               // COW-aware: targeted updates instead of blanket clear
-              const prevCurrent = this.ctx.location.locations.find(
+              const prevCurrent = this.story.location.locations.find(
                 (l) => l.current && l.id !== ownedLoc.id,
               )
               if (prevCurrent) {
                 const { entity: ownedPrev, wasCowed: prevWasCowed } =
-                  await this.ctx.location.cowLocation(prevCurrent)
+                  await this.story.location.cowLocation(prevCurrent)
                 await database.updateLocation(ownedPrev.id, { current: false })
-                this.ctx.location.locations = this.ctx.location.locations.map((l) =>
+                this.story.location.locations = this.story.location.locations.map((l) =>
                   l.id === ownedPrev.id ? { ...l, current: false } : l,
                 )
                 if (prevWasCowed && trackingEnabled) {
@@ -411,7 +411,7 @@ export class StoryClassification {
                 }
               }
               await database.updateLocation(ownedLoc.id, { ...changes, current: true })
-              this.ctx.location.locations = this.ctx.location.locations.map((l) =>
+              this.story.location.locations = this.story.location.locations.map((l) =>
                 l.id === ownedLoc.id ? { ...l, ...changes, current: true, visited: true } : l,
               )
             } else {
@@ -419,7 +419,7 @@ export class StoryClassification {
               if (Object.keys(changes).length > 0) {
                 await database.updateLocation(ownedLoc.id, changes)
               }
-              this.ctx.location.locations = this.ctx.location.locations.map((l) => {
+              this.story.location.locations = this.story.location.locations.map((l) => {
                 if (l.id === ownedLoc.id) {
                   return { ...l, ...changes, current: true, visited: true }
                 }
@@ -445,7 +445,7 @@ export class StoryClassification {
             return
           }
           await database.updateLocation(ownedLoc.id, changes)
-          this.ctx.location.locations = this.ctx.location.locations.map((l) =>
+          this.story.location.locations = this.story.location.locations.map((l) =>
             l.id === ownedLoc.id ? { ...l, ...changes } : l,
           )
           if (locWasCowed && trackingEnabled) {
@@ -460,7 +460,7 @@ export class StoryClassification {
     // Apply item updates
     for (const update of result.entryUpdates.itemUpdates) {
       await this.wrapUpdate('Update item', update.name, async () => {
-        let existing = this.ctx.item.items.find(
+        let existing = this.story.item.items.find(
           (i) => i.name.toLowerCase() === update.name.toLowerCase(),
         )
 
@@ -489,10 +489,10 @@ export class StoryClassification {
             equipped: false,
             location: newItemData?.location ?? 'inventory',
             metadata: itemMetadata,
-            branchId: this.ctx.currentStory?.currentBranchId ?? null,
+            branchId: this.story.branch.currentBranchId,
           }
           await database.addItem(item)
-          this.ctx.item.items = [...this.ctx.item.items, item]
+          this.story.item.items = [...this.story.item.items, item]
           if (trackingEnabled) createdItemIds.push(item.id)
           existing = item
         }
@@ -513,9 +513,9 @@ export class StoryClassification {
           }
           // COW: ensure entity is owned by current branch before updating
           const { entity: ownedItem, wasCowed: itemWasCowed } =
-            await this.ctx.item.cowItem(existing)
+            await this.story.item.cowItem(existing)
           await database.updateItem(ownedItem.id, changes)
-          this.ctx.item.items = this.ctx.item.items.map((i) =>
+          this.story.item.items = this.story.item.items.map((i) =>
             i.id === ownedItem.id ? { ...i, ...changes } : i,
           )
           if (itemWasCowed && trackingEnabled) {
@@ -530,7 +530,7 @@ export class StoryClassification {
     // Apply story beat updates (mark as completed/failed)
     for (const update of result.entryUpdates.storyBeatUpdates) {
       await this.wrapUpdate('Update story beat', update.title, async () => {
-        let existing = this.ctx.storyBeat.storyBeats.find(
+        let existing = this.story.storyBeat.storyBeats.find(
           (b) => b.title.toLowerCase() === update.title.toLowerCase(),
         )
 
@@ -559,10 +559,10 @@ export class StoryClassification {
             status: newBeatData?.status ?? 'active',
             triggeredAt: Date.now(),
             metadata: beatMetadata,
-            branchId: this.ctx.currentStory?.currentBranchId ?? null,
+            branchId: this.story.branch.currentBranchId,
           }
           await database.addStoryBeat(beat)
-          this.ctx.storyBeat.storyBeats = [...this.ctx.storyBeat.storyBeats, beat]
+          this.story.storyBeat.storyBeats = [...this.story.storyBeat.storyBeats, beat]
           if (trackingEnabled) createdStoryBeatIds.push(beat.id)
           existing = beat
         }
@@ -588,9 +588,9 @@ export class StoryClassification {
           }
           // COW: ensure entity is owned by current branch before updating
           const { entity: ownedBeat, wasCowed: beatWasCowed } =
-            await this.ctx.storyBeat.cowStoryBeat(existing)
+            await this.story.storyBeat.cowStoryBeat(existing)
           await database.updateStoryBeat(ownedBeat.id, changes)
-          this.ctx.storyBeat.storyBeats = this.ctx.storyBeat.storyBeats.map((b) =>
+          this.story.storyBeat.storyBeats = this.story.storyBeat.storyBeats.map((b) =>
             b.id === ownedBeat.id ? { ...b, ...changes } : b,
           )
           if (beatWasCowed && trackingEnabled) {
@@ -605,7 +605,7 @@ export class StoryClassification {
     // Add new characters (check for duplicates)
     for (const newChar of result.entryUpdates.newCharacters) {
       await this.wrapUpdate('Add character', newChar.name, async () => {
-        const exists = this.ctx.character.characters.some(
+        const exists = this.story.character.characters.some(
           (c) => c.name.toLowerCase() === newChar.name.toLowerCase(),
         )
         if (!exists) {
@@ -629,10 +629,10 @@ export class StoryClassification {
             status: 'active',
             metadata: charMetadata,
             portrait: null,
-            branchId: this.ctx.currentStory?.currentBranchId ?? null,
+            branchId: this.story.branch.currentBranchId,
           }
           await database.addCharacter(character)
-          this.ctx.character.characters = [...this.ctx.character.characters, character]
+          this.story.character.characters = [...this.story.character.characters, character]
           if (trackingEnabled) createdCharacterIds.push(character.id)
         }
       })
@@ -643,7 +643,7 @@ export class StoryClassification {
     if (result.scene.currentLocationName) {
       await this.wrapUpdate('Set scene location', result.scene.currentLocationName, async () => {
         const locationName = result.scene.currentLocationName!.toLowerCase()
-        let currentLoc = this.ctx.location.locations.find(
+        let currentLoc = this.story.location.locations.find(
           (l) => l.name.toLowerCase() === locationName,
         )
 
@@ -662,28 +662,28 @@ export class StoryClassification {
             current: false,
             connections: [],
             metadata: { source: 'classifier' },
-            branchId: this.ctx.currentStory?.currentBranchId ?? null,
+            branchId: this.story.branch.currentBranchId,
           }
           await database.addLocation(stubLocation)
-          this.ctx.location.locations = [...this.ctx.location.locations, stubLocation]
+          this.story.location.locations = [...this.story.location.locations, stubLocation]
           if (trackingEnabled) createdLocationIds.push(stubLocation.id)
           currentLoc = stubLocation
         }
 
         if (currentLoc && !currentLoc.current) {
           log('Setting current location from scene:', currentLoc.name)
-          if (this.ctx.branch.isCowBranch()) {
+          if (this.story.branch.isCowBranch()) {
             // COW-aware: targeted updates
             const { entity: ownedTarget, wasCowed: targetWasCowed } =
-              await this.ctx.location.cowLocation(currentLoc)
-            const prevCurrent = this.ctx.location.locations.find(
+              await this.story.location.cowLocation(currentLoc)
+            const prevCurrent = this.story.location.locations.find(
               (l) => l.current && l.id !== ownedTarget.id,
             )
             if (prevCurrent) {
               const { entity: ownedPrev, wasCowed: prevWasCowed } =
-                await this.ctx.location.cowLocation(prevCurrent)
+                await this.story.location.cowLocation(prevCurrent)
               await database.updateLocation(ownedPrev.id, { current: false })
-              this.ctx.location.locations = this.ctx.location.locations.map((l) =>
+              this.story.location.locations = this.story.location.locations.map((l) =>
                 l.id === ownedPrev.id ? { ...l, current: false } : l,
               )
               if (prevWasCowed && trackingEnabled) {
@@ -693,7 +693,7 @@ export class StoryClassification {
               }
             }
             await database.updateLocation(ownedTarget.id, { current: true, visited: true })
-            this.ctx.location.locations = this.ctx.location.locations.map((l) =>
+            this.story.location.locations = this.story.location.locations.map((l) =>
               l.id === ownedTarget.id ? { ...l, current: true, visited: true } : l,
             )
             if (targetWasCowed && trackingEnabled) {
@@ -703,7 +703,7 @@ export class StoryClassification {
             }
           } else {
             await database.setCurrentLocation(storyId, currentLoc.id)
-            this.ctx.location.locations = this.ctx.location.locations.map((l) => ({
+            this.story.location.locations = this.story.location.locations.map((l) => ({
               ...l,
               current: l.id === currentLoc!.id,
               visited: l.id === currentLoc!.id ? true : l.visited,
@@ -716,7 +716,7 @@ export class StoryClassification {
     // Add new locations (check for duplicates, merge into recently created)
     for (const newLoc of result.entryUpdates.newLocations) {
       await this.wrapUpdate('Add location', newLoc.name, async () => {
-        const existing = this.ctx.location.locations.find(
+        const existing = this.story.location.locations.find(
           (l) => l.name.toLowerCase() === newLoc.name.toLowerCase(),
         )
         if (existing && createdLocationIds.includes(existing.id)) {
@@ -744,7 +744,7 @@ export class StoryClassification {
           }
           if (Object.keys(changes).length > 0) {
             await database.updateLocation(existing.id, changes)
-            this.ctx.location.locations = this.ctx.location.locations.map((l) =>
+            this.story.location.locations = this.story.location.locations.map((l) =>
               l.id === existing.id ? { ...l, ...changes } : l,
             )
           }
@@ -752,22 +752,22 @@ export class StoryClassification {
           log('Adding new location:', newLoc.name)
           // If this is the current location, unset others first
           if (newLoc.current) {
-            if (this.ctx.branch.isCowBranch()) {
+            if (this.story.branch.isCowBranch()) {
               // COW-aware: targeted unset of previous current
-              const prevCurrent = this.ctx.location.locations.find((l) => l.current)
+              const prevCurrent = this.story.location.locations.find((l) => l.current)
               if (prevCurrent) {
-                const { entity: ownedPrev } = await this.ctx.location.cowLocation(prevCurrent)
+                const { entity: ownedPrev } = await this.story.location.cowLocation(prevCurrent)
                 await database.updateLocation(ownedPrev.id, { current: false })
-                this.ctx.location.locations = this.ctx.location.locations.map((l) =>
+                this.story.location.locations = this.story.location.locations.map((l) =>
                   l.id === ownedPrev.id ? { ...l, current: false } : l,
                 )
               }
             } else {
-              this.ctx.location.locations = this.ctx.location.locations.map((l) => ({
+              this.story.location.locations = this.story.location.locations.map((l) => ({
                 ...l,
                 current: false,
               }))
-              for (const l of this.ctx.location.locations) {
+              for (const l of this.story.location.locations) {
                 await database.updateLocation(l.id, { current: false })
               }
             }
@@ -789,10 +789,10 @@ export class StoryClassification {
             current: newLoc.current ?? false,
             connections: [],
             metadata: locMetadata,
-            branchId: this.ctx.currentStory?.currentBranchId ?? null,
+            branchId: this.story.branch.currentBranchId,
           }
           await database.addLocation(location)
-          this.ctx.location.locations = [...this.ctx.location.locations, location]
+          this.story.location.locations = [...this.story.location.locations, location]
           if (trackingEnabled) createdLocationIds.push(location.id)
         }
       })
@@ -801,7 +801,7 @@ export class StoryClassification {
     // Add new items (check for duplicates)
     for (const newItem of result.entryUpdates.newItems) {
       await this.wrapUpdate('Add item', newItem.name, async () => {
-        const exists = this.ctx.item.items.some(
+        const exists = this.story.item.items.some(
           (i) => i.name.toLowerCase() === newItem.name.toLowerCase(),
         )
         if (!exists) {
@@ -823,10 +823,10 @@ export class StoryClassification {
             equipped: false,
             location: newItem.location ?? 'inventory',
             metadata: itemMetadata,
-            branchId: this.ctx.currentStory?.currentBranchId ?? null,
+            branchId: this.story.branch.currentBranchId,
           }
           await database.addItem(item)
-          this.ctx.item.items = [...this.ctx.item.items, item]
+          this.story.item.items = [...this.story.item.items, item]
           if (trackingEnabled) createdItemIds.push(item.id)
         }
       })
@@ -835,7 +835,7 @@ export class StoryClassification {
     // Add new story beats (check for duplicates)
     for (const newBeat of result.entryUpdates.newStoryBeats) {
       await this.wrapUpdate('Add story beat', newBeat.title, async () => {
-        const exists = this.ctx.storyBeat.storyBeats.some(
+        const exists = this.story.storyBeat.storyBeats.some(
           (b) => b.title.toLowerCase() === newBeat.title.toLowerCase(),
         )
         if (!exists) {
@@ -857,10 +857,10 @@ export class StoryClassification {
             status: newBeat.status ?? 'active',
             triggeredAt: Date.now(),
             metadata: beatMetadata,
-            branchId: this.ctx.currentStory?.currentBranchId ?? null,
+            branchId: this.story.branch.currentBranchId,
           }
           await database.addStoryBeat(beat)
-          this.ctx.storyBeat.storyBeats = [...this.ctx.storyBeat.storyBeats, beat]
+          this.story.storyBeat.storyBeats = [...this.story.storyBeat.storyBeats, beat]
           if (trackingEnabled) createdStoryBeatIds.push(beat.id)
         }
       })
@@ -868,7 +868,7 @@ export class StoryClassification {
 
     // Apply time progression from scene data
     if (result.scene.timeProgression && result.scene.timeProgression !== 'none') {
-      await this.ctx.time.applyTimeProgression(result.scene.timeProgression)
+      await this.story.time.applyTimeProgression(result.scene.timeProgression)
     }
 
     // Phase 1: Save world state delta on the entry
@@ -894,7 +894,7 @@ export class StoryClassification {
 
         await database.updateStoryEntry(entryId, { worldStateDelta: delta })
         // Update in-memory entry
-        this.ctx.entry.entries = this.ctx.entry.entries.map((e) =>
+        this.story.entry.entries = this.story.entry.entries.map((e) =>
           e.id === entryId ? { ...e, worldStateDelta: delta } : e,
         )
 
@@ -911,7 +911,7 @@ export class StoryClassification {
         })
 
         // Auto-snapshot if interval reached
-        await this.ctx.maybeCreateAutoSnapshot(entryId)
+        await this.story.maybeCreateAutoSnapshot(entryId)
       } catch (error) {
         console.error('[StoryStore] Failed to save world state delta:', error)
         // Non-fatal - don't break the main flow
@@ -919,10 +919,10 @@ export class StoryClassification {
     }
 
     log('applyClassificationResult complete', {
-      characters: this.ctx.character.characters.length,
-      locations: this.ctx.location.locations.length,
-      items: this.ctx.item.items.length,
-      storyBeats: this.ctx.storyBeat.storyBeats.length,
+      characters: this.story.character.characters.length,
+      locations: this.story.location.locations.length,
+      items: this.story.item.items.length,
+      storyBeats: this.story.storyBeat.storyBeats.length,
     })
 
     // Sync all entity arrays to singleton after classification mutations

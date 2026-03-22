@@ -11,7 +11,7 @@ function log(...args: any[]) {
 }
 
 export class StoryLocationStore {
-  constructor(private ctx: StoryStore) {}
+  constructor(private story: StoryStore) {}
   locations = $state<Location[]>([])
 
   get currentLocation(): Location | undefined {
@@ -20,18 +20,18 @@ export class StoryLocationStore {
 
   // Add a location
   async addLocation(name: string, description?: string, makeCurrent = false): Promise<Location> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const location: Location = {
       id: crypto.randomUUID(),
-      storyId: this.ctx.currentStory.id,
+      storyId: this.story.id!,
       name,
       description: description ?? null,
       visited: makeCurrent,
       current: makeCurrent,
       connections: [],
       metadata: null,
-      branchId: this.ctx.currentStory.currentBranchId,
+      branchId: this.story.branch.currentBranchId,
     }
 
     await database.addLocation(location)
@@ -47,7 +47,7 @@ export class StoryLocationStore {
 
   // Update a location's details
   async updateLocation(id: string, updates: Partial<Location>): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const existing = this.locations.find((l) => l.id === id)
     if (!existing) throw new Error('Location not found')
@@ -56,7 +56,7 @@ export class StoryLocationStore {
     const { entity: owned } = await this.cowLocation(existing)
 
     if (updates.current === true) {
-      if (this.ctx.branch.isCowBranch()) {
+      if (this.story.branch.isCowBranch()) {
         // COW-aware: targeted updates instead of blanket clear
         const prevCurrent = this.locations.find((l) => l.current && l.id !== owned.id)
         if (prevCurrent) {
@@ -71,7 +71,7 @@ export class StoryLocationStore {
           l.id === owned.id ? { ...l, ...updates, current: true, visited: true } : l,
         )
       } else {
-        await database.setCurrentLocation(this.ctx.currentStory.id, owned.id)
+        await database.setCurrentLocation(this.story.id!, owned.id)
         this.locations = this.locations.map((l) => ({
           ...l,
           current: l.id === owned.id,
@@ -86,9 +86,9 @@ export class StoryLocationStore {
 
   // Set current location
   async setCurrentLocation(locationId: string): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
-    if (this.ctx.branch.isCowBranch()) {
+    if (this.story.branch.isCowBranch()) {
       // COW-aware: targeted updates instead of blanket clear
       const target = this.locations.find((l) => l.id === locationId)
       const prevCurrent = this.locations.find((l) => l.current && l.id !== locationId)
@@ -108,7 +108,7 @@ export class StoryLocationStore {
         )
       }
     } else {
-      await database.setCurrentLocation(this.ctx.currentStory.id, locationId)
+      await database.setCurrentLocation(this.story.id!, locationId)
       this.locations = this.locations.map((l) => ({
         ...l,
         current: l.id === locationId,
@@ -119,7 +119,7 @@ export class StoryLocationStore {
 
   // Toggle location visited status
   async toggleLocationVisited(locationId: string): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const location = this.locations.find((l) => l.id === locationId)
     if (!location) throw new Error('Location not found')
@@ -134,13 +134,13 @@ export class StoryLocationStore {
 
   // Delete a location
   async deleteLocation(locationId: string): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const location = this.locations.find((l) => l.id === locationId)
     if (!location) throw new Error('Location not found')
 
     if (settings.experimentalFeatures.lightweightBranches) {
-      if (location.branchId === this.ctx.currentStory.currentBranchId) {
+      if (location.branchId === this.story.branch.currentBranchId) {
         await database.markLocationDeleted(locationId)
       } else {
         const { entity: owned } = await this.cowLocation(location)
@@ -157,7 +157,7 @@ export class StoryLocationStore {
    * Ensure a location is owned by the current branch (COW).
    */
   async cowLocation(entity: Location): Promise<{ entity: Location; wasCowed: boolean }> {
-    const branchId = this.ctx.currentStory?.currentBranchId
+    const branchId = this.story.branch.currentBranchId
     if (
       !branchId ||
       entity.branchId === branchId ||

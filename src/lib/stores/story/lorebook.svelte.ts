@@ -11,7 +11,7 @@ function log(...args: any[]) {
 }
 
 export class StoryLorebookStore {
-  constructor(private ctx: StoryStore) {}
+  constructor(private story: StoryStore) {}
   lorebookEntries = $state<Entry[]>([])
 
   /**
@@ -23,17 +23,17 @@ export class StoryLorebookStore {
       branchId?: string | null
     },
   ): Promise<Entry> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const now = Date.now()
     const entry: Entry = {
       ...entryData,
       id: crypto.randomUUID(),
-      storyId: this.ctx.currentStory.id,
+      storyId: this.story.id!,
       createdAt: now,
       updatedAt: now,
       // Use provided branchId or default to current branch
-      branchId: entryData.branchId ?? this.ctx.currentStory.currentBranchId,
+      branchId: entryData.branchId ?? this.story.branch.currentBranchId,
     }
 
     await database.addEntry(entry)
@@ -46,7 +46,7 @@ export class StoryLorebookStore {
    * Update a lorebook entry.
    */
   async updateLorebookEntry(id: string, updates: Partial<Entry>): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const existing = this.lorebookEntries.find((e) => e.id === id)
     if (!existing) throw new Error('Lorebook entry not found')
@@ -70,12 +70,12 @@ export class StoryLorebookStore {
    * Delete a lorebook entry.
    */
   async deleteLorebookEntry(id: string): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     if (settings.experimentalFeatures.lightweightBranches) {
       const existing = this.lorebookEntries.find((e) => e.id === id)
       if (existing) {
-        if (existing.branchId === this.ctx.currentStory.currentBranchId) {
+        if (existing.branchId === this.story.branch.currentBranchId) {
           await database.markEntryDeleted(id)
         } else {
           const { entity: owned } = await this.cowLorebookEntry(existing)
@@ -95,14 +95,14 @@ export class StoryLorebookStore {
    * Delete multiple lorebook entries (bulk operation).
    */
   async deleteLorebookEntries(ids: string[]): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     if (settings.experimentalFeatures.lightweightBranches) {
       // COD: process each entry individually for correct tombstone handling
       for (const id of ids) {
         const existing = this.lorebookEntries.find((e) => e.id === id)
         if (existing) {
-          if (existing.branchId === this.ctx.currentStory.currentBranchId) {
+          if (existing.branchId === this.story.branch.currentBranchId) {
             await database.markEntryDeleted(id)
           } else {
             const { entity: owned } = await this.cowLorebookEntry(existing)
@@ -130,7 +130,7 @@ export class StoryLorebookStore {
    * Ensure a lorebook entry is owned by the current branch (COW).
    */
   private async cowLorebookEntry(entity: Entry): Promise<{ entity: Entry; wasCowed: boolean }> {
-    const branchId = this.ctx.currentStory?.currentBranchId
+    const branchId = this.story.branch.currentBranchId
     if (
       !branchId ||
       entity.branchId === branchId ||

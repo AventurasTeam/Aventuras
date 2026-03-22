@@ -11,7 +11,7 @@ function log(...args: any[]) {
 }
 
 export class StoryChapterStore {
-  constructor(private ctx: StoryStore) {}
+  constructor(private story: StoryStore) {}
 
   chapters = $state<Chapter[]>([])
 
@@ -22,7 +22,7 @@ export class StoryChapterStore {
 
   // Add a chapter
   async addChapter(chapter: Chapter): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     await database.addChapter(chapter)
     this.chapters = [...this.chapters, chapter]
@@ -38,7 +38,7 @@ export class StoryChapterStore {
 
   // Get the next chapter number from the database (handles deletions correctly)
   async getNextChapterNumber(): Promise<number> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     // Use branch-filtered chapters to determine next chapter number
     // storyContext.chapters is already filtered to current branch view (inherited + branch-specific)
@@ -53,7 +53,7 @@ export class StoryChapterStore {
 
   // Update a chapter's summary
   async updateChapterSummary(chapterId: string, summary: string): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     await database.updateChapter(chapterId, { summary })
     this.chapters = this.chapters.map((ch) => (ch.id === chapterId ? { ...ch, summary } : ch))
@@ -62,7 +62,7 @@ export class StoryChapterStore {
 
   // Update a chapter with multiple fields
   async updateChapter(chapterId: string, updates: Partial<Chapter>): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     await database.updateChapter(chapterId, updates)
     this.chapters = this.chapters.map((ch) => (ch.id === chapterId ? { ...ch, ...updates } : ch))
@@ -71,7 +71,7 @@ export class StoryChapterStore {
 
   // Get entries for a specific chapter
   getChapterEntries(chapter: Chapter): StoryEntry[] {
-    const entries = this.ctx.entry.entries
+    const entries = this.story.entry.entries
     const startIdx = entries.findIndex((e) => e.id === chapter.startEntryId)
     const endIdx = entries.findIndex((e) => e.id === chapter.endEntryId)
     if (startIdx === -1 || endIdx === -1) return []
@@ -80,7 +80,7 @@ export class StoryChapterStore {
 
   // Delete a chapter
   async deleteChapter(chapterId: string): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     await database.deleteChapter(chapterId)
     this.chapters = this.chapters.filter((ch) => ch.id !== chapterId)
@@ -93,18 +93,18 @@ export class StoryChapterStore {
 
   // Create a manual chapter at a specific entry index
   async createManualChapter(endEntryIndex: number): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     // Find the start index (after the last chapter or beginning)
     const startIndex = this.lastChapterEndIndex
 
     // Validate the end index
-    if (endEntryIndex <= startIndex || endEntryIndex > this.ctx.entry.entries.length) {
+    if (endEntryIndex <= startIndex || endEntryIndex > this.story.entry.entries.length) {
       throw new Error('Invalid entry index for chapter creation')
     }
 
     // Get the entries for this chapter
-    const chapterEntries = this.ctx.entry.entries.slice(startIndex, endEntryIndex)
+    const chapterEntries = this.story.entry.entries.slice(startIndex, endEntryIndex)
     if (chapterEntries.length === 0) {
       throw new Error('No entries to create chapter from')
     }
@@ -119,9 +119,9 @@ export class StoryChapterStore {
     const chapterData = await aiService.summarizeChapter(
       chapterEntries,
       previousChapters,
-      this.ctx.currentStory?.mode ?? 'adventure',
-      this.ctx.generationContext.pov,
-      this.ctx.generationContext.tense,
+      this.story.mode,
+      this.story.settings.pov,
+      this.story.settings.tense,
     )
 
     // Get the next chapter number
@@ -136,7 +136,7 @@ export class StoryChapterStore {
     // Create the chapter
     const chapter: Chapter = {
       id: crypto.randomUUID(),
-      storyId: this.ctx.currentStory.id,
+      storyId: this.story.id!,
       number: chapterNumber,
       title: chapterData.title || null,
       startEntryId: chapterEntries[0].id,
@@ -150,7 +150,7 @@ export class StoryChapterStore {
       locations: chapterData.locations,
       plotThreads: chapterData.plotThreads,
       emotionalTone: chapterData.emotionalTone || null,
-      branchId: this.ctx.currentStory.currentBranchId,
+      branchId: this.story.branch.currentBranchId,
       createdAt: Date.now(),
     }
 
@@ -164,14 +164,14 @@ export class StoryChapterStore {
    * Returns true if repairs were made.
    */
   async validateChapterIntegrity(): Promise<boolean> {
-    if (this.ctx.chapter.chapters.length === 0) return false
+    if (this.story.chapter.chapters.length === 0) return false
 
     let repairsMade = false
-    const entryIdSet = new Set(this.ctx.entry.entries.map((e) => e.id))
+    const entryIdSet = new Set(this.story.entry.entries.map((e) => e.id))
     const chaptersToDelete: string[] = []
 
     // Sort chapters by number for proper validation
-    const sortedChapters = [...this.ctx.chapter.chapters].sort((a, b) => a.number - b.number)
+    const sortedChapters = [...this.story.chapter.chapters].sort((a, b) => a.number - b.number)
 
     for (const chapter of sortedChapters) {
       const hasValidStart = entryIdSet.has(chapter.startEntryId)
@@ -202,7 +202,7 @@ export class StoryChapterStore {
     }
 
     if (chaptersToDelete.length > 0) {
-      this.ctx.chapter.chapters = this.ctx.chapter.chapters.filter(
+      this.story.chapter.chapters = this.story.chapter.chapters.filter(
         (ch) => !chaptersToDelete.includes(ch.id),
       )
       // Invalidate chapter cache after deletions
@@ -210,12 +210,12 @@ export class StoryChapterStore {
     }
 
     // Ensure chapters are sorted by number
-    this.ctx.chapter.chapters = [...this.ctx.chapter.chapters].sort((a, b) => a.number - b.number)
+    this.story.chapter.chapters = [...this.story.chapter.chapters].sort((a, b) => a.number - b.number)
 
     if (repairsMade) {
       log('Chapter integrity validation complete', {
         deletedChapters: chaptersToDelete.length,
-        remainingChapters: this.ctx.chapter.chapters.length,
+        remainingChapters: this.story.chapter.chapters.length,
       })
     }
 
@@ -227,14 +227,14 @@ export class StoryChapterStore {
    * Includes main branch chapters plus any ancestor/current branch chapters.
    */
   get currentBranchChapters(): Chapter[] {
-    const currentBranchId = this.ctx.currentStory?.currentBranchId ?? null
+    const currentBranchId = this.story.branch.currentBranchId
 
     // If on main branch, only return chapters with null branchId
     if (currentBranchId === null) {
       return this.chapters.filter((ch) => ch.branchId === null)
     }
 
-    const lineage = this.ctx.branch.buildBranchLineage(currentBranchId)
+    const lineage = this.story.branch.buildBranchLineage(currentBranchId)
     if (lineage.length === 0) {
       return this.chapters.filter((ch) => ch.branchId === null)
     }
@@ -250,11 +250,11 @@ export class StoryChapterStore {
 
     // Check if cache is valid - invalidate if chapters or entries changed
     const chaptersChanged = this.chapters.length !== this._lastChaptersLength
-    const entriesChanged = this.ctx.entry.entries.length !== this._lastEntriesLength
+    const entriesChanged = this.story.entry.entries.length !== this._lastEntriesLength
 
     if (chaptersChanged || entriesChanged || this._lastChapterEndIndexDirty) {
       this._lastChaptersLength = this.chapters.length
-      this._lastEntriesLength = this.ctx.entry.entries.length
+      this._lastEntriesLength = this.story.entry.entries.length
       this._cachedLastChapterEndIndex = this._computeLastChapterEndIndex()
       this._lastChapterEndIndexDirty = false
     }
@@ -263,7 +263,7 @@ export class StoryChapterStore {
   }
 
   get messagesSinceLastChapter(): number {
-    return this.ctx.entry.entries.length - this.lastChapterEndIndex
+    return this.story.entry.entries.length - this.lastChapterEndIndex
   }
 
   /**
@@ -276,8 +276,8 @@ export class StoryChapterStore {
     if (branchChapters.length === 0) return 0
 
     // Rebuild index map if needed
-    if (this.ctx.entry._entryIdToIndex.size !== this.ctx.entry.entries.length) {
-      this.ctx.entry.rebuildEntryIdIndex()
+    if (this.story.entry._entryIdToIndex.size !== this.story.entry.entries.length) {
+      this.story.entry.rebuildEntryIdIndex()
     }
 
     // Sort chapters by number to ensure we get the actual last chapter for this branch
@@ -285,7 +285,7 @@ export class StoryChapterStore {
     const lastChapter = sortedChapters[sortedChapters.length - 1]
 
     // Use O(1) map lookup instead of O(n) find + indexOf
-    const endIndex = this.ctx.entry._entryIdToIndex.get(lastChapter.endEntryId)
+    const endIndex = this.story.entry._entryIdToIndex.get(lastChapter.endEntryId)
     if (endIndex !== undefined) {
       return endIndex + 1
     }
@@ -299,7 +299,7 @@ export class StoryChapterStore {
 
     // Sum up all branch chapter entry counts as a fallback estimate
     const totalChapterEntries = sortedChapters.reduce((sum, ch) => sum + ch.entryCount, 0)
-    return Math.min(totalChapterEntries, this.ctx.entry.entries.length)
+    return Math.min(totalChapterEntries, this.story.entry.entries.length)
   }
 
   /**
@@ -307,6 +307,6 @@ export class StoryChapterStore {
    */
   invalidateChapterCache(): void {
     this._lastChapterEndIndexDirty = true
-    this.ctx.entry._entryIdToIndex.clear() // Force rebuild on next access
+    this.story.entry._entryIdToIndex.clear() // Force rebuild on next access
   }
 }

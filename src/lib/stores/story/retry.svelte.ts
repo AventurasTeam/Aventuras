@@ -19,7 +19,7 @@ function log(...args: any[]) {
 }
 
 export class StoryRetryStore {
-  constructor(private ctx: StoryStore) {}
+  constructor(private story: StoryStore) {}
 
   isRetryInProgress = $state(false)
 
@@ -39,7 +39,7 @@ export class StoryRetryStore {
     timeTracker?: TimeTracker | null
     entryCountBeforeAction: number
   }): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     // Lock editing during retry restore to prevent race conditions
     this.isRetryInProgress = true
@@ -47,7 +47,7 @@ export class StoryRetryStore {
 
     try {
       // Debug: Log character visual descriptors before restore
-      const currentCharDescriptors = this.ctx.character.characters.map((c) => ({
+      const currentCharDescriptors = this.story.character.characters.map((c) => ({
         name: c.name,
         visualDescriptors: c.visualDescriptors,
       }))
@@ -61,14 +61,14 @@ export class StoryRetryStore {
       })
 
       // Determine entries to delete (those added since the backup)
-      const entriesToDelete = this.ctx.entry.entries.filter(
+      const entriesToDelete = this.story.entry.entries.filter(
         (e) => e.position >= backup.entryCountBeforeAction,
       )
       const entryIdsToDelete = entriesToDelete.map((e) => e.id)
 
       log('Restoring from retry backup...', {
         entriesCount: backup.entries.length,
-        currentEntriesCount: this.ctx.entry.entries.length,
+        currentEntriesCount: this.story.entry.entries.length,
         entriesToDelete: entryIdsToDelete.length,
         embeddedImagesCount: backup.embeddedImages.length,
       })
@@ -76,8 +76,8 @@ export class StoryRetryStore {
       // Restore to database (branch-aware: only delete/restore world state for current branch)
       await database.restoreRetryBackup(
         entryIdsToDelete,
-        this.ctx.currentStory.id,
-        this.ctx.currentStory.currentBranchId,
+        this.story.id!,
+        this.story.branch.currentBranchId,
         backup.characters,
         backup.locations,
         backup.items,
@@ -85,10 +85,10 @@ export class StoryRetryStore {
       )
 
       // Reload from database using branch-aware method for clean state
-      await this.ctx.branch.reloadEntriesForCurrentBranch()
+      await this.story.branch.reloadEntriesForCurrentBranch()
 
       // Debug: Log what we got back from database
-      const dbCharDescriptors = this.ctx.character.characters.map((c) => ({
+      const dbCharDescriptors = this.story.character.characters.map((c) => ({
         name: c.name,
         visualDescriptors: c.visualDescriptors,
       }))
@@ -97,11 +97,11 @@ export class StoryRetryStore {
       })
 
       // Invalidate caches after state restore
-      this.ctx.generationContext.invalidateWordCountCache()
-      this.ctx.chapter.invalidateChapterCache()
+      this.story.generationContext.invalidateWordCountCache()
+      this.story.chapter.invalidateChapterCache()
 
       // Debug: Verify memory state matches
-      const finalCharDescriptors = this.ctx.character.characters.map((c) => ({
+      const finalCharDescriptors = this.story.character.characters.map((c) => ({
         name: c.name,
         visualDescriptors: c.visualDescriptors,
       }))
@@ -110,12 +110,12 @@ export class StoryRetryStore {
       })
 
       // Restore time tracker if provided (null clears)
-      await this.ctx.time.restoreTimeTrackerSnapshot(backup.timeTracker)
+      await this.story.time.restoreTimeTrackerSnapshot(backup.timeTracker)
 
       log('Retry backup restored', {
-        entries: this.ctx.entry.entries.length,
-        characters: this.ctx.character.characters.length,
-        locations: this.ctx.location.locations.length,
+        entries: this.story.entry.entries.length,
+        characters: this.story.character.characters.length,
+        locations: this.story.location.locations.length,
         embeddedImages: backup.embeddedImages.length,
       })
     } finally {

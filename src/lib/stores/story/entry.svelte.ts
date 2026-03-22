@@ -15,7 +15,7 @@ function log(...args: any[]) {
 }
 
 export class StoryEntryStore {
-  constructor(private ctx: StoryStore) {}
+  constructor(private story: StoryStore) {}
 
   entries = $state<StoryEntry[]>([])
 
@@ -31,7 +31,7 @@ export class StoryEntryStore {
     reasoning?: string,
     id?: string,
   ): Promise<StoryEntry> {
-    if (!this.ctx.currentStory) {
+    if (!this.story.id) {
       throw new Error('No story loaded')
     }
 
@@ -40,46 +40,44 @@ export class StoryEntryStore {
 
     // Capture current story time as timeStart for this entry
     // timeEnd defaults to timeStart; for narration entries, timeEnd is updated after classification
-    const timeStart = this.ctx.currentStory.timeTracker
-      ? { ...this.ctx.currentStory.timeTracker }
-      : { years: 0, days: 0, hours: 0, minutes: 0 }
+    const timeStart = { ...this.story.time.timeTracker }
     const timeEnd = { ...timeStart }
 
     const position = await database.getNextEntryPosition(
-      this.ctx.currentStory.id,
-      this.ctx.currentStory.currentBranchId,
+      this.story.id!,
+      this.story.branch.currentBranchId,
     )
     const entry = await database.addStoryEntry({
       id: id ?? crypto.randomUUID(),
-      storyId: this.ctx.currentStory.id,
+      storyId: this.story.id!,
       type,
       content,
       parentId: null,
       position,
       metadata: { ...metadata, tokenCount, timeStart, timeEnd },
-      branchId: this.ctx.currentStory.currentBranchId,
+      branchId: this.story.branch.currentBranchId,
       reasoning,
     })
 
     this.entries = [...this.entries, entry]
 
     // Invalidate caches
-    this.ctx.generationContext.invalidateWordCountCache()
-    this.ctx.chapter.invalidateChapterCache()
+    this.story.generationContext.invalidateWordCountCache()
+    this.story.chapter.invalidateChapterCache()
 
     // Update story's updatedAt
-    await database.updateStory(this.ctx.currentStory.id, {})
+    await database.updateStory(this.story.id!, {})
 
     return entry
   }
 
   // Update a story entry
   async updateEntry(entryId: string, content: string): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     // Prevent editing during any generation or retry restore to avoid race conditions
     // Silently return - UI should disable buttons using ui.isGenerating
-    if (this.ctx.retry.isRetryInProgress || ui.isGenerating) {
+    if (this.story.retry.isRetryInProgress || ui.isGenerating) {
       log('Edit blocked - generation or retry in progress')
       return
     }
@@ -89,7 +87,7 @@ export class StoryEntryStore {
 
     // Prevent modifying inherited entries on a branch
     // An entry is inherited if its branchId doesn't match the current branch
-    const currentBranchId = this.ctx.currentStory.currentBranchId
+    const currentBranchId = this.story.branch.currentBranchId
     if ((existingEntry.branchId ?? null) !== currentBranchId) {
       throw new Error(
         'Cannot edit inherited entries. This entry belongs to ' +
@@ -108,19 +106,19 @@ export class StoryEntryStore {
     )
 
     // Invalidate word count cache (content changed)
-    this.ctx.generationContext.invalidateWordCountCache()
+    this.story.generationContext.invalidateWordCountCache()
 
     // Update story's updatedAt
-    await database.updateStory(this.ctx.currentStory.id, {})
+    await database.updateStory(this.story.id!, {})
   }
 
   // Delete a story entry
   async deleteEntry(entryId: string): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     // Prevent deleting during any generation or retry restore to avoid race conditions
     // Silently return - UI should disable buttons using ui.isGenerating
-    if (this.ctx.retry.isRetryInProgress || ui.isGenerating) {
+    if (this.story.retry.isRetryInProgress || ui.isGenerating) {
       log('Delete blocked - generation or retry in progress')
       return
     }
@@ -130,7 +128,7 @@ export class StoryEntryStore {
 
     // Prevent deleting inherited entries on a branch
     // An entry is inherited if its branchId doesn't match the current branch
-    const currentBranchId = this.ctx.currentStory.currentBranchId
+    const currentBranchId = this.story.branch.currentBranchId
     if ((existingEntry.branchId ?? null) !== currentBranchId) {
       throw new Error(
         'Cannot delete inherited entries. This entry belongs to ' +
@@ -140,7 +138,7 @@ export class StoryEntryStore {
     }
 
     // Check if this entry is a fork point for any branch
-    const branchUsingEntry = this.ctx.branch.branches.find((b) => b.forkEntryId === entryId)
+    const branchUsingEntry = this.story.branch.branches.find((b) => b.forkEntryId === entryId)
     if (branchUsingEntry) {
       throw new Error(
         `Cannot delete this entry because it is the fork point for branch "${branchUsingEntry.name}". ` +
@@ -157,7 +155,7 @@ export class StoryEntryStore {
 
       // Run rollback to undo world state changes for this entry and all after it
       const rollbackSummary = await rollbackService.rollbackFromPosition(
-        this.ctx.currentStory.id,
+        this.story.id!,
         currentBranchId ?? null,
         existingEntry.position,
         this.entries,
@@ -169,36 +167,33 @@ export class StoryEntryStore {
       await this.deleteEntriesFromPosition(existingEntry.position, { skipRollback: true })
 
       // Reload all entities from DB to ensure in-memory state is consistent
-      await this.ctx.branch.reloadEntriesForCurrentBranch()
+      await this.story.branch.reloadEntriesForCurrentBranch()
 
       // Also reload time tracker from the story record
-      const freshStory = await database.getStory(this.ctx.currentStory.id)
+      const freshStory = await database.getStory(this.story.id!)
       if (freshStory) {
-        this.ctx.currentStory = {
-          ...this.ctx.currentStory,
-          timeTracker: freshStory.timeTracker,
-        }
+        this.story.time.load(freshStory.timeTracker)
       }
 
       // Restore suggested actions from the new last narration entry
-      this.ctx.restoreSuggestedActionsAfterDelete()
+      this.story.restoreSuggestedActionsAfterDelete()
 
       return
     }
 
     // Legacy behavior: delete just this one entry (no world state changes)
     await database.deleteStoryEntry(entryId)
-    this.ctx.entry.entries = this.ctx.entry.entries.filter((e) => e.id !== entryId)
+    this.story.entry.entries = this.story.entry.entries.filter((e) => e.id !== entryId)
 
     // Invalidate caches
-    this.ctx.generationContext.invalidateWordCountCache()
-    this.ctx.chapter.invalidateChapterCache()
+    this.story.generationContext.invalidateWordCountCache()
+    this.story.chapter.invalidateChapterCache()
 
     // Update story's updatedAt
-    await database.updateStory(this.ctx.currentStory.id, {})
+    await database.updateStory(this.story.id!, {})
 
     // Restore suggested actions from the new last narration entry
-    this.ctx.restoreSuggestedActionsAfterDelete()
+    this.story.restoreSuggestedActionsAfterDelete()
   }
 
   /**
@@ -206,23 +201,21 @@ export class StoryEntryStore {
    * Called after applyClassificationResult to record the story time after the entry's events.
    */
   async updateEntryTimeEnd(entryId: string): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
-    const entry = this.ctx.entry.entries.find((e) => e.id === entryId)
+    const entry = this.story.entry.entries.find((e) => e.id === entryId)
     if (!entry) {
       log('updateEntryTimeEnd: Entry not found', entryId)
       return
     }
 
     // Capture current story time as timeEnd
-    const timeEnd = this.ctx.currentStory.timeTracker
-      ? { ...this.ctx.currentStory.timeTracker }
-      : { years: 0, days: 0, hours: 0, minutes: 0 }
+    const timeEnd = { ...this.story.time.timeTracker }
 
     const updatedMetadata = { ...entry.metadata, timeEnd }
 
     await database.updateStoryEntry(entryId, { metadata: updatedMetadata })
-    this.ctx.entry.entries = this.ctx.entry.entries.map((e) =>
+    this.story.entry.entries = this.story.entry.entries.map((e) =>
       e.id === entryId ? { ...e, metadata: updatedMetadata } : e,
     )
 
@@ -233,11 +226,11 @@ export class StoryEntryStore {
    * Update an entry's reasoning content and persist to database.
    */
   async updateEntryReasoning(entryId: string, reasoning: string): Promise<void> {
-    const entry = this.ctx.entry.entries.find((e) => e.id === entryId)
+    const entry = this.story.entry.entries.find((e) => e.id === entryId)
     if (!entry) return
 
     // Update in-memory state
-    this.ctx.entry.entries = this.ctx.entry.entries.map((e) =>
+    this.story.entry.entries = this.story.entry.entries.map((e) =>
       e.id === entryId ? { ...e, reasoning } : e,
     )
 
@@ -254,7 +247,7 @@ export class StoryEntryStore {
     if (!updatedEntry) return
 
     // Update in-memory state
-    this.ctx.entry.entries = this.ctx.entry.entries.map((e) =>
+    this.story.entry.entries = this.story.entry.entries.map((e) =>
       e.id === entryId ? updatedEntry : e,
     )
   }
@@ -267,7 +260,7 @@ export class StoryEntryStore {
     position: number,
     options?: { skipRollback?: boolean },
   ): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     // Phase 2: Rollback world state before deleting entries
     // Skip if caller already performed rollback (e.g. deleteEntry)
@@ -279,10 +272,10 @@ export class StoryEntryStore {
     if (rollbackEnabled) {
       try {
         const rollbackSummary = await rollbackService.rollbackFromPosition(
-          this.ctx.currentStory.id,
-          this.ctx.currentStory.currentBranchId ?? null,
+          this.story.id!,
+          this.story.branch.currentBranchId ?? null,
           position,
-          this.ctx.entry.entries,
+          this.story.entry.entries,
         )
         log('Rollback before deleteEntriesFromPosition:', rollbackSummary)
       } catch (error) {
@@ -291,18 +284,18 @@ export class StoryEntryStore {
     }
 
     // Find entries to delete (position >= the given position)
-    const entriesToDelete = this.ctx.entry.entries.filter((e) => e.position >= position)
+    const entriesToDelete = this.story.entry.entries.filter((e) => e.position >= position)
     const entryIdsToDelete = new Set(entriesToDelete.map((e) => e.id))
 
     log('Deleting entries from position', {
       position,
       entriesToDelete: entriesToDelete.length,
-      totalEntries: this.ctx.entry.entries.length,
+      totalEntries: this.story.entry.entries.length,
     })
 
     // Find chapters that reference any of the entries being deleted
     // (chapters have foreign keys to start_entry_id and end_entry_id)
-    const chaptersToDelete = this.ctx.chapter.chapters.filter(
+    const chaptersToDelete = this.story.chapter.chapters.filter(
       (ch) => entryIdsToDelete.has(ch.startEntryId) || entryIdsToDelete.has(ch.endEntryId),
     )
 
@@ -316,7 +309,7 @@ export class StoryEntryStore {
       for (const chapter of chaptersToDelete) {
         await database.deleteChapter(chapter.id)
       }
-      this.ctx.chapter.chapters = this.ctx.chapter.chapters.filter(
+      this.story.chapter.chapters = this.story.chapter.chapters.filter(
         (ch) => !chaptersToDelete.some((d) => d.id === ch.id),
       )
     }
@@ -333,17 +326,17 @@ export class StoryEntryStore {
     }
 
     // Update in-memory state
-    this.ctx.entry.entries = this.ctx.entry.entries.filter((e) => e.position < position)
+    this.story.entry.entries = this.story.entry.entries.filter((e) => e.position < position)
 
     // Invalidate caches
-    this.ctx.generationContext.invalidateWordCountCache()
-    this.ctx.chapter.invalidateChapterCache()
+    this.story.generationContext.invalidateWordCountCache()
+    this.story.chapter.invalidateChapterCache()
 
     // Update story's updatedAt
-    await database.updateStory(this.ctx.currentStory.id, {})
+    await database.updateStory(this.story.id!, {})
 
     // Restore suggested actions from the new last narration entry
-    this.ctx.restoreSuggestedActionsAfterDelete()
+    this.story.restoreSuggestedActionsAfterDelete()
   }
 
   /**
@@ -360,7 +353,7 @@ export class StoryEntryStore {
     storyBeatIds: string[]
     embeddedImageIds?: string[]
   }): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const characterIdsSet = new Set(savedIds.characterIds)
     const locationIdsSet = new Set(savedIds.locationIds)
@@ -369,18 +362,18 @@ export class StoryEntryStore {
     const embeddedImageIdsSet = new Set(savedIds.embeddedImageIds ?? [])
 
     // Find entities to delete (not in saved lists)
-    const charactersToDelete = this.ctx.character.characters.filter(
+    const charactersToDelete = this.story.character.characters.filter(
       (c) => !characterIdsSet.has(c.id),
     )
-    const locationsToDelete = this.ctx.location.locations.filter((l) => !locationIdsSet.has(l.id))
-    const itemsToDelete = this.ctx.item.items.filter((i) => !itemIdsSet.has(i.id))
-    const storyBeatsToDelete = this.ctx.storyBeat.storyBeats.filter(
+    const locationsToDelete = this.story.location.locations.filter((l) => !locationIdsSet.has(l.id))
+    const itemsToDelete = this.story.item.items.filter((i) => !itemIdsSet.has(i.id))
+    const storyBeatsToDelete = this.story.storyBeat.storyBeats.filter(
       (sb) => !storyBeatIdsSet.has(sb.id),
     )
 
     // Embedded images are not in memory - fetch from database to find ones to delete
     // Note: Many embedded images may already be deleted via CASCADE when entries are deleted
-    const currentEmbeddedImages = await database.getEmbeddedImagesForStory(this.ctx.currentStory.id)
+    const currentEmbeddedImages = await database.getEmbeddedImagesForStory(this.story.id!)
     const embeddedImagesToDelete = savedIds.embeddedImageIds
       ? currentEmbeddedImages.filter((ei) => !embeddedImageIdsSet.has(ei.id))
       : []
@@ -411,19 +404,19 @@ export class StoryEntryStore {
     }
 
     // Update in-memory state
-    this.ctx.character.characters = this.ctx.character.characters.filter((c) =>
+    this.story.character.characters = this.story.character.characters.filter((c) =>
       characterIdsSet.has(c.id),
     )
-    this.ctx.location.locations = this.ctx.location.locations.filter((l) =>
+    this.story.location.locations = this.story.location.locations.filter((l) =>
       locationIdsSet.has(l.id),
     )
-    this.ctx.item.items = this.ctx.item.items.filter((i) => itemIdsSet.has(i.id))
-    this.ctx.storyBeat.storyBeats = this.ctx.storyBeat.storyBeats.filter((sb) =>
+    this.story.item.items = this.story.item.items.filter((i) => itemIdsSet.has(i.id))
+    this.story.storyBeat.storyBeats = this.story.storyBeat.storyBeats.filter((sb) =>
       storyBeatIdsSet.has(sb.id),
     )
 
     // Update story's updatedAt
-    await database.updateStory(this.ctx.currentStory.id, {})
+    await database.updateStory(this.story.id!, {})
   }
 
   /**
@@ -431,18 +424,18 @@ export class StoryEntryStore {
    * main-branch entries. The current story must be loaded before calling this.
    */
   async importSTChat(messages: STChatMessage[]): Promise<void> {
-    if (!this.ctx.currentStory) {
+    if (!this.story.id) {
       throw new Error('No story loaded')
     }
 
-    const storyId = this.ctx.currentStory.id
+    const storyId = this.story.id!
 
     // Branches fork off main-branch entries via fork_entry_id.
     // Deleting all main-branch entries would leave every branch with a
     // dangling FK reference — block the import if any branches exist.
-    if (this.ctx.branch.branches.length > 0) {
+    if (this.story.branch.branches.length > 0) {
       throw new Error(
-        `Cannot import: this story has ${this.ctx.branch.branches.length} branch${this.ctx.branch.branches.length === 1 ? '' : 'es'}. ` +
+        `Cannot import: this story has ${this.story.branch.branches.length} branch${this.story.branch.branches.length === 1 ? '' : 'es'}. ` +
           'Delete all branches before importing a SillyTavern chat.',
       )
     }
@@ -466,10 +459,10 @@ export class StoryEntryStore {
 
     // Bump the story's updatedAt so the library view reflects the import
     await database.updateStory(storyId, {})
-    this.ctx.currentStory = { ...this.ctx.currentStory!, updatedAt: Date.now() }
+    this.story.updatedAt = Date.now()
 
     // Reload entries into the store
-    await this.ctx.branch.reloadEntriesForCurrentBranch()
+    await this.story.branch.reloadEntriesForCurrentBranch()
   }
 
   /**
@@ -478,7 +471,7 @@ export class StoryEntryStore {
    * so generation doesn't start before that dialog is resolved.
    */
   triggerSuggestionsAfterImport(): void {
-    this.ctx.restoreSuggestedActionsAfterDelete()
+    this.story.restoreSuggestedActionsAfterDelete()
   }
 
   /**
@@ -498,11 +491,11 @@ export class StoryEntryStore {
    * Per design doc section 3.1.2: summarized entries should be excluded from context.
    */
   get visibleEntries(): StoryEntry[] {
-    if (this.ctx.chapter.chapters.length === 0) {
+    if (this.story.chapter.chapters.length === 0) {
       // No chapters yet, all entries are visible
       return this.entries
     }
     // Return only entries after the last chapter
-    return this.entries.slice(this.ctx.chapter.lastChapterEndIndex)
+    return this.entries.slice(this.story.chapter.lastChapterEndIndex)
   }
 }

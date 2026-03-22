@@ -11,34 +11,34 @@ function log(...args: any[]) {
 }
 
 export class StoryCheckpointStore {
-  constructor(private ctx: StoryStore) {}
+  constructor(private story: StoryStore) {}
 
   checkpoints = $state<Checkpoint[]>([])
 
   // Create a checkpoint (snapshot of current state)
   async createCheckpoint(name: string): Promise<Checkpoint> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
-    const lastEntry = this.ctx.entry.entries[this.ctx.entry.entries.length - 1]
+    const lastEntry = this.story.entry.entries[this.story.entry.entries.length - 1]
     if (!lastEntry) throw new Error('No entries to checkpoint')
 
     const checkpoint: Checkpoint = {
       id: crypto.randomUUID(),
-      storyId: this.ctx.currentStory.id,
+      storyId: this.story.id!,
       name,
       lastEntryId: lastEntry.id,
       lastEntryPreview: lastEntry.content.substring(0, 100),
-      entryCount: this.ctx.entry.entries.length,
-      entriesSnapshot: [...this.ctx.entry.entries],
-      charactersSnapshot: [...this.ctx.character.characters],
-      locationsSnapshot: [...this.ctx.location.locations],
-      itemsSnapshot: [...this.ctx.item.items],
-      storyBeatsSnapshot: [...this.ctx.storyBeat.storyBeats],
-      chaptersSnapshot: [...this.ctx.chapter.chapters],
-      timeTrackerSnapshot: this.ctx.currentStory.timeTracker
-        ? { ...this.ctx.currentStory.timeTracker }
+      entryCount: this.story.entry.entries.length,
+      entriesSnapshot: [...this.story.entry.entries],
+      charactersSnapshot: [...this.story.character.characters],
+      locationsSnapshot: [...this.story.location.locations],
+      itemsSnapshot: [...this.story.item.items],
+      storyBeatsSnapshot: [...this.story.storyBeat.storyBeats],
+      chaptersSnapshot: [...this.story.chapter.chapters],
+      timeTrackerSnapshot: this.story.time.timeTracker
+        ? { ...this.story.time.timeTracker }
         : null,
-      lorebookEntriesSnapshot: [...this.ctx.lorebook.lorebookEntries],
+      lorebookEntriesSnapshot: [...this.story.lorebook.lorebookEntries],
       createdAt: Date.now(),
     }
 
@@ -46,13 +46,13 @@ export class StoryCheckpointStore {
     this.checkpoints = [checkpoint, ...this.checkpoints]
 
     // Save current background for this checkpoint
-    if (this.ctx.currentBgImage) {
+    if (this.story.image.currentBgImage) {
       log('Saving background for checkpoint:', name)
       await database.saveBackground(
-        this.ctx.currentStory.id,
-        this.ctx.currentStory.currentBranchId,
+        this.story.id!,
+        this.story.branch.currentBranchId,
         checkpoint.id,
-        this.ctx.currentBgImage,
+        this.story.image.currentBgImage,
       )
     }
 

@@ -11,7 +11,7 @@ function log(...args: any[]) {
 }
 
 export class StoryCharacterStore {
-  constructor(private ctx: StoryStore) {}
+  constructor(private story: StoryStore) {}
   characters = $state<Character[]>([])
 
   get protagonist(): Character | undefined {
@@ -28,11 +28,11 @@ export class StoryCharacterStore {
     description?: string,
     relationship?: string,
   ): Promise<Character> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const character: Character = {
       id: crypto.randomUUID(),
-      storyId: this.ctx.currentStory.id,
+      storyId: this.story.id,
       name,
       description: description ?? null,
       relationship: relationship ?? null,
@@ -41,7 +41,7 @@ export class StoryCharacterStore {
       metadata: null,
       visualDescriptors: {},
       portrait: null,
-      branchId: this.ctx.currentStory.currentBranchId,
+      branchId: this.story.branch.currentBranchId,
     }
 
     await database.addCharacter(character)
@@ -51,7 +51,7 @@ export class StoryCharacterStore {
 
   // Update an existing character (except protagonist swap)
   async updateCharacter(id: string, updates: Partial<Character>): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const existing = this.characters.find((c) => c.id === id)
     if (!existing) throw new Error('Character not found')
@@ -73,7 +73,7 @@ export class StoryCharacterStore {
 
   // Delete a character (protagonist cannot be deleted)
   async deleteCharacter(id: string): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const existing = this.characters.find((c) => c.id === id)
     if (!existing) throw new Error('Character not found')
@@ -83,7 +83,7 @@ export class StoryCharacterStore {
 
     if (settings.experimentalFeatures.lightweightBranches) {
       // COD: tombstone instead of hard-deleting to preserve row for sibling/child branches
-      if (existing.branchId === this.ctx.currentStory.currentBranchId) {
+      if (existing.branchId === this.story.branch.currentBranchId) {
         // Entity is owned by current branch (or main) — mark deleted in place
         await database.markCharacterDeleted(id)
       } else {
@@ -99,7 +99,7 @@ export class StoryCharacterStore {
 
   // Swap the protagonist to another character, updating the old label
   async setProtagonist(newCharacterId: string, previousRelationshipLabel?: string): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const currentProtagonist = this.characters.find((c) => c.relationship === 'self') ?? null
     const newProtagonist = this.characters.find((c) => c.id === newCharacterId)
@@ -146,7 +146,7 @@ export class StoryCharacterStore {
    * Returns the owned character (either the original or the new override).
    */
   async cowCharacter(entity: Character): Promise<{ entity: Character; wasCowed: boolean }> {
-    const branchId = this.ctx.currentStory?.currentBranchId
+    const branchId = this.story.branch.currentBranchId
     if (
       !branchId ||
       entity.branchId === branchId ||
@@ -179,17 +179,17 @@ export class StoryCharacterStore {
    */
   async restoreCharacterSnapshots(snapshots?: PersistentCharacterSnapshot[]): Promise<void> {
     log('restoreCharacterSnapshots called', {
-      hasCurrentStory: !!this.ctx.currentStory,
+      hasCurrentStory: !!this.story.isLoaded,
       snapshotsCount: snapshots?.length ?? 0,
       snapshots: snapshots?.map((s) => ({ id: s.id, visualDescriptors: s.visualDescriptors })),
-      currentCharacters: this.ctx.character.characters.map((c) => ({
+      currentCharacters: this.story.character.characters.map((c) => ({
         id: c.id,
         name: c.name,
         visualDescriptors: c.visualDescriptors,
       })),
     })
 
-    if (!this.ctx.currentStory || !snapshots || snapshots.length === 0) {
+    if (!this.story.id || !snapshots || snapshots.length === 0) {
       log('restoreCharacterSnapshots: early return - no story or no snapshots')
       return
     }
@@ -197,7 +197,7 @@ export class StoryCharacterStore {
     const snapshotById = new Map(snapshots.map((snapshot) => [snapshot.id, snapshot]))
     const updates: Array<{ id: string; updates: Partial<Character> }> = []
 
-    for (const character of this.ctx.character.characters) {
+    for (const character of this.story.character.characters) {
       const snapshot = snapshotById.get(character.id)
       if (!snapshot) continue
 
@@ -222,7 +222,7 @@ export class StoryCharacterStore {
       await database.updateCharacter(update.id, update.updates)
     }
 
-    this.ctx.character.characters = this.ctx.character.characters.map((character) => {
+    this.story.character.characters = this.story.character.characters.map((character) => {
       const snapshot = snapshotById.get(character.id)
       if (!snapshot) return character
 
@@ -243,7 +243,7 @@ export class StoryCharacterStore {
 
     log('restoreCharacterSnapshots complete', {
       updatedCount: updates.length,
-      finalCharacters: this.ctx.character.characters.map((c) => ({
+      finalCharacters: this.story.character.characters.map((c) => ({
         id: c.id,
         name: c.name,
         visualDescriptors: c.visualDescriptors,

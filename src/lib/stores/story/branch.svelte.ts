@@ -24,7 +24,7 @@ function log(...args: any[]) {
 }
 
 export class StoryBranchStore {
-  constructor(private ctx: StoryStore) {}
+  constructor(private story: StoryStore) {}
   branches = $state<Branch[]>([])
   currentBranchId = $state<string | null>(null)
 
@@ -45,10 +45,10 @@ export class StoryBranchStore {
     forkEntryId: string,
     checkpointId: string,
   ): Promise<Branch> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     // Verify the checkpoint exists in memory
-    const checkpoint = this.ctx.checkpoint.checkpoints.find((cp) => cp.id === checkpointId)
+    const checkpoint = this.story.checkpoint.checkpoints.find((cp) => cp.id === checkpointId)
     if (!checkpoint) {
       throw new Error('Checkpoint not found in memory')
     }
@@ -69,14 +69,14 @@ export class StoryBranchStore {
       throw new Error(`Fork entry ${forkEntryId} not found in database`)
     }
 
-    const dbStory = await database.getStory(this.ctx.currentStory.id)
+    const dbStory = await database.getStory(this.story.id!)
     if (!dbStory) {
-      throw new Error(`Story ${this.ctx.currentStory.id} not found in database`)
+      throw new Error(`Story ${this.story.id!} not found in database`)
     }
 
     // Determine parent branch (current branch, or null for main)
     // IMPORTANT: Ensure it's explicitly null, not undefined
-    const parentBranchId = this.ctx.currentStory.currentBranchId ?? null
+    const parentBranchId = this.story.branch.currentBranchId ?? null
 
     // If there's a parent branch, verify it exists
     if (parentBranchId !== null) {
@@ -89,7 +89,7 @@ export class StoryBranchStore {
     // Create the branch
     const branch: Branch = {
       id: crypto.randomUUID(),
-      storyId: this.ctx.currentStory.id,
+      storyId: this.story.id!,
       name,
       parentBranchId,
       forkEntryId,
@@ -102,12 +102,12 @@ export class StoryBranchStore {
 
     // Inherit background from checkpoint
     const checkpointBg = await database.getBackgroundForCheckpoint(
-      this.ctx.currentStory.id,
+      this.story.id!,
       checkpointId,
     )
     if (checkpointBg) {
       log('Inheriting background from checkpoint for new branch:', branch.name)
-      await database.saveBackground(this.ctx.currentStory.id, branch.id, null, checkpointBg)
+      await database.saveBackground(this.story.id!, branch.id, null, checkpointBg)
     }
 
     // Copy world state from checkpoint into database with the new branch_id
@@ -204,7 +204,7 @@ export class StoryBranchStore {
         try {
           const snapshot: WorldStateSnapshot = {
             id: crypto.randomUUID(),
-            storyId: this.ctx.currentStory.id,
+            storyId: this.story.id!,
             branchId: branch.id,
             entryId: forkEntryId,
             entryPosition: dbEntry.position,
@@ -288,11 +288,8 @@ export class StoryBranchStore {
 
     // Restore time tracker from checkpoint
     if (checkpoint.timeTrackerSnapshot) {
-      this.ctx.currentStory = {
-        ...this.ctx.currentStory!,
-        timeTracker: { ...checkpoint.timeTrackerSnapshot },
-      }
-      await database.updateStory(this.ctx.currentStory!.id, {
+      this.story.time.load({ ...checkpoint.timeTrackerSnapshot })
+      await database.updateStory(this.story.id!, {
         timeTracker: checkpoint.timeTrackerSnapshot,
       })
       log('Time tracker restored from checkpoint:', checkpoint.timeTrackerSnapshot)
@@ -351,7 +348,7 @@ export class StoryBranchStore {
    * @param skipReload - If true, skip reloading entries (used when creating new branch from current state)
    */
   async switchBranch(branchId: string | null, skipReload: boolean = false): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     // Validate branch exists (if not null)
     if (branchId !== null) {
@@ -360,11 +357,8 @@ export class StoryBranchStore {
     }
 
     // Update story's current branch in database
-    await database.setStoryCurrentBranch(this.ctx.currentStory.id, branchId)
-    this.ctx.currentStory = {
-      ...this.ctx.currentStory,
-      currentBranchId: branchId,
-    }
+    await database.setStoryCurrentBranch(this.story.id!, branchId)
+    this.story.branch.currentBranchId = branchId
 
     // Reload entries from database if not skipping
     // When creating a new branch, we skip because we're already at the correct state
@@ -373,18 +367,18 @@ export class StoryBranchStore {
     }
 
     // Invalidate caches
-    this.ctx.generationContext.invalidateWordCountCache()
-    this.ctx.chapter.invalidateChapterCache()
+    this.story.generationContext.invalidateWordCountCache()
+    this.story.chapter.invalidateChapterCache()
 
     // Reload background from database for the branch
-    this.ctx.currentBgImage = await database.getBackgroundForBranch(
-      this.ctx.currentStory.id,
+    this.story.image.currentBgImage = await database.getBackgroundForBranch(
+      this.story.id!,
       branchId,
     )
 
     // Restore suggested actions from the new branch's last narration entry
     // Without this, stale actions from the previous branch persist in the UI
-    this.ctx.restoreSuggestedActionsAfterDelete()
+    this.story.restoreSuggestedActionsAfterDelete()
 
     log('Switched to branch:', branchId ?? 'main')
   }
@@ -396,38 +390,38 @@ export class StoryBranchStore {
    * - For other branches: loads inherited items (null branch_id) + branch-specific items
    */
   async reloadEntriesForCurrentBranch(): Promise<void> {
-    if (!this.ctx.currentStory) return
+    if (!this.story.id) return
 
-    const branchId = this.ctx.currentStory.currentBranchId
+    const branchId = this.story.branch.currentBranchId
 
     if (branchId === null) {
       // Main branch: load all data with null branch_id
       const [entries, chapters, characters, locations, items, storyBeats, lorebookEntries] =
         await Promise.all([
-          database.getStoryEntriesForBranch(this.ctx.currentStory.id, null),
-          database.getChaptersForBranch(this.ctx.currentStory.id, null),
-          database.getCharactersForBranch(this.ctx.currentStory.id, null),
-          database.getLocationsForBranch(this.ctx.currentStory.id, null),
-          database.getItemsForBranch(this.ctx.currentStory.id, null),
-          database.getStoryBeatsForBranch(this.ctx.currentStory.id, null),
-          database.getEntriesForBranch(this.ctx.currentStory.id, null),
+          database.getStoryEntriesForBranch(this.story.id!, null),
+          database.getChaptersForBranch(this.story.id!, null),
+          database.getCharactersForBranch(this.story.id!, null),
+          database.getLocationsForBranch(this.story.id!, null),
+          database.getItemsForBranch(this.story.id!, null),
+          database.getStoryBeatsForBranch(this.story.id!, null),
+          database.getEntriesForBranch(this.story.id!, null),
         ])
 
-      this.ctx.entry.entries = entries
-      this.ctx.chapter.chapters = chapters
-      this.ctx.character.characters = characters
-      this.ctx.location.locations = locations
-      this.ctx.item.items = items
-      this.ctx.storyBeat.storyBeats = storyBeats
-      this.ctx.lorebook.lorebookEntries = lorebookEntries
+      this.story.entry.entries = entries
+      this.story.chapter.chapters = chapters
+      this.story.character.characters = characters
+      this.story.location.locations = locations
+      this.story.item.items = items
+      this.story.storyBeat.storyBeats = storyBeats
+      this.story.lorebook.lorebookEntries = lorebookEntries
 
       // Filter out tombstoned entities when COW is enabled
       if (settings.experimentalFeatures.lightweightBranches) {
-        this.ctx.character.characters = this.ctx.character.characters.filter((c) => !c.deleted)
-        this.ctx.location.locations = this.ctx.location.locations.filter((l) => !l.deleted)
-        this.ctx.item.items = this.ctx.item.items.filter((i) => !i.deleted)
-        this.ctx.storyBeat.storyBeats = this.ctx.storyBeat.storyBeats.filter((b) => !b.deleted)
-        this.ctx.lorebook.lorebookEntries = this.ctx.lorebook.lorebookEntries.filter(
+        this.story.character.characters = this.story.character.characters.filter((c) => !c.deleted)
+        this.story.location.locations = this.story.location.locations.filter((l) => !l.deleted)
+        this.story.item.items = this.story.item.items.filter((i) => !i.deleted)
+        this.story.storyBeat.storyBeats = this.story.storyBeat.storyBeats.filter((b) => !b.deleted)
+        this.story.lorebook.lorebookEntries = this.story.lorebook.lorebookEntries.filter(
           (e) => !e.deleted,
         )
       }
@@ -440,7 +434,7 @@ export class StoryBranchStore {
       const rootForkPosition = forkPositions.get(lineage[0].id)
 
       const inheritedEntries = await database.getStoryEntriesForBranch(
-        this.ctx.currentStory.id,
+        this.story.id!,
         null,
         rootForkPosition ?? undefined,
       )
@@ -451,24 +445,24 @@ export class StoryBranchStore {
         const childForkPosition =
           i < lineage.length - 1 ? forkPositions.get(lineage[i + 1].id) : undefined
         const entries = await database.getStoryEntriesForBranch(
-          this.ctx.currentStory.id,
+          this.story.id!,
           branch.id,
           childForkPosition ?? undefined,
         )
         branchEntries.push(...entries)
       }
 
-      this.ctx.entry.entries = [...inheritedEntries, ...branchEntries].sort(
+      this.story.entry.entries = [...inheritedEntries, ...branchEntries].sort(
         (a, b) => a.position - b.position,
       )
 
       const entryPositions = new SvelteMap<string, number>()
-      for (const entry of this.ctx.entry.entries) {
+      for (const entry of this.story.entry.entries) {
         entryPositions.set(entry.id, entry.position)
       }
 
       const chapters: Chapter[] = []
-      const mainChapters = await database.getChaptersForBranch(this.ctx.currentStory.id, null)
+      const mainChapters = await database.getChaptersForBranch(this.story.id!, null)
       if (rootForkPosition === null || rootForkPosition === undefined) {
         chapters.push(...mainChapters)
       } else {
@@ -485,7 +479,7 @@ export class StoryBranchStore {
         const childForkPosition =
           i < lineage.length - 1 ? forkPositions.get(lineage[i + 1].id) : undefined
         const branchChapters = await database.getChaptersForBranch(
-          this.ctx.currentStory.id,
+          this.story.id!,
           branch.id,
         )
         if (childForkPosition === null || childForkPosition === undefined) {
@@ -500,7 +494,7 @@ export class StoryBranchStore {
         }
       }
 
-      this.ctx.chapter.chapters = chapters.sort((a, b) => a.number - b.number)
+      this.story.chapter.chapters = chapters.sort((a, b) => a.number - b.number)
 
       // Load world state from database
       // COW branches use resolved loading (walks lineage), legacy branches use direct loading
@@ -515,11 +509,11 @@ export class StoryBranchStore {
         if (currentBranchInfo?.snapshotComplete) {
           // Snapshot isolation: branch has its own complete entity set
           ;[characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
-            database.getCharactersForBranch(this.ctx.currentStory.id, branchId),
-            database.getLocationsForBranch(this.ctx.currentStory.id, branchId),
-            database.getItemsForBranch(this.ctx.currentStory.id, branchId),
-            database.getStoryBeatsForBranch(this.ctx.currentStory.id, branchId),
-            database.getEntriesForBranch(this.ctx.currentStory.id, branchId),
+            database.getCharactersForBranch(this.story.id!, branchId),
+            database.getLocationsForBranch(this.story.id!, branchId),
+            database.getItemsForBranch(this.story.id!, branchId),
+            database.getStoryBeatsForBranch(this.story.id!, branchId),
+            database.getEntriesForBranch(this.story.id!, branchId),
           ])
           // Filter out tombstoned entities
           characters = characters.filter((c) => !c.deleted)
@@ -537,11 +531,11 @@ export class StoryBranchStore {
         } else {
           // Legacy COW: resolve through lineage (pre-snapshot branches)
           ;[characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
-            database.getCharactersResolved(this.ctx.currentStory.id, lineage),
-            database.getLocationsResolved(this.ctx.currentStory.id, lineage),
-            database.getItemsResolved(this.ctx.currentStory.id, lineage),
-            database.getStoryBeatsResolved(this.ctx.currentStory.id, lineage),
-            database.getLorebookEntriesResolved(this.ctx.currentStory.id, lineage),
+            database.getCharactersResolved(this.story.id!, lineage),
+            database.getLocationsResolved(this.story.id!, lineage),
+            database.getItemsResolved(this.story.id!, lineage),
+            database.getStoryBeatsResolved(this.story.id!, lineage),
+            database.getLorebookEntriesResolved(this.story.id!, lineage),
           ])
           log('COW: Resolved world state through lineage for branch:', branchId, {
             lineageDepth: lineage.length,
@@ -555,19 +549,19 @@ export class StoryBranchStore {
       } else {
         // Legacy path: direct branch loading (entities were fully copied at branch creation)
         ;[characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
-          database.getCharactersForBranch(this.ctx.currentStory.id, branchId),
-          database.getLocationsForBranch(this.ctx.currentStory.id, branchId),
-          database.getItemsForBranch(this.ctx.currentStory.id, branchId),
-          database.getStoryBeatsForBranch(this.ctx.currentStory.id, branchId),
-          database.getEntriesForBranch(this.ctx.currentStory.id, branchId),
+          database.getCharactersForBranch(this.story.id!, branchId),
+          database.getLocationsForBranch(this.story.id!, branchId),
+          database.getItemsForBranch(this.story.id!, branchId),
+          database.getStoryBeatsForBranch(this.story.id!, branchId),
+          database.getEntriesForBranch(this.story.id!, branchId),
         ])
       }
 
-      this.ctx.character.characters = characters
-      this.ctx.location.locations = locations
-      this.ctx.item.items = items
-      this.ctx.storyBeat.storyBeats = storyBeats
-      this.ctx.lorebook.lorebookEntries = lorebookEntries
+      this.story.character.characters = characters
+      this.story.location.locations = locations
+      this.story.item.items = items
+      this.story.storyBeat.storyBeats = storyBeats
+      this.story.lorebook.lorebookEntries = lorebookEntries
 
       // Get the current branch name from lineage for logging
       const currentBranch = lineage[lineage.length - 1]
@@ -589,15 +583,15 @@ export class StoryBranchStore {
    * Called after loading entries for a branch to ensure time consistency.
    */
   private async restoreTimeFromLastEntry(): Promise<void> {
-    if (!this.ctx.currentStory || this.ctx.entry.entries.length === 0) return
+    if (!this.story.id || this.story.entry.entries.length === 0) return
 
-    const lastEntry = this.ctx.entry.entries[this.ctx.entry.entries.length - 1]
+    const lastEntry = this.story.entry.entries[this.story.entry.entries.length - 1]
     const timeEnd = lastEntry.metadata?.timeEnd
 
     if (timeEnd && typeof timeEnd === 'object') {
       const newTime = timeEnd as TimeTracker
       // Only update if different to avoid unnecessary DB writes
-      const current = this.ctx.currentStory.timeTracker
+      const current = this.story.time.timeTracker
       if (
         !current ||
         current.years !== newTime.years ||
@@ -605,8 +599,8 @@ export class StoryBranchStore {
         current.hours !== newTime.hours ||
         current.minutes !== newTime.minutes
       ) {
-        this.ctx.currentStory = { ...this.ctx.currentStory, timeTracker: newTime }
-        await database.updateStory(this.ctx.currentStory.id, { timeTracker: newTime })
+        this.story.time.load(newTime)
+        await database.updateStory(this.story.id!, { timeTracker: newTime })
         log('Time tracker restored from last entry:', newTime)
       }
     }
@@ -626,10 +620,10 @@ export class StoryBranchStore {
    * Cannot delete the main branch (null), the current branch, or branches with children.
    */
   async deleteBranch(branchId: string): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     // Cannot delete current branch
-    if (this.ctx.currentStory.currentBranchId === branchId) {
+    if (this.story.branch.currentBranchId === branchId) {
       throw new Error('Cannot delete the current branch')
     }
 
@@ -644,11 +638,11 @@ export class StoryBranchStore {
     }
 
     // Delete associated checkpoints first
-    const checkpointsToDelete = this.ctx.checkpoint.checkpoints.filter(
+    const checkpointsToDelete = this.story.checkpoint.checkpoints.filter(
       (checkpoint) => this.getCheckpointBranchId(checkpoint) === branchId,
     )
     await Promise.all(checkpointsToDelete.map((cp) => database.deleteCheckpoint(cp.id)))
-    this.ctx.checkpoint.checkpoints = this.ctx.checkpoint.checkpoints.filter(
+    this.story.checkpoint.checkpoints = this.story.checkpoint.checkpoints.filter(
       (checkpoint) => this.getCheckpointBranchId(checkpoint) !== branchId,
     )
 
@@ -666,10 +660,10 @@ export class StoryBranchStore {
    * Get the total entry count for a branch including inherited history.
    */
   async getBranchEntryCount(branchId: string | null): Promise<number> {
-    if (!this.ctx.currentStory) return 0
+    if (!this.story.id) return 0
 
     if (branchId === null) {
-      const entries = await database.getStoryEntriesForBranch(this.ctx.currentStory.id, null)
+      const entries = await database.getStoryEntriesForBranch(this.story.id!, null)
       return entries.length
     }
 
@@ -681,7 +675,7 @@ export class StoryBranchStore {
 
     let count = 0
     const mainEntries = await database.getStoryEntriesForBranch(
-      this.ctx.currentStory.id,
+      this.story.id!,
       null,
       rootForkPosition ?? undefined,
     )
@@ -692,7 +686,7 @@ export class StoryBranchStore {
       const childForkPosition =
         i < lineage.length - 1 ? forkPositions.get(lineage[i + 1].id) : undefined
       const entries = await database.getStoryEntriesForBranch(
-        this.ctx.currentStory.id,
+        this.story.id!,
         branch.id,
         childForkPosition ?? undefined,
       )
@@ -732,7 +726,7 @@ export class StoryBranchStore {
    */
   isCowBranch(): boolean {
     return (
-      !!this.ctx.currentStory?.currentBranchId && settings.experimentalFeatures.lightweightBranches
+      !!this.story.branch.currentBranchId && settings.experimentalFeatures.lightweightBranches
     )
   }
 }

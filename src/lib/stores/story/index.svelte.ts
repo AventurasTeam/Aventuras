@@ -5,9 +5,7 @@ import type {
   Location,
   Item,
   StoryBeat,
-  MemoryConfig,
   StoryMode,
-  StorySettings,
   Entry,
   WorldStateSnapshot,
 } from '$lib/types'
@@ -37,6 +35,8 @@ import { StoryRetryStore } from './retry.svelte'
 import { StoryStoryBeatStore } from './storyBeat.svelte'
 import { StoryTimeStore } from './time.svelte'
 import { StoryGenerationContextStore } from './generationContext.svelte'
+import { StorySettingsStore } from './settings.svelte'
+import { StoryImageStore } from './image.svelte'
 
 const DEBUG = true
 
@@ -48,12 +48,26 @@ function log(...args: any[]) {
 
 // Story Store using Svelte 5 runes
 class StoryStore {
-  currentBgImage = $state<string | null>(null)
+  // Root identity fields (formerly on currentStory)
+  id = $state<string | null>(null)
+  title = $state<string | null>(null)
+  description = $state<string | null>(null)
+  genre = $state<string | null>(null)
+  templateId = $state<string | null>(null)
+  mode = $state<StoryMode>('adventure')
+  createdAt = $state<number>(0)
+  updatedAt = $state<number>(0)
+
+  get isLoaded(): boolean {
+    return this.id !== null
+  }
 
   // Story library
   allStories = $state<Story[]>([])
-  currentStory = $state<Story | null>(null)
 
+  // Sub-stores
+  settings = new StorySettingsStore(this)
+  image = new StoryImageStore(this)
   branch = new StoryBranchStore(this)
   chapter = new StoryChapterStore(this)
   character = new StoryCharacterStore(this)
@@ -68,13 +82,23 @@ class StoryStore {
   storyBeat = new StoryStoryBeatStore(this)
   time = new StoryTimeStore(this)
 
-  // Close the current story and reset state
   closeStory(): void {
-    this.currentBgImage = null
+    this.id = null
+    this.title = null
+    this.description = null
+    this.genre = null
+    this.templateId = null
+    this.mode = 'adventure'
+    this.createdAt = 0
+    this.updatedAt = 0
+    this.image.clear()
+    this.settings.clear()
+    this.time.clear()
+    this.branch.currentBranchId = null
     this.checkpoint.checkpoints = []
     this.branch.branches = []
-    log('Story closed')
     this.generationContext.clear()
+    log('Story closed')
   }
 
   // Load all stories for library view
@@ -82,19 +106,29 @@ class StoryStore {
     this.allStories = await database.getAllStories()
   }
 
-  // Load a specific story with all its data
   async loadStory(storyId: string): Promise<void> {
-    const story = await database.getStory(storyId)
-    if (!story) {
+    const storyData = await database.getStory(storyId)
+    if (!storyData) {
       throw new Error(`Story not found: ${storyId}`)
     }
 
-    // Clean up any orphaned embedded_images before loading
-    // (fixes FK constraint issues from older data)
     await database.cleanupOrphanedEmbeddedImages()
 
-    this.currentStory = story
-    this.currentBgImage = await database.getBackgroundForBranch(storyId, story.currentBranchId)
+    // Root identity
+    this.id = storyData.id
+    this.title = storyData.title
+    this.description = storyData.description
+    this.genre = storyData.genre
+    this.templateId = storyData.templateId
+    this.mode = storyData.mode
+    this.createdAt = storyData.createdAt
+    this.updatedAt = storyData.updatedAt
+
+    // Sub-stores
+    this.settings.load(storyData.settings, storyData.memoryConfig)
+    this.time.load(storyData.timeTracker)
+    this.branch.currentBranchId = storyData.currentBranchId
+    await this.image.load(storyData.id, storyData.currentBranchId)
 
     // Load branch-independent data first
     const [checkpoints, branches] = await Promise.all([
@@ -114,13 +148,13 @@ class StoryStore {
 
     log('Story loaded', {
       id: storyId,
-      mode: story.mode,
+      mode: storyData.mode,
       entries: this.entry.entries.length,
       lorebookEntries: this.lorebook.lorebookEntries.length,
       chapters: this.chapter.chapters.length,
       checkpoints: checkpoints.length,
       branches: branches.length,
-      currentBranchId: story.currentBranchId,
+      currentBranchId: storyData.currentBranchId,
     })
 
     // Load persisted activation data for this story (stickiness tracking)
@@ -133,23 +167,23 @@ class StoryStore {
     ui.setCurrentRetryStoryId(storyId)
 
     // Load retry state from DB if we don't have an in-memory backup for this story
-    if (story.retryState) {
-      ui.loadRetryBackupFromPersistent(storyId, story.retryState)
+    if (storyData.retryState) {
+      ui.loadRetryBackupFromPersistent(storyId, storyData.retryState)
     }
 
     // Load style review state from DB
-    ui.loadStyleReviewState(storyId, story.styleReviewState)
+    ui.loadStyleReviewState(storyId, storyData.styleReviewState)
 
     // Validate and repair chapter integrity (handles orphaned references)
     await this.chapter.validateChapterIntegrity()
 
     // Load persisted action choices for adventure mode
-    if (story.mode === 'adventure') {
+    if (storyData.mode === 'adventure') {
       await ui.loadActionChoices(storyId)
     }
 
     // Load persisted suggestions for creative-writing mode
-    if (story.mode === 'creative-writing') {
+    if (storyData.mode === 'creative-writing') {
       await ui.loadSuggestions(storyId)
     }
 
@@ -157,10 +191,9 @@ class StoryStore {
     ui.setMobileDefaults()
 
     // Emit event
-    emitStoryLoaded(storyId, story.mode)
+    emitStoryLoaded(storyId, storyData.mode)
   }
 
-  // Create a new story
   async createStory(
     title: string,
     templateId?: string,
@@ -185,6 +218,16 @@ class StoryStore {
 
     this.allStories = [storyData, ...this.allStories]
 
+    // Set root fields
+    this.id = storyData.id
+    this.title = storyData.title
+    this.description = storyData.description
+    this.genre = storyData.genre
+    this.templateId = storyData.templateId
+    this.mode = storyData.mode
+    this.createdAt = storyData.createdAt
+    this.updatedAt = storyData.updatedAt
+
     // Emit event
     eventBus.emit<StoryCreatedEvent>({ type: 'StoryCreated', storyId: storyData.id, mode })
 
@@ -197,12 +240,12 @@ class StoryStore {
    * Characters and lorebook entries are intentionally preserved.
    */
   async resetWorldStateAfterImport(): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
-    await database.resetWorldStateForImport(this.currentStory.id)
+    if (!this.id) throw new Error('No story loaded')
+    await database.resetWorldStateForImport(this.id)
     this.location.locations = []
     this.item.items = []
     this.storyBeat.storyBeats = []
-    this.currentStory = { ...this.currentStory, timeTracker: null }
+    this.time.load(null)
   }
 
   /**
@@ -210,13 +253,13 @@ class StoryStore {
    * Returns true if saved actions were found and restored, false if regeneration is needed.
    */
   restoreSuggestedActionsAfterDelete(): boolean {
-    if (!this.currentStory) return false
+    if (!this.id) return false
 
     // Find the new last narration entry (actions attach to narration entries)
     const lastNarration = [...this.entry.entries].reverse().find((e) => e.type === 'narration')
 
-    const storyMode = this.generationContext.storyMode
-    const storyId = this.currentStory.id
+    const storyMode = this.mode
+    const storyId = this.id
 
     if (lastNarration) {
       const restored = ui.restoreSuggestedActionsFromEntry(
@@ -243,35 +286,14 @@ class StoryStore {
   }
 
   /**
-   * Update the current background image for the story and persist to database.
-   */
-  async updateCurrentBackgroundImage(imageData: string | null): Promise<void> {
-    if (!this.currentStory) return
-
-    log('Updating background image...', { hasData: !!imageData })
-    this.currentBgImage = imageData
-
-    // Keep the currentStory object in sync to prevent any potential inconsistency
-    this.currentStory = { ...this.currentStory, currentBgImage: imageData }
-
-    await database.saveBackground(
-      this.currentStory.id,
-      this.currentStory.currentBranchId,
-      null,
-      imageData,
-    )
-    log('Background image updated and persisted')
-  }
-
-  /**
    * Refresh world state (characters, locations, items, story beats) from the database.
    * Used when background processes update translations.
    */
   async refreshWorldState(): Promise<void> {
-    if (!this.currentStory) return
+    if (!this.id) return
 
-    const storyId = this.currentStory.id
-    const branchId = this.currentStory.currentBranchId
+    const storyId = this.id
+    const branchId = this.branch.currentBranchId
 
     let characters: Character[]
     let locations: Location[]
@@ -338,9 +360,21 @@ class StoryStore {
     })
   }
 
-  // Clear current story (when switching or closing)
   clearCurrentStory(): void {
+    this.id = null
+    this.title = null
+    this.description = null
+    this.genre = null
+    this.templateId = null
+    this.mode = 'adventure'
+    this.createdAt = 0
+    this.updatedAt = 0
+    this.image.clear()
+    this.settings.clear()
+    this.time.clear()
+    this.branch.currentBranchId = null
     this.checkpoint.checkpoints = []
+    this.branch.branches = []
     this.generationContext.clear()
 
     // Clear current retry story ID (backups are kept per-story)
@@ -350,46 +384,15 @@ class StoryStore {
     ui.clearStyleReviewState()
   }
 
-  // Update story mode
   async setStoryMode(mode: StoryMode): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+    if (!this.id) throw new Error('No story loaded')
 
-    await database.updateStory(this.currentStory.id, { mode })
-    this.currentStory = { ...this.currentStory, mode }
+    await database.updateStory(this.id, { mode })
+    this.mode = mode
     log('Story mode updated:', mode)
 
     // Emit event
     emitModeChanged(mode)
-  }
-
-  // Update memory configuration
-  async setMemoryConfig(config: MemoryConfig): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
-
-    await database.updateStory(this.currentStory.id, { memoryConfig: config })
-    this.currentStory = { ...this.currentStory, memoryConfig: config }
-    log('Memory config updated:', config)
-  }
-
-  // Update memory configuration (partial updates)
-  async updateMemoryConfig(updates: Partial<MemoryConfig>): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
-
-    const newConfig = { ...this.currentStory.memoryConfig, ...updates }
-    // TODO: check typesafety
-    await database.updateStory(this.currentStory.id, { memoryConfig: newConfig as MemoryConfig })
-    this.currentStory = { ...this.currentStory, memoryConfig: newConfig as MemoryConfig }
-    log('Memory config updated via updateMemoryConfig:', updates)
-  }
-
-  // Update story settings (partial updates)
-  async updateStorySettings(updates: Partial<StorySettings>): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
-
-    const newSettings = { ...(this.currentStory.settings ?? {}), ...updates }
-    await database.updateStory(this.currentStory.id, { settings: newSettings })
-    this.currentStory = { ...this.currentStory, settings: newSettings }
-    log('Story settings updated via updateStorySettings:', updates)
   }
 
   /**
@@ -397,7 +400,7 @@ class StoryStore {
    * Called after saving a delta. Creates a snapshot every N entries (configured interval).
    */
   async maybeCreateAutoSnapshot(entryId: string): Promise<void> {
-    if (!this.currentStory) return
+    if (!this.id) return
     if (!settings.experimentalFeatures.stateTracking) return
 
     const entry = this.entry.entries.find((e) => e.id === entryId)
@@ -409,12 +412,12 @@ class StoryStore {
     // Only snapshot at interval boundaries
     if (entry.position % interval !== 0) return
 
-    const branchId = this.currentStory.currentBranchId ?? null
+    const branchId = this.branch.currentBranchId
 
     try {
       const snapshot: WorldStateSnapshot = {
         id: crypto.randomUUID(),
-        storyId: this.currentStory.id,
+        storyId: this.id,
         branchId,
         entryId,
         entryPosition: entry.position,
@@ -423,10 +426,7 @@ class StoryStore {
         itemsSnapshot: this.item.items.map((i) => ({ ...i })),
         storyBeatsSnapshot: this.storyBeat.storyBeats.map((b) => ({ ...b })),
         lorebookEntriesSnapshot: this.lorebook.lorebookEntries.map((e) => ({ ...e })),
-        // TODO: currentStory.timeTracker vs time.timeTracker - consolidate to one source of truth
-        timeTrackerSnapshot: this.currentStory.timeTracker
-          ? { ...this.currentStory.timeTracker }
-          : null,
+        timeTrackerSnapshot: { ...this.time.timeTracker },
         createdAt: Date.now(),
       }
 
@@ -438,12 +438,11 @@ class StoryStore {
     }
   }
 
-  // Delete a story
   async deleteStory(storyId: string): Promise<void> {
     await database.deleteStory(storyId)
     this.allStories = this.allStories.filter((s) => s.id !== storyId)
 
-    if (this.currentStory?.id === storyId) {
+    if (this.id === storyId) {
       this.clearCurrentStory()
     }
   }
@@ -536,7 +535,18 @@ class StoryStore {
     this.allStories = [storyData, ...this.allStories]
     const storyId = storyData.id
 
-    this.currentStory = storyData
+    // Set root fields
+    this.id = storyData.id
+    this.title = storyData.title
+    this.description = storyData.description
+    this.genre = storyData.genre
+    this.templateId = storyData.templateId
+    this.mode = storyData.mode
+    this.createdAt = storyData.createdAt
+    this.updatedAt = storyData.updatedAt
+    this.settings.load(storyData.settings, storyData.memoryConfig)
+    this.branch.currentBranchId = storyData.currentBranchId
+    this.time.load(storyData.timeTracker)
 
     // Add protagonist
     if (data.protagonist.name) {

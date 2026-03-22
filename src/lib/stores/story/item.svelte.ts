@@ -11,7 +11,7 @@ function log(...args: any[]) {
 }
 
 export class StoryItemStore {
-  constructor(private ctx: StoryStore) {}
+  constructor(private story: StoryStore) {}
 
   items = $state<Item[]>([])
 
@@ -25,18 +25,18 @@ export class StoryItemStore {
 
   // Add an item to inventory
   async addItem(name: string, description?: string, quantity = 1): Promise<Item> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const item: Item = {
       id: crypto.randomUUID(),
-      storyId: this.ctx.currentStory.id,
+      storyId: this.story.id!,
       name,
       description: description ?? null,
       quantity,
       equipped: false,
       location: 'inventory',
       metadata: null,
-      branchId: this.ctx.currentStory.currentBranchId,
+      branchId: this.story.branch.currentBranchId,
     }
 
     await database.addItem(item)
@@ -46,7 +46,7 @@ export class StoryItemStore {
 
   // Update an existing item
   async updateItem(id: string, updates: Partial<Item>): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const existing = this.items.find((i) => i.id === id)
     if (!existing) throw new Error('Item not found')
@@ -59,13 +59,13 @@ export class StoryItemStore {
 
   // Delete an item
   async deleteItem(id: string): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const existing = this.items.find((i) => i.id === id)
     if (!existing) throw new Error('Item not found')
 
     if (settings.experimentalFeatures.lightweightBranches) {
-      if (existing.branchId === this.ctx.currentStory.currentBranchId) {
+      if (existing.branchId === this.story.branch.currentBranchId) {
         await database.markItemDeleted(id)
       } else {
         const { entity: owned } = await this.cowItem(existing)
@@ -81,7 +81,7 @@ export class StoryItemStore {
    * Ensure an item is owned by the current branch (COW).
    */
   async cowItem(entity: Item): Promise<{ entity: Item; wasCowed: boolean }> {
-    const branchId = this.ctx.currentStory?.currentBranchId
+    const branchId = this.story.branch.currentBranchId
     if (
       !branchId ||
       entity.branchId === branchId ||

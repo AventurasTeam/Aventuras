@@ -11,7 +11,7 @@ function log(...args: any[]) {
 }
 
 export class StoryStoryBeatStore {
-  constructor(private ctx: StoryStore) {}
+  constructor(private story: StoryStore) {}
 
   storyBeats = $state<StoryBeat[]>([])
 
@@ -25,11 +25,11 @@ export class StoryStoryBeatStore {
     type: StoryBeat['type'],
     description?: string,
   ): Promise<StoryBeat> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const beat: StoryBeat = {
       id: crypto.randomUUID(),
-      storyId: this.ctx.currentStory.id,
+      storyId: this.story.id!,
       title,
       description: description ?? null,
       type,
@@ -37,7 +37,7 @@ export class StoryStoryBeatStore {
       triggeredAt: null,
       resolvedAt: null,
       metadata: null,
-      branchId: this.ctx.currentStory.currentBranchId,
+      branchId: this.story.branch.currentBranchId,
     }
 
     await database.addStoryBeat(beat)
@@ -47,7 +47,7 @@ export class StoryStoryBeatStore {
 
   // Update a story beat
   async updateStoryBeat(id: string, updates: Partial<StoryBeat>): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const existing = this.storyBeats.find((b) => b.id === id)
     if (!existing) throw new Error('Story beat not found')
@@ -73,13 +73,13 @@ export class StoryStoryBeatStore {
 
   // Delete a story beat
   async deleteStoryBeat(id: string): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const existing = this.storyBeats.find((b) => b.id === id)
     if (!existing) throw new Error('Story beat not found')
 
     if (settings.experimentalFeatures.lightweightBranches) {
-      if (existing.branchId === this.ctx.currentStory.currentBranchId) {
+      if (existing.branchId === this.story.branch.currentBranchId) {
         await database.markStoryBeatDeleted(id)
       } else {
         const { entity: owned } = await this.cowStoryBeat(existing)
@@ -95,7 +95,7 @@ export class StoryStoryBeatStore {
    * Ensure a story beat is owned by the current branch (COW).
    */
   async cowStoryBeat(entity: StoryBeat): Promise<{ entity: StoryBeat; wasCowed: boolean }> {
-    const branchId = this.ctx.currentStory?.currentBranchId
+    const branchId = this.story.branch.currentBranchId
     if (
       !branchId ||
       entity.branchId === branchId ||

@@ -12,7 +12,7 @@ function log(...args: any[]) {
 export class StoryTimeStore {
   private _timeTracker = $state<TimeTracker | null>(null)
 
-  constructor(private ctx: StoryStore) {}
+  constructor(private story: StoryStore) {}
 
   get timeTracker(): TimeTracker {
     return this._timeTracker || { years: 0, days: 0, hours: 0, minutes: 0 }
@@ -81,17 +81,17 @@ export class StoryTimeStore {
 
   // Set time tracker directly
   async setTimeTracker(time: TimeTracker): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const normalized = this.normalizeTime(time)
-    await database.saveTimeTracker(this.ctx.currentStory.id, normalized)
+    await database.saveTimeTracker(this.story.id!, normalized)
     this._timeTracker = normalized
     log('Time tracker set:', normalized)
   }
 
   // Update time tracker with partial values (adds to current time)
   async addTime(updates: Partial<TimeTracker>): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
 
     const current = this.timeTracker
     const newTime: TimeTracker = {
@@ -102,7 +102,7 @@ export class StoryTimeStore {
     }
 
     const normalized = this.normalizeTime(newTime)
-    await database.saveTimeTracker(this.ctx.currentStory.id, normalized)
+    await database.saveTimeTracker(this.story.id!, normalized)
     this._timeTracker = normalized
     log('Time added:', updates, '→', normalized)
   }
@@ -132,18 +132,18 @@ export class StoryTimeStore {
    * Undefined means "skip", null means "clear".
    */
   async restoreTimeTrackerSnapshot(snapshot: TimeTracker | null | undefined): Promise<void> {
-    if (!this.ctx.currentStory) throw new Error('No story loaded')
+    if (!this.story.id) throw new Error('No story loaded')
     if (snapshot === undefined) return
 
     if (snapshot === null) {
-      await database.clearTimeTracker(this.ctx.currentStory.id)
+      await database.clearTimeTracker(this.story.id!)
       this._timeTracker = null
       log('Time tracker cleared from snapshot')
       return
     }
 
     const normalized = this.normalizeTime(snapshot)
-    await database.saveTimeTracker(this.ctx.currentStory.id, normalized)
+    await database.saveTimeTracker(this.story.id!, normalized)
     this._timeTracker = normalized
     log('Time tracker restored from snapshot:', normalized)
   }
