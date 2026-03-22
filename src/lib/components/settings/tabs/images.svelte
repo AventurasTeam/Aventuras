@@ -99,6 +99,10 @@
 
   // ===== Image Profile CRUD =====
   let editingProfileId = $state<string | null>(null)
+  const isEditingReferenceProfile = $derived(
+    editingProfileId !== null &&
+      editingProfileId === settings.systemServicesSettings.imageGeneration.referenceProfileId,
+  )
   let isNewProfile = $state(false)
   let suppressAutoSave = false
   let profileName = $state('')
@@ -1087,6 +1091,7 @@
         onModelChange={(id) => {
           profileModel = id
         }}
+        filterFunc={isEditingReferenceProfile ? (m) => m.supportsImg2Img : undefined}
         showCost={true}
         showImg2ImgIndicator={true}
         showDescription={false}

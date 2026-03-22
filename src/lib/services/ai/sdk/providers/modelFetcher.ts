@@ -36,12 +36,13 @@ export async function fetchModelsFromProvider(
   // Provider-specific fetch logic
   if (providerType === 'nanogpt') return fetchNanogptModels(baseUrl)
   if (providerType === 'openrouter') return fetchOpenRouterModels(baseUrl)
-  if (providerType === 'google') return wrap(fetchGoogleModels(baseUrl, apiKey))
+  if (providerType === 'google') return fetchGoogleModels(baseUrl, apiKey)
   if (providerType === 'anthropic') return wrap(fetchAnthropicModels(baseUrl, apiKey))
   if (providerType === 'chutes') return wrap(fetchChutesModels(baseUrl, apiKey))
   if (providerType === 'ollama') return wrap(fetchOllamaModels(baseUrl))
   if (providerType === 'zhipu') return wrap(fetchZhipuModels(baseUrl, apiKey))
   if (providerType === 'mistral') return wrap(fetchMistralModels(baseUrl, apiKey))
+  if (providerType === 'pollinations') return fetchPollinationsTextModels()
 
   // Standard OpenAI-compatible endpoint
   const effectiveBaseUrl = normalizeBaseUrl(baseUrl) || getBaseUrl(providerType)
@@ -65,12 +66,20 @@ export async function fetchModelsFromProvider(
   const data = await response.json()
 
   if (data.data && Array.isArray(data.data)) {
-    return dedupeTextModels(data.data.map((m: { id: string }) => ({ id: m.id })))
+    return dedupeTextModels(
+      data.data.map((m: { id: string; reasoning?: boolean }) => ({
+        id: m.id,
+        reasoning: m.reasoning,
+      })),
+    )
   }
   if (Array.isArray(data)) {
     const entries = data as { id?: string; name?: string; reasoning?: boolean }[]
     return dedupeTextModels(
-      entries.map((m) => ({ id: m.id || m.name || '', reasoning: m.reasoning })),
+      entries.map((m) => ({
+        id: m.id || m.name || '',
+        reasoning: m.reasoning,
+      })),
     )
   }
 
@@ -179,14 +188,27 @@ async function fetchAnthropicModels(baseUrl?: string, apiKey?: string): Promise<
 interface GoogleModelEntry {
   name: string
   supportedGenerationMethods?: string[]
+  thinking?: boolean
 }
 
-async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<string[]> {
+/**
+ * Fetches models from Google AI Studio.
+ *
+ * Example API response for a reasoning model (Gemini 3.1):
+ * {
+ *   "name": "models/gemini-3.1-pro-preview",
+ *   "version": "3.1-pro-preview-01-2026",
+ *   "displayName": "Gemini 3.1 Pro Preview",
+ *   "supportedGenerationMethods": ["generateContent", ...],
+ *   "thinking": true
+ * }
+ */
+async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<TextModel[]> {
   const effectiveBaseUrl = baseUrl || 'https://generativelanguage.googleapis.com/v1beta'
 
   if (!apiKey) {
     console.warn('[ModelFetcher] Google API key required, using fallback models')
-    return PROVIDERS.google.fallbackModels
+    return wrap(Promise.resolve(PROVIDERS.google.fallbackModels))
   }
 
   const modelsUrl = effectiveBaseUrl.replace(/\/$/, '') + '/models?key=' + apiKey
@@ -197,22 +219,25 @@ async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<str
 
     if (!response.ok) {
       console.warn(`[ModelFetcher] Google API returned ${response.status}, using fallback models`)
-      return PROVIDERS.google.fallbackModels
+      return wrap(Promise.resolve(PROVIDERS.google.fallbackModels))
     }
 
     const data = await response.json()
     if (data.models && Array.isArray(data.models)) {
       const models = (data.models as GoogleModelEntry[])
         .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
-        .map((m) => m.name.replace(/^models\//, ''))
-        .filter(Boolean)
-      if (models.length > 0) return models
+        .map((m) => ({
+          id: m.name.replace(/^models\//, ''),
+          reasoning: m.thinking,
+        }))
+        .filter((m) => !!m.id)
+      if (models.length > 0) return dedupeTextModels(models)
     }
 
-    return PROVIDERS.google.fallbackModels
+    return wrap(Promise.resolve(PROVIDERS.google.fallbackModels))
   } catch (error) {
     console.warn('[ModelFetcher] Failed to fetch Google models:', error)
-    return PROVIDERS.google.fallbackModels
+    return wrap(Promise.resolve(PROVIDERS.google.fallbackModels))
   }
 }
 
@@ -342,4 +367,50 @@ async function fetchMistralModels(baseUrl?: string, apiKey?: string): Promise<st
     console.warn('[ModelFetcher] Failed to fetch Mistral models:', error)
     return PROVIDERS.mistral.fallbackModels
   }
+}
+
+interface PollinationsTextModelResponse {
+  name: string
+  is_specialized?: boolean
+  paid_only?: boolean
+  reasoning?: boolean
+  tools?: boolean
+  input_modalities?: string[]
+  output_modalities?: string[]
+}
+
+async function fetchPollinationsTextModels(): Promise<TextModel[]> {
+  const url = 'https://gen.pollinations.ai/text/models'
+  const fetchFn = createTimeoutFetch(30000, 'model-fetch')
+
+  try {
+    const response = await fetchFn(url, { method: 'GET' })
+    if (!response.ok) return getPollinationsTextFallback()
+
+    const data = await response.json()
+    if (!Array.isArray(data)) return getPollinationsTextFallback()
+
+    const models: TextModel[] = (data as PollinationsTextModelResponse[])
+      .filter(
+        (m) =>
+          !m.is_specialized &&
+          !m.paid_only &&
+          (m.input_modalities?.includes('text') ?? true) &&
+          (m.output_modalities?.includes('text') ?? true),
+      )
+      .map((m) => ({
+        id: m.name,
+        reasoning: m.reasoning ?? false,
+        structuredOutput: m.tools ?? false,
+      }))
+
+    return models.length > 0 ? dedupeTextModels(models) : getPollinationsTextFallback()
+  } catch (error) {
+    console.warn('[ModelFetcher] Failed to fetch Pollinations text models:', error)
+    return getPollinationsTextFallback()
+  }
+}
+
+function getPollinationsTextFallback(): TextModel[] {
+  return dedupeTextModels(PROVIDERS.pollinations.fallbackModels.map((id) => ({ id })))
 }

@@ -143,9 +143,15 @@ export function buildProviderOptions(
         break
       case 'google':
         if (reasoningEffort) {
+          const isGemini2 =
+            preset.model.includes('gemini-2') || preset.model.includes('gemini-exp-1206')
           options = {
-            thinkingConfig: { thinkingLevel: reasoningEffort },
-            structuredOutputs,
+            thinkingConfig: {
+              includeThoughts: true,
+              ...(isGemini2
+                ? { thinkingBudget: budgetTokens }
+                : { thinkingLevel: reasoningEffort }),
+            },
           } satisfies GoogleGenerativeAIProviderOptions
         }
         if (structuredOutputs) {
@@ -154,7 +160,7 @@ export function buildProviderOptions(
         break
       case 'pollinations':
         options = {
-          reasoningEffort: reasoningEffort,
+          reasoning_effort: reasoningEffort,
           parallel_tool_calls: true,
         } satisfies PollinationsLanguageModelSettings
         break

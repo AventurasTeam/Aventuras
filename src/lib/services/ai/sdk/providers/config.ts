@@ -239,15 +239,16 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     capabilities: {
       textGeneration: true,
       imageGeneration: true,
-      structuredOutput: false,
+      structuredOutput: true,
       reasoning: true,
+      modelCapabilityFetching: true,
     },
     imageDefaults: {
       defaultModel: 'flux',
       referenceModel: 'kontext',
-      supportedSizes: ['512x512', '1024x1024', '2048x2048'],
+      supportedSizes: ['512x512', '1024x1024', '1536x1536'],
     },
-    fallbackModels: ['openai', 'mistral', 'llama'],
+    fallbackModels: ['openai', 'openai-fast', 'claude-fast', 'mistral', 'gemini'],
     // No service defaults - user must configure models in Generation Settings
   },
 
@@ -345,6 +346,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       imageGeneration: true,
       structuredOutput: true,
       reasoning: true,
+      modelCapabilityFetching: true,
     },
     imageDefaults: {
       defaultModel: 'dall-e-3',
@@ -373,6 +375,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       imageGeneration: false,
       structuredOutput: true,
       reasoning: true,
+      modelCapabilityFetching: true,
     },
     fallbackModels: [
       'claude-opus-4-5-20251101',
@@ -395,6 +398,8 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       imageGeneration: true,
       structuredOutput: true,
       reasoning: true,
+      reasoningExtraction: 'think-tag',
+      modelCapabilityFetching: true,
     },
     imageDefaults: {
       defaultModel: 'imagen-3.0-generate-002',
@@ -421,6 +426,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       imageGeneration: false,
       structuredOutput: true,
       reasoning: true,
+      modelCapabilityFetching: true,
     },
     fallbackModels: ['grok-3', 'grok-3-fast', 'grok-2', 'grok-2-vision'],
     // No service defaults - user must configure models in Generation Settings
@@ -436,6 +442,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       imageGeneration: false,
       structuredOutput: false,
       reasoning: true,
+      modelCapabilityFetching: true,
     },
     fallbackModels: [
       'llama-3.3-70b-versatile',
@@ -457,6 +464,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       structuredOutput: true,
       reasoning: true,
       binaryReasoning: true,
+      modelCapabilityFetching: true,
     },
     imageDefaults: {
       defaultModel: 'cogview-3-plus',
@@ -485,6 +493,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       structuredOutput: true,
       reasoning: true,
       binaryReasoning: true,
+      modelCapabilityFetching: true,
     },
     fallbackModels: ['deepseek-chat', 'deepseek-reasoner'],
     // No service defaults - user must configure models in Generation Settings

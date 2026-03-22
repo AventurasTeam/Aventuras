@@ -19,6 +19,19 @@ const DEFAULT_MODEL = 'zimage'
 const REFERENCE_MODEL = 'kontext'
 const MODELS_ENDPOINT = 'https://gen.pollinations.ai/image/models'
 
+interface PollinationsImageModelResponse {
+  name: string
+  description?: string
+  input_modalities?: string[]
+  output_modalities?: string[]
+  paid_only?: boolean
+  pricing?: {
+    completionImageTokens?: string | number
+    promptTextTokens?: string | number
+    promptImageTokens?: string | number
+  }
+}
+
 export function createPollinationsProvider(config: ImageProviderConfig): ImageProvider {
   return {
     id: 'pollinations',
@@ -81,30 +94,31 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
         const data = await response.json()
         if (!Array.isArray(data) || data.length === 0) return getFallbackModels()
 
-        return data.map(
-          (model: {
-            name: string
-            description?: string
-            input_modalities?: string[]
-            output_modalities?: string[]
-            pricing?: {
-              completionImageTokens?: number
-              promptTextTokens?: number
-              promptImageTokens?: number
-            }
-          }) => ({
+        return (data as PollinationsImageModelResponse[])
+          .filter(
+            (model) => (model.output_modalities?.includes('image') ?? false) && !model.paid_only,
+          )
+          .map((model) => ({
             id: model.name,
             name: model.name,
             description: model.description,
-            supportsSizes: ['512x512', '1024x1024', '2048x2048'],
+            supportsSizes: ['512x512', '1024x1024', '1536x1536'],
             supportsImg2Img: model.input_modalities?.includes('image') ?? false,
-            costPerImage: model.pricing?.completionImageTokens,
-            costPerTextToken: model.pricing?.promptTextTokens,
-            costPerImageToken: model.pricing?.promptImageTokens,
+            costPerImage:
+              model.pricing?.completionImageTokens !== undefined
+                ? Number(model.pricing.completionImageTokens)
+                : undefined,
+            costPerTextToken:
+              model.pricing?.promptTextTokens !== undefined
+                ? Number(model.pricing.promptTextTokens)
+                : undefined,
+            costPerImageToken:
+              model.pricing?.promptImageTokens !== undefined
+                ? Number(model.pricing.promptImageTokens)
+                : undefined,
             inputModalities: model.input_modalities,
             outputModalities: model.output_modalities,
-          }),
-        )
+          }))
       } catch {
         return getFallbackModels()
       }
@@ -118,21 +132,21 @@ function getFallbackModels(): ImageModelInfo[] {
       id: DEFAULT_MODEL,
       name: 'Z Image',
       description: 'Default fast image generation',
-      supportsSizes: ['512x512', '1024x1024', '2048x2048'],
+      supportsSizes: ['512x512', '1024x1024', '1536x1536'],
       supportsImg2Img: false,
     },
     {
       id: 'flux',
       name: 'Flux',
       description: 'High quality image generation',
-      supportsSizes: ['512x512', '1024x1024', '2048x2048'],
+      supportsSizes: ['512x512', '1024x1024', '1536x1536'],
       supportsImg2Img: false,
     },
     {
       id: REFERENCE_MODEL,
       name: 'Flux Kontext',
       description: 'In-context editing & generation',
-      supportsSizes: ['512x512', '1024x1024', '2048x2048'],
+      supportsSizes: ['512x512', '1024x1024', '1536x1536'],
       supportsImg2Img: true,
     },
   ]
