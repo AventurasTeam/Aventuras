@@ -371,18 +371,21 @@ describe('Adventure Mode — ActionInputController E2E', () => {
       name: 'World Lore',
       description: 'The realm of Aethermoor is a land of ancient magic and forgotten kingdoms.',
       injection: { mode: 'always', keywords: [], priority: 0 },
+      type: 'concept',
     })
     const keywordLore = buildLorebookEntry({
       storyId: testStory.id,
       name: 'Crystal Spire Legend',
       description: 'The Crystal Spire was built by the Arcane Order to channel ley line energy.',
       injection: { mode: 'keyword', keywords: ['crystal', 'spire'], priority: 0 },
+      type: 'concept',
     })
     const tier3Lore = buildLorebookEntry({
       storyId: testStory.id,
       name: 'Ancient Prophecy',
       description: 'A forgotten prophecy about the convergence of realms.',
       injection: { mode: 'keyword', keywords: ['oracle', 'prophecy'], priority: 0 },
+      type: 'concept',
     })
 
     // Story history entries
@@ -467,7 +470,7 @@ describe('Adventure Mode — ActionInputController E2E', () => {
       )
       .on(
         'tier3-entry-selection',
-        respondWithJSON({ selectedIds: [], reasoning: 'No relevant entries' }),
+        respondWithJSON({ selectedIds: [tier3Lore.id], reasoning: 'Found relevant entry' }),
       )
       .on('narrative', respondWithStream(narrativeText))
       .on('background-image-prompt-analysis', respondWithJSON(backgroundImageResult))
@@ -511,6 +514,26 @@ describe('Adventure Mode — ActionInputController E2E', () => {
     expectPromptContains(interceptor, 'narrative', 'Obsidian Dagger')
     expectPromptContains(interceptor, 'narrative', 'I enter the spire with my blade drawn')
     expectPromptContains(interceptor, 'narrative', 'Find the Lost Artifact')
+
+    // Prompt contains injected lorebook entries
+    expectPromptContains(interceptor, 'narrative', 'World Lore')
+    expectPromptContains(
+      interceptor,
+      'narrative',
+      'The realm of Aethermoor is a land of ancient magic and forgotten kingdoms.',
+    )
+    expectPromptContains(interceptor, 'narrative', 'Ancient Prophecy')
+    expectPromptContains(
+      interceptor,
+      'narrative',
+      'A forgotten prophecy about the convergence of realms.',
+    )
+    expectPromptContains(interceptor, 'narrative', 'Crystal Spire Legend')
+    expectPromptContains(
+      interceptor,
+      'narrative',
+      'The Crystal Spire was built by the Arcane Order to channel ley line energy.',
+    )
 
     // Style review injected
     expectPromptContains(interceptor, 'narrative', 'passive constructions')
