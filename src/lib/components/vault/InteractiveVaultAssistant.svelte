@@ -350,6 +350,10 @@
     renameValue = ''
   }
 
+  function focus(node: HTMLElement) {
+    node.focus()
+  }
+
   function handleReferenceImage(imageId: string) {
     const ref = `[Image: ${imageId}]`
     inputValue = inputValue.trim() ? `${inputValue.trim()}\n${ref}` : ref
@@ -829,7 +833,7 @@
                                 if (e.key === 'Escape') cancelRename()
                               }}
                               onblur={() => commitRename()}
-                              autofocus
+                              use:focus
                             />
                           </form>
                         {:else}
@@ -1243,31 +1247,28 @@
                 class="border-surface-700 bg-surface-800 placeholder:text-surface-500 min-h-[2.5rem] resize-none rounded-xl text-sm"
                 disabled={isGenerating || !service}
               />
-              {#if isGenerating}
-                <Button
-                  size="icon"
-                  class="h-10 w-10 shrink-0 rounded-xl bg-red-600 hover:bg-red-500"
-                  onclick={() => {
+              <Button
+                size="icon"
+                class="bg-accent-600 hover:bg-accent-500 h-10 w-10 shrink-0 rounded-xl"
+                onclick={() => {
+                  if (isGenerating) {
                     if (abortController) {
                       abortController.abort()
                       abortController = null
                     }
-                  }}
-                  title="Stop generating"
-                >
+                  } else {
+                    handleSend()
+                  }
+                }}
+                disabled={!isGenerating && (!inputValue.trim() || !service)}
+                title={isGenerating ? 'Stop generating' : 'Send message'}
+              >
+                {#if isGenerating}
                   <Square class="h-4 w-4 fill-current" />
-                </Button>
-              {:else}
-                <Button
-                  size="icon"
-                  class="bg-accent-600 hover:bg-accent-500 h-10 w-10 shrink-0 rounded-xl"
-                  onclick={handleSend}
-                  disabled={!inputValue.trim() || !service}
-                  title="Send message"
-                >
+                {:else}
                   <Send class="h-5 w-5" />
-                </Button>
-              {/if}
+                {/if}
+              </Button>
             </div>
             <div class="text-surface-500 mt-1.5 hidden text-center text-[10px] md:block">
               {isTouchDevice()
