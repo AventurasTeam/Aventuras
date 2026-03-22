@@ -45,6 +45,7 @@ import {
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { aiService } from '$lib/services/ai'
 import { createLogger } from '$lib/log'
+import { grammarService } from '$lib/services/grammar'
 
 const log = createLogger('StoryStore')
 
@@ -450,6 +451,7 @@ class StoryStore {
     this.branches = []
     this.invalidateWordCountCache()
     this.invalidateChapterCache()
+    grammarService.clearEntityWords()
     log('Story closed')
   }
 
@@ -491,6 +493,16 @@ class StoryStore {
     this.checkpoints = checkpoints
     this.lorebookEntries = lorebookEntries
     this.branches = branches
+
+    // Import entity names into spell checker so they are not flagged as errors
+    const entityNames = [
+      ...characters.map((c) => c.name),
+      ...locations.map((l) => l.name),
+      ...items.map((i) => i.name),
+      ...lorebookEntries.map((e) => e.name),
+      ...lorebookEntries.flatMap((e) => e.aliases ?? []),
+    ].filter(Boolean)
+    grammarService.importEntityWords(entityNames)
 
     // Load entries and chapters based on current branch
     await this.reloadEntriesForCurrentBranch()
@@ -2742,6 +2754,9 @@ class StoryStore {
 
     // Clear style review state (will be loaded fresh for next story)
     ui.clearStyleReviewState()
+
+    // Clear entity words from spell checker
+    grammarService.clearEntityWords()
   }
 
   // Update story mode

@@ -25,6 +25,7 @@ class GrammarService {
   private enabled = true
   private customWordsLoaded = false
   private customWords = new Map<string, string>()
+  private entityWords = new Set<string>()
   private dictionaryQueue: Promise<void> = Promise.resolve()
 
   private queueDictionaryOperation<T>(operation: () => Promise<T>): Promise<T> {
@@ -235,11 +236,7 @@ class GrammarService {
 
       if (this.linter) {
         try {
-          await this.linter.clearWords()
-          const remainingWords = [...this.customWords.values()]
-          if (remainingWords.length > 0) {
-            await this.linter.importWords(remainingWords)
-          }
+          await this.reimportAllWords()
         } catch (error) {
           log('Failed to rebuild dictionary after removal:', error)
         }
@@ -258,10 +255,62 @@ class GrammarService {
       if (this.linter) {
         try {
           await this.linter.clearWords()
+          await this.reimportEntityWords()
         } catch (error) {
           log('Failed to clear dictionary words:', error)
         }
       }
+    })
+  }
+
+  private async reimportAllWords(): Promise<void> {
+    if (!this.linter) return
+    try {
+      await this.linter.clearWords()
+      const allWords = [...this.customWords.values(), ...this.entityWords]
+      if (allWords.length > 0) {
+        await this.linter.importWords(allWords)
+      }
+    } catch (error) {
+      log('Failed to reimport words:', error)
+    }
+  }
+
+  private async reimportEntityWords(): Promise<void> {
+    if (!this.linter || this.entityWords.size === 0) return
+    try {
+      await this.linter.importWords([...this.entityWords])
+    } catch (error) {
+      log('Failed to reimport entity words:', error)
+    }
+  }
+
+  async importEntityWords(names: string[]): Promise<void> {
+    return this.queueDictionaryOperation(async () => {
+      this.entityWords.clear()
+
+      for (const name of names) {
+        // Split multi-word names into individual words
+        const words = name.split(/\s+/)
+        for (const word of words) {
+          const normalized = this.normalizeWord(word)
+          if (normalized) {
+            this.entityWords.add(normalized.display)
+          }
+        }
+      }
+
+      await this.setup()
+      await this.reimportAllWords()
+      log('Imported', this.entityWords.size, 'entity words into spell checker')
+    })
+  }
+
+  async clearEntityWords(): Promise<void> {
+    return this.queueDictionaryOperation(async () => {
+      this.entityWords.clear()
+      await this.reimportAllWords()
+      log('Cleared entity words from spell checker')
     })
   }
 }
