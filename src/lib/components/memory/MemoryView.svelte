@@ -26,7 +26,7 @@
    * Same as ActionInput's lore management, triggered per design doc section 3.4.
    */
   async function runLoreManagement() {
-    if (!story.currentStory) return
+    if (!story.isLoaded) return
 
     console.log('[MemoryView] Starting lore management...')
     ui.startLoreManagement()
@@ -39,8 +39,8 @@
 
     try {
       const result = await aiService.runLoreManagement(
-        story.currentStory.id,
-        story.currentStory.currentBranchId,
+        story.id!,
+        story.branch.currentBranchId,
         [...story.lorebook.lorebookEntries],
         story.chapter.chapters,
         {
@@ -99,9 +99,9 @@
             )
           },
         },
-        story.currentStory?.mode ?? 'adventure',
-        story.generationContext.pov,
-        story.generationContext.tense,
+        story.mode ?? 'adventure',
+        story.settings.pov,
+        story.settings.tense,
       )
 
       console.log('[MemoryView] Lore management complete', {
@@ -153,9 +153,9 @@
         chapter,
         entries,
         story.chapter.chapters,
-        story.generationContext.storyMode ?? 'adventure',
-        story.generationContext.pov,
-        story.generationContext.tense,
+        story.mode ?? 'adventure',
+        story.settings.pov,
+        story.settings.tense,
       )
 
       // Update the chapter with new summary and metadata

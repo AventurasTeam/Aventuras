@@ -40,15 +40,15 @@
   let editRuntimeVars = $state<RuntimeVarsMap>({})
 
   $effect(() => {
-    if (story.currentStory) {
+    if (story.isLoaded) {
       loadRuntimeVarDefs()
     }
   })
 
   async function loadRuntimeVarDefs() {
-    if (!story.currentStory) return
+    if (!story.isLoaded) return
     try {
-      const packId = await database.getStoryPackId(story.currentStory.id)
+      const packId = await database.getStoryPackId(story.id!)
       if (packId) {
         runtimeVarDefs = await database.getRuntimeVariablesByEntityType(packId, 'story_beat')
       } else {

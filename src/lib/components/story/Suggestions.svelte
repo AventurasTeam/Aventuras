@@ -44,7 +44,7 @@
   }
 </script>
 
-{#if story.generationContext?.storyMode === 'creative-writing'}
+{#if story.mode === 'creative-writing'}
   <div
     class="px-2 pt-0.5 pb-2 sm:py-2 {!collapsed ? '-mt-2' : ''}"
     use:swipe={{

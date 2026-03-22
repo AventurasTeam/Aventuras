@@ -25,7 +25,7 @@
 
   // Swipe handlers for mobile sidebar toggle
   function handleSwipeLeft() {
-    if (story.currentStory && !ui.sidebarOpen) {
+    if (story.isLoaded && !ui.sidebarOpen) {
       ui.toggleSidebar()
     }
   }
@@ -183,7 +183,7 @@
   <!-- Main app container -->
   <div class="flex min-h-0 flex-1">
     <!-- Mobile sidebar overlay (tap to close) -->
-    {#if ui.sidebarOpen && story.currentStory}
+    {#if ui.sidebarOpen && story.isLoaded}
       <button
         class="mobile-sidebar-overlay"
         onclick={() => ui.toggleSidebar()}
@@ -192,7 +192,7 @@
     {/if}
 
     <!-- Right edge swipe zone for opening sidebar (when closed) -->
-    {#if !ui.sidebarOpen && story.currentStory}
+    {#if !ui.sidebarOpen && story.isLoaded}
       <div
         class="swipe-edge-zone"
         use:swipe={{ onSwipeLeft: handleSwipeLeft, threshold: 30 }}
@@ -204,17 +204,17 @@
       <Header />
 
       <main class="flex-1 overflow-hidden">
-        {#if ui.activePanel === 'story' && story.currentStory}
+        {#if ui.activePanel === 'story' && story.isLoaded}
           <StoryView />
-        {:else if ui.activePanel === 'gallery' && story.currentStory}
+        {:else if ui.activePanel === 'gallery' && story.isLoaded}
           <GalleryTab />
-        {:else if ui.activePanel === 'lorebook' && story.currentStory}
+        {:else if ui.activePanel === 'lorebook' && story.isLoaded}
           <LorebookView />
-        {:else if ui.activePanel === 'memory' && story.currentStory}
+        {:else if ui.activePanel === 'memory' && story.isLoaded}
           <MemoryView />
         {:else if ui.activePanel === 'vault'}
           <VaultPanel />
-        {:else if ui.activePanel === 'library' || !story.currentStory}
+        {:else if ui.activePanel === 'library' || !story.isLoaded}
           <LibraryView />
         {:else if children}
           {@render children()}
@@ -223,7 +223,7 @@
     </div>
 
     <!-- Sidebar (Right aligned) -->
-    {#if ui.sidebarOpen && story.currentStory}
+    {#if ui.sidebarOpen && story.isLoaded}
       <div class="sidebar-container relative flex h-full">
         <!-- Resizer Handle (Desktop only) -->
         <button

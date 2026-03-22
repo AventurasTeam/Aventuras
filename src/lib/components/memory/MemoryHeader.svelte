@@ -16,10 +16,10 @@
   let { onCreateChapter }: Props = $props()
 
   const tokensOutsideBuffer = $derived(story.generationContext.tokensOutsideBuffer)
-  const threshold = $derived(story.generationContext.memoryConfig.tokenThreshold)
-  const autoSummarize = $derived(story.generationContext.memoryConfig.autoSummarize)
+  const threshold = $derived(story.settings.memoryConfig.tokenThreshold)
+  const autoSummarize = $derived(story.settings.memoryConfig.autoSummarize)
   const messagesSinceLastChapter = $derived(story.chapter.messagesSinceLastChapter)
-  const bufferSize = $derived(story.generationContext.memoryConfig.chapterBuffer)
+  const bufferSize = $derived(story.settings.memoryConfig.chapterBuffer)
 
   const percentage = $derived(
     threshold > 0 ? Math.min(100, Math.round((tokensOutsideBuffer / threshold) * 100)) : 0,
@@ -32,7 +32,7 @@
   }
 
   async function toggleAutoSummarize() {
-    await story.updateMemoryConfig({ autoSummarize: !autoSummarize })
+    await story.settings.updateMemoryConfig({ autoSummarize: !autoSummarize })
   }
 
   function handleCreateChapter() {

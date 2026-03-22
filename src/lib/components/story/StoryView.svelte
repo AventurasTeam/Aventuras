@@ -53,7 +53,7 @@
 
   // Reset window when story changes
   $effect(() => {
-    const currentStoryId = story.currentStory?.id ?? null
+    const currentStoryId = story.id ?? null
 
     if (currentStoryId !== lastStoryId) {
       lastStoryId = currentStoryId
@@ -237,7 +237,7 @@
 
   // Format background image URL (handling raw base64 vs data URL)
   const bgImageUrl = $derived.by(() => {
-    const raw = story.currentBgImage
+    const raw = story.image.currentBgImage
     if (!raw) return null
     if (raw.startsWith('data:')) return `url(${raw})`
     return `url(data:image/png;base64,${raw})`
@@ -246,8 +246,8 @@
 
 <div class="relative flex h-full flex-col overflow-hidden">
   <!-- Background Image Layer -->
-  {#if story.currentBgImage}
-    {#key story.currentBgImage}
+  {#if story.image.currentBgImage}
+    {#key story.image.currentBgImage}
       <div
         class="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-all duration-300"
         style="background-image: {bgImageUrl}; filter: blur({settings.systemServicesSettings
@@ -318,7 +318,7 @@
         {/if}
 
         <!-- Show RPG-style action choices after narration (adventure mode only) -->
-        {#if !ui.isStreaming && !ui.isGenerating && story.generationContext.storyMode === 'adventure' && !settings.uiSettings.disableSuggestions}
+        {#if !ui.isStreaming && !ui.isGenerating && story.mode === 'adventure' && !settings.uiSettings.disableSuggestions}
           <ActionChoices />
         {/if}
 
@@ -384,7 +384,8 @@
 
   <!-- Action input area -->
   <div
-    class="border-border relative z-10 border-t px-3 pt-2 pb-1 sm:pt-3 sm:pr-8 sm:pb-2 sm:pl-6 {story.currentBgImage
+    class="border-border relative z-10 border-t px-3 pt-2 pb-1 sm:pt-3 sm:pr-8 sm:pb-2 sm:pl-6 {story
+      .image.currentBgImage
       ? 'bg-background/60 backdrop-blur-md'
       : 'bg-card'}"
   >

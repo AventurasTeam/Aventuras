@@ -180,7 +180,7 @@
       const now = Date.now()
       const entryData: Entry = {
         id: entry?.id ?? crypto.randomUUID(),
-        storyId: story.currentStory?.id ?? '',
+        storyId: story.id ?? '',
         name: name.trim(),
         type,
         description: description.trim(),
@@ -201,7 +201,7 @@
         createdAt: entry?.createdAt ?? now,
         updatedAt: now,
         loreManagementBlacklisted,
-        branchId: entry?.branchId ?? story.currentStory?.currentBranchId ?? null,
+        branchId: entry?.branchId ?? story.branch.currentBranchId ?? null,
       }
 
       onSave(entryData)

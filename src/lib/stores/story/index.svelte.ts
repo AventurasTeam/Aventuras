@@ -82,6 +82,28 @@ class StoryStore {
   storyBeat = new StoryStoryBeatStore(this)
   time = new StoryTimeStore(this)
 
+  /** Build a Story snapshot from the current store state (for services that need a Story object). */
+  getStorySnapshot(): Story {
+    if (!this.id) throw new Error('No story loaded')
+    return {
+      id: this.id,
+      title: this.title ?? '',
+      description: this.description ?? null,
+      genre: this.genre ?? null,
+      templateId: this.templateId ?? null,
+      mode: this.mode,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt,
+      settings: this.settings.toSnapshot(),
+      memoryConfig: this.settings.memoryConfig,
+      retryState: null,
+      styleReviewState: null,
+      timeTracker: this.time.timeTracker,
+      currentBranchId: this.branch.currentBranchId,
+      currentBgImage: this.image.currentBgImage,
+    }
+  }
+
   closeStory(): void {
     this.id = null
     this.title = null

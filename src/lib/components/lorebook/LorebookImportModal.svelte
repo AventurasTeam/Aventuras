@@ -117,16 +117,16 @@
   }
 
   async function handleImport() {
-    if (!parseResult || !story.currentStory) return
+    if (!parseResult || !story.isLoaded) return
 
     importing = true
     importProgress = null
 
     try {
       const result = await lorebookImportService.importEntries(parseResult, {
-        storyId: story.currentStory.id,
+        storyId: story.id!,
         useAIClassification,
-        storyMode: story.currentStory.mode ?? 'adventure',
+        storyMode: story.mode ?? 'adventure',
         onProgress: (progress) => {
           importProgress = progress
         },
@@ -134,7 +134,7 @@
 
       if (result.success) {
         // Reload entries into store
-        const allEntries = await lorebookImportService.getStoryEntries(story.currentStory.id)
+        const allEntries = await lorebookImportService.getStoryEntries(story.id!)
         story.lorebook.lorebookEntries = allEntries
 
         ui.showToast(`Successfully imported ${result.entriesImported} entries`, 'info')

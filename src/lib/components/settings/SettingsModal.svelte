@@ -50,11 +50,11 @@
 
   const storyTab = { id: 'story-settings' as const, label: 'Story', icon: BookOpen }
 
-  let tabs = $derived(story.currentStory ? [storyTab, ...baseTabs] : baseTabs)
+  let tabs = $derived(story.isLoaded ? [storyTab, ...baseTabs] : baseTabs)
 
   // Fall back to 'api' if story tab is active but story is unloaded
   $effect(() => {
-    if (ui.settingsTab === 'story-settings' && !story.currentStory) {
+    if (ui.settingsTab === 'story-settings' && !story.isLoaded) {
       ui.setSettingsTab('api')
     }
   })

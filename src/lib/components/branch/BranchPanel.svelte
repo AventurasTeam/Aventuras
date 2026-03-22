@@ -93,7 +93,7 @@
 
   function getLatestCheckpoint() {
     if (story.checkpoint.checkpoints.length === 0) return null
-    const currentBranchId = story.currentStory?.currentBranchId ?? null
+    const currentBranchId = story.branch.currentBranchId
     const eligible = story.checkpoint.checkpoints.filter(
       (checkpoint) => getCheckpointBranchId(checkpoint) === currentBranchId,
     )
@@ -136,7 +136,7 @@
   }
 
   async function refreshEntryCounts() {
-    if (!story.currentStory) return
+    if (!story.isLoaded) return
     const runId = ++entryCountsRun
     const counts: Record<string, number> = {}
 
@@ -157,8 +157,8 @@
 
   $effect(() => {
     const _ = [
-      story.currentStory?.id,
-      story.currentStory?.currentBranchId,
+      story.id,
+      story.branch.currentBranchId,
       story.branch.branches.length,
       story.entry.entries.length,
     ]
@@ -172,7 +172,7 @@
 
   // Check if branch is current
   function isCurrent(branchId: string | null): boolean {
-    return story.currentStory?.currentBranchId === branchId
+    return story.branch.currentBranchId === branchId
   }
 </script>
 

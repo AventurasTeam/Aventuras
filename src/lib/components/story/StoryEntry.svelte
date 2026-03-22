@@ -74,7 +74,7 @@
   )
 
   // Check if Visual Prose mode is enabled for this story
-  const visualProseMode = $derived(story.currentStory?.settings?.visualProseMode ?? false)
+  const visualProseMode = $derived(story.settings.visualProseMode ?? false)
 
   // Check if this is the latest narration entry (for retry button)
   const isLatestNarration = $derived.by(() => {
@@ -88,8 +88,8 @@
   const canRetry = $derived(
     isLatestNarration &&
       ui.retryBackup &&
-      story.currentStory &&
-      ui.retryBackup.storyId === story.currentStory.id &&
+      story.isLoaded &&
+      ui.retryBackup.storyId === story.id &&
       !ui.isGenerating &&
       !ui.lastGenerationError,
   )
@@ -207,7 +207,7 @@
 
   // Check if this entry has an associated checkpoint (can be branched from)
   // Only show checkpoints that belong to the current branch to prevent incorrect branch lineage
-  const currentBranchId = $derived(story.currentStory?.currentBranchId ?? null)
+  const currentBranchId = $derived(story.branch.currentBranchId)
   const entryCheckpoint = $derived(
     story.checkpoint.checkpoints.find(
       (cp) => cp.lastEntryId === entry.id && getCheckpointBranchId(cp) === currentBranchId,
@@ -279,16 +279,16 @@
 
   // Handle creating missing inline images (stuck/lost records)
   async function handleCreateMissingImage() {
-    if (!story.currentStory) return
+    if (!story.isLoaded) return
 
     // Trigger scanning of this entry
     // We pass the full content, the service will find tags and create missing records
     const context = {
-      storyId: story.currentStory.id,
+      storyId: story.id!,
       entryId: entry.id,
       narrativeContent: entry.translatedContent ?? entry.content,
       presentCharacters: story.character.characters, // Use all story characters for lookup
-      referenceMode: story.currentStory.settings?.referenceMode ?? false,
+      referenceMode: story.settings.referenceMode ?? false,
     }
 
     await inlineImageService.processNarrativeForInlineImages(context)
@@ -896,16 +896,16 @@
   }
 
   const styles = $derived({
-    user_action: story.currentBgImage
+    user_action: story.image.currentBgImage
       ? 'border-l-primary bg-primary/10 backdrop-blur-md'
       : 'border-l-primary bg-primary/5',
-    narration: story.currentBgImage
+    narration: story.image.currentBgImage
       ? 'border-l-muted-foreground/40 bg-card/60 backdrop-blur-md'
       : 'border-l-muted-foreground/40 bg-card',
-    system: story.currentBgImage
+    system: story.image.currentBgImage
       ? 'border-l-muted bg-muted/20 backdrop-blur-md italic text-muted-foreground'
       : 'border-l-muted bg-muted/30 italic text-muted-foreground',
-    retry: story.currentBgImage
+    retry: story.image.currentBgImage
       ? 'border-l-amber-500 bg-amber-500/20 backdrop-blur-md'
       : 'border-l-amber-500 bg-amber-500/10',
   })
@@ -931,8 +931,8 @@
       if (
         isLastUserAction &&
         ui.retryBackup &&
-        story.currentStory &&
-        ui.retryBackup.storyId === story.currentStory.id
+        story.isLoaded &&
+        ui.retryBackup.storyId === story.id
       ) {
         // Update the backup with the new content and trigger retry
         console.log('[StoryEntry] Editing last user action, triggering retry with new content')
@@ -1024,16 +1024,16 @@
   let isGeneratingStoryImages = $state(false)
 
   async function handleGenerateStoryImages() {
-    if (!story.currentStory || isGeneratingStoryImages) return
+    if (!story.isLoaded || isGeneratingStoryImages) return
     isGeneratingStoryImages = true
     try {
       const context = {
-        storyId: story.currentStory.id,
+        storyId: story.id!,
         entryId: entry.id,
         narrativeResponse: entry.content,
         userAction: '',
         presentCharacters: story.character.characters,
-        referenceMode: story.currentStory.settings?.referenceMode ?? false,
+        referenceMode: story.settings.referenceMode ?? false,
         translatedNarrative: entry.translatedContent ?? undefined,
       }
       await aiService.generateImagesForNarrative(context)
@@ -1170,7 +1170,7 @@
             <Volume2 class="h-4 w-4" />
           {/if}
         </Button>
-        {#if isLatestNarration && story.currentStory?.settings?.imageGenerationMode === 'agentic'}
+        {#if isLatestNarration && story.settings.imageGenerationMode === 'agentic'}
           <Button
             variant="text"
             size="icon"

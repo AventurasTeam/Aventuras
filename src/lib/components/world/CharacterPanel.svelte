@@ -73,15 +73,15 @@
   let editRuntimeVars = $state<RuntimeVarsMap>({})
 
   $effect(() => {
-    if (story.currentStory) {
+    if (story.isLoaded) {
       loadRuntimeVarDefs()
     }
   })
 
   async function loadRuntimeVarDefs() {
-    if (!story.currentStory) return
+    if (!story.isLoaded) return
     try {
-      const packId = await database.getStoryPackId(story.currentStory.id)
+      const packId = await database.getStoryPackId(story.id!)
       if (packId) {
         runtimeVarDefs = await database.getRuntimeVariablesByEntityType(packId, 'character')
       } else {
@@ -190,14 +190,14 @@
   }
 
   async function saveCharacterToVault(character: Character) {
-    if (!story.currentStory) return
+    if (!story.isLoaded) return
 
     // Ensure vault is loaded
     if (!characterVault.isLoaded) {
       await characterVault.load()
     }
 
-    await characterVault.saveFromStory(character, story.currentStory.id)
+    await characterVault.saveFromStory(character, story.id!)
 
     savedToVaultId = character.id
     setTimeout(() => (savedToVaultId = null), 2000)

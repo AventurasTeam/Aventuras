@@ -92,7 +92,7 @@
   }
 
   async function handleImport() {
-    if (!parseResult || !story.currentStory) return
+    if (!parseResult || !story.isLoaded) return
     importing = true
     try {
       await story.entry.importSTChat(parseResult.messages)
@@ -238,7 +238,7 @@
           <AlertTriangle class="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
           <div class="space-y-1 text-sm">
             <p class="text-foreground font-medium">
-              This will permanently replace all entries in "{story.currentStory?.title}".
+              This will permanently replace all entries in "{story.title}".
             </p>
             <p class="text-muted-foreground">
               Back up first: use <strong>Export → Aventuras (.avt)</strong> in the header, or

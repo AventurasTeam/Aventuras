@@ -161,8 +161,7 @@
   // ============================================================================
 
   const canShowManualImageGen = $derived(
-    story.currentStory?.settings?.imageGenerationMode === 'none' &&
-      !!controller.lastImageGenContext,
+    story.settings.imageGenerationMode === 'none' && !!controller.lastImageGenContext,
   )
 
   const manualImageGenDisabled = $derived.by(() => {
@@ -170,7 +169,7 @@
     return !hasRequiredCredentials()
   })
 
-  const isCreativeWritingMode = $derived(story.generationContext.isCreativeWritingMode)
+  const isCreativeWritingMode = $derived(story.mode === 'creative-writing')
 
   const sendKeyHint = $derived(
     isTouchDevice() ? 'Shift+Enter to send' : 'Enter to send, Shift+Enter for new line',
@@ -222,7 +221,7 @@
     () =>
       story.character.characters.find((c) => c.relationship === 'self')?.name ?? 'The protagonist',
   )
-  const pov = $derived(story.generationContext.pov)
+  const pov = $derived(story.settings.pov)
 
   const actionPrefixes = $derived.by(() => {
     switch (pov) {
@@ -251,7 +250,7 @@
   // ============================================================================
 
   $effect(() => {
-    const storyId = story.currentStory?.id ?? null
+    const storyId = story.id ?? null
     if (
       !storyId ||
       (controller.lastImageGenContext && controller.lastImageGenContext.storyId !== storyId)
@@ -302,8 +301,7 @@
 
   async function handleManualImageGeneration() {
     if (!controller.lastImageGenContext || manualImageGenDisabled) return
-    const storySettings = story.currentStory?.settings
-    if (!storySettings || storySettings.imageGenerationMode === 'none') return
+    if (story.settings.imageGenerationMode === 'none') return
     isManualImageGenRunning = true
     try {
       await aiService.generateImagesForNarrative(controller.lastImageGenContext)
@@ -315,11 +313,11 @@
   }
 
   async function handleSubmit() {
-    if (!inputValue.trim() || ui.isGenerating || !story.currentStory) return
+    if (!inputValue.trim() || ui.isGenerating || !story.isLoaded) return
 
     ui.clearGenerationError()
     ui.resetScrollBreak()
-    ui.clearSuggestions(story.currentStory.id)
+    ui.clearSuggestions(story.id!)
 
     const rawInput = inputValue.trim()
     const wasRawActionChoice = isRawActionChoice

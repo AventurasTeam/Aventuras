@@ -45,7 +45,7 @@
         ) {
           ui.setActivePanel('story')
         } else {
-          if (story.currentStory) story.closeStory()
+          if (story.isLoaded) story.closeStory()
           ui.setActivePanel('library')
         }
         return

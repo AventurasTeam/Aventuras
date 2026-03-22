@@ -38,7 +38,7 @@
       await exportLorebook({
         format: selectedFormat,
         entries: entriesToExport(),
-        filename: story.currentStory?.title ? `${story.currentStory.title}-lorebook` : undefined,
+        filename: story.title ? `${story.title}-lorebook` : undefined,
       })
       ui.showToast('Export successful', 'info')
       ui.closeLorebookExport()

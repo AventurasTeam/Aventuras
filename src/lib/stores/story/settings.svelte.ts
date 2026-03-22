@@ -53,7 +53,11 @@ export class StorySettingsStore {
     this.referenceMode = settings?.referenceMode
   }
 
-  /** Reconstruct the StorySettings object for DB persistence. */
+  /** Reconstruct the StorySettings object (for DB persistence or Story snapshots). */
+  toSnapshot(): StorySettings {
+    return this.toStorySettings()
+  }
+
   private toStorySettings(): StorySettings {
     return {
       pov: this._pov,

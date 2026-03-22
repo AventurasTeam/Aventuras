@@ -3,7 +3,6 @@
   import { hasRequiredCredentials } from '$lib/services/ai/image'
   import WritingStyleFields from '$lib/components/shared/WritingStyleFields.svelte'
 
-  const storySettings = $derived(story.currentStory?.settings ?? {})
   const imageGenEnabled = $derived(hasRequiredCredentials())
 </script>
 
@@ -14,22 +13,22 @@
   </div>
 
   <WritingStyleFields
-    selectedPOV={storySettings.pov ?? 'second'}
-    selectedTense={storySettings.tense ?? 'present'}
-    tone={storySettings.tone ?? ''}
-    visualProseMode={storySettings.visualProseMode ?? false}
+    selectedPOV={story.settings.pov}
+    selectedTense={story.settings.tense}
+    tone={story.settings.tone ?? ''}
+    visualProseMode={story.settings.visualProseMode ?? false}
     imageGenerationEnabled={imageGenEnabled}
-    imageGenerationMode={storySettings.imageGenerationMode ?? 'none'}
-    backgroundImagesEnabled={storySettings.backgroundImagesEnabled ?? false}
-    referenceMode={storySettings.referenceMode ?? false}
-    onPOVChange={(v) => story.updateStorySettings({ pov: v })}
-    onTenseChange={(v) => story.updateStorySettings({ tense: v })}
-    onToneChange={(v) => story.updateStorySettings({ tone: v })}
-    onVisualProseModeChange={(v) => story.updateStorySettings({ visualProseMode: v })}
-    onImageGenerationModeChange={(v) => story.updateStorySettings({ imageGenerationMode: v })}
+    imageGenerationMode={story.settings.imageGenerationMode ?? 'none'}
+    backgroundImagesEnabled={story.settings.backgroundImagesEnabled ?? false}
+    referenceMode={story.settings.referenceMode ?? false}
+    onPOVChange={(v) => story.settings.updateSettings({ pov: v })}
+    onTenseChange={(v) => story.settings.updateSettings({ tense: v })}
+    onToneChange={(v) => story.settings.updateSettings({ tone: v })}
+    onVisualProseModeChange={(v) => story.settings.updateSettings({ visualProseMode: v })}
+    onImageGenerationModeChange={(v) => story.settings.updateSettings({ imageGenerationMode: v })}
     onBackgroundImagesEnabledChange={(v) =>
-      story.updateStorySettings({ backgroundImagesEnabled: v })}
-    onReferenceModeChange={(v) => story.updateStorySettings({ referenceMode: v })}
+      story.settings.updateSettings({ backgroundImagesEnabled: v })}
+    onReferenceModeChange={(v) => story.settings.updateSettings({ referenceMode: v })}
     disabledFields={{ pov: true, tense: true, visualProseMode: true }}
     disabledReason="Cannot be changed mid-story. Set during story creation."
   />
