@@ -26,13 +26,14 @@ function log(...args: any[]) {
 export class StoryBranchStore {
   constructor(private ctx: StoryStore) {}
   branches = $state<Branch[]>([])
+  currentBranchId = $state<string | null>(null)
 
   /**
    * Get the current branch, or null if on the main branch (for legacy stories)
    */
   get currentBranch(): Branch | null {
-    if (!this.ctx.currentStory?.currentBranchId) return null
-    return this.branches.find((b) => b.id === this.ctx.currentStory!.currentBranchId) ?? null
+    if (!this.currentBranchId) return null
+    return this.branches.find((b) => b.id === this.currentBranchId) ?? null
   }
 
   /**
