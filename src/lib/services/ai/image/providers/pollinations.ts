@@ -15,8 +15,13 @@ import type {
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
 
-const DEFAULT_MODEL = 'zimage'
-const REFERENCE_MODEL = 'kontext'
+import {
+  POLLINATIONS_DEFAULT_MODEL_ID,
+  POLLINATIONS_REFERENCE_MODEL_ID,
+  POLLINATIONS_SUPPORTED_SIZES,
+} from '../constants'
+const DEFAULT_MODEL = POLLINATIONS_DEFAULT_MODEL_ID
+const REFERENCE_MODEL = POLLINATIONS_REFERENCE_MODEL_ID
 const MODELS_ENDPOINT = 'https://gen.pollinations.ai/image/models'
 
 interface PollinationsImageModelResponse {
@@ -102,7 +107,7 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
             id: model.name,
             name: model.name,
             description: model.description,
-            supportsSizes: ['512x512', '1024x1024', '1536x1536'],
+            supportsSizes: POLLINATIONS_SUPPORTED_SIZES,
             supportsImg2Img: model.input_modalities?.includes('image') ?? false,
             costPerImage:
               model.pricing?.completionImageTokens !== undefined
@@ -132,21 +137,21 @@ function getFallbackModels(): ImageModelInfo[] {
       id: DEFAULT_MODEL,
       name: 'Z Image',
       description: 'Default fast image generation',
-      supportsSizes: ['512x512', '1024x1024', '1536x1536'],
+      supportsSizes: POLLINATIONS_SUPPORTED_SIZES,
       supportsImg2Img: false,
     },
     {
       id: 'flux',
       name: 'Flux',
       description: 'High quality image generation',
-      supportsSizes: ['512x512', '1024x1024', '1536x1536'],
+      supportsSizes: POLLINATIONS_SUPPORTED_SIZES,
       supportsImg2Img: false,
     },
     {
       id: REFERENCE_MODEL,
       name: 'Flux Kontext',
       description: 'In-context editing & generation',
-      supportsSizes: ['512x512', '1024x1024', '1536x1536'],
+      supportsSizes: POLLINATIONS_SUPPORTED_SIZES,
       supportsImg2Img: true,
     },
   ]

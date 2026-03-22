@@ -5,6 +5,7 @@
  */
 
 import type { ProviderType, ReasoningEffort } from '$lib/types'
+import { POLLINATIONS_SUPPORTED_SIZES } from '../../image/constants'
 import { OPENROUTER_SUPPORTED_SIZES } from '../../image/providers/openrouter'
 
 // ============================================================================
@@ -246,7 +247,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     imageDefaults: {
       defaultModel: 'flux',
       referenceModel: 'kontext',
-      supportedSizes: ['512x512', '1024x1024', '1536x1536'],
+      supportedSizes: POLLINATIONS_SUPPORTED_SIZES,
     },
     fallbackModels: ['openai', 'openai-fast', 'claude-fast', 'mistral', 'gemini'],
     // No service defaults - user must configure models in Generation Settings

@@ -226,10 +226,15 @@ async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<Tex
     if (data.models && Array.isArray(data.models)) {
       const models = (data.models as GoogleModelEntry[])
         .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
-        .map((m) => ({
-          id: m.name.replace(/^models\//, ''),
-          reasoning: m.thinking,
-        }))
+        .map((m) => {
+          const id = m.name.replace(/^models\//, '')
+          const isGemini2 = id.includes('gemini-2.0') || id.includes('gemini-exp-1206')
+          return {
+            id,
+            reasoning: m.thinking ?? isGemini2,
+            isBudgetReasoning: isGemini2,
+          }
+        })
         .filter((m) => !!m.id)
       if (models.length > 0) return dedupeTextModels(models)
     }

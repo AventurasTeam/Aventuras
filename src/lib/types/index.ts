@@ -679,6 +679,8 @@ export type ProviderType =
 export interface TextModel {
   id: string
   reasoning?: boolean
+  /** Whether the model uses a token budget for reasoning (Gemini 2.x, Anthropic) instead of effort levels */
+  isBudgetReasoning?: boolean
   structuredOutput?: boolean
 }
 

@@ -19,7 +19,13 @@ import { jsonrepair } from 'jsonrepair'
 import type { z } from 'zod'
 
 import { settings } from '$lib/stores/settings.svelte'
-import type { ProviderType, GenerationPreset, ReasoningEffort, APIProfile } from '$lib/types'
+import type {
+  ProviderType,
+  GenerationPreset,
+  ReasoningEffort,
+  APIProfile,
+  TextModel,
+} from '$lib/types'
 import { createLogger } from '$lib/log'
 import { createProviderFromProfile } from './providers'
 import { PROVIDERS, getReasoningExtraction } from './providers/config'
@@ -97,6 +103,7 @@ export function buildProviderOptions(
   preset: GenerationPreset,
   providerType: ProviderType,
   structuredOutputs?: boolean,
+  modelInfo?: TextModel,
 ): ProviderOptions | undefined {
   let options: JSONObject = {}
 
@@ -143,12 +150,10 @@ export function buildProviderOptions(
         break
       case 'google':
         if (reasoningEffort) {
-          const isGemini2 =
-            preset.model.includes('gemini-2') || preset.model.includes('gemini-exp-1206')
           options = {
             thinkingConfig: {
               includeThoughts: true,
-              ...(isGemini2
+              ...(modelInfo?.isBudgetReasoning
                 ? { thinkingBudget: budgetTokens }
                 : { thinkingLevel: reasoningEffort }),
             },
@@ -255,6 +260,8 @@ function resolveConfig(presetId: string, serviceId: string, debugId?: string): R
     }
   }
 
+  const fetchedModel = settings.getProfileModels(profileId).find((m) => m.id === preset.model)
+
   const provider = createProviderFromProfile({
     profile,
     presetId: serviceId,
@@ -273,7 +280,12 @@ function resolveConfig(presetId: string, serviceId: string, debugId?: string): R
     profile,
     providerType: profile.providerType,
     model,
-    providerOptions: buildProviderOptions(preset, profile.providerType, supportsStructuredOutput),
+    providerOptions: buildProviderOptions(
+      preset,
+      profile.providerType,
+      supportsStructuredOutput,
+      fetchedModel,
+    ),
     supportsStructuredOutput,
     useThinkTag,
   }
@@ -288,13 +300,15 @@ function resolveNarrativeConfig(debugId?: string): NarrativeConfig {
     )
   }
 
+  const baseModelId = settings.apiSettings.defaultModel
+  const fetchedModel = settings.getProfileModels(profile.id).find((m) => m.id === baseModelId)
+
   const provider = createProviderFromProfile({
     profile,
     presetId: 'narrative',
     debugId,
     manualBody: settings.apiSettings.manualBody ?? '',
   })
-  const baseModelId = settings.apiSettings.defaultModel
   const reasoningEffort = settings.apiSettings.reasoningEffort ?? 'off'
   const model = provider(baseModelId) as LanguageModelV3
 
@@ -320,7 +334,12 @@ function resolveNarrativeConfig(debugId?: string): NarrativeConfig {
     model,
     temperature: settings.apiSettings.temperature,
     maxTokens: settings.apiSettings.maxTokens,
-    providerOptions: buildProviderOptions(narrativePreset, profile.providerType),
+    providerOptions: buildProviderOptions(
+      narrativePreset,
+      profile.providerType,
+      false,
+      fetchedModel,
+    ),
     useThinkTag,
   }
 }
