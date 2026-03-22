@@ -254,7 +254,6 @@ class GrammarService {
 
       if (this.linter) {
         try {
-          await this.linter.clearWords()
           await this.reimportEntityWords()
         } catch (error) {
           log('Failed to clear dictionary words:', error)
@@ -277,9 +276,12 @@ class GrammarService {
   }
 
   private async reimportEntityWords(): Promise<void> {
-    if (!this.linter || this.entityWords.size === 0) return
+    if (!this.linter) return
     try {
-      await this.linter.importWords([...this.entityWords])
+      await this.linter.clearWords()
+      if (this.entityWords.size > 0) {
+        await this.linter.importWords([...this.entityWords])
+      }
     } catch (error) {
       log('Failed to reimport entity words:', error)
     }
@@ -289,16 +291,14 @@ class GrammarService {
     return this.queueDictionaryOperation(async () => {
       this.entityWords.clear()
 
-      for (const name of names) {
-        // Split multi-word names into individual words
-        const words = name.split(/\s+/)
-        for (const word of words) {
+      names
+        .flatMap((name) => name.split(/\s+/))
+        .forEach((word) => {
           const normalized = this.normalizeWord(word)
           if (normalized) {
             this.entityWords.add(normalized.display)
           }
-        }
-      }
+        })
 
       await this.setup()
       await this.reimportAllWords()

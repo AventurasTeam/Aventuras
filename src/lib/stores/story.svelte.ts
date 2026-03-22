@@ -436,11 +436,9 @@ class StoryStore {
     return repairsMade
   }
 
-  // Close the current story and reset state
-  closeStory(): void {
+  private resetStoryState(): void {
     this.currentStory = null
     this.entries = []
-    this.currentBgImage = null
     this.characters = []
     this.locations = []
     this.items = []
@@ -448,10 +446,16 @@ class StoryStore {
     this.chapters = []
     this.checkpoints = []
     this.lorebookEntries = []
-    this.branches = []
     this.invalidateWordCountCache()
     this.invalidateChapterCache()
     grammarService.clearEntityWords()
+  }
+
+  // Close the current story and reset state
+  closeStory(): void {
+    this.resetStoryState()
+    this.currentBgImage = null
+    this.branches = []
     log('Story closed')
   }
 
@@ -2735,28 +2739,13 @@ class StoryStore {
 
   // Clear current story (when switching or closing)
   clearCurrentStory(): void {
-    this.currentStory = null
-    this.entries = []
-    this.lorebookEntries = []
-    this.characters = []
-    this.locations = []
-    this.items = []
-    this.storyBeats = []
-    this.chapters = []
-    this.checkpoints = []
-
-    // Reset all caches
-    this.invalidateWordCountCache()
-    this.invalidateChapterCache()
+    this.resetStoryState()
 
     // Clear current retry story ID (backups are kept per-story)
     ui.setCurrentRetryStoryId(null)
 
     // Clear style review state (will be loaded fresh for next story)
     ui.clearStyleReviewState()
-
-    // Clear entity words from spell checker
-    grammarService.clearEntityWords()
   }
 
   // Update story mode
