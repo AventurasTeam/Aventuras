@@ -6,10 +6,10 @@ import { buildStory, buildCharacter, buildEntry } from '$test/factories'
 describe('store hydration', () => {
   afterEach(() => clearTestStory())
 
-  it('loadTestStory populates story.currentStory', () => {
+  it('loadTestStory populates story root fields', () => {
     const s = buildStory({ title: 'Test Adventure' })
     loadTestStory({ story: s })
-    expect(story.currentStory?.title).toBe('Test Adventure')
+    expect(story.title).toBe('Test Adventure')
   })
 
   it('loadTestStory populates characters', () => {
@@ -36,7 +36,8 @@ describe('store hydration', () => {
       characters: [buildCharacter()],
     })
     clearTestStory()
-    expect(story.currentStory).toBeNull()
+    expect(story.isLoaded).toBe(false)
+    expect(story.id).toBeNull()
     expect(story.character.characters).toHaveLength(0)
   })
 })

@@ -119,7 +119,6 @@ describe('GenerationPipeline smoke test', () => {
     }
     story.generationContext.narrationEntryId = crypto.randomUUID()
     story.generationContext.abortSignal = new AbortController().signal
-    story.generationContext.embeddedImages = []
     story.generationContext.rawInput = 'I enter the cave'
     story.generationContext.actionType = 'do'
     story.generationContext.wasRawActionChoice = false

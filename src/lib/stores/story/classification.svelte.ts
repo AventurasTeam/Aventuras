@@ -132,9 +132,7 @@ export class StoryClassification {
       currentLocationIdBefore = currentLoc?.id ?? null
 
       // Snapshot time tracker
-      timeTrackerBefore = this.story.time.timeTracker
-        ? { ...this.story.time.timeTracker }
-        : null
+      timeTrackerBefore = this.story.time.timeTracker ? { ...this.story.time.timeTracker } : null
 
       // Snapshot characters that will be updated
       for (const update of result.entryUpdates.characterUpdates) {

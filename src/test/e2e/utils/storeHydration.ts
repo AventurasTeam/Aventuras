@@ -41,7 +41,19 @@ export function loadTestStory(options: LoadTestStoryOptions): void {
     chapters = [],
   } = options
 
-  story.currentStory = storyObj
+  story.id = storyObj.id
+  story.title = storyObj.title
+  story.description = storyObj.description
+  story.genre = storyObj.genre
+  story.templateId = storyObj.templateId
+  story.mode = storyObj.mode
+  story.createdAt = storyObj.createdAt
+  story.updatedAt = storyObj.updatedAt
+  story.settings.load(storyObj.settings, storyObj.memoryConfig)
+  story.time.load(storyObj.timeTracker)
+  story.branch.currentBranchId = storyObj.currentBranchId
+  story.image.currentBgImage = storyObj.currentBgImage
+
   story.character.characters = characters
   story.location.locations = locations
   story.item.items = items
@@ -55,7 +67,19 @@ export function loadTestStory(options: LoadTestStoryOptions): void {
  * Reset all story store state back to its initial empty values.
  */
 export function clearTestStory(): void {
-  story.currentStory = null
+  story.id = null
+  story.title = null
+  story.description = null
+  story.genre = null
+  story.templateId = null
+  story.mode = 'adventure'
+  story.createdAt = 0
+  story.updatedAt = 0
+  story.settings.clear()
+  story.time.clear()
+  story.branch.currentBranchId = null
+  story.image.clear()
+
   story.character.characters = []
   story.location.locations = []
   story.item.items = []

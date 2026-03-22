@@ -140,8 +140,6 @@ class AutoTracerImpl implements AutoTracer {
   }
 }
 
-export function createAutoTracer(
-  getStoreState: () => Record<string, unknown>,
-): AutoTracer {
+export function createAutoTracer(getStoreState: () => Record<string, unknown>): AutoTracer {
   return new AutoTracerImpl(getStoreState)
 }

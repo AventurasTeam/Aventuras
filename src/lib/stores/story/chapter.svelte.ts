@@ -210,7 +210,9 @@ export class StoryChapterStore {
     }
 
     // Ensure chapters are sorted by number
-    this.story.chapter.chapters = [...this.story.chapter.chapters].sort((a, b) => a.number - b.number)
+    this.story.chapter.chapters = [...this.story.chapter.chapters].sort(
+      (a, b) => a.number - b.number,
+    )
 
     if (repairsMade) {
       log('Chapter integrity validation complete', {

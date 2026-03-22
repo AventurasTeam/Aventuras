@@ -4,7 +4,35 @@ export const settings = {
   serviceSpecificSettings: null,
 }
 export const story = {
-  currentStory: null as any,
+  id: null as any,
+  title: null as any,
+  description: null as any,
+  genre: null as any,
+  templateId: null as any,
+  mode: 'adventure' as any,
+  createdAt: 0,
+  updatedAt: 0,
+  isLoaded: false,
+  settings: {
+    pov: 'first' as string,
+    tense: 'present' as string,
+    memoryConfig: null as any,
+    visualProseMode: false,
+    imageGenerationMode: undefined as any,
+    backgroundImagesEnabled: false,
+    referenceMode: false,
+    tone: undefined as any,
+    themes: undefined as any,
+    load: () => {},
+    clear: () => {},
+  },
+  image: {
+    currentBgImage: null as any,
+    clear: () => {},
+  },
+  branch: {
+    currentBranchId: null as any,
+  },
   chapter: {
     currentBranchChapters: [] as any[],
     chapters: [] as any[],
@@ -25,11 +53,10 @@ export const story = {
   },
   time: {
     timeTracker: null as any,
+    load: () => {},
+    clear: () => {},
   },
   generationContext: {
-    pov: 'first' as string,
-    tense: 'present' as string,
-    storyMode: 'adventure' as string,
     retrievalResult: null as any,
     clear: () => {},
   },
@@ -37,7 +64,6 @@ export const story = {
 export const storyUI = {}
 export const storyContext = {
   // Category 1 — world state
-  currentStory: null,
   entries: [],
   characters: [],
   locations: [],

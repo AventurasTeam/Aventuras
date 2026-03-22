@@ -195,14 +195,13 @@ function buildTestInput(storyId: string): {
     styleReview: { analyzeStyle: aiService.analyzeStyle.bind(aiService) },
   }
 
-  const currentStory = story.currentStory!
   const input: BackgroundTaskInput = {
     styleReview: {
       storyId,
       entries: story.entry.entries,
-      mode: currentStory.mode,
-      pov: story.generationContext.pov,
-      tense: story.generationContext.tense,
+      mode: story.mode,
+      pov: story.settings.pov,
+      tense: story.settings.tense,
       enabled: settings.systemServicesSettings.styleReviewer.enabled,
       triggerInterval: settings.systemServicesSettings.styleReviewer.triggerInterval,
       currentCounter: ui.messagesSinceLastStyleReview,
@@ -216,26 +215,26 @@ function buildTestInput(storyId: string): {
     },
     chapterCheck: {
       storyId,
-      currentBranchId: currentStory.currentBranchId,
+      currentBranchId: story.branch.currentBranchId,
       entries: story.entry.entries,
       lastChapterEndIndex: story.chapter.lastChapterEndIndex,
       tokensSinceLastChapter: story.generationContext.tokensSinceLastChapter,
       tokensOutsideBuffer: story.generationContext.tokensOutsideBuffer,
       messagesSinceLastChapter: story.chapter.messagesSinceLastChapter,
-      memoryConfig: story.generationContext.memoryConfig,
+      memoryConfig: story.settings.memoryConfig,
       currentBranchChapters: story.chapter.currentBranchChapters,
-      mode: currentStory.mode,
-      pov: story.generationContext.pov,
-      tense: story.generationContext.tense,
+      mode: story.mode,
+      pov: story.settings.pov,
+      tense: story.settings.tense,
     },
     loreSession: {
       storyId,
-      currentBranchId: currentStory.currentBranchId,
+      currentBranchId: story.branch.currentBranchId,
       lorebookEntries: story.lorebook.lorebookEntries,
       chapters: story.chapter.currentBranchChapters,
-      mode: currentStory.mode,
-      pov: story.generationContext.pov,
-      tense: story.generationContext.tense,
+      mode: story.mode,
+      pov: story.settings.pov,
+      tense: story.settings.tense,
     },
     loreCallbacks: {
       onCreateEntry: vi.fn().mockResolvedValue(undefined),

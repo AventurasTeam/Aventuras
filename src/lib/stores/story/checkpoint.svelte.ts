@@ -35,9 +35,7 @@ export class StoryCheckpointStore {
       itemsSnapshot: [...this.story.item.items],
       storyBeatsSnapshot: [...this.story.storyBeat.storyBeats],
       chaptersSnapshot: [...this.story.chapter.chapters],
-      timeTrackerSnapshot: this.story.time.timeTracker
-        ? { ...this.story.time.timeTracker }
-        : null,
+      timeTrackerSnapshot: this.story.time.timeTracker ? { ...this.story.time.timeTracker } : null,
       lorebookEntriesSnapshot: [...this.story.lorebook.lorebookEntries],
       createdAt: Date.now(),
     }

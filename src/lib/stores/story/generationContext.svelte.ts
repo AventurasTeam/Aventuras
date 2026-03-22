@@ -1,4 +1,4 @@
-import type { EmbeddedImage, ActionInputType } from '$lib/types'
+import type { ActionInputType } from '$lib/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
 import type { ActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import type { RetrievalResult } from '$lib/services/generation/types'

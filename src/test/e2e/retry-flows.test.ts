@@ -485,7 +485,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
-      const backup = buildRetryBackup(story.currentStory!.id, {
+      const backup = buildRetryBackup(story.id!, {
         hasFullState: true,
         entries: [...story.entry.entries],
         entryCountBeforeAction: story.entry.entries.length,

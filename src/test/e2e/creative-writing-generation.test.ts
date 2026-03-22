@@ -566,7 +566,7 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
     expect(story.storyBeat.storyBeats.find((b) => b.title === 'The Stranger Appears')).toBeDefined()
 
     // Time progression applied (hours → adds time to timeTracker)
-    expect(story.currentStory?.timeTracker).not.toBeNull()
+    expect(story.time.timeTracker).not.toBeNull()
 
     // ---- Assertions: Image phase ----
     expect(interceptor.getRequests('image-prompt-analysis').length).toBeGreaterThan(0)

@@ -25,27 +25,22 @@ vi.mock('$lib/services/templates/engine', () => ({
 const TEST_STORY_ID = 'story-singleton-test'
 
 beforeEach(() => {
-  story.currentStory = {
-    id: TEST_STORY_ID,
-    mode: 'adventure',
-    genre: 'fantasy',
-    description: 'A test setting',
-    settings: {
+  story.id = TEST_STORY_ID
+  story.mode = 'adventure'
+  story.genre = 'fantasy'
+  story.description = 'A test setting'
+  story.settings.load(
+    {
       pov: 'second',
       tense: 'past',
       tone: 'dark',
       themes: ['magic', 'betrayal'],
       visualProseMode: false,
       imageGenerationMode: 'standard',
-    },
-    timeTracker: { years: 1, days: 5, hours: 14, minutes: 30 },
-  } as any
-
-  // pov, tense, storyMode are readonly getters on the real class
-  // but writable plain properties on the stores-stub.
-  ;(story.generationContext as any).pov = 'second'
-  ;(story.generationContext as any).tense = 'past'
-  ;(story.generationContext as any).storyMode = 'adventure'
+    } as any,
+    null,
+  )
+  story.time.load({ years: 1, days: 5, hours: 14, minutes: 30 })
 
   story.character.characters = [
     { id: 'char-1', name: 'Hero', relationship: 'self', description: 'The hero' } as any,
@@ -60,26 +55,26 @@ beforeEach(() => {
 
   story.item.items = []
   story.storyBeat.storyBeats = []
-  ;(story.time as any).timeTracker = { years: 1, days: 5, hours: 14, minutes: 30 }
 })
 
 afterEach(() => {
-  story.currentStory = null
+  story.id = null
+  story.mode = 'adventure'
+  story.genre = null
+  story.description = null
+  story.settings.clear()
+  story.time.clear()
   story.character.characters = []
   story.location.locations = []
   story.item.items = []
   story.storyBeat.storyBeats = []
   ;(story.character as any).protagonist = undefined
   ;(story.location as any).currentLocation = undefined
-  ;(story.generationContext as any).pov = 'first'
-  ;(story.generationContext as any).tense = 'present'
-  ;(story.generationContext as any).storyMode = 'adventure'
-  ;(story.time as any).timeTracker = null
   vi.clearAllMocks()
 })
 
 describe('ContextBuilder.forStory singleton auto-detection', () => {
-  it('singleton path is used when storyContext.currentStory.id matches storyId', async () => {
+  it('singleton path is used when story.id matches storyId', async () => {
     const { database } = await import('$lib/services/database')
 
     await ContextBuilder.forStory(TEST_STORY_ID)
@@ -92,12 +87,12 @@ describe('ContextBuilder.forStory singleton auto-detection', () => {
     expect(database.getStoryPackId).toHaveBeenCalledWith(TEST_STORY_ID)
   })
 
-  it('throws when storyContext.currentStory.id does not match', async () => {
+  it('throws when story.id does not match', async () => {
     await expect(ContextBuilder.forStory('different-story-id')).rejects.toThrow('story not loaded')
   })
 
-  it('throws when storyContext.currentStory is null', async () => {
-    story.currentStory = null
+  it('throws when story.id is null', async () => {
+    story.id = null
 
     await expect(ContextBuilder.forStory(TEST_STORY_ID)).rejects.toThrow('story not loaded')
   })

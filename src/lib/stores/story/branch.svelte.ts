@@ -101,10 +101,7 @@ export class StoryBranchStore {
     this.branches = [...this.branches, branch]
 
     // Inherit background from checkpoint
-    const checkpointBg = await database.getBackgroundForCheckpoint(
-      this.story.id!,
-      checkpointId,
-    )
+    const checkpointBg = await database.getBackgroundForCheckpoint(this.story.id!, checkpointId)
     if (checkpointBg) {
       log('Inheriting background from checkpoint for new branch:', branch.name)
       await database.saveBackground(this.story.id!, branch.id, null, checkpointBg)
@@ -478,10 +475,7 @@ export class StoryBranchStore {
         const branch = lineage[i]
         const childForkPosition =
           i < lineage.length - 1 ? forkPositions.get(lineage[i + 1].id) : undefined
-        const branchChapters = await database.getChaptersForBranch(
-          this.story.id!,
-          branch.id,
-        )
+        const branchChapters = await database.getChaptersForBranch(this.story.id!, branch.id)
         if (childForkPosition === null || childForkPosition === undefined) {
           chapters.push(...branchChapters)
         } else {
@@ -725,8 +719,6 @@ export class StoryBranchStore {
    * Returns true if on a non-main branch with lightweightBranches enabled.
    */
   isCowBranch(): boolean {
-    return (
-      !!this.story.branch.currentBranchId && settings.experimentalFeatures.lightweightBranches
-    )
+    return !!this.story.branch.currentBranchId && settings.experimentalFeatures.lightweightBranches
   }
 }
