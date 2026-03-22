@@ -36,6 +36,8 @@
     ImageIcon,
     CornerDownLeft,
     CircleUser,
+    Pencil,
+    Square,
   } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
   import { Textarea } from '$lib/components/ui/textarea'
@@ -317,6 +319,35 @@
     } catch {
       // Ignore
     }
+  }
+
+  // Rename conversation
+  let renamingConversationId = $state<string | null>(null)
+  let renameValue = $state('')
+
+  function startRename(conv: VaultConversation) {
+    renamingConversationId = conv.id
+    renameValue = conv.title || ''
+  }
+
+  async function commitRename() {
+    if (!renamingConversationId) return
+    const trimmed = renameValue.trim()
+    if (trimmed) {
+      try {
+        await database.saveVaultConversation(renamingConversationId, { title: trimmed })
+        await loadConversationsList()
+      } catch {
+        // Ignore
+      }
+    }
+    renamingConversationId = null
+    renameValue = ''
+  }
+
+  function cancelRename() {
+    renamingConversationId = null
+    renameValue = ''
   }
 
   function handleReferenceImage(imageId: string) {
@@ -776,45 +807,82 @@
                       <div
                         class="group bg-surface-800 hover:bg-foreground/5 flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors"
                       >
-                        <button
-                          class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                          onclick={() => {
-                            conversationSelectorOpen = false
-                            handleSwitchConversation(conv.id)
-                          }}
-                        >
+                        {#if renamingConversationId === conv.id}
+                          <!-- Inline rename input -->
                           <div
                             class="bg-surface-700 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md"
                           >
                             <History class="text-surface-400 h-3.5 w-3.5" />
                           </div>
-                          <div class="min-w-0 flex-1">
-                            <div class="text-surface-200 truncate text-xs font-medium">
-                              {conv.title || 'Untitled'}
+                          <form
+                            class="flex min-w-0 flex-1 items-center gap-1.5"
+                            onsubmit={(e) => {
+                              e.preventDefault()
+                              commitRename()
+                            }}
+                          >
+                            <input
+                              class="bg-surface-700 text-surface-200 border-surface-600 focus:border-accent-500 min-w-0 flex-1 rounded-md border px-2 py-1 text-xs focus:outline-none"
+                              type="text"
+                              bind:value={renameValue}
+                              onkeydown={(e) => {
+                                if (e.key === 'Escape') cancelRename()
+                              }}
+                              onblur={() => commitRename()}
+                              autofocus
+                            />
+                          </form>
+                        {:else}
+                          <button
+                            class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                            onclick={() => {
+                              conversationSelectorOpen = false
+                              handleSwitchConversation(conv.id)
+                            }}
+                          >
+                            <div
+                              class="bg-surface-700 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md"
+                            >
+                              <History class="text-surface-400 h-3.5 w-3.5" />
                             </div>
-                            <div class="text-surface-500 mt-0.5 text-[10px]">
-                              {new Date(conv.updatedAt).toLocaleString(undefined, {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: 'numeric',
-                                minute: '2-digit',
-                              })}
-                              {#if i === conversations.length - 1 && conversations.length >= MAX_CONVERSATIONS}
-                                <span class="text-surface-600 ml-1">· oldest</span>
-                              {/if}
+                            <div class="min-w-0 flex-1">
+                              <div class="text-surface-200 truncate text-xs font-medium">
+                                {conv.title || 'Untitled'}
+                              </div>
+                              <div class="text-surface-500 mt-0.5 text-[10px]">
+                                {new Date(conv.updatedAt).toLocaleString(undefined, {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                })}
+                                {#if i === conversations.length - 1 && conversations.length >= MAX_CONVERSATIONS}
+                                  <span class="text-surface-600 ml-1">· oldest</span>
+                                {/if}
+                              </div>
                             </div>
-                          </div>
-                        </button>
-                        <button
-                          class="text-surface-500 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md opacity-0 transition-all group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400"
-                          onclick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteConversation(conv.id)
-                          }}
-                          title="Delete conversation"
-                        >
-                          <Trash2 class="h-3 w-3" />
-                        </button>
+                          </button>
+                          <button
+                            class="text-surface-500 hover:bg-surface-600 hover:text-surface-200 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md opacity-0 transition-all group-hover:opacity-100"
+                            onclick={(e) => {
+                              e.stopPropagation()
+                              startRename(conv)
+                            }}
+                            title="Rename conversation"
+                          >
+                            <Pencil class="h-3 w-3" />
+                          </button>
+                          <button
+                            class="text-surface-500 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md opacity-0 transition-all group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400"
+                            onclick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteConversation(conv.id)
+                            }}
+                            title="Delete conversation"
+                          >
+                            <Trash2 class="h-3 w-3" />
+                          </button>
+                        {/if}
                       </div>
                     {/each}
                   {/if}
@@ -1175,22 +1243,31 @@
                 class="border-surface-700 bg-surface-800 placeholder:text-surface-500 min-h-[2.5rem] resize-none rounded-xl text-sm"
                 disabled={isGenerating || !service}
               />
-              <Button
-                size="icon"
-                class={cn(
-                  'h-10 w-10 shrink-0 rounded-xl',
-                  isGenerating ? 'opacity-70' : 'bg-accent-600 hover:bg-accent-500',
-                )}
-                onclick={handleSend}
-                disabled={!inputValue.trim() || isGenerating || !service}
-                title="Send message"
-              >
-                {#if isGenerating}
-                  <Loader2 class="h-5 w-5 animate-spin" />
-                {:else}
+              {#if isGenerating}
+                <Button
+                  size="icon"
+                  class="h-10 w-10 shrink-0 rounded-xl bg-red-600 hover:bg-red-500"
+                  onclick={() => {
+                    if (abortController) {
+                      abortController.abort()
+                      abortController = null
+                    }
+                  }}
+                  title="Stop generating"
+                >
+                  <Square class="h-4 w-4 fill-current" />
+                </Button>
+              {:else}
+                <Button
+                  size="icon"
+                  class="bg-accent-600 hover:bg-accent-500 h-10 w-10 shrink-0 rounded-xl"
+                  onclick={handleSend}
+                  disabled={!inputValue.trim() || !service}
+                  title="Send message"
+                >
                   <Send class="h-5 w-5" />
-                {/if}
-              </Button>
+                </Button>
+              {/if}
             </div>
             <div class="text-surface-500 mt-1.5 hidden text-center text-[10px] md:block">
               {isTouchDevice()

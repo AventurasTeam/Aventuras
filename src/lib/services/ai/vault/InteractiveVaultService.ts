@@ -908,7 +908,7 @@ export class InteractiveVaultService extends BaseAIService {
 
     // Create new conversation with auto-generated title
     const id = `vc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const title = this.generateTitle()
+    const title = this.generateTitle(chatMessages)
     const now = new Date().toISOString()
 
     await database.createVaultConversation({
@@ -984,17 +984,9 @@ export class InteractiveVaultService extends BaseAIService {
    * Auto-generate a conversation title from the first user message.
    * Truncates to ~50 characters at a word boundary.
    */
-  private generateTitle(): string {
-    const firstUserMessage = this.conversationHistory.find((m) => m.role === 'user')
-    if (!firstUserMessage) return 'New Conversation'
-
-    const content =
-      typeof firstUserMessage.content === 'string'
-        ? firstUserMessage.content
-        : firstUserMessage.content
-            .filter((p): p is TextPart => p.type === 'text')
-            .map((p) => p.text)
-            .join(' ')
+  private generateTitle(chatMessages: ChatMessage[]): string {
+    const firstUser = chatMessages.find((m) => m.role === 'user')
+    const content = firstUser?.content
 
     if (!content) return 'New Conversation'
 
