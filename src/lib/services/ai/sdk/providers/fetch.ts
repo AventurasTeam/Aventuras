@@ -125,7 +125,9 @@ export function createTimeoutFetch(
               text,
             )
           })
-          .catch(() => {})
+          .catch((err) => {
+            console.warn('[Fetch] Failed to read error response for logging:', err)
+          })
         return response
       }
 
@@ -212,11 +214,23 @@ export function createTimeoutFetch(
               }
 
               if (hasAggregation) {
+                const finalChoices = Object.values(aggregatedChoices).map((choice: any) => {
+                  if (choice.message.tool_calls) {
+                    choice.message.tool_calls = choice.message.tool_calls.map((tc: any) => {
+                      try {
+                        tc.function.parsed_arguments = JSON.parse(tc.function.arguments)
+                      } catch {}
+                      return tc
+                    })
+                  }
+                  return choice
+                })
+
                 parsedBody = {
                   _note: 'Aggregated from stream',
                   id: aggregatedId,
                   model: aggregatedModel,
-                  choices: Object.values(aggregatedChoices),
+                  choices: finalChoices,
                 }
               } else if (parsedChunks.length > 0) {
                 parsedBody = parsedChunks
@@ -235,7 +249,9 @@ export function createTimeoutFetch(
               startTime,
             )
           })
-          .catch(() => {})
+          .catch((err) => {
+            console.warn('[Fetch] Failed to read streaming response for logging:', err)
+          })
         return response
       }
 
