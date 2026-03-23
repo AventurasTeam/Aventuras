@@ -679,6 +679,8 @@ export type ProviderType =
 export interface TextModel {
   id: string
   reasoning?: boolean
+  /** Whether the model uses a token budget for reasoning (Gemini 2.x, Anthropic) instead of effort levels */
+  isBudgetReasoning?: boolean
   structuredOutput?: boolean
 }
 
@@ -815,7 +817,7 @@ export interface InlineImageTag {
   status: 'pending' | 'generating' | 'complete' | 'failed'
 }
 
-export type ImageSize = '512x512' | '1024x1024' | '2048x2048'
+export type ImageSize = '512x512' | '1024x1024' | '1536x1536' | '2048x2048'
 
 export interface ImageGenerationSettings {
   enabled: boolean // Toggle for image generation (default: false)

@@ -92,8 +92,26 @@ class DebugStore {
   ) {
     if (!this.isActive) return
 
+    const entryId = `${requestId}-response`
+    const existingEntry = this.debugLogs.find((l) => l.id === entryId)
+
+    if (existingEntry) {
+      // Merge data instead of overwriting
+      existingEntry.data = { ...existingEntry.data, ...data }
+      existingEntry.duration = Date.now() - startTime
+      if (error) existingEntry.error = error
+
+      // Notify external window
+      if (this.debugWindowActive) {
+        emit('debug-log-added', this.safeIpcEntry(existingEntry)).catch((err) => {
+          console.warn('[UI] Failed to emit debug-log-added:', err)
+        })
+      }
+      return
+    }
+
     const entry: DebugLogEntry = {
-      id: `${requestId}-response`,
+      id: entryId,
       timestamp: Date.now(),
       type: 'response',
       serviceName,
