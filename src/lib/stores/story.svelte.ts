@@ -45,6 +45,7 @@ import {
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { aiService } from '$lib/services/ai'
 import { createLogger } from '$lib/log'
+import { grammarService } from '$lib/services/grammar'
 
 const log = createLogger('StoryStore')
 
@@ -435,11 +436,9 @@ class StoryStore {
     return repairsMade
   }
 
-  // Close the current story and reset state
-  closeStory(): void {
+  private resetStoryState(): void {
     this.currentStory = null
     this.entries = []
-    this.currentBgImage = null
     this.characters = []
     this.locations = []
     this.items = []
@@ -447,9 +446,16 @@ class StoryStore {
     this.chapters = []
     this.checkpoints = []
     this.lorebookEntries = []
-    this.branches = []
     this.invalidateWordCountCache()
     this.invalidateChapterCache()
+    grammarService.clearEntityWords()
+  }
+
+  // Close the current story and reset state
+  closeStory(): void {
+    this.resetStoryState()
+    this.currentBgImage = null
+    this.branches = []
     log('Story closed')
   }
 
@@ -491,6 +497,16 @@ class StoryStore {
     this.checkpoints = checkpoints
     this.lorebookEntries = lorebookEntries
     this.branches = branches
+
+    // Import entity names into spell checker so they are not flagged as errors
+    const entityNames = [
+      ...characters.map((c) => c.name),
+      ...locations.map((l) => l.name),
+      ...items.map((i) => i.name),
+      ...lorebookEntries.map((e) => e.name),
+      ...lorebookEntries.flatMap((e) => e.aliases ?? []),
+    ].filter(Boolean)
+    grammarService.importEntityWords(entityNames)
 
     // Load entries and chapters based on current branch
     await this.reloadEntriesForCurrentBranch()
@@ -2723,19 +2739,7 @@ class StoryStore {
 
   // Clear current story (when switching or closing)
   clearCurrentStory(): void {
-    this.currentStory = null
-    this.entries = []
-    this.lorebookEntries = []
-    this.characters = []
-    this.locations = []
-    this.items = []
-    this.storyBeats = []
-    this.chapters = []
-    this.checkpoints = []
-
-    // Reset all caches
-    this.invalidateWordCountCache()
-    this.invalidateChapterCache()
+    this.resetStoryState()
 
     // Clear current retry story ID (backups are kept per-story)
     ui.setCurrentRetryStoryId(null)
