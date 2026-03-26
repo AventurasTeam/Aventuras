@@ -82,12 +82,23 @@ export function createTimeoutFetch(
       parsedBody = undefined
     }
 
+    const rawHeaders = normalizeHeaders(init?.headers)
+    const sanitizedHeaders: Record<string, string> = {}
+    const sensitiveKeys = new Set(['authorization', 'x-api-key', 'api-key'])
+    for (const [key, value] of Object.entries(rawHeaders)) {
+      if (sensitiveKeys.has(key.toLowerCase()) && value.length > 8) {
+        sanitizedHeaders[key] = value.slice(0, 4) + '...' + value.slice(-4)
+      } else {
+        sanitizedHeaders[key] = value
+      }
+    }
+
     const debugId = debug.addDebugRequest(
       serviceId,
       {
         url: input.toString(),
         method: init?.method ?? 'GET',
-        headers: normalizeHeaders(init?.headers),
+        headers: sanitizedHeaders,
         body: parsedBody,
       },
       debugIdExternal,

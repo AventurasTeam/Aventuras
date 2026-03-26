@@ -12,6 +12,7 @@ export function dedupeTextModels(models: TextModel[]): TextModel[] {
       deduped.set(id, {
         ...existing,
         reasoning: existing.reasoning || model.reasoning || undefined,
+        isBudgetReasoning: existing.isBudgetReasoning ?? model.isBudgetReasoning ?? undefined,
         structuredOutput: existing.structuredOutput || model.structuredOutput || undefined,
       })
       continue

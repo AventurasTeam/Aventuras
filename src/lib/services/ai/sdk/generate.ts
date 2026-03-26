@@ -600,6 +600,7 @@ export function streamNarrative(options: NarrativeGenerateOptions) {
         debugId,
         'narrative:result',
         {
+          _note: 'This is the final SDK summary. Look at the other log entry for the raw response.',
           finishReason: result.finishReason,
           usage: result.usage,
           providerMetadata: result.providerMetadata,
