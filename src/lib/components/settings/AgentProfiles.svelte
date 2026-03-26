@@ -639,6 +639,8 @@
             )
             if (!models.find((m) => m.id === previousModel)) {
               tempPreset.model = ''
+            } else {
+              maybeEnableNanogptReasoning(id, previousModel)
             }
           }}
           onModelChange={(m) => {

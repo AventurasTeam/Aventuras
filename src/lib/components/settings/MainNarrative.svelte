@@ -55,6 +55,14 @@
     const models = settings.getAvailableModels(profileId)
     if (!models.find((m) => m.id === previousModel)) {
       settings.setDefaultModel('')
+    } else {
+      const profile = settings.getProfile(profileId)
+      if (profile) {
+        const model = settings.getProfileModels(profileId).find((mod) => mod.id === previousModel)
+        if (!!model?.reasoning && profile.providerType === 'nanogpt' && reasoningValue === 0) {
+          updateReasoning(3)
+        }
+      }
     }
   }
 
