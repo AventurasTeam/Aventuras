@@ -48,16 +48,14 @@
   }
 
   async function handleSetMainNarrativeProfile(profileId: string) {
-    const profile = settings.getProfile(profileId)
-    if (profile) {
-      const model = settings
-        .getProfileModels(profileId)
-        .find((mod) => mod.id === settings.apiSettings.defaultModel)
-      if (!!model?.reasoning && profile.providerType === 'nanogpt' && reasoningValue === 0) {
-        updateReasoning(3)
-      }
-    }
+    const previousModel = settings.apiSettings.defaultModel
     await settings.setMainNarrativeProfile(profileId)
+    await fetchModelsToProfile()
+
+    const models = settings.getAvailableModels(profileId)
+    if (!models.find((m) => m.id === previousModel)) {
+      settings.setDefaultModel('')
+    }
   }
 
   async function fetchModelsToProfile() {
