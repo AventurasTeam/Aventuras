@@ -859,6 +859,9 @@ class StoryStore {
       // Restore suggested actions from the new last narration entry
       this.restoreSuggestedActionsAfterDelete()
 
+      // Invalidate retry backup — state has changed, backup is stale
+      ui.clearRetryBackup(true)
+
       return
     }
 
@@ -875,6 +878,9 @@ class StoryStore {
 
     // Restore suggested actions from the new last narration entry
     this.restoreSuggestedActionsAfterDelete()
+
+    // Invalidate retry backup — state has changed, backup is stale
+    ui.clearRetryBackup(true)
   }
 
   /**
@@ -1758,6 +1764,7 @@ class StoryStore {
 
     await database.addEntry(entry)
     this.lorebookEntries = [...this.lorebookEntries, entry]
+    ui.setLastRetrievalResult(null)
     log('Lorebook entry added:', entry.name)
     return entry
   }
@@ -1782,6 +1789,7 @@ class StoryStore {
 
     await database.bulkInsertEntries(entries)
     this.lorebookEntries = [...this.lorebookEntries, ...entries]
+    ui.setLastRetrievalResult(null)
     log('Lorebook entries bulk added:', entries.length)
     return entries.length
   }
@@ -1807,6 +1815,7 @@ class StoryStore {
     this.lorebookEntries = this.lorebookEntries.map((e) =>
       e.id === owned.id ? { ...e, ...updatesWithTimestamp } : e,
     )
+    ui.setLastRetrievalResult(null)
     log('Lorebook entry updated:', owned.id)
   }
 
@@ -1832,6 +1841,7 @@ class StoryStore {
       await database.deleteEntry(id)
     }
     this.lorebookEntries = this.lorebookEntries.filter((e) => e.id !== id)
+    ui.setLastRetrievalResult(null)
     log('Lorebook entry deleted:', id)
   }
 
@@ -1860,6 +1870,7 @@ class StoryStore {
       await Promise.all(ids.map((id) => database.deleteEntry(id)))
     }
     this.lorebookEntries = this.lorebookEntries.filter((e) => !ids.includes(e.id))
+    ui.setLastRetrievalResult(null)
     log('Lorebook entries deleted:', ids.length)
   }
 
@@ -2744,8 +2755,8 @@ class StoryStore {
     // Clear current retry story ID (backups are kept per-story)
     ui.setCurrentRetryStoryId(null)
 
-    // Clear style review state (will be loaded fresh for next story)
-    ui.clearStyleReviewState()
+    // Clear all generation caches (style review, retrieval, lorebook debug)
+    ui.clearGenerationCaches()
   }
 
   // Update story mode
