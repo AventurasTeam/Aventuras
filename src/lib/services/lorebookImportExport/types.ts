@@ -6,7 +6,7 @@ import type { Entry, EntryType, EntryInjectionMode } from '$lib/types'
 
 // ===== Import Types =====
 
-export interface ImportedEntry {
+export type ImportedEntry = {
   name: string
   type: EntryType
   description: string
@@ -17,7 +17,7 @@ export interface ImportedEntry {
   originalData?: SillyTavernEntry
 }
 
-export interface LorebookImportResult {
+export type LorebookImportResult = {
   success: boolean
   entries: ImportedEntry[]
   errors: string[]
@@ -30,21 +30,21 @@ export interface LorebookImportResult {
   }
 }
 
-export interface ImportProgress {
+export type ImportProgress = {
   phase: 'parsing' | 'classifying' | 'converting' | 'inserting' | 'complete'
   current: number
   total: number
   message?: string
 }
 
-export interface ImportOptions {
+export type ImportOptions = {
   storyId: string
   useAIClassification: boolean
   storyMode: import('$lib/types').StoryMode
   onProgress?: (progress: ImportProgress) => void
 }
 
-export interface ImportResult {
+export type ImportResult = {
   success: boolean
   entriesImported: number
   errors: string[]
@@ -55,7 +55,7 @@ export interface ImportResult {
 
 export type ExportFormat = 'aventura' | 'sillytavern' | 'text'
 
-export interface LorebookExportOptions {
+export type LorebookExportOptions = {
   format: ExportFormat
   entries: Entry[]
   filename?: string
@@ -63,13 +63,13 @@ export interface LorebookExportOptions {
 
 // ===== SillyTavern Format Types (Internal) =====
 
-export interface SillyTavernCharacterFilter {
+export type SillyTavernCharacterFilter = {
   isExclude: boolean
   names: string[]
   tags: string[]
 }
 
-export interface SillyTavernEntry {
+export type SillyTavernEntry = {
   uid: number
   key: string[]
   keysecondary: string[]
@@ -114,7 +114,7 @@ export interface SillyTavernEntry {
   characterFilter: SillyTavernCharacterFilter
 }
 
-export interface SillyTavernLorebook {
+export type SillyTavernLorebook = {
   entries: Record<string, SillyTavernEntry>
   name?: string
   description?: string
