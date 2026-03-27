@@ -4,7 +4,7 @@
 
 import type { Wand2 } from 'lucide-svelte'
 import type { Genre, Tense } from '$lib/services/ai/wizard'
-import type { LorebookImportResult, ImportedEntry } from '$lib/services/lorebookImporter'
+import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import type { POV, EntryType } from '$lib/types'
 
 /**
@@ -14,8 +14,8 @@ export interface ImportedLorebookItem {
   id: string
   vaultId?: string // If imported from vault
   filename: string
-  result: LorebookImportResult
-  entries: ImportedEntry[]
+  result: LorebookImportExport.LorebookImportResult
+  entries: LorebookImportExport.ImportedEntry[]
   expanded: boolean
   /** Whether this lorebook is currently being processed (parsing or classifying) */
   isLoading?: boolean
@@ -78,7 +78,9 @@ export function getTypeColor(type: EntryType): string {
 /**
  * Get type counts from entries array
  */
-export function getTypeCounts(entries: ImportedEntry[]): Record<string, number> {
+export function getTypeCounts(
+  entries: LorebookImportExport.ImportedEntry[],
+): Record<string, number> {
   return {
     character: entries.filter((e) => e.type === 'character').length,
     location: entries.filter((e) => e.type === 'location').length,

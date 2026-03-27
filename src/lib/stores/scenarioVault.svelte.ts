@@ -2,7 +2,7 @@ import type { VaultScenario, VaultScenarioNpc } from '$lib/types'
 import { database } from '$lib/services/database'
 import { discoveryService, type DiscoveryCard } from '$lib/services/discovery'
 import { CharacterCardImport } from '$lib/services/characterCardImport'
-import { extractEmbeddedLorebook } from '$lib/services/lorebookImporter'
+import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import { lorebookVault } from './lorebookVault.svelte'
 import type { Genre } from '$lib/services/ai/wizard/ScenarioService'
 import { ui } from './ui.svelte'
@@ -300,7 +300,10 @@ class ScenarioVaultStore {
     // Extract embedded lorebook if present
     const parsed = CharacterCardImport.parseJson(jsonString)
     if (parsed?.characterBook) {
-      const extracted = extractEmbeddedLorebook(parsed.characterBook, parsed.name)
+      const extracted = LorebookImportExport.extractEmbeddedLorebook(
+        parsed.characterBook,
+        parsed.name,
+      )
       if (extracted) {
         try {
           if (!lorebookVault.isLoaded) await lorebookVault.load()

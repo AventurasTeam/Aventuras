@@ -4,7 +4,7 @@ import { aiService } from '$lib/services/ai'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 import { settings } from '$lib/stores/settings.svelte'
 import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
-import type { ImportedEntry } from '$lib/services/lorebookImporter'
+import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import type { GeneratedCharacter } from '$lib/services/ai/sdk'
 
 export class SettingStore {
@@ -70,7 +70,7 @@ export class SettingStore {
   async expandSetting(
     selectedGenre: Genre,
     customGenre: string,
-    importedEntries: ImportedEntry[] = [],
+    importedEntries: LorebookImportExport.ImportedEntry[] = [],
     seedOverride?: string,
   ) {
     const seed = seedOverride ?? this.settingSeed
@@ -113,7 +113,7 @@ export class SettingStore {
   async expandSettingFurther(
     selectedGenre: Genre,
     customGenre: string,
-    importedEntries: ImportedEntry[] = [],
+    importedEntries: LorebookImportExport.ImportedEntry[] = [],
   ) {
     if (!this.expandedSetting || this.isRefiningSetting) return
 

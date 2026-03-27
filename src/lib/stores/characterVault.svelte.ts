@@ -2,7 +2,7 @@ import type { VaultCharacter, Character } from '$lib/types'
 import { database } from '$lib/services/database'
 import { discoveryService, type DiscoveryCard } from '$lib/services/discovery'
 import { CharacterCardImport } from '$lib/services/characterCardImport'
-import { extractEmbeddedLorebook } from '$lib/services/lorebookImporter'
+import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import { lorebookVault } from './lorebookVault.svelte'
 import { ui } from './ui.svelte'
 import { createLogger } from '$lib/log'
@@ -373,7 +373,10 @@ class CharacterVaultStore {
 
       // Extract embedded lorebook if present
       if (parsed.characterBook) {
-        const extracted = extractEmbeddedLorebook(parsed.characterBook, parsed.name)
+        const extracted = LorebookImportExport.extractEmbeddedLorebook(
+          parsed.characterBook,
+          parsed.name,
+        )
         if (extracted) {
           try {
             if (!lorebookVault.isLoaded) await lorebookVault.load()

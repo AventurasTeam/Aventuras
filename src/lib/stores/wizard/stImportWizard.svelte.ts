@@ -8,7 +8,7 @@ import {
   type STChatMessage,
 } from '$lib/services/stChatImporter'
 import { CharacterCardImport } from '$lib/services/characterCardImport'
-import { extractEmbeddedLorebook } from '$lib/services/lorebookImporter'
+import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import { replaceUserPlaceholders } from '$lib/components/wizard/wizardTypes'
 import type { ImportedLorebookItem } from '$lib/components/wizard/wizardTypes'
 import type { StoryMode, POV, VaultCharacter, VaultLorebook, VaultLorebookEntry } from '$lib/types'
@@ -19,7 +19,6 @@ import type {
   GeneratedProtagonist,
 } from '$lib/services/ai/sdk'
 import type { Genre, Tense } from '$lib/services/ai/wizard/ScenarioService'
-import type { LorebookImportResult } from '$lib/services/lorebookImporter'
 import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
 import { database } from '$lib/services/database'
 import { ImageStore } from '$lib/stores/wizard/imageStore.svelte'
@@ -63,7 +62,7 @@ export class STImportWizardStore {
   embeddedLorebookData = $state<{
     name: string
     entries: VaultLorebookEntry[]
-    result: LorebookImportResult
+    result: LorebookImportExport.LorebookImportResult
   } | null>(null)
 
   // Step 3: Characters
@@ -314,7 +313,10 @@ export class STImportWizardStore {
 
       // Extract embedded lorebook
       if (parsed.characterBook) {
-        this.embeddedLorebookData = extractEmbeddedLorebook(parsed.characterBook, parsed.name)
+        this.embeddedLorebookData = LorebookImportExport.extractEmbeddedLorebook(
+          parsed.characterBook,
+          parsed.name,
+        )
       }
 
       // Auto-populate title from card name

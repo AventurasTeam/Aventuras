@@ -1,8 +1,7 @@
 import type { VaultLorebook, EntryType, VaultLorebookEntry } from '$lib/types'
-import type { LorebookImportResult } from '$lib/services/lorebookImporter'
 import { database } from '$lib/services/database'
 import { discoveryService, type DiscoveryCard } from '$lib/services/discovery'
-import { parseLorebook, classifyEntriesWithLLM } from '$lib/services/lorebookImporter'
+import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import { ui } from './ui.svelte'
 import { createLogger } from '$lib/log'
 
@@ -80,7 +79,7 @@ class LorebookVaultStore {
   async saveFromImport(
     name: string,
     entries: VaultLorebookEntry[],
-    result: LorebookImportResult,
+    result: LorebookImportExport.LorebookImportResult,
     filename: string,
     linkedFrom?: { name: string; type: 'character' | 'scenario' },
   ): Promise<VaultLorebook> {
@@ -273,13 +272,13 @@ class LorebookVaultStore {
   private async _processDiscoveryImport(tempId: string, card: DiscoveryCard): Promise<void> {
     const blob = await discoveryService.downloadCard(card)
     const text = await blob.text()
-    const parsed = parseLorebook(text)
+    const parsed = LorebookImportExport.parse(text)
     if (!parsed.success || parsed.entries.length === 0) {
       throw new Error(parsed.errors.join('; ') || 'Failed to parse lorebook')
     }
 
     // Classify entries with LLM
-    const entries = await classifyEntriesWithLLM(
+    const entries = await LorebookImportExport.classifyEntries(
       parsed.entries,
       // eslint-disable-next-line unused-imports/no-unused-vars
       (current, total) => {
@@ -370,12 +369,12 @@ class LorebookVaultStore {
 
   private async _processFileImport(tempId: string, file: File, name: string): Promise<void> {
     const text = await file.text()
-    const parsed = parseLorebook(text)
+    const parsed = LorebookImportExport.parse(text)
     if (!parsed.success || parsed.entries.length === 0) {
       throw new Error(parsed.errors.join('; ') || 'Failed to parse lorebook')
     }
 
-    const entries = await classifyEntriesWithLLM(
+    const entries = await LorebookImportExport.classifyEntries(
       parsed.entries,
       // eslint-disable-next-line unused-imports/no-unused-vars
       (current, total) => {

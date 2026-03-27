@@ -30,7 +30,7 @@ import { extractInlineCustomVars } from '$lib/services/ai/sdk/schemas/runtime-va
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
 import type { RuntimeVariable } from '$lib/services/packs/types'
 import { DEFAULT_MEMORY_CONFIG } from '$lib/services/ai/generation/MemoryService'
-import { convertToEntries, type ImportedEntry } from '$lib/services/lorebookImporter'
+import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import { countTokens } from '$lib/services/tokenizer'
 import type { STChatMessage } from '$lib/services/stChatImporter'
 import {
@@ -4086,7 +4086,7 @@ class StoryStore {
     initialItems: Partial<Item>[]
     openingScene: string
     characters: Partial<Character>[]
-    importedEntries?: ImportedEntry[]
+    importedEntries?: LorebookImportExport.ImportedEntry[]
     // Translation data (optional)
     translations?: {
       language: string
@@ -4287,7 +4287,7 @@ class StoryStore {
 
     // Add imported lorebook entries
     if (data.importedEntries && data.importedEntries.length > 0) {
-      const entries = convertToEntries(data.importedEntries, 'import')
+      const entries = LorebookImportExport.convertToEntries(data.importedEntries, 'import')
       for (const entryData of entries) {
         const entry: Entry = {
           ...entryData,
