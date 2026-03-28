@@ -58,7 +58,6 @@ export type {
   StoryToolContext,
   VaultLorebookToolContext,
   ChapterInfo,
-  VaultLorebookPendingChangeSchema,
   LorebookEntryTools,
   StoryTools,
   VaultLorebookTools,

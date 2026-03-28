@@ -16,8 +16,6 @@ import {
   type VaultLorebookPendingChangeSchema,
 } from '../schemas/lorebook'
 
-export type { VaultLorebookPendingChangeSchema }
-
 /**
  * Context provided to lorebook tools.
  * Tools are factory functions that capture this context.

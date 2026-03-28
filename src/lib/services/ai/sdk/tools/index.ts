@@ -11,7 +11,6 @@ export {
   type StoryToolContext,
   type VaultLorebookToolContext,
   type ChapterInfo,
-  type VaultLorebookPendingChangeSchema,
   type LorebookEntryTools,
   type StoryTools,
   type VaultLorebookTools,
