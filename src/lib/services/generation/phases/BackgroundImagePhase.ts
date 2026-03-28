@@ -29,7 +29,7 @@ export interface BackgroundImageResult {
 /** Coordinates image generation. Errors are non-fatal. */
 export class BackgroundImagePhase {
   /** Execute the image phase - yields events and returns result */
-  async *execute(): AsyncGenerator<GenerationEvent, BackgroundImageResult> {
+  async *execute(): AsyncGenerator<GenerationEvent> {
     const abortSignal = story.generationContext.abortSignal ?? undefined
     const imageSettings: BackgroundImageSettings = {
       backgroundImagesEnabled: story.settings.backgroundImagesEnabled ?? false,
@@ -42,29 +42,29 @@ export class BackgroundImagePhase {
     if (imageSettings.backgroundImagesEnabled === false) {
       const result: BackgroundImageResult = { started: false, skippedReason: 'disabled' }
       story.generationContext.backgroundResult = result
-      yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
-      return result
+      yield { type: 'phase_complete', phase: 'image' } satisfies PhaseCompleteEvent
+      return
     }
 
     // Skip in inline mode - we don't want agentic background analysis in pure inline mode
     if (imageSettings.imageGenerationMode === 'inline') {
       const result: BackgroundImageResult = { started: false, skippedReason: 'inline_mode' }
       story.generationContext.backgroundResult = result
-      yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
-      return result
+      yield { type: 'phase_complete', phase: 'image' } satisfies PhaseCompleteEvent
+      return
     }
 
     // Check if image generation is actually configured (profile exists)
     if (!aiService.isImageGenerationEnabled(imageSettings, 'background')) {
       const result: BackgroundImageResult = { started: false, skippedReason: 'not_configured' }
       story.generationContext.backgroundResult = result
-      yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
-      return result
+      yield { type: 'phase_complete', phase: 'image' } satisfies PhaseCompleteEvent
+      return
     }
 
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'image' } satisfies AbortedEvent
-      return { started: false, skippedReason: 'aborted' }
+      return
     }
 
     try {
@@ -73,11 +73,11 @@ export class BackgroundImagePhase {
       const result: BackgroundImageResult = { started: true }
       story.generationContext.backgroundResult = result
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
-      return result
+      return
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         yield { type: 'aborted', phase: 'image' } satisfies AbortedEvent
-        return { started: false, skippedReason: 'aborted' }
+        return
       }
 
       // Image generation errors are non-fatal
@@ -88,7 +88,7 @@ export class BackgroundImagePhase {
         fatal: false,
       } satisfies ErrorEvent
 
-      return { started: false }
+      return
     }
   }
 }

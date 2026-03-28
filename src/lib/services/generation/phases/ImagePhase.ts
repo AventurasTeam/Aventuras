@@ -29,7 +29,7 @@ export interface ImageResult {
 /** Coordinates image generation. Errors are non-fatal. */
 export class ImagePhase {
   /** Execute the image phase - yields events and returns result */
-  async *execute(): AsyncGenerator<GenerationEvent, ImageResult> {
+  async *execute(): AsyncGenerator<GenerationEvent> {
     yield { type: 'phase_start', phase: 'image' } satisfies PhaseStartEvent
 
     const imageSettings: ImageSettings = {
@@ -42,7 +42,7 @@ export class ImagePhase {
       const result: ImageResult = { started: false, skippedReason: 'inline_mode' }
       story.generationContext.imageResult = result
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
-      return result
+      return
     }
 
     // Check if image generation is disabled for this story
@@ -50,7 +50,7 @@ export class ImagePhase {
       const result: ImageResult = { started: false, skippedReason: 'disabled' }
       story.generationContext.imageResult = result
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
-      return result
+      return
     }
 
     // Check if auto-generate is off (manual mode - context stored for later)
@@ -58,7 +58,7 @@ export class ImagePhase {
       const result: ImageResult = { started: false, skippedReason: 'agentic_generate_off' }
       story.generationContext.imageResult = result
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
-      return result
+      return
     }
 
     // Check if image generation is actually configured (profile exists)
@@ -70,7 +70,7 @@ export class ImagePhase {
       const result: ImageResult = { started: false, skippedReason: 'not_configured' }
       story.generationContext.imageResult = result
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
-      return result
+      return
     }
 
     if (story.generationContext.abortSignal?.aborted) {
@@ -87,11 +87,11 @@ export class ImagePhase {
       const result: ImageResult = { started: true }
       story.generationContext.imageResult = result
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
-      return result
+      return
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         yield { type: 'aborted', phase: 'image' } satisfies AbortedEvent
-        return { started: false, skippedReason: 'aborted' }
+        return
       }
 
       // Image generation errors are non-fatal
@@ -102,7 +102,7 @@ export class ImagePhase {
         fatal: false,
       } satisfies ErrorEvent
 
-      return { started: false }
+      return
     }
   }
 }

@@ -35,7 +35,7 @@ export interface NarrativeResult {
  */
 export class NarrativePhase {
   /** Execute the narrative phase - yields chunk events and phase events */
-  async *execute(): AsyncGenerator<GenerationEvent, boolean> {
+  async *execute(): AsyncGenerator<GenerationEvent> {
     yield { type: 'phase_start', phase: 'narrative' } satisfies PhaseStartEvent
 
     const abortSignal = story.generationContext.abortSignal ?? undefined
@@ -48,7 +48,7 @@ export class NarrativePhase {
     while (retryCount < MAX_EMPTY_RESPONSE_RETRIES) {
       if (abortSignal?.aborted) {
         yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
-        return false
+        return
       }
 
       fullResponse = ''
@@ -59,7 +59,7 @@ export class NarrativePhase {
         for await (const chunk of aiService.streamNarrative()) {
           if (abortSignal?.aborted) {
             yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
-            return false
+            return
           }
 
           chunkCount++
@@ -93,7 +93,7 @@ export class NarrativePhase {
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
           yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
-          return false
+          return
         }
         yield {
           type: 'error',
@@ -101,13 +101,13 @@ export class NarrativePhase {
           error: error instanceof Error ? error : new Error(String(error)),
           fatal: true,
         } satisfies ErrorEvent
-        return false
+        return
       }
     }
 
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
-      return false
+      return
     }
 
     if (!fullResponse.trim()) {
@@ -117,7 +117,7 @@ export class NarrativePhase {
         error: new Error(`Empty response after ${MAX_EMPTY_RESPONSE_RETRIES} attempts`),
         fatal: true,
       } satisfies ErrorEvent
-      return false
+      return
     }
 
     const result: NarrativeResult = {
@@ -134,6 +134,6 @@ export class NarrativePhase {
     // Write result to singleton before returning (only on success path)
     story.generationContext.narrativeResult = result
 
-    return true
+    return
   }
 }

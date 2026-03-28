@@ -35,8 +35,8 @@ export interface TranslationResult2 {
  * Errors are non-fatal - if translation fails, the pipeline continues with original content.
  */
 export class TranslationPhase {
-  /** Execute the translation phase - yields events and returns result */
-  async *execute(): AsyncGenerator<GenerationEvent, TranslationResult2> {
+  /** Execute the translation phase - yields events */
+  async *execute(): AsyncGenerator<GenerationEvent> {
     yield { type: 'phase_start', phase: 'translation' } satisfies PhaseStartEvent
 
     const abortSignal = story.generationContext.abortSignal ?? undefined
@@ -57,7 +57,7 @@ export class TranslationPhase {
         result,
       } satisfies PhaseCompleteEvent
 
-      return result
+      return
     }
 
     if (abortSignal?.aborted) {
@@ -68,7 +68,7 @@ export class TranslationPhase {
         targetLanguage: null,
       }
       story.generationContext.translationResult = result
-      return result
+      return
     }
 
     const targetLanguage = translationSettings.targetLanguage
@@ -84,7 +84,7 @@ export class TranslationPhase {
           targetLanguage: null,
         }
         story.generationContext.translationResult = result
-        return result
+        return
       }
 
       const result: TranslationResult2 = {
@@ -100,7 +100,7 @@ export class TranslationPhase {
         result,
       } satisfies PhaseCompleteEvent
 
-      return result
+      return
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         yield { type: 'aborted', phase: 'translation' } satisfies AbortedEvent
@@ -110,7 +110,7 @@ export class TranslationPhase {
           targetLanguage: null,
         }
         story.generationContext.translationResult = result
-        return result
+        return
       }
 
       // Translation errors are non-fatal - log and continue with original content
@@ -127,7 +127,7 @@ export class TranslationPhase {
         targetLanguage: null,
       }
       story.generationContext.translationResult = result
-      return result
+      return
     }
   }
 }

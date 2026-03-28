@@ -36,7 +36,7 @@ export interface PostGenerationResult {
  * Errors are non-fatal - generation continues even if suggestions fail.
  */
 export class PostGenerationPhase {
-  async *execute(): AsyncGenerator<GenerationEvent, boolean> {
+  async *execute(): AsyncGenerator<GenerationEvent> {
     yield { type: 'phase_start', phase: 'post' } satisfies PhaseStartEvent
 
     const isCreativeWritingMode = story.mode === 'creative-writing'
@@ -45,7 +45,7 @@ export class PostGenerationPhase {
 
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'post' } satisfies AbortedEvent
-      return false
+      return
     }
 
     const result: PostGenerationResult = { suggestions: null, actionChoices: null }
@@ -56,21 +56,21 @@ export class PostGenerationPhase {
           result.suggestions = await this.generateSuggestions(settings.translationSettings)
         } catch (error) {
           yield this.errorEvent(error)
-          return false
+          return
         }
       } else {
         try {
           result.actionChoices = await this.generateActionChoices(settings.translationSettings)
         } catch (error) {
           yield this.errorEvent(error)
-          return false
+          return
         }
       }
     }
 
     story.generationContext.postGenerationResult = result
     yield { type: 'phase_complete', phase: 'post', result } satisfies PhaseCompleteEvent
-    return true
+    return
   }
 
   private async generateSuggestions(

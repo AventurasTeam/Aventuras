@@ -21,7 +21,7 @@ import { settings } from '$lib/stores/settings.svelte'
 import { aiService } from '$lib/services/ai'
 
 export class RetrievalPhase {
-  async *execute(): AsyncGenerator<GenerationEvent, boolean> {
+  async *execute(): AsyncGenerator<GenerationEvent> {
     yield { type: 'phase_start', phase: 'retrieval' } satisfies PhaseStartEvent
 
     const timelineFillEnabled = settings.systemServicesSettings.timelineFill?.enabled ?? true
@@ -78,7 +78,7 @@ export class RetrievalPhase {
 
     if (story.generationContext.abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'retrieval' } satisfies AbortedEvent
-      return false
+      return
     }
 
     // Extract Entry[] from retrieval result (with optional description truncation)
@@ -101,7 +101,7 @@ export class RetrievalPhase {
 
     story.generationContext.retrievalResult = result
 
-    return true
+    return
   }
 
   private async runMemoryRetrieval(): Promise<{
