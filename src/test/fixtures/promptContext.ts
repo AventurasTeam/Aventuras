@@ -184,30 +184,6 @@ const chapters: Chapter[] = [
 ]
 
 // ---------------------------------------------------------------------------
-// World state arrays
-// ---------------------------------------------------------------------------
-
-const relevantWorldState: WorldStateArrays = {
-  characters,
-  inventory: items,
-  relevantItems: [
-    {
-      id: 'i3', storyId: 's1', name: 'Crystal of Aethon', description: 'A powerful artifact',
-      quantity: 1, equipped: false, location: 'world', metadata: null, branchId: null,
-    },
-  ],
-  storyBeats: storyBeats.filter((b) => b.status === 'active' || b.status === 'pending'),
-  relatedStoryBeats: [
-    {
-      id: 'b4', storyId: 's1', title: 'The Prophecy',
-      description: 'An ancient prophecy speaks of a chosen one',
-      type: 'revelation', status: 'active', triggeredAt: null, metadata: null, branchId: null,
-    },
-  ],
-  locations: locations.filter((l) => !l.current),
-}
-
-// ---------------------------------------------------------------------------
 // Retrieval result
 // ---------------------------------------------------------------------------
 
@@ -352,6 +328,30 @@ const storyBeats: StoryBeat[] = [
     type: 'event', status: 'completed', triggeredAt: Date.now(), metadata: null, branchId: null,
   },
 ]
+
+// ---------------------------------------------------------------------------
+// World state arrays
+// ---------------------------------------------------------------------------
+
+const relevantWorldState: WorldStateArrays = {
+  characters,
+  inventory: items,
+  relevantItems: [
+    {
+      id: 'i3', storyId: 's1', name: 'Crystal of Aethon', description: 'A powerful artifact',
+      quantity: 1, equipped: false, location: 'world', metadata: null, branchId: null,
+    },
+  ],
+  storyBeats: storyBeats.filter((b) => b.status === 'active' || b.status === 'pending'),
+  relatedStoryBeats: [
+    {
+      id: 'b4', storyId: 's1', title: 'The Prophecy',
+      description: 'An ancient prophecy speaks of a chosen one',
+      type: 'revelation', status: 'active', triggeredAt: null, metadata: null, branchId: null,
+    },
+  ],
+  locations: locations.filter((l) => !l.current),
+}
 
 // ---------------------------------------------------------------------------
 // Tier 3 candidates
