@@ -7,36 +7,12 @@
  * All functions are stateless and side-effect-free.
  */
 
-import type { Character, StoryBeat, StoryEntry } from '$lib/types'
+import type { StoryBeat, StoryEntry } from '$lib/types'
 import type {
-  ContextClassifierCharacter,
   ContextClassifierBeat,
   ContextChatEntry,
 } from './context-types'
-import { normalizeAppearance } from './context-utils'
 import { stripPicTags } from '$lib/utils/inlineImageParser'
-
-/**
- * Map an array of Character domain objects to ContextClassifierCharacter context shapes.
- *
- * Strips IDs, timestamps, and translation fields.
- * Normalizes visualDescriptors into a flat appearance string[].
- * Defaults tier to 1 — classifier processes full active roster, no retrieval ranking.
- */
-export function mapCharacters(characters: Character[]): ContextClassifierCharacter[] {
-  return characters.map(
-    (c) =>
-      ({
-        name: c.name,
-        description: c.description ?? '',
-        relationship: c.relationship ?? '',
-        traits: c.traits ?? [],
-        appearance: normalizeAppearance(c.visualDescriptors),
-        status: c.status,
-        tier: 1,
-      }) satisfies ContextClassifierCharacter,
-  )
-}
 
 /**
  * Map an array of StoryBeat domain objects to ContextClassifierBeat context shapes.
