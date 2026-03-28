@@ -5,12 +5,14 @@ import type {
   ExperimentalFeatures,
   FontSource,
   GenerationPreset,
+  ImageGenerationServiceSettings,
   ImageProfile,
   ImageProviderType,
   ProviderType,
   ReasoningEffort,
   TextModel,
   ThemeId,
+  TimelineFillSettings,
   TranslationSettings,
   UISettings,
   UpdateSettings,
@@ -22,7 +24,6 @@ import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '$lib/constants/timeout'
 import { SvelteSet, SvelteMap } from 'svelte/reactivity'
 import { dedupeTextModels } from '$lib/utils/dedupeTextModels'
-import type { ImageGenerationServiceSettings, TimelineFillSettings } from '$lib/services/ai'
 import { debug } from './debug.svelte'
 
 // Provider preset type (used by WelcomeScreen)
