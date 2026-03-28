@@ -721,6 +721,76 @@ class StoryStore {
     log('Story created from wizard:', storyId)
     return storyData
   }
+
+  /**
+   * Delete entities that were created after the backup.
+   * Used for persistent retry restore to remove AI-extracted entities.
+   * Compares current entity IDs against the saved ID lists and deletes any not in the lists.
+   * NOTE: Lorebook entries are NOT included as they are independent of retry operations
+   * (they are based on permanent chapters, not current chat).
+   */
+  async deleteEntitiesCreatedAfterBackup(savedIds: {
+    characterIds: string[]
+    locationIds: string[]
+    itemIds: string[]
+    storyBeatIds: string[]
+    embeddedImageIds?: string[]
+  }): Promise<void> {
+    if (!this.id) throw new Error('No story loaded')
+
+    const characterIdsSet = new Set(savedIds.characterIds)
+    const locationIdsSet = new Set(savedIds.locationIds)
+    const itemIdsSet = new Set(savedIds.itemIds)
+    const storyBeatIdsSet = new Set(savedIds.storyBeatIds)
+    const embeddedImageIdsSet = new Set(savedIds.embeddedImageIds ?? [])
+
+    // Find entities to delete (not in saved lists)
+    const charactersToDelete = this.character.characters.filter((c) => !characterIdsSet.has(c.id))
+    const locationsToDelete = this.location.locations.filter((l) => !locationIdsSet.has(l.id))
+    const itemsToDelete = this.item.items.filter((i) => !itemIdsSet.has(i.id))
+    const storyBeatsToDelete = this.storyBeat.storyBeats.filter((sb) => !storyBeatIdsSet.has(sb.id))
+
+    // Embedded images are not in memory - fetch from database to find ones to delete
+    // Note: Many embedded images may already be deleted via CASCADE when entries are deleted
+    const currentEmbeddedImages = await database.getEmbeddedImagesForStory(this.id!)
+    const embeddedImagesToDelete = savedIds.embeddedImageIds
+      ? currentEmbeddedImages.filter((ei) => !embeddedImageIdsSet.has(ei.id))
+      : []
+
+    log('Deleting entities created after backup', {
+      characters: charactersToDelete.length,
+      locations: locationsToDelete.length,
+      items: itemsToDelete.length,
+      storyBeats: storyBeatsToDelete.length,
+      embeddedImages: embeddedImagesToDelete.length,
+    })
+
+    // Delete from database
+    for (const character of charactersToDelete) {
+      await database.deleteCharacter(character.id)
+    }
+    for (const location of locationsToDelete) {
+      await database.deleteLocation(location.id)
+    }
+    for (const item of itemsToDelete) {
+      await database.deleteItem(item.id)
+    }
+    for (const storyBeat of storyBeatsToDelete) {
+      await database.deleteStoryBeat(storyBeat.id)
+    }
+    for (const embeddedImage of embeddedImagesToDelete) {
+      await database.deleteEmbeddedImage(embeddedImage.id)
+    }
+
+    // Update in-memory state
+    this.character.characters = this.character.characters.filter((c) => characterIdsSet.has(c.id))
+    this.location.locations = this.location.locations.filter((l) => locationIdsSet.has(l.id))
+    this.item.items = this.item.items.filter((i) => itemIdsSet.has(i.id))
+    this.storyBeat.storyBeats = this.storyBeat.storyBeats.filter((sb) => storyBeatIdsSet.has(sb.id))
+
+    // Update story's updatedAt
+    await database.updateStory(this.id!, {})
+  }
 }
 
 export const story = new StoryStore()

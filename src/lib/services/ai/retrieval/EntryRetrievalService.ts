@@ -574,16 +574,14 @@ export class EntryRetrievalService extends BaseAIService {
    * Asks the LLM to select the most relevant entries from the candidate pool.
    */
   private async getLLMSelectedEntries(): Promise<RetrievedEntry[]> {
-    const generationContext = story.generationContext
-    const promptContext = generationContext.promptContext
-    const availableEntries = generationContext.loreEntriesForTier3
+    const availableEntries = story.generationContext.loreEntriesForTier3
 
     if (availableEntries.length === 0) {
       return []
     }
 
     const ctx = new ContextBuilder()
-    ctx.add(promptContext)
+    ctx.add(story.generationContext.promptContext)
     const { system, user: prompt } = await ctx.render('tier3-entry-selection')
 
     try {

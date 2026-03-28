@@ -455,28 +455,7 @@ export class ActionInputController {
     }
     ui.setLastLorebookRetrieval(null)
 
-    const result = await retryService.handleStopGeneration(
-      backup,
-      {
-        restoreFromRetryBackup: story.retry.restoreFromRetryBackup.bind(story.retry),
-        deleteEntriesFromPosition: story.entry.deleteEntriesFromPosition.bind(story.entry),
-        deleteEntitiesCreatedAfterBackup: story.entry.deleteEntitiesCreatedAfterBackup.bind(
-          story.entry,
-        ),
-        restoreCharacterSnapshots: story.character.restoreCharacterSnapshots.bind(story.character),
-        restoreTimeTrackerSnapshot: story.time.restoreTimeTrackerSnapshot.bind(story.time),
-        lockRetryInProgress: story.retry.lockRetryInProgress.bind(story.retry),
-        unlockRetryInProgress: story.retry.unlockRetryInProgress.bind(story.retry),
-        restoreActivationData: ui.restoreActivationData.bind(ui),
-        clearActivationData: () => ui.clearActivationData(),
-        setLastLorebookRetrieval: ui.setLastLorebookRetrieval.bind(ui),
-      },
-      {
-        clearGenerationError: () => ui.clearGenerationError(),
-        clearSuggestions: () => ui.clearSuggestions(story.id!),
-        clearActionChoices: () => ui.clearActionChoices(story.id!),
-      },
-    )
+    const result = await retryService.handleStopGeneration(backup)
 
     let restoredValues: {
       restoredActionType?: ActionType
@@ -544,29 +523,7 @@ export class ActionInputController {
     ui.clearActionChoices(storyId)
     ui.setLastLorebookRetrieval(null)
 
-    const result = await retryService.handleRetryLastMessage(
-      backup,
-      {
-        restoreFromRetryBackup: story.retry.restoreFromRetryBackup.bind(story.retry),
-        deleteEntriesFromPosition: story.entry.deleteEntriesFromPosition.bind(story.entry),
-        deleteEntitiesCreatedAfterBackup: story.entry.deleteEntitiesCreatedAfterBackup.bind(
-          story.entry,
-        ),
-        restoreCharacterSnapshots: story.character.restoreCharacterSnapshots.bind(story.character),
-        restoreTimeTrackerSnapshot: story.time.restoreTimeTrackerSnapshot.bind(story.time),
-        lockRetryInProgress: story.retry.lockRetryInProgress.bind(story.retry),
-        unlockRetryInProgress: story.retry.unlockRetryInProgress.bind(story.retry),
-        restoreActivationData: ui.restoreActivationData.bind(ui),
-        clearActivationData: () => ui.clearActivationData(),
-        setLastLorebookRetrieval: ui.setLastLorebookRetrieval.bind(ui),
-      },
-      {
-        clearGenerationError: () => ui.clearGenerationError(),
-        clearSuggestions: () => ui.clearSuggestions(storyId),
-        clearActionChoices: () => ui.clearActionChoices(storyId),
-        clearImageContext: () => {},
-      },
-    )
+    const result = await retryService.handleRetryLastMessage(backup)
 
     if (!result.success) return
 

@@ -47,4 +47,3 @@ export type ContextAnswerChapter = Pick<Chapter, 'number' | 'title' | 'summary'>
   /** Optional story entries within this chapter (for detailed answer mode) */
   entries?: ContextStoryEntry[]
 }
-

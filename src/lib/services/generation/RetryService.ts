@@ -7,6 +7,8 @@
  * - Full state and persistent (ID-based) restore paths
  */
 
+import { story } from '$lib/stores/story/index.svelte'
+import { ui } from '$lib/stores/ui.svelte'
 import type {
   StoryEntry,
   Character,
@@ -110,10 +112,7 @@ export class RetryService {
    * Restore state from a backup (for stop generation).
    * Determines restore path based on backup.hasFullState.
    */
-  async restoreFromBackup(
-    backup: RetryBackupData,
-    callbacks: RetryStoreCallbacks,
-  ): Promise<RestoreResult> {
+  async restoreFromBackup(backup: RetryBackupData): Promise<RestoreResult> {
     log('restoreFromBackup called', {
       hasFullState: backup.hasFullState,
       hasEntityIds: backup.hasEntityIds,
@@ -123,10 +122,10 @@ export class RetryService {
     try {
       if (backup.hasFullState) {
         // Full state restore path
-        await this.restoreFullState(backup, callbacks)
+        await this.restoreFullState(backup)
       } else {
         // Persistent (ID-based) restore path
-        await this.restorePersistentState(backup, callbacks)
+        await this.restorePersistentState(backup)
       }
 
       return {
@@ -147,17 +146,14 @@ export class RetryService {
   /**
    * Restore from full in-memory state backup.
    */
-  private async restoreFullState(
-    backup: RetryBackupData,
-    callbacks: RetryStoreCallbacks,
-  ): Promise<void> {
+  private async restoreFullState(backup: RetryBackupData): Promise<void> {
     log('Restoring full state from backup')
 
     // Restore activation data first
-    callbacks.restoreActivationData(backup.activationData, backup.storyPosition)
+    ui.restoreActivationData(backup.activationData, backup.storyPosition)
 
     // Restore story state (this handles locking internally)
-    await callbacks.restoreFromRetryBackup({
+    await story.retry.restoreFromRetryBackup({
       entries: backup.entries,
       characters: backup.characters,
       locations: backup.locations,
@@ -175,34 +171,31 @@ export class RetryService {
    * Restore from persistent backup (ID-based cleanup).
    * Used when we only have entity IDs, not full snapshots.
    */
-  private async restorePersistentState(
-    backup: RetryBackupData,
-    callbacks: RetryStoreCallbacks,
-  ): Promise<void> {
+  private async restorePersistentState(backup: RetryBackupData): Promise<void> {
     log('Restoring persistent state (ID-based)', {
       entryCountBeforeAction: backup.entryCountBeforeAction,
       hasEntityIds: backup.hasEntityIds,
     })
 
     // Lock editing during restore
-    callbacks.lockRetryInProgress()
+    story.retry.lockRetryInProgress()
 
     try {
       // Restore activation data (lorebook stickiness) from backup
       if (backup.activationData && Object.keys(backup.activationData).length > 0) {
-        callbacks.restoreActivationData(backup.activationData, backup.storyPosition)
+        ui.restoreActivationData(backup.activationData, backup.storyPosition)
       } else {
-        callbacks.clearActivationData()
+        ui.clearActivationData()
       }
 
       // Delete entries from the backup position onward
       log('Deleting entries from position', backup.entryCountBeforeAction)
-      await callbacks.deleteEntriesFromPosition(backup.entryCountBeforeAction)
+      await story.entry.deleteEntriesFromPosition(backup.entryCountBeforeAction)
 
       // Delete entities created after backup (if we have ID snapshots)
       if (backup.hasEntityIds) {
         log('Deleting entities created after backup')
-        await callbacks.deleteEntitiesCreatedAfterBackup({
+        await story.deleteEntitiesCreatedAfterBackup({
           characterIds: backup.characterIds,
           locationIds: backup.locationIds,
           itemIds: backup.itemIds,
@@ -214,77 +207,59 @@ export class RetryService {
       }
 
       // Restore character field snapshots
-      await callbacks.restoreCharacterSnapshots(backup.characterSnapshots)
+      await story.character.restoreCharacterSnapshots(backup.characterSnapshots)
 
       // Restore time tracker
-      await callbacks.restoreTimeTrackerSnapshot(backup.timeTracker)
+      await story.time.restoreTimeTrackerSnapshot(backup.timeTracker)
 
       log('Persistent state restore complete')
     } finally {
-      callbacks.unlockRetryInProgress()
+      story.retry.unlockRetryInProgress()
     }
   }
 
   /**
    * Prepare for stop generation - performs full restore including UI cleanup.
    */
-  async handleStopGeneration(
-    backup: RetryBackupData,
-    callbacks: RetryStoreCallbacks,
-    uiCleanup: {
-      clearGenerationError: () => void
-      clearSuggestions: () => void
-      clearActionChoices: () => void
-    },
-  ): Promise<RestoreResult> {
+  async handleStopGeneration(backup: RetryBackupData): Promise<RestoreResult> {
     log('handleStopGeneration called')
 
     // Clear UI state first
-    uiCleanup.clearGenerationError()
-    uiCleanup.clearSuggestions()
-    uiCleanup.clearActionChoices()
+    ui.clearGenerationError()
+    ui.clearSuggestions()
+    ui.clearActionChoices()
 
     // Restore activation data for full state path
     if (backup.hasFullState) {
-      callbacks.restoreActivationData(backup.activationData, backup.storyPosition)
+      ui.restoreActivationData(backup.activationData, backup.storyPosition)
     }
 
     // Clear lorebook retrieval debug state
-    callbacks.setLastLorebookRetrieval(null)
+    ui.setLastLorebookRetrieval(null)
 
     // Perform restore
-    return this.restoreFromBackup(backup, callbacks)
+    return this.restoreFromBackup(backup)
   }
 
   /**
    * Prepare for retry last message - performs full restore for regeneration.
    */
-  async handleRetryLastMessage(
-    backup: RetryBackupData,
-    callbacks: RetryStoreCallbacks,
-    uiCleanup: {
-      clearGenerationError: () => void
-      clearSuggestions: () => void
-      clearActionChoices: () => void
-      clearImageContext: () => void
-    },
-  ): Promise<RestoreResult> {
+  async handleRetryLastMessage(backup: RetryBackupData): Promise<RestoreResult> {
     log('handleRetryLastMessage called', {
       hasFullState: backup.hasFullState,
       entryCountBeforeAction: backup.entryCountBeforeAction,
     })
 
     // Clear UI state
-    uiCleanup.clearGenerationError()
-    uiCleanup.clearSuggestions()
-    uiCleanup.clearActionChoices()
-    uiCleanup.clearImageContext()
+    ui.clearGenerationError()
+    ui.clearSuggestions()
+    ui.clearActionChoices()
 
     // Clear lorebook retrieval debug state
-    callbacks.setLastLorebookRetrieval(null)
+    ui.setLastLorebookRetrieval(null)
 
     // Perform restore
-    return this.restoreFromBackup(backup, callbacks)
+    return this.restoreFromBackup(backup)
   }
 }
 

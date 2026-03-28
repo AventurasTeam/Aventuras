@@ -141,7 +141,7 @@ export class TimelineFillService extends BaseAIService {
       }
       const entries = story.chapter.getChapterEntries(c)
       if (entries.length > 0) {
-        chapter.entries = mapStoryEntriesToContext(entries, { stripPicTags: false })
+        chapter.entries = mapStoryEntriesToContext(entries, { stripPicTags: true })
       }
       return chapter
     })
