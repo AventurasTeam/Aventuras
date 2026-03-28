@@ -654,7 +654,7 @@ export const promptContext = {
 
   // -- image-prompt-analysis / image-prompt-analysis-reference --
   translationResult: {
-    translatedContent: 'La porte s\'est ouverte lentement',
+    translatedContent: "La porte s'est ouverte lentement",
     targetLanguage: 'French',
   },
 

@@ -8,7 +8,12 @@ vi.mock('$lib/services/database', () => ({
   },
 }))
 
-import { renderTemplate, createTemplateTestMock, testVariableInjection, testManifestCoverage } from '$test/helpers/templateTestHelper'
+import {
+  renderTemplate,
+  createTemplateTestMock,
+  testVariableInjection,
+  testManifestCoverage,
+} from '$test/helpers/templateTestHelper'
 import { promptContext, promptContextMinimal } from '$test/fixtures/promptContext'
 import {
   imagePromptAnalysisManifest,
@@ -167,8 +172,12 @@ describe('image-portrait-generation', () => {
     it('renders all 7 descriptor fields when all present', async () => {
       const result = await renderTemplate('image-portrait-generation', {
         visualDescriptors: {
-          face: 'Angular', hair: 'Silver', eyes: 'Teal',
-          build: 'Tall', clothing: 'Leather', accessories: 'Pendant',
+          face: 'Angular',
+          hair: 'Silver',
+          eyes: 'Teal',
+          build: 'Tall',
+          clothing: 'Leather',
+          accessories: 'Pendant',
           distinguishing: 'Scar',
         },
         imageStylePrompt: 'Anime',
@@ -221,9 +230,7 @@ describe('background-image-prompt-analysis', () => {
     it('single narration entry — only Previous Message section', async () => {
       const result = await renderTemplate('background-image-prompt-analysis', {
         ...promptContextMinimal,
-        storyEntriesVisible: [
-          { id: 's1', type: 'narration', content: 'The adventure begins.' },
-        ],
+        storyEntriesVisible: [{ id: 's1', type: 'narration', content: 'The adventure begins.' }],
       })
       expect(result.user).toContain('The adventure begins.')
     })

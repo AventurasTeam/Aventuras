@@ -8,7 +8,12 @@ vi.mock('$lib/services/database', () => ({
   },
 }))
 
-import { renderTemplate, createTemplateTestMock, testVariableInjection, testManifestCoverage } from '$test/helpers/templateTestHelper'
+import {
+  renderTemplate,
+  createTemplateTestMock,
+  testVariableInjection,
+  testManifestCoverage,
+} from '$test/helpers/templateTestHelper'
 import { promptContext, promptContextMinimal } from '$test/fixtures/promptContext'
 import { adventureManifest, creativeWritingManifest } from '$test/fixtures/templateManifests'
 
@@ -140,13 +145,25 @@ describe('adventure', () => {
     })
 
     it('second and third person produce distinct outputs', async () => {
-      const second = await renderTemplate('adventure', { ...promptContext, pov: 'second', tense: 'present' })
-      const third = await renderTemplate('adventure', { ...promptContext, pov: 'third', tense: 'past' })
+      const second = await renderTemplate('adventure', {
+        ...promptContext,
+        pov: 'second',
+        tense: 'present',
+      })
+      const third = await renderTemplate('adventure', {
+        ...promptContext,
+        pov: 'third',
+        tense: 'past',
+      })
       expect(second.user).not.toEqual(third.user)
     })
 
     it('third-person system content refers to protagonist by name', async () => {
-      const result = await renderTemplate('adventure', { ...promptContext, pov: 'third', tense: 'present' })
+      const result = await renderTemplate('adventure', {
+        ...promptContext,
+        pov: 'third',
+        tense: 'present',
+      })
       expect(result.system).toContain('Refer to the protagonist as "Kael"')
     })
   })
@@ -250,7 +267,10 @@ describe('creative-writing', () => {
     })
 
     it('Story Context absent when all empty', async () => {
-      const result = await renderTemplate('creative-writing', { ...promptContextMinimal, themes: '' })
+      const result = await renderTemplate('creative-writing', {
+        ...promptContextMinimal,
+        themes: '',
+      })
       expect(result.system).not.toContain('# Story Context')
     })
 

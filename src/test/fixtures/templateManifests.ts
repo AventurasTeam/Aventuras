@@ -102,7 +102,14 @@ export const chapterAnalysisManifest: TemplateVariableManifest = {
   templateId: 'chapter-analysis',
   hasUserContent: true,
   variables: [
-    { name: 'chapterAnalysis.analysisEntries', expectedInUser: ['I open the gate.', 'The gate creaks open, revealing a passage.', 'Ancient runes glow along the walls.'] },
+    {
+      name: 'chapterAnalysis.analysisEntries',
+      expectedInUser: [
+        'I open the gate.',
+        'The gate creaks open, revealing a passage.',
+        'Ancient runes glow along the walls.',
+      ],
+    },
     { name: 'firstValidId (computed)', expectedInUser: ['1'] },
     { name: 'lastValidId (computed)', expectedInUser: ['3'] },
   ],
@@ -113,7 +120,10 @@ export const chapterSummarizationManifest: TemplateVariableManifest = {
   hasUserContent: true,
   variables: [
     { name: 'previousChapters', expectedInUser: ['Chapter 1', 'Chapter 2'] },
-    { name: 'chapterAnalysis.chapterEntries', expectedInUser: ['The hero arrived at dawn.', 'I search the room carefully.'] },
+    {
+      name: 'chapterAnalysis.chapterEntries',
+      expectedInUser: ['The hero arrived at dawn.', 'I search the room carefully.'],
+    },
   ],
 }
 
@@ -161,7 +171,10 @@ export const suggestionsManifest: TemplateVariableManifest = {
   variables: [
     { name: 'genre', expectedInUser: ['Fantasy'] },
     { name: 'storyBeats (activeThreads)', expectedInUser: ['Find the Lost Temple'] },
-    { name: 'storyEntriesVisible', expectedInUser: ['I draw my sword and step cautiously forward.'] },
+    {
+      name: 'storyEntriesVisible',
+      expectedInUser: ['I draw my sword and step cautiously forward.'],
+    },
     { name: 'lorebookEntries', expectedInUser: ['The Shadow Guild', 'Elder Dragon'] },
   ],
 }
@@ -176,8 +189,14 @@ export const actionChoicesManifest: TemplateVariableManifest = {
   variables: [
     { name: 'protagonistName', expectedInUser: ['Kael'] },
     { name: 'protagonistDescription', expectedInUser: ['wandering swordsman'] },
-    { name: 'lastNarrativeEntry.content', expectedInUser: ['revealing a vast underground chamber'] },
-    { name: 'storyEntriesVisible', expectedInUser: ['I draw my sword and step cautiously forward.'] },
+    {
+      name: 'lastNarrativeEntry.content',
+      expectedInUser: ['revealing a vast underground chamber'],
+    },
+    {
+      name: 'storyEntriesVisible',
+      expectedInUser: ['I draw my sword and step cautiously forward.'],
+    },
     { name: 'inventory (items | where: equipped)', expectedInUser: ['Iron Sword'] },
     { name: 'retrievalResult.lorebookEntries', expectedInUser: ['The Shadow Guild'] },
     { name: 'styleReview.phrases', expectedInUser: ['dark and stormy'] },
@@ -199,7 +218,10 @@ export const timelineFillAnswerManifest: TemplateVariableManifest = {
   variables: [
     { name: 'answerChapters', expectedInUser: ['Into the Woods'] },
     { name: 'query', expectedInUser: ['What happened at the gate?'] },
-    { name: 'answerChapters[].entries', expectedInUser: ['I open the gate.', 'The gate creaks open'] },
+    {
+      name: 'answerChapters[].entries',
+      expectedInUser: ['I open the gate.', 'The gate creaks open'],
+    },
   ],
 }
 
@@ -248,9 +270,7 @@ export const classifierManifest: TemplateVariableManifest = {
 export const lorebookClassifierManifest: TemplateVariableManifest = {
   templateId: 'lorebook-classifier',
   hasUserContent: true,
-  variables: [
-    { name: 'entriesJson', expectedInUser: ['The Shadow Guild', 'Elder Dragon'] },
-  ],
+  variables: [{ name: 'entriesJson', expectedInUser: ['The Shadow Guild', 'Elder Dragon'] }],
 }
 
 export const styleReviewerManifest: TemplateVariableManifest = {
@@ -280,12 +300,21 @@ export const imagePromptAnalysisManifest: TemplateVariableManifest = {
   hasUserContent: true,
   variables: [
     { name: 'userSettings.imageGeneration.maxImages', expectedInSystem: ['3'] },
-    { name: 'userSettings.imageGeneration.stylePrompt', expectedInSystem: ['Soft cel-shaded anime'] },
-    { name: 'characters[].visualDescriptors', expectedInSystem: ['Silver, waist-length, braided', 'Teal, sharp gaze'] },
+    {
+      name: 'userSettings.imageGeneration.stylePrompt',
+      expectedInSystem: ['Soft cel-shaded anime'],
+    },
+    {
+      name: 'characters[].visualDescriptors',
+      expectedInSystem: ['Silver, waist-length, braided', 'Teal, sharp gaze'],
+    },
     { name: 'storyEntriesVisible', expectedInUser: ['The torches flickered'] },
     { name: 'userInput', expectedInUser: ['I look around the chamber carefully'] },
     { name: 'lastNarrativeEntry.content', expectedInUser: ['phosphorescent moss'] },
-    { name: 'translationResult.translatedContent', expectedInUser: ["La porte s'est ouverte lentement"] },
+    {
+      name: 'translationResult.translatedContent',
+      expectedInUser: ["La porte s'est ouverte lentement"],
+    },
   ],
 }
 
@@ -294,12 +323,18 @@ export const imagePromptAnalysisReferenceManifest: TemplateVariableManifest = {
   hasUserContent: true,
   variables: [
     { name: 'userSettings.imageGeneration.maxImages', expectedInSystem: ['3'] },
-    { name: 'userSettings.imageGeneration.stylePrompt', expectedInSystem: ['Soft cel-shaded anime'] },
+    {
+      name: 'userSettings.imageGeneration.stylePrompt',
+      expectedInSystem: ['Soft cel-shaded anime'],
+    },
     { name: 'characters[].visualDescriptors', expectedInSystem: ['Silver, waist-length, braided'] },
     { name: 'storyEntriesVisible', expectedInUser: ['The torches flickered'] },
     { name: 'userInput', expectedInUser: ['I look around the chamber carefully'] },
     { name: 'lastNarrativeEntry.content', expectedInUser: ['phosphorescent moss'] },
-    { name: 'translationResult.translatedContent', expectedInUser: ["La porte s'est ouverte lentement"] },
+    {
+      name: 'translationResult.translatedContent',
+      expectedInUser: ["La porte s'est ouverte lentement"],
+    },
   ],
 }
 
@@ -365,10 +400,22 @@ export const adventureManifest: TemplateVariableManifest = {
     { name: 'relevantWorldState.locations', expectedInSystem: ['Thornwood Edge'] },
     { name: 'relevantWorldState.relevantItems', expectedInSystem: ['Crystal of Aethon'] },
     { name: 'relevantWorldState.relatedStoryBeats', expectedInSystem: ['The Prophecy'] },
-    { name: 'retrievalResult.lorebookEntries', expectedInSystem: ['The Shadow Guild', 'Elder Dragon'] },
-    { name: 'retrievalResult.agenticRetrieval.agenticReasoning', expectedInSystem: ['Selected entries relevant to the temple exploration.'] },
-    { name: 'retrievalResult.agenticRetrieval.agenticChapterSummary', expectedInSystem: ['the party entered the Thornwood'] },
-    { name: 'retrievalResult.agenticRetrieval.agenticSelectedEntries', expectedInSystem: ['## Elder Dragon (character)'] },
+    {
+      name: 'retrievalResult.lorebookEntries',
+      expectedInSystem: ['The Shadow Guild', 'Elder Dragon'],
+    },
+    {
+      name: 'retrievalResult.agenticRetrieval.agenticReasoning',
+      expectedInSystem: ['Selected entries relevant to the temple exploration.'],
+    },
+    {
+      name: 'retrievalResult.agenticRetrieval.agenticChapterSummary',
+      expectedInSystem: ['the party entered the Thornwood'],
+    },
+    {
+      name: 'retrievalResult.agenticRetrieval.agenticSelectedEntries',
+      expectedInSystem: ['## Elder Dragon (character)'],
+    },
     { name: 'chapters', expectedInSystem: ['Into the Woods'] },
     { name: 'styleReview', expectedInSystem: ['dark and stormy'] },
     { name: 'storyEntriesVisibleRaw', expectedInUser: ['I draw my sword'] },
@@ -393,7 +440,10 @@ export const creativeWritingManifest: TemplateVariableManifest = {
     { name: 'relevantWorldState.inventory', expectedInSystem: ['Iron Sword'] },
     { name: 'relevantWorldState.storyBeats', expectedInSystem: ['Find the Lost Temple'] },
     { name: 'retrievalResult.lorebookEntries', expectedInSystem: ['The Shadow Guild'] },
-    { name: 'retrievalResult.agenticRetrieval.agenticReasoning', expectedInSystem: ['Selected entries relevant to the temple exploration.'] },
+    {
+      name: 'retrievalResult.agenticRetrieval.agenticReasoning',
+      expectedInSystem: ['Selected entries relevant to the temple exploration.'],
+    },
     { name: 'chapters', expectedInSystem: ['Into the Woods'] },
     { name: 'storyEntriesVisibleRaw', expectedInUser: ['I draw my sword'] },
   ],
