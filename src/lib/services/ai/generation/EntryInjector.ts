@@ -58,7 +58,6 @@ export interface RelevantEntry {
 
 export type Tier3Candidate = Omit<RelevantEntry, 'metadata' | 'tier' | 'priority'>
 
-
 /**
  * Service that builds context from world state using tiered injection.
  * - Tier 1 and Tier 2 work without AI

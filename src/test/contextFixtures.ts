@@ -29,7 +29,7 @@ import type {
 
 /**
  * Main input fixture for world state tests.
- * Pre-split by tier matching the old worldStateMapper output:
+ * Pre-split by tier:
  *   characters: Aria (tier-1), Lord Malachar (tier-2)
  *   inventory: Iron Dagger (tier-1)
  *   relevantItems: Ancient Tome (tier-2)

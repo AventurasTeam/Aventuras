@@ -8,10 +8,7 @@
  */
 
 import type { StoryBeat, StoryEntry } from '$lib/types'
-import type {
-  ContextClassifierBeat,
-  ContextChatEntry,
-} from './context-types'
+import type { ContextClassifierBeat, ContextChatEntry } from './context-types'
 import { stripPicTags } from '$lib/utils/inlineImageParser'
 
 /**

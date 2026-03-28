@@ -2,7 +2,7 @@
  * Shared context utility functions used across all mapper modules.
  *
  * These are pure transformation helpers extracted to avoid duplication
- * between classifierMapper, imageMapper, and worldStateMapper.
+ * between classifierMapper and imageMapper.
  */
 
 import { createLogger } from '$lib/log'
