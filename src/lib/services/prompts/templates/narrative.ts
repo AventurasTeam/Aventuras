@@ -683,11 +683,11 @@ Year {{ timeTracker.years }}, Day {{ timeTracker.days }}, {{ timeTracker.hours }
 {% endfor %}{% endif %}{% endif %}{% if retrievalResult.agenticRetrieval.agenticReasoning %}
 
 [AGENT CONTEXT]
-{{ agenticReasoning }}
+{{ retrievalResult.agenticRetrieval.agenticReasoning }}
 {% endif %}{% if retrievalResult.agenticRetrieval.agenticChapterSummary %}
 
 ## Past Story Context
-{{ agenticChapterSummary }}
+{{ retrievalResult.agenticRetrieval.agenticChapterSummary }}
 {% endif %}{% if retrievalResult.agenticRetrieval.agenticSelectedEntries.size > 0 %}
 {% for entry in retrievalResult.agenticRetrieval.agenticSelectedEntries %}
 ## {{ entry.name }} ({{ entry.type }})
@@ -697,7 +697,6 @@ Year {{ timeTracker.years }}, Day {{ timeTracker.days }}, {{ timeTracker.hours }
 <story_history>
 ## Previous Chapters
 The following chapters have occurred earlier in the story. Use them for continuity and context.
-
 {% for c in chapters %}
 ### Chapter {{ c.number }}{% if c.title != '' %}: {{ c.title }}{% endif %}
 {% if c.startTime and c.endTime %}*Time: {{ c.startTime }} → {{ c.endTime }}*

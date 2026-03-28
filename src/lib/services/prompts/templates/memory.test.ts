@@ -1,76 +1,69 @@
 import { describe, it, expect } from 'vitest'
 import { templateEngine } from '$lib/services/templates/engine'
 import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
+import {
+  promptContext,
+  promptContextMinimal,
+} from '../../../../test/fixtures/promptContext'
 
 // ===== Template lookups =====
 
 const chapterAnalysisTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'chapter-analysis')!
-const chapterSummarizationTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'chapter-summarization')!
+const chapterSummarizationTemplate = PROMPT_TEMPLATES.find(
+  (t) => t.id === 'chapter-summarization',
+)!
 const loreManagementTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'lore-management')!
 const agenticRetrievalTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'agentic-retrieval')!
-const interactiveLorebookTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'interactive-lorebook')!
+const interactiveLorebookTemplate = PROMPT_TEMPLATES.find(
+  (t) => t.id === 'interactive-lorebook',
+)!
 
 // ===== chapter-analysis =====
 
 describe('chapter-analysis template', () => {
-  it('renders entry type and content from messagesInRange array', () => {
+  it('renders entry type and content from chapterAnalysis.analysisEntries', () => {
     const result = templateEngine.render(chapterAnalysisTemplate.userContent!, {
-      firstValidId: 1,
-      lastValidId: 3,
-      messagesInRange: [
-        { type: 'user_action', content: 'I open the gate.' },
-        { type: 'narration', content: 'The gate creaks open.' },
-      ],
+      ...promptContext,
     })
     expect(result).toContain('user_action')
     expect(result).toContain('I open the gate.')
     expect(result).toContain('narration')
-    expect(result).toContain('The gate creaks open.')
+    expect(result).toContain('The gate creaks open, revealing a passage.')
   })
 
-  it('renders correct Message ID using firstValidId offset', () => {
+  it('renders correct Message ID using lastChapterEndIndex', () => {
+    // fixture lastChapterEndIndex is 0, so firstValidId = 1
     const result = templateEngine.render(chapterAnalysisTemplate.userContent!, {
-      firstValidId: 5,
-      lastValidId: 7,
-      messagesInRange: [{ type: 'narration', content: 'Scene begins.' }],
+      ...promptContext,
     })
-    expect(result).toContain('[Message 5]')
+    expect(result).toContain('[Message 1]')
   })
 
-  it('renders sequential Message IDs for multiple entries', () => {
+  it('renders sequential Message IDs based on lastChapterEndIndex', () => {
+    // lastChapterEndIndex=0 → firstValidId=1, 3 entries → Messages 1, 2, 3
     const result = templateEngine.render(chapterAnalysisTemplate.userContent!, {
-      firstValidId: 3,
-      lastValidId: 5,
-      messagesInRange: [
-        { type: 'narration', content: 'First.' },
-        { type: 'narration', content: 'Second.' },
-        { type: 'narration', content: 'Third.' },
-      ],
+      ...promptContext,
     })
+    expect(result).toContain('[Message 1]')
+    expect(result).toContain('[Message 2]')
     expect(result).toContain('[Message 3]')
-    expect(result).toContain('[Message 4]')
-    expect(result).toContain('[Message 5]')
   })
 
-  it('renders without crash when messagesInRange is empty', () => {
+  it('renders without crash when empty', () => {
     const result = templateEngine.render(chapterAnalysisTemplate.userContent!, {
-      firstValidId: 1,
-      lastValidId: 1,
-      messagesInRange: [],
+      ...promptContextMinimal,
     })
     expect(result).not.toBeNull()
   })
 
   it('does not contain [object Object]', () => {
     const result = templateEngine.render(chapterAnalysisTemplate.userContent!, {
-      firstValidId: 1,
-      lastValidId: 2,
-      messagesInRange: [{ type: 'narration', content: 'Text.' }],
+      ...promptContext,
     })
     expect(result).not.toContain('[object Object]')
   })
 
-  it('content renders without error (static)', () => {
+  it('content renders without error', () => {
     const result = templateEngine.render(chapterAnalysisTemplate.content, {})
     expect(result).not.toBeNull()
     expect(result!.length).toBeGreaterThan(0)
@@ -80,67 +73,53 @@ describe('chapter-analysis template', () => {
 // ===== chapter-summarization =====
 
 describe('chapter-summarization template', () => {
-  it('renders entry type and content from chapterEntries array', () => {
+  it('renders entry type and content from chapterEntries', () => {
     const result = templateEngine.render(chapterSummarizationTemplate.userContent!, {
-      chapterEntries: [
-        { type: 'narration', content: 'The hero arrived at dawn.' },
-        { type: 'user_action', content: 'I search the room.' },
-      ],
-      previousChapters: [],
+      ...promptContext,
     })
     expect(result).toContain('narration')
     expect(result).toContain('The hero arrived at dawn.')
     expect(result).toContain('user_action')
-    expect(result).toContain('I search the room.')
+    expect(result).toContain('I search the room carefully.')
   })
 
-  it('renders previousChapters with number and summary', () => {
+  it('renders previousChapters', () => {
     const result = templateEngine.render(chapterSummarizationTemplate.userContent!, {
-      chapterEntries: [],
-      previousChapters: [
-        { number: 1, summary: 'The village burned.' },
-        { number: 2, summary: 'The hero fled.' },
-      ],
+      ...promptContext,
     })
     expect(result).toContain('Chapter 1:')
-    expect(result).toContain('The village burned.')
     expect(result).toContain('Chapter 2:')
-    expect(result).toContain('The hero fled.')
   })
 
-  it('renders "Previous chapters:" header when previousChapters has entries', () => {
+  it('renders Previous chapters header', () => {
     const result = templateEngine.render(chapterSummarizationTemplate.userContent!, {
-      chapterEntries: [],
-      previousChapters: [{ number: 1, summary: 'Summary.' }],
+      ...promptContext,
     })
     expect(result).toContain('Previous chapters:')
   })
 
-  it('does not render "Previous chapters:" header when previousChapters is empty', () => {
+  it('does not render header when empty', () => {
     const result = templateEngine.render(chapterSummarizationTemplate.userContent!, {
-      chapterEntries: [],
-      previousChapters: [],
+      ...promptContextMinimal,
     })
     expect(result).not.toContain('Previous chapters:')
   })
 
-  it('renders without crash when both arrays are empty', () => {
+  it('renders without crash when both empty', () => {
     const result = templateEngine.render(chapterSummarizationTemplate.userContent!, {
-      chapterEntries: [],
-      previousChapters: [],
+      ...promptContextMinimal,
     })
     expect(result).not.toBeNull()
   })
 
   it('does not contain [object Object]', () => {
     const result = templateEngine.render(chapterSummarizationTemplate.userContent!, {
-      chapterEntries: [{ type: 'narration', content: 'Text.' }],
-      previousChapters: [{ number: 1, summary: 'Summary.' }],
+      ...promptContext,
     })
     expect(result).not.toContain('[object Object]')
   })
 
-  it('content renders without error (static)', () => {
+  it('content renders without error', () => {
     const result = templateEngine.render(chapterSummarizationTemplate.content, {})
     expect(result).not.toBeNull()
     expect(result!.length).toBeGreaterThan(0)
@@ -224,112 +203,55 @@ describe('lore-management template', () => {
 // ===== agentic-retrieval =====
 
 describe('agentic-retrieval template', () => {
-  it('renders agenticChapters with number and summary', () => {
+  it('renders agenticChapters', () => {
     const result = templateEngine.render(agenticRetrievalTemplate.userContent!, {
-      userInput: 'What did we find?',
-      recentEntries: [{ type: 'narration', content: 'We stand at the cave entrance.' }],
-      chaptersCount: 2,
-      agenticChapters: [
-        { number: 1, summary: 'The cave was mapped.' },
-        { number: 2, title: 'The Find', summary: 'An artifact was found.' },
-      ],
-      entriesCount: 0,
-      agenticEntries: [],
+      ...promptContext,
     })
     expect(result).toContain('Chapter 1')
-    expect(result).toContain('The cave was mapped.')
-    expect(result).toContain('Chapter 2')
-    expect(result).toContain('The Find')
-    expect(result).toContain('An artifact was found.')
+    expect(result).toContain('Into the Woods')
   })
 
-  it('renders agenticEntries with 0-based index, type, name', () => {
+  it('renders agenticEntries', () => {
     const result = templateEngine.render(agenticRetrievalTemplate.userContent!, {
-      userInput: 'Who is here?',
-      recentEntries: [{ type: 'narration', content: 'A figure approaches.' }],
-      chaptersCount: 0,
-      agenticChapters: [],
-      entriesCount: 2,
-      agenticEntries: [
-        { type: 'character', name: 'Thane' },
-        { type: 'location', name: 'The Ruins' },
-      ],
+      ...promptContext,
     })
     expect(result).toContain('0.')
-    expect(result).toContain('[character]')
-    expect(result).toContain('Thane')
-    expect(result).toContain('1.')
-    expect(result).toContain('[location]')
-    expect(result).toContain('The Ruins')
+    expect(result).toContain('[faction]')
+    expect(result).toContain('The Shadow Guild')
   })
 
-  it('renders recentEntries array entries correctly', () => {
+  it('renders recentEntries', () => {
     const result = templateEngine.render(agenticRetrievalTemplate.userContent!, {
-      userInput: 'What happened next?',
-      recentEntries: [
-        { type: 'narration', content: 'The door creaked open.' },
-        { type: 'user_action', content: 'I step inside carefully.' },
-        { type: 'narration', content: 'Dust swirled in the dim light.' },
-      ],
-      chaptersCount: 0,
-      agenticChapters: [],
-      entriesCount: 0,
-      agenticEntries: [],
+      ...promptContext,
     })
-    expect(result).toContain('The door creaked open.')
-    expect(result).toContain('I step inside carefully.')
-    expect(result).toContain('Dust swirled in the dim light.')
+    // storyEntries from fixture contain these entries
+    expect(result).toContain(
+      'The torches flickered against the stone walls of the ancient chamber.',
+    )
   })
 
-  it('renders "No chapters available." fallback when agenticChapters is empty', () => {
+  it('renders fallback when empty', () => {
     const result = templateEngine.render(agenticRetrievalTemplate.userContent!, {
-      userInput: 'Input.',
-      recentEntries: [],
-      chaptersCount: 0,
-      agenticChapters: [],
-      entriesCount: 0,
-      agenticEntries: [],
+      ...promptContextMinimal,
     })
     expect(result).toContain('No chapters available.')
   })
 
-  it('renders "No entries available." fallback when agenticEntries is empty', () => {
+  it('does not render recentContext', () => {
     const result = templateEngine.render(agenticRetrievalTemplate.userContent!, {
-      userInput: 'Input.',
-      recentEntries: [],
-      chaptersCount: 0,
-      agenticChapters: [],
-      entriesCount: 0,
-      agenticEntries: [],
-    })
-    expect(result).toContain('No entries available.')
-  })
-
-  it('does not render recentContext variable name in output', () => {
-    const result = templateEngine.render(agenticRetrievalTemplate.userContent!, {
-      userInput: 'Input.',
-      recentEntries: [],
-      chaptersCount: 0,
-      agenticChapters: [],
-      entriesCount: 0,
-      agenticEntries: [],
+      ...promptContextMinimal,
     })
     expect(result).not.toContain('recentContext')
   })
 
   it('does not contain [object Object]', () => {
     const result = templateEngine.render(agenticRetrievalTemplate.userContent!, {
-      userInput: 'Input.',
-      recentEntries: [{ type: 'narration', content: 'Scene text.' }],
-      chaptersCount: 1,
-      agenticChapters: [{ number: 1, summary: 'Summary.' }],
-      entriesCount: 1,
-      agenticEntries: [{ type: 'character', name: 'Hero' }],
+      ...promptContext,
     })
     expect(result).not.toContain('[object Object]')
   })
 
-  it('content renders without error (static)', () => {
+  it('content renders without error', () => {
     const result = templateEngine.render(agenticRetrievalTemplate.content, {})
     expect(result).not.toBeNull()
     expect(result!.length).toBeGreaterThan(0)

@@ -1,107 +1,95 @@
 import { describe, it, expect } from 'vitest'
 import { templateEngine } from '$lib/services/templates/engine'
 import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
+import {
+  promptContext,
+  promptContextMinimal,
+} from '../../../../test/fixtures/promptContext'
 
 const template = PROMPT_TEMPLATES.find((t) => t.id === 'action-choices')!
 const timelineFillTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'timeline-fill')!
-const timelineFillAnswerTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'timeline-fill-answer')!
-
-const actionChoicesBase = {
-  protagonistName: 'Kael',
-  protagonistDescription: '',
-  narrativeResponse: '',
-  storyEntries: [],
-  currentLocation: '',
-  npcsPresent: '',
-  inventory: '',
-  activeQuests: '',
-  lorebookEntries: [],
-  povInstruction: '',
-  lengthInstruction: '',
-}
+const timelineFillAnswerTemplate = PROMPT_TEMPLATES.find(
+  (t) => t.id === 'timeline-fill-answer'
+)!
 
 describe('action-choices template', () => {
   describe('variable injection', () => {
     it('renders protagonistName in userContent', () => {
       const result = templateEngine.render(template.userContent!, {
-        ...actionChoicesBase,
-        protagonistName: 'Kael',
+        ...promptContext,
       })
       expect(result).toContain('Kael')
     })
 
-    it('renders narrativeResponse in userContent', () => {
+    it('renders lastNarrativeEntry.content in userContent', () => {
       const result = templateEngine.render(template.userContent!, {
-        ...actionChoicesBase,
-        narrativeResponse: 'The gate opened slowly.',
+        ...promptContext,
       })
-      expect(result).toContain('The gate opened slowly.')
+      expect(result).toContain(promptContext.lastNarrativeEntry.content)
     })
   })
 
   describe('conditional suppression', () => {
     it('World Context section absent when lorebookEntries empty', () => {
-      const result = templateEngine.render(template.userContent!, { ...actionChoicesBase })
+      const result = templateEngine.render(template.userContent!, {
+        ...promptContextMinimal,
+      })
       expect(result).not.toContain('## World Context')
     })
 
     it('World Context section present when lorebookEntries has items', () => {
       const result = templateEngine.render(template.userContent!, {
-        ...actionChoicesBase,
-        lorebookEntries: [
-          { name: 'The Keep', type: 'location', description: 'A dark fortress.', tier: 1 },
-        ],
+        ...promptContext,
       })
       expect(result).toContain('## World Context')
     })
 
     it('Style Notes section absent when styleReview has no phrases', () => {
-      const result = templateEngine.render(template.userContent!, { ...actionChoicesBase })
+      const result = templateEngine.render(template.userContent!, {
+        ...promptContextMinimal,
+      })
       expect(result).not.toContain('## Style Notes')
     })
 
     it('Style Notes section present when styleReview has phrases', () => {
       const result = templateEngine.render(template.userContent!, {
-        ...actionChoicesBase,
-        styleReview: {
-          phrases: [{ phrase: 'very very', count: 4 }],
-          overallAssessment: 'Varies well.',
-          reviewedEntryCount: 3,
-        },
+        ...promptContext,
       })
       expect(result).toContain('## Style Notes')
     })
   })
 
   describe('array iteration', () => {
-    it('storyEntries loop renders 2 entries', () => {
+    it('storyEntriesVisible renders recent entry contents', () => {
       const result = templateEngine.render(template.userContent!, {
-        ...actionChoicesBase,
-        storyEntries: [
-          { type: 'narration', content: 'The bridge collapsed.' },
-          { type: 'user_action', content: 'I grabbed the rope.' },
-        ],
+        ...promptContext,
       })
-      expect(result).toContain('The bridge collapsed.')
-      expect(result).toContain('I grabbed the rope.')
+      // Template slices to last 5 — with 3 fixture entries, the last two
+      // are guaranteed to appear (Liquid slice:-5 on short arrays).
+      expect(result).toContain('I draw my sword and step cautiously forward.')
+      expect(result).toContain(
+        'The gate creaked open, revealing a vast underground chamber'
+      )
     })
 
-    it('lorebookEntries loop renders 2 items when present', () => {
+    it('lorebookEntries renders entry names', () => {
       const result = templateEngine.render(template.userContent!, {
-        ...actionChoicesBase,
-        lorebookEntries: [
-          { name: 'Ancient Sword', type: 'item', description: 'Glows blue.', tier: 1 },
-          { name: 'Shadow Guild', type: 'faction', description: 'Operates in darkness.', tier: 2 },
-        ],
+        ...promptContext,
       })
-      expect(result).toContain('Ancient Sword')
-      expect(result).toContain('Shadow Guild')
+      for (const entry of promptContext.retrievalResult.lorebookEntries.slice(
+        0,
+        promptContext.userSettings.lorebookConfig.maxForActionChoices
+      )) {
+        expect(result).toContain(entry.name)
+      }
     })
   })
 
   describe('no crash on missing optional vars', () => {
-    it('userContent renders without crash when optional vars absent', () => {
-      const result = templateEngine.render(template.userContent!, { protagonistName: 'Hero' })
+    it('userContent renders without crash with minimal context', () => {
+      const result = templateEngine.render(template.userContent!, {
+        ...promptContextMinimal,
+      })
       expect(result).not.toBeNull()
     })
 
@@ -113,9 +101,9 @@ describe('action-choices template', () => {
 })
 
 describe('timeline-fill template', () => {
-  it('renders entry content from storyEntries array', () => {
+  it('renders entry content from storyEntriesVisible array', () => {
     const result = templateEngine.render(timelineFillTemplate.userContent!, {
-      storyEntries: [
+      storyEntriesVisible: [
         { type: 'user_action', content: 'I drew my sword.' },
         { type: 'narration', content: 'The knight fell back.' },
       ],
@@ -128,7 +116,7 @@ describe('timeline-fill template', () => {
 
   it('renders ACTION/NARRATIVE labels based on entry type', () => {
     const result = templateEngine.render(timelineFillTemplate.userContent!, {
-      storyEntries: [
+      storyEntriesVisible: [
         { type: 'user_action', content: 'I climbed the wall.' },
         { type: 'narration', content: 'Shadows gathered.' },
       ],
@@ -140,7 +128,7 @@ describe('timeline-fill template', () => {
 
   it('renders chapter number and summary in timeline section', () => {
     const result = templateEngine.render(timelineFillTemplate.userContent!, {
-      storyEntries: [],
+      storyEntriesVisible: [],
       chapters: [
         { number: 1, summary: 'The hero arrived in town.' },
         { number: 2, summary: 'A dragon was sighted.' },
@@ -159,7 +147,7 @@ describe('timeline-fill template', () => {
       { type: 'narration', content: 'Entry C' },
     ]
     const result = templateEngine.render(timelineFillTemplate.userContent!, {
-      storyEntries: entries,
+      storyEntriesVisible: entries,
       chapters: [],
     })
     expect(result).toContain('Entry A')
@@ -173,7 +161,7 @@ describe('timeline-fill template', () => {
       content: `Entry ${i + 1}`,
     }))
     const result = templateEngine.render(timelineFillTemplate.userContent!, {
-      storyEntries: entries,
+      storyEntriesVisible: entries,
       chapters: [],
     })
     expect(result).toContain('Entry 15')

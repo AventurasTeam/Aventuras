@@ -1,42 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { templateEngine } from '$lib/services/templates/engine'
 import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
-import {
-  contextResult,
-  entryRetrievalResult,
-  rawChapters,
-  timelineFillResult,
-  rawStoryEntries,
-} from '../../../../test/contextFixtures'
-import { mapContextResultToArrays } from '$lib/services/context/worldStateMapper'
-import { mapEntryRetrievalToLorebookEntries } from '$lib/services/context/lorebookMapper'
-import { mapChaptersToContext } from '$lib/services/context/chapterMapper'
-import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
-
-// ---------------------------------------------------------------------------
-// Shared mapped context (built once at module level from real mapper output)
-// ---------------------------------------------------------------------------
-
-const worldStateArrays = mapContextResultToArrays(contextResult)
-const lorebookEntries = mapEntryRetrievalToLorebookEntries(entryRetrievalResult, 0)
-const { chapters, timelineFill } = mapChaptersToContext(rawChapters, timelineFillResult)
-const storyEntries = mapStoryEntriesToContext(rawStoryEntries, { stripPicTags: true })
-
-// Pipeline context for narrative templates (adventure + creative-writing)
-const narrativePipelineContext = {
-  protagonistName: 'Aria',
-  pov: 'second',
-  tense: 'present',
-  genre: 'Fantasy',
-  tone: '',
-  settingDescription: '',
-  themes: '',
-  ...worldStateArrays,
-  lorebookEntries,
-  chapters,
-  timelineFill,
-  storyEntries,
-}
+import { promptContext } from '../../../../test/fixtures/promptContext'
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -46,17 +11,17 @@ describe('pipeline: adventure', () => {
   const template = PROMPT_TEMPLATES.find((t) => t.id === 'adventure')!
 
   it('content render is non-null', () => {
-    const result = templateEngine.render(template.content, narrativePipelineContext)
+    const result = templateEngine.render(template.content, { ...promptContext })
     expect(result).not.toBeNull()
   })
 
-  it('content render contains Aria from fixture', () => {
-    const result = templateEngine.render(template.content, narrativePipelineContext)
-    expect(result).toContain('Aria')
+  it('content render contains Kael from fixture', () => {
+    const result = templateEngine.render(template.content, { ...promptContext })
+    expect(result).toContain('Kael')
   })
 
   it('userContent render is non-null', () => {
-    const result = templateEngine.render(template.userContent || '', narrativePipelineContext)
+    const result = templateEngine.render(template.userContent || '', { ...promptContext })
     expect(result).not.toBeNull()
   })
 })
@@ -65,37 +30,31 @@ describe('pipeline: creative-writing', () => {
   const template = PROMPT_TEMPLATES.find((t) => t.id === 'creative-writing')!
 
   it('content render is non-null', () => {
-    const result = templateEngine.render(template.content, narrativePipelineContext)
+    const result = templateEngine.render(template.content, { ...promptContext })
     expect(result).not.toBeNull()
   })
 
-  it('content render contains Aria from fixture', () => {
-    const result = templateEngine.render(template.content, narrativePipelineContext)
-    expect(result).toContain('Aria')
+  it('content render contains Kael from fixture', () => {
+    const result = templateEngine.render(template.content, { ...promptContext })
+    expect(result).toContain('Kael')
   })
 
   it('userContent render is non-null', () => {
-    const result = templateEngine.render(template.userContent || '', narrativePipelineContext)
+    const result = templateEngine.render(template.userContent || '', { ...promptContext })
     expect(result).not.toBeNull()
   })
 })
 
 describe('pipeline: suggestions', () => {
   const template = PROMPT_TEMPLATES.find((t) => t.id === 'suggestions')!
-  const suggestionsPipelineContext = {
-    storyEntries,
-    lorebookEntries,
-    activeThreads: '',
-    genre: 'Fantasy',
-  }
 
   it('userContent render is non-null', () => {
-    const result = templateEngine.render(template.userContent || '', suggestionsPipelineContext)
+    const result = templateEngine.render(template.userContent || '', { ...promptContext })
     expect(result).not.toBeNull()
   })
 
   it('userContent render contains mapped story entry content', () => {
-    const result = templateEngine.render(template.userContent || '', suggestionsPipelineContext)
+    const result = templateEngine.render(template.userContent || '', { ...promptContext })
     expect(result).not.toBeNull()
     expect(result!.length).toBeGreaterThan(0)
   })
@@ -103,38 +62,20 @@ describe('pipeline: suggestions', () => {
 
 describe('pipeline: action-choices', () => {
   const template = PROMPT_TEMPLATES.find((t) => t.id === 'action-choices')!
-  const actionChoicesPipelineContext = {
-    protagonistName: 'Aria',
-    protagonistDescription: '',
-    narrativeResponse: '',
-    storyEntries,
-    currentLocation: '',
-    npcsPresent: '',
-    inventory: '',
-    activeQuests: '',
-    lorebookEntries,
-    povInstruction: '',
-    lengthInstruction: '',
-  }
 
   it('userContent render is non-null', () => {
-    const result = templateEngine.render(template.userContent || '', actionChoicesPipelineContext)
+    const result = templateEngine.render(template.userContent || '', { ...promptContext })
     expect(result).not.toBeNull()
   })
 
-  it('userContent render contains Aria from context', () => {
-    const result = templateEngine.render(template.userContent || '', actionChoicesPipelineContext)
-    expect(result).toContain('Aria')
+  it('userContent render contains Kael from context', () => {
+    const result = templateEngine.render(template.userContent || '', { ...promptContext })
+    expect(result).toContain('Kael')
   })
 })
 
 describe('pipeline: chapter-summarization', () => {
   const template = PROMPT_TEMPLATES.find((t) => t.id === 'chapter-summarization')!
-  const firstChapterTitle = 'Into the Woods'
-  const chapterPipelineContext = {
-    chapterEntries: [{ type: 'narration', content: firstChapterTitle }],
-    previousChapters: chapters,
-  }
 
   it('content render is non-null', () => {
     const result = templateEngine.render(template.content, {})
@@ -142,12 +83,13 @@ describe('pipeline: chapter-summarization', () => {
   })
 
   it('userContent render is non-null', () => {
-    const result = templateEngine.render(template.userContent || '', chapterPipelineContext)
+    const result = templateEngine.render(template.userContent || '', { ...promptContext })
     expect(result).not.toBeNull()
   })
 
-  it('userContent render contains chapter title from fixture', () => {
-    const result = templateEngine.render(template.userContent || '', chapterPipelineContext)
-    expect(result).toContain(firstChapterTitle)
+  it('userContent render contains chapter entry content from fixture', () => {
+    // chapterAnalysis.chapterEntries has 'The hero arrived at dawn.'
+    const result = templateEngine.render(template.userContent || '', { ...promptContext })
+    expect(result).toContain('The hero arrived at dawn.')
   })
 })

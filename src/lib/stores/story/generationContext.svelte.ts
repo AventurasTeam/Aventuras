@@ -113,6 +113,8 @@ interface StoryPromptContext {
     analysisEntries?: StoryEntry[]
     chapterEntries?: StoryEntry[]
   }
+  narrativeResult?: NarrativeResult
+  userActionOriginal?: string
 }
 
 export class StoryGenerationContextStore {
@@ -147,7 +149,7 @@ export class StoryGenerationContextStore {
   loreEntriesForTier3 = $state.raw<Entry[]>([])
   worldStateForTier3 = $state.raw<Tier3Candidate[]>([])
   retrievalResult = $state.raw<RetrievalResult | null>(null)
-  narrativeResult = $state.raw<NarrativeResult | null>(null)
+  narrativeResult = $state.raw<NarrativeResult | undefined>()
   classificationResult = $state.raw<ClassificationPhaseResult | null>(null)
   translationResult = $state.raw<TranslationResult2 | null>(null)
   imageResult = $state.raw<ImageResult | null>(null)
@@ -226,6 +228,7 @@ export class StoryGenerationContextStore {
       storyEntriesVisible: this.story.entry.visibleStoryEntries,
       storyEntriesVisibleRaw: this.story.entry.visibleEntries,
       userInput: this.userAction?.content,
+      userActionOriginal: this.userActionOriginal,
       lastNarrativeEntry: this.story.entry.rawEntries.find((e) => e.id === this.narrationEntryId),
       loreEntriesForTier3: this.loreEntriesForTier3,
       worldStateForTier3: this.worldStateForTier3,
@@ -247,6 +250,7 @@ export class StoryGenerationContextStore {
       classificationResult: this.classificationResult?.classificationResult ?? undefined,
       lastChapterEndIndex: this.story.chapter.lastChapterEndIndex,
       chapterAnalysis: this.chapterAnalysis,
+      narrativeResult: this.narrativeResult,
     }
   }
 
@@ -349,7 +353,7 @@ export class StoryGenerationContextStore {
     this.stylePrompt = ''
     this.packVariables = undefined
     this.retrievalResult = null
-    this.narrativeResult = null
+    this.narrativeResult = undefined
     this.classificationResult = null
     this.translationResult = null
     this.imageResult = null

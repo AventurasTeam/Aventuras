@@ -23,7 +23,7 @@ First valid message ID: {{ firstValidId }}
 Last valid message ID: {{ lastValidId }}
 
 # Messages in Range:
-{% for e in analysisEntries %}[Message {{ forloop.index0 | plus: firstValidId }}] [{{ e.type }}]: {{ e.content }}
+{% for e in chapterAnalysis.analysisEntries %}[Message {{ forloop.index0 | plus: firstValidId }}] [{{ e.type }}]: {{ e.content }}
 
 {% endfor %}
 Select the single best chapter endpoint from this range.`,

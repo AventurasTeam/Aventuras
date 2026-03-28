@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { templateEngine } from '$lib/services/templates/engine'
 import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
+import { promptContext } from '../../../../test/fixtures/promptContext'
 
 const translateNarration = PROMPT_TEMPLATES.find((t) => t.id === 'translate-narration')!
 const translateInput = PROMPT_TEMPLATES.find((t) => t.id === 'translate-input')!
@@ -11,72 +12,64 @@ const translateWizardContent = PROMPT_TEMPLATES.find((t) => t.id === 'translate-
 
 describe('translate-narration template', () => {
   it('renders targetLanguage in system prompt', () => {
-    const result = templateEngine.render(translateNarration.content, { targetLanguage: 'French' })
+    const result = templateEngine.render(translateNarration.content, { ...promptContext })
     expect(result).toContain('French')
   })
 
   it('renders content in userContent', () => {
-    const result = templateEngine.render(translateNarration.userContent!, {
-      content: 'The sun set.',
-    })
-    expect(result).toContain('The sun set.')
+    const result = templateEngine.render(translateNarration.userContent!, { ...promptContext })
+    expect(result).toContain('The gate opened slowly')
   })
 })
 
 describe('translate-input template', () => {
   it('renders sourceLanguage in system prompt', () => {
-    const result = templateEngine.render(translateInput.content, { sourceLanguage: 'Japanese' })
+    const result = templateEngine.render(translateInput.content, { ...promptContext })
     expect(result).toContain('Japanese')
   })
 
   it('renders content in userContent', () => {
-    const result = templateEngine.render(translateInput.userContent!, { content: 'Hello world' })
-    expect(result).toContain('Hello world')
+    const result = templateEngine.render(translateInput.userContent!, { ...promptContext })
+    expect(result).toContain('I draw my sword and step forward')
   })
 })
 
 describe('translate-ui template', () => {
   it('renders targetLanguage in system prompt', () => {
-    const result = templateEngine.render(translateUI.content, { targetLanguage: 'Spanish' })
-    expect(result).toContain('Spanish')
+    const result = templateEngine.render(translateUI.content, { ...promptContext })
+    expect(result).toContain('French')
   })
 
   it('passes JSON payload through unmangled', () => {
-    const json = '[{"id":"loc1","text":"The Keep"}]'
-    const result = templateEngine.render(translateUI.userContent!, { elementsJson: json })
-    expect(result).toContain(json)
+    const result = templateEngine.render(translateUI.userContent!, { ...promptContext })
+    expect(result).toContain('The Keep')
+    expect(result).toContain('The Marketplace')
   })
 })
 
 describe('translate-suggestions template', () => {
   it('renders targetLanguage in system prompt', () => {
-    const result = templateEngine.render(translateSuggestions.content, {
-      targetLanguage: 'German',
-    })
-    expect(result).toContain('German')
+    const result = templateEngine.render(translateSuggestions.content, { ...promptContext })
+    expect(result).toContain('French')
   })
 
   it('passes JSON payload through unmangled', () => {
-    const json = '[{"type":"action","text":"Draw sword"}]'
-    const result = templateEngine.render(translateSuggestions.userContent!, {
-      suggestionsJson: json,
-    })
-    expect(result).toContain(json)
+    const result = templateEngine.render(translateSuggestions.userContent!, { ...promptContext })
+    expect(result).toContain('Draw your sword and charge.')
+    expect(result).toContain('Ask the guardian about the prophecy.')
   })
 })
 
 describe('translate-action-choices template', () => {
   it('renders targetLanguage in system prompt', () => {
-    const result = templateEngine.render(translateActionChoices.content, {
-      targetLanguage: 'Korean',
-    })
-    expect(result).toContain('Korean')
+    const result = templateEngine.render(translateActionChoices.content, { ...promptContext })
+    expect(result).toContain('French')
   })
 
   it('passes JSON payload through unmangled', () => {
-    const json = '[{"type":"do","text":"Open the chest"}]'
-    const result = templateEngine.render(translateActionChoices.userContent!, { choicesJson: json })
-    expect(result).toContain(json)
+    const result = templateEngine.render(translateActionChoices.userContent!, { ...promptContext })
+    expect(result).toContain('Open the ancient chest.')
+    expect(result).toContain('Greet the stranger.')
   })
 })
 

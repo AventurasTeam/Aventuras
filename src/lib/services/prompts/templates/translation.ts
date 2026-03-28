@@ -17,7 +17,7 @@ Rules:
    - These tags contain English image prompts that must NOT be translated
 
 Respond with ONLY the translated text, no explanations or notes.`,
-  userContent: `{{ generationContext.narrativeResult.content  }}`,
+  userContent: `{{ narrativeResult.content  }}`,
 }
 
 const translateInputTemplate: PromptTemplate = {
@@ -34,7 +34,7 @@ Rules:
 4. Do not add interpretation or expansion
 
 Respond with ONLY the English translation, no explanations.`,
-  userContent: `{{ story.generationContext.userActionOriginal }}`,
+  userContent: `{{ userActionOriginal }}`,
 }
 
 const translateUITemplate: PromptTemplate = {

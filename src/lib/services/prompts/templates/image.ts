@@ -40,7 +40,7 @@ Analyze the narrative and identify up to {{ userSettings.imageGeneration.maxImag
 **You MUST incorporate this full style description into every prompt.** Include multiple style keywords and rendering details.
 
 ## Character Reference
-{%- assign presentCharacterNames = classificationResult.scene.presentCharacterNames | default: "" | split: "" -%}
+{%- assign presentCharacterNames = classificationResult.scene.presentCharacterNames | default: "" | split: "," -%}
 
 {%- assign sceneCharacters = "" | split: "" -%}
 {%- for character in characters -%}
@@ -159,7 +159,7 @@ Analyze the narrative and identify up to {{ userSettings.imageGeneration.maxImag
 ## Style Keywords (pick 2-3 relevant ones per prompt)
 {{ userSettings.imageGeneration.stylePrompt }}
 
-{% assign presentCharacterNames = classificationResult.scene.presentCharacterNames | default: "" | split: "" -%}
+{% assign presentCharacterNames = classificationResult.scene.presentCharacterNames | default: "" | split: "," -%}
 
 {%- assign sceneCharacters = "" | split: "" -%}
 {%- for character in characters -%}

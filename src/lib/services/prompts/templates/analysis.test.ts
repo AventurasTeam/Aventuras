@@ -1,95 +1,35 @@
 import { describe, it, expect } from 'vitest'
 import { templateEngine } from '$lib/services/templates/engine'
 import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
+import {
+  promptContext,
+  promptContextMinimal,
+} from '../../../../../src/test/fixtures/promptContext'
 
 // ===== Template lookups =====
 
 const classifierTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'classifier')!
 const styleReviewerTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'style-reviewer')!
 const tier3Template = PROMPT_TEMPLATES.find((t) => t.id === 'tier3-entry-selection')!
-const lorebookClassifierTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'lorebook-classifier')!
-
-// ===== Base contexts =====
-
-const classifierBase = {
-  characters: [],
-  storyBeats: [],
-  chatHistory: [],
-  locations: [],
-  items: [],
-  genre: '',
-  mode: 'adventure',
-  entityCounts: '0 characters, 0 locations, 0 items',
-  currentTimeInfo: '',
-  inputLabel: 'Player Action',
-  userAction: 'Look around the room',
-  narrativeResponse: 'You see a dusty chamber.',
-  storyBeatTypes: 'milestone, quest, revelation, event, plot_point',
-  itemLocationOptions: 'inventory, worn, ground',
-  defaultItemLocation: 'inventory',
-  sceneLocationDesc: '',
-}
-
-const styleReviewerBase = {
-  passages: [],
-  passageCount: '0',
-  mode: 'adventure',
-  pov: 'second person',
-  tense: 'present',
-}
-
-const tier3Base = {
-  availableEntries: [],
-  recentEntries: [],
-  userInput: 'Search the area',
-}
-
-const lorebookClassifierBase = {
-  entriesJson: JSON.stringify([
-    { id: 'e1', name: 'Fire Dragon', content: 'A mighty beast', keywords: 'dragon,fire' },
-  ]),
-}
-
-// ===== Helper: minimal ContextChatEntry fixture =====
-
-function makeChatEntry(overrides: {
-  type: 'user_action' | 'narration' | 'system' | 'retry'
-  content: string
-  timeStart: string
-}) {
-  return {
-    type: overrides.type,
-    content: overrides.content,
-    timeStart: overrides.timeStart,
-  }
-}
+const lorebookClassifierTemplate = PROMPT_TEMPLATES.find(
+  (t) => t.id === 'lorebook-classifier',
+)!
 
 // ===== Tests =====
 
 describe('classifier template', () => {
   it('renders character name from characters array', () => {
     const result = templateEngine.render(classifierTemplate.userContent!, {
-      ...classifierBase,
-      characters: [
-        {
-          name: 'Aria',
-          relationship: 'companion',
-          status: 'active',
-          appearance: ['red hair', 'green eyes'],
-          description: '',
-          traits: [],
-          tier: 1,
-        },
-      ],
+      ...promptContext,
     })
     expect(result).toContain('Aria')
     expect(result).toContain('companion')
-    expect(result).toContain('red hair')
+    expect(result).toContain('Silver hair')
   })
 
   it('renders inactive character status', () => {
     const result = templateEngine.render(classifierTemplate.userContent!, {
-      ...classifierBase,
+      ...promptContext,
       characters: [
         {
           name: 'Old Guard',
@@ -107,93 +47,72 @@ describe('classifier template', () => {
 
   it('handles empty characters with (none)', () => {
     const result = templateEngine.render(classifierTemplate.userContent!, {
-      ...classifierBase,
-      characters: [],
+      ...promptContextMinimal,
     })
     expect(result).toContain('(none)')
   })
 
   it('renders beat title filtered to active/pending', () => {
     const result = templateEngine.render(classifierTemplate.userContent!, {
-      ...classifierBase,
-      storyBeats: [
-        { title: 'Find the Key', description: 'A quest', type: 'quest', status: 'active' },
-        { title: 'Old Quest', description: '', type: 'quest', status: 'completed' },
-      ],
+      ...promptContext,
     })
-    expect(result).toContain('Find the Key')
-    expect(result).not.toContain('Old Quest')
+    expect(result).toContain('Find the Lost Temple')
+    expect(result).not.toContain('Defeated the Wolves')
   })
 
-  it('renders chat history with ACTION prefix', () => {
+  it('renders storyEntriesVisible with ACTION prefix', () => {
     const result = templateEngine.render(classifierTemplate.userContent!, {
-      ...classifierBase,
-      chatHistory: [
-        makeChatEntry({ type: 'user_action', content: 'I open the door', timeStart: 'Y1D3 09:30' }),
-      ],
+      ...promptContext,
     })
     expect(result).toContain('[ACTION]')
-    expect(result).toContain('at Y1D3 09:30')
-    expect(result).toContain('I open the door')
+    expect(result).toContain('at Y1D42 14:05')
+    expect(result).toContain('I draw my sword and step cautiously forward.')
   })
 
-  it('renders chat history with NARRATIVE prefix', () => {
+  it('renders storyEntriesVisible with NARRATIVE prefix', () => {
     const result = templateEngine.render(classifierTemplate.userContent!, {
-      ...classifierBase,
-      chatHistory: [
-        makeChatEntry({ type: 'narration', content: 'The door swings open.', timeStart: '' }),
-      ],
+      ...promptContext,
     })
     expect(result).toContain('[NARRATIVE]')
   })
 
-  it('renders location names as comma-separated list', () => {
+  it('renders time display from entry timeStart', () => {
     const result = templateEngine.render(classifierTemplate.userContent!, {
-      ...classifierBase,
-      locations: [
-        { name: 'Tavern', description: '', type: 'building', tier: 1 },
-        { name: 'Market', description: '', type: 'district', tier: 1 },
-      ],
+      ...promptContext,
     })
-    expect(result).toContain('Tavern')
-    expect(result).toContain('Market')
+    expect(result).toContain('at Y1D42 14:00')
   })
 
-  it('renders item names as comma-separated list', () => {
+  it('renders location names', () => {
     const result = templateEngine.render(classifierTemplate.userContent!, {
-      ...classifierBase,
-      items: [{ name: 'Sword', description: '', type: 'weapon' }],
+      ...promptContext,
     })
-    expect(result).toContain('Sword')
+    expect(result).toContain('Thornwood Edge')
+    expect(result).toContain('Sunken Temple')
+  })
+
+  it('renders item names', () => {
+    const result = templateEngine.render(classifierTemplate.userContent!, {
+      ...promptContext,
+    })
+    expect(result).toContain('Iron Sword')
+    expect(result).toContain('Health Potion')
   })
 
   it('does not contain old scalar variable references', () => {
-    const result = templateEngine.render(classifierTemplate.userContent!, classifierBase)
+    const result = templateEngine.render(classifierTemplate.userContent!, {
+      ...promptContext,
+    })
+    expect(result).not.toContain('{{ chatHistoryBlock }}')
     expect(result).not.toContain('{{ existingCharacters }}')
     expect(result).not.toContain('{{ existingBeats }}')
-    expect(result).not.toContain('{{ chatHistoryBlock }}')
     expect(result).not.toContain('{{ existingLocations }}')
     expect(result).not.toContain('{{ existingItems }}')
   })
 
   it('does not contain [object Object]', () => {
     const result = templateEngine.render(classifierTemplate.userContent!, {
-      ...classifierBase,
-      characters: [
-        {
-          name: 'Aria',
-          relationship: 'companion',
-          status: 'active',
-          appearance: ['red hair'],
-          description: '',
-          traits: [],
-          tier: 1,
-        },
-      ],
-      storyBeats: [{ title: 'The Quest', description: 'Find it', type: 'quest', status: 'active' }],
-      chatHistory: [
-        makeChatEntry({ type: 'user_action', content: 'Go north', timeStart: 'Y1D1 08:00' }),
-      ],
+      ...promptContext,
     })
     expect(result).not.toContain('[object Object]')
   })
@@ -201,49 +120,53 @@ describe('classifier template', () => {
 
 describe('classifier template - runtimeVariables', () => {
   const withRuntimeVars = {
-    ...classifierBase,
-    runtimeVariables: {
-      character: [
-        {
-          variableName: 'loyalty',
-          variableType: 'number',
-          minValue: 0,
-          maxValue: 100,
-          defaultValue: '50',
-          description: 'Loyalty toward protagonist',
-        },
-        {
-          variableName: 'mood',
-          variableType: 'enum',
-          enumOptions: [{ value: 'happy' }, { value: 'neutral' }, { value: 'hostile' }],
-          defaultValue: 'neutral',
-          description: 'Current emotional state',
-        },
-      ],
-      item: [
-        {
-          variableName: 'durability',
-          variableType: 'number',
-          minValue: 0,
-          maxValue: 100,
-          defaultValue: undefined,
-          description: 'Item condition as a percentage',
-        },
-      ],
+    ...promptContext,
+    packVariables: {
+      runtimeVariables: {
+        character: [
+          {
+            variableName: 'loyalty',
+            variableType: 'number',
+            minValue: 0,
+            maxValue: 100,
+            defaultValue: '50',
+            description: 'Loyalty toward protagonist',
+          },
+          {
+            variableName: 'mood',
+            variableType: 'enum',
+            enumOptions: [{ value: 'happy' }, { value: 'neutral' }, { value: 'hostile' }],
+            defaultValue: 'neutral',
+            description: 'Current emotional state',
+          },
+        ],
+        item: [
+          {
+            variableName: 'durability',
+            variableType: 'number',
+            minValue: 0,
+            maxValue: 100,
+            defaultValue: undefined,
+            description: 'Item condition as a percentage',
+          },
+        ],
+      },
     },
   }
 
   const withTextVar = {
-    ...classifierBase,
-    runtimeVariables: {
-      character: [
-        {
-          variableName: 'backstory',
-          variableType: 'text',
-          defaultValue: undefined,
-          description: 'Character background story',
-        },
-      ],
+    ...promptContext,
+    packVariables: {
+      runtimeVariables: {
+        character: [
+          {
+            variableName: 'backstory',
+            variableType: 'text',
+            defaultValue: undefined,
+            description: 'Character background story',
+          },
+        ],
+      },
     },
   }
 
@@ -295,7 +218,8 @@ describe('classifier template - runtimeVariables', () => {
   })
 
   it('omits runtimeVariables section entirely when variable is absent from context', () => {
-    const result = templateEngine.render(classifierTemplate.userContent!, classifierBase)
+    const ctx = { ...promptContext, packVariables: {} }
+    const result = templateEngine.render(classifierTemplate.userContent!, ctx)
     expect(result).not.toContain('## Custom Variables to Track')
   })
 
@@ -306,102 +230,95 @@ describe('classifier template - runtimeVariables', () => {
 })
 
 describe('style-reviewer template', () => {
-  it('renders passage content from passages array', () => {
+  it('renders passage content from storyEntriesVisible narration entries', () => {
     const result = templateEngine.render(styleReviewerTemplate.userContent!, {
-      ...styleReviewerBase,
-      passages: [{ content: 'The wind howled.', entryId: '1' }],
-      passageCount: '1',
+      ...promptContext,
     })
-    expect(result).toContain('The wind howled.')
+    expect(result).toContain(
+      'The torches flickered against the stone walls of the ancient chamber.',
+    )
   })
 
   it('renders passage number separator', () => {
     const result = templateEngine.render(styleReviewerTemplate.userContent!, {
-      ...styleReviewerBase,
-      passages: [{ content: 'The wind howled.', entryId: '1' }],
-      passageCount: '1',
+      ...promptContext,
     })
     expect(result).toContain('--- Passage 1 ---')
   })
 
   it('renders multiple passages with sequential numbers', () => {
     const result = templateEngine.render(styleReviewerTemplate.userContent!, {
-      ...styleReviewerBase,
-      passages: [
-        { content: 'The wind howled.', entryId: '1' },
-        { content: 'Rain fell hard.', entryId: '2' },
-      ],
-      passageCount: '2',
+      ...promptContext,
     })
+    // promptContext has 2 narration entries (e1, e3) and 1 user_action (e2)
     expect(result).toContain('--- Passage 1 ---')
     expect(result).toContain('--- Passage 2 ---')
   })
 
   it('does not contain old {{ passages }} as raw Liquid', () => {
-    const result = templateEngine.render(styleReviewerTemplate.userContent!, styleReviewerBase)
+    const result = templateEngine.render(styleReviewerTemplate.userContent!, {
+      ...promptContextMinimal,
+    })
     expect(result).not.toContain('{{ passages }}')
   })
 
   it('does not contain [object Object]', () => {
     const result = templateEngine.render(styleReviewerTemplate.userContent!, {
-      ...styleReviewerBase,
-      passages: [{ content: 'The wind howled.', entryId: '1' }],
-      passageCount: '1',
+      ...promptContext,
     })
     expect(result).not.toContain('[object Object]')
   })
 })
 
 describe('tier3-entry-selection template', () => {
-  it('renders entry name from availableEntries array', () => {
+  it('renders entry name from loreEntriesForTier3', () => {
     const result = templateEngine.render(tier3Template.userContent!, {
-      ...tier3Base,
-      availableEntries: [
-        { name: 'Dragon Lore', type: 'concept', description: 'Ancient knowledge' },
-      ],
+      ...promptContext,
     })
-    expect(result).toContain('Dragon Lore')
-    expect(result).toContain('[concept]')
-    expect(result).toContain('Ancient knowledge')
+    expect(result).toContain('The Sundering')
+    expect(result).toContain('[event]')
+    expect(result).toContain('A cataclysm that split the continent.')
   })
 
   it('renders 0-based index for entries', () => {
     const result = templateEngine.render(tier3Template.userContent!, {
-      ...tier3Base,
-      availableEntries: [
-        { name: 'Dragon Lore', type: 'concept', description: 'Ancient knowledge' },
-      ],
+      ...promptContext,
     })
     expect(result).toContain('0.')
   })
 
-  it('renders recent entry content', () => {
+  it('renders recent entry content from storyEntries', () => {
     const result = templateEngine.render(tier3Template.userContent!, {
-      ...tier3Base,
-      recentEntries: [{ type: 'narration', content: 'The cave echoed.' }],
+      ...promptContext,
     })
-    expect(result).toContain('The cave echoed.')
+    expect(result).toContain(
+      'The torches flickered against the stone walls of the ancient chamber.',
+    )
   })
 
   it('does not contain old scalar variable references', () => {
-    const result = templateEngine.render(tier3Template.userContent!, tier3Base)
+    const result = templateEngine.render(tier3Template.userContent!, {
+      ...promptContext,
+    })
     expect(result).not.toContain('{{ entrySummaries }}')
     expect(result).not.toContain('{{ recentContent }}')
   })
 
   it('does not contain [object Object]', () => {
     const result = templateEngine.render(tier3Template.userContent!, {
-      ...tier3Base,
-      availableEntries: [
-        { name: 'Dragon Lore', type: 'concept', description: 'Ancient knowledge' },
-      ],
-      recentEntries: [{ type: 'narration', content: 'The cave echoed.' }],
+      ...promptContext,
     })
     expect(result).not.toContain('[object Object]')
   })
 })
 
 describe('lorebook-classifier template', () => {
+  const lorebookClassifierBase = {
+    entriesJson: JSON.stringify([
+      { id: 'e1', name: 'Fire Dragon', content: 'A mighty beast', keywords: 'dragon,fire' },
+    ]),
+  }
+
   it('renders entriesJson content unmangled', () => {
     const result = templateEngine.render(
       lorebookClassifierTemplate.userContent!,
@@ -413,7 +330,10 @@ describe('lorebook-classifier template', () => {
 
   it('rendered output contains valid JSON fragment', () => {
     const result =
-      templateEngine.render(lorebookClassifierTemplate.userContent!, lorebookClassifierBase) ?? ''
+      templateEngine.render(
+        lorebookClassifierTemplate.userContent!,
+        lorebookClassifierBase,
+      ) ?? ''
     // Extract the JSON array portion from the rendered output
     const jsonStart = result.indexOf('[')
     const jsonEnd = result.lastIndexOf(']')
