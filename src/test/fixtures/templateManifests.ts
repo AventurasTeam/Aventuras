@@ -93,3 +93,60 @@ export const translateActionChoicesManifest: TemplateVariableManifest = {
     },
   ],
 }
+
+// ---------------------------------------------------------------------------
+// Memory manifests
+// ---------------------------------------------------------------------------
+
+export const chapterAnalysisManifest: TemplateVariableManifest = {
+  templateId: 'chapter-analysis',
+  hasUserContent: true,
+  variables: [
+    { name: 'chapterAnalysis.analysisEntries', expectedInUser: ['I open the gate.', 'The gate creaks open, revealing a passage.', 'Ancient runes glow along the walls.'] },
+    { name: 'firstValidId (computed)', expectedInUser: ['1'] },
+    { name: 'lastValidId (computed)', expectedInUser: ['3'] },
+  ],
+}
+
+export const chapterSummarizationManifest: TemplateVariableManifest = {
+  templateId: 'chapter-summarization',
+  hasUserContent: true,
+  variables: [
+    { name: 'previousChapters', expectedInUser: ['Chapter 1', 'Chapter 2'] },
+    { name: 'chapterAnalysis.chapterEntries', expectedInUser: ['The hero arrived at dawn.', 'I search the room carefully.'] },
+  ],
+}
+
+export const agenticRetrievalManifest: TemplateVariableManifest = {
+  templateId: 'agentic-retrieval',
+  hasUserContent: true,
+  variables: [
+    { name: 'userInput', expectedInUser: ['I look around the chamber carefully'] },
+    { name: 'storyEntries', expectedInUser: ['The torches flickered'] },
+    { name: 'agenticChapters', expectedInUser: ['Into the Woods'] },
+    { name: 'agenticEntries', expectedInUser: ['The Shadow Guild'] },
+  ],
+}
+
+export const interactiveLorebookManifest: TemplateVariableManifest = {
+  templateId: 'interactive-lorebook',
+  hasUserContent: false,
+  variables: [
+    { name: 'characterCount', expectedInSystem: ['2'] },
+    { name: 'lorebookCount', expectedInSystem: ['2'] },
+    { name: 'totalEntryCount', expectedInSystem: ['4'] },
+    { name: 'scenarioCount', expectedInSystem: ['1'] },
+    { name: 'focusedEntity.entityType', expectedInSystem: ['character'] },
+    { name: 'focusedEntity.entityName', expectedInSystem: ['Aria'] },
+    { name: 'focusedEntity.entityId', expectedInSystem: ['c1'] },
+  ],
+}
+
+export const loreManagementManifest: TemplateVariableManifest = {
+  templateId: 'lore-management',
+  hasUserContent: true,
+  variables: [
+    { name: 'loreEntries', expectedInUser: ['The Shadow Guild', 'Elder Dragon'] },
+    { name: 'loreChapters', expectedInUser: ['Into the Woods', 'The Sunken Temple'] },
+  ],
+}

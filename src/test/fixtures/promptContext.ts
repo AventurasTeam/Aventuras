@@ -625,6 +625,60 @@ export const promptContext = {
   chapterAnalysis,
 
   narrationEntryId: 'e3',
+
+  // -- agentic-retrieval needs these as top-level arrays --
+  agenticChapters: chapters,
+  agenticEntries: rawLorebookEntries,
+
+  // -- lore-management --
+  loreEntries: rawLorebookEntries,
+  loreChapters: chapters,
+
+  // -- chapter-summarization --
+  previousChapters: chapters,
+
+  // -- chapter-analysis --
+  firstValidId: 1,
+  lastValidId: 3,
+
+  // -- interactive-lorebook --
+  characterCount: 2,
+  lorebookCount: 2,
+  totalEntryCount: 4,
+  scenarioCount: 1,
+  focusedEntity: {
+    entityType: 'character',
+    entityName: 'Aria',
+    entityId: 'c1',
+  },
+
+  // -- image-prompt-analysis / image-prompt-analysis-reference --
+  translationResult: {
+    translatedContent: 'La porte s\'est ouverte lentement',
+    targetLanguage: 'French',
+  },
+
+  // -- timeline-fill-answer --
+  answerChapters: [
+    {
+      number: 1,
+      title: 'Into the Woods',
+      summary: 'The party ventured into the Thornwood seeking the lost temple.',
+      entries: [
+        { type: 'user_action' as const, content: 'I open the gate.' },
+        { type: 'narration' as const, content: 'The gate creaks open, revealing a passage.' },
+      ],
+    },
+  ],
+  query: 'What happened at the gate?',
+
+  // -- action-choices (string-formatted summaries) --
+  currentLocation: 'Sunken Temple',
+  npcsPresent: 'Aria (companion), Marcus (ally)',
+  inventory: 'Iron Sword [equipped], Health Potion ×3',
+
+  // -- lorebook-classifier --
+  entriesJson: JSON.stringify(rawLorebookEntries),
 }
 
 // ---------------------------------------------------------------------------
@@ -679,4 +733,23 @@ export const promptContextMinimal = {
   retrievalResult: emptyRetrievalResult,
   chapterAnalysis: {} as typeof chapterAnalysis,
   lastChapterEndIndex: 0,
+  agenticChapters: [] as Chapter[],
+  agenticEntries: [] as Entry[],
+  loreEntries: [] as Entry[],
+  loreChapters: [] as Chapter[],
+  previousChapters: [] as Chapter[],
+  firstValidId: 0,
+  lastValidId: 0,
+  characterCount: 0,
+  lorebookCount: 0,
+  totalEntryCount: 0,
+  scenarioCount: 0,
+  focusedEntity: null,
+  translationResult: null,
+  answerChapters: [],
+  query: '',
+  currentLocation: '',
+  npcsPresent: '',
+  inventory: '',
+  entriesJson: '[]',
 }
