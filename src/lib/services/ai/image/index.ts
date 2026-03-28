@@ -7,6 +7,8 @@
  * - imageUtils: Helper functions for image generation
  */
 
+export { BackgroundImageService } from './BackgroundImageService'
+
 // Main inline image service
 export {
   InlineImageGenerationService,
