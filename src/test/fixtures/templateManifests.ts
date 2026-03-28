@@ -150,3 +150,55 @@ export const loreManagementManifest: TemplateVariableManifest = {
     { name: 'loreChapters', expectedInUser: ['Into the Woods', 'The Sunken Temple'] },
   ],
 }
+
+// ---------------------------------------------------------------------------
+// Suggestions manifests
+// ---------------------------------------------------------------------------
+
+export const suggestionsManifest: TemplateVariableManifest = {
+  templateId: 'suggestions',
+  hasUserContent: true,
+  variables: [
+    { name: 'genre', expectedInUser: ['Fantasy'] },
+    { name: 'storyBeats (activeThreads)', expectedInUser: ['Find the Lost Temple'] },
+    { name: 'storyEntriesVisible', expectedInUser: ['I draw my sword and step cautiously forward.'] },
+    { name: 'lorebookEntries', expectedInUser: ['The Shadow Guild', 'Elder Dragon'] },
+  ],
+}
+
+// ---------------------------------------------------------------------------
+// Generation manifests
+// ---------------------------------------------------------------------------
+
+export const actionChoicesManifest: TemplateVariableManifest = {
+  templateId: 'action-choices',
+  hasUserContent: true,
+  variables: [
+    { name: 'protagonistName', expectedInUser: ['Kael'] },
+    { name: 'protagonistDescription', expectedInUser: ['wandering swordsman'] },
+    { name: 'lastNarrativeEntry.content', expectedInUser: ['revealing a vast underground chamber'] },
+    { name: 'storyEntriesVisible', expectedInUser: ['I draw my sword and step cautiously forward.'] },
+    { name: 'inventory (items | where: equipped)', expectedInUser: ['Iron Sword'] },
+    { name: 'retrievalResult.lorebookEntries', expectedInUser: ['The Shadow Guild'] },
+    { name: 'styleReview.phrases', expectedInUser: ['dark and stormy'] },
+  ],
+}
+
+export const timelineFillManifest: TemplateVariableManifest = {
+  templateId: 'timeline-fill',
+  hasUserContent: true,
+  variables: [
+    { name: 'storyEntriesVisible', expectedInUser: ['The torches flickered'] },
+    { name: 'chapters', expectedInUser: ['The party ventured into the Thornwood'] },
+  ],
+}
+
+export const timelineFillAnswerManifest: TemplateVariableManifest = {
+  templateId: 'timeline-fill-answer',
+  hasUserContent: true,
+  variables: [
+    { name: 'answerChapters', expectedInUser: ['Into the Woods'] },
+    { name: 'query', expectedInUser: ['What happened at the gate?'] },
+    { name: 'answerChapters[].entries', expectedInUser: ['I open the gate.', 'The gate creaks open'] },
+  ],
+}
