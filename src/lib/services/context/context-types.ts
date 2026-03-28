@@ -12,6 +12,25 @@
 
 import type { Character, Item, StoryBeat, Location, Entry, Chapter, StoryEntry } from '$lib/types'
 
+/**
+ * All world state arrays produced by EntryInjector.buildContext().
+ * Uses full domain types — templates access only the fields they need.
+ */
+export interface WorldStateArrays {
+  /** All characters from all tiers, ordered by tier then priority */
+  characters: Character[]
+  /** Tier-1 items (player inventory) */
+  inventory: Item[]
+  /** Tier-2/3 items (contextually relevant, not held) */
+  relevantItems: Item[]
+  /** Tier-1 story beats (active threads) */
+  storyBeats: StoryBeat[]
+  /** Tier-2/3 story beats (related threads) */
+  relatedStoryBeats: StoryBeat[]
+  /** Tier-2/3 non-current locations */
+  locations: Location[]
+}
+
 // ===== Refactored Existing Interfaces (Omit<>/Pick<> derivation) =====
 
 /**
