@@ -49,15 +49,6 @@ export type ContextLorebookEntry = ContextLorebookEntryBase & {
 }
 
 /**
- * A lorebook entry for wizard templates (lorebookEntries[]).
- * No tier — wizard entries are not prioritized by retrieval.
- */
-export type ContextWizardLorebookEntry = ContextLorebookEntryBase & {
-  /** Hidden lore visible only to the AI — optional, wizard-only */
-  hiddenInfo?: string
-}
-
-/**
  * A chapter summary as seen by Liquid templates (chapters[]).
  * Strips internal IDs, branch tracking, entry boundary IDs, keyword/thread metadata.
  * Converts TimeTracker startTime/endTime to formatted string | null for template rendering.
@@ -111,68 +102,6 @@ export type ContextChatEntry = Pick<StoryEntry, 'type' | 'content'> & {
 }
 
 /**
- * A passage for style review templates (passages[]).
- * No direct domain type mapping — content + reference entry ID.
- */
-export interface ContextPassage {
-  /** Passage text content */
-  content: string
-  /** ID of the source story entry */
-  entryId: string
-}
-
-/**
- * An available lorebook entry for tier-3 entry selection (availableEntries[]).
- * Slim subset from Entry — name, type, description plus optional keywords string.
- */
-export type ContextAvailableEntry = Pick<Entry, 'name' | 'type' | 'description'> & {
-  /** Comma-separated keywords for matching (optional) */
-  keywords?: string
-}
-
-/**
- * A story entry for retrieval/memory range queries (messagesInRange[]).
- * Same shape as ContextStoryEntry — type alias for semantic clarity.
- */
-export type ContextMessagesInRange = ContextStoryEntry
-
-/**
- * A story entry for chapter summarization (chapterEntries[]).
- * Same shape as ContextStoryEntry — type alias for semantic clarity.
- */
-export type ContextChapterEntry = ContextStoryEntry
-
-/**
- * A previous chapter for chapter summarization context (previousChapters[]).
- * Same shape as ContextChapter — type alias for semantic clarity.
- */
-export type ContextPreviousChapter = ContextChapter
-
-/**
- * A lorebook entry for lore management templates (loreEntries[]).
- * Uses Pick — name, type, description plus optional current state.
- */
-export type ContextLoreEntry = Pick<Entry, 'name' | 'type' | 'description'> & {
-  /** Current dynamic state of the entry (optional) */
-  state?: string
-}
-
-/**
- * A chapter summary for lore management templates (loreChapters[]).
- * Slim subset — only number, title, summary needed for lore context.
- */
-export type ContextLoreChapter = Pick<Chapter, 'number' | 'title' | 'summary'>
-
-/**
- * A character for image generation templates (sceneCharacters[]).
- * Keeps visualDescriptors and portrait for image prompt construction.
- */
-export type ContextSceneCharacter = Pick<
-  Character,
-  'name' | 'description' | 'relationship' | 'traits' | 'visualDescriptors' | 'portrait' | 'status'
->
-
-/**
  * A chapter for timeline-fill-answer templates (answerChapters[]).
  * Slim subset with optional entries array for dual-mode rendering.
  */
@@ -181,14 +110,3 @@ export type ContextAnswerChapter = Pick<Chapter, 'number' | 'title' | 'summary'>
   entries?: ContextStoryEntry[]
 }
 
-/**
- * A chapter for agentic retrieval templates (agenticChapters[]).
- * Same shape as ContextLoreChapter — type alias for semantic clarity.
- */
-export type ContextAgenticChapter = ContextLoreChapter
-
-/**
- * A lorebook entry for agentic retrieval templates (agenticEntries[]).
- * Slim subset — name and type only.
- */
-export type ContextAgenticEntry = Pick<Entry, 'name' | 'type'>
