@@ -25,7 +25,7 @@ import type { UITranslationItem } from '$lib/services/ai/utils/TranslationServic
 import { countTokens } from '$lib/services/tokenizer'
 import type { StoryStore } from './index.svelte'
 import type { Tier3Candidate } from '$lib/services/ai/generation/EntryInjector'
-import type { WorldStateArrays } from '$lib/services/context/worldStateMapper'
+import type { WorldStateArrays } from '$lib/services/context/context-types'
 import { database } from '$lib/services/database'
 import { ContextBuilder, type EntityRuntimeVars } from '$lib/services/context/context-builder'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from '$lib/services/ai/image'
