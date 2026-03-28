@@ -14,7 +14,6 @@
 import { streamNarrative } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
 import { story } from '$lib/stores/story/index.svelte'
-import { mapContextResultToArrays } from '$lib/services/context/worldStateMapper'
 import { EntryInjector } from './EntryInjector'
 import { createLogger } from '$lib/log'
 import type { StreamChunk } from '../core/types'
@@ -59,8 +58,7 @@ export class NarrativeService {
     // Build tiered context from singleton
     const injector = new EntryInjector({}, 'entryRetrieval')
 
-    const contextResult = await injector.buildContext()
-    mapContextResultToArrays(contextResult)
+    story.generationContext.relevantWorldState = await injector.buildContext()
 
     const ctx = new ContextBuilder()
 
