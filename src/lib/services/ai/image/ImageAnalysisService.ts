@@ -9,7 +9,6 @@
  */
 
 import type { Character } from '$lib/types'
-import type { ContextChatEntry } from '$lib/services/context/context-types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
@@ -34,8 +33,6 @@ export interface ImageAnalysisContext {
   stylePrompt: string
   /** Maximum number of images (0 = unlimited) */
   maxImages: number
-  /** Full chat history for comprehensive context */
-  chatHistory?: ContextChatEntry[]
   /** Translated narrative text - use this for sourceText extraction when available */
   translatedNarrative?: string
   /** Target language for translation */

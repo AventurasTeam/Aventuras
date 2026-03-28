@@ -15,7 +15,7 @@ import type { TimelineFillResult } from '$lib/services/ai/retrieval/TimelineFill
 import type { EntryRetrievalResult } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import { getEntryRetrievalConfigFromSettings } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import { mapEntryRetrievalToLorebookEntries } from '$lib/services/context/lorebookMapper'
-import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import type { Entry } from '$lib/types'
 import { story } from '$lib/stores/story/index.svelte'
 import { settings } from '$lib/stores/settings.svelte'
 import { aiService } from '$lib/services/ai'
@@ -81,9 +81,9 @@ export class RetrievalPhase {
       return false
     }
 
-    // Map raw retrieval result to typed ContextLorebookEntry[]
+    // Extract Entry[] from retrieval result (with optional description truncation)
     const entryRetrievalConfig = getEntryRetrievalConfigFromSettings()
-    const mappedLorebookEntries: ContextLorebookEntry[] = lorebookRetrievalResult
+    const mappedLorebookEntries: Entry[] = lorebookRetrievalResult
       ? mapEntryRetrievalToLorebookEntries(
           lorebookRetrievalResult,
           entryRetrievalConfig.maxWordsPerEntry,

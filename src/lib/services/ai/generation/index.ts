@@ -18,9 +18,6 @@ export { aiService } from '../index'
 // Narrative generation
 export { NarrativeService, type NarrativeOptions } from './NarrativeService'
 
-// Chapter context mapper (formatStoryTime moved here from NarrativeService)
-export { mapChaptersToContext, formatStoryTime } from '$lib/services/context/chapterMapper'
-
 // Classification
 export { ClassifierService } from './ClassifierService'
 // Classifier output types - import from schema

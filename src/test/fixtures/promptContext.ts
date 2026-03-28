@@ -17,12 +17,7 @@ import type {
   StoryEntry,
   TimeTracker,
 } from '$lib/types'
-import type {
-  ContextStoryEntry,
-  ContextLorebookEntry,
-  ContextLorebookEntryBase,
-} from '$lib/services/context/context-types'
-import type { WorldStateArrays } from '$lib/services/context/context-types'
+import type { ContextStoryEntry, WorldStateArrays } from '$lib/services/context/context-types'
 import type { RetrievalResult, AgenticRetrievalFields } from '$lib/services/generation/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
 import type { Suggestion } from '$lib/services/ai/sdk/schemas/suggestions'
@@ -125,8 +120,7 @@ const characters: Character[] = [
 ]
 
 // ---------------------------------------------------------------------------
-// Lorebook entries (Entry[] for promptContext.lorebookEntries,
-//                   ContextLorebookEntry[] for retrievalResult.lorebookEntries)
+// Lorebook entries (Entry[] for both promptContext and retrievalResult)
 // ---------------------------------------------------------------------------
 
 const rawLorebookEntries: Entry[] = [
@@ -182,45 +176,6 @@ const rawLorebookEntries: Entry[] = [
   },
 ]
 
-const contextLorebookEntries: ContextLorebookEntry[] = [
-  {
-    name: 'The Shadow Guild',
-    type: 'faction',
-    description: 'A secretive criminal organization.',
-    tier: 1,
-  },
-  {
-    name: 'Elder Dragon',
-    type: 'character',
-    description: 'An ancient beast guarding the Sunken Temple.',
-    tier: 2,
-    disposition: 'hostile',
-  },
-  {
-    name: 'Crystal of Aethon',
-    type: 'item',
-    description: 'A powerful artifact of unknown origin.',
-    tier: 1,
-  },
-  {
-    name: 'The Thornwood',
-    type: 'location',
-    description: 'A cursed forest north of the kingdom.',
-    tier: 2,
-  },
-  {
-    name: 'Arcane Weaving',
-    type: 'concept',
-    description: 'The art of channeling raw magical energy.',
-    tier: 3,
-  },
-  {
-    name: 'The Sundering',
-    type: 'event',
-    description: 'A cataclysm that split the continent a thousand years ago.',
-    tier: 3,
-  },
-]
 
 // ---------------------------------------------------------------------------
 // Chapters
@@ -275,23 +230,12 @@ const agenticRetrieval: AgenticRetrievalFields = {
   agenticReasoning: 'Selected entries relevant to the temple exploration.',
   agenticChapterSummary:
     'In chapter 1, the party entered the Thornwood. In chapter 2, they found the Sunken Temple.',
-  agenticSelectedEntries: [
-    {
-      name: 'Elder Dragon',
-      type: 'character',
-      description: 'An ancient beast guarding the Sunken Temple.',
-    },
-    {
-      name: 'Crystal of Aethon',
-      type: 'item',
-      description: 'A powerful artifact of unknown origin.',
-    },
-  ] satisfies ContextLorebookEntryBase[],
+  agenticSelectedEntries: rawLorebookEntries,
 }
 
 const retrievalResult: RetrievalResult = {
   agenticRetrieval,
-  lorebookEntries: contextLorebookEntries,
+  lorebookEntries: rawLorebookEntries,
   lorebookRetrievalResult: null,
   timelineFillResult: {
     queries: [],

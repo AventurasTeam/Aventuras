@@ -282,7 +282,7 @@ Year {{ timeTracker.years }}, Day {{ timeTracker.days }}, {{ timeTracker.hours }
 (CANONICAL - All information below is established lore. Do not contradict these facts.)
 {% assign loreCharacters = retrievalResult.lorebookEntries | where: 'type', 'character' %}{% if loreCharacters.size > 0 %}
 • Characters:
-{% for entry in loreCharacters %}  - {{ entry.name }}: {{ entry.description }}{% if entry.disposition %} [{{ entry.disposition }}]{% endif %}
+{% for entry in loreCharacters %}  - {{ entry.name }}: {{ entry.description }}{% if entry.state.currentDisposition %} [{{ entry.state.currentDisposition }}]{% endif %}
 {% endfor %}{% endif %}{% assign loreLocations = retrievalResult.lorebookEntries | where: 'type', 'location' %}{% if loreLocations.size > 0 %}
 • Locations:
 {% for entry in loreLocations %}  - {{ entry.name }}: {{ entry.description }}
@@ -664,7 +664,7 @@ Year {{ timeTracker.years }}, Day {{ timeTracker.days }}, {{ timeTracker.hours }
 (CANONICAL - All information below is established lore. Do not contradict these facts.)
 {% assign loreCharacters = retrievalResult.lorebookEntries | where: 'type', 'character' %}{% if loreCharacters.size > 0 %}
 • Characters:
-{% for entry in loreCharacters %}  - {{ entry.name }}: {{ entry.description }}{% if entry.disposition %} [{{ entry.disposition }}]{% endif %}
+{% for entry in loreCharacters %}  - {{ entry.name }}: {{ entry.description }}{% if entry.state.currentDisposition %} [{{ entry.state.currentDisposition }}]{% endif %}
 {% endfor %}{% endif %}{% assign loreLocations = retrievalResult.lorebookEntries | where: 'type', 'location' %}{% if loreLocations.size > 0 %}
 • Locations:
 {% for entry in loreLocations %}  - {{ entry.name }}: {{ entry.description }}

@@ -88,10 +88,7 @@ export const DEFAULT_ENTRY_RETRIEVAL_CONFIG: EntryRetrievalConfig = {
 export function getEntryRetrievalConfigFromSettings(): EntryRetrievalConfig {
   const entrySettings = settings.systemServicesSettings.entryRetrieval
   const preset = settings.getPresetConfig(settings.getServicePresetId('entryRetrieval'))
-  const maxWordsPerEntryRaw =
-    typeof entrySettings.maxWordsPerEntry === 'number'
-      ? entrySettings.maxWordsPerEntry
-      : Number(entrySettings.maxWordsPerEntry)
+  const maxWordsPerEntryRaw = entrySettings.maxWordsPerEntry
   const maxWordsPerEntry = Number.isFinite(maxWordsPerEntryRaw)
     ? Math.min(Math.max(0, Math.floor(maxWordsPerEntryRaw)), 500)
     : 0

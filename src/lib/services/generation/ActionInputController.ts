@@ -16,7 +16,7 @@
 import { tick } from 'svelte'
 import { story } from '$lib/stores/story/index.svelte'
 import { settings } from '$lib/stores/settings.svelte'
-import { aiService, type ImageGenerationContext } from '$lib/services/ai'
+import { aiService } from '$lib/services/ai'
 import { database } from '$lib/services/database'
 import { SimpleActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
@@ -126,7 +126,6 @@ export class ActionInputController {
   // Internal state
   stopRequested = false
   activeAbortController: AbortController | null = null
-  lastImageGenContext: ImageGenerationContext | null = null
   private currentActionType: ActionType = 'do'
 
   // --------------------------------------------------------------------------
@@ -543,7 +542,6 @@ export class ActionInputController {
     ui.clearGenerationError()
     ui.clearSuggestions(storyId)
     ui.clearActionChoices(storyId)
-    this.lastImageGenContext = null
     ui.setLastLorebookRetrieval(null)
 
     const result = await retryService.handleRetryLastMessage(
@@ -566,9 +564,7 @@ export class ActionInputController {
         clearGenerationError: () => ui.clearGenerationError(),
         clearSuggestions: () => ui.clearSuggestions(storyId),
         clearActionChoices: () => ui.clearActionChoices(storyId),
-        clearImageContext: () => {
-          this.lastImageGenContext = null
-        },
+        clearImageContext: () => {},
       },
     )
 

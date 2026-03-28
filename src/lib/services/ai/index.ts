@@ -33,7 +33,6 @@ import type { StyleReviewResult } from './generation/StyleReviewerService'
 import type { RetrievalResult as AgenticRetrievalResult } from './retrieval/AgenticRetrievalService'
 import type { TimelineFillResult } from './retrieval/TimelineFillService'
 
-import type { ContextChatEntry } from '$lib/services/context/context-types'
 import {
   EntryRetrievalService,
   type EntryRetrievalResult,
@@ -60,19 +59,6 @@ import { normalizeImageDataUrl, parseImageSize } from '$lib/utils/image'
 import type { ImageableScene } from './sdk/schemas/imageanalysis'
 import type { EmbeddedImage } from '$lib/types'
 
-// Re-export ImageGenerationContext type for backwards compatibility
-export interface ImageGenerationContext {
-  storyId: string
-  entryId: string
-  narrativeResponse: string
-  userAction: string
-  presentCharacters: Character[]
-  currentLocation?: string
-  chatHistory?: ContextChatEntry[]
-  translatedNarrative?: string
-  translationLanguage?: string
-  referenceMode: boolean
-}
 import type { TranslationResult, UITranslationItem } from './utils/TranslationService'
 import type { StreamChunk } from './core/types'
 import type {

@@ -11,7 +11,6 @@ import { createLogger } from '$lib/log'
 import { createAgentFromPreset, extractTerminalToolResult, stopOnTerminalTool } from '../sdk/agents'
 import { createRetrievalTools, type RetrievalToolContext } from '../sdk/tools'
 import { ContextBuilder } from '$lib/services/context'
-import type { ContextLorebookEntryBase } from '$lib/services/context/context-types'
 import { story } from '$lib/stores/story/index.svelte'
 import { aiService } from '../generation'
 
@@ -27,8 +26,8 @@ export interface RetrievalResult {
   agenticReasoning: string
   /** Summary of key facts learned from chapter queries */
   agenticChapterSummary: string
-  /** Selected entries mapped to ContextLorebookEntryBase shape (no tier) */
-  agenticSelectedEntries: ContextLorebookEntryBase[]
+  /** Selected entries for template consumption */
+  agenticSelectedEntries: Entry[]
   /** Number of agent iterations */
   iterations: number
   /** IDs of chapters that were queried */
@@ -178,11 +177,7 @@ export class AgenticRetrievalService extends BaseAIService {
       entries: selectedEntries,
       agenticReasoning: reasoning ?? '',
       agenticChapterSummary: terminalResult?.chapterSummary ?? '',
-      agenticSelectedEntries: selectedEntries.map((e) => ({
-        name: e.name,
-        type: e.type,
-        description: e.description,
-      })),
+      agenticSelectedEntries: selectedEntries,
       iterations,
       queriedChapters: Array.from(queriedChapterIds),
       queryHistory: queryHistory.length > 0 ? queryHistory : undefined,

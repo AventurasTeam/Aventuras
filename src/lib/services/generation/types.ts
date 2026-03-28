@@ -6,10 +6,7 @@
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
 import type { TimelineFillResult } from '$lib/services/ai/retrieval'
 import type { EntryRetrievalResult } from '$lib/services/ai/retrieval/EntryRetrievalService'
-import type {
-  ContextLorebookEntry,
-  ContextLorebookEntryBase,
-} from '$lib/services/context/context-types'
+import type { Entry } from '$lib/types'
 
 // Generation Phases
 export type GenerationPhase =
@@ -25,7 +22,7 @@ export type GenerationPhase =
 export interface AgenticRetrievalFields {
   agenticReasoning: string
   agenticChapterSummary: string
-  agenticSelectedEntries: ContextLorebookEntryBase[]
+  agenticSelectedEntries: Entry[]
 }
 
 /**
@@ -39,7 +36,7 @@ export interface AgenticRetrievalFields {
  */
 export interface RetrievalResult {
   agenticRetrieval: AgenticRetrievalFields | null
-  lorebookEntries: ContextLorebookEntry[]
+  lorebookEntries: Entry[]
   lorebookRetrievalResult: EntryRetrievalResult | null
   timelineFillResult: TimelineFillResult | null
 }
