@@ -16,7 +16,7 @@ import type {
 } from '$lib/types'
 import { database } from '$lib/services/database'
 import { grammarService } from '$lib/services/grammar'
-import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
+import { PROVIDERS } from '$lib/services/ai/sdk/providers'
 import { ui } from '$lib/stores/ui.svelte'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '$lib/constants/timeout'
