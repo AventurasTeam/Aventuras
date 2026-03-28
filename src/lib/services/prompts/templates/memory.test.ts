@@ -8,7 +8,7 @@ vi.mock('$lib/services/database', () => ({
   },
 }))
 
-import { renderTemplate, createTemplateTestMock, testVariableInjection } from '$test/helpers/templateTestHelper'
+import { renderTemplate, createTemplateTestMock, testVariableInjection, testManifestCoverage } from '$test/helpers/templateTestHelper'
 import { promptContext, promptContextMinimal } from '$test/fixtures/promptContext'
 import {
   chapterAnalysisManifest,
@@ -308,4 +308,16 @@ describe('lore-management', () => {
       expect(result.user).not.toContain('[object Object]')
     })
   })
+})
+
+// ---------------------------------------------------------------------------
+// manifest coverage
+// ---------------------------------------------------------------------------
+
+describe('manifest coverage', () => {
+  testManifestCoverage(chapterAnalysisManifest)
+  testManifestCoverage(chapterSummarizationManifest)
+  testManifestCoverage(agenticRetrievalManifest)
+  testManifestCoverage(interactiveLorebookManifest)
+  testManifestCoverage(loreManagementManifest)
 })

@@ -8,7 +8,7 @@ vi.mock('$lib/services/database', () => ({
   },
 }))
 
-import { renderTemplate, createTemplateTestMock, testVariableInjection } from '$test/helpers/templateTestHelper'
+import { renderTemplate, createTemplateTestMock, testVariableInjection, testManifestCoverage } from '$test/helpers/templateTestHelper'
 import { promptContext, promptContextMinimal } from '$test/fixtures/promptContext'
 import {
   imagePromptAnalysisManifest,
@@ -265,4 +265,15 @@ describe('static image style templates', () => {
       expect(result.system.length).toBeGreaterThan(0)
     })
   }
+})
+
+// ---------------------------------------------------------------------------
+// manifest coverage
+// ---------------------------------------------------------------------------
+
+describe('manifest coverage', () => {
+  testManifestCoverage(imagePromptAnalysisManifest)
+  testManifestCoverage(imagePromptAnalysisReferenceManifest)
+  testManifestCoverage(imagePortraitGenerationManifest)
+  testManifestCoverage(backgroundImagePromptAnalysisManifest)
 })

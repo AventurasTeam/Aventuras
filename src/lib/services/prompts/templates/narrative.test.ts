@@ -8,7 +8,7 @@ vi.mock('$lib/services/database', () => ({
   },
 }))
 
-import { renderTemplate, createTemplateTestMock, testVariableInjection } from '$test/helpers/templateTestHelper'
+import { renderTemplate, createTemplateTestMock, testVariableInjection, testManifestCoverage } from '$test/helpers/templateTestHelper'
 import { promptContext, promptContextMinimal } from '$test/fixtures/promptContext'
 import { adventureManifest, creativeWritingManifest } from '$test/fixtures/templateManifests'
 
@@ -330,4 +330,13 @@ describe('creative-writing', () => {
       expect(result.system).not.toContain('STALE_STRING')
     })
   })
+})
+
+// ---------------------------------------------------------------------------
+// manifest coverage
+// ---------------------------------------------------------------------------
+
+describe('manifest coverage', () => {
+  testManifestCoverage(adventureManifest)
+  testManifestCoverage(creativeWritingManifest)
 })

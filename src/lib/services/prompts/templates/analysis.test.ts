@@ -8,7 +8,7 @@ vi.mock('$lib/services/database', () => ({
   },
 }))
 
-import { renderTemplate, createTemplateTestMock, testVariableInjection } from '$test/helpers/templateTestHelper'
+import { renderTemplate, createTemplateTestMock, testVariableInjection, testManifestCoverage } from '$test/helpers/templateTestHelper'
 import { promptContext, promptContextMinimal } from '$test/fixtures/promptContext'
 import {
   classifierManifest,
@@ -268,4 +268,15 @@ describe('tier3-entry-selection', () => {
       expect(result.user).not.toContain('[object Object]')
     })
   })
+})
+
+// ---------------------------------------------------------------------------
+// manifest coverage
+// ---------------------------------------------------------------------------
+
+describe('manifest coverage', () => {
+  testManifestCoverage(classifierManifest)
+  testManifestCoverage(lorebookClassifierManifest)
+  testManifestCoverage(styleReviewerManifest)
+  testManifestCoverage(tier3EntrySelectionManifest)
 })

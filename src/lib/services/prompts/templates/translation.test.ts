@@ -15,6 +15,7 @@ import {
   renderTemplate,
   createTemplateTestMock,
   testVariableInjection,
+  testManifestCoverage,
 } from '$test/helpers/templateTestHelper'
 import { promptContext } from '$test/fixtures/promptContext'
 import {
@@ -150,4 +151,16 @@ describe('translate-action-choices', () => {
       expect(result.user).not.toContain('[object Object]')
     })
   })
+})
+
+// ---------------------------------------------------------------------------
+// manifest coverage
+// ---------------------------------------------------------------------------
+
+describe('manifest coverage', () => {
+  testManifestCoverage(translateNarrationManifest)
+  testManifestCoverage(translateInputManifest)
+  testManifestCoverage(translateUIManifest)
+  testManifestCoverage(translateSuggestionsManifest)
+  testManifestCoverage(translateActionChoicesManifest)
 })

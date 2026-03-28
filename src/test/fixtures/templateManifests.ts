@@ -222,6 +222,26 @@ export const classifierManifest: TemplateVariableManifest = {
     { name: 'timeTracker', expectedInUser: ['Year 1, Day 42'] },
     { name: 'storyEntriesVisible', expectedInUser: ['I draw my sword'] },
     { name: 'characters[].visualDescriptors', expectedInUser: ['Silver pendant'] },
+    {
+      name: 'packVariables.runtimeVariables',
+      expectedInUser: ['loyalty'],
+      requiresContext: {
+        packVariables: {
+          runtimeVariables: {
+            character: [
+              {
+                variableName: 'loyalty',
+                variableType: 'number',
+                minValue: 0,
+                maxValue: 100,
+                defaultValue: '50',
+                description: 'Loyalty toward protagonist',
+              },
+            ],
+          },
+        },
+      },
+    },
   ],
 }
 
@@ -265,6 +285,7 @@ export const imagePromptAnalysisManifest: TemplateVariableManifest = {
     { name: 'storyEntriesVisible', expectedInUser: ['The torches flickered'] },
     { name: 'userInput', expectedInUser: ['I look around the chamber carefully'] },
     { name: 'lastNarrativeEntry.content', expectedInUser: ['phosphorescent moss'] },
+    { name: 'translationResult.translatedContent', expectedInUser: ["La porte s'est ouverte lentement"] },
   ],
 }
 
@@ -278,6 +299,7 @@ export const imagePromptAnalysisReferenceManifest: TemplateVariableManifest = {
     { name: 'storyEntriesVisible', expectedInUser: ['The torches flickered'] },
     { name: 'userInput', expectedInUser: ['I look around the chamber carefully'] },
     { name: 'lastNarrativeEntry.content', expectedInUser: ['phosphorescent moss'] },
+    { name: 'translationResult.translatedContent', expectedInUser: ["La porte s'est ouverte lentement"] },
   ],
 }
 
@@ -330,6 +352,9 @@ export const adventureManifest: TemplateVariableManifest = {
     { name: 'tone', expectedInSystem: ['Epic'] },
     { name: 'settingDescription', expectedInSystem: ['dark medieval realm'] },
     { name: 'themes', expectedInSystem: ['redemption'] },
+    { name: 'pov', expectedInUser: ['second person'] },
+    { name: 'tense', expectedInUser: ['present'] },
+    { name: 'userSettings.visualProseMode' },
     { name: 'timeTracker.years', expectedInSystem: ['1'] },
     { name: 'timeTracker.days', expectedInSystem: ['42'] },
     { name: 'timeTracker.hours', expectedInSystem: ['14'] },
@@ -359,6 +384,10 @@ export const creativeWritingManifest: TemplateVariableManifest = {
     { name: 'tone', expectedInSystem: ['Epic'] },
     { name: 'settingDescription', expectedInSystem: ['dark medieval realm'] },
     { name: 'themes', expectedInSystem: ['redemption'] },
+    { name: 'pov', expectedInSystem: ['SECOND PERSON'] },
+    { name: 'tense', expectedInSystem: ['PRESENT TENSE'] },
+    { name: 'userSettings.visualProseMode' },
+    { name: 'styleReview', expectedInSystem: ['dark and stormy'] },
     { name: 'timeTracker.years', expectedInSystem: ['1'] },
     { name: 'relevantWorldState.characters', expectedInSystem: ['Aria', 'Marcus'] },
     { name: 'relevantWorldState.inventory', expectedInSystem: ['Iron Sword'] },
