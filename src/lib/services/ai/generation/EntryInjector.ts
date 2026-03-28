@@ -9,6 +9,7 @@
  */
 
 import type { Character, Location, Item, StoryBeat, StoryEntry, Chapter } from '$lib/types'
+import type { WorldStateArrays } from '$lib/services/context/context-types'
 import { BaseAIService } from '../BaseAIService'
 import { AI_CONFIG } from '../core/config'
 import { createLogger } from '$lib/log'
@@ -57,12 +58,6 @@ export interface RelevantEntry {
 
 export type Tier3Candidate = Omit<RelevantEntry, 'metadata' | 'tier' | 'priority'>
 
-export interface ContextResult {
-  tier1: RelevantEntry[]
-  tier2: RelevantEntry[]
-  tier3: RelevantEntry[]
-  all: RelevantEntry[]
-}
 
 /**
  * Service that builds context from world state using tiered injection.
@@ -83,7 +78,7 @@ export class EntryInjector extends BaseAIService {
    * NOTE: Tier 3 is currently disabled pending SDK migration.
    */
 
-  async buildContext(): Promise<ContextResult> {
+  async buildContext(): Promise<WorldStateArrays> {
     const worldState: WorldState = {
       characters: story.character.characters,
       locations: story.location.locations,
@@ -129,10 +124,39 @@ export class EntryInjector extends BaseAIService {
       log('Tier 3 entries:', tier3.length)
     }
 
-    // Combine all entries
-    const all = [...tier1, ...tier2, ...tier3]
+    // Collect all IDs per tier for lookup
+    const tier1IdSet = tier1Ids
+    const tier2IdSet = new Set(tier2.map((e) => e.id))
+    const tier3IdSet = new Set(tier3.map((e) => e.id))
 
-    return { tier1, tier2, tier3, all }
+    // Characters: all tiers, ordered tier1 → tier2 → tier3
+    const characters = [
+      ...worldState.characters.filter((c) => tier1IdSet.has(c.id)),
+      ...worldState.characters.filter((c) => tier2IdSet.has(c.id)),
+      ...worldState.characters.filter((c) => tier3IdSet.has(c.id)),
+    ]
+
+    // Items: tier-1 → inventory, tier-2/3 → relevantItems
+    const inventory = worldState.items.filter((i) => tier1IdSet.has(i.id))
+    const relevantItems = [
+      ...worldState.items.filter((i) => tier2IdSet.has(i.id)),
+      ...worldState.items.filter((i) => tier3IdSet.has(i.id)),
+    ]
+
+    // Story beats: tier-1 → storyBeats, tier-2/3 → relatedStoryBeats
+    const storyBeats = worldState.storyBeats.filter((b) => tier1IdSet.has(b.id))
+    const relatedStoryBeats = [
+      ...worldState.storyBeats.filter((b) => tier2IdSet.has(b.id)),
+      ...worldState.storyBeats.filter((b) => tier3IdSet.has(b.id)),
+    ]
+
+    // Locations: tier-2/3 non-current only (current location is injected separately)
+    const locations = [
+      ...worldState.locations.filter((l) => tier2IdSet.has(l.id) && !l.current),
+      ...worldState.locations.filter((l) => tier3IdSet.has(l.id) && !l.current),
+    ]
+
+    return { characters, inventory, relevantItems, storyBeats, relatedStoryBeats, locations }
   }
 
   /**
