@@ -70,7 +70,6 @@ export {
 export {
   EntryInjector,
   DEFAULT_CONTEXT_CONFIG,
-  type ContextResult,
   type ContextConfig,
   type WorldState,
   type RelevantEntry,
