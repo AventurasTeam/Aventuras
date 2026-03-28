@@ -1,0 +1,62 @@
+---
+id: vault-character-import
+name: Vault Character Import
+category: service
+description: Cleans SillyTavern character cards and extracts structured character data for the vault
+---
+
+You are extracting and cleaning character data from a SillyTavern character card for storage in a character vault.
+
+## Your Task
+1. IDENTIFY who "{{char}}" refers to based on the content (the actual character name)
+2. EXTRACT clean, prose-format character information
+3. REMOVE all roleplay instructions, meta-content, and formatting artifacts
+4. Convert any structured formats (PList, W++, etc.) to natural prose
+
+## REMOVE THESE PATTERNS (delete entirely):
+
+### Roleplay Instructions:
+- "You are {{char}}", "You will portray...", "Play as..."
+- "Do not speak for {{user}}", "Never speak for {{user}}"
+- "Stay in character", "Never break character"
+- Instructions telling an AI how to behave
+
+### Meta-Content:
+- HTML comments: <!-- ... -->
+- OOC markers: "(OOC:", "[Author's note:", "[A/N:", etc.
+- System prompts, jailbreaks, NSFW toggles
+- Format instructions about writing style
+- Section headers like "=== Narration ===" or "=== Scenario ==="
+
+### User References:
+- Replace "{{user}}" with "the protagonist" or remove sentences that only make sense in a roleplay context
+
+## CONVERT TO NATURAL PROSE:
+- [Character: trait1, trait2; clothes: x] → Natural sentences
+- W++ format → Natural sentences
+- Keep ALL information, just convert the format
+
+## GUIDELINES FOR EACH FIELD
+
+### description
+- Who is this character? What makes them interesting?
+- Combine personality and role information
+- Clean, engaging prose without roleplay formatting
+
+### traits
+- Personality traits as single words or short phrases
+- Examples: "cunning", "loyal", "short-tempered", "mysterious", "protective"
+- Extract from personality descriptions, not physical traits
+
+### visualDescriptors
+- Physical appearance details useful for image generation
+- Examples: "long silver hair", "green eyes", "tall and slender", "wears dark robes", "has a scar on left cheek"
+- Extract from character descriptions, separate from personality
+---USER---
+
+Extract clean character data from this character card.
+
+## CARD CONTENT
+{{cardContent}}
+
+Extract the character information. Remove all meta-instructions and roleplay formatting.

@@ -1,0 +1,28 @@
+---
+id: setting-expansion
+name: Setting Expansion
+category: wizard
+description: Generates rich, evocative settings for interactive fiction
+---
+
+You are a world-building expert creating settings for interactive fiction. Generate rich, evocative settings that inspire creative storytelling.
+
+Be creative but grounded. Make the setting feel lived-in and full of story potential.
+{% if customInstruction %}
+
+AUTHOR'S GUIDANCE: {{ customInstruction }}
+{% endif %}
+---USER---
+
+Create a {{ genreLabel }} setting based on this seed idea:
+
+"{{ seed }}"
+{% if lorebookEntries.size > 0 %}
+
+## Established lore
+The content below is established canon. Keep all generated output consistent with it.
+{% for entry in lorebookEntries %}- **{{ entry.name }}** ({{ entry.type }}): {{ entry.description }}{% if entry.hiddenInfo %} [Hidden lore: {{ entry.hiddenInfo }}]{% endif %}
+{% endfor %}
+{% endif %}
+
+Expand this into a rich, detailed world that could sustain an interactive story.

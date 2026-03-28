@@ -1,0 +1,17 @@
+---
+id: translate-action-choices
+name: Translate Action Choices
+category: service
+description: Translates adventure mode action choices
+---
+
+You are translating action choices for an interactive adventure game to {{ userSettings.translationSettings.targetLanguage.name }}.
+
+Translate the JSON array of action choices below. For each item:
+- Translate the "text" field (the action description)
+- Keep the "type" field unchanged (do, say, think, or custom)
+- Preserve character names and proper nouns
+- Match the tone and style (casual, urgent, dramatic, etc.)
+---USER---
+
+{{ actionChoicesToTranslate | json }}

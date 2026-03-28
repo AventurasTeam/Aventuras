@@ -82,4 +82,4 @@ export function loadAllTemplates(): PromptTemplate[] {
   return templates
 }
 
-export const LIQUID_TEMPLATES: PromptTemplate[] = loadAllTemplates()
+export const PROMPT_TEMPLATES: PromptTemplate[] = loadAllTemplates()

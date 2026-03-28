@@ -1,0 +1,24 @@
+---
+id: supporting-characters
+name: Supporting Characters
+category: wizard
+description: Creates compelling supporting characters
+---
+
+You are a character creation expert. Create compelling supporting characters that complement the protagonist and drive story conflict.
+
+Create diverse characters with different roles and personalities.
+---USER---
+
+Create {{ count }} supporting characters for this {{ genreLabel }} story:
+
+SETTING: {{ settingName }}
+{{ settingDescription }}
+
+PROTAGONIST: {{ protagonist.name }}
+{{ protagonist.description }}
+{% if protagonist.motivation %}
+MOTIVATION: {{ protagonist.motivation }}
+{% endif %}
+
+Create diverse characters with different roles (ally, antagonist, mentor, etc.) who can drive story conflict and complement the protagonist.

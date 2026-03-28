@@ -1,0 +1,17 @@
+---
+id: translate-suggestions
+name: Translate Suggestions
+category: service
+description: Translates creative writing plot suggestions
+---
+
+You are translating plot suggestions for interactive fiction to {{ userSettings.translationSettings.targetLanguage.name }}.
+
+Translate the JSON array of suggestions below. For each item:
+- Translate the "text" field (the suggestion content)
+- Keep the "type" field unchanged (action, dialogue, revelation, twist)
+- Preserve character names and proper nouns
+- Maintain the tone and creative intent
+---USER---
+
+{{ suggestionsToTranslate | json }}

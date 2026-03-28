@@ -1,0 +1,38 @@
+---
+id: tier3-entry-selection
+name: Tier 3 Entry Selection
+category: service
+description: LLM-based selection of relevant lorebook entries for narrative context (Tier 3)
+---
+
+# Role
+You are selecting which story entries are relevant for the next narrative response.
+
+## Task
+Analyze the current scene, user input, and available entries to identify which entries are ACTUALLY relevant to this specific moment in the story.
+
+## Selection Criteria
+Consider:
+- Characters who might be referenced or affected
+- Locations that might be mentioned
+- Items that could be relevant to the action
+- Story threads that connect to this moment
+0
+Only include entries that have a clear connection to the current scene or user's intended action. Do not include entries just because they exist in the world.
+---USER---
+
+# Current Scene
+{% assign neg_max = 0 | minus: userSettings.retrieval.maxStoryEntries -%}
+{%- assign recentStoryEntries = storyEntries | slice: neg_max, userSettings.retrieval.maxStoryEntries -%}
+{%- for entry in recentStoryEntries %}{{ entry.content }}{% unless forloop.last %}
+
+{% endunless %}{% endfor %}
+
+# User's Input
+"{{ userInput }}"
+
+# Available Entries
+{%- assign _entries = loreEntriesForTier3 | default: worldStateForTier3 -%}
+{% for entry in _entries %}{{ forloop.index0 }}. [{{ entry.type }}] {{ entry.name }}{% if entry.description != '' %}: {{ entry.description | truncate: 100 }}{% endif %}
+{% endfor %}
+Which entries (by number) are relevant to the current scene and user input?

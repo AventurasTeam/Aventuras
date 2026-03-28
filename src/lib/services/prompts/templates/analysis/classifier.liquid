@@ -1,11 +1,11 @@
-import type { PromptTemplate } from '../types'
+---
+id: classifier
+name: World State Classifier
+category: service
+description: Extracts characters, locations, items, and story beats from narrative responses
+---
 
-const classifierPromptTemplate: PromptTemplate = {
-  id: 'classifier',
-  name: 'World State Classifier',
-  category: 'service',
-  description: 'Extracts characters, locations, items, and story beats from narrative responses',
-  content: `You analyze interactive fiction responses and extract structured world state changes.
+You analyze interactive fiction responses and extract structured world state changes.
 
 ## Your Role
 Extract ONLY significant, named entities that matter to the ongoing story. Be precise and conservative.
@@ -39,9 +39,9 @@ Visual descriptors enable consistent character visualization. The goal is to bui
 Never leave a character without complete visual descriptors - invent plausible details to fill gaps.
 
 **For EXISTING characters - USE replaceVisualDescriptors:**
-When updating a character's appearance, use \`replaceVisualDescriptors\` to provide the COMPLETE, FINAL list of descriptors. This REPLACES all existing descriptors entirely. Look at their current "Appearance:" in the entity list and output a cleaned-up, consolidated version with any updates applied.
+When updating a character's appearance, use `replaceVisualDescriptors` to provide the COMPLETE, FINAL list of descriptors. This REPLACES all existing descriptors entirely. Look at their current "Appearance:" in the entity list and output a cleaned-up, consolidated version with any updates applied.
 
-When to use \`replaceVisualDescriptors\`:
+When to use `replaceVisualDescriptors`:
 - ANY visual change (new outfit, new accessory, injury, etc.)
 - Existing descriptors are bloated/redundant (consolidate them!)
 - Character was missing descriptors (fill them in now)
@@ -53,7 +53,7 @@ The replacement list should:
 - Update changed details (new clothes replace old clothes)
 - Keep unchanged details from the original
 
-Example: If character has bloated appearance with duplicate Face/Hair/Eyes entries, output a single clean \`replaceVisualDescriptors\` array with one entry per category.
+Example: If character has bloated appearance with duplicate Face/Hair/Eyes entries, output a single clean `replaceVisualDescriptors` array with one entry per category.
 
 **Goal:** Descriptors should be CONCISE but COMPLETE - detailed enough to draw the character, but without redundancy. Always output ~5-10 descriptors, never 20+.
 
@@ -126,8 +126,10 @@ Determine how much narrative time elapsed during this passage. Consider what act
 2. Only extract what ACTUALLY HAPPENED, not what might happen
 3. Use the exact names from the text, don't invent or embellish
 4. ALWAYS check if active story beats should be marked completed or failed
-5. ALWAYS assess timeProgression - prefer incrementing time over "none" when activities occur`,
-  userContent: `Analyze this narrative passage and extract world state changes.
+5. ALWAYS assess timeProgression - prefer incrementing time over "none" when activities occur
+---USER---
+
+Analyze this narrative passage and extract world state changes.
 
 ## Context
 Genre: {{ genre }}
@@ -192,112 +194,4 @@ For {{ label }}, include these as direct fields alongside standard fields:
 3. Identify any NEW significant entities introduced (apply the extraction rules strictly)
 4. Determine the current scene state
 
-Empty arrays are fine - don't invent entities that aren't clearly in the text.`,
-}
-
-const styleReviewerPromptTemplate: PromptTemplate = {
-  id: 'style-reviewer',
-  name: 'Style Reviewer',
-  category: 'service',
-  description: 'Identifies overused phrases and style issues in narrative text',
-  content: `You analyze narrative text for repetitive phrases, structural patterns, and style issues.
-
-## Your Role
-Identify overused phrases, sentence patterns, structural repetition, and stylistic tics that reduce prose quality.
-
-## What to Look For
-
-### Phrase-Level Repetition
-- Repeated descriptive phrases (e.g., "eyes widening", "heart pounding")
-- Overused sentence openers (e.g., "You see", "There is")
-- Cliche expressions and purple prose patterns
-- Repetitive dialogue tags or action beats
-- Word echoes within close proximity
-
-### Structural Repetition (IMPORTANT)
-- Paragraphs/passages that always start the same way (e.g., always opening with environmental sounds, weather, or sensory details)
-- Paragraphs/passages that always end the same way (e.g., always ending with punchy one-liners, cliffhangers, or rhetorical questions)
-- Predictable paragraph structures (e.g., always: description → action → dialogue → reaction)
-- Repetitive scene transitions or narrative beats
-- Formulaic pacing patterns across multiple passages
-
-## Severity Levels
-- low: 2-3 occurrences, minor impact
-- medium: 4-5 occurrences, noticeable repetition
-- high: 6+ occurrences, significantly impacts reading experience
-
-## Response Requirements
-- Be specific about the exact phrase or structural pattern
-- For structural issues, describe the pattern clearly (e.g., "5 of 7 passages begin with ambient sound descriptions")
-- Provide context-appropriate alternatives
-- Focus on actionable improvements`,
-  userContent: `{%- assign passages = storyEntriesVisible | where: "type", "narration" -%}
-Analyze these {{ passages | size }} passages for repetitive phrases, structural patterns, and style issues. Each passage is a separate AI-generated narrative response.
-
-{% for passage in passages %}--- Passage {{ forloop.index }} ---
-{{ passage.content }}
-{% unless forloop.last %}
-
-{% endunless %}{% endfor %}`,
-}
-
-const lorebookClassifierPromptTemplate: PromptTemplate = {
-  id: 'lorebook-classifier',
-  name: 'Lorebook Classifier',
-  category: 'service',
-  description: 'Classifies lorebook entries into appropriate categories',
-  content: `You are a precise classifier for fantasy/RPG lorebook entries. Analyze the name, content, and keywords to determine the most appropriate category. Be decisive - pick the single best category for each entry.`,
-  userContent: `Classify each lorebook entry into exactly one category. The categories are:
-- character: A person, creature, or being with personality/traits (NPCs, monsters, etc.)
-- location: A place, area, building, or geographic feature
-- item: An object, weapon, artifact, tool, or piece of equipment
-- faction: An organization, group, guild, kingdom, or collective entity
-- concept: A magic system, rule, tradition, technology, or abstract idea
-- event: A historical occurrence, battle, ceremony, or significant happening
-
-Entries to classify:
-{{entriesJson}}`,
-}
-
-const tier3EntrySelectionPromptTemplate: PromptTemplate = {
-  id: 'tier3-entry-selection',
-  name: 'Tier 3 Entry Selection',
-  category: 'service',
-  description: 'LLM-based selection of relevant lorebook entries for narrative context (Tier 3)',
-  content: `# Role
-You are selecting which story entries are relevant for the next narrative response.
-
-## Task
-Analyze the current scene, user input, and available entries to identify which entries are ACTUALLY relevant to this specific moment in the story.
-
-## Selection Criteria
-Consider:
-- Characters who might be referenced or affected
-- Locations that might be mentioned
-- Items that could be relevant to the action
-- Story threads that connect to this moment
-0
-Only include entries that have a clear connection to the current scene or user's intended action. Do not include entries just because they exist in the world.`,
-  userContent: `# Current Scene
-{% assign neg_max = 0 | minus: userSettings.retrieval.maxStoryEntries -%}
-{%- assign recentStoryEntries = storyEntries | slice: neg_max, userSettings.retrieval.maxStoryEntries -%}
-{%- for entry in recentStoryEntries %}{{ entry.content }}{% unless forloop.last %}
-
-{% endunless %}{% endfor %}
-
-# User's Input
-"{{ userInput }}"
-
-# Available Entries
-{%- assign _entries = loreEntriesForTier3 | default: worldStateForTier3 -%}
-{% for entry in _entries %}{{ forloop.index0 }}. [{{ entry.type }}] {{ entry.name }}{% if entry.description != '' %}: {{ entry.description | truncate: 100 }}{% endif %}
-{% endfor %}
-Which entries (by number) are relevant to the current scene and user input?`,
-}
-
-export const analysisTemplates: PromptTemplate[] = [
-  classifierPromptTemplate,
-  styleReviewerPromptTemplate,
-  lorebookClassifierPromptTemplate,
-  tier3EntrySelectionPromptTemplate,
-]
+Empty arrays are fine - don't invent entities that aren't clearly in the text.

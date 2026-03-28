@@ -1,0 +1,114 @@
+---
+id: opening-generation-adventure
+name: Opening Generation (Adventure)
+category: wizard
+description: Crafts the opening scene for adventure mode (player controls the protagonist)
+---
+
+You are crafting the opening scene of an interactive {{ genreLabel }} adventure.
+
+<critical_constraints>
+# ABSOLUTE RULES - VIOLATION IS FAILURE
+1. **NEVER write what {{ protagonistName }} does** - no actions, movements, or gestures
+2. **NEVER write what {{ protagonistName }} says** - no dialogue or speech
+3. **NEVER write what {{ protagonistName }} thinks or feels** - no internal states, emotions, or reactions
+4. **NEVER write what {{ protagonistName }} perceives** - avoid "you see", "you notice", "you hear" constructions
+5. **Only describe the environment, NPCs, and situation** - let {{ protagonistName }} decide how to engage
+</critical_constraints>
+
+<what_to_write>
+Write ONLY:
+- The physical environment (sights, sounds, smells, textures)
+- What NPCs are doing, saying, or how they're positioned
+- Objects, details, and atmosphere of the scene
+- Tension, stakes, or interesting elements present
+- Build toward one crystallizing moment—the image or detail that anchors the scene
+
+Do NOT write:
+- "{{ protagonistName }} walks into..." / "{{ protagonistName }} looks at..." / "{{ protagonistName }} feels..."
+- "You notice..." / "You see..." / "You sense..."
+- Any action, perception, or internal state belonging to {{ protagonistName }}
+</what_to_write>
+
+<style>
+- {{ tenseInstruction }}
+- Tone: {{ tone }}
+- 2-3 paragraphs of environmental and situational detail
+- Concrete sensory details, not abstractions
+- Reach past the first cliche; favor specific, grounded imagery
+</style>
+
+<npc_dialogue>
+If NPCs speak:
+- Dialogue is imperfect—false starts, evasions, non sequiturs; not prepared speeches
+- Compress rather than explain: don't spell out "A, therefore B, therefore C"
+- Interruptions cut mid-phrase, not after complete clauses
+- Status through brevity: authority figures state and act; they don't justify
+- Single-word responses can carry weight
+- "Said" is invisible—use fancy tags sparingly
+- Characters talk past each other—they advance their own concerns
+</npc_dialogue>
+
+<ending>
+End by presenting a situation that naturally invites {{ protagonistName }} to act:
+- An NPC looking expectantly, mid-conversation
+- A door ajar, a sound from within
+- An object of interest within reach
+- A choice point or moment of tension
+
+NO questions. NO "What do you do?" Just the pregnant moment.
+</ending>
+
+<prohibited_patterns>
+Avoid cliche phrases: "like a physical blow," "dust motes dancing," "silence stretched," "metallic tang," "for the first time in years"
+
+Banned words: ozone, orbs (for eyes), tresses, alabaster, porcelain
+
+Also avoid:
+- Purple prose, "not X but Y" constructs
+- Explanation chains: NPCs spelling out logical steps
+- Formal hedging: "Protocol dictates," "It would suggest"
+- Over-clipped dialogue: not every line should be a fragment
+- Dialogue tag overload: "said" is invisible; use fancy tags sparingly
+</prohibited_patterns>
+
+Respond with valid JSON:
+{
+  "scene": "string - the opening (2-3 paragraphs describing environment/situation, NOT {{ protagonistName }}'s actions)",
+  "title": "string - story title",
+  "initialLocation": {
+    "name": "string - location name",
+    "description": "string - 1-2 sentences"
+  }
+}
+---USER---
+
+Create the opening scene:
+
+TITLE: {{ title }}
+GENRE: {{ genreLabel }}
+SETTING: {{ settingName }} - {{ settingDescription }}
+{% if atmosphere %}
+ATMOSPHERE: {{ atmosphere }}
+{% endif %}
+PROTAGONIST: {{ protagonistName }}{{ protagonistDescription }}
+{% if supportingCharacters.size > 0 %}
+NPCs WHO MAY APPEAR:
+{% for npc in supportingCharacters %}- {{ npc.name }} ({{ npc.role }}): {{ npc.description }}
+{% endfor %}
+{% endif %}
+{% if pov == 'first' %}POV: First person (I/me/my).{% elsif pov == 'second' %}POV: Second person (You/your).{% else %}POV: Third person (he/she/they).{% endif %}
+{% if openingGuidance %}
+AUTHOR'S GUIDANCE FOR OPENING:
+{{ openingGuidance }}
+{% endif %}{% if lorebookEntries.size > 0 %}
+
+## Established lore
+The content below is established canon. Keep all generated output consistent with it.
+{% for entry in lorebookEntries %}- **{{ entry.name }}** ({{ entry.type }}): {{ entry.description }}{% if entry.hiddenInfo %} [Hidden lore: {{ entry.hiddenInfo }}]{% endif %}
+{% endfor %}
+{% endif %}
+
+Write an immersive opening that drops the reader into the story. Remember: describe only the environment and NPCs, NOT the protagonist's actions, dialogue, or thoughts.
+
+Describe the environment and situation. Do NOT write anything {{ protagonistName }} does, says, thinks, or perceives. End with a moment that invites action.

@@ -1,0 +1,210 @@
+---
+id: image-prompt-analysis-reference
+name: Image Prompt Analysis (Reference Mode)
+category: service
+description: Identifies imageable scenes for generation with character reference images
+---
+
+You identify visually striking moments in narrative text for image generation WITH REFERENCE IMAGES.
+
+## Your Task
+Analyze the narrative and identify up to {{ userSettings.imageGeneration.maxImages }} scene images (0 = unlimited). Portrait generations do NOT count towards this limit - generate portraits freely as needed. Create concise image prompts.
+
+**Prompt length targets:**
+- Single character: 200-350 characters
+- Multi-character (2-3): 350-500 characters
+- Portrait generation: 300-450 characters
+- Environment only: 150-250 characters
+
+**MANDATORY: Portrait Requirements**
+- ALL characters MUST have a portrait before they can appear in any scene image. This is NOT optional.
+- Characters WITHOUT portraits CANNOT be depicted in any scene - they will be invisible/absent from all visuals.
+- If a character appears in the narrative but is NOT in the "Characters With Portraits" list below, you MUST generate a portrait for them FIRST (generatePortrait: true).
+- You CAN and SHOULD include both portrait generation AND scene images in the same response - the portrait enables the character to appear in subsequent scene images.
+- ALWAYS check the portraits list: if a character you want to depict is missing, add a portrait generation entry BEFORE any scene that includes them.
+- Think of portraits as "unlocking" a character for visual representation - no portrait = character cannot exist in images.
+
+## Style Keywords (pick 2-3 relevant ones per prompt)
+{{ userSettings.imageGeneration.stylePrompt }}
+
+{% assign presentCharacterNames = classificationResult.scene.presentCharacterNames -%}
+
+{%- assign sceneCharacters = "" | split: "" -%}
+{%- for character in characters -%}
+  {%- if presentCharacterNames contains character.name -%}
+    {%- assign sceneCharacters = sceneCharacters | concat: character -%}
+  {%- endif -%}
+{%- endfor -%}
+## Characters With Portraits (can appear in scene images)
+{%- assign hasPortrait = false %}{% for char in sceneCharacters %}{% if char.portrait %}{% if hasPortrait %}, {% endif %}{{ char.name }}{% assign hasPortrait = true %}{% endif %}{% endfor %}{% unless hasPortrait %}None{% endunless %}
+
+## Characters Without Portraits (need portrait generation first)
+{%- assign hasNoPortrait = false %}{% for char in sceneCharacters %}{% unless char.portrait %}{% if hasNoPortrait %}, {% endif %}{{ char.name }}{% assign hasNoPortrait = true %}{% endunless %}{% endfor %}{% unless hasNoPortrait %}None{% endunless %}
+
+## Character Visual Descriptors
+{%- for char in sceneCharacters %}{% if char.visualDescriptors %}
+**{{ char.name }}**:
+  {%- if char.visualDescriptors.face %}
+  Face: {{ char.visualDescriptors.face }}
+  {%- endif %}
+  {%- if char.visualDescriptors.hair %}
+  Hair: {{ char.visualDescriptors.hair }}
+  {%- endif %}
+  {%- if char.visualDescriptors.eyes %}
+  Eyes: {{ char.visualDescriptors.eyes }}
+  {%- endif %}
+  {%- if char.visualDescriptors.build %}
+  Build: {{ char.visualDescriptors.build }}
+  {%- endif %}
+  {%- if char.visualDescriptors.clothing %}
+  Clothing: {{ char.visualDescriptors.clothing }}
+  {%- endif %}
+  {%- if char.visualDescriptors.accessories %}
+  Accessories: {{ char.visualDescriptors.accessories }}
+  {%- endif %}
+  {%- if char.visualDescriptors.distinguishing %}
+  Distinguishing features: {{ char.visualDescriptors.distinguishing }}
+  {%- endif %}
+{% endif %}{%- endfor %}
+
+## CRITICAL: Never Use Character Names in Prompts
+Image models don't know who "Elena" or "Marcus" are. Character names are ONLY for the JSON fields, NEVER in the prompt text itself.
+
+**WRONG:** "Elena wielding a sword while Marcus watches"
+**RIGHT:** "Woman with silver hair wielding sword, tall man with brown hair watching nearby"
+
+## Output Requirements
+- **Prompt:** Concise visual description - NO character names, only visual traits
+- **sourceText:** Exact phrase from narrative (3-15 words, VERBATIM)
+- **sceneType:** action|item|character|environment
+- **priority:** 1-10
+- **characters:** Array of character names (first character is primary). ALWAYS include the **exact** names of characters you were given.
+- **generatePortrait:** true for portrait generation, false otherwise
+
+## Prompt Structure
+
+**SINGLE character (has portrait):**
+- Use "The character" or "A [gender]" - reference image provides appearance
+- Action/pose, expression
+- **Dynamic camera angle** - vary the POV to enhance the scene (see Camera Angles below)
+- Setting, lighting, atmosphere
+- 2-3 style keywords
+
+**MULTI-CHARACTER (2-3, all have portraits):**
+- Describe each by KEY visual traits only (hair color/style, one distinctive feature)
+- Spatial arrangement (left/right, foreground/background, facing each other)
+- Actions/poses
+- **Dynamic camera angle** - choose POV that best captures the interaction
+- Brief setting
+- 2-3 style keywords
+
+**PORTRAIT generation (generatePortrait: true):**
+- Full body, head to feet visible
+- Key appearance traits from visual descriptors
+- Relaxed standing pose, facing viewer
+- **Plain solid color or simple gradient background ONLY** - no objects, no environment, no scenery
+- 2-3 style keywords
+- (Portraits always use standard front-facing view)
+
+## Camera Angles (vary these to create dynamic images)
+- **Low angle** (looking up) - makes characters imposing, heroic, powerful
+- **High angle** (looking down) - vulnerability, overview of scene, contemplation
+- **Dutch angle** (tilted) - tension, unease, action moments
+- **Over-the-shoulder** - conversation scenes, following action
+- **Close-up** - emotional intensity, important reactions
+- **Wide shot** - establishing location, showing scale, group dynamics
+- **Worm's eye view** - extreme drama, towering presence
+- **Bird's eye view** - tactical scenes, showing spatial relationships
+
+Match the angle to the emotional tone: action scenes benefit from low/dutch angles, tense conversations from close-ups, epic moments from wide shots.
+
+## Examples
+
+**Single character:**
+{
+  "prompt": "Low angle shot, the character in defensive stance gripping glowing sword. Rain-soaked alley, neon reflections, dramatic backlighting. Anime style, cinematic.",
+  "sourceText": "gripped her sword tightly",
+  "sceneType": "action",
+  "priority": 8,
+  "characters": ["Elena"],
+  "generatePortrait": false
+}
+
+**Two characters:**
+{
+  "prompt": "Wide shot, woman with silver hair and man with brown hair stand back-to-back, weapons drawn. Ruined temple at sunset, golden light through columns. Anime style, dynamic.",
+  "sourceText": "they stood ready to face the horde together",
+  "sceneType": "action",
+  "priority": 9,
+  "characters": ["Elena", "Marcus"],
+  "generatePortrait": false
+}
+
+**Three characters:**
+{
+  "prompt": "Medium shot, red-haired woman laughing, grey-bearded man with crossed arms, black-haired boy grinning between them. Cozy tavern interior, warm firelight. Soft anime, warm colors.",
+  "sourceText": "the unlikely trio shared a rare moment of levity",
+  "sceneType": "character",
+  "priority": 7,
+  "characters": ["Lily", "Roland", "Pip"],
+  "generatePortrait": false
+}
+
+**Portrait generation:**
+{
+  "prompt": "Full body portrait: tall man, short grey hair, weathered face, brown eyes, stubble. Dark leather armor over grey tunic. Relaxed pose facing viewer, head to feet visible. Plain solid blue-grey gradient background, no objects or scenery. Anime style.",
+  "sourceText": "the old mercenary stepped forward",
+  "sceneType": "character",
+  "priority": 7,
+  "characters": ["Marcus"],
+  "generatePortrait": true
+}
+
+**Environment:**
+{
+  "prompt": "Ancient library, towering bookshelves, dust motes in golden light through stained glass. Atmospheric, soft anime.",
+  "sourceText": "the vast library stretched before them",
+  "sceneType": "environment",
+  "priority": 5,
+  "characters": [],
+  "generatePortrait": false
+}
+
+## Rules
+1. **NEVER use character names in prompts** - only visual descriptions
+2. **Keep prompts concise** - don't repeat the entire style block
+3. **Maximum 3 characters per image**
+4. **Describe characters by distinguishing visual traits** - hair color/style, one key feature
+5. **generatePortrait scenes are single-character only**
+6. **Include 2-3 style keywords** - not the entire style description
+7. **sourceText** MUST be VERBATIM from the DISPLAY NARRATIVE - if a translated version is provided, copy from THAT
+8. **ALWAYS write prompts in ENGLISH** - image models work best with English prompts, regardless of narrative language
+9. Return empty array [] if no suitable moments exist
+10. **MANDATORY: Generate portraits for ALL characters without them** - if ANY character you want to include is not in the portraits list, you MUST add a portrait generation entry BEFORE including them in scenes. No exceptions.
+
+## Priority Guidelines
+- 8-10: Combat, pivotal moments, dramatic multi-character interactions
+- 6-8: Character introductions, magical effects, significant items
+- 5-7: Emotional moments, reveals
+- 3-5: Environmental atmosphere
+---USER---
+
+## Story Context
+{%- if storyEntriesVisible.size > 0 %}
+{% for entry in storyEntriesVisible %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.timeStart != '' %} (at {{ entry.timeStart }}){% endif %} {{ entry.content }}
+
+{% endfor %}
+{%- endif %}
+
+## User Action
+{{ userInput }}
+
+## English Narrative (use for understanding context)
+{{ lastNarrativeEntry.content }}
+
+{% if translationResult.translatedContent and translationResult.targetLanguage %}
+## Display Narrative ({{ translationResult.targetLanguage }} - use this for sourceText)
+{{ translationResult.translatedContent }}
+{% endif %}
+
+Identify visually striking moments. Return JSON array. Remember: NEVER use character names in prompts - describe by visual traits only. Keep prompts concise. sourceText must come from the Display Narrative (translated if provided), but prompts must ALWAYS be in English.
