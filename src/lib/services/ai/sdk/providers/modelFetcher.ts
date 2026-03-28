@@ -4,10 +4,11 @@
  * Fetches available models from AI providers.
  */
 
+import { PROVIDERS } from '$lib/constants/providerConfig'
 import type { ProviderType, TextModel } from '$lib/types'
 import { dedupeTextModels } from '$lib/utils/dedupeTextModels'
 import { createTimeoutFetch } from './fetch'
-import { PROVIDERS, getBaseUrl } from './config'
+import { getBaseUrl } from './config'
 
 /** URLs that don't require authentication for model fetching */
 const NO_AUTH_PATTERNS = ['nano-gpt.com', 'gen.pollinations.ai', '127.0.0.1', 'localhost']

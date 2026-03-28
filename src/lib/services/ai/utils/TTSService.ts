@@ -4,7 +4,7 @@
  * Designed for extensibility to support multiple TTS providers.
  */
 
-import { PROVIDERS } from '../sdk/providers/config'
+import { PROVIDERS } from '$lib/constants/providerConfig'
 import { corsFetch } from '$lib/services/discovery/utils'
 
 // Constants

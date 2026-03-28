@@ -26,7 +26,7 @@ export {
 } from './generate'
 
 // Provider registry
-export { createProviderFromProfile, PROVIDERS } from './providers'
+export { createProviderFromProfile } from './providers'
 
 // Agent factory and stop conditions
 export {
@@ -50,8 +50,6 @@ export {
 } from './tools'
 
 // Types
-export type { ProviderType, APIProfile } from '$lib/types'
-export type { ProviderConfig, ServiceModelDefaults } from './providers'
 export type { ResolvedAgentConfig, CreateAgentOptions, AgentResult } from './agents'
 export type {
   LorebookEntryToolContext,

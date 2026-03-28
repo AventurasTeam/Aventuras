@@ -7,7 +7,6 @@
 export { createProviderFromProfile } from './registry'
 export { fetchModelsFromProvider } from './modelFetcher'
 export {
-  PROVIDERS,
   getBaseUrl,
   hasDefaultEndpoint,
   getProviderList,
@@ -15,9 +14,4 @@ export {
   supportsBinaryReasoning,
   supportsCapabilityFetch,
   getReasoningExtraction,
-  type ProviderConfig,
-  type ProviderServices,
-  type ServiceModelDefaults,
-  type ProviderCapabilities,
-  type ImageDefaults,
 } from './config'

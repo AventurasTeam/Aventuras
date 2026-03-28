@@ -15,9 +15,10 @@ import { createGroq } from '@ai-sdk/groq'
 import { createDeepSeek } from '@ai-sdk/deepseek'
 import { createMistral } from '@ai-sdk/mistral'
 
+import { PROVIDERS } from '$lib/constants/providerConfig'
 import type { APIProfile } from '$lib/types'
 import { createTimeoutFetch } from './fetch'
-import { PROVIDERS, getBaseUrl } from './config'
+import { getBaseUrl } from './config'
 import { settings } from '$lib/stores/settings.svelte'
 
 export function createProviderFromProfile(options: {

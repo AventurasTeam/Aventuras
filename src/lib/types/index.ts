@@ -675,6 +675,59 @@ export type ProviderType =
   | 'deepseek' // @ai-sdk/deepseek
   | 'mistral' // @ai-sdk/mistral
 
+export interface ServiceModelDefaults {
+  model: string
+  temperature: number
+  maxTokens: number
+  reasoningEffort: ReasoningEffort
+}
+
+export interface ProviderCapabilities {
+  textGeneration: boolean
+  imageGeneration: boolean
+  structuredOutput: boolean
+  /**
+   * Whether the provider supports reasoning/thinking.
+   */
+  reasoning: boolean
+  binaryReasoning?: true
+  /**
+   * How reasoning is extracted from the response.
+   * - 'think-tag': Provider embeds reasoning in <think> tags, use extractReasoningMiddleware
+   * - undefined: Standard handling
+   */
+  reasoningExtraction?: 'think-tag'
+  modelCapabilityFetching?: boolean
+}
+
+export interface ImageDefaults {
+  defaultModel: string
+  referenceModel: string
+  supportedSizes: string[]
+}
+
+export interface ProviderServices {
+  narrative: ServiceModelDefaults
+  classification: ServiceModelDefaults
+  memory: ServiceModelDefaults
+  suggestions: ServiceModelDefaults
+  agentic: ServiceModelDefaults
+  wizard: ServiceModelDefaults
+  translation: ServiceModelDefaults
+}
+
+export interface ProviderConfig {
+  name: string
+  description: string
+  baseUrl: string // Empty string = SDK default
+  requiresApiKey: boolean
+  capabilities: ProviderCapabilities
+  imageDefaults?: ImageDefaults
+  fallbackModels: string[]
+  /** Service model defaults. Only some providers (openrouter, nanogpt) have preconfigured defaults. */
+  services?: ProviderServices
+}
+
 /** Result from fetching models, including which ones support reasoning */
 export interface TextModel {
   id: string

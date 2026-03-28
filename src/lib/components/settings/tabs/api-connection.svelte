@@ -3,7 +3,7 @@
   import { settings } from '$lib/stores/settings.svelte'
   import type { APIProfile, ProviderType, TextModel } from '$lib/types'
   import { fetchModelsFromProvider } from '$lib/services/ai/sdk/providers'
-  import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
+  import { PROVIDERS } from '$lib/constants/providerConfig'
   import { Plus, Check, ChevronRight, Key as KeyIcon, Star } from 'lucide-svelte'
 
   import { Button } from '$lib/components/ui/button'
