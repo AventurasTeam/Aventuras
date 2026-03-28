@@ -31,54 +31,6 @@ export interface WorldStateArrays {
   locations: Location[]
 }
 
-// ===== Refactored Existing Interfaces (Omit<>/Pick<> derivation) =====
-
-/**
- * A character as seen by Liquid templates (worldStateCharacters[]).
- * Explicit field list — new Character fields won't leak into templates.
- * `appearance` is normalized from VisualDescriptors; `tier` is retrieval priority.
- */
-export type ContextCharacter = Pick<
-  Character,
-  'name' | 'description' | 'relationship' | 'traits'
-> & {
-  status: 'active' | 'inactive' | 'deceased'
-  /** Visual appearance details (normalized from VisualDescriptors) */
-  appearance: string[]
-  /** Retrieval tier — lower means higher priority in context window */
-  tier: 1 | 2 | 3
-}
-
-/**
- * An inventory item as seen by Liquid templates (worldStateInventory[]).
- * Strips internal IDs, branch tracking, location, and translation fields.
- * Adds optional `tier` for tier-2/3 relevant items.
- */
-export type ContextItem = Pick<Item, 'name' | 'description' | 'quantity' | 'equipped'> & {
-  /** Retrieval tier — present for tier-2/3 items (worldStateRelevantItems), omitted for inventory */
-  tier?: 1 | 2 | 3
-}
-
-/**
- * A story beat/active thread as seen by Liquid templates (worldStateBeats[]).
- * Strips internal IDs, branch tracking, timestamps, and translation fields.
- * Adds optional `tier` for tier-2/3 related beats.
- */
-export type ContextStoryBeat = Pick<StoryBeat, 'title' | 'description' | 'type' | 'status'> & {
-  /** Retrieval tier — present for tier-2/3 beats (worldStateRelatedBeats), omitted for active beats */
-  tier?: 1 | 2 | 3
-}
-
-/**
- * A non-current location as seen by Liquid templates (worldStateLocations[]).
- * Strips internal IDs, branch tracking, connections, current flag, and translation fields.
- * Adds `tier` for retrieval priority ordering.
- */
-export type ContextLocation = Pick<Location, 'name' | 'description' | 'visited'> & {
-  /** Retrieval tier — lower means higher priority in context window */
-  tier: 1 | 2 | 3
-}
-
 /**
  * Base lorebook entry fields shared by all context paths (retrieval, wizard, agentic).
  */
@@ -141,13 +93,6 @@ export interface ContextTimelineFill {
 export type ContextStoryEntry = StoryEntry & {
   type: 'user_action' | 'narration'
 }
-
-/**
- * A character subset for classifier templates (characters[]).
- * Full character context needed for entity classification.
- * Reuses ContextCharacter — classifier can tolerate all fields.
- */
-export type ContextClassifierCharacter = ContextCharacter
 
 /**
  * A story beat subset for classifier templates (storyBeats[]).
