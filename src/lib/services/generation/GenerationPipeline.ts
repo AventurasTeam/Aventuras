@@ -35,8 +35,8 @@ export class GenerationPipeline {
       yield* this.retrievalPhase.execute()
       if (story.generationContext.abortSignal?.aborted) return { ...status, aborted: true }
 
-      const narrative = yield* this.narrativePhase.execute()
-      if (!narrative || story.generationContext.abortSignal?.aborted)
+      yield* this.narrativePhase.execute()
+      if (!story.generationContext.narrativeResult || story.generationContext.abortSignal?.aborted)
         return { ...status, aborted: true }
 
       yield* mergeGenerators({
