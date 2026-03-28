@@ -7,7 +7,7 @@
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { LLM_TIMEOUT_DEFAULT } from '$lib/constants/timeout'
-import { parseManualBody } from '$lib/services/ai/core/requestOverrides'
+import { parseManualBody } from '../../core'
 import { debug } from '$lib/stores/debug.svelte'
 
 function normalizeHeaders(headers: RequestInit['headers']): Record<string, string> {

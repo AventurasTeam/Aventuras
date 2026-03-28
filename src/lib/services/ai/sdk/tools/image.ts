@@ -9,14 +9,14 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import type { VaultCharacter } from '$lib/types'
-import type { VaultPendingChange } from '$lib/services/ai/sdk/schemas/vault'
+import type { VaultPendingChange } from '../schemas/vault'
 import {
+  DEFAULT_FALLBACK_STYLE_PROMPT,
   generateImage,
   generatePortrait as sdkGeneratePortrait,
   isImageGenerationEnabled,
   hasRequiredCredentials,
-} from '$lib/services/ai/image'
-import { DEFAULT_FALLBACK_STYLE_PROMPT } from '$lib/services/ai/image/constants'
+} from '../../image'
 import { database } from '$lib/services/database'
 import { ContextBuilder } from '$lib/services/context'
 import { settings } from '$lib/stores/settings.svelte'
