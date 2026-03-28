@@ -126,7 +126,6 @@
       const result = await lorebookImportService.importEntries(parseResult, {
         storyId: story.id!,
         useAIClassification,
-        storyMode: story.mode ?? 'adventure',
         onProgress: (progress) => {
           importProgress = progress
         },

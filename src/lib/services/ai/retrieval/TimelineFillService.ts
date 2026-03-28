@@ -11,7 +11,6 @@ import { createLogger } from '$lib/log'
 import { generatePlainText } from '../sdk/generate'
 import { timelineQueriesResultSchema, type TimelineQuery } from '../sdk/schemas/timeline'
 import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
-import { mapChaptersToContext } from '$lib/services/context/chapterMapper'
 import type { ContextAnswerChapter } from '$lib/services/context/context-types'
 import { story } from '$lib/stores/story/index.svelte'
 

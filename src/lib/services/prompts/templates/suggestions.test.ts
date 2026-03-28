@@ -1,10 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { templateEngine } from '$lib/services/templates/engine'
 import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
-import {
-  promptContext,
-  promptContextMinimal,
-} from '../../../../test/fixtures/promptContext'
+import { promptContext, promptContextMinimal } from '../../../../test/fixtures/promptContext'
 
 const template = PROMPT_TEMPLATES.find((t) => t.id === 'suggestions')!
 

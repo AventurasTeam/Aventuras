@@ -54,7 +54,6 @@ import { createDatabaseMock } from './utils/databaseMock'
 import { expectPromptContains, expectPromptNotContains } from './utils/assertions'
 import {
   ActionInputController,
-  type ActionInputCallbacks,
   type SubmitInput,
 } from '$lib/services/generation/ActionInputController'
 import { createAutoTracer } from './utils/TestTracer'
@@ -82,12 +81,6 @@ function getStoreState() {
       postGenerationResult: structuredClone(story.generationContext.postGenerationResult),
       backgroundResult: structuredClone(story.generationContext.backgroundResult),
     },
-  }
-}
-
-function buildMockCallbacks(): ActionInputCallbacks {
-  return {
-    sendGenerationNotification: vi.fn(),
   }
 }
 
@@ -230,6 +223,7 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     interceptor.restore()
     clearTestStory()
     settings.systemServicesSettings.imageGeneration.profileId = null
@@ -444,9 +438,13 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
       'user_action',
       'Kael enters the spire with his blade drawn',
     )
+    story.generationContext.userAction = {
+      entryId: userActionEntry.id,
+      content: userActionEntry.content,
+      rawInput: userActionEntry.content,
+    }
 
-    const callbacks = buildMockCallbacks()
-    const controller = new ActionInputController(callbacks)
+    const controller = new ActionInputController()
 
     // Spy on ui methods to verify lifecycle calls
     const setGeneratingSpy = vi.spyOn(ui, 'setGenerating')
@@ -458,7 +456,7 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
     const tracer = createAutoTracer(getStoreState)
     interceptor.connectTracer(tracer)
 
-    await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+    await controller.generateResponse()
 
     // ---- Assertions: Retrieval phase ----
     expect(interceptor.getRequests('timeline-fill').length).toBeGreaterThan(0)
@@ -582,8 +580,7 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
     interceptor.on('narrative', respondWithStream('The rain intensified.'))
     interceptor.on('classifier', respondWithJSON(defaultClassifierResult))
 
-    const callbacks = buildMockCallbacks()
-    const controller = new ActionInputController(callbacks)
+    const controller = new ActionInputController()
 
     const tracer = createAutoTracer(getStoreState)
     interceptor.connectTracer(tracer)
@@ -639,15 +636,19 @@ describe('Creative Writing Mode — ActionInputController E2E', () => {
     interceptor.on('classifier', respondWithJSON(defaultClassifierResult))
 
     const userActionEntry = await story.entry.addEntry('user_action', 'Continue the scene')
+    story.generationContext.userAction = {
+      entryId: userActionEntry.id,
+      content: userActionEntry.content,
+      rawInput: userActionEntry.content,
+    }
 
-    const callbacks = buildMockCallbacks()
-    const controller = new ActionInputController(callbacks)
+    const controller = new ActionInputController()
     const setSuggestionsSpy = vi.spyOn(ui, 'setSuggestions')
 
     const tracer = createAutoTracer(getStoreState)
     interceptor.connectTracer(tracer)
 
-    await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+    await controller.generateResponse()
 
     expect(interceptor.getRequests('suggestions').length).toBe(0)
     expect(setSuggestionsSpy).not.toHaveBeenCalled()

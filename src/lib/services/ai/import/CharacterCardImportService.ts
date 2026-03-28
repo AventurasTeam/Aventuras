@@ -5,7 +5,6 @@
  * serviceId + dynamic getter pattern, consistent with all other AI services.
  */
 
-import type { StoryMode } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import type { Genre } from '$lib/services/ai/wizard/ScenarioService'
 import { ContextBuilder } from '$lib/services/context'

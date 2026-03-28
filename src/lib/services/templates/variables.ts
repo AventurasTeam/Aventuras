@@ -832,10 +832,19 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
     infoFields: [
       { name: 'name', type: 'string', description: 'Character name' },
-      { name: 'relationship', type: 'string', description: 'e.g. companion, rival, ally (nullable)' },
+      {
+        name: 'relationship',
+        type: 'string',
+        description: 'e.g. companion, rival, ally (nullable)',
+      },
       { name: 'description', type: 'string', description: 'Character description (nullable)' },
       { name: 'traits', type: 'string[]', description: 'Personality traits' },
-      { name: 'visualDescriptors', type: 'object', description: 'Visual appearance (face, hair, eyes, build, clothing, accessories, distinguishing)' },
+      {
+        name: 'visualDescriptors',
+        type: 'object',
+        description:
+          'Visual appearance (face, hair, eyes, build, clothing, accessories, distinguishing)',
+      },
       { name: 'status', type: 'string', description: 'active, inactive, or deceased' },
       { name: 'portrait', type: 'string', description: 'Portrait data URL (nullable)' },
     ] satisfies VariableFieldInfo[],

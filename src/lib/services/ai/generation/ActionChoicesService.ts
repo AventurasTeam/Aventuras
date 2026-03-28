@@ -30,7 +30,7 @@ export class ActionChoicesService extends BaseAIService {
   async generateChoices(): Promise<ActionChoice[]> {
     log('generateChoices called')
 
-    let ctx = new ContextBuilder()
+    const ctx = new ContextBuilder()
 
     // Add runtime variables for template rendering
     ctx.add(story.generationContext.promptContext)

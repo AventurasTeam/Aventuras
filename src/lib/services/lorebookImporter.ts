@@ -11,7 +11,6 @@ import type {
   EntryCreator,
   VaultLorebookEntry,
 } from '$lib/types'
-import type { StoryMode } from '$lib/types'
 import { createLogger } from '$lib/log'
 import { LorebookClassifierService } from './ai/import/LorebookClassifierService'
 
@@ -241,7 +240,6 @@ function inferEntryType(name: string, content: string): EntryType {
 export async function classifyEntriesWithLLM(
   entries: ImportedEntry[],
   onProgress?: (classified: number, total: number) => void,
-  mode: StoryMode = 'adventure',
 ): Promise<ImportedEntry[]> {
   const service = new LorebookClassifierService()
   return service.classifyEntries(entries, onProgress)

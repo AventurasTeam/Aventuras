@@ -109,9 +109,6 @@ export class StoryChapterStore {
       throw new Error('No entries to create chapter from')
     }
 
-    // Get previous chapters for context (branch-filtered)
-    const previousChapters = [...this.currentBranchChapters].sort((a, b) => a.number - b.number)
-
     // Import aiService dynamically to avoid circular dependency
     const { aiService } = await import('$lib/services/ai')
 

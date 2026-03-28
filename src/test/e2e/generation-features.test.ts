@@ -44,10 +44,7 @@ import { buildStory, buildEntry, buildLorebookEntry, buildChapter } from '$test/
 import { FetchInterceptor, respondWithStream, respondWithJSON } from './utils/FetchInterceptor'
 import { createDatabaseMock } from './utils/databaseMock'
 import { expectNoRequest } from './utils/assertions'
-import {
-  ActionInputController,
-  type ActionInputCallbacks,
-} from '$lib/services/generation/ActionInputController'
+import { ActionInputController } from '$lib/services/generation/ActionInputController'
 import { createAutoTracer } from './utils/TestTracer'
 
 // ============================================================================
@@ -76,9 +73,12 @@ function getStoreState() {
   }
 }
 
-function buildMockCallbacks(): ActionInputCallbacks {
-  return {
-    sendGenerationNotification: vi.fn(),
+/** Set generationContext.userAction from an addEntry result */
+function setUserAction(entry: { id: string; content: string }) {
+  story.generationContext.userAction = {
+    entryId: entry.id,
+    content: entry.content,
+    rawInput: entry.content,
   }
 }
 
@@ -184,13 +184,13 @@ describe('Generation Feature Toggles', () => {
 
       const userActionEntry = await story.entry.addEntry('user_action', 'I look around')
 
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      setUserAction(userActionEntry)
+      const controller = new ActionInputController()
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
 
-      await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+      await controller.generateResponse()
 
       // Translation request must have been made
       expect(interceptor.getRequests('translate-narration').length).toBeGreaterThan(0)
@@ -219,13 +219,13 @@ describe('Generation Feature Toggles', () => {
 
       const userActionEntry = await story.entry.addEntry('user_action', 'I look around')
 
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      setUserAction(userActionEntry)
+      const controller = new ActionInputController()
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
 
-      await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+      await controller.generateResponse()
 
       // No translation request should be made
       expectNoRequest(interceptor, 'translate-narration')
@@ -290,13 +290,13 @@ describe('Generation Feature Toggles', () => {
 
       const userActionEntry = await story.entry.addEntry('user_action', 'I look around')
 
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      setUserAction(userActionEntry)
+      const controller = new ActionInputController()
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
 
-      await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+      await controller.generateResponse()
 
       // Image analysis request must have been made
       expect(interceptor.getRequests('image-prompt-analysis').length).toBeGreaterThan(0)
@@ -324,13 +324,13 @@ describe('Generation Feature Toggles', () => {
 
       const userActionEntry = await story.entry.addEntry('user_action', 'I look around')
 
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      setUserAction(userActionEntry)
+      const controller = new ActionInputController()
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
 
-      await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+      await controller.generateResponse()
 
       // No image analysis request should be made
       expectNoRequest(interceptor, 'image-prompt-analysis')
@@ -377,13 +377,13 @@ describe('Generation Feature Toggles', () => {
       // Use an action that does NOT mention lorebook keywords — entry goes to tier3
       const userActionEntry = await story.entry.addEntry('user_action', 'I walk forward slowly')
 
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      setUserAction(userActionEntry)
+      const controller = new ActionInputController()
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
 
-      await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+      await controller.generateResponse()
 
       // Tier3 LLM selection should have been called since entry wasn't matched by keywords
       expect(interceptor.getRequests('tier3-entry-selection').length).toBeGreaterThan(0)
@@ -414,13 +414,13 @@ describe('Generation Feature Toggles', () => {
 
       const userActionEntry = await story.entry.addEntry('user_action', 'I walk forward slowly')
 
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      setUserAction(userActionEntry)
+      const controller = new ActionInputController()
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
 
-      await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+      await controller.generateResponse()
 
       // No tier3 LLM selection should be made with no lore content
       expectNoRequest(interceptor, 'tier3-entry-selection')
@@ -457,13 +457,13 @@ describe('Generation Feature Toggles', () => {
 
       const userActionEntry = await story.entry.addEntry('user_action', 'I press on')
 
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      setUserAction(userActionEntry)
+      const controller = new ActionInputController()
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
 
-      await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+      await controller.generateResponse()
 
       // Generation completed (narrative + classifier ran)
       expect(interceptor.getRequests('narrative').length).toBeGreaterThan(0)
@@ -515,13 +515,13 @@ describe('Generation Feature Toggles', () => {
 
       const userActionEntry = await story.entry.addEntry('user_action', 'I advance forward')
 
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      setUserAction(userActionEntry)
+      const controller = new ActionInputController()
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
 
-      await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+      await controller.generateResponse()
 
       // Narrative request was made
       expect(interceptor.getRequests('narrative').length).toBeGreaterThan(0)

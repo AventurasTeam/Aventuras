@@ -42,10 +42,7 @@ import { buildStory, buildEntry } from '$test/factories'
 import { FetchInterceptor, respondWithStream, respondWithJSON } from './utils/FetchInterceptor'
 import { createDatabaseMock } from './utils/databaseMock'
 import type { DatabaseMock } from './utils/databaseMock'
-import {
-  ActionInputController,
-  type ActionInputCallbacks,
-} from '$lib/services/generation/ActionInputController'
+import { ActionInputController } from '$lib/services/generation/ActionInputController'
 import type { RetryBackupData } from '$lib/services/generation/RetryService'
 import { createAutoTracer } from './utils/TestTracer'
 
@@ -72,12 +69,6 @@ function getStoreState() {
       postGenerationResult: structuredClone(story.generationContext.postGenerationResult),
       backgroundResult: structuredClone(story.generationContext.backgroundResult),
     },
-  }
-}
-
-function buildMockCallbacks(): ActionInputCallbacks {
-  return {
-    sendGenerationNotification: vi.fn(),
   }
 }
 
@@ -188,8 +179,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
     it('no-op when lastGenerationError is null', async ({ task }) => {
       setupAdventureStory()
 
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      const controller = new ActionInputController()
       const clearGenerationErrorSpy = vi.spyOn(ui, 'clearGenerationError')
 
       const tracer = createAutoTracer(getStoreState)
@@ -230,8 +220,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
         timestamp: Date.now(),
       })
 
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      const controller = new ActionInputController()
       const clearGenerationErrorSpy = vi.spyOn(ui, 'clearGenerationError')
       const endStreamingSpy = vi.spyOn(ui, 'endStreaming')
       const setGeneratingSpy = vi.spyOn(ui, 'setGenerating')
@@ -272,8 +261,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
         timestamp: Date.now(),
       })
 
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      const controller = new ActionInputController()
       const clearGenerationErrorSpy = vi.spyOn(ui, 'clearGenerationError')
 
       const tracer = createAutoTracer(getStoreState)
@@ -317,8 +305,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
         timestamp: Date.now(),
       })
 
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      const controller = new ActionInputController()
       const setGenerationErrorSpy = vi.spyOn(ui, 'setGenerationError')
 
       const tracer = createAutoTracer(getStoreState)
@@ -346,8 +333,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
 
       ui.setRetryingLastMessage(true)
 
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      const controller = new ActionInputController()
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
@@ -365,8 +351,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
     it('returns empty object when no backup exists', async ({ task }) => {
       setupAdventureStory()
 
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      const controller = new ActionInputController()
       const setGeneratingSpy = vi.spyOn(ui, 'setGenerating')
       const endStreamingSpy = vi.spyOn(ui, 'endStreaming')
 
@@ -390,13 +375,12 @@ describe('Retry Flows — ActionInputController E2E', () => {
     }) => {
       setupAdventureStory()
 
-      const callbacks = buildMockCallbacks()
       // Backup for a different story
       const backup = buildRetryBackup('different-story-id')
       vi.spyOn(ui, 'retryBackup', 'get').mockReturnValue(backup as any)
       const clearRetryBackupSpy = vi.spyOn(ui, 'clearRetryBackup')
 
-      const controller = new ActionInputController(callbacks)
+      const controller = new ActionInputController()
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
@@ -414,7 +398,6 @@ describe('Retry Flows — ActionInputController E2E', () => {
     it('restores state from backup and returns restored values', async ({ task }) => {
       const testStory = setupAdventureStory()
 
-      const callbacks = buildMockCallbacks()
       const backup = buildRetryBackup(testStory.id, {
         userActionContent: 'I run away',
         rawInput: 'run away',
@@ -430,7 +413,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       const clearRetryBackupSpy = vi.spyOn(ui, 'clearRetryBackup')
 
       // Set up the abort controller state as if generation is in progress
-      const controller = new ActionInputController(callbacks)
+      const controller = new ActionInputController()
       controller.stopRequested = false
       controller.activeAbortController = new AbortController()
 
@@ -459,7 +442,6 @@ describe('Retry Flows — ActionInputController E2E', () => {
     it('fires abort signal when stopRequested is set', async ({ task }) => {
       setupAdventureStory()
 
-      const callbacks = buildMockCallbacks()
       const backup = buildRetryBackup(story.id!, {
         hasFullState: true,
         entries: [...story.entry.rawEntries],
@@ -467,7 +449,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       })
       vi.spyOn(ui, 'retryBackup', 'get').mockReturnValue(backup as any)
 
-      const controller = new ActionInputController(callbacks)
+      const controller = new ActionInputController()
 
       // Simulate an in-flight abort controller
       const abortController = new AbortController()
@@ -495,8 +477,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
     it('no-op when retryBackup is null', async ({ task }) => {
       setupAdventureStory()
 
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      const controller = new ActionInputController()
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
@@ -515,12 +496,11 @@ describe('Retry Flows — ActionInputController E2E', () => {
     }) => {
       setupAdventureStory()
 
-      const callbacks = buildMockCallbacks()
       const backup = buildRetryBackup('different-story-id')
       vi.spyOn(ui, 'retryBackup', 'get').mockReturnValue(backup as any)
       const clearRetryBackupSpy = vi.spyOn(ui, 'clearRetryBackup')
 
-      const controller = new ActionInputController(callbacks)
+      const controller = new ActionInputController()
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
@@ -554,8 +534,6 @@ describe('Retry Flows — ActionInputController E2E', () => {
       interceptor.on('narrative', respondWithStream('You stride confidently forward.'))
       interceptor.on('classifier', respondWithJSON(defaultClassifierResult))
 
-      const callbacks = buildMockCallbacks()
-
       // Build backup that captures state before userActionEntry was added
       const backup = buildRetryBackup(testStory.id, {
         userActionContent: 'I walk forward',
@@ -576,7 +554,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       const setRetryingLastMessageSpy = vi.spyOn(ui, 'setRetryingLastMessage')
       const clearGenerationErrorSpy = vi.spyOn(ui, 'clearGenerationError')
 
-      const controller = new ActionInputController(callbacks)
+      const controller = new ActionInputController()
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)

@@ -49,12 +49,7 @@ import { loadTestStory, loadTestSettings, clearTestStory } from './utils/storeHy
 import { buildStory, buildEntry } from '$test/factories'
 import { FetchInterceptor, respondWithJSON, respondWithToolCall } from './utils/FetchInterceptor'
 import { createDatabaseMock } from './utils/databaseMock'
-import {
-  BackgroundTaskCoordinator,
-  type BackgroundTaskDependencies,
-  type BackgroundTaskInput,
-} from '$lib/services/generation/BackgroundTaskCoordinator'
-import { aiService } from '$lib/services/ai'
+import { BackgroundTaskCoordinator } from '$lib/services/generation/BackgroundTaskCoordinator'
 import { createAutoTracer } from './utils/TestTracer'
 
 // ============================================================================
@@ -80,6 +75,19 @@ function getStoreState() {
       postGenerationResult: structuredClone(story.generationContext.postGenerationResult),
       backgroundResult: structuredClone(story.generationContext.backgroundResult),
     },
+  }
+}
+
+/**
+ * Set a dummy userAction on generationContext so promptContext can be computed.
+ * Background tasks access promptContext for prompt rendering.
+ */
+function setDummyUserAction() {
+  const lastEntry = story.entry.rawEntries[story.entry.rawEntries.length - 1]
+  story.generationContext.userAction = {
+    entryId: lastEntry?.id ?? 'dummy',
+    content: lastEntry?.content ?? 'continue',
+    rawInput: lastEntry?.content ?? 'continue',
   }
 }
 
@@ -170,88 +178,6 @@ function buildChapterReadyStory() {
   return { testStory, entries }
 }
 
-/**
- * Build a BackgroundTaskInput wired to the real aiService (intercepted via
- * FetchInterceptor) but with stub callbacks for chapter/lore CRUD.
- * Bypasses the broken story.chapter.addChapter.bind(story) in the static run().
- */
-function buildTestInput(storyId: string): {
-  input: BackgroundTaskInput
-  deps: BackgroundTaskDependencies
-  addChapterMock: ReturnType<typeof vi.fn>
-} {
-  const addChapterMock = vi.fn().mockResolvedValue(undefined)
-
-  const deps: BackgroundTaskDependencies = {
-    chapterService: {
-      analyzeForChapter: aiService.analyzeForChapter.bind(aiService),
-      summarizeChapter: aiService.summarizeChapter.bind(aiService),
-      getNextChapterNumber: vi.fn().mockResolvedValue(1),
-      addChapter: addChapterMock,
-    },
-    loreManagement: {
-      runLoreManagement: aiService.runLoreManagement.bind(aiService),
-    },
-    styleReview: { analyzeStyle: aiService.analyzeStyle.bind(aiService) },
-  }
-
-  const input: BackgroundTaskInput = {
-    styleReview: {
-      storyId,
-      entries: story.entry.rawEntries,
-      mode: story.mode,
-      pov: story.settings.pov,
-      tense: story.settings.tense,
-      enabled: settings.systemServicesSettings.styleReviewer.enabled,
-      triggerInterval: settings.systemServicesSettings.styleReviewer.triggerInterval,
-      currentCounter: ui.messagesSinceLastStyleReview,
-      shouldIncrement: false,
-      source: 'test',
-    },
-    styleReviewCallbacks: {
-      incrementCounter: vi.fn(),
-      setLoading: vi.fn(),
-      setResult: vi.fn(),
-    },
-    chapterCheck: {
-      storyId,
-      currentBranchId: story.branch.currentBranchId,
-      entries: story.entry.rawEntries,
-      lastChapterEndIndex: story.chapter.lastChapterEndIndex,
-      tokensSinceLastChapter: story.generationContext.tokensSinceLastChapter,
-      tokensOutsideBuffer: story.generationContext.tokensOutsideBuffer,
-      messagesSinceLastChapter: story.chapter.messagesSinceLastChapter,
-      memoryConfig: story.settings.memoryConfig,
-      currentBranchChapters: story.chapter.currentBranchChapters,
-      mode: story.mode,
-      pov: story.settings.pov,
-      tense: story.settings.tense,
-    },
-    loreSession: {
-      storyId,
-      currentBranchId: story.branch.currentBranchId,
-      lorebookEntries: story.lorebook.lorebookEntries,
-      chapters: story.chapter.currentBranchChapters,
-      mode: story.mode,
-      pov: story.settings.pov,
-      tense: story.settings.tense,
-    },
-    loreCallbacks: {
-      onCreateEntry: vi.fn().mockResolvedValue(undefined),
-      onUpdateEntry: vi.fn().mockResolvedValue(undefined),
-      onDeleteEntry: vi.fn().mockResolvedValue(undefined),
-      onMergeEntries: vi.fn().mockResolvedValue(undefined),
-    },
-    loreUICallbacks: {
-      onStart: vi.fn(),
-      onProgress: vi.fn(),
-      onComplete: vi.fn(),
-    },
-  }
-
-  return { input, deps, addChapterMock }
-}
-
 // ============================================================================
 // Test suite
 // ============================================================================
@@ -304,6 +230,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
         ],
       })
       loadTestSettings({ disableSuggestions: true })
+      setDummyUserAction()
 
       // counter = 4, countStyleReview=true → effective = 5 = triggerInterval → fires
       settings.systemServicesSettings.styleReviewer.enabled = true
@@ -389,6 +316,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
+      setDummyUserAction()
       settings.systemServicesSettings.styleReviewer.enabled = false
 
       interceptor.on('chapter-analysis', respondWithJSON(chapterAnalysisCreateChapter))
@@ -421,6 +349,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
+      setDummyUserAction()
       settings.systemServicesSettings.styleReviewer.enabled = false
 
       interceptor.on('chapter-analysis', respondWithJSON(chapterAnalysisNoChapter))
@@ -527,14 +456,13 @@ describe('BackgroundTaskCoordinator E2E', () => {
   // Deps are constructed with properly bound methods.
   // --------------------------------------------------------------------------
 
-  describe('chapter + lore management pipeline (via runBackgroundTasks())', () => {
+  describe('chapter + lore management pipeline', () => {
     it('runs lore management when chapter creation triggers it', async ({ task }) => {
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
+      setDummyUserAction()
       settings.systemServicesSettings.styleReviewer.enabled = false
-
-      const { input, deps, addChapterMock } = buildTestInput(testStory.id)
 
       interceptor.on('chapter-analysis', respondWithJSON(chapterAnalysisCreateChapter))
       interceptor.on('chapter-summarization', respondWithJSON(chapterSummaryResult))
@@ -552,17 +480,13 @@ describe('BackgroundTaskCoordinator E2E', () => {
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
 
-      const coordinator = new BackgroundTaskCoordinator(deps)
-      const result = await coordinator.runBackgroundTasks(input)
+      await BackgroundTaskCoordinator.run(false, 'new')
 
       tracer.finalize()
       ;(task.meta as any).traceData = tracer.export()
 
       expect(interceptor.getRequests('chapter-analysis').length).toBeGreaterThan(0)
       expect(interceptor.getRequests('chapter-summarization').length).toBeGreaterThan(0)
-      expect(addChapterMock).toHaveBeenCalled()
-      expect(result.chapterCreation.created).toBe(true)
-      expect(result.chapterCreation.loreManagementTriggered).toBe(true)
       expect(interceptor.getRequests('lore-management').length).toBeGreaterThan(0)
     })
 
@@ -570,23 +494,20 @@ describe('BackgroundTaskCoordinator E2E', () => {
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
+      setDummyUserAction()
       settings.systemServicesSettings.styleReviewer.enabled = false
-
-      const { input, deps } = buildTestInput(testStory.id)
 
       interceptor.on('chapter-analysis', respondWithJSON(chapterAnalysisNoChapter))
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
 
-      const coordinator = new BackgroundTaskCoordinator(deps)
-      const result = await coordinator.runBackgroundTasks(input)
+      await BackgroundTaskCoordinator.run(false, 'new')
 
       tracer.finalize()
       ;(task.meta as any).traceData = tracer.export()
 
-      expect(result.chapterCreation.created).toBe(false)
-      expect(result.chapterCreation.loreManagementTriggered).toBe(false)
+      expect(interceptor.getRequests('chapter-analysis').length).toBeGreaterThan(0)
       expect(interceptor.getRequests('lore-management').length).toBe(0)
     })
   })
@@ -624,6 +545,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
         ],
       })
       loadTestSettings({ disableSuggestions: true })
+      setDummyUserAction()
 
       // Counter at trigger level so style review fires
       settings.systemServicesSettings.styleReviewer.enabled = true
@@ -651,6 +573,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
+      setDummyUserAction()
       settings.systemServicesSettings.styleReviewer.enabled = false
 
       // 400 = non-retryable
@@ -674,9 +597,8 @@ describe('BackgroundTaskCoordinator E2E', () => {
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
+      setDummyUserAction()
       settings.systemServicesSettings.styleReviewer.enabled = false
-
-      const { input, deps } = buildTestInput(testStory.id)
 
       interceptor.on('chapter-analysis', respondWithJSON(chapterAnalysisCreateChapter))
       interceptor.on('chapter-summarization', respondWithJSON(chapterSummaryResult))
@@ -689,8 +611,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
 
-      const coordinator = new BackgroundTaskCoordinator(deps)
-      await expect(coordinator.runBackgroundTasks(input)).resolves.toBeDefined()
+      await expect(BackgroundTaskCoordinator.run(false, 'new')).resolves.toBeUndefined()
 
       tracer.finalize()
       ;(task.meta as any).traceData = tracer.export()
@@ -700,6 +621,7 @@ describe('BackgroundTaskCoordinator E2E', () => {
       const { testStory, entries } = buildChapterReadyStory()
       loadTestStory({ story: testStory, entries })
       loadTestSettings({ disableSuggestions: true })
+      setDummyUserAction()
 
       // Enable style review at trigger level so it fires and fails
       settings.systemServicesSettings.styleReviewer.enabled = true

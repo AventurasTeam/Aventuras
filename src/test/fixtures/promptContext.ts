@@ -17,7 +17,11 @@ import type {
   StoryEntry,
   TimeTracker,
 } from '$lib/types'
-import type { ContextStoryEntry, ContextLorebookEntry, ContextLorebookEntryBase } from '$lib/services/context/context-types'
+import type {
+  ContextStoryEntry,
+  ContextLorebookEntry,
+  ContextLorebookEntryBase,
+} from '$lib/services/context/context-types'
 import type { WorldStateArrays } from '$lib/services/context/context-types'
 import type { RetrievalResult, AgenticRetrievalFields } from '$lib/services/generation/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
@@ -62,7 +66,8 @@ const storyEntry3: ContextStoryEntry = {
   id: 'e3',
   storyId: 's1',
   type: 'narration',
-  content: 'The gate creaked open, revealing a vast underground chamber lit by phosphorescent moss.',
+  content:
+    'The gate creaked open, revealing a vast underground chamber lit by phosphorescent moss.',
   parentId: 'e2',
   position: 2,
   createdAt: Date.now(),
@@ -126,34 +131,95 @@ const characters: Character[] = [
 
 const rawLorebookEntries: Entry[] = [
   {
-    id: 'lb1', storyId: 's1', name: 'The Shadow Guild', type: 'faction',
-    description: 'A secretive criminal organization.', hiddenInfo: null, aliases: [],
+    id: 'lb1',
+    storyId: 's1',
+    name: 'The Shadow Guild',
+    type: 'faction',
+    description: 'A secretive criminal organization.',
+    hiddenInfo: null,
+    aliases: [],
     state: { type: 'faction', playerStanding: 0, status: 'hostile', knownMembers: [] },
-    adventureState: null, creativeState: null,
+    adventureState: null,
+    creativeState: null,
     injection: { mode: 'keyword', keywords: ['shadow', 'guild'], priority: 1 },
-    firstMentioned: null, lastMentioned: null, mentionCount: 0,
-    createdBy: 'user', createdAt: Date.now(), updatedAt: Date.now(),
-    loreManagementBlacklisted: false, branchId: null,
+    firstMentioned: null,
+    lastMentioned: null,
+    mentionCount: 0,
+    createdBy: 'user',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    loreManagementBlacklisted: false,
+    branchId: null,
   },
   {
-    id: 'lb2', storyId: 's1', name: 'Elder Dragon', type: 'character',
-    description: 'An ancient beast guarding the Sunken Temple.', hiddenInfo: null, aliases: [],
-    state: { type: 'character', isPresent: false, lastSeenLocation: 'Sunken Temple', currentDisposition: 'hostile', relationship: { level: 0, status: 'hostile', history: [] }, knownFacts: [], revealedSecrets: [] },
-    adventureState: null, creativeState: null,
+    id: 'lb2',
+    storyId: 's1',
+    name: 'Elder Dragon',
+    type: 'character',
+    description: 'An ancient beast guarding the Sunken Temple.',
+    hiddenInfo: null,
+    aliases: [],
+    state: {
+      type: 'character',
+      isPresent: false,
+      lastSeenLocation: 'Sunken Temple',
+      currentDisposition: 'hostile',
+      relationship: { level: 0, status: 'hostile', history: [] },
+      knownFacts: [],
+      revealedSecrets: [],
+    },
+    adventureState: null,
+    creativeState: null,
     injection: { mode: 'keyword', keywords: ['dragon', 'temple'], priority: 2 },
-    firstMentioned: null, lastMentioned: null, mentionCount: 0,
-    createdBy: 'user', createdAt: Date.now(), updatedAt: Date.now(),
-    loreManagementBlacklisted: false, branchId: null,
+    firstMentioned: null,
+    lastMentioned: null,
+    mentionCount: 0,
+    createdBy: 'user',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    loreManagementBlacklisted: false,
+    branchId: null,
   },
 ]
 
 const contextLorebookEntries: ContextLorebookEntry[] = [
-  { name: 'The Shadow Guild', type: 'faction', description: 'A secretive criminal organization.', tier: 1 },
-  { name: 'Elder Dragon', type: 'character', description: 'An ancient beast guarding the Sunken Temple.', tier: 2, disposition: 'hostile' },
-  { name: 'Crystal of Aethon', type: 'item', description: 'A powerful artifact of unknown origin.', tier: 1 },
-  { name: 'The Thornwood', type: 'location', description: 'A cursed forest north of the kingdom.', tier: 2 },
-  { name: 'Arcane Weaving', type: 'concept', description: 'The art of channeling raw magical energy.', tier: 3 },
-  { name: 'The Sundering', type: 'event', description: 'A cataclysm that split the continent a thousand years ago.', tier: 3 },
+  {
+    name: 'The Shadow Guild',
+    type: 'faction',
+    description: 'A secretive criminal organization.',
+    tier: 1,
+  },
+  {
+    name: 'Elder Dragon',
+    type: 'character',
+    description: 'An ancient beast guarding the Sunken Temple.',
+    tier: 2,
+    disposition: 'hostile',
+  },
+  {
+    name: 'Crystal of Aethon',
+    type: 'item',
+    description: 'A powerful artifact of unknown origin.',
+    tier: 1,
+  },
+  {
+    name: 'The Thornwood',
+    type: 'location',
+    description: 'A cursed forest north of the kingdom.',
+    tier: 2,
+  },
+  {
+    name: 'Arcane Weaving',
+    type: 'concept',
+    description: 'The art of channeling raw magical energy.',
+    tier: 3,
+  },
+  {
+    name: 'The Sundering',
+    type: 'event',
+    description: 'A cataclysm that split the continent a thousand years ago.',
+    tier: 3,
+  },
 ]
 
 // ---------------------------------------------------------------------------
@@ -162,24 +228,42 @@ const contextLorebookEntries: ContextLorebookEntry[] = [
 
 const chapters: Chapter[] = [
   {
-    id: 'ch1', storyId: 's1', number: 1, title: 'Into the Woods',
-    startEntryId: 'e1', endEntryId: 'e10', entryCount: 10,
+    id: 'ch1',
+    storyId: 's1',
+    number: 1,
+    title: 'Into the Woods',
+    startEntryId: 'e1',
+    endEntryId: 'e10',
+    entryCount: 10,
     summary: 'The party ventured into the Thornwood seeking the lost temple.',
     startTime: { years: 1, days: 1, hours: 8, minutes: 0 },
     endTime: { years: 1, days: 3, hours: 18, minutes: 0 },
-    keywords: ['thornwood', 'temple'], characters: ['Kael', 'Aria'],
-    locations: ['Thornwood', 'River Crossing'], plotThreads: ['Find the Lost Temple'],
-    emotionalTone: 'Tense', branchId: null, createdAt: Date.now(),
+    keywords: ['thornwood', 'temple'],
+    characters: ['Kael', 'Aria'],
+    locations: ['Thornwood', 'River Crossing'],
+    plotThreads: ['Find the Lost Temple'],
+    emotionalTone: 'Tense',
+    branchId: null,
+    createdAt: Date.now(),
   },
   {
-    id: 'ch2', storyId: 's1', number: 2, title: 'The Sunken Temple',
-    startEntryId: 'e11', endEntryId: 'e20', entryCount: 10,
+    id: 'ch2',
+    storyId: 's1',
+    number: 2,
+    title: 'The Sunken Temple',
+    startEntryId: 'e11',
+    endEntryId: 'e20',
+    entryCount: 10,
     summary: 'Discovery of the ancient temple and its guardian.',
     startTime: { years: 1, days: 4, hours: 9, minutes: 0 },
     endTime: { years: 1, days: 5, hours: 22, minutes: 0 },
-    keywords: ['temple', 'dragon'], characters: ['Kael', 'Aria', 'Marcus'],
-    locations: ['Sunken Temple'], plotThreads: ['Find the Lost Temple'],
-    emotionalTone: 'Ominous', branchId: null, createdAt: Date.now(),
+    keywords: ['temple', 'dragon'],
+    characters: ['Kael', 'Aria', 'Marcus'],
+    locations: ['Sunken Temple'],
+    plotThreads: ['Find the Lost Temple'],
+    emotionalTone: 'Ominous',
+    branchId: null,
+    createdAt: Date.now(),
   },
 ]
 
@@ -189,10 +273,19 @@ const chapters: Chapter[] = [
 
 const agenticRetrieval: AgenticRetrievalFields = {
   agenticReasoning: 'Selected entries relevant to the temple exploration.',
-  agenticChapterSummary: 'In chapter 1, the party entered the Thornwood. In chapter 2, they found the Sunken Temple.',
+  agenticChapterSummary:
+    'In chapter 1, the party entered the Thornwood. In chapter 2, they found the Sunken Temple.',
   agenticSelectedEntries: [
-    { name: 'Elder Dragon', type: 'character', description: 'An ancient beast guarding the Sunken Temple.' },
-    { name: 'Crystal of Aethon', type: 'item', description: 'A powerful artifact of unknown origin.' },
+    {
+      name: 'Elder Dragon',
+      type: 'character',
+      description: 'An ancient beast guarding the Sunken Temple.',
+    },
+    {
+      name: 'Crystal of Aethon',
+      type: 'item',
+      description: 'A powerful artifact of unknown origin.',
+    },
   ] satisfies ContextLorebookEntryBase[],
 }
 
@@ -203,8 +296,16 @@ const retrievalResult: RetrievalResult = {
   timelineFillResult: {
     queries: [],
     responses: [
-      { query: 'What happened at the river crossing?', answer: 'The party was ambushed by shadow guild agents.', chapterNumbers: [1] },
-      { query: 'Who guards the temple?', answer: 'An elder dragon has nested in the temple ruins.', chapterNumbers: [1, 2] },
+      {
+        query: 'What happened at the river crossing?',
+        answer: 'The party was ambushed by shadow guild agents.',
+        chapterNumbers: [1],
+      },
+      {
+        query: 'Who guards the temple?',
+        answer: 'An elder dragon has nested in the temple ruins.',
+        chapterNumbers: [1, 2],
+      },
     ],
   },
 }
@@ -215,8 +316,20 @@ const retrievalResult: RetrievalResult = {
 
 const styleReview: StyleReviewResult = {
   phrases: [
-    { phrase: 'dark and stormy', frequency: 3, severity: 'low', alternatives: ['gloomy', 'tempestuous'], contexts: [] },
-    { phrase: 'eyes widening', frequency: 5, severity: 'medium', alternatives: ['gaze sharpening', 'brow lifting'], contexts: [] },
+    {
+      phrase: 'dark and stormy',
+      frequency: 3,
+      severity: 'low',
+      alternatives: ['gloomy', 'tempestuous'],
+      contexts: [],
+    },
+    {
+      phrase: 'eyes widening',
+      frequency: 5,
+      severity: 'medium',
+      alternatives: ['gaze sharpening', 'brow lifting'],
+      contexts: [],
+    },
   ],
   overallAssessment: 'Generally strong prose with some repetitive descriptive patterns.',
   reviewedEntryCount: 8,
@@ -231,9 +344,7 @@ const packVariables: {
   runtimeVariables: Record<string, EntityRuntimeVars[]>
 } = {
   runtimeVariables: {
-    character: [
-      { name: 'Aria', vars: [{ label: 'loyalty', value: '75' }] },
-    ],
+    character: [{ name: 'Aria', vars: [{ label: 'loyalty', value: '75' }] }],
     item: [],
   },
 }
@@ -291,41 +402,87 @@ const userSettings = {
 
 const locations: Location[] = [
   {
-    id: 'l1', storyId: 's1', name: 'Thornwood Edge', description: 'The cursed treeline',
-    visited: true, current: false, connections: [], metadata: null, branchId: null,
+    id: 'l1',
+    storyId: 's1',
+    name: 'Thornwood Edge',
+    description: 'The cursed treeline',
+    visited: true,
+    current: false,
+    connections: [],
+    metadata: null,
+    branchId: null,
   },
   {
-    id: 'l2', storyId: 's1', name: 'Sunken Temple', description: 'An ancient temple beneath the forest',
-    visited: true, current: true, connections: ['l1'], metadata: null, branchId: null,
+    id: 'l2',
+    storyId: 's1',
+    name: 'Sunken Temple',
+    description: 'An ancient temple beneath the forest',
+    visited: true,
+    current: true,
+    connections: ['l1'],
+    metadata: null,
+    branchId: null,
   },
 ]
 
 const items: Item[] = [
   {
-    id: 'i1', storyId: 's1', name: 'Iron Sword', description: 'A sturdy blade',
-    quantity: 1, equipped: true, location: 'inventory', metadata: null, branchId: null,
+    id: 'i1',
+    storyId: 's1',
+    name: 'Iron Sword',
+    description: 'A sturdy blade',
+    quantity: 1,
+    equipped: true,
+    location: 'inventory',
+    metadata: null,
+    branchId: null,
   },
   {
-    id: 'i2', storyId: 's1', name: 'Health Potion', description: 'Restores vitality',
-    quantity: 3, equipped: false, location: 'inventory', metadata: null, branchId: null,
+    id: 'i2',
+    storyId: 's1',
+    name: 'Health Potion',
+    description: 'Restores vitality',
+    quantity: 3,
+    equipped: false,
+    location: 'inventory',
+    metadata: null,
+    branchId: null,
   },
 ]
 
 const storyBeats: StoryBeat[] = [
   {
-    id: 'b1', storyId: 's1', title: 'Find the Lost Temple',
+    id: 'b1',
+    storyId: 's1',
+    title: 'Find the Lost Temple',
     description: 'Locate the Sunken Temple in the Thornwood',
-    type: 'quest', status: 'active', triggeredAt: Date.now(), metadata: null, branchId: null,
+    type: 'quest',
+    status: 'active',
+    triggeredAt: Date.now(),
+    metadata: null,
+    branchId: null,
   },
   {
-    id: 'b2', storyId: 's1', title: 'Earn Marcus\'s Trust',
+    id: 'b2',
+    storyId: 's1',
+    title: "Earn Marcus's Trust",
     description: 'Prove yourself to the old mercenary',
-    type: 'quest', status: 'pending', triggeredAt: null, metadata: null, branchId: null,
+    type: 'quest',
+    status: 'pending',
+    triggeredAt: null,
+    metadata: null,
+    branchId: null,
   },
   {
-    id: 'b3', storyId: 's1', title: 'Defeated the Wolves',
+    id: 'b3',
+    storyId: 's1',
+    title: 'Defeated the Wolves',
     description: 'Wolf pack at the river',
-    type: 'event', status: 'completed', triggeredAt: Date.now(), metadata: null, branchId: null,
+    type: 'event',
+    status: 'completed',
+    triggeredAt: Date.now(),
+    metadata: null,
+    branchId: null,
   },
 ]
 
@@ -338,16 +495,29 @@ const relevantWorldState: WorldStateArrays = {
   inventory: items,
   relevantItems: [
     {
-      id: 'i3', storyId: 's1', name: 'Crystal of Aethon', description: 'A powerful artifact',
-      quantity: 1, equipped: false, location: 'world', metadata: null, branchId: null,
+      id: 'i3',
+      storyId: 's1',
+      name: 'Crystal of Aethon',
+      description: 'A powerful artifact',
+      quantity: 1,
+      equipped: false,
+      location: 'world',
+      metadata: null,
+      branchId: null,
     },
   ],
   storyBeats: storyBeats.filter((b) => b.status === 'active' || b.status === 'pending'),
   relatedStoryBeats: [
     {
-      id: 'b4', storyId: 's1', title: 'The Prophecy',
+      id: 'b4',
+      storyId: 's1',
+      title: 'The Prophecy',
       description: 'An ancient prophecy speaks of a chosen one',
-      type: 'revelation', status: 'active', triggeredAt: null, metadata: null, branchId: null,
+      type: 'revelation',
+      status: 'active',
+      triggeredAt: null,
+      metadata: null,
+      branchId: null,
     },
   ],
   locations: locations.filter((l) => !l.current),
@@ -408,7 +578,8 @@ const classificationResult: ClassificationResult = {
 // ---------------------------------------------------------------------------
 
 const narrativeResult: NarrativeResult = {
-  content: 'The gate opened slowly, revealing the chamber beyond. Phosphorescent moss cast an eerie green glow across ancient stone columns.',
+  content:
+    'The gate opened slowly, revealing the chamber beyond. Phosphorescent moss cast an eerie green glow across ancient stone columns.',
   reasoning: '',
   chunkCount: 1,
 }
@@ -423,10 +594,20 @@ const timeTracker: TimeTracker = { years: 1, days: 42, hours: 14, minutes: 30 }
 // Chapter analysis
 // ---------------------------------------------------------------------------
 
-const analysisEntry = (type: 'user_action' | 'narration', content: string, pos: number): StoryEntry => ({
-  id: `ae${pos}`, storyId: 's1', type, content,
-  parentId: null, position: pos, createdAt: Date.now(),
-  metadata: null, branchId: null,
+const analysisEntry = (
+  type: 'user_action' | 'narration',
+  content: string,
+  pos: number,
+): StoryEntry => ({
+  id: `ae${pos}`,
+  storyId: 's1',
+  type,
+  content,
+  parentId: null,
+  position: pos,
+  createdAt: Date.now(),
+  metadata: null,
+  branchId: null,
 })
 
 const chapterAnalysis: {

@@ -124,10 +124,10 @@ Analyze the narrative and identify up to {{ userSettings.imageGeneration.maxImag
 ## English Narrative (use for understanding context)
 {{ lastNarrativeEntry.content }}
 
-{{% if translationResult.translatedContent and translationResult.targetLanguage -%}}
+{% if translationResult.translatedContent and translationResult.targetLanguage -%}
 ## Display Narrative ({{ translationResult.targetLanguage }} - use this for sourceText)
 {{ translationResult.translatedContent }}
-{{%- endif %}}
+{%- endif %}
 
 Identify the most visually striking moments and return the JSON array. Remember: sourceText must come from the Display Narrative (translated if provided), but prompts must ALWAYS be in English.`,
 }
@@ -332,10 +332,10 @@ Match the angle to the emotional tone: action scenes benefit from low/dutch angl
 ## English Narrative (use for understanding context)
 {{ lastNarrativeEntry.content }}
 
-{{% if translationResult.translatedContent and translationResult.targetLanguage %}}
+{% if translationResult.translatedContent and translationResult.targetLanguage %}
 ## Display Narrative ({{ translationResult.targetLanguage }} - use this for sourceText)
 {{ translationResult.translatedContent }}
-{{% endif %}}
+{% endif %}
 
 Identify visually striking moments. Return JSON array. Remember: NEVER use character names in prompts - describe by visual traits only. Keep prompts concise. sourceText must come from the Display Narrative (translated if provided), but prompts must ALWAYS be in English.`,
 }

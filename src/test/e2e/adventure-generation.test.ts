@@ -54,7 +54,6 @@ import { createDatabaseMock } from './utils/databaseMock'
 import { expectPromptContains, expectPromptNotContains } from './utils/assertions'
 import {
   ActionInputController,
-  type ActionInputCallbacks,
   type SubmitInput,
 } from '$lib/services/generation/ActionInputController'
 import { createAutoTracer } from './utils/TestTracer'
@@ -82,12 +81,6 @@ function getStoreState() {
       postGenerationResult: structuredClone(story.generationContext.postGenerationResult),
       backgroundResult: structuredClone(story.generationContext.backgroundResult),
     },
-  }
-}
-
-function buildMockCallbacks(): ActionInputCallbacks {
-  return {
-    sendGenerationNotification: vi.fn(),
   }
 }
 
@@ -231,6 +224,7 @@ describe('Adventure Mode — ActionInputController E2E', () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     interceptor.restore()
     clearTestStory()
     settings.systemServicesSettings.imageGeneration.profileId = null
@@ -445,9 +439,13 @@ describe('Adventure Mode — ActionInputController E2E', () => {
       'user_action',
       'I enter the spire with my blade drawn',
     )
+    story.generationContext.userAction = {
+      entryId: userActionEntry.id,
+      content: userActionEntry.content,
+      rawInput: userActionEntry.content,
+    }
 
-    const callbacks = buildMockCallbacks()
-    const controller = new ActionInputController(callbacks)
+    const controller = new ActionInputController()
 
     // Spy on ui methods to verify lifecycle calls
     const setGeneratingSpy = vi.spyOn(ui, 'setGenerating')
@@ -459,7 +457,7 @@ describe('Adventure Mode — ActionInputController E2E', () => {
     const tracer = createAutoTracer(getStoreState)
     interceptor.connectTracer(tracer)
 
-    await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+    await controller.generateResponse()
 
     // ---- Assertions: Retrieval phase ----
     expect(interceptor.getRequests('timeline-fill').length).toBeGreaterThan(0)
@@ -601,8 +599,7 @@ describe('Adventure Mode — ActionInputController E2E', () => {
       inputValue: string,
       actionType: 'do' | 'say' | 'think' | 'story' | 'free',
     ) {
-      const callbacks = buildMockCallbacks()
-      const controller = new ActionInputController(callbacks)
+      const controller = new ActionInputController()
 
       const input: SubmitInput = {
         inputValue,
@@ -614,7 +611,6 @@ describe('Adventure Mode — ActionInputController E2E', () => {
       }
 
       await controller.handleSubmit(input)
-      return callbacks
     }
 
     it('do: prompt contains "I " + input', async ({ task }) => {
@@ -726,15 +722,19 @@ describe('Adventure Mode — ActionInputController E2E', () => {
     interceptor.on('classifier', respondWithJSON(defaultClassifierResult))
 
     const userActionEntry = await story.entry.addEntry('user_action', 'I look around')
+    story.generationContext.userAction = {
+      entryId: userActionEntry.id,
+      content: userActionEntry.content,
+      rawInput: userActionEntry.content,
+    }
 
-    const callbacks = buildMockCallbacks()
-    const controller = new ActionInputController(callbacks)
+    const controller = new ActionInputController()
     const setActionChoicesSpy = vi.spyOn(ui, 'setActionChoices')
 
     const tracer = createAutoTracer(getStoreState)
     interceptor.connectTracer(tracer)
 
-    await controller.generateResponse(userActionEntry.id, userActionEntry.content)
+    await controller.generateResponse()
 
     expect(interceptor.getRequests('action-choices').length).toBe(0)
     expect(setActionChoicesSpy).not.toHaveBeenCalled()

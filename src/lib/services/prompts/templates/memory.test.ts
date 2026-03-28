@@ -1,22 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import { templateEngine } from '$lib/services/templates/engine'
 import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
-import {
-  promptContext,
-  promptContextMinimal,
-} from '../../../../test/fixtures/promptContext'
+import { promptContext, promptContextMinimal } from '../../../../test/fixtures/promptContext'
 
 // ===== Template lookups =====
 
 const chapterAnalysisTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'chapter-analysis')!
-const chapterSummarizationTemplate = PROMPT_TEMPLATES.find(
-  (t) => t.id === 'chapter-summarization',
-)!
+const chapterSummarizationTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'chapter-summarization')!
 const loreManagementTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'lore-management')!
 const agenticRetrievalTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'agentic-retrieval')!
-const interactiveLorebookTemplate = PROMPT_TEMPLATES.find(
-  (t) => t.id === 'interactive-lorebook',
-)!
+const interactiveLorebookTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'interactive-lorebook')!
 
 // ===== chapter-analysis =====
 

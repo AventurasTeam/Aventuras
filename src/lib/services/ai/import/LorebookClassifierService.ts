@@ -6,7 +6,6 @@ import { settings } from '$lib/stores/settings.svelte'
  * standard serviceId + dynamic getter pattern, consistent with all other AI services.
  */
 
-import type { StoryMode } from '$lib/types'
 import type { EntryType } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'

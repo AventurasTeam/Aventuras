@@ -1,16 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { templateEngine } from '$lib/services/templates/engine'
 import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
-import {
-  promptContext,
-  promptContextMinimal,
-} from '../../../../test/fixtures/promptContext'
+import { promptContext, promptContextMinimal } from '../../../../test/fixtures/promptContext'
 
 const template = PROMPT_TEMPLATES.find((t) => t.id === 'action-choices')!
 const timelineFillTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'timeline-fill')!
-const timelineFillAnswerTemplate = PROMPT_TEMPLATES.find(
-  (t) => t.id === 'timeline-fill-answer'
-)!
+const timelineFillAnswerTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'timeline-fill-answer')!
 
 describe('action-choices template', () => {
   describe('variable injection', () => {
@@ -67,9 +62,7 @@ describe('action-choices template', () => {
       // Template slices to last 5 — with 3 fixture entries, the last two
       // are guaranteed to appear (Liquid slice:-5 on short arrays).
       expect(result).toContain('I draw my sword and step cautiously forward.')
-      expect(result).toContain(
-        'The gate creaked open, revealing a vast underground chamber'
-      )
+      expect(result).toContain('The gate creaked open, revealing a vast underground chamber')
     })
 
     it('lorebookEntries renders entry names', () => {
@@ -78,7 +71,7 @@ describe('action-choices template', () => {
       })
       for (const entry of promptContext.retrievalResult.lorebookEntries.slice(
         0,
-        promptContext.userSettings.lorebookConfig.maxForActionChoices
+        promptContext.userSettings.lorebookConfig.maxForActionChoices,
       )) {
         expect(result).toContain(entry.name)
       }

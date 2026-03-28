@@ -1,6 +1,5 @@
 import type {
   Story,
-  StoryEntry,
   Character,
   Location,
   Item,
@@ -21,7 +20,6 @@ import {
   emitModeChanged,
   type StoryCreatedEvent,
 } from '$lib/services/events'
-import { aiService } from '$lib/services/ai'
 import { StoryCharacterStore } from './character.svelte'
 import { StoryEntryStore } from './entry.svelte'
 import { StoryBranchStore } from './branch.svelte'
@@ -678,11 +676,10 @@ class StoryStore {
     }
 
     // Add opening scene as first narration entry
-    let openingEntry: StoryEntry | undefined = undefined
     if (data.openingScene) {
       const tokenCount = countTokens(data.openingScene)
       const baseTime = storyData.timeTracker ?? { years: 0, days: 0, hours: 0, minutes: 0 }
-      openingEntry = await database.addStoryEntry({
+      await database.addStoryEntry({
         id: crypto.randomUUID(),
         storyId,
         type: 'narration',

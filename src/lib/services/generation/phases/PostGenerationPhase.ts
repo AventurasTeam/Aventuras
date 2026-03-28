@@ -69,7 +69,7 @@ export class PostGenerationPhase {
     }
 
     story.generationContext.postGenerationResult = result
-    yield { type: 'phase_complete', phase: 'post' } satisfies PhaseCompleteEvent
+    yield { type: 'phase_complete', phase: 'post', result } satisfies PhaseCompleteEvent
     return true
   }
 
