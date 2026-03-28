@@ -146,7 +146,7 @@ Already tracking: {{ characters.size }} characters, {{ locations.size }} locatio
 {%- if recentEntries.size > 0 %}
 
 ## Recent Chat History
-{% for entry in recentEntries %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.timeStart != '' %} (at {{ entry.timeStart }}){% endif %} {{ entry.content }}
+{% for entry in recentEntries %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.metadata.timeStart %} (at Year {{ entry.metadata.timeStart.years }}, Day {{ entry.metadata.timeStart.days }}, {{ entry.metadata.timeStart.hours }}:{{ entry.metadata.timeStart.minutes }}){% endif %} {{ entry.content }}
 
 {% endfor %}
 {%- endif %}
@@ -161,7 +161,7 @@ Already tracking: {{ characters.size }} characters, {{ locations.size }} locatio
 ## Already Known Entities (check before adding duplicates)
 Characters: {% if characters.size == 0 %}(none){% else %}{% for char in characters %}
 - {{ char.name }}{% if char.relationship != '' %} ({{ char.relationship }}){% endif %}{% if char.status != 'active' %} [{{ char.status }}]{% endif %}
-{% if char.appearance.size > 0 %}  Appearance: {% for a in char.appearance %}{{ a }}{% unless forloop.last %}, {% endunless %}{% endfor %}
+{% if char.visualDescriptors %}  Appearance: {% if char.visualDescriptors.face %}Face: {{ char.visualDescriptors.face }}{% endif %}{% if char.visualDescriptors.hair %}, Hair: {{ char.visualDescriptors.hair }}{% endif %}{% if char.visualDescriptors.eyes %}, Eyes: {{ char.visualDescriptors.eyes }}{% endif %}{% if char.visualDescriptors.build %}, Build: {{ char.visualDescriptors.build }}{% endif %}{% if char.visualDescriptors.clothing %}, Clothing: {{ char.visualDescriptors.clothing }}{% endif %}{% if char.visualDescriptors.accessories %}, Accessories: {{ char.visualDescriptors.accessories }}{% endif %}{% if char.visualDescriptors.distinguishing %}, Distinguishing: {{ char.visualDescriptors.distinguishing }}{% endif %}
 {% endif %}{% endfor %}{% endif %}
 Locations: {% if locations.size == 0 %}(none){% else %}{% for loc in locations %}{{ loc.name }}{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif %}
 Items: {% if items.size == 0 %}(none){% else %}{% for item in items %}{{ item.name }}{% unless forloop.last %}, {% endunless %}{% endfor %}{% endif %}

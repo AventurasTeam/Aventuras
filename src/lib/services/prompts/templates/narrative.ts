@@ -251,7 +251,7 @@ Year {{ timeTracker.years }}, Day {{ timeTracker.days }}, {{ timeTracker.hours }
 
 [KNOWN CHARACTERS]
 {%- for char in relevantWorldState.characters %}
-• {{ char.name }}{% if char.relationship != '' %} ({{ char.relationship }}){% endif %}{% if char.description != '' %} - {{ char.description }}{% endif %}{% if char.traits.size > 0 %} [{{ char.traits | join: ', ' }}]{% endif %}{% if char.appearance.size > 0 %} {Appearance: {{ char.appearance | join: ', ' }}}{% endif -%}
+• {{ char.name }}{% if char.relationship != '' %} ({{ char.relationship }}){% endif %}{% if char.description != '' %} - {{ char.description }}{% endif %}{% if char.traits.size > 0 %} [{{ char.traits | join: ', ' }}]{% endif %}{% if char.visualDescriptors %} {Appearance: {% if char.visualDescriptors.face %}Face: {{ char.visualDescriptors.face }}{% endif %}{% if char.visualDescriptors.hair %}, Hair: {{ char.visualDescriptors.hair }}{% endif %}{% if char.visualDescriptors.eyes %}, Eyes: {{ char.visualDescriptors.eyes }}{% endif %}{% if char.visualDescriptors.build %}, Build: {{ char.visualDescriptors.build }}{% endif %}{% if char.visualDescriptors.clothing %}, Clothing: {{ char.visualDescriptors.clothing }}{% endif %}{% if char.visualDescriptors.accessories %}, Accessories: {{ char.visualDescriptors.accessories }}{% endif %}{% if char.visualDescriptors.distinguishing %}, Distinguishing: {{ char.visualDescriptors.distinguishing }}{% endif %}}{% endif -%}
 {% endfor %}{% endif %}{% if relevantWorldState.inventory.size > 0 %}
 
 [INVENTORY]
@@ -634,9 +634,9 @@ Year {{ timeTracker.years }}, Day {{ timeTracker.days }}, {{ timeTracker.hours }
 {% endif %}{% if relevantWorldState.characters.size > 0 %}
 [KNOWN CHARACTERS]
 {%- for char in relevantWorldState.characters %}
-• {{ char.name }}{% if char.relationship != '' %} ({{ char.relationship }}){% endif %}{% if char.description != '' %} - {{ char.description }}{% endif %}{% if char.traits.size > 0 %} [{{ char.traits | join: ', ' }}]{% endif %}{% if char.appearance.size > 0 %} {Appearance: {{ char.appearance | join: ', ' }}}{% endif -%}
+• {{ char.name }}{% if char.relationship != '' %} ({{ char.relationship }}){% endif %}{% if char.description != '' %} - {{ char.description }}{% endif %}{% if char.traits.size > 0 %} [{{ char.traits | join: ', ' }}]{% endif %}{% if char.visualDescriptors %} {Appearance: {% if char.visualDescriptors.face %}Face: {{ char.visualDescriptors.face }}{% endif %}{% if char.visualDescriptors.hair %}, Hair: {{ char.visualDescriptors.hair }}{% endif %}{% if char.visualDescriptors.eyes %}, Eyes: {{ char.visualDescriptors.eyes }}{% endif %}{% if char.visualDescriptors.build %}, Build: {{ char.visualDescriptors.build }}{% endif %}{% if char.visualDescriptors.clothing %}, Clothing: {{ char.visualDescriptors.clothing }}{% endif %}{% if char.visualDescriptors.accessories %}, Accessories: {{ char.visualDescriptors.accessories }}{% endif %}{% if char.visualDescriptors.distinguishing %}, Distinguishing: {{ char.visualDescriptors.distinguishing }}{% endif %}}{% endif -%}
 {% endfor %}{% endif %}{% if relevantWorldState.inventory.size > 0 %}
-  
+
 [INVENTORY]
 {% for item in relevantWorldState.inventory %}{% if forloop.first == false %}, {% endif %}{{ item.name }}{% if item.quantity > 1 %} (×{{ item.quantity }}){% endif %}{% if item.equipped %} [equipped]{% endif %}{% endfor %}
 {% endif %}{% if relevantWorldState.storyBeats.size > 0 %}

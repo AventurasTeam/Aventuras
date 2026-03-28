@@ -1,19 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { templateEngine } from '$lib/services/templates/engine'
 import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
-import {
-  promptContext,
-  promptContextMinimal,
-} from '../../../../../src/test/fixtures/promptContext'
+import { promptContext, promptContextMinimal } from '../../../../../src/test/fixtures/promptContext'
 
 // ===== Template lookups =====
 
 const classifierTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'classifier')!
 const styleReviewerTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'style-reviewer')!
 const tier3Template = PROMPT_TEMPLATES.find((t) => t.id === 'tier3-entry-selection')!
-const lorebookClassifierTemplate = PROMPT_TEMPLATES.find(
-  (t) => t.id === 'lorebook-classifier',
-)!
+const lorebookClassifierTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'lorebook-classifier')!
 
 // ===== Tests =====
 
@@ -32,13 +27,10 @@ describe('classifier template', () => {
       ...promptContext,
       characters: [
         {
+          ...promptContext.characters[0],
           name: 'Old Guard',
           relationship: '',
           status: 'deceased',
-          appearance: [],
-          description: '',
-          traits: [],
-          tier: 1,
         },
       ],
     })
@@ -65,7 +57,7 @@ describe('classifier template', () => {
       ...promptContext,
     })
     expect(result).toContain('[ACTION]')
-    expect(result).toContain('at Y1D42 14:05')
+    expect(result).toContain('at Year 1, Day 42, 14:5')
     expect(result).toContain('I draw my sword and step cautiously forward.')
   })
 
@@ -80,7 +72,7 @@ describe('classifier template', () => {
     const result = templateEngine.render(classifierTemplate.userContent!, {
       ...promptContext,
     })
-    expect(result).toContain('at Y1D42 14:00')
+    expect(result).toContain('at Year 1, Day 42, 14:0')
   })
 
   it('renders location names', () => {
@@ -275,9 +267,9 @@ describe('tier3-entry-selection template', () => {
     const result = templateEngine.render(tier3Template.userContent!, {
       ...promptContext,
     })
-    expect(result).toContain('The Sundering')
-    expect(result).toContain('[event]')
-    expect(result).toContain('A cataclysm that split the continent.')
+    expect(result).toContain('The Shadow Guild')
+    expect(result).toContain('[faction]')
+    expect(result).toContain('A secretive criminal organization.')
   })
 
   it('renders 0-based index for entries', () => {
@@ -330,10 +322,7 @@ describe('lorebook-classifier template', () => {
 
   it('rendered output contains valid JSON fragment', () => {
     const result =
-      templateEngine.render(
-        lorebookClassifierTemplate.userContent!,
-        lorebookClassifierBase,
-      ) ?? ''
+      templateEngine.render(lorebookClassifierTemplate.userContent!, lorebookClassifierBase) ?? ''
     // Extract the JSON array portion from the rendered output
     const jsonStart = result.indexOf('[')
     const jsonEnd = result.lastIndexOf(']')
