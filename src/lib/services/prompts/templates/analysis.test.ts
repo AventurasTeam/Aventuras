@@ -19,7 +19,7 @@ describe('classifier template', () => {
     })
     expect(result).toContain('Aria')
     expect(result).toContain('companion')
-    expect(result).toContain('Silver hair')
+    expect(result).toContain('Silver pendant')
   })
 
   it('renders inactive character status', () => {
