@@ -4,54 +4,23 @@
  * Each task is independent - one failure doesn't block others.
  */
 
-import {
-  ChapterService,
-  type ChapterServiceDependencies,
-  type ChapterCheckInput,
-  type ChapterCreationResult,
-} from './ChapterService'
-import {
-  LoreManagementCoordinator,
-  type LoreManagementDependencies,
-  type LoreManagementCallbacks,
-  type LoreManagementUICallbacks,
-  type LoreSessionInput,
-  type LoreSessionResult,
-} from './LoreManagementCoordinator'
+import { ChapterService, type ChapterCreationResult } from './ChapterService'
+import { LoreManagementCoordinator, type LoreSessionResult } from './LoreManagementCoordinator'
 import {
   StyleReviewScheduler,
-  type StyleReviewDependencies,
-  type StyleReviewUICallbacks,
   type StyleReviewCheckInput,
   type StyleReviewCheckResult,
 } from './StyleReviewScheduler'
-import { aiService } from '$lib/services/ai'
 import { story } from '$lib/stores/story/index.svelte'
-import { settings } from '$lib/stores/settings.svelte'
-import { ui } from '$lib/stores/ui.svelte'
 
 function log(...args: unknown[]) {
   console.log('[BackgroundTaskCoordinator]', ...args)
 }
 
-export interface BackgroundTaskDependencies {
-  chapterService: ChapterServiceDependencies
-  loreManagement: LoreManagementDependencies
-  styleReview: StyleReviewDependencies
-}
-
 export interface BackgroundTaskInput {
   // Style review input
   styleReview: StyleReviewCheckInput
-  styleReviewCallbacks?: StyleReviewUICallbacks
-
-  // Chapter check input
-  chapterCheck: ChapterCheckInput
-
-  // Lore management input (used if chapter triggers lore management)
-  loreSession: LoreSessionInput
-  loreCallbacks: LoreManagementCallbacks
-  loreUICallbacks?: LoreManagementUICallbacks
+  shouldCheckChapter: boolean
 }
 
 export interface BackgroundTaskResult {
@@ -61,106 +30,34 @@ export interface BackgroundTaskResult {
 }
 
 export class BackgroundTaskCoordinator {
-  private chapterService: ChapterService
-  private loreCoordinator: LoreManagementCoordinator
-  private styleScheduler: StyleReviewScheduler
+  private chapterService = new ChapterService()
+  private loreCoordinator = new LoreManagementCoordinator()
+  private styleScheduler = new StyleReviewScheduler()
 
-  constructor(deps: BackgroundTaskDependencies) {
+  /* constructor(deps: BackgroundTaskDependencies) {
     this.chapterService = new ChapterService(deps.chapterService)
     this.loreCoordinator = new LoreManagementCoordinator(deps.loreManagement)
     this.styleScheduler = new StyleReviewScheduler(deps.styleReview)
-  }
+  } */
 
   /**
    * Static convenience method that builds deps + input from stores and runs all background tasks.
    * Called from ActionInput after pipeline.execute() completes.
    */
   static async run(countStyleReview: boolean, styleReviewSource: string): Promise<void> {
-    const storyId = story.id ?? ''
-    const mode = story.mode
-
-    const deps: BackgroundTaskDependencies = {
-      chapterService: {
-        analyzeForChapter: aiService.analyzeForChapter.bind(aiService),
-        summarizeChapter: aiService.summarizeChapter.bind(aiService),
-        getNextChapterNumber: story.chapter.getNextChapterNumber.bind(story.chapter),
-        addChapter: story.chapter.addChapter.bind(story.chapter),
-      },
-      loreManagement: {
-        runLoreManagement: aiService.runLoreManagement.bind(aiService),
-      },
-      styleReview: { analyzeStyle: aiService.analyzeStyle.bind(aiService) },
-    }
-
     const input: BackgroundTaskInput = {
       styleReview: {
-        storyId,
-        entries: story.entry.entries,
-        mode,
-        pov: story.settings.pov,
-        tense: story.settings.tense,
-        enabled: settings.systemServicesSettings.styleReviewer.enabled,
-        triggerInterval: settings.systemServicesSettings.styleReviewer.triggerInterval,
-        currentCounter: ui.messagesSinceLastStyleReview,
         shouldIncrement: countStyleReview,
         source: styleReviewSource,
       },
-      styleReviewCallbacks: {
-        incrementCounter: ui.incrementStyleReviewCounter.bind(ui),
-        setLoading: ui.setStyleReviewLoading.bind(ui),
-        setResult: ui.setStyleReview.bind(ui),
-      },
-      chapterCheck: {
-        storyId,
-        currentBranchId: story.branch.currentBranchId,
-        entries: story.entry.entries,
-        lastChapterEndIndex: story.chapter.lastChapterEndIndex,
-        tokensSinceLastChapter: story.generationContext.tokensSinceLastChapter,
-        tokensOutsideBuffer: story.generationContext.tokensOutsideBuffer,
-        messagesSinceLastChapter: story.chapter.messagesSinceLastChapter,
-        memoryConfig: story.settings.memoryConfig,
-        currentBranchChapters: story.chapter.currentBranchChapters,
-        mode,
-        pov: story.settings.pov,
-        tense: story.settings.tense,
-      },
-      loreSession: {
-        storyId,
-        currentBranchId: story.branch.currentBranchId,
-        lorebookEntries: story.lorebook.lorebookEntries,
-        chapters: story.chapter.currentBranchChapters,
-        mode,
-        pov: story.settings.pov,
-        tense: story.settings.tense,
-      },
-      loreCallbacks: {
-        onCreateEntry: async (entry) => {
-          await story.lorebook.addLorebookEntry(entry)
-        },
-        onUpdateEntry: story.lorebook.updateLorebookEntry.bind(story.lorebook),
-        onDeleteEntry: story.lorebook.deleteLorebookEntry.bind(story.lorebook),
-        onMergeEntries: async (entryIds, mergedEntry) => {
-          await story.lorebook.deleteLorebookEntries(entryIds)
-          await story.lorebook.addLorebookEntry(mergedEntry)
-        },
-        onQueryChapter: async (chapterNumber, question) => {
-          return aiService.answerChapterQuestion(
-            chapterNumber,
-            question,
-            story.chapter.currentBranchChapters,
-          )
-        },
-      },
-      loreUICallbacks: {
-        onStart: ui.startLoreManagement.bind(ui),
-        onProgress: ui.updateLoreManagementProgress.bind(ui),
-        onComplete: ui.finishLoreManagement.bind(ui),
-      },
+      shouldCheckChapter: true,
     }
 
-    if (!story.settings.memoryConfig.autoSummarize) input.chapterCheck.tokensOutsideBuffer = 0
+    if (!story.settings.memoryConfig.autoSummarize) {
+      input.shouldCheckChapter = false
+    }
 
-    const coordinator = new BackgroundTaskCoordinator(deps)
+    const coordinator = new BackgroundTaskCoordinator()
     await coordinator.runBackgroundTasks(input)
   }
 
@@ -179,34 +76,29 @@ export class BackgroundTaskCoordinator {
 
     // 1. Style review (runs first, independent)
     try {
-      result.styleReview = await this.styleScheduler.checkAndTrigger(
-        input.styleReview,
-        input.styleReviewCallbacks,
-      )
+      result.styleReview = await this.styleScheduler.checkAndTrigger(input.styleReview)
       log('Style review complete', { triggered: result.styleReview.triggered })
     } catch (error) {
       log('Style review failed (non-fatal)', error)
     }
 
     // 2. Chapter check
-    try {
-      result.chapterCreation = await this.chapterService.checkAndCreateChapter(input.chapterCheck)
-      log('Chapter check complete', {
-        created: result.chapterCreation.created,
-        loreManagementTriggered: result.chapterCreation.loreManagementTriggered,
-      })
-    } catch (error) {
-      log('Chapter check failed (non-fatal)', error)
+    if (input.shouldCheckChapter) {
+      try {
+        result.chapterCreation = await this.chapterService.checkAndCreateChapter()
+        log('Chapter check complete', {
+          created: result.chapterCreation.created,
+          loreManagementTriggered: result.chapterCreation.loreManagementTriggered,
+        })
+      } catch (error) {
+        log('Chapter check failed (non-fatal)', error)
+      }
     }
 
     // 3. Lore management (only if chapter creation triggered it)
     if (result.chapterCreation.loreManagementTriggered) {
       try {
-        result.loreManagement = await this.loreCoordinator.runSession(
-          input.loreSession,
-          input.loreCallbacks,
-          input.loreUICallbacks,
-        )
+        result.loreManagement = await this.loreCoordinator.runSession()
         log('Lore management complete', {
           completed: result.loreManagement.completed,
           changeCount: result.loreManagement.changeCount,

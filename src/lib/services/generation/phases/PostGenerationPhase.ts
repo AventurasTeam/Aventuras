@@ -36,7 +36,7 @@ export interface PostGenerationResult {
  * Errors are non-fatal - generation continues even if suggestions fail.
  */
 export class PostGenerationPhase {
-  async *execute(): AsyncGenerator<GenerationEvent, PostGenerationResult> {
+  async *execute(): AsyncGenerator<GenerationEvent, boolean> {
     yield { type: 'phase_start', phase: 'post' } satisfies PhaseStartEvent
 
     const isCreativeWritingMode = story.mode === 'creative-writing'
@@ -45,7 +45,7 @@ export class PostGenerationPhase {
 
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'post' } satisfies AbortedEvent
-      return { suggestions: null, actionChoices: null }
+      return false
     }
 
     const result: PostGenerationResult = { suggestions: null, actionChoices: null }
@@ -56,19 +56,21 @@ export class PostGenerationPhase {
           result.suggestions = await this.generateSuggestions(settings.translationSettings)
         } catch (error) {
           yield this.errorEvent(error)
+          return false
         }
       } else {
         try {
           result.actionChoices = await this.generateActionChoices(settings.translationSettings)
         } catch (error) {
           yield this.errorEvent(error)
+          return false
         }
       }
     }
 
     story.generationContext.postGenerationResult = result
-    yield { type: 'phase_complete', phase: 'post', result } satisfies PhaseCompleteEvent
-    return result
+    yield { type: 'phase_complete', phase: 'post' } satisfies PhaseCompleteEvent
+    return true
   }
 
   private async generateSuggestions(
@@ -78,7 +80,8 @@ export class PostGenerationPhase {
 
     if (TranslationService.shouldTranslate(translationSettings)) {
       try {
-        return await aiService.translateSuggestions(suggestions, translationSettings.targetLanguage)
+        story.generationContext.suggestionsToTranslate = suggestions
+        return await aiService.translateSuggestions()
       } catch {
         return suggestions
       }
@@ -93,7 +96,8 @@ export class PostGenerationPhase {
 
     if (TranslationService.shouldTranslate(translationSettings)) {
       try {
-        return await aiService.translateActionChoices(choices, translationSettings.targetLanguage)
+        story.generationContext.actionChoicesToTranslate = choices
+        return await aiService.translateActionChoices()
       } catch {
         return choices
       }

@@ -5,7 +5,6 @@
  * Uses the Vercel AI SDK for structured output with Zod schema validation.
  */
 
-import type { Chapter, StoryEntry } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
@@ -14,6 +13,7 @@ import { timelineQueriesResultSchema, type TimelineQuery } from '../sdk/schemas/
 import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
 import { mapChaptersToContext } from '$lib/services/context/chapterMapper'
 import type { ContextAnswerChapter } from '$lib/services/context/context-types'
+import { story } from '$lib/stores/story/index.svelte'
 
 const log = createLogger('TimelineFill')
 
@@ -75,10 +75,9 @@ export class TimelineFillService extends BaseAIService {
   /**
    * Generate queries to fill gaps in timeline knowledge.
    */
-  async generateQueries(
-    visibleEntries: StoryEntry[],
-    chapters: Chapter[],
-  ): Promise<TimelineQuery[]> {
+  async generateQueries(): Promise<TimelineQuery[]> {
+    const chapters = story.generationContext.promptContext.chapters
+    const visibleEntries = story.generationContext.promptContext.storyEntriesVisible
     log('generateQueries called', {
       visibleEntriesCount: visibleEntries.length,
       chaptersCount: chapters.length,
@@ -89,11 +88,8 @@ export class TimelineFillService extends BaseAIService {
       return []
     }
 
-    const storyEntries = mapStoryEntriesToContext(visibleEntries, { stripPicTags: false })
-    const { chapters: contextChapters } = mapChaptersToContext(chapters)
-
     const ctx = new ContextBuilder()
-    ctx.add({ storyEntries, chapters: contextChapters })
+    ctx.add(story.generationContext.promptContext)
     const { system, user: prompt } = await ctx.render('timeline-fill')
 
     try {
@@ -116,17 +112,12 @@ export class TimelineFillService extends BaseAIService {
    * Answer a question about the story timeline.
    * @param getChapterEntries Optional callback to fetch full chapter entries for richer context
    */
-  async answerQuestion(
-    query: string,
-    chapters: Chapter[],
-    chapterNumbers?: number[],
-    getChapterEntries?: (chapter: Chapter) => StoryEntry[],
-  ): Promise<TimelineAnswer> {
+  async answerQuestion(query: string, chapterNumbers?: number[]): Promise<TimelineAnswer> {
+    const chapters = story.generationContext.promptContext.chapters
     log('answerQuestion called', {
       query,
       chaptersCount: chapters.length,
       targetChapters: chapterNumbers,
-      hasEntriesCallback: !!getChapterEntries,
     })
 
     // Filter to specific chapters if provided
@@ -149,17 +140,15 @@ export class TimelineFillService extends BaseAIService {
         title: c.title ?? '',
         summary: c.summary,
       }
-      if (getChapterEntries) {
-        const entries = getChapterEntries(c)
-        if (entries.length > 0) {
-          chapter.entries = mapStoryEntriesToContext(entries, { stripPicTags: false })
-        }
+      const entries = story.chapter.getChapterEntries(c)
+      if (entries.length > 0) {
+        chapter.entries = mapStoryEntriesToContext(entries, { stripPicTags: false })
       }
       return chapter
     })
 
     const ctx = new ContextBuilder()
-    ctx.add({ answerChapters, query })
+    ctx.add({ ...story.generationContext.promptContext, answerChapters, query })
     const { system, user: prompt } = await ctx.render('timeline-fill-answer')
 
     try {
@@ -191,15 +180,12 @@ export class TimelineFillService extends BaseAIService {
    * Run the full timeline fill process.
    * @param getChapterEntries Optional callback to fetch full chapter entries for richer context
    */
-  async runTimelineFill(
-    visibleEntries: StoryEntry[],
-    chapters: Chapter[],
-    getChapterEntries?: (chapter: Chapter) => StoryEntry[],
-  ): Promise<TimelineFillResult> {
+  async runTimelineFill(): Promise<TimelineFillResult> {
+    const chapters = story.generationContext.promptContext.chapters
+    const visibleEntries = story.generationContext.promptContext.storyEntriesVisible
     log('runTimelineFill called', {
       visibleEntriesCount: visibleEntries.length,
       chaptersCount: chapters.length,
-      hasEntriesCallback: !!getChapterEntries,
     })
 
     if (chapters.length === 0) {
@@ -207,7 +193,7 @@ export class TimelineFillService extends BaseAIService {
     }
 
     // Step 1: Generate queries
-    const queries = await this.generateQueries(visibleEntries, chapters)
+    const queries = await this.generateQueries()
 
     if (queries.length === 0) {
       return { queries: [], responses: [] }
@@ -226,12 +212,7 @@ export class TimelineFillService extends BaseAIService {
           }
         }
 
-        const answer = await this.answerQuestion(
-          q.query,
-          chapters,
-          chapterNumbers,
-          getChapterEntries,
-        )
+        const answer = await this.answerQuestion(q.query, chapterNumbers)
 
         return {
           query: q.query,

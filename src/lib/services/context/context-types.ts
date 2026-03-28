@@ -119,9 +119,8 @@ export interface ContextTimelineFill {
  * A story entry as seen by Liquid templates (storyEntries[]).
  * Narrow type union — system/retry types are filtered out by mappers before reaching templates.
  */
-export type ContextStoryEntry = {
+export type ContextStoryEntry = StoryEntry & {
   type: 'user_action' | 'narration'
-  content: string
 }
 
 /**

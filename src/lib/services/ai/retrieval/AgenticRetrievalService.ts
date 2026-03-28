@@ -12,7 +12,8 @@ import { createAgentFromPreset, extractTerminalToolResult, stopOnTerminalTool } 
 import { createRetrievalTools, type RetrievalToolContext } from '../sdk/tools'
 import { ContextBuilder } from '$lib/services/context'
 import type { ContextLorebookEntryBase } from '$lib/services/context/context-types'
-import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
+import { story } from '$lib/stores/story/index.svelte'
+import { aiService } from '../generation'
 
 const log = createLogger('AgenticRetrieval')
 
@@ -84,10 +85,14 @@ export class AgenticRetrievalService extends BaseAIService {
    * @param signal - Optional abort signal for cancellation
    * @returns Result with selected entries and reasoning
    */
-  async runRetrieval(context: RetrievalContext, signal?: AbortSignal): Promise<RetrievalResult> {
+  async runRetrieval(): Promise<RetrievalResult> {
+    const generationContext = story.generationContext
+    const promptContext = generationContext.promptContext
+    const availableEntries = story.lorebook.lorebookEntries
+    const chapters = story.chapter.currentBranchChapters
     log('Starting agentic retrieval', {
-      entryCount: context.availableEntries.length,
-      chapterCount: context.chapters?.length ?? 0,
+      entryCount: availableEntries.length,
+      chapterCount: chapters?.length ?? 0,
       maxIterations: this.maxIterations,
     })
 
@@ -98,8 +103,8 @@ export class AgenticRetrievalService extends BaseAIService {
 
     // Create plain deep copies of reactive arrays to avoid DataCloneError in AI SDK
     // (Svelte reactive proxies cannot be structured cloned)
-    const plainEntries = JSON.parse(JSON.stringify(context.availableEntries))
-    const plainChapters = JSON.parse(JSON.stringify(context.chapters ?? []))
+    const plainEntries = JSON.parse(JSON.stringify(promptContext.lorebookEntries)) as Entry[]
+    const plainChapters = JSON.parse(JSON.stringify(promptContext.chapters)) as Chapter[]
 
     // Create tool context with chapter tracking
     const toolContext: RetrievalToolContext = {
@@ -109,47 +114,19 @@ export class AgenticRetrievalService extends BaseAIService {
         selectedIndices.add(index)
         log('Entry selected', { index, name: plainEntries[index]?.name })
       },
-      queryChapter: context.queryChapter
-        ? async (chapterNumber: number, question: string) => {
-            queriedChapterIds.add(String(chapterNumber))
-            queryHistory.push(`Queried chapter ${chapterNumber}: ${question}`)
-            return context.queryChapter!(chapterNumber, question)
-          }
-        : undefined,
+      queryChapter: async (chapterNumber: number, question: string) => {
+        queriedChapterIds.add(String(chapterNumber))
+        queryHistory.push(`Queried chapter ${chapterNumber}: ${question}`)
+        return aiService.answerChapterQuestion(chapterNumber, question)
+      },
     }
 
     // Create tools
     const tools = createRetrievalTools(toolContext)
 
-    // Build typed arrays (apply slice limits before mapping — templates cannot slice)
-    const agenticChapters = (context.chapters ?? []).slice(0, 20).map((ch) => ({
-      number: ch.number,
-      title: ch.title ?? '',
-      summary: ch.summary.slice(0, 100) + '...',
-    }))
-    const agenticEntries = context.availableEntries.slice(0, 30).map((e) => ({
-      name: e.name,
-      type: e.type,
-    }))
-
-    // Map recent entries to ContextStoryEntry shape (character budget removed — configurable count)
-    const recentEntries = mapStoryEntriesToContext(
-      context.recentEntries.slice(-this.recentEntryCount),
-      {
-        stripPicTags: false,
-      },
-    )
-
     // Render prompts through unified pipeline
     const ctx = new ContextBuilder()
-    ctx.add({
-      userInput: context.userInput,
-      recentEntries,
-      chaptersCount: context.chapters?.length ?? 0,
-      agenticChapters,
-      entriesCount: context.availableEntries.length,
-      agenticEntries,
-    })
+    ctx.add(promptContext)
     const { system: systemPrompt, user: userPrompt } = await ctx.render('agentic-retrieval')
 
     // Create the agent
@@ -159,7 +136,7 @@ export class AgenticRetrievalService extends BaseAIService {
         instructions: systemPrompt,
         tools,
         stopWhen: stopOnTerminalTool('finish_retrieval', this.maxIterations),
-        signal,
+        signal: story.generationContext.abortSignal,
       },
       'agentic-retrieval',
     )

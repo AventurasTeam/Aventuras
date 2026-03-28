@@ -38,71 +38,7 @@
     }
 
     try {
-      const result = await aiService.runLoreManagement(
-        story.id!,
-        story.branch.currentBranchId,
-        [...story.lorebook.lorebookEntries],
-        story.chapter.chapters,
-        {
-          onCreateEntry: async (entry) => {
-            await story.lorebook.addLorebookEntry({
-              name: entry.name,
-              type: entry.type,
-              description: entry.description,
-              hiddenInfo: entry.hiddenInfo,
-              aliases: entry.aliases,
-              state: entry.state,
-              adventureState: entry.adventureState,
-              creativeState: entry.creativeState,
-              injection: entry.injection,
-              firstMentioned: entry.firstMentioned,
-              lastMentioned: entry.lastMentioned,
-              mentionCount: entry.mentionCount,
-              createdBy: entry.createdBy,
-              loreManagementBlacklisted: entry.loreManagementBlacklisted,
-            })
-            ui.updateLoreManagementProgress('Creating entries...', bumpChanges())
-          },
-          onUpdateEntry: async (id, updates) => {
-            await story.lorebook.updateLorebookEntry(id, updates)
-            ui.updateLoreManagementProgress('Updating entries...', bumpChanges())
-          },
-          onDeleteEntry: async (id) => {
-            await story.lorebook.deleteLorebookEntry(id)
-            ui.updateLoreManagementProgress('Cleaning up entries...', bumpChanges())
-          },
-          onMergeEntries: async (entryIds, mergedEntry) => {
-            await story.lorebook.deleteLorebookEntries(entryIds)
-            await story.lorebook.addLorebookEntry({
-              name: mergedEntry.name,
-              type: mergedEntry.type,
-              description: mergedEntry.description,
-              hiddenInfo: mergedEntry.hiddenInfo,
-              aliases: mergedEntry.aliases,
-              state: mergedEntry.state,
-              adventureState: mergedEntry.adventureState,
-              creativeState: mergedEntry.creativeState,
-              injection: mergedEntry.injection,
-              firstMentioned: mergedEntry.firstMentioned,
-              lastMentioned: mergedEntry.lastMentioned,
-              mentionCount: mergedEntry.mentionCount,
-              createdBy: mergedEntry.createdBy,
-              loreManagementBlacklisted: mergedEntry.loreManagementBlacklisted,
-            })
-            ui.updateLoreManagementProgress('Merging entries...', bumpChanges())
-          },
-          onQueryChapter: async (chapterNumber, question) => {
-            return aiService.answerChapterQuestion(
-              chapterNumber,
-              question,
-              story.chapter.currentBranchChapters,
-            )
-          },
-        },
-        story.mode ?? 'adventure',
-        story.settings.pov,
-        story.settings.tense,
-      )
+      const result = await aiService.runLoreManagement(bumpChanges)
 
       console.log('[MemoryView] Lore management complete', {
         changesCount: result.changes.length,
@@ -149,14 +85,8 @@
     ui.setMemoryLoading(true)
     try {
       const entries = getChapterEntries(chapter)
-      const newSummary = await aiService.resummarizeChapter(
-        chapter,
-        entries,
-        story.chapter.chapters,
-        story.mode ?? 'adventure',
-        story.settings.pov,
-        story.settings.tense,
-      )
+      story.generationContext.chapterAnalysis.chapterEntries = entries
+      const newSummary = await aiService.resummarizeChapter()
 
       // Update the chapter with new summary and metadata
       await story.chapter.updateChapter(chapter.id, {

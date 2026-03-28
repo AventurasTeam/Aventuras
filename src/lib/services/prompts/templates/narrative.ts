@@ -28,11 +28,11 @@ I am the player. You narrate the world around me. Begin when I take my first act
 {%- endif %}
 
 {%- assign lastActionIndex = -1 -%}
-{%- for entry in storyEntries -%}{%- if entry.type == 'user_action' -%}{%- assign lastActionIndex = forloop.index0 -%}{%- endif -%}{%- endfor -%}
-{%- if storyEntries.size > 1 %}
+{%- for entry in storyEntriesVisibleRaw -%}{%- if entry.type == 'user_action' -%}{%- assign lastActionIndex = forloop.index0 -%}{%- endif -%}{%- endfor -%}
+{%- if storyEntriesVisibleRaw.size > 1 %}
 
 ## Recent Story:
-{% for entry in storyEntries %}{% if forloop.index0 < lastActionIndex %}{% if entry.type == 'user_action' %}
+{% for entry in storyEntriesVisibleRaw %}{% if forloop.index0 < lastActionIndex %}{% if entry.type == 'user_action' %}
 [ACTION] {{ entry.content }}
 {% else %}
 [NARRATIVE]
@@ -40,7 +40,7 @@ I am the player. You narrate the world around me. Begin when I take my first act
 {% endif %}{% endif %}{% endfor %}
 {%- endif %}
 ## Current Action:
-{% for entry in storyEntries %}{% if forloop.index0 == lastActionIndex %}{{ entry.content }}{% endif %}{% endfor %}
+{% for entry in storyEntriesVisibleRaw %}{% if forloop.index0 == lastActionIndex %}{{ entry.content }}{% endif %}{% endfor %}
 
 Continue the narrative:`,
   content: `# Role
@@ -159,7 +159,7 @@ CRITICAL VOICE RULES:
 End with a natural opening for action, not a direct question.{% endif %}
 </response_instruction>
 
-{% if visualProseMode %}<VisualProse>
+{% if userSettings.visualProseMode %}<VisualProse>
 You are also a visual artist with HTML5 and CSS3 at your disposal. Your entire response must be valid HTML.
 
 **OUTPUT FORMAT (CRITICAL):**
@@ -208,7 +208,7 @@ Example structure:
 
 Create atmospheric layouts, styled dialogue, themed visual elements. Match visual style to genre and mood.
 </VisualProse>{% endif %}
-{% if inlineImageMode %}<InlineImages>
+{% if userSettings.imageGeneration.inlineImageMode %}<InlineImages>
 You can embed images directly in your narrative using the <pic> tag. Images will be generated automatically where you place these tags.
 
 **TAG FORMAT:**
@@ -239,78 +239,78 @@ Elena drew her blade, firelight dancing along the steel edge as she faced the cr
 - Do not use <pic> for every scene - reserve for truly striking visual moments
 - Keep prompts between 50-150 words for best results
 </InlineImages>{% endif %}
-{% if storyTime != '' %}
 [CURRENT STORY TIME]
-{{ storyTime }}
-{% endif %}{% if currentLocationObject -%}
+Year {{ timeTracker.years }}, Day {{ timeTracker.days }}, {{ timeTracker.hours }} hours {{ timeTracker.minutes }} minutes
+{% assign currentLocationObject = location | where: "curent", true | first -%}
+{%- if currentLocationObject %}
 
 [CURRENT LOCATION]
 {{ currentLocationObject.name }}{% if currentLocationObject.description != '' %}
 {{ currentLocationObject.description }}{% endif -%}
-{% endif %}{% if worldStateCharacters.size > 0 %}
+{% endif %}{% if relevantWorldState.characters.size > 0 %}
 
 [KNOWN CHARACTERS]
-{%- for char in worldStateCharacters %}
+{%- for char in relevantWorldState.characters %}
 • {{ char.name }}{% if char.relationship != '' %} ({{ char.relationship }}){% endif %}{% if char.description != '' %} - {{ char.description }}{% endif %}{% if char.traits.size > 0 %} [{{ char.traits | join: ', ' }}]{% endif %}{% if char.appearance.size > 0 %} {Appearance: {{ char.appearance | join: ', ' }}}{% endif -%}
-{% endfor %}{% endif %}{% if worldStateInventory.size > 0 %}
+{% endfor %}{% endif %}{% if relevantWorldState.inventory.size > 0 %}
 
 [INVENTORY]
-{% for item in worldStateInventory %}{% if forloop.first == false %}, {% endif %}{{ item.name }}{% if item.quantity > 1 %} (×{{ item.quantity }}){% endif %}{% if item.equipped %} [equipped]{% endif %}{% endfor -%}
-{% endif %}{% if worldStateBeats.size > 0 %}
+{% for item in relevantWorldState.inventory %}{% if forloop.first == false %}, {% endif %}{{ item.name }}{% if item.quantity > 1 %} (×{{ item.quantity }}){% endif %}{% if item.equipped %} [equipped]{% endif %}{% endfor -%}
+{% endif %}{% if relevantWorldState.storyBeats.size > 0 %}
 
 [ACTIVE THREADS]
-{%- for beat in worldStateBeats %}
+{%- for beat in relevantWorldState.storyBeats %}
 • {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif -%}
-{% endfor %}{% endif %}{% if worldStateLocations.size > 0 %}
+{% endfor %}{% endif %}{% if relevantWorldState.locations.size > 0 %}
 
 [RELEVANT LOCATIONS]
-{%- for loc in worldStateLocations %}
+{%- for loc in relevantWorldState.locations %}
 • {{ loc.name }}{% if loc.description != '' %}: {{ loc.description }}{% endif -%}
-{% endfor %}{% endif %}{% if worldStateRelevantItems.size > 0 %}
+{% endfor %}{% endif %}{% if relevantWorldState.relevantItems.size > 0 %}
 
 [RELEVANT ITEMS]
-{%- for item in worldStateRelevantItems %}
+{%- for item in relevantWorldState.relevantItems %}
 • {{ item.name }}{% if item.description != '' %}: {{ item.description }}{% endif -%}
-{% endfor %}{% endif %}{% if worldStateRelatedBeats.size > 0 %}
+{% endfor %}{% endif %}{% if relevantWorldState.relatedStoryBeats.size > 0 %}
 
 [RELATED STORY THREADS]
-{%- for beat in worldStateRelatedBeats %}
+{%- for beat in relevantWorldState.relatedStoryBeats %}
 • {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif -%}
-{% endfor %}{% endif %}{% if lorebookEntries.size > 0 %}
+{% endfor %}{% endif %}{% if retrievalResult.lorebookEntries.size > 0 %}
 
 [LOREBOOK CONTEXT]
 (CANONICAL - All information below is established lore. Do not contradict these facts.)
-{% assign loreCharacters = lorebookEntries | where: 'type', 'character' %}{% if loreCharacters.size > 0 %}
+{% assign loreCharacters = retrievalResult.lorebookEntries | where: 'type', 'character' %}{% if loreCharacters.size > 0 %}
 • Characters:
 {% for entry in loreCharacters %}  - {{ entry.name }}: {{ entry.description }}{% if entry.disposition %} [{{ entry.disposition }}]{% endif %}
-{% endfor %}{% endif %}{% assign loreLocations = lorebookEntries | where: 'type', 'location' %}{% if loreLocations.size > 0 %}
+{% endfor %}{% endif %}{% assign loreLocations = retrievalResult.lorebookEntries | where: 'type', 'location' %}{% if loreLocations.size > 0 %}
 • Locations:
 {% for entry in loreLocations %}  - {{ entry.name }}: {{ entry.description }}
-{% endfor %}{% endif %}{% assign loreItems = lorebookEntries | where: 'type', 'item' %}{% if loreItems.size > 0 %}
+{% endfor %}{% endif %}{% assign loreItems = retrievalResult.lorebookEntries | where: 'type', 'item' %}{% if loreItems.size > 0 %}
 • Items:
 {% for entry in loreItems %}  - {{ entry.name }}: {{ entry.description }}
-{% endfor %}{% endif %}{% assign loreFactions = lorebookEntries | where: 'type', 'faction' %}{% if loreFactions.size > 0 %}
+{% endfor %}{% endif %}{% assign loreFactions = retrievalResult.lorebookEntries | where: 'type', 'faction' %}{% if loreFactions.size > 0 %}
 • Factions:
 {% for entry in loreFactions %}  - {{ entry.name }}: {{ entry.description }}
-{% endfor %}{% endif %}{% assign loreConcepts = lorebookEntries | where: 'type', 'concept' %}{% if loreConcepts.size > 0 %}
+{% endfor %}{% endif %}{% assign loreConcepts = retrievalResult.lorebookEntries | where: 'type', 'concept' %}{% if loreConcepts.size > 0 %}
 • Lore:
 {% for entry in loreConcepts %}  - {{ entry.name }}: {{ entry.description }}
-{% endfor %}{% endif %}{% assign loreEvents = lorebookEntries | where: 'type', 'event' %}{% if loreEvents.size > 0 %}
+{% endfor %}{% endif %}{% assign loreEvents = retrievalResult.lorebookEntries | where: 'type', 'event' %}{% if loreEvents.size > 0 %}
 • Events:
 {% for entry in loreEvents %}  - {{ entry.name }}: {{ entry.description }}
-{% endfor %}{% endif %}{% endif %}{% if agenticReasoning %}
+{% endfor %}{% endif %}{% endif %}{% if retrievalResult.agenticRetrieval.agenticReasoning %}
 
 [AGENT CONTEXT]
-{{ agenticReasoning }}
-{% endif %}{% if agenticChapterSummary %}
+{{ retrievalResult.agenticRetrieval.agenticReasoning }}
+{% endif %}{% if retrievalResult.agenticRetrieval.agenticChapterSummary %}
 
 ## Past Story Context
-{{ agenticChapterSummary }}
-{% endif %}{% if agenticSelectedEntries.size > 0 %}
-{% for entry in agenticSelectedEntries %}
+{{ retrievalResult.agenticRetrieval.agenticChapterSummary }}
+{% endif %}{% if retrievalResult.agenticRetrieval.agenticSelectedEntries.size > 0 %}
+{% for entry in retrievalResult.agenticRetrieval.agenticSelectedEntries %}
 ## {{ entry.name }} ({{ entry.type }})
 {{ entry.description }}
-{% endfor %}{% endif %}{% if chapters.size > 0 or timelineFill.size > 0 %}
+{% endfor %}{% endif %}{% if chapters.size > 0 or retrievalResult.timelineFillResult.responses.timelineFill.size > 0 %}
 
 <story_history>
 ## Previous Chapters
@@ -338,11 +338,11 @@ The following chapters have occurred earlier in the story. Use them for continui
 *{{ stripped_metadata }}*
 {%- endif %}
 {% endfor %}
-{%- if timelineFill.size > 0 %}
+{%- if retrievalResult.timelineFillResult.responses.timelineFill.size > 0 %}
 ## Retrieved Context
 The following information was retrieved from past chapters and is relevant to the current scene:
 
-{% for item in timelineFill %}{% assign chapCount = item.chapterNumbers.size %}{% if chapCount == 1 %}**Chapter {{ item.chapterNumbers[0] }}**{% else %}**Chapters {{ item.chapterNumbers | join: ', ' }}**{% endif %}
+{% for item in retrievalResult.timelineFillResult.responses.timelineFill %}{% assign chapCount = item.chapterNumbers.size %}{% if chapCount == 1 %}**Chapter {{ item.chapterNumbers[0] }}**{% else %}**Chapters {{ item.chapterNumbers | join: ', ' }}**{% endif %}
 Q: {{ item.query }}
 A: {{ item.answer }}
 {% endfor %}{% endif %}</story_history>{% endif %}{% if styleReview.phrases.size > 0 %}
@@ -376,11 +376,11 @@ Write in third person. Refer to {{ protagonistName }} by name or with "they/them
 I am the author directing the story. Write what I ask for.
 
 {%- assign lastActionIndex = -1 -%}
-{%- for entry in storyEntries -%}{%- if entry.type == 'user_action' -%}{%- assign lastActionIndex = forloop.index0 -%}{%- endif -%}{%- endfor -%}
-{%- if storyEntries.size > 1 %}
+{%- for entry in storyEntriesVisibleRaw -%}{%- if entry.type == 'user_action' -%}{%- assign lastActionIndex = forloop.index0 -%}{%- endif -%}{%- endfor -%}
+{%- if storyEntriesVisibleRaw.size > 1 %}
 
 ## Recent Story:
-{% for entry in storyEntries %}{% if forloop.index0 < lastActionIndex %}{% if entry.type == 'user_action' %}
+{% for entry in storyEntriesVisibleRaw %}{% if forloop.index0 < lastActionIndex %}{% if entry.type == 'user_action' %}
 [DIRECTION] {{ entry.content }}
 {% else %}
 [NARRATIVE]
@@ -388,7 +388,7 @@ I am the author directing the story. Write what I ask for.
 {% endif %}{% endif %}{% endfor %}
 {%- endif %}
 ## Current Direction:
-{% for entry in storyEntries %}{% if forloop.index0 == lastActionIndex %}{{ entry.content }}{% endif %}{% endfor %}
+{% for entry in storyEntriesVisibleRaw %}{% if forloop.index0 == lastActionIndex %}{{ entry.content }}{% endif %}{% endfor %}
 
 Write the next scene:`,
   content: `# Role
@@ -543,7 +543,7 @@ STYLE:
 End at a natural narrative beat.{% endif %}
 </response_instruction>
 
-{% if visualProseMode %}<VisualProse>
+{% if userSettings.visualProseMode %}<VisualProse>
 You are also a visual artist with HTML5 and CSS3 at your disposal. Your entire response must be valid HTML.
 
 **OUTPUT FORMAT (CRITICAL):**
@@ -592,7 +592,7 @@ Example structure:
 
 Create atmospheric layouts, styled dialogue, themed visual elements. Match visual style to genre and mood.
 </VisualProse>{% endif %}
-{% if inlineImageMode %}<InlineImages>
+{% if userSettings.imageGeneration.inlineImageMode %}<InlineImages>
 You can embed images directly in your narrative using the <pic> tag. Images will be generated automatically where you place these tags.
 
 **TAG FORMAT:**
@@ -623,75 +623,76 @@ Elena drew her blade, firelight dancing along the steel edge as she faced the cr
 - Do not use <pic> for every scene - reserve for truly striking visual moments
 - Keep prompts between 50-150 words for best results
 </InlineImages>{% endif %}
-{% if storyTime != '' %}
 [CURRENT STORY TIME]
-{{ storyTime }}
-{% endif %}{% if currentLocationObject %}
+Year {{ timeTracker.years }}, Day {{ timeTracker.days }}, {{ timeTracker.hours }} hours {{ timeTracker.minutes }} minutes
+{% assign currentLocationObject = location | where: "curent", true | first -%}
+{%- if currentLocationObject %}
+
 [CURRENT LOCATION]
 {{ currentLocationObject.name }}{% if currentLocationObject.description != '' %}
 {{ currentLocationObject.description }}{% endif %}
-{% endif %}{% if worldStateCharacters.size > 0 %}
+{% endif %}{% if relevantWorldState.characters.size > 0 %}
 [KNOWN CHARACTERS]
-{%- for char in worldStateCharacters %}
+{%- for char in relevantWorldState.characters %}
 • {{ char.name }}{% if char.relationship != '' %} ({{ char.relationship }}){% endif %}{% if char.description != '' %} - {{ char.description }}{% endif %}{% if char.traits.size > 0 %} [{{ char.traits | join: ', ' }}]{% endif %}{% if char.appearance.size > 0 %} {Appearance: {{ char.appearance | join: ', ' }}}{% endif -%}
-{% endfor %}{% endif %}{% if worldStateInventory.size > 0 %}
+{% endfor %}{% endif %}{% if relevantWorldState.inventory.size > 0 %}
   
 [INVENTORY]
-{% for item in worldStateInventory %}{% if forloop.first == false %}, {% endif %}{{ item.name }}{% if item.quantity > 1 %} (×{{ item.quantity }}){% endif %}{% if item.equipped %} [equipped]{% endif %}{% endfor %}
-{% endif %}{% if worldStateBeats.size > 0 %}
+{% for item in relevantWorldState.inventory %}{% if forloop.first == false %}, {% endif %}{{ item.name }}{% if item.quantity > 1 %} (×{{ item.quantity }}){% endif %}{% if item.equipped %} [equipped]{% endif %}{% endfor %}
+{% endif %}{% if relevantWorldState.storyBeats.size > 0 %}
 [ACTIVE THREADS]
-{%- for beat in worldStateBeats %}
+{%- for beat in relevantWorldState.storyBeats %}
 • {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif -%}
-{% endfor %}{% endif %}{% if worldStateLocations.size > 0 %}
+{% endfor %}{% endif %}{% if relevantWorldState.locations.size > 0 %}
   
 [RELEVANT LOCATIONS]
-{%- for loc in worldStateLocations %}
+{%- for loc in relevantWorldState.locations %}
 • {{ loc.name }}{% if loc.description != '' %}: {{ loc.description }}{% endif -%}
-{% endfor %}{% endif %}{% if worldStateRelevantItems.size > 0 %}
+{% endfor %}{% endif %}{% if relevantWorldState.relevantItems.size > 0 %}
   
 [RELEVANT ITEMS]
-{%- for item in worldStateRelevantItems %}
+{%- for item in relevantWorldState.relevantItems %}
 • {{ item.name }}{% if item.description != '' %}: {{ item.description }}{% endif -%}
-{% endfor %}{% endif %}{% if worldStateRelatedBeats.size > 0 %}
+{% endfor %}{% endif %}{% if relevantWorldState.relatedStoryBeats.size > 0 %}
   
 [RELATED STORY THREADS]
-{%- for beat in worldStateRelatedBeats %}
+{%- for beat in relevantWorldState.relatedStoryBeats %}
 • {{ beat.title }}{% if beat.description != '' %}: {{ beat.description }}{% endif -%}
-{% endfor %}{% endif %}{% if lorebookEntries.size > 0 %}
+{% endfor %}{% endif %}{% if retrievalResult.lorebookEntries.size > 0 %}
 
 [LOREBOOK CONTEXT]
 (CANONICAL - All information below is established lore. Do not contradict these facts.)
-{% assign loreCharacters = lorebookEntries | where: 'type', 'character' %}{% if loreCharacters.size > 0 %}
+{% assign loreCharacters = retrievalResult.lorebookEntries | where: 'type', 'character' %}{% if loreCharacters.size > 0 %}
 • Characters:
 {% for entry in loreCharacters %}  - {{ entry.name }}: {{ entry.description }}{% if entry.disposition %} [{{ entry.disposition }}]{% endif %}
-{% endfor %}{% endif %}{% assign loreLocations = lorebookEntries | where: 'type', 'location' %}{% if loreLocations.size > 0 %}
+{% endfor %}{% endif %}{% assign loreLocations = retrievalResult.lorebookEntries | where: 'type', 'location' %}{% if loreLocations.size > 0 %}
 • Locations:
 {% for entry in loreLocations %}  - {{ entry.name }}: {{ entry.description }}
-{% endfor %}{% endif %}{% assign loreItems = lorebookEntries | where: 'type', 'item' %}{% if loreItems.size > 0 %}
+{% endfor %}{% endif %}{% assign loreItems = retrievalResult.lorebookEntries | where: 'type', 'item' %}{% if loreItems.size > 0 %}
 • Items:
 {% for entry in loreItems %}  - {{ entry.name }}: {{ entry.description }}
-{% endfor %}{% endif %}{% assign loreFactions = lorebookEntries | where: 'type', 'faction' %}{% if loreFactions.size > 0 %}
+{% endfor %}{% endif %}{% assign loreFactions = retrievalResult.lorebookEntries | where: 'type', 'faction' %}{% if loreFactions.size > 0 %}
 • Factions:
 {% for entry in loreFactions %}  - {{ entry.name }}: {{ entry.description }}
-{% endfor %}{% endif %}{% assign loreConcepts = lorebookEntries | where: 'type', 'concept' %}{% if loreConcepts.size > 0 %}
+{% endfor %}{% endif %}{% assign loreConcepts = retrievalResult.lorebookEntries | where: 'type', 'concept' %}{% if loreConcepts.size > 0 %}
 • Lore:
 {% for entry in loreConcepts %}  - {{ entry.name }}: {{ entry.description }}
-{% endfor %}{% endif %}{% assign loreEvents = lorebookEntries | where: 'type', 'event' %}{% if loreEvents.size > 0 %}
+{% endfor %}{% endif %}{% assign loreEvents = retrievalResult.lorebookEntries | where: 'type', 'event' %}{% if loreEvents.size > 0 %}
 • Events:
 {% for entry in loreEvents %}  - {{ entry.name }}: {{ entry.description }}
-{% endfor %}{% endif %}{% endif %}{% if agenticReasoning %}
+{% endfor %}{% endif %}{% endif %}{% if retrievalResult.agenticRetrieval.agenticReasoning %}
 
 [AGENT CONTEXT]
 {{ agenticReasoning }}
-{% endif %}{% if agenticChapterSummary %}
+{% endif %}{% if retrievalResult.agenticRetrieval.agenticChapterSummary %}
 
 ## Past Story Context
 {{ agenticChapterSummary }}
-{% endif %}{% if agenticSelectedEntries.size > 0 %}
-{% for entry in agenticSelectedEntries %}
+{% endif %}{% if retrievalResult.agenticRetrieval.agenticSelectedEntries.size > 0 %}
+{% for entry in retrievalResult.agenticRetrieval.agenticSelectedEntries %}
 ## {{ entry.name }} ({{ entry.type }})
 {{ entry.description }}
-{% endfor %}{% endif %}{% if chapters.size > 0 or timelineFill.size > 0 %}
+{% endfor %}{% endif %}{% if chapters.size > 0 or retrievalResult.timelineFillResult.responses.timelineFill.size > 0 %}
 
 <story_history>
 ## Previous Chapters
@@ -720,11 +721,11 @@ The following chapters have occurred earlier in the story. Use them for continui
 *{{ stripped_metadata }}*
 {%- endif %}
 {% endfor %}
-{%- if timelineFill.size > 0 %}
+{%- if retrievalResult.timelineFillResult.responses.timelineFill.size > 0 %}
 ## Retrieved Context
 The following information was retrieved from past chapters and is relevant to the current scene:
 
-{% for item in timelineFill %}{% assign chapCount = item.chapterNumbers.size %}{% if chapCount == 1 %}**Chapter {{ item.chapterNumbers[0] }}**{% else %}**Chapters {{ item.chapterNumbers | join: ', ' }}**{% endif %}
+{% for item in retrievalResult.timelineFillResult.responses.timelineFill %}{% assign chapCount = item.chapterNumbers.size %}{% if chapCount == 1 %}**Chapter {{ item.chapterNumbers[0] }}**{% else %}**Chapters {{ item.chapterNumbers | join: ', ' }}**{% endif %}
 Q: {{ item.query }}
 A: {{ item.answer }}
 {% endfor %}{% endif %}</story_history>{% endif %}{% if styleReview.phrases.size > 0 %}

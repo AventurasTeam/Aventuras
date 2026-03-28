@@ -61,14 +61,14 @@ export class StoryRetryStore {
       })
 
       // Determine entries to delete (those added since the backup)
-      const entriesToDelete = this.story.entry.entries.filter(
+      const entriesToDelete = this.story.entry.rawEntries.filter(
         (e) => e.position >= backup.entryCountBeforeAction,
       )
       const entryIdsToDelete = entriesToDelete.map((e) => e.id)
 
       log('Restoring from retry backup...', {
         entriesCount: backup.entries.length,
-        currentEntriesCount: this.story.entry.entries.length,
+        currentEntriesCount: this.story.entry.rawEntries.length,
         entriesToDelete: entryIdsToDelete.length,
         embeddedImagesCount: backup.embeddedImages.length,
       })
@@ -113,7 +113,7 @@ export class StoryRetryStore {
       await this.story.time.restoreTimeTrackerSnapshot(backup.timeTracker)
 
       log('Retry backup restored', {
-        entries: this.story.entry.entries.length,
+        entries: this.story.entry.rawEntries.length,
         characters: this.story.character.characters.length,
         locations: this.story.location.locations.length,
         embeddedImages: backup.embeddedImages.length,

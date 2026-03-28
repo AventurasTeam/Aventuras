@@ -19,7 +19,7 @@ export class StoryCheckpointStore {
   async createCheckpoint(name: string): Promise<Checkpoint> {
     if (!this.story.id) throw new Error('No story loaded')
 
-    const lastEntry = this.story.entry.entries[this.story.entry.entries.length - 1]
+    const lastEntry = this.story.entry.rawEntries[this.story.entry.rawEntries.length - 1]
     if (!lastEntry) throw new Error('No entries to checkpoint')
 
     const checkpoint: Checkpoint = {
@@ -28,8 +28,8 @@ export class StoryCheckpointStore {
       name,
       lastEntryId: lastEntry.id,
       lastEntryPreview: lastEntry.content.substring(0, 100),
-      entryCount: this.story.entry.entries.length,
-      entriesSnapshot: [...this.story.entry.entries],
+      entryCount: this.story.entry.rawEntries.length,
+      entriesSnapshot: [...this.story.entry.rawEntries],
       charactersSnapshot: [...this.story.character.characters],
       locationsSnapshot: [...this.story.location.locations],
       itemsSnapshot: [...this.story.item.items],

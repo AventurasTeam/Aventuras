@@ -11,21 +11,11 @@ import { generateStructured } from '../sdk/generate'
  * Prompt generation flows through ContextBuilder + Liquid templates.
  */
 
-import type {
-  StoryEntry,
-  StoryMode,
-  Character,
-  Location,
-  Item,
-  StoryBeat,
-  TimeTracker,
-} from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { database } from '$lib/services/database'
 import { story } from '$lib/stores/story/index.svelte'
 import { createLogger } from '$lib/log'
-import { stripPicTags } from '$lib/utils/inlineImageParser'
 import {
   classificationResultSchema,
   clampNumber,
@@ -33,24 +23,8 @@ import {
 } from '../sdk/schemas/classifier'
 import { buildExtendedClassificationSchema } from '../sdk/schemas/runtime-variables'
 import type { RuntimeVariable } from '$lib/services/packs/types'
-import { mapCharacters, mapBeats, mapChatEntries } from '$lib/services/context/classifierMapper'
 
 const log = createLogger('Classifier')
-
-/**
- * Context for classification.
- */
-export interface ClassificationContext {
-  storyId: string
-  mode: StoryMode
-  genre: string | null
-  narrativeResponse: string
-  userAction: string
-  existingCharacters: Character[]
-  existingLocations: Location[]
-  existingItems: Item[]
-  existingStoryBeats: StoryBeat[]
-}
 
 const EMPTY_CLASSIFICATION_RESULT: ClassificationResult = {
   entryUpdates: {
@@ -74,16 +48,13 @@ const EMPTY_CLASSIFICATION_RESULT: ClassificationResult = {
  * Service that classifies narrative responses to extract world state changes.
  */
 export class ClassifierService extends BaseAIService {
-  private chatHistoryTruncation: number
-
-  constructor(serviceId: string, chatHistoryTruncation: number = 100) {
+  constructor(serviceId: string) {
     super(serviceId)
-    this.chatHistoryTruncation = chatHistoryTruncation
   }
 
   /**
    * Zero-arg classify() — reads all context from storyContext singleton.
-   * This is the primary method used by the generation pipeline.
+   * Stores mapped data in generationContext, uses promptContext for template rendering.
    */
   async classify(): Promise<ClassificationResult> {
     if (!story.isLoaded) {
@@ -91,52 +62,10 @@ export class ClassifierService extends BaseAIService {
       return { ...EMPTY_CLASSIFICATION_RESULT }
     }
 
-    const context: ClassificationContext = {
-      storyId: story.id!,
-      mode: story.mode,
-      genre: story.genre,
-      narrativeResponse: story.generationContext.narrativeResult?.content ?? '',
-      userAction: story.generationContext.userAction?.content ?? '',
-      existingCharacters: story.character.characters,
-      existingLocations: story.location.locations,
-      existingItems: story.item.items,
-      existingStoryBeats: story.storyBeat.storyBeats,
-    }
-
-    // Filter out the current narration entry to avoid sending it twice
-    // (once in chatHistory, once as narrativeResponse in ClassificationContext).
-    // This mirrors the filtering previously done in ClassificationPhase.execute().
-    const narrationEntryId = story.generationContext.narrationEntryId
-    const visibleEntries = narrationEntryId
-      ? story.entry.visibleEntries.filter((e) => e.id !== narrationEntryId)
-      : story.entry.visibleEntries
-
-    return this._classifyInternal(context, visibleEntries, story.time.timeTracker)
-  }
-
-  /**
-   * Internal classify implementation with explicit parameters.
-   * Called by the zero-arg classify() and may also be called directly for non-pipeline use.
-   */
-  private async _classifyInternal(
-    context: ClassificationContext,
-    visibleEntries?: StoryEntry[],
-    currentStoryTime?: TimeTracker | null,
-  ): Promise<ClassificationResult> {
-    log('classify', {
-      narrativeLength: context.narrativeResponse.length,
-      existingCharacters: context.existingCharacters.length,
-      existingLocations: context.existingLocations.length,
-      existingItems: context.existingItems.length,
-      existingStoryBeats: context.existingStoryBeats.length,
-    })
-
-    const mode = context.mode ?? 'adventure'
-
     // Load runtime variable definitions for the story's pack (if any)
     let runtimeVars: RuntimeVariable[] = []
     let runtimeVarsByType: Record<string, RuntimeVariable[]> = {}
-    const packId = await database.getStoryPackId(context.storyId)
+    const packId = await database.getStoryPackId(story.id!)
     if (packId) {
       runtimeVars = await database.getRuntimeVariables(packId)
       runtimeVarsByType = this.groupByEntityType(runtimeVars)
@@ -148,50 +77,16 @@ export class ClassifierService extends BaseAIService {
         ? buildExtendedClassificationSchema(runtimeVarsByType)
         : classificationResultSchema
 
-    // Map domain entities to typed context arrays for template rendering
-    const characters = mapCharacters(context.existingCharacters)
-    const locations = context.existingLocations
-    const items = context.existingItems
-    const storyBeats = mapBeats(context.existingStoryBeats)
-
-    // Build chat history array if entries provided
-    const chatHistory = visibleEntries
-      ? mapChatEntries(visibleEntries.slice(-this.chatHistoryTruncation))
-      : []
-
-    // Build time info
-    const currentTimeInfo = currentStoryTime
-      ? `Current story time: Year ${currentStoryTime.years}, Day ${currentStoryTime.days}, ${String(currentStoryTime.hours).padStart(2, '0')}:${String(currentStoryTime.minutes).padStart(2, '0')}`
-      : ''
-
-    // Create ContextBuilder from story -- auto-populates mode, pov, tense, genre, etc.
-    const ctx = await ContextBuilder.forStory(context.storyId)
-
-    // Add all runtime variables explicitly via ctx.add()
-    ctx.add({
-      genre: context.genre ? `Genre: ${context.genre}` : '',
-      mode,
-      entityCounts: `${context.existingCharacters.length} characters, ${context.existingLocations.length} locations, ${context.existingItems.length} items`,
-      currentTimeInfo,
-      chatHistory,
-      inputLabel: mode === 'creative-writing' ? 'Author Direction' : 'Player Action',
-      userAction: stripPicTags(context.userAction),
-      narrativeResponse: stripPicTags(context.narrativeResponse),
-      characters,
-      locations,
-      items,
-      storyBeats,
-      storyBeatTypes: 'milestone, quest, revelation, event, plot_point',
-      itemLocationOptions: 'inventory, worn, ground, or specific location name',
-      defaultItemLocation: 'inventory',
-      sceneLocationDesc: 'Name of current location if identifiable, null otherwise',
+    log('classify', {
+      narrativeLength: (story.generationContext.narrativeResult?.content ?? '').length,
+      existingCharacters: story.character.characters.length,
+      existingLocations: story.location.locations.length,
+      existingItems: story.item.items.length,
+      existingStoryBeats: story.storyBeat.storyBeats.length,
     })
 
-    if (runtimeVars.length > 0) {
-      ctx.add({ runtimeVariables: runtimeVarsByType })
-    }
-
-    // Render through the classifier template
+    const ctx = new ContextBuilder()
+    ctx.add(story.generationContext.promptContext)
     const { system, user: prompt } = await ctx.render('classifier')
 
     try {

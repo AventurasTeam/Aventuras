@@ -57,13 +57,13 @@
 
     if (currentStoryId !== lastStoryId) {
       lastStoryId = currentStoryId
-      anchorToBottom(story.entry.entries.length)
+      anchorToBottom(story.entry.rawEntries.length)
     }
   })
 
   // Compute which entries to render
   const displayedEntries = $derived.by(() => {
-    const entries = story.entry.entries
+    const entries = story.entry.rawEntries
     const total = entries.length
     const start = Math.max(0, Math.min(windowStart, total))
     const end = Math.min(total, Math.max(windowEnd, start))
@@ -106,7 +106,7 @@
 
   // Load later entries below, then trim the top if it's safely off-screen.
   async function showMoreBelow() {
-    const total = story.entry.entries.length
+    const total = story.entry.rawEntries.length
 
     // Phase 1: expand window downward (no scroll compensation needed — adding below doesn't shift content)
     windowEnd = Math.min(total, windowEnd + LOAD_MORE_BATCH)
@@ -146,7 +146,7 @@
   }
 
   function scrollToBottom() {
-    anchorToBottom(story.entry.entries.length)
+    anchorToBottom(story.entry.rawEntries.length)
     requestAnimationFrame(() => {
       performScroll(storyContainer?.scrollHeight ?? 0)
     })
@@ -155,7 +155,7 @@
   async function scrollToTop() {
     ui.setScrollBreak(true)
     suppressScrollHandler = true
-    anchorToTop(story.entry.entries.length)
+    anchorToTop(story.entry.rawEntries.length)
     await tick()
     performScroll(0)
     requestAnimationFrame(() => {
@@ -201,7 +201,7 @@
   // Auto-scroll to bottom when new entries are added or streaming content changes
   $effect(() => {
     // Track primary scroll-inducing changes
-    const currentCount = story.entry.entries.length
+    const currentCount = story.entry.rawEntries.length
     const _ = innerHeight
     const __ = containerHeight
 
@@ -212,7 +212,7 @@
     // Detect if we should scroll:
     // 1. We are NOT user-scrolled-up (pinned mode)
     // 2. OR on user action send message/retry
-    const lastEntry = story.entry.entries[story.entry.entries.length - 1]
+    const lastEntry = story.entry.rawEntries[story.entry.rawEntries.length - 1]
     const shouldScroll =
       settings.uiSettings.autoScroll &&
       (!ui.userScrolledUp ||
@@ -271,7 +271,7 @@
     onscroll={handleScroll}
   >
     <div class="mx-auto max-w-3xl space-y-2.5 sm:space-y-3" bind:clientHeight={innerHeight}>
-      {#if story.entry.entries.length === 0 && !ui.isStreaming}
+      {#if story.entry.rawEntries.length === 0 && !ui.isStreaming}
         <EmptyState
           icon={BookOpen}
           title="Your adventure begins here..."
@@ -344,7 +344,7 @@
     </div>
 
     <!-- Scroll navigation buttons (floating at bottom of scroll container) -->
-    {#if story.entry.entries.length > 0}
+    {#if story.entry.rawEntries.length > 0}
       {@const buttonClasses = 'h-8 w-8 rounded-full shadow-lg disabled:opacity-50 sm:h-9 sm:w-9'}
       {@const iconClasses = 'h-4 w-4 sm:h-5 sm:w-5'}
 

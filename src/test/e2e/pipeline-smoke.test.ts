@@ -50,7 +50,7 @@ import { createAutoTracer } from './utils/TestTracer'
 
 function getStoreState() {
   return {
-    entries: structuredClone(story.entry.entries),
+    entries: structuredClone(story.entry.rawEntries),
     characters: structuredClone(story.character.characters),
     locations: structuredClone(story.location.locations),
     items: structuredClone(story.item.items),

@@ -892,7 +892,7 @@ export class StoryClassification {
 
         await database.updateStoryEntry(entryId, { worldStateDelta: delta })
         // Update in-memory entry
-        this.story.entry.entries = this.story.entry.entries.map((e) =>
+        this.story.entry.rawEntries = this.story.entry.rawEntries.map((e) =>
           e.id === entryId ? { ...e, worldStateDelta: delta } : e,
         )
 

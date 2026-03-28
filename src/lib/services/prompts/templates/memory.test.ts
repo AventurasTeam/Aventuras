@@ -6,7 +6,6 @@ import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
 
 const chapterAnalysisTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'chapter-analysis')!
 const chapterSummarizationTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'chapter-summarization')!
-const retrievalDecisionTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'retrieval-decision')!
 const loreManagementTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'lore-management')!
 const agenticRetrievalTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'agentic-retrieval')!
 const interactiveLorebookTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'interactive-lorebook')!
@@ -143,68 +142,6 @@ describe('chapter-summarization template', () => {
 
   it('content renders without error (static)', () => {
     const result = templateEngine.render(chapterSummarizationTemplate.content, {})
-    expect(result).not.toBeNull()
-    expect(result!.length).toBeGreaterThan(0)
-  })
-})
-
-// ===== retrieval-decision =====
-
-describe('retrieval-decision template', () => {
-  it('renders entry type and content from recentEntries array', () => {
-    const result = templateEngine.render(retrievalDecisionTemplate.userContent!, {
-      userInput: 'What happened before?',
-      recentEntries: [
-        { type: 'narration', content: 'The shadows gathered.' },
-        { type: 'user_action', content: 'I draw my sword.' },
-      ],
-      chapters: [],
-      maxChaptersPerRetrieval: 3,
-    })
-    expect(result).toContain('narration')
-    expect(result).toContain('The shadows gathered.')
-    expect(result).toContain('user_action')
-    expect(result).toContain('I draw my sword.')
-  })
-
-  it('renders chapters with number and summary', () => {
-    const result = templateEngine.render(retrievalDecisionTemplate.userContent!, {
-      userInput: 'Tell me about the forest.',
-      recentEntries: [],
-      chapters: [
-        { number: 1, summary: 'The forest was explored.' },
-        { number: 2, summary: 'A beast was found.' },
-      ],
-      maxChaptersPerRetrieval: 3,
-    })
-    expect(result).toContain('Chapter 1:')
-    expect(result).toContain('The forest was explored.')
-    expect(result).toContain('Chapter 2:')
-    expect(result).toContain('A beast was found.')
-  })
-
-  it('renders without crash when recentEntries is empty', () => {
-    const result = templateEngine.render(retrievalDecisionTemplate.userContent!, {
-      userInput: 'Nothing.',
-      recentEntries: [],
-      chapters: [],
-      maxChaptersPerRetrieval: 3,
-    })
-    expect(result).not.toBeNull()
-  })
-
-  it('does not contain [object Object]', () => {
-    const result = templateEngine.render(retrievalDecisionTemplate.userContent!, {
-      userInput: 'Input.',
-      recentEntries: [{ type: 'narration', content: 'Text.' }],
-      chapters: [{ number: 1, summary: 'Summary.' }],
-      maxChaptersPerRetrieval: 3,
-    })
-    expect(result).not.toContain('[object Object]')
-  })
-
-  it('content renders without error (static)', () => {
-    const result = templateEngine.render(retrievalDecisionTemplate.content, {})
     expect(result).not.toBeNull()
     expect(result!.length).toBeGreaterThan(0)
   })

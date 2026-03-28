@@ -19,7 +19,8 @@ These should read like instructions an author gives to guide the next part of th
 
 ## Recent Story Content
 """
-{% for entry in storyEntries %}{%- if entry.type == 'user_action' %}
+{%- assign recentEntries = storyEntriesVisible | slice: -5, 5 -%}
+{% for entry in recentEntries %}{%- if entry.type == 'user_action' %}
 [DIRECTION] {{ entry.content }}
 {%- else %}
 [NARRATIVE] {{ entry.content }}
@@ -27,9 +28,25 @@ These should read like instructions an author gives to guide the next part of th
 """
 
 ## Active Story Threads
-{{ activeThreads }}
+{%- assign pendingQuests = storyBeats | where: "status", "pending" -%}
+{%- assign activeThreads = storyBeats | where: "status", "active" -%}
+{%- assign filteredQuests = pendingQuests | concat: activeThreads -%}
+{%- if filteredQuests.size > 0 -%}
+  {%- for q in filteredQuests -%}
+    {%- if q.description -%}
+      {%- assign quest = "• " | append: q.title | append: ": " | append: q.description -%}
+    {%- else -%}
+      {%- assign quest = "• " | append: q.title -%}
+    {%- endif -%}
+    {{ quest }}
+  {%- endfor -%}
+{%- else -%}
+None
+{%- endif -%}
 
-{{ genre }}{% if lorebookEntries.size > 0 %}
+## Genre: {{ genre }}
+{%- assign lorebookEntries = retrievalResult.lorebookEntries | slice: 0, userSettings.lorebookConfig.maxForSuggestions -%}
+{% if lorebookEntries.size > 0 %}
 ## Lorebook/World Elements
 The following characters, locations, and concepts exist in this world and can be incorporated into suggestions:
 {% for entry in lorebookEntries %}

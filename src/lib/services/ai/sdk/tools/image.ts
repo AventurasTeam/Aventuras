@@ -182,13 +182,8 @@ export function createImageTools(context: ImageToolContext) {
 
           const ctx = new ContextBuilder()
           ctx.add({
-            mode: 'adventure',
-            pov: 'second',
-            tense: 'present',
-            protagonistName: '',
             imageStylePrompt: stylePrompt,
             visualDescriptors: character.visualDescriptors,
-            characterName: character.name,
           })
           const { system: portraitPrompt } = await ctx.render('image-portrait-generation')
 

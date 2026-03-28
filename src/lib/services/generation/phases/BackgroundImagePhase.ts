@@ -30,17 +30,12 @@ export interface BackgroundImageResult {
 export class BackgroundImagePhase {
   /** Execute the image phase - yields events and returns result */
   async *execute(): AsyncGenerator<GenerationEvent, BackgroundImageResult> {
-    // === CONCURRENT PHASE SAFETY: Snapshot ALL singleton inputs before first yield ===
-    const storyId = story.id ?? ''
-    const storyEntries = story.entry.visibleEntries
     const abortSignal = story.generationContext.abortSignal ?? undefined
     const imageSettings: BackgroundImageSettings = {
       backgroundImagesEnabled: story.settings.backgroundImagesEnabled ?? false,
       imageGenerationMode: story.settings.imageGenerationMode ?? 'agentic',
     }
-    // === End snapshot block ===
 
-    console.log('BackgroundImagePhase.execute')
     yield { type: 'phase_start', phase: 'image' } satisfies PhaseStartEvent
 
     // Check if background image generation is disabled
@@ -73,7 +68,7 @@ export class BackgroundImagePhase {
     }
 
     try {
-      await aiService.analyzeBackgroundChangeAndGenerateImage(storyId, storyEntries)
+      await aiService.analyzeBackgroundChangeAndGenerateImage()
 
       const result: BackgroundImageResult = { started: true }
       story.generationContext.backgroundResult = result

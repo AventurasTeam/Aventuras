@@ -1,12 +1,11 @@
 import { emitBackgroundImageAnalysisFailed } from '$lib/services/events'
 import { ContextBuilder } from '$lib/services/context'
 import { settings } from '$lib/stores/settings.svelte'
-import type { StoryEntry } from '$lib/types'
 import { createLogger } from '$lib/log'
 import { backgroundImageAnalysisResultSchema, type BackgroundImageAnalysisResult } from '../sdk'
 import { BaseAIService } from '../BaseAIService'
 import { generateImage } from './providers/registry'
-import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
+import { story } from '$lib/stores/story/index.svelte'
 
 const log = createLogger('BackgroundImageService')
 
@@ -21,14 +20,10 @@ export class BackgroundImageService extends BaseAIService {
     this.imageSettings = imageSettings
   }
 
-  async analyzeResponsesForBackgroundImage(
-    visibleEntries: StoryEntry[],
-  ): Promise<BackgroundImageAnalysisResult> {
-    log('analyzeResponsesForBackgroundImage called', {
-      visibleEntriesCount: visibleEntries.length,
-    })
-
-    const narrationEntries = visibleEntries.filter((e) => e.type === 'narration')
+  async analyzeResponsesForBackgroundImage(): Promise<BackgroundImageAnalysisResult> {
+    log('analyzeResponsesForBackgroundImage called')
+    const storyEntries = story.entry.visibleEntries
+    const narrationEntries = storyEntries.filter((e) => e.type === 'narration')
 
     if (narrationEntries.length === 0) {
       log('No entries, skipping')
@@ -38,11 +33,8 @@ export class BackgroundImageService extends BaseAIService {
       }
     }
 
-    const mappedEntries = mapStoryEntriesToContext(narrationEntries, { stripPicTags: false })
-    const lastNarrationIndex = mappedEntries.length - 1
-
     const ctx = new ContextBuilder()
-    ctx.add({ narrationEntries: mappedEntries, lastNarrationIndex })
+    ctx.add(story.generationContext.promptContext)
     const { system, user: prompt } = await ctx.render('background-image-prompt-analysis')
 
     try {

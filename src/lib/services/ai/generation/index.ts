@@ -22,7 +22,7 @@ export { NarrativeService, type NarrativeOptions } from './NarrativeService'
 export { mapChaptersToContext, formatStoryTime } from '$lib/services/context/chapterMapper'
 
 // Classification
-export { ClassifierService, type ClassificationContext } from './ClassifierService'
+export { ClassifierService } from './ClassifierService'
 // Classifier output types - import from schema
 export type {
   ClassificationResult,

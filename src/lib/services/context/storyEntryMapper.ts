@@ -35,12 +35,11 @@ export function mapStoryEntriesToContext(
   options: StoryEntryMapOptions,
 ): ContextStoryEntry[] {
   const narrative = entries.filter(
-    (e): e is StoryEntry & { type: 'user_action' | 'narration' } =>
-      e.type === 'user_action' || e.type === 'narration',
+    (e): e is ContextStoryEntry => e.type === 'user_action' || e.type === 'narration',
   )
   const sliced = options.maxEntries ? narrative.slice(-options.maxEntries) : narrative
   return sliced.map((e) => ({
-    type: e.type,
+    ...e,
     content: options.stripPicTags ? stripPics(e.content) : e.content,
   }))
 }

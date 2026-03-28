@@ -40,13 +40,8 @@ async function buildPortraitPrompt(
 ): Promise<string> {
   const ctx = new ContextBuilder()
   ctx.add({
-    mode: 'adventure',
-    pov: 'second',
-    tense: 'present',
-    protagonistName: '',
     imageStylePrompt: stylePrompt,
     visualDescriptors,
-    characterName,
   })
   const { system } = await ctx.render('image-portrait-generation')
   return system

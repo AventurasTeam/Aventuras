@@ -9,33 +9,54 @@ const actionChoicesPromptTemplate: PromptTemplate = {
   userContent: `Based on the current story moment, generate 3-4 RPG-style action choices.
 
 ## CRITICAL: Who is the Player?
-The USER is playing as {{ protagonistName }}{{ protagonistDescription }}. This is the USER'S persona/character - it IS the user, not a separate NPC.
+The USER is playing as {{ protagonistName }}({{ protagonistDescription }}). This is the USER'S persona/character - it IS the user, not a separate NPC.
 When generating action choices, you are suggesting what THE USER might want to do next as their character {{ protagonistName }}.
 Do NOT generate actions for {{ protagonistName }} as if they were a separate character - these are suggestions for the user's next move.
 
 ## Current Narrative
 """
-{{ narrativeResponse }}
+{{ lastNarrativeEntry.content }}
 """
 
 ## Recent Context
-{% for entry in storyEntries %}{%- if entry.type == 'user_action' %}
+{%- assign recentEntries = storyEntriesVisible | slice: -5, 5 -%}
+{% for entry in recentEntries %}{%- if entry.type == 'user_action' %}
 [ACTION] {{ entry.content }}
 {%- else %}
 [NARRATIVE] {{ entry.content }}
 {%- endif %}{% endfor %}
 
 ## Current Scene
+{%- assign currentLocation = locations | where: "current" -%}
 Location: {{ currentLocation }}
+{%- assign npcsPresent = c | reject: "relationship", "self" | where: "status", "active" | map: "name" | join: ", " | default: "None" -%}
 NPCs Present: {{ npcsPresent }}
+{%- assign inventory = items | where: "equipped" | map: "name" | join: "," | default: "None" -%}
 {{ protagonistName }}'s Inventory: {{ inventory }}
-Active Quests: {{ activeQuests }}
+{%- assign pendingQuests = storyBeats | where: "status", "pending" -%}
+{%- assign activeQuests = storyBeats | where: "status", "active" -%}
+{%- assign filteredQuests = pendingQuests | concat: activeQuests -%}
+Active Quests: {%- if filteredQuests.size > 0 -%}
+  {%- for q in filteredQuests -%}
+    {%- if q.description -%}
+      {%- assign quest = "• " | append: q.title | append: ": " | append: q.description -%}
+    {%- else -%}
+      {%- assign quest = "• " | append: q.title -%}
+    {%- endif -%}
+    {{ quest }}
+  {%- endfor -%}
+{%- else -%}
+None
+{%- endif -%}
+{%- assign lorebookEntries = retrievalResult.lorebookEntries | slice: 0, userSettings.lorebookConfig.maxForActionChoices -%}
 {% if lorebookEntries.size > 0 %}
 ## World Context
 {% for entry in lorebookEntries %}
 - {{ entry.name }} ({{ entry.type }}): {{ entry.description }}
 {% endfor %}
-{% endif %}{% if styleReview.phrases.size > 0 %}
+{% endif -%}
+
+{%- if styleReview.phrases.size > 0 %}
 ## Style Notes
 Avoid overusing:
 {% for phrase in styleReview.phrases %}
@@ -51,9 +72,16 @@ Generate 3-4 distinct action choices for THE USER (playing as {{ protagonistName
 
 Avoid choices like "Wait and see" or "Do nothing" - each option should lead to meaningful story progression.
 
+{%- if pov == "first" -%}
+  {%- assign povInstruction = "Use first person (I, me, my) for all action choices." -%}
+{%- elsif pov == "second" -%}
+  {%- assign povInstruction = "Use second person (you, your) for all action choices." -%}
+{%- else -%}
+  {%- assign povInstruction = "Use third person for all action choices." -%}
+{%- endif -%}
 {{ povInstruction }}
 
-{{ lengthInstruction }}
+Keep each choice concise but specific - typically 5-15 words.
 
 ## Choice Types
 - action: Physical actions (fight, take, use, give, etc.)

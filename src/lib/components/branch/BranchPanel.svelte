@@ -160,7 +160,7 @@
       story.id,
       story.branch.currentBranchId,
       story.branch.branches.length,
-      story.entry.entries.length,
+      story.entry.rawEntries.length,
     ]
     refreshEntryCounts()
   })

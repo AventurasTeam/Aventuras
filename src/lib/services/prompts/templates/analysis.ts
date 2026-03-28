@@ -130,23 +130,32 @@ Determine how much narrative time elapsed during this passage. Consider what act
   userContent: `Analyze this narrative passage and extract world state changes.
 
 ## Context
-{{ genre }}
+Genre: {{ genre }}
 Mode: {{ mode }}
-Already tracking: {{ entityCounts }}
-{{ currentTimeInfo }}
-{%- if chatHistory.size > 0 %}
+Already tracking: {{ characters.size }} characters, {{ locations.size }} locations, {{ items.size }} items
+{% if timeTracker %}Current story time: Year {{ timeTracker.years }}, Day {{ timeTracker.days }}, {{ timeTracker.hours }}:{{ timeTracker.minutes }}{% endif %}
+
+{%- if narrationEntryId -%}
+  {%- assign visibleEntries = storyEntriesVisible | reject: "id", narrationEntryId -%}
+{%- else -%}
+  {%- assign visibleEntries = storyEntriesVisible -%}
+{%- endif -%}
+
+{%- assign truncationOffset = 0 | minus: userSettings.classifier.maxEntries -%}
+{%- assign recentEntries = visibleEntries | slice: truncationOffset, userSettings.classifier.maxEntries -%}
+{%- if recentEntries.size > 0 %}
 
 ## Recent Chat History
-{% for entry in chatHistory %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.timeStart != '' %} (at {{ entry.timeStart }}){% endif %} {{ entry.content }}
+{% for entry in recentEntries %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.timeStart != '' %} (at {{ entry.timeStart }}){% endif %} {{ entry.content }}
 
 {% endfor %}
 {%- endif %}
-## {{ inputLabel }}
-"{{ userAction }}"
+## {% if mode == 'creative-writing' %}Author Direction{% else %}Player Action{% endif %}
+"{{ userInput }}"
 
 ## The Narrative Response (to classify)
 """
-{{ narrativeResponse }}
+{{ narrativeResult.content }}
 """
 
 ## Already Known Entities (check before adding duplicates)
@@ -163,9 +172,9 @@ Items: {% if items.size == 0 %}(none){% else %}{% for item in items %}{{ item.na
 - "{{ beat.title }}" [{{ beat.status }}]{% if beat.description != '' %}: {{ beat.description }}{% endif %}
 {% endif %}{% endfor %}{% endif %}
 
-{% if runtimeVariables %}
+{% if packVariables.runtimeVariables %}
 ## Custom Variables to Track
-{% for pair in runtimeVariables %}
+{% for pair in packVariables.runtimeVariables %}
 {%- assign label = '' %}
 {%- if pair[0] == 'character' %}{%- assign label = 'character updates/new characters' %}
 {%- elsif pair[0] == 'location' %}{%- assign label = 'location updates/new locations' %}
@@ -222,7 +231,8 @@ Identify overused phrases, sentence patterns, structural repetition, and stylist
 - For structural issues, describe the pattern clearly (e.g., "5 of 7 passages begin with ambient sound descriptions")
 - Provide context-appropriate alternatives
 - Focus on actionable improvements`,
-  userContent: `Analyze these {{ passageCount }} passages for repetitive phrases, structural patterns, and style issues. Each passage is a separate AI-generated narrative response.
+  userContent: `{%- assign passages = storyEntriesVisible | where: "type", "narration" -%}
+Analyze these {{ passages | size }} passages for repetitive phrases, structural patterns, and style issues. Each passage is a separate AI-generated narrative response.
 
 {% for passage in passages %}--- Passage {{ forloop.index }} ---
 {{ passage.content }}
@@ -266,10 +276,12 @@ Consider:
 - Locations that might be mentioned
 - Items that could be relevant to the action
 - Story threads that connect to this moment
-
+0
 Only include entries that have a clear connection to the current scene or user's intended action. Do not include entries just because they exist in the world.`,
   userContent: `# Current Scene
-{% for entry in recentEntries %}{{ entry.content }}{% unless forloop.last %}
+{% assign neg_max = 0 | minus: userSettings.retrieval.maxStoryEntries -%}
+{%- assign recentStoryEntries = storyEntries | slice: neg_max, userSettings.retrieval.maxStoryEntries -%}
+{%- for entry in recentStoryEntries %}{{ entry.content }}{% unless forloop.last %}
 
 {% endunless %}{% endfor %}
 
@@ -277,7 +289,8 @@ Only include entries that have a clear connection to the current scene or user's
 "{{ userInput }}"
 
 # Available Entries
-{% for entry in availableEntries %}{{ forloop.index0 }}. [{{ entry.type }}] {{ entry.name }}{% if entry.description != '' %}: {{ entry.description }}{% endif %}
+{%- assign _entries = loreEntriesForTier3 | default: worldStateForTier3 -%}
+{% for entry in _entries %}{{ forloop.index0 }}. [{{ entry.type }}] {{ entry.name }}{% if entry.description != '' %}: {{ entry.description | truncate: 100 }}{% endif %}
 {% endfor %}
 Which entries (by number) are relevant to the current scene and user input?`,
 }

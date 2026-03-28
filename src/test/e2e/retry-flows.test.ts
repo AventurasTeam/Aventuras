@@ -36,6 +36,7 @@ vi.mock('$lib/services/database', () => ({
 // ---- Imports (after mocks) ----
 
 import { story } from '$lib/stores/story/index.svelte'
+import { ui } from '$lib/stores/ui.svelte'
 import { loadTestStory, loadTestSettings, clearTestStory } from './utils/storeHydration'
 import { buildStory, buildEntry } from '$test/factories'
 import { FetchInterceptor, respondWithStream, respondWithJSON } from './utils/FetchInterceptor'
@@ -54,7 +55,7 @@ import { createAutoTracer } from './utils/TestTracer'
 
 function getStoreState() {
   return {
-    entries: structuredClone(story.entry.entries),
+    entries: structuredClone(story.entry.rawEntries),
     characters: structuredClone(story.character.characters),
     locations: structuredClone(story.location.locations),
     items: structuredClone(story.item.items),
@@ -76,45 +77,7 @@ function getStoreState() {
 
 function buildMockCallbacks(): ActionInputCallbacks {
   return {
-    startStreaming: vi.fn(),
-    endStreaming: vi.fn(),
-    appendStreamContent: vi.fn(),
-    appendReasoningContent: vi.fn(),
-    setGenerating: vi.fn(),
-    clearGenerationError: vi.fn(),
-    setGenerationError: vi.fn(),
-    setGenerationStatus: vi.fn(),
-    setSuggestionsLoading: vi.fn(),
-    setActionChoicesLoading: vi.fn(),
-    setSuggestions: vi.fn(),
-    setActionChoices: vi.fn(),
-    clearSuggestions: vi.fn(),
-    clearActionChoices: vi.fn(),
-    createRetryBackup: vi.fn(),
-    clearRetryBackup: vi.fn(),
-    getRetryBackup: vi.fn().mockReturnValue(null),
-    isRetryingLastMessage: vi.fn().mockReturnValue(false),
-    setRetryingLastMessage: vi.fn(),
-    updateActivationData: vi.fn(),
-    getActivationTracker: vi.fn().mockReturnValue(null),
-    restoreActivationData: vi.fn(),
-    clearActivationData: vi.fn(),
-    setLastLorebookRetrieval: vi.fn(),
-    getLastStyleReview: vi.fn().mockReturnValue(null),
-    emitNarrativeResponse: vi.fn(),
-    emitUserInput: vi.fn(),
-    emitResponseStreaming: vi.fn(),
-    emitSuggestionsReady: vi.fn(),
-    emitTTSQueued: vi.fn(),
     sendGenerationNotification: vi.fn(),
-    wasBackgroundedDuringGeneration: vi.fn().mockReturnValue(false),
-    isAppBackgrounded: vi.fn().mockReturnValue(false),
-    resetBackgroundedFlag: vi.fn(),
-    startGenerationService: vi.fn(),
-    stopGenerationService: vi.fn(),
-    shouldUseBackgroundService: vi.fn().mockReturnValue(false),
-    resetScrollBreak: vi.fn(),
-    getLastGenerationError: vi.fn().mockReturnValue(null),
   }
 }
 
@@ -222,12 +185,12 @@ describe('Retry Flows — ActionInputController E2E', () => {
   // --------------------------------------------------------------------------
 
   describe('handleRetry', () => {
-    it('no-op when getLastGenerationError returns null', async ({ task }) => {
+    it('no-op when lastGenerationError is null', async ({ task }) => {
       setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
-      // getLastGenerationError returns null by default
       const controller = new ActionInputController(callbacks)
+      const clearGenerationErrorSpy = vi.spyOn(ui, 'clearGenerationError')
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
@@ -236,7 +199,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
 
       // No narrative request should have been made
       expect(interceptor.getRequests('narrative')).toHaveLength(0)
-      expect(callbacks.clearGenerationError).not.toHaveBeenCalled()
+      expect(clearGenerationErrorSpy).not.toHaveBeenCalled()
 
       tracer.finalize()
       ;(task.meta as any).traceData = tracer.export()
@@ -252,23 +215,26 @@ describe('Retry Flows — ActionInputController E2E', () => {
       const errorEntry = await story.entry.addEntry('system', 'Generation failed: some AI error')
 
       // Verify both entries exist
-      expect(story.entry.entries.find((e) => e.id === userActionEntry.id)).toBeDefined()
-      expect(story.entry.entries.find((e) => e.id === errorEntry.id)).toBeDefined()
+      expect(story.entry.rawEntries.find((e) => e.id === userActionEntry.id)).toBeDefined()
+      expect(story.entry.rawEntries.find((e) => e.id === errorEntry.id)).toBeDefined()
 
       // Set up working handlers for the retry
       interceptor.on('narrative', respondWithStream('You move forward carefully.'))
       interceptor.on('classifier', respondWithJSON(defaultClassifierResult))
 
-      const callbacks = buildMockCallbacks()
-      // Make getLastGenerationError return an error pointing to the entries we set up
-      callbacks.getLastGenerationError = vi.fn().mockReturnValue({
+      // Set the generation error in ui store
+      ui.setGenerationError({
         message: 'some AI error',
         errorEntryId: errorEntry.id,
         userActionEntryId: userActionEntry.id,
         timestamp: Date.now(),
       })
 
+      const callbacks = buildMockCallbacks()
       const controller = new ActionInputController(callbacks)
+      const clearGenerationErrorSpy = vi.spyOn(ui, 'clearGenerationError')
+      const endStreamingSpy = vi.spyOn(ui, 'endStreaming')
+      const setGeneratingSpy = vi.spyOn(ui, 'setGenerating')
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
@@ -276,20 +242,20 @@ describe('Retry Flows — ActionInputController E2E', () => {
       await controller.handleRetry()
 
       // clearGenerationError was called
-      expect(callbacks.clearGenerationError).toHaveBeenCalled()
+      expect(clearGenerationErrorSpy).toHaveBeenCalled()
 
       // A new narrative request was made
       expect(interceptor.getRequests('narrative').length).toBeGreaterThan(0)
 
       // endStreaming and setGenerating(false) are always called (in finally block)
-      expect(callbacks.endStreaming).toHaveBeenCalled()
-      expect(callbacks.setGenerating).toHaveBeenCalledWith(false)
+      expect(endStreamingSpy).toHaveBeenCalled()
+      expect(setGeneratingSpy).toHaveBeenCalledWith(false)
 
-      // emitNarrativeResponse was called (generation succeeded)
-      expect(callbacks.emitNarrativeResponse).toHaveBeenCalledWith(
-        expect.any(String),
-        'You move forward carefully.',
+      // Narration entry was added
+      const narrationEntry = story.entry.rawEntries.find(
+        (e) => e.type === 'narration' && e.content === 'You move forward carefully.',
       )
+      expect(narrationEntry).toBeDefined()
 
       tracer.finalize()
       ;(task.meta as any).traceData = tracer.export()
@@ -298,16 +264,17 @@ describe('Retry Flows — ActionInputController E2E', () => {
     it('clears error and no-ops when userActionEntry not found', async ({ task }) => {
       setupAdventureStory()
 
-      const callbacks = buildMockCallbacks()
       // Error references a non-existent user action entry ID
-      callbacks.getLastGenerationError = vi.fn().mockReturnValue({
+      ui.setGenerationError({
         message: 'some AI error',
         errorEntryId: 'fake-error-entry-id',
         userActionEntryId: 'non-existent-user-action-id',
         timestamp: Date.now(),
       })
 
+      const callbacks = buildMockCallbacks()
       const controller = new ActionInputController(callbacks)
+      const clearGenerationErrorSpy = vi.spyOn(ui, 'clearGenerationError')
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
@@ -315,7 +282,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       await controller.handleRetry()
 
       // clearGenerationError is called even though entry not found
-      expect(callbacks.clearGenerationError).toHaveBeenCalled()
+      expect(clearGenerationErrorSpy).toHaveBeenCalled()
 
       // No narrative request should be made since user action wasn't found
       expect(interceptor.getRequests('narrative')).toHaveLength(0)
@@ -342,15 +309,17 @@ describe('Retry Flows — ActionInputController E2E', () => {
       })
       interceptor.on('classifier', respondWithJSON(defaultClassifierResult))
 
-      const callbacks = buildMockCallbacks()
-      callbacks.getLastGenerationError = vi.fn().mockReturnValue({
+      // Set the generation error in ui store
+      ui.setGenerationError({
         message: 'previous error',
         errorEntryId: fakeErrorEntry.id,
         userActionEntryId: userActionEntry.id,
         timestamp: Date.now(),
       })
 
+      const callbacks = buildMockCallbacks()
       const controller = new ActionInputController(callbacks)
+      const setGenerationErrorSpy = vi.spyOn(ui, 'setGenerationError')
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
@@ -358,7 +327,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       await controller.handleRetry()
 
       // setGenerationError was called because the retry also failed
-      expect(callbacks.setGenerationError).toHaveBeenCalledWith(
+      expect(setGenerationErrorSpy).toHaveBeenCalledWith(
         expect.objectContaining({ message: expect.any(String) }),
       )
 
@@ -375,9 +344,9 @@ describe('Retry Flows — ActionInputController E2E', () => {
     it('returns empty object when isRetryingLastMessage is true', async ({ task }) => {
       setupAdventureStory()
 
-      const callbacks = buildMockCallbacks()
-      callbacks.isRetryingLastMessage = vi.fn().mockReturnValue(true)
+      ui.setRetryingLastMessage(true)
 
+      const callbacks = buildMockCallbacks()
       const controller = new ActionInputController(callbacks)
 
       const tracer = createAutoTracer(getStoreState)
@@ -386,6 +355,8 @@ describe('Retry Flows — ActionInputController E2E', () => {
       const result = await controller.handleStopGeneration()
 
       expect(result).toEqual({})
+
+      ui.setRetryingLastMessage(false) // cleanup
 
       tracer.finalize()
       ;(task.meta as any).traceData = tracer.export()
@@ -395,9 +366,9 @@ describe('Retry Flows — ActionInputController E2E', () => {
       setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
-      callbacks.getRetryBackup = vi.fn().mockReturnValue(null)
-
       const controller = new ActionInputController(callbacks)
+      const setGeneratingSpy = vi.spyOn(ui, 'setGenerating')
+      const endStreamingSpy = vi.spyOn(ui, 'endStreaming')
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
@@ -406,9 +377,9 @@ describe('Retry Flows — ActionInputController E2E', () => {
 
       expect(result).toEqual({})
       // setGenerating(false) is called
-      expect(callbacks.setGenerating).toHaveBeenCalledWith(false)
+      expect(setGeneratingSpy).toHaveBeenCalledWith(false)
       // endStreaming is called
-      expect(callbacks.endStreaming).toHaveBeenCalled()
+      expect(endStreamingSpy).toHaveBeenCalled()
 
       tracer.finalize()
       ;(task.meta as any).traceData = tracer.export()
@@ -422,7 +393,8 @@ describe('Retry Flows — ActionInputController E2E', () => {
       const callbacks = buildMockCallbacks()
       // Backup for a different story
       const backup = buildRetryBackup('different-story-id')
-      callbacks.getRetryBackup = vi.fn().mockReturnValue(backup)
+      vi.spyOn(ui, 'retryBackup', 'get').mockReturnValue(backup as any)
+      const clearRetryBackupSpy = vi.spyOn(ui, 'clearRetryBackup')
 
       const controller = new ActionInputController(callbacks)
 
@@ -433,7 +405,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
 
       expect(result).toEqual({})
       // clearRetryBackup should be called to discard the stale backup
-      expect(callbacks.clearRetryBackup).toHaveBeenCalled()
+      expect(clearRetryBackupSpy).toHaveBeenCalled()
 
       tracer.finalize()
       ;(task.meta as any).traceData = tracer.export()
@@ -449,10 +421,13 @@ describe('Retry Flows — ActionInputController E2E', () => {
         actionType: 'do',
         wasRawActionChoice: false,
         hasFullState: true,
-        entries: [...story.entry.entries],
-        entryCountBeforeAction: story.entry.entries.length,
+        entries: [...story.entry.rawEntries],
+        entryCountBeforeAction: story.entry.rawEntries.length,
       })
-      callbacks.getRetryBackup = vi.fn().mockReturnValue(backup)
+      vi.spyOn(ui, 'retryBackup', 'get').mockReturnValue(backup as any)
+      const setGeneratingSpy = vi.spyOn(ui, 'setGenerating')
+      const endStreamingSpy = vi.spyOn(ui, 'endStreaming')
+      const clearRetryBackupSpy = vi.spyOn(ui, 'clearRetryBackup')
 
       // Set up the abort controller state as if generation is in progress
       const controller = new ActionInputController(callbacks)
@@ -466,11 +441,11 @@ describe('Retry Flows — ActionInputController E2E', () => {
       const result = await controller.handleStopGeneration()
 
       // Should call abort
-      expect(callbacks.setGenerating).toHaveBeenCalledWith(false)
-      expect(callbacks.endStreaming).toHaveBeenCalled()
+      expect(setGeneratingSpy).toHaveBeenCalledWith(false)
+      expect(endStreamingSpy).toHaveBeenCalled()
 
       // clearRetryBackup(true) is called at end of stop flow
-      expect(callbacks.clearRetryBackup).toHaveBeenCalledWith(true)
+      expect(clearRetryBackupSpy).toHaveBeenCalledWith(true)
 
       // Restored values should reflect the backup
       expect(result.restoredRawInput).toBe('run away')
@@ -487,10 +462,10 @@ describe('Retry Flows — ActionInputController E2E', () => {
       const callbacks = buildMockCallbacks()
       const backup = buildRetryBackup(story.id!, {
         hasFullState: true,
-        entries: [...story.entry.entries],
-        entryCountBeforeAction: story.entry.entries.length,
+        entries: [...story.entry.rawEntries],
+        entryCountBeforeAction: story.entry.rawEntries.length,
       })
-      callbacks.getRetryBackup = vi.fn().mockReturnValue(backup)
+      vi.spyOn(ui, 'retryBackup', 'get').mockReturnValue(backup as any)
 
       const controller = new ActionInputController(callbacks)
 
@@ -517,12 +492,10 @@ describe('Retry Flows — ActionInputController E2E', () => {
   // --------------------------------------------------------------------------
 
   describe('handleRetryLastMessage', () => {
-    it('no-op when getRetryBackup returns null', async ({ task }) => {
+    it('no-op when retryBackup is null', async ({ task }) => {
       setupAdventureStory()
 
       const callbacks = buildMockCallbacks()
-      callbacks.getRetryBackup = vi.fn().mockReturnValue(null)
-
       const controller = new ActionInputController(callbacks)
 
       const tracer = createAutoTracer(getStoreState)
@@ -544,7 +517,8 @@ describe('Retry Flows — ActionInputController E2E', () => {
 
       const callbacks = buildMockCallbacks()
       const backup = buildRetryBackup('different-story-id')
-      callbacks.getRetryBackup = vi.fn().mockReturnValue(backup)
+      vi.spyOn(ui, 'retryBackup', 'get').mockReturnValue(backup as any)
+      const clearRetryBackupSpy = vi.spyOn(ui, 'clearRetryBackup')
 
       const controller = new ActionInputController(callbacks)
 
@@ -554,7 +528,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       await controller.handleRetryLastMessage()
 
       // clearRetryBackup(false) is called (not clearing from DB)
-      expect(callbacks.clearRetryBackup).toHaveBeenCalledWith(false)
+      expect(clearRetryBackupSpy).toHaveBeenCalledWith(false)
 
       // No narrative request should be made
       expect(interceptor.getRequests('narrative')).toHaveLength(0)
@@ -572,7 +546,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
       // 0: narration (initial)
       // 1: user_action
       // 2: narration (the one we want to retry)
-      const initialNarration = story.entry.entries[0]
+      const initialNarration = story.entry.rawEntries[0]
       await story.entry.addEntry('user_action', 'I walk forward')
       await story.entry.addEntry('narration', 'You walk forward.')
 
@@ -598,7 +572,9 @@ describe('Retry Flows — ActionInputController E2E', () => {
         embeddedImages: [],
         entryCountBeforeAction: 1,
       })
-      callbacks.getRetryBackup = vi.fn().mockReturnValue(backup)
+      vi.spyOn(ui, 'retryBackup', 'get').mockReturnValue(backup as any)
+      const setRetryingLastMessageSpy = vi.spyOn(ui, 'setRetryingLastMessage')
+      const clearGenerationErrorSpy = vi.spyOn(ui, 'clearGenerationError')
 
       const controller = new ActionInputController(callbacks)
 
@@ -610,21 +586,18 @@ describe('Retry Flows — ActionInputController E2E', () => {
       // A new narrative request was made (regeneration happened)
       expect(interceptor.getRequests('narrative').length).toBeGreaterThan(0)
 
-      // emitUserInput was called with the original user action content
-      expect(callbacks.emitUserInput).toHaveBeenCalledWith('I walk forward', 'do')
-
       // setRetryingLastMessage was called with true then false
-      expect(callbacks.setRetryingLastMessage).toHaveBeenCalledWith(true)
-      expect(callbacks.setRetryingLastMessage).toHaveBeenCalledWith(false)
+      expect(setRetryingLastMessageSpy).toHaveBeenCalledWith(true)
+      expect(setRetryingLastMessageSpy).toHaveBeenCalledWith(false)
 
       // clearGenerationError was called as part of cleanup
-      expect(callbacks.clearGenerationError).toHaveBeenCalled()
+      expect(clearGenerationErrorSpy).toHaveBeenCalled()
 
-      // Generation succeeded
-      expect(callbacks.emitNarrativeResponse).toHaveBeenCalledWith(
-        expect.any(String),
-        'You stride confidently forward.',
+      // Narration entry was added
+      const narrationEntry = story.entry.rawEntries.find(
+        (e) => e.type === 'narration' && e.content === 'You stride confidently forward.',
       )
+      expect(narrationEntry).toBeDefined()
 
       tracer.finalize()
       ;(task.meta as any).traceData = tracer.export()
@@ -633,7 +606,7 @@ describe('Retry Flows — ActionInputController E2E', () => {
     it('sets retryingLastMessage to false even if generation throws', async ({ task }) => {
       const testStory = setupAdventureStory()
 
-      const initialNarration = story.entry.entries[0]
+      const initialNarration = story.entry.rawEntries[0]
       await story.entry.addEntry('user_action', 'I fail')
 
       // Register a handler that throws a network-level error so the pipeline fails fast
@@ -642,7 +615,6 @@ describe('Retry Flows — ActionInputController E2E', () => {
       })
       interceptor.on('classifier', respondWithJSON(defaultClassifierResult))
 
-      const callbacks = buildMockCallbacks()
       const backup = buildRetryBackup(testStory.id, {
         userActionContent: 'I fail',
         rawInput: 'fail',
@@ -657,9 +629,10 @@ describe('Retry Flows — ActionInputController E2E', () => {
         embeddedImages: [],
         entryCountBeforeAction: 1,
       })
-      callbacks.getRetryBackup = vi.fn().mockReturnValue(backup)
+      vi.spyOn(ui, 'retryBackup', 'get').mockReturnValue(backup as any)
+      const setRetryingLastMessageSpy = vi.spyOn(ui, 'setRetryingLastMessage')
 
-      const controller = new ActionInputController(callbacks)
+      const controller = new ActionInputController()
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
@@ -667,28 +640,25 @@ describe('Retry Flows — ActionInputController E2E', () => {
       await controller.handleRetryLastMessage()
 
       // setRetryingLastMessage(false) must be called in finally even on error
-      expect(callbacks.setRetryingLastMessage).toHaveBeenCalledWith(false)
+      expect(setRetryingLastMessageSpy).toHaveBeenCalledWith(false)
 
       tracer.finalize()
       ;(task.meta as any).traceData = tracer.export()
     })
 
-    it('consults getRetryBackup callback, not store directly', async ({ task }) => {
+    it('reads retryBackup from ui store directly', async ({ task }) => {
       setupAdventureStory()
 
-      const callbacks = buildMockCallbacks()
-      const getRetryBackupSpy = vi.fn().mockReturnValue(null)
-      callbacks.getRetryBackup = getRetryBackupSpy
-
-      const controller = new ActionInputController(callbacks)
+      const controller = new ActionInputController()
 
       const tracer = createAutoTracer(getStoreState)
       interceptor.connectTracer(tracer)
 
+      // ui.retryBackup is null by default, so this should no-op
       await controller.handleRetryLastMessage()
 
-      // Should have called getRetryBackup at least once
-      expect(getRetryBackupSpy).toHaveBeenCalled()
+      // No narrative request should be made
+      expect(interceptor.getRequests('narrative')).toHaveLength(0)
 
       tracer.finalize()
       ;(task.meta as any).traceData = tracer.export()

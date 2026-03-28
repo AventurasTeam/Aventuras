@@ -419,13 +419,8 @@
       // Build the portrait generation prompt using ContextBuilder
       const ctx = new ContextBuilder()
       ctx.add({
-        mode: 'adventure',
-        pov: 'second',
-        tense: 'present',
-        protagonistName: '',
         imageStylePrompt: stylePrompt,
         visualDescriptors: stringToDescriptors(editVisualDescriptors),
-        characterName: editName || character.name,
       })
       const { system: portraitPrompt } = await ctx.render('image-portrait-generation')
 

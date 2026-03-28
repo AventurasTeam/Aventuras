@@ -261,7 +261,7 @@ export async function convertCardToScenario(
   genre: Genre,
 ): Promise<CardImportResult> {
   const service = new CharacterCardImportService()
-  return service.convertCardToScenario(jsonString, mode, genre)
+  return service.convertCardToScenario(jsonString, genre)
 }
 
 export interface SanitizedCharacter {

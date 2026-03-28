@@ -13,6 +13,8 @@ import type {
   Tense,
 } from '$lib/types'
 import type { ChapterAnalysis, ChapterSummaryResult } from '$lib/services/ai/sdk/schemas/memory'
+import { aiService } from '../ai'
+import { story } from '$lib/stores/story/index.svelte'
 
 function log(...args: unknown[]) {
   console.log('[ChapterService]', ...args)
@@ -39,29 +41,6 @@ export interface ChapterCheckInput {
   tense: Tense
 }
 
-export interface ChapterServiceDependencies {
-  analyzeForChapter: (
-    entries: StoryEntry[],
-    lastChapterEndIndex: number,
-    config: MemoryConfig,
-    tokensOutsideBuffer: number,
-    mode?: StoryMode,
-    pov?: POV,
-    tense?: Tense,
-  ) => Promise<ChapterAnalysisResult>
-
-  summarizeChapter: (
-    entries: StoryEntry[],
-    previousChapters?: Chapter[],
-    mode?: StoryMode,
-    pov?: POV,
-    tense?: Tense,
-  ) => Promise<ChapterSummaryData>
-
-  getNextChapterNumber: () => Promise<number>
-  addChapter: (chapter: Chapter) => Promise<void>
-}
-
 export interface ChapterCreationResult {
   created: boolean
   chapter?: Chapter
@@ -69,21 +48,18 @@ export interface ChapterCreationResult {
 }
 
 export class ChapterService {
-  private deps: ChapterServiceDependencies
-
-  constructor(deps: ChapterServiceDependencies) {
-    this.deps = deps
-  }
-
-  async checkAndCreateChapter(input: ChapterCheckInput): Promise<ChapterCreationResult> {
-    const { entries, tokensOutsideBuffer, memoryConfig, currentBranchChapters, mode, pov, tense } =
-      input
+  async checkAndCreateChapter(): Promise<ChapterCreationResult> {
+    const entries = story.entry.rawEntries
+    const memoryConfig = story.settings.memoryConfig
+    const tokensOutsideBuffer = story.generationContext.tokensOutsideBuffer
+    const tokensSinceLastChapter = story.generationContext.tokensSinceLastChapter
+    const messagesSinceLastChapter = story.chapter.messagesSinceLastChapter
 
     log('checkAndCreateChapter', {
-      tokensSinceLastChapter: input.tokensSinceLastChapter,
+      tokensSinceLastChapter: tokensSinceLastChapter,
       tokensOutsideBuffer,
       tokenThreshold: memoryConfig.tokenThreshold,
-      messagesOutsideBuffer: input.messagesSinceLastChapter - memoryConfig.chapterBuffer,
+      messagesOutsideBuffer: messagesSinceLastChapter - memoryConfig.chapterBuffer,
     })
 
     if (tokensOutsideBuffer === 0) {
@@ -102,8 +78,9 @@ export class ChapterService {
     // Chapter endpoints must stay outside the protected tail buffer.
     const protectedCount = Math.max(0, memoryConfig.chapterBuffer)
     const maxSelectableEndIndex = Math.max(0, entries.length - protectedCount)
-    const startIndex = input.lastChapterEndIndex
+    const startIndex = story.chapter.lastChapterEndIndex
     const analysisEntries = entries.slice(startIndex, maxSelectableEndIndex)
+    story.generationContext.chapterAnalysis.analysisEntries = analysisEntries
     if (maxSelectableEndIndex <= startIndex) {
       log('No non-protected entries available for chapter end, skipping', {
         startIndex,
@@ -113,29 +90,25 @@ export class ChapterService {
       return { created: false, loreManagementTriggered: false }
     }
 
-    const analysis = await this.deps.analyzeForChapter(
-      analysisEntries,
-      input.lastChapterEndIndex,
-      memoryConfig,
-      tokensOutsideBuffer,
-      mode,
-      pov,
-      tense,
-    )
+    await aiService.analyzeForChapter()
+    const analysis = story.generationContext.chapterAnalysis
+    if (!analysis.result) {
+      throw new Error('Chapter analysis failed')
+    }
 
-    if (!analysis.shouldCreateChapter) {
+    if (!analysis.result.shouldCreateChapter) {
       log('No chapter needed yet')
       return { created: false, loreManagementTriggered: false }
     }
 
     const clampedEndIndex = Math.min(
-      Math.max(analysis.optimalEndIndex, startIndex + 1),
+      Math.max(analysis.result.optimalEndIndex, startIndex + 1),
       maxSelectableEndIndex,
     )
 
-    if (clampedEndIndex !== analysis.optimalEndIndex) {
+    if (clampedEndIndex !== analysis.result.optimalEndIndex) {
       log('Adjusted chapter endpoint to non-protected range', {
-        requestedEndIndex: analysis.optimalEndIndex,
+        requestedEndIndex: analysis.result.optimalEndIndex,
         clampedEndIndex,
         startIndex,
         maxSelectableEndIndex,
@@ -143,27 +116,20 @@ export class ChapterService {
     }
 
     log('Creating new chapter', {
-      optimalEndIndex: analysis.optimalEndIndex,
+      optimalEndIndex: analysis.result.optimalEndIndex,
       finalEndIndex: clampedEndIndex,
       maxSelectableEndIndex,
     })
 
     const chapterEntries = entries.slice(startIndex, clampedEndIndex)
-
+    story.generationContext.chapterAnalysis.chapterEntries = chapterEntries
     if (chapterEntries.length === 0) {
       log('No entries for chapter')
       return { created: false, loreManagementTriggered: false }
     }
 
-    const previousChapters = [...currentBranchChapters].sort((a, b) => a.number - b.number)
-    const summary = await this.deps.summarizeChapter(
-      chapterEntries,
-      previousChapters,
-      mode,
-      pov,
-      tense,
-    )
-    const chapterNumber = await this.deps.getNextChapterNumber()
+    const summary = await aiService.summarizeChapter()
+    const chapterNumber = await story.chapter.getNextChapterNumber()
 
     const firstEntry = chapterEntries[0]
     const lastEntry = chapterEntries[chapterEntries.length - 1]
@@ -172,9 +138,9 @@ export class ChapterService {
 
     const chapter: Chapter = {
       id: crypto.randomUUID(),
-      storyId: input.storyId,
+      storyId: story.id!,
       number: chapterNumber,
-      title: analysis.suggestedTitle ?? summary.title ?? null,
+      title: analysis.result.suggestedTitle ?? summary.title ?? null,
       startEntryId: chapterEntries[0].id,
       endEntryId: chapterEntries[chapterEntries.length - 1].id,
       entryCount: chapterEntries.length,
@@ -186,11 +152,11 @@ export class ChapterService {
       locations: summary.locations,
       plotThreads: summary.plotThreads,
       emotionalTone: summary.emotionalTone ?? null,
-      branchId: input.currentBranchId,
+      branchId: story.branch.currentBranchId,
       createdAt: Date.now(),
     }
 
-    await this.deps.addChapter(chapter)
+    await story.chapter.addChapter(chapter)
     log('Chapter created', { number: chapterNumber, title: chapter.title })
 
     return { created: true, chapter, loreManagementTriggered: true }

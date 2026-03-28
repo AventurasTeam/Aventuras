@@ -55,6 +55,8 @@ export interface RelevantEntry {
   metadata?: Record<string, any>
 }
 
+export type Tier3Candidate = Omit<RelevantEntry, 'metadata' | 'tier' | 'priority'>
+
 export interface ContextResult {
   tier1: RelevantEntry[]
   tier2: RelevantEntry[]
@@ -80,48 +82,25 @@ export class EntryInjector extends BaseAIService {
    * Zero-arg overload reads all data from the storyContext singleton.
    * NOTE: Tier 3 is currently disabled pending SDK migration.
    */
-  async buildContext(): Promise<ContextResult>
-  async buildContext(
-    worldState: WorldState,
-    userInput: string,
-    recentEntries: StoryEntry[],
-  ): Promise<ContextResult>
-  async buildContext(
-    worldState?: WorldState,
-    userInput?: string,
-    recentEntries?: StoryEntry[],
-  ): Promise<ContextResult> {
-    if (worldState === undefined) {
-      // Zero-arg: read from singleton — storyContext is the generation singleton
-      const ws: WorldState = {
-        characters: story.character.characters,
-        locations: story.location.locations,
-        items: story.item.items,
-        storyBeats: story.storyBeat.storyBeats,
-        currentLocation: story.location.currentLocation,
-        chapters: story.chapter.currentBranchChapters,
-      }
-      const entries = story.entry.visibleEntries
-      const lastEntry = entries[entries.length - 1]
-      const input = lastEntry?.content ?? ''
-      return this.buildContext(ws, input, entries)
-    }
-    return this._buildContextInternal(worldState, userInput!, recentEntries!)
-  }
 
-  private async _buildContextInternal(
-    worldState: WorldState,
-    userInput: string,
-    recentEntries: StoryEntry[],
-  ): Promise<ContextResult> {
+  async buildContext(): Promise<ContextResult> {
+    const worldState: WorldState = {
+      characters: story.character.characters,
+      locations: story.location.locations,
+      items: story.item.items,
+      storyBeats: story.storyBeat.storyBeats,
+      currentLocation: story.location.currentLocation,
+      chapters: story.chapter.currentBranchChapters,
+    }
     log('buildContext called', {
       characters: worldState.characters.length,
       locations: worldState.locations.length,
       items: worldState.items.length,
       storyBeats: worldState.storyBeats.length,
-      userInputLength: userInput.length,
-      recentEntriesCount: recentEntries.length,
     })
+
+    const userInput = story.generationContext.promptContext.userInput
+    const recentEntries = story.entry.visibleEntries.slice(-this.config.recentEntriesCount)
 
     // Tier 1: Always inject - state-based entries
     const tier1 = this.getTier1Entries(worldState)
@@ -336,12 +315,7 @@ export class EntryInjector extends BaseAIService {
     excludeIds: Set<string>,
   ): Promise<RelevantEntry[]> {
     // Collect all remaining entries not in Tier 1 or 2
-    const candidates: {
-      type: RelevantEntry['type']
-      id: string
-      name: string
-      description: string | null
-    }[] = []
+    const candidates: Tier3Candidate[] = []
 
     for (const char of worldState.characters) {
       if (!excludeIds.has(char.id)) {
@@ -388,22 +362,10 @@ export class EntryInjector extends BaseAIService {
       return []
     }
 
-    // Format entries for the prompt
-    const entrySummaries = candidates
-      .map(
-        (e, i) =>
-          `${i}. [${e.type}] ${e.name}${e.description ? `: ${e.description.slice(0, 100)}` : ''}`,
-      )
-      .join('\n')
-
-    // Build recent content for context
-    const recentContent = recentEntries
-      .slice(-this.config.recentEntriesCount)
-      .map((e) => e.content)
-      .join('\n\n')
+    story.generationContext.worldStateForTier3 = candidates
 
     const ctx = new ContextPipeline()
-    ctx.add({ recentContent, userInput, entrySummaries })
+    ctx.add(story.generationContext)
     const { system, user: prompt } = await ctx.render('tier3-entry-selection')
 
     try {

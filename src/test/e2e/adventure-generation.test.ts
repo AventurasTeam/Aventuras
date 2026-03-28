@@ -65,7 +65,7 @@ import { createAutoTracer } from './utils/TestTracer'
 
 function getStoreState() {
   return {
-    entries: structuredClone(story.entry.entries),
+    entries: structuredClone(story.entry.rawEntries),
     characters: structuredClone(story.character.characters),
     locations: structuredClone(story.location.locations),
     items: structuredClone(story.item.items),
@@ -87,45 +87,7 @@ function getStoreState() {
 
 function buildMockCallbacks(): ActionInputCallbacks {
   return {
-    startStreaming: vi.fn(),
-    endStreaming: vi.fn(),
-    appendStreamContent: vi.fn(),
-    appendReasoningContent: vi.fn(),
-    setGenerating: vi.fn(),
-    clearGenerationError: vi.fn(),
-    setGenerationError: vi.fn(),
-    setGenerationStatus: vi.fn(),
-    setSuggestionsLoading: vi.fn(),
-    setActionChoicesLoading: vi.fn(),
-    setSuggestions: vi.fn(),
-    setActionChoices: vi.fn(),
-    clearSuggestions: vi.fn(),
-    clearActionChoices: vi.fn(),
-    createRetryBackup: vi.fn(),
-    clearRetryBackup: vi.fn(),
-    getRetryBackup: vi.fn().mockReturnValue(null),
-    isRetryingLastMessage: vi.fn().mockReturnValue(false),
-    setRetryingLastMessage: vi.fn(),
-    updateActivationData: vi.fn(),
-    getActivationTracker: vi.fn().mockReturnValue(null),
-    restoreActivationData: vi.fn(),
-    clearActivationData: vi.fn(),
-    setLastLorebookRetrieval: vi.fn(),
-    getLastStyleReview: vi.fn().mockReturnValue(null),
-    emitNarrativeResponse: vi.fn(),
-    emitUserInput: vi.fn(),
-    emitResponseStreaming: vi.fn(),
-    emitSuggestionsReady: vi.fn(),
-    emitTTSQueued: vi.fn(),
     sendGenerationNotification: vi.fn(),
-    wasBackgroundedDuringGeneration: vi.fn().mockReturnValue(false),
-    isAppBackgrounded: vi.fn().mockReturnValue(false),
-    resetBackgroundedFlag: vi.fn(),
-    startGenerationService: vi.fn(),
-    stopGenerationService: vi.fn(),
-    shouldUseBackgroundService: vi.fn().mockReturnValue(false),
-    resetScrollBreak: vi.fn(),
-    getLastGenerationError: vi.fn().mockReturnValue(null),
   }
 }
 
@@ -485,9 +447,14 @@ describe('Adventure Mode — ActionInputController E2E', () => {
     )
 
     const callbacks = buildMockCallbacks()
-    // Override getLastStyleReview to read live from ui store (default mock returns null)
-    callbacks.getLastStyleReview = () => ui.lastStyleReview
     const controller = new ActionInputController(callbacks)
+
+    // Spy on ui methods to verify lifecycle calls
+    const setGeneratingSpy = vi.spyOn(ui, 'setGenerating')
+    const startStreamingSpy = vi.spyOn(ui, 'startStreaming')
+    const endStreamingSpy = vi.spyOn(ui, 'endStreaming')
+    const setActionChoicesSpy = vi.spyOn(ui, 'setActionChoices')
+    const setSuggestionsSpy = vi.spyOn(ui, 'setSuggestions')
 
     const tracer = createAutoTracer(getStoreState)
     interceptor.connectTracer(tracer)
@@ -505,8 +472,6 @@ describe('Adventure Mode — ActionInputController E2E', () => {
 
     // ---- Assertions: Narrative phase ----
     expect(interceptor.getRequests('narrative').length).toBeGreaterThan(0)
-    expect(callbacks.appendStreamContent).toHaveBeenCalled()
-
     // Prompt contains world state
     expectPromptContains(interceptor, 'narrative', 'Seraphina')
     expectPromptContains(interceptor, 'narrative', 'Kael')
@@ -538,9 +503,8 @@ describe('Adventure Mode — ActionInputController E2E', () => {
     // Style review injected
     expectPromptContains(interceptor, 'narrative', 'passive constructions')
 
-    // Narrative response emitted and entry added
-    expect(callbacks.emitNarrativeResponse).toHaveBeenCalledWith(expect.any(String), narrativeText)
-    const narrationEntries = story.entry.entries.filter(
+    // Narrative response entry added
+    const narrationEntries = story.entry.rawEntries.filter(
       (e) => e.type === 'narration' && e.content === narrativeText,
     )
     expect(narrationEntries.length).toBe(1)
@@ -570,14 +534,14 @@ describe('Adventure Mode — ActionInputController E2E', () => {
 
     // ---- Assertions: Post-generation phase ----
     expect(interceptor.getRequests('action-choices').length).toBeGreaterThan(0)
-    expect(callbacks.setActionChoices).toHaveBeenCalled()
-    expect(callbacks.setSuggestions).not.toHaveBeenCalled()
+    expect(setActionChoicesSpy).toHaveBeenCalled()
+    expect(setSuggestionsSpy).not.toHaveBeenCalled()
 
     // ---- Assertions: Pipeline lifecycle ----
-    expect(callbacks.setGenerating).toHaveBeenCalledWith(true)
-    expect(callbacks.startStreaming).toHaveBeenCalled()
-    expect(callbacks.endStreaming).toHaveBeenCalled()
-    expect(callbacks.setGenerating).toHaveBeenCalledWith(false)
+    expect(setGeneratingSpy).toHaveBeenCalledWith(true)
+    expect(startStreamingSpy).toHaveBeenCalled()
+    expect(endStreamingSpy).toHaveBeenCalled()
+    expect(setGeneratingSpy).toHaveBeenCalledWith(false)
 
     tracer.finalize()
     ;(task.meta as any).traceData = tracer.export()
@@ -765,6 +729,7 @@ describe('Adventure Mode — ActionInputController E2E', () => {
 
     const callbacks = buildMockCallbacks()
     const controller = new ActionInputController(callbacks)
+    const setActionChoicesSpy = vi.spyOn(ui, 'setActionChoices')
 
     const tracer = createAutoTracer(getStoreState)
     interceptor.connectTracer(tracer)
@@ -772,7 +737,7 @@ describe('Adventure Mode — ActionInputController E2E', () => {
     await controller.generateResponse(userActionEntry.id, userActionEntry.content)
 
     expect(interceptor.getRequests('action-choices').length).toBe(0)
-    expect(callbacks.setActionChoices).not.toHaveBeenCalled()
+    expect(setActionChoicesSpy).not.toHaveBeenCalled()
 
     tracer.finalize()
     ;(task.meta as any).traceData = tracer.export()

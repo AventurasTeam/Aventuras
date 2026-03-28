@@ -11,11 +11,8 @@ import type {
   AbortedEvent,
   ErrorEvent,
 } from '../types'
-import { aiService, type ImageGenerationContext } from '$lib/services/ai'
-import type { Character } from '$lib/types'
-import type { ContextChatEntry } from '$lib/services/context/context-types'
+import { aiService } from '$lib/services/ai'
 import { story } from '$lib/stores/story/index.svelte'
-import { mapChatEntries } from '$lib/services/context/classifierMapper'
 
 /** Settings needed for image phase decision making */
 export interface ImageSettings {
@@ -39,32 +36,6 @@ export class ImagePhase {
       imageGenerationMode: story.settings.imageGenerationMode ?? 'agentic',
       referenceMode: story.settings.referenceMode ?? false,
     }
-
-    // Read all data from singleton
-    const storyId = story.id ?? ''
-    const entryId =
-      story.generationContext.narrationEntryId ?? story.generationContext.userAction?.entryId ?? ''
-    const narrativeContent = story.generationContext.narrativeResult?.content ?? ''
-    const userAction = story.generationContext.userAction?.content ?? ''
-    const abortSignal = story.generationContext.abortSignal ?? undefined
-
-    // Compute presentCharacters from classification result
-    const presentCharacterNames =
-      story.generationContext.classificationResult?.classificationResult?.scene
-        ?.presentCharacterNames ?? []
-    const presentCharacters: Character[] = story.character.characters.filter((c) =>
-      presentCharacterNames.includes(c.name),
-    )
-
-    const currentLocation = story.location.currentLocation?.name
-    const chatHistory: ContextChatEntry[] = mapChatEntries(
-      story.entry.visibleEntries.filter((e) => e.type === 'user_action' || e.type === 'narration'),
-      { truncate: false, stripPicTags: true },
-    )
-    const translatedNarrative =
-      story.generationContext.translationResult?.translatedContent ?? undefined
-    const translationLanguage =
-      story.generationContext.translationResult?.targetLanguage ?? undefined
 
     // Check if inline mode is enabled - inline images are processed during streaming, not here
     if (imageSettings.imageGenerationMode === 'inline') {
@@ -102,30 +73,16 @@ export class ImagePhase {
       return result
     }
 
-    if (abortSignal?.aborted) {
+    if (story.generationContext.abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'image' } satisfies AbortedEvent
       return { started: false, skippedReason: 'aborted' }
-    }
-
-    // Build the image generation context
-    const imageGenContext: ImageGenerationContext = {
-      storyId,
-      entryId,
-      narrativeResponse: narrativeContent,
-      userAction,
-      presentCharacters,
-      currentLocation,
-      chatHistory,
-      translatedNarrative,
-      translationLanguage,
-      referenceMode: imageSettings.referenceMode || false,
     }
 
     try {
       // Start image generation (runs in background via AIService)
       // Note: This is intentionally fire-and-forget within the pipeline
       // The AIService handles its own error logging
-      await aiService.generateImagesForNarrative(imageGenContext)
+      await aiService.generateImagesForNarrative()
 
       const result: ImageResult = { started: true }
       story.generationContext.imageResult = result

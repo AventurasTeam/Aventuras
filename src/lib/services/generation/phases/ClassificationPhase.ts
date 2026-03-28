@@ -31,7 +31,7 @@ export interface ClassificationPhaseResult {
  */
 export class ClassificationPhase {
   /** Execute the classification phase - yields events and returns result */
-  async *execute(): AsyncGenerator<GenerationEvent, ClassificationPhaseResult | null> {
+  async *execute(): AsyncGenerator<GenerationEvent, boolean> {
     // === CONCURRENT PHASE SAFETY: Snapshot singleton inputs before first yield ===
     const narrativeEntryId = story.generationContext.narrationEntryId ?? ''
     const abortSignal = story.generationContext.abortSignal ?? undefined
@@ -41,7 +41,7 @@ export class ClassificationPhase {
 
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'classification' } satisfies AbortedEvent
-      return null
+      return false
     }
 
     try {
@@ -50,7 +50,7 @@ export class ClassificationPhase {
 
       if (abortSignal?.aborted) {
         yield { type: 'aborted', phase: 'classification' } satisfies AbortedEvent
-        return null
+        return false
       }
 
       // Emit classification complete event
@@ -71,11 +71,11 @@ export class ClassificationPhase {
       } satisfies PhaseCompleteEvent
 
       story.generationContext.classificationResult = result
-      return result
+      return true
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         yield { type: 'aborted', phase: 'classification' } satisfies AbortedEvent
-        return null
+        return false
       }
 
       // Classification errors are non-fatal - world state just won't be updated
@@ -86,7 +86,7 @@ export class ClassificationPhase {
         fatal: false,
       } satisfies ErrorEvent
 
-      return null
+      return false
     }
   }
 }

@@ -11,7 +11,6 @@
 export {
   EntryRetrievalService,
   getEntryRetrievalConfigFromSettings,
-  getRelevantEntries,
   SimpleActivationTracker,
   STICKINESS_BY_TYPE,
   DEFAULT_ENTRY_RETRIEVAL_CONFIG,

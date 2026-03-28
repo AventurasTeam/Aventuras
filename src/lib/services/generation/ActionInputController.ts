@@ -10,8 +10,7 @@
  * - handleRetryLastMessage (retry with new generation)
  * - refreshSuggestions / regenerateActionsAfterDelete
  *
- * The component creates an instance with a callback interface for all UI interaction.
- * The controller reads directly from store singletons (story, settings) for state.
+ * Reads directly from store singletons (story, settings, ui) for state.
  */
 
 import { tick } from 'svelte'
@@ -20,7 +19,6 @@ import { settings } from '$lib/stores/settings.svelte'
 import { aiService, type ImageGenerationContext } from '$lib/services/ai'
 import { database } from '$lib/services/database'
 import { SimpleActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
-import { mapChatEntries } from '$lib/services/context/classifierMapper'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 import {
   GenerationPipeline,
@@ -30,10 +28,18 @@ import {
   handleEvent,
   SuggestionsRefreshService,
 } from '$lib/services/generation'
-import type { PipelineUICallbacks, PipelineEventState } from '$lib/services/generation'
+import type { PipelineEventState } from '$lib/services/generation'
 import { InlineImageTracker } from '$lib/services/ai/image'
-import { eventBus } from '$lib/services/events'
+import {
+  eventBus,
+  emitNarrativeResponse,
+  emitUserInput,
+  emitSuggestionsReady,
+  emitTTSQueued,
+} from '$lib/services/events'
 import type { ClassificationCompleteEvent } from '$lib/services/events'
+import { ui } from '$lib/stores/ui.svelte'
+import { isAndroid } from '$lib/utils/platform'
 
 function log(...args: any[]) {
   console.log('[ActionInput]', ...args)
@@ -55,78 +61,19 @@ export interface SubmitInput {
 }
 
 export interface ActionInputCallbacks {
-  // Streaming lifecycle
-  startStreaming: (visualProseMode: boolean, streamingEntryId: string) => void
-  endStreaming: () => void
-  appendStreamContent: (content: string) => void
-  appendReasoningContent: (content: string) => void
-
-  // Generation state
-  setGenerating: (generating: boolean) => void
-  clearGenerationError: () => void
-  setGenerationError: (error: any) => void
-  setGenerationStatus: (status: string) => void
-
-  // Suggestions/action choices
-  setSuggestionsLoading: (loading: boolean) => void
-  setActionChoicesLoading: (loading: boolean) => void
-  setSuggestions: (suggestions: any[], storyId: string) => void
-  setActionChoices: (choices: any[], storyId: string) => void
-  clearSuggestions: (storyId: string) => void
-  clearActionChoices: (storyId: string) => void
-
-  // Retry
-  createRetryBackup: (...args: any[]) => void
-  clearRetryBackup: (clearFromDb?: boolean) => void
-  getRetryBackup: () => any
-  isRetryingLastMessage: () => boolean
-  setRetryingLastMessage: (retrying: boolean) => void
-
-  // Activation data
-  updateActivationData: (tracker: any, storyId: string) => void
-  getActivationTracker: (position: number) => any
-  restoreActivationData: (data: any, position: number) => void
-  clearActivationData: () => void
-
-  // Lorebook
-  setLastLorebookRetrieval: (result: any | null) => void
-
-  // Style review
-  getLastStyleReview: () => any | null
-
-  // Events
-  emitNarrativeResponse: (entryId: string, content: string) => void
-  emitUserInput: (content: string, type: string) => void
-  emitResponseStreaming: (chunk: string, accumulated: string) => void
-  emitSuggestionsReady: (suggestions: any[]) => void
-  emitTTSQueued: (entryId: string, content: string) => void
-
-  // Platform
   sendGenerationNotification: (text: string, success: boolean) => void
-  wasBackgroundedDuringGeneration: () => boolean
-  isAppBackgrounded: () => boolean
-  resetBackgroundedFlag: () => void
-
-  // Android
-  startGenerationService: () => void
-  stopGenerationService: () => void
-  shouldUseBackgroundService: () => boolean
-
-  // Scroll
-  resetScrollBreak: () => void
-
-  // Error state
-  getLastGenerationError: () => any | null
 }
 
 // ============================================================================
 // Static helpers
 // ============================================================================
 
-export async function translateUserInput(
-  content: string,
-  translationSettings: typeof settings.translationSettings,
-): Promise<{ promptContent: string; originalInput: string | undefined }> {
+export async function translateUserInput(): Promise<{
+  promptContent: string
+  originalInput: string | undefined
+}> {
+  const translationSettings = settings.translationSettings
+  const content = story.generationContext.userActionOriginal!
   if (!TranslationService.shouldTranslateInput(translationSettings)) {
     return { promptContent: content, originalInput: undefined }
   }
@@ -135,7 +82,7 @@ export async function translateUserInput(
     log('Translating user input', {
       sourceLanguage: translationSettings.sourceLanguage,
     })
-    const result = await aiService.translateInput(content, translationSettings.sourceLanguage)
+    const result = await aiService.translateInput()
     log('Input translated', {
       originalLength: content.length,
       translatedLength: result.translatedContent.length,
@@ -147,32 +94,48 @@ export async function translateUserInput(
   }
 }
 
+const sendGenerationNotification = async (responseText: string, success: boolean) => {
+  try {
+    const { sendNotification, isPermissionGranted } =
+      await import('@tauri-apps/plugin-notification')
+    const permitted = await isPermissionGranted()
+    if (!permitted) return
+
+    if (success) {
+      const body =
+        settings.experimentalFeatures.notificationPreview && responseText.length > 0
+          ? responseText.slice(0, 120).replace(/[<>]/g, '') + (responseText.length > 120 ? '…' : '')
+          : 'Tap to return to your story.'
+      sendNotification({ title: 'Story generation complete', body })
+    } else {
+      sendNotification({
+        title: 'Story generation failed',
+        body: 'Tap to return and retry.',
+      })
+    }
+  } catch (e) {
+    console.warn('[ActionInput] Failed to send notification:', e)
+  }
+}
+
 // ============================================================================
 // Controller
 // ============================================================================
 
 export class ActionInputController {
-  private callbacks: ActionInputCallbacks
-
   // Internal state
   stopRequested = false
   activeAbortController: AbortController | null = null
   lastImageGenContext: ImageGenerationContext | null = null
   private currentActionType: ActionType = 'do'
 
-  constructor(callbacks: ActionInputCallbacks) {
-    this.callbacks = callbacks
-  }
-
   // --------------------------------------------------------------------------
   // Core Generation
   // --------------------------------------------------------------------------
 
-  async generateResponse(
-    userActionEntryId: string,
-    userActionContent: string,
-    options?: { countStyleReview?: boolean; styleReviewSource?: string },
-  ) {
+  async generateResponse(options?: { countStyleReview?: boolean; styleReviewSource?: string }) {
+    const userActionContent = story.generationContext.userAction?.content ?? ''
+    const userActionEntryId = story.generationContext.userAction?.entryId ?? ''
     const countStyleReview = options?.countStyleReview ?? true
     const styleReviewSource =
       options?.styleReviewSource ?? (countStyleReview ? 'new' : 'regenerate')
@@ -187,10 +150,10 @@ export class ActionInputController {
     const streamingEntryId = crypto.randomUUID()
     const narrationEntryId = crypto.randomUUID()
 
-    this.callbacks.setGenerating(true)
-    this.callbacks.clearGenerationError()
-    this.callbacks.clearActionChoices(story.id!)
-    this.callbacks.startStreaming(visualProseMode, streamingEntryId)
+    ui.setGenerating(true)
+    ui.clearGenerationError()
+    ui.clearActionChoices(story.id!)
+    ui.startStreaming(visualProseMode, streamingEntryId)
 
     const storyId = story.id!
 
@@ -204,33 +167,31 @@ export class ActionInputController {
     }
 
     // Android: start foreground service to keep process alive when backgrounded
-    const useBackgroundService = this.callbacks.shouldUseBackgroundService()
+    const useBackgroundService = isAndroid() && settings.experimentalFeatures.backgroundGeneration
     if (useBackgroundService) {
-      this.callbacks.startGenerationService()
+      try {
+        window.AndroidBridge?.startGenerationService()
+      } catch (e) {
+        console.warn('[ActionInput] Failed to start generation foreground service:', e)
+      }
     }
-    this.callbacks.resetBackgroundedFlag()
+    ui.resetBackgroundedFlag()
 
     try {
-      // Populate singleton for pipeline phases to read
-      story.generationContext.clearIntermediates()
-      story.generationContext.userAction = {
-        entryId: userActionEntryId,
-        content: userActionContent,
-        rawInput: userActionContent,
-      }
       story.generationContext.narrationEntryId = narrationEntryId
       story.generationContext.abortSignal = this.activeAbortController.signal
 
-      const storyPosition = story.entry.entries.length
-      const activationTracker = this.callbacks.getActivationTracker(
-        storyPosition,
-      ) as SimpleActivationTracker
+      const storyPosition = story.entry.rawEntries.length
+      const activationTracker = ui.getActivationTracker(storyPosition) as SimpleActivationTracker
 
       story.generationContext.rawInput = userActionContent
       story.generationContext.actionType = this.currentActionType ?? 'do'
       story.generationContext.wasRawActionChoice = false
-      story.generationContext.styleReview = this.callbacks.getLastStyleReview()
+      story.generationContext.styleReview = ui.lastStyleReview
       story.generationContext.activationTracker = activationTracker
+
+      await story.generationContext.loadPackVariables()
+      await story.generationContext.loadStylePrompt()
 
       const isCreativeWritingMode = story.mode === 'creative-writing'
 
@@ -252,45 +213,10 @@ export class ActionInputController {
           storyId,
         }
 
-        const persistSuggestedActions = (actions: unknown[], type: 'suggestions' | 'choices') => {
-          if (narrationEntry && actions.length > 0) {
-            database
-              .updateStoryEntry(narrationEntry.id, {
-                suggestedActions: JSON.stringify(actions),
-              })
-              .catch((err) =>
-                console.warn(`[ActionInput] Failed to save suggested ${type} to entry:`, err),
-              )
-          }
-        }
-
-        const eventCallbacks: PipelineUICallbacks = {
-          startStreaming: this.callbacks.startStreaming,
-          appendStreamContent: this.callbacks.appendStreamContent,
-          appendReasoningContent: this.callbacks.appendReasoningContent,
-          setGenerationStatus: this.callbacks.setGenerationStatus,
-          setSuggestionsLoading: this.callbacks.setSuggestionsLoading,
-          setActionChoicesLoading: this.callbacks.setActionChoicesLoading,
-          setSuggestions: (suggestions, storyId) => {
-            this.callbacks.setSuggestions(suggestions, storyId ?? story.id!)
-            persistSuggestedActions(suggestions, 'suggestions')
-          },
-          setActionChoices: (choices, storyId) => {
-            this.callbacks.setActionChoices(choices, storyId ?? story.id!)
-            persistSuggestedActions(choices, 'choices')
-          },
-          emitResponseStreaming: (chunk, accumulated) => {
-            this.callbacks.emitResponseStreaming(chunk, accumulated)
-          },
-          emitSuggestionsReady: (suggestions) => {
-            this.callbacks.emitSuggestionsReady(suggestions)
-          },
-        }
-
-        handleEvent(event, eventState, eventCallbacks)
+        handleEvent(event, eventState)
 
         if (event.type === 'phase_complete' && event.phase === 'retrieval') {
-          this.callbacks.setLastLorebookRetrieval(
+          ui.setLastLorebookRetrieval(
             story.generationContext.retrievalResult?.lorebookRetrievalResult ?? null,
           )
         }
@@ -303,7 +229,7 @@ export class ActionInputController {
         }
 
         if (event.type === 'phase_complete' && event.phase === 'narrative' && fullResponse.trim()) {
-          this.callbacks.endStreaming()
+          ui.endStreaming()
           narrationEntry = await story.entry.addEntry(
             'narration',
             fullResponse,
@@ -311,7 +237,7 @@ export class ActionInputController {
             fullReasoning || undefined,
             narrationEntryId,
           )
-          this.callbacks.emitNarrativeResponse(narrationEntry.id, fullResponse)
+          emitNarrativeResponse(narrationEntry.id, fullResponse)
           if (inlineImageTracker?.hasPendingImages) await inlineImageTracker.flushToDatabase()
         }
 
@@ -324,60 +250,11 @@ export class ActionInputController {
           await story.classification.applyClassificationResult(event.result, narrationEntry.id)
           await story.entry.updateEntryTimeEnd(narrationEntry.id)
 
-          if (story.settings.imageGenerationMode !== 'none') {
-            const presentCharacters = story.character.characters.filter(
-              (c) =>
-                event.result.scene.presentCharacterNames.includes(c.name) ||
-                c.relationship === 'self',
-            )
-            this.lastImageGenContext = {
-              storyId,
-              entryId: narrationEntry.id,
-              narrativeResponse: fullResponse,
-              userAction: userActionContent,
-              presentCharacters,
-              currentLocation:
-                event.result.scene.currentLocationName ?? story.location.currentLocation?.name,
-              chatHistory: mapChatEntries(
-                story.entry.visibleEntries.filter(
-                  (e) => e.type === 'user_action' || e.type === 'narration',
-                ),
-                { truncate: false, stripPicTags: true },
-              ),
-              referenceMode: story.settings.referenceMode ?? false,
-            }
-          }
-
           const translationSettings = settings.translationSettings
           if (TranslationService.shouldTranslateWorldState(translationSettings)) {
-            const translationService = new WorldStateTranslationService({
-              translateUIElements: aiService.translateUIElements.bind(aiService),
-            })
+            const translationService = new WorldStateTranslationService()
             translationService
-              .translateEntities(
-                {
-                  classificationResult: {
-                    newCharacters: event.result.entryUpdates.newCharacters,
-                    newLocations: event.result.entryUpdates.newLocations,
-                    newItems: event.result.entryUpdates.newItems,
-                    newStoryBeats: event.result.entryUpdates.newStoryBeats,
-                  },
-                  worldState: {
-                    characters: story.character.characters,
-                    locations: story.location.locations,
-                    items: story.item.items,
-                    storyBeats: story.storyBeat.storyBeats,
-                  },
-                  targetLanguage: translationSettings.targetLanguage,
-                },
-                {
-                  updateCharacter: (id, data) => database.updateCharacter(id, data as any),
-                  updateLocation: (id, data) => database.updateLocation(id, data as any),
-                  updateItem: (id, data) => database.updateItem(id, data as any),
-                  updateStoryBeat: (id, data) => database.updateStoryBeat(id, data as any),
-                  refreshWorldState: story.refreshWorldState.bind(story),
-                },
-              )
+              .translateEntities()
               .catch((err) => log('World state translation failed (non-fatal)', err))
           }
         }
@@ -405,13 +282,13 @@ export class ActionInputController {
         }
       }
 
-      this.callbacks.updateActivationData(activationTracker, storyId)
+      ui.updateActivationData(activationTracker, storyId)
       if (this.stopRequested) return
 
       if (!fullResponse.trim()) {
         const errorMessage = 'The AI returned an empty response after 3 attempts. Please try again.'
         const errorEntry = await story.entry.addEntry('system', errorMessage)
-        this.callbacks.setGenerationError({
+        ui.setGenerationError({
           message: errorMessage,
           errorEntryId: errorEntry.id,
           userActionEntryId,
@@ -425,7 +302,7 @@ export class ActionInputController {
         settings.systemServicesSettings.tts.enabled &&
         settings.systemServicesSettings.tts.autoPlay
       ) {
-        this.callbacks.emitTTSQueued(narrationEntry.id, fullResponse)
+        emitTTSQueued(narrationEntry.id, fullResponse)
       }
 
       BackgroundTaskCoordinator.run(countStyleReview, styleReviewSource).catch((err) =>
@@ -434,23 +311,23 @@ export class ActionInputController {
 
       // Android: notify user that generation completed while app was backgrounded
       if (
-        this.callbacks.wasBackgroundedDuringGeneration() &&
-        this.callbacks.isAppBackgrounded() &&
+        ui.wasBackgroundedDuringGeneration &&
+        ui.isAppBackgrounded &&
         settings.experimentalFeatures.generationNotifications &&
         fullResponse.trim()
       ) {
-        this.callbacks.sendGenerationNotification(fullResponse, true)
+        sendGenerationNotification(fullResponse, true)
       }
     } catch (error) {
       if (this.stopRequested || (error instanceof Error && error.name === 'AbortError')) return
       console.error('[ActionInput] Generation error:', error)
       const baseMessage =
         error instanceof Error ? error.message : 'Failed to generate response. Please try again.'
-      const errorMessage = this.callbacks.wasBackgroundedDuringGeneration()
+      const errorMessage = ui.wasBackgroundedDuringGeneration
         ? `Generation may have been interrupted while the app was in the background. ${baseMessage}`
         : baseMessage
       const errorEntry = await story.entry.addEntry('system', `Generation failed: ${errorMessage}`)
-      this.callbacks.setGenerationError({
+      ui.setGenerationError({
         message: errorMessage,
         errorEntryId: errorEntry.id,
         userActionEntryId,
@@ -459,22 +336,26 @@ export class ActionInputController {
 
       // Android: notify user that generation failed while backgrounded
       if (
-        this.callbacks.wasBackgroundedDuringGeneration() &&
-        this.callbacks.isAppBackgrounded() &&
+        ui.wasBackgroundedDuringGeneration &&
+        ui.isAppBackgrounded &&
         settings.experimentalFeatures.generationNotifications
       ) {
-        this.callbacks.sendGenerationNotification('', false)
+        sendGenerationNotification('', false)
       }
     } finally {
-      this.callbacks.endStreaming()
-      this.callbacks.setGenerating(false)
-      this.callbacks.setGenerationStatus('')
+      ui.endStreaming()
+      ui.setGenerating(false)
+      ui.setGenerationStatus('')
       this.activeAbortController = null
       this.stopRequested = false
 
       // Android: always stop the foreground service when generation ends
       if (useBackgroundService) {
-        this.callbacks.stopGenerationService()
+        try {
+          window.AndroidBridge?.stopGenerationService()
+        } catch (e) {
+          console.warn('[ActionInput] Failed to stop generation foreground service:', e)
+        }
       }
     }
   }
@@ -504,9 +385,9 @@ export class ActionInputController {
     this.currentActionType = actionType
 
     const embeddedImages = await database.getEmbeddedImagesForStory(story.id!)
-    this.callbacks.createRetryBackup(
+    ui.createRetryBackup(
       story.id!,
-      story.entry.entries,
+      story.entry.rawEntries,
       story.character.characters,
       story.location.locations,
       story.item.items,
@@ -518,26 +399,30 @@ export class ActionInputController {
       isRawActionChoice,
       story.time.timeTracker,
     )
-
-    const { promptContent, originalInput } = await translateUserInput(
-      content,
-      settings.translationSettings,
-    )
+    story.generationContext.clearIntermediates()
+    story.generationContext.userActionOriginal = content
+    const { promptContent, originalInput } = await translateUserInput()
 
     const userActionEntry = await story.entry.addEntry('user_action', promptContent)
+
+    story.generationContext.userAction = {
+      entryId: userActionEntry.id,
+      content: promptContent,
+      rawInput: promptContent,
+    }
 
     if (originalInput) {
       await database.updateStoryEntry(userActionEntry.id, { originalInput })
       await story.entry.refreshEntry(userActionEntry.id)
     }
 
-    this.callbacks.emitUserInput(
+    emitUserInput(
       content,
       isCreativeWritingMode ? 'direction' : forceFreeMode ? 'free' : actionType,
     )
     await tick()
 
-    await this.generateResponse(userActionEntry.id, content)
+    await this.generateResponse()
   }
 
   // --------------------------------------------------------------------------
@@ -549,27 +434,27 @@ export class ActionInputController {
     restoredWasRawActionChoice?: boolean
     restoredRawInput?: string
   }> {
-    if (this.callbacks.isRetryingLastMessage()) return {}
+    if (ui.isRetryingLastMessage) return {}
 
     this.stopRequested = true
     this.activeAbortController?.abort()
-    this.callbacks.endStreaming()
-    this.callbacks.setGenerating(false)
+    ui.endStreaming()
+    ui.setGenerating(false)
 
-    const backup = this.callbacks.getRetryBackup()
+    const backup = ui.retryBackup
     if (!backup || !story.isLoaded || backup.storyId !== story.id) {
-      if (backup) this.callbacks.clearRetryBackup()
+      if (backup) ui.clearRetryBackup()
       return {}
     }
 
-    this.callbacks.clearGenerationError()
-    this.callbacks.clearSuggestions(story.id!)
-    this.callbacks.clearActionChoices(story.id!)
+    ui.clearGenerationError()
+    ui.clearSuggestions(story.id!)
+    ui.clearActionChoices(story.id!)
 
     if (backup.hasFullState) {
-      this.callbacks.restoreActivationData(backup.activationData, backup.storyPosition)
+      ui.restoreActivationData(backup.activationData, backup.storyPosition)
     }
-    this.callbacks.setLastLorebookRetrieval(null)
+    ui.setLastLorebookRetrieval(null)
 
     const result = await retryService.handleStopGeneration(
       backup,
@@ -583,14 +468,14 @@ export class ActionInputController {
         restoreTimeTrackerSnapshot: story.time.restoreTimeTrackerSnapshot.bind(story.time),
         lockRetryInProgress: story.retry.lockRetryInProgress.bind(story.retry),
         unlockRetryInProgress: story.retry.unlockRetryInProgress.bind(story.retry),
-        restoreActivationData: this.callbacks.restoreActivationData,
-        clearActivationData: () => this.callbacks.clearActivationData(),
-        setLastLorebookRetrieval: this.callbacks.setLastLorebookRetrieval,
+        restoreActivationData: ui.restoreActivationData.bind(ui),
+        clearActivationData: () => ui.clearActivationData(),
+        setLastLorebookRetrieval: ui.setLastLorebookRetrieval.bind(ui),
       },
       {
-        clearGenerationError: () => this.callbacks.clearGenerationError(),
-        clearSuggestions: () => this.callbacks.clearSuggestions(story.id!),
-        clearActionChoices: () => this.callbacks.clearActionChoices(story.id!),
+        clearGenerationError: () => ui.clearGenerationError(),
+        clearSuggestions: () => ui.clearSuggestions(story.id!),
+        clearActionChoices: () => ui.clearActionChoices(story.id!),
       },
     )
 
@@ -608,7 +493,7 @@ export class ActionInputController {
         restoredRawInput: result.restoredRawInput ?? '',
       }
     }
-    this.callbacks.clearRetryBackup(true)
+    ui.clearRetryBackup(true)
     return restoredValues
   }
 
@@ -617,19 +502,25 @@ export class ActionInputController {
   // --------------------------------------------------------------------------
 
   async handleRetry() {
-    const error = this.callbacks.getLastGenerationError()
+    const error = ui.lastGenerationError
     if (!error) return
 
-    const userActionEntry = story.entry.entries.find((e) => e.id === error.userActionEntryId)
+    const userActionEntry = story.entry.rawEntries.find((e) => e.id === error.userActionEntryId)
     if (!userActionEntry) {
-      this.callbacks.clearGenerationError()
+      ui.clearGenerationError()
       return
     }
 
     await story.entry.deleteEntry(error.errorEntryId)
-    this.callbacks.clearGenerationError()
+    ui.clearGenerationError()
 
-    await this.generateResponse(userActionEntry.id, userActionEntry.content, {
+    story.generationContext.userAction = {
+      entryId: userActionEntry.id,
+      content: userActionEntry.content,
+      rawInput: userActionEntry.content,
+    }
+
+    await this.generateResponse({
       countStyleReview: false,
       styleReviewSource: 'retry-error',
     })
@@ -640,20 +531,20 @@ export class ActionInputController {
   // --------------------------------------------------------------------------
 
   async handleRetryLastMessage() {
-    const backup = this.callbacks.getRetryBackup()
+    const backup = ui.retryBackup
     if (!backup || !story.isLoaded) return
     if (backup.storyId !== story.id) {
-      this.callbacks.clearRetryBackup(false)
+      ui.clearRetryBackup(false)
       return
     }
 
     const storyId = story.id!
 
-    this.callbacks.clearGenerationError()
-    this.callbacks.clearSuggestions(storyId)
-    this.callbacks.clearActionChoices(storyId)
+    ui.clearGenerationError()
+    ui.clearSuggestions(storyId)
+    ui.clearActionChoices(storyId)
     this.lastImageGenContext = null
-    this.callbacks.setLastLorebookRetrieval(null)
+    ui.setLastLorebookRetrieval(null)
 
     const result = await retryService.handleRetryLastMessage(
       backup,
@@ -667,14 +558,14 @@ export class ActionInputController {
         restoreTimeTrackerSnapshot: story.time.restoreTimeTrackerSnapshot.bind(story.time),
         lockRetryInProgress: story.retry.lockRetryInProgress.bind(story.retry),
         unlockRetryInProgress: story.retry.unlockRetryInProgress.bind(story.retry),
-        restoreActivationData: this.callbacks.restoreActivationData,
-        clearActivationData: () => this.callbacks.clearActivationData(),
-        setLastLorebookRetrieval: this.callbacks.setLastLorebookRetrieval,
+        restoreActivationData: ui.restoreActivationData.bind(ui),
+        clearActivationData: () => ui.clearActivationData(),
+        setLastLorebookRetrieval: ui.setLastLorebookRetrieval.bind(ui),
       },
       {
-        clearGenerationError: () => this.callbacks.clearGenerationError(),
-        clearSuggestions: () => this.callbacks.clearSuggestions(storyId),
-        clearActionChoices: () => this.callbacks.clearActionChoices(storyId),
+        clearGenerationError: () => ui.clearGenerationError(),
+        clearSuggestions: () => ui.clearSuggestions(storyId),
+        clearActionChoices: () => ui.clearActionChoices(storyId),
         clearImageContext: () => {
           this.lastImageGenContext = null
         },
@@ -686,32 +577,32 @@ export class ActionInputController {
     await tick()
 
     const isCreativeWritingMode = story.mode === 'creative-writing'
-
-    const { promptContent, originalInput } = await translateUserInput(
-      backup.userActionContent,
-      settings.translationSettings,
-    )
+    story.generationContext.userActionOriginal = backup.userActionContent
+    const { promptContent, originalInput } = await translateUserInput()
     const userActionEntry = await story.entry.addEntry('user_action', promptContent)
+
+    story.generationContext.userAction = {
+      entryId: userActionEntry.id,
+      content: promptContent,
+      rawInput: promptContent,
+    }
 
     if (originalInput) {
       await database.updateStoryEntry(userActionEntry.id, { originalInput })
       await story.entry.refreshEntry(userActionEntry.id)
     }
 
-    this.callbacks.emitUserInput(
-      backup.userActionContent,
-      isCreativeWritingMode ? 'direction' : backup.actionType,
-    )
+    emitUserInput(backup.userActionContent, isCreativeWritingMode ? 'direction' : backup.actionType)
     await tick()
 
-    this.callbacks.setRetryingLastMessage(true)
+    ui.setRetryingLastMessage(true)
     try {
-      await this.generateResponse(userActionEntry.id, promptContent, {
+      await this.generateResponse({
         countStyleReview: false,
         styleReviewSource: 'retry-last-message',
       })
     } finally {
-      this.callbacks.setRetryingLastMessage(false)
+      ui.setRetryingLastMessage(false)
     }
   }
 
@@ -720,7 +611,7 @@ export class ActionInputController {
   // --------------------------------------------------------------------------
 
   async regenerateActionsAfterDelete() {
-    if (!story.isLoaded || story.entry.entries.length === 0) return
+    if (!story.isLoaded || story.entry.rawEntries.length === 0) return
 
     const storyMode = story.mode
 
@@ -729,18 +620,20 @@ export class ActionInputController {
     } else if (storyMode === 'adventure') {
       if (settings.uiSettings.disableSuggestions) return
 
-      this.callbacks.setActionChoicesLoading(true)
+      ui.setActionChoicesLoading(true)
       try {
-        const lastNarration = [...story.entry.entries].reverse().find((e) => e.type === 'narration')
+        const lastNarration = [...story.entry.rawEntries]
+          .reverse()
+          .find((e) => e.type === 'narration')
         if (!lastNarration) {
-          this.callbacks.setActionChoicesLoading(false)
+          ui.setActionChoicesLoading(false)
           return
         }
 
         const result = await aiService.generateActionChoices()
 
         if (result.choices.length > 0) {
-          this.callbacks.setActionChoices(result.choices, story.id!)
+          ui.setActionChoices(result.choices, story.id!)
           database
             .updateStoryEntry(lastNarration.id, {
               suggestedActions: JSON.stringify(result.choices),
@@ -752,7 +645,7 @@ export class ActionInputController {
       } catch (error) {
         console.warn('[ActionInput] Failed to regenerate action choices after delete:', error)
       } finally {
-        this.callbacks.setActionChoicesLoading(false)
+        ui.setActionChoicesLoading(false)
       }
     }
   }
@@ -760,26 +653,21 @@ export class ActionInputController {
   async refreshSuggestions() {
     if (!story.isLoaded) return
 
-    if (story.mode !== 'creative-writing' || story.entry.entries.length === 0) {
-      this.callbacks.clearSuggestions(story.id!)
+    if (story.mode !== 'creative-writing' || story.entry.rawEntries.length === 0) {
+      ui.clearSuggestions(story.id!)
       return
     }
 
-    this.callbacks.setSuggestionsLoading(true)
+    ui.setSuggestionsLoading(true)
     try {
-      const service = new SuggestionsRefreshService({
-        generateSuggestions: aiService.generateSuggestions.bind(aiService),
-        translateSuggestions: aiService.translateSuggestions.bind(aiService),
-      })
-      const result = await service.refresh({
-        translationSettings: settings.translationSettings,
-      })
-      this.callbacks.setSuggestions(result.suggestions, story.id!)
-      this.callbacks.emitSuggestionsReady(
-        result.suggestions.map((s) => ({ text: s.text, type: s.type })),
-      )
+      const service = new SuggestionsRefreshService()
+      const result = await service.refresh()
+      ui.setSuggestions(result.suggestions, story.id!)
+      emitSuggestionsReady(result.suggestions.map((s) => ({ text: s.text, type: s.type })))
       // Persist refreshed suggestions to the latest narration entry for time-travel restore
-      const lastNarration = [...story.entry.entries].reverse().find((e) => e.type === 'narration')
+      const lastNarration = [...story.entry.rawEntries]
+        .reverse()
+        .find((e) => e.type === 'narration')
       if (lastNarration && result.suggestions.length > 0) {
         database
           .updateStoryEntry(lastNarration.id, {
@@ -791,9 +679,9 @@ export class ActionInputController {
       }
     } catch (error) {
       log('Failed to generate suggestions:', error)
-      this.callbacks.clearSuggestions(story.id!)
+      ui.clearSuggestions(story.id!)
     } finally {
-      this.callbacks.setSuggestionsLoading(false)
+      ui.setSuggestionsLoading(false)
     }
   }
 }

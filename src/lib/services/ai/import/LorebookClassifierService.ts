@@ -28,7 +28,6 @@ export class LorebookClassifierService extends BaseAIService {
   async classifyEntries(
     entries: ImportedEntry[],
     onProgress?: (classified: number, total: number) => void,
-    mode: StoryMode = 'adventure',
   ): Promise<ImportedEntry[]> {
     if (entries.length === 0) return entries
 
@@ -62,7 +61,7 @@ export class LorebookClassifierService extends BaseAIService {
         )
 
         const ctx = new ContextBuilder()
-        ctx.add({ mode, pov: 'second', tense: 'present', protagonistName: '', entriesJson })
+        ctx.add({ entriesJson })
         const { system, user: prompt } = await ctx.render('lorebook-classifier')
 
         let classifications: Array<{ index: number; type: string }> = []

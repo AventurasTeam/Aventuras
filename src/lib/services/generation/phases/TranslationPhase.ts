@@ -39,9 +39,7 @@ export class TranslationPhase {
   async *execute(): AsyncGenerator<GenerationEvent, TranslationResult2> {
     yield { type: 'phase_start', phase: 'translation' } satisfies PhaseStartEvent
 
-    const narrativeContent = story.generationContext.narrativeResult?.content ?? ''
     const abortSignal = story.generationContext.abortSignal ?? undefined
-    const isVisualProse = story.settings.visualProseMode ?? false
     const translationSettings = settings.translationSettings
 
     // Check if translation should be skipped
@@ -76,11 +74,7 @@ export class TranslationPhase {
     const targetLanguage = translationSettings.targetLanguage
 
     try {
-      const translationResult = await aiService.translateNarration(
-        narrativeContent,
-        targetLanguage,
-        isVisualProse,
-      )
+      const translationResult = await aiService.translateNarration()
 
       if (abortSignal?.aborted) {
         yield { type: 'aborted', phase: 'translation' } satisfies AbortedEvent

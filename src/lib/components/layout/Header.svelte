@@ -133,7 +133,7 @@
       () =>
         exportService.exportToMarkdown(
           story.getStorySnapshot(),
-          story.entry.entries,
+          story.entry.rawEntries,
           story.character.characters,
           story.location.locations,
           true,
@@ -145,7 +145,7 @@
   async function exportText() {
     if (!story.isLoaded) return
     await handleExport(
-      () => exportService.exportToText(story.getStorySnapshot(), story.entry.entries),
+      () => exportService.exportToText(story.getStorySnapshot(), story.entry.rawEntries),
       'Plain Text (.txt)',
     )
   }

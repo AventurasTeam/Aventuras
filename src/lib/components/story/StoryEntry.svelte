@@ -79,7 +79,7 @@
   // Check if this is the latest narration entry (for retry button)
   const isLatestNarration = $derived.by(() => {
     if (entry.type !== 'narration') return false
-    const narrations = story.entry.entries.filter((e) => e.type === 'narration')
+    const narrations = story.entry.rawEntries.filter((e) => e.type === 'narration')
     if (narrations?.length === 0) return false
     return narrations[narrations.length - 1].id === entry.id
   })
@@ -128,7 +128,7 @@
 
     // For legacy/untracked errors, find the previous user action and set up retry
     console.log('[StoryEntry] Legacy error, finding previous user action')
-    const entryIndex = story.entry.entries.findIndex((e) => e.id === entry.id)
+    const entryIndex = story.entry.rawEntries.findIndex((e) => e.id === entry.id)
     if (entryIndex <= 0) {
       console.log('[StoryEntry] Entry not found or is first entry')
       return
@@ -137,8 +137,8 @@
     // Find the most recent user action before this error
     let userActionEntry = null
     for (let i = entryIndex - 1; i >= 0; i--) {
-      if (story.entry.entries[i].type === 'user_action') {
-        userActionEntry = story.entry.entries[i]
+      if (story.entry.rawEntries[i].type === 'user_action') {
+        userActionEntry = story.entry.rawEntries[i]
         break
       }
     }
@@ -243,8 +243,8 @@
 
   // Check if this is the latest entry (checkpoints can only be created at the latest entry)
   const isLatestEntry = $derived(
-    story.entry.entries.length > 0 &&
-      story.entry.entries[story.entry.entries.length - 1].id === entry.id,
+    story.entry.rawEntries.length > 0 &&
+      story.entry.rawEntries[story.entry.rawEntries.length - 1].id === entry.id,
   )
 
   // Can create checkpoint: latest entry, not a system entry, and no checkpoint exists yet
@@ -280,18 +280,7 @@
   // Handle creating missing inline images (stuck/lost records)
   async function handleCreateMissingImage() {
     if (!story.isLoaded) return
-
-    // Trigger scanning of this entry
-    // We pass the full content, the service will find tags and create missing records
-    const context = {
-      storyId: story.id!,
-      entryId: entry.id,
-      narrativeContent: entry.translatedContent ?? entry.content,
-      presentCharacters: story.character.characters, // Use all story characters for lookup
-      referenceMode: story.settings.referenceMode ?? false,
-    }
-
-    await inlineImageService.processNarrativeForInlineImages(context)
+    await inlineImageService.processNarrativeForInlineImages()
     await loadEmbeddedImages()
   }
 
@@ -955,7 +944,7 @@
    */
   function isLastUserActionEntry(): boolean {
     // Find all user_action entries
-    const userActions = story.entry.entries.filter((e) => e.type === 'user_action')
+    const userActions = story.entry.rawEntries.filter((e) => e.type === 'user_action')
     if (userActions.length === 0) return false
 
     // Check if this entry is the last one
@@ -1027,16 +1016,7 @@
     if (!story.isLoaded || isGeneratingStoryImages) return
     isGeneratingStoryImages = true
     try {
-      const context = {
-        storyId: story.id!,
-        entryId: entry.id,
-        narrativeResponse: entry.content,
-        userAction: '',
-        presentCharacters: story.character.characters,
-        referenceMode: story.settings.referenceMode ?? false,
-        translatedNarrative: entry.translatedContent ?? undefined,
-      }
-      await aiService.generateImagesForNarrative(context)
+      await aiService.generateImagesForNarrative()
     } catch (error) {
       console.error('[StoryEntry] Image generation failed:', error)
       ui.showToast('Image generation failed', 'error')

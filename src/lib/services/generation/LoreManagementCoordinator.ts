@@ -3,7 +3,10 @@
  * Coordinates AI lore management with CRUD callbacks for entry operations.
  */
 
+import { story } from '$lib/stores/story/index.svelte'
+import { ui } from '$lib/stores/ui.svelte'
 import type { Entry, Chapter, LoreManagementResult, StoryMode, POV, Tense } from '$lib/types'
+import { aiService } from '../ai'
 
 function log(...args: unknown[]) {
   console.log('[LoreManagementCoordinator]', ...args)
@@ -33,25 +36,6 @@ export interface LoreSessionInput {
   tense: Tense
 }
 
-export interface LoreManagementDependencies {
-  runLoreManagement: (
-    storyId: string,
-    branchId: string | null,
-    entries: Entry[],
-    chapters: Chapter[],
-    callbacks: {
-      onCreateEntry: (entry: Entry) => Promise<void>
-      onUpdateEntry: (id: string, updates: Partial<Entry>) => Promise<void>
-      onDeleteEntry: (id: string) => Promise<void>
-      onMergeEntries: (entryIds: string[], mergedEntry: Entry) => Promise<void>
-      onQueryChapter?: (chapterNumber: number, question: string) => Promise<string>
-    },
-    mode: StoryMode,
-    pov?: POV,
-    tense?: Tense,
-  ) => Promise<LoreManagementResult>
-}
-
 export interface LoreSessionResult {
   completed: boolean
   result?: LoreManagementResult
@@ -59,20 +43,8 @@ export interface LoreSessionResult {
 }
 
 export class LoreManagementCoordinator {
-  private deps: LoreManagementDependencies
-
-  constructor(deps: LoreManagementDependencies) {
-    this.deps = deps
-  }
-
-  async runSession(
-    input: LoreSessionInput,
-    callbacks: LoreManagementCallbacks,
-    uiCallbacks?: LoreManagementUICallbacks,
-  ): Promise<LoreSessionResult> {
-    log('Starting lore management session', { storyId: input.storyId })
-
-    uiCallbacks?.onStart()
+  async runSession(): Promise<LoreSessionResult> {
+    log('Starting lore management session', { storyId: story.id! })
 
     let changeCount = 0
     const bumpChanges = (delta = 1) => {
@@ -80,49 +52,22 @@ export class LoreManagementCoordinator {
       return changeCount
     }
 
+    ui.startLoreManagement()
+
     try {
-      const result = await this.deps.runLoreManagement(
-        input.storyId,
-        input.currentBranchId,
-        [...input.lorebookEntries], // Clone to avoid mutation issues
-        input.chapters,
-        {
-          onCreateEntry: async (entry) => {
-            await callbacks.onCreateEntry(entry)
-            uiCallbacks?.onProgress('Creating entries...', bumpChanges())
-          },
-          onUpdateEntry: async (id, updates) => {
-            await callbacks.onUpdateEntry(id, updates)
-            uiCallbacks?.onProgress('Updating entries...', bumpChanges())
-          },
-          onDeleteEntry: async (id) => {
-            await callbacks.onDeleteEntry(id)
-            uiCallbacks?.onProgress('Cleaning up entries...', bumpChanges())
-          },
-          onMergeEntries: async (entryIds, mergedEntry) => {
-            await callbacks.onMergeEntries(entryIds, mergedEntry)
-            uiCallbacks?.onProgress('Merging entries...', bumpChanges())
-          },
-          onQueryChapter: callbacks.onQueryChapter,
-        },
-        input.mode,
-        input.pov,
-        input.tense,
-      )
+      const result = await aiService.runLoreManagement(bumpChanges)
 
       log('Lore management complete', {
         changesCount: result.changes.length,
         summary: result.summary,
       })
 
-      uiCallbacks?.onProgress(`Complete: ${result.summary}`, result.changes.length)
+      ui.updateLoreManagementProgress(`Complete: ${result.summary}`, result.changes.length)
 
       // Give user a moment to see the completion message
-      if (uiCallbacks) {
-        setTimeout(() => {
-          uiCallbacks.onComplete()
-        }, 2000)
-      }
+      setTimeout(() => {
+        ui.finishLoreManagement()
+      }, 2000)
 
       return {
         completed: true,
@@ -133,15 +78,13 @@ export class LoreManagementCoordinator {
       log('Lore management failed', error)
 
       // Still call complete to clean up UI state
-      if (uiCallbacks) {
-        setTimeout(() => {
-          uiCallbacks.onComplete()
-        }, 2000)
-      }
+      setTimeout(() => {
+        ui.finishLoreManagement()
+      }, 2000)
 
       return {
         completed: false,
-        changeCount,
+        changeCount: 0,
       }
     }
   }

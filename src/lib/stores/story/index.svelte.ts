@@ -171,7 +171,7 @@ class StoryStore {
     log('Story loaded', {
       id: storyId,
       mode: storyData.mode,
-      entries: this.entry.entries.length,
+      entries: this.entry.rawEntries.length,
       lorebookEntries: this.lorebook.lorebookEntries.length,
       chapters: this.chapter.chapters.length,
       checkpoints: checkpoints.length,
@@ -278,7 +278,7 @@ class StoryStore {
     if (!this.id) return false
 
     // Find the new last narration entry (actions attach to narration entries)
-    const lastNarration = [...this.entry.entries].reverse().find((e) => e.type === 'narration')
+    const lastNarration = [...this.entry.rawEntries].reverse().find((e) => e.type === 'narration')
 
     const storyMode = this.mode
     const storyId = this.id
@@ -425,7 +425,7 @@ class StoryStore {
     if (!this.id) return
     if (!settings.experimentalFeatures.stateTracking) return
 
-    const entry = this.entry.entries.find((e) => e.id === entryId)
+    const entry = this.entry.rawEntries.find((e) => e.id === entryId)
     if (!entry) return
 
     const interval = settings.experimentalFeatures.autoSnapshotInterval
@@ -716,12 +716,6 @@ class StoryStore {
         await database.addEntry(entry)
       }
       log('Added imported entries:', data.importedEntries.length)
-    }
-
-    // Generate background image from opening scene
-    if (data.openingScene && openingEntry && storyData.settings?.backgroundImagesEnabled) {
-      aiService.analyzeBackgroundChangeAndGenerateImage(storyId, [openingEntry])
-      log('Generated background image')
     }
 
     // Emit event

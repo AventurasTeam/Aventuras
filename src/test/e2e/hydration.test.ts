@@ -27,7 +27,7 @@ describe('store hydration', () => {
       buildEntry({ type: 'narration', content: 'You see a cave.' }),
     ]
     loadTestStory({ story: s, entries })
-    expect(story.entry.entries).toHaveLength(2)
+    expect(story.entry.rawEntries).toHaveLength(2)
   })
 
   it('clearTestStory resets all state', () => {

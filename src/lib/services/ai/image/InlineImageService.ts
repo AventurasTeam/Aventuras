@@ -23,16 +23,9 @@ import { normalizeImageDataUrl, parseImageSize } from '$lib/utils/image'
 import { extractPicTags, type ParsedPicTag } from '$lib/utils/inlineImageParser'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from './constants'
 import { createLogger } from '$lib/log'
+import { story } from '$lib/stores/story/index.svelte'
 
 const log = createLogger('InlineImageGen')
-
-export interface InlineImageContext {
-  storyId: string
-  entryId: string
-  narrativeContent: string
-  presentCharacters: Character[]
-  referenceMode: boolean
-}
 
 export class InlineImageGenerationService {
   /**
@@ -56,11 +49,11 @@ export class InlineImageGenerationService {
    * This is the main entry point called after narrative generation completes
    * when inline image mode is enabled.
    */
-  async processNarrativeForInlineImages(context: InlineImageContext): Promise<void> {
+  async processNarrativeForInlineImages(): Promise<void> {
     const imageSettings = settings.systemServicesSettings.imageGeneration
 
     // Extract all <pic> tags from the narrative
-    const picTags = extractPicTags(context.narrativeContent)
+    const picTags = extractPicTags(story.generationContext.narrativeResult?.content ?? '')
 
     if (picTags.length === 0) {
       log('No <pic> tags found in narrative')
@@ -89,7 +82,7 @@ export class InlineImageGenerationService {
 
     // Process each tag
     for (const tag of tagsToProcess) {
-      await this.generateImageForTag(context, tag, imageSettings)
+      await this.generateImageForTag(tag)
     }
 
     log('All inline images queued', { count: tagsToProcess.length })
@@ -99,12 +92,19 @@ export class InlineImageGenerationService {
    * Generate image for a single <pic> tag.
    * Selects appropriate profile and model based on portrait mode and character availability.
    */
-  private async generateImageForTag(
-    context: InlineImageContext,
-    tag: ParsedPicTag,
-    imageSettings: typeof settings.systemServicesSettings.imageGeneration,
-  ): Promise<void> {
+  private async generateImageForTag(tag: ParsedPicTag): Promise<void> {
     const imageId = crypto.randomUUID()
+    const referenceMode =
+      story.generationContext.promptContext.userSettings.imageGeneration.referenceMode
+    const entryId =
+      story.generationContext.narrationEntryId ?? story.generationContext.userAction?.entryId ?? ''
+    const charactersPresentNames =
+      story.generationContext.classificationResult?.classificationResult?.scene
+        ?.presentCharacterNames ?? []
+    const charactersPresent: Character[] = story.character.characters.filter((c) =>
+      charactersPresentNames.includes(c.name),
+    )
+    const imageSettings = settings.systemServicesSettings.imageGeneration
 
     // Determine which profile and model to use
     let profileId = imageSettings.profileId
@@ -113,13 +113,13 @@ export class InlineImageGenerationService {
     let referenceImageUrls: string[] | undefined
 
     // If portrait mode is enabled and tag specifies characters, look for their portraits
-    if (context.referenceMode && tag.characters.length > 0) {
+    if (referenceMode && tag.characters.length > 0) {
       const portraitUrls: string[] = []
       const charactersWithPortraits: string[] = []
       const charactersWithoutPortraits: string[] = []
 
       for (const charName of tag.characters.slice(0, 3)) {
-        const character = context.presentCharacters.find(
+        const character = charactersPresent.find(
           (c) => c.name.toLowerCase() === charName.toLowerCase(),
         )
 
@@ -169,8 +169,8 @@ export class InlineImageGenerationService {
     // Create pending record in database
     const embeddedImage: Omit<EmbeddedImage, 'createdAt'> = {
       id: imageId,
-      storyId: context.storyId,
-      entryId: context.entryId,
+      storyId: story.id!,
+      entryId,
       sourceText: tag.originalTag,
       prompt: fullPrompt,
       styleId: imageSettings.styleId,
@@ -191,7 +191,7 @@ export class InlineImageGenerationService {
     })
 
     // Emit queued event
-    emitImageQueued(imageId, context.entryId)
+    emitImageQueued(imageId, entryId)
 
     // Start async generation (fire-and-forget)
     this.generateImage(
@@ -200,7 +200,7 @@ export class InlineImageGenerationService {
       profileId,
       modelToUse,
       sizeToUse,
-      context.entryId,
+      entryId,
       referenceImageUrls,
     ).catch((error) => {
       log('Async inline image generation failed', { imageId, error })

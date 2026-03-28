@@ -20,16 +20,7 @@
   import Suggestions from './Suggestions.svelte'
   import GrammarCheck from './GrammarCheck.svelte'
   import { Button } from '$lib/components/ui/button'
-  import {
-    emitUserInput,
-    emitNarrativeResponse,
-    emitSuggestionsReady,
-    emitTTSQueued,
-    eventBus,
-    type ResponseStreamingEvent,
-  } from '$lib/services/events'
   import { isTouchDevice } from '$lib/utils/swipe'
-  import { isAndroid } from '$lib/utils/platform'
   import { ActionInputController, type ActionType } from '$lib/services/generation'
 
   function log(...args: any[]) {
@@ -49,120 +40,13 @@
   // Controller
   // ============================================================================
 
-  const controller = new ActionInputController({
-    // Streaming lifecycle
-    startStreaming: ui.startStreaming.bind(ui),
-    endStreaming: ui.endStreaming.bind(ui),
-    appendStreamContent: ui.appendStreamContent.bind(ui),
-    appendReasoningContent: ui.appendReasoningContent.bind(ui),
-
-    // Generation state
-    setGenerating: ui.setGenerating.bind(ui),
-    clearGenerationError: () => ui.clearGenerationError(),
-    setGenerationError: (error) => ui.setGenerationError(error),
-    setGenerationStatus: ui.setGenerationStatus.bind(ui),
-
-    // Suggestions/action choices
-    setSuggestionsLoading: ui.setSuggestionsLoading.bind(ui),
-    setActionChoicesLoading: ui.setActionChoicesLoading.bind(ui),
-    setSuggestions: (suggestions, storyId) => ui.setSuggestions(suggestions, storyId),
-    setActionChoices: (choices, storyId) => ui.setActionChoices(choices, storyId),
-    clearSuggestions: (storyId) => ui.clearSuggestions(storyId),
-    clearActionChoices: (storyId) => ui.clearActionChoices(storyId),
-
-    // Retry
-    createRetryBackup: ui.createRetryBackup.bind(ui),
-    clearRetryBackup: (clearFromDb) => ui.clearRetryBackup(clearFromDb),
-    getRetryBackup: () => ui.retryBackup,
-    isRetryingLastMessage: () => ui.isRetryingLastMessage,
-    setRetryingLastMessage: (retrying) => ui.setRetryingLastMessage(retrying),
-
-    // Activation data
-    updateActivationData: ui.updateActivationData.bind(ui),
-    getActivationTracker: (position) => ui.getActivationTracker(position),
-    restoreActivationData: ui.restoreActivationData.bind(ui),
-    clearActivationData: () => ui.clearActivationData(),
-
-    // Lorebook
-    setLastLorebookRetrieval: ui.setLastLorebookRetrieval.bind(ui),
-
-    // Style review
-    getLastStyleReview: () => ui.lastStyleReview,
-
-    // Events
-    emitNarrativeResponse: (entryId, content) => emitNarrativeResponse(entryId, content),
-    emitUserInput: (content, type) => emitUserInput(content, type as any),
-    emitResponseStreaming: (chunk, accumulated) => {
-      eventBus.emit<ResponseStreamingEvent>({
-        type: 'ResponseStreaming',
-        chunk,
-        accumulated,
-      })
-    },
-    emitSuggestionsReady: (suggestions) => emitSuggestionsReady(suggestions),
-    emitTTSQueued: (entryId, content) => emitTTSQueued(entryId, content),
-
-    // Platform
-    sendGenerationNotification: async (responseText, success) => {
-      try {
-        const { sendNotification, isPermissionGranted } =
-          await import('@tauri-apps/plugin-notification')
-        const permitted = await isPermissionGranted()
-        if (!permitted) return
-
-        if (success) {
-          const body =
-            settings.experimentalFeatures.notificationPreview && responseText.length > 0
-              ? responseText.slice(0, 120).replace(/[<>]/g, '') +
-                (responseText.length > 120 ? '…' : '')
-              : 'Tap to return to your story.'
-          sendNotification({ title: 'Story generation complete', body })
-        } else {
-          sendNotification({
-            title: 'Story generation failed',
-            body: 'Tap to return and retry.',
-          })
-        }
-      } catch (e) {
-        console.warn('[ActionInput] Failed to send notification:', e)
-      }
-    },
-    wasBackgroundedDuringGeneration: () => ui.wasBackgroundedDuringGeneration,
-    isAppBackgrounded: () => ui.isAppBackgrounded,
-    resetBackgroundedFlag: () => ui.resetBackgroundedFlag(),
-
-    // Android
-    startGenerationService: () => {
-      try {
-        window.AndroidBridge?.startGenerationService()
-      } catch (e) {
-        console.warn('[ActionInput] Failed to start generation foreground service:', e)
-      }
-    },
-    stopGenerationService: () => {
-      try {
-        window.AndroidBridge?.stopGenerationService()
-      } catch (e) {
-        console.warn('[ActionInput] Failed to stop generation foreground service:', e)
-      }
-    },
-    shouldUseBackgroundService: () =>
-      isAndroid() && settings.experimentalFeatures.backgroundGeneration,
-
-    // Scroll
-    resetScrollBreak: () => ui.resetScrollBreak(),
-
-    // Error state
-    getLastGenerationError: () => ui.lastGenerationError,
-  })
+  const controller = new ActionInputController()
 
   // ============================================================================
   // Derived State
   // ============================================================================
 
-  const canShowManualImageGen = $derived(
-    story.settings.imageGenerationMode === 'none' && !!controller.lastImageGenContext,
-  )
+  const canShowManualImageGen = $derived(story.settings.imageGenerationMode === 'none')
 
   const manualImageGenDisabled = $derived.by(() => {
     if (ui.isGenerating || isManualImageGenRunning) return true
@@ -250,15 +134,6 @@
   // ============================================================================
 
   $effect(() => {
-    const storyId = story.id ?? null
-    if (
-      !storyId ||
-      (controller.lastImageGenContext && controller.lastImageGenContext.storyId !== storyId)
-    )
-      controller.lastImageGenContext = null
-  })
-
-  $effect(() => {
     ui.setRetryCallback(() => controller.handleRetry())
     return () => ui.setRetryCallback(null)
   })
@@ -279,7 +154,7 @@
 
   // Auto-regenerate suggestions/actions after time-travel delete when no saved actions found
   $effect(() => {
-    if (ui.suggestionsRegenerationNeeded && !ui.isGenerating && story.entry.entries.length > 0) {
+    if (ui.suggestionsRegenerationNeeded && !ui.isGenerating && story.entry.rawEntries.length > 0) {
       ui.suggestionsRegenerationNeeded = false
       controller.regenerateActionsAfterDelete()
     }
@@ -300,11 +175,11 @@
   }
 
   async function handleManualImageGeneration() {
-    if (!controller.lastImageGenContext || manualImageGenDisabled) return
+    if (manualImageGenDisabled) return
     if (story.settings.imageGenerationMode === 'none') return
     isManualImageGenRunning = true
     try {
-      await aiService.generateImagesForNarrative(controller.lastImageGenContext)
+      await aiService.generateImagesForNarrative()
     } catch (error) {
       log('Manual image generation failed (non-fatal)', error)
     } finally {

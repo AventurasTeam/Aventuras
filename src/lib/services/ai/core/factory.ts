@@ -43,10 +43,7 @@ export class ServiceFactory {
    * Create a classifier service instance.
    */
   createClassifierService(): ClassifierService {
-    return new ClassifierService(
-      'classifier',
-      settings.systemServicesSettings.classifier.chatHistoryTruncation ?? 100,
-    )
+    return new ClassifierService('classifier')
   }
 
   /**

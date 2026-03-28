@@ -18,7 +18,7 @@
   // These are entries after the last chapter
   const availableEntries = $derived(() => {
     const lastChapterEndIndex = story.chapter.lastChapterEndIndex
-    return story.entry.entries.slice(lastChapterEndIndex)
+    return story.entry.rawEntries.slice(lastChapterEndIndex)
   })
 
   const entries = $derived(availableEntries())

@@ -58,7 +58,7 @@ export function loadTestStory(options: LoadTestStoryOptions): void {
   story.location.locations = locations
   story.item.items = items
   story.storyBeat.storyBeats = storyBeats
-  story.entry.entries = entries
+  story.entry.rawEntries = entries
   story.lorebook.lorebookEntries = lorebookEntries
   story.chapter.chapters = chapters
 }
@@ -84,7 +84,7 @@ export function clearTestStory(): void {
   story.location.locations = []
   story.item.items = []
   story.storyBeat.storyBeats = []
-  story.entry.entries = []
+  story.entry.rawEntries = []
   story.lorebook.lorebookEntries = []
   story.chapter.chapters = []
 }

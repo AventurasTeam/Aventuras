@@ -7,25 +7,17 @@ import { settings } from '$lib/stores/settings.svelte'
  * Implements three tiers of entry injection for lorebook entries:
  * - Tier 1: Always inject (injection.mode === 'always', or state-based like isPresent)
  * - Tier 2: Keyword matching (match name/aliases/keywords against user input & recent story)
- * - Tier 3: LLM selection (STUBBED - awaiting SDK migration)
+ * - Tier 3: LLM selection
  */
 
 import { escapeRegex } from '$lib/utils/text'
-import type {
-  Entry,
-  EntryType,
-  StoryEntry,
-  Character,
-  Location,
-  Item,
-  GenerationPreset,
-} from '$lib/types'
+import type { Entry, EntryType, Character, Location, Item, GenerationPreset } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { buildExtraBody } from '../core/requestOverrides'
 import { createLogger } from '$lib/log'
 import { entitySelectionSchema } from '../sdk/schemas/context'
 import { ContextBuilder } from '$lib/services/context'
-import type { ContextAvailableEntry, ContextStoryEntry } from '$lib/services/context/context-types'
+import { story } from '$lib/stores/story/index.svelte'
 
 const log = createLogger('EntryRetrieval')
 
@@ -166,26 +158,33 @@ export class EntryRetrievalService extends BaseAIService {
    *   - Lorebook entries with injection.mode === 'always'
    *   - "Sticky" entries (recently activated via Tier 2/3, duration based on type)
    * Tier 2: Keyword matched (name/aliases/keywords match user input or recent story)
-   * Tier 3: LLM selection (STUBBED - awaiting SDK migration)
+   * Tier 3: LLM selection
    */
-  async getRelevantEntries(
-    entries: Entry[],
-    userInput: string,
-    recentStoryEntries: StoryEntry[],
-    liveState?: LiveWorldState,
-    activationTracker?: ActivationTracker,
-    signal?: AbortSignal,
-  ): Promise<EntryRetrievalResult> {
+  async getRelevantEntries(): Promise<EntryRetrievalResult> {
+    const {
+      generationContext: { activationTracker, userAction },
+      character: { characters },
+      location: { locations },
+      item: { items },
+      lorebook: { lorebookEntries: entries },
+    } = story
+    const liveState = { characters, locations, items }
+    const userInput = userAction?.content
+    const recentStoryEntries = story.entry.entries.slice(-this.config.recentEntriesCount)
     const currentPosition = activationTracker?.currentPosition ?? recentStoryEntries.length
+
+    if (!userInput) {
+      throw new Error('No user input found in generation context for entry retrieval')
+    }
 
     log('getRelevantEntries called', {
       totalEntries: entries.length,
       userInputLength: userInput.length,
       recentCount: recentStoryEntries.length,
       currentPosition,
-      liveCharacters: liveState?.characters.length ?? 0,
-      liveLocations: liveState?.locations.length ?? 0,
-      liveItems: liveState?.items.length ?? 0,
+      liveCharacters: characters.length ?? 0,
+      liveLocations: locations.length ?? 0,
+      liveItems: items.length ?? 0,
     })
 
     // Build search content from user input and recent story
@@ -196,7 +195,12 @@ export class EntryRetrievalService extends BaseAIService {
     const searchContent = `${userInput} ${recentContent}`.toLowerCase()
 
     // Tier 1: Live-tracked entities + always-inject + sticky entries
-    const tier1 = this.getTier1Entries(entries, liveState, activationTracker, currentPosition)
+    const tier1 = this.getTier1Entries(
+      entries,
+      liveState,
+      activationTracker || undefined,
+      currentPosition,
+    )
     log(
       'Tier 1 entries (always active):',
       tier1.length,
@@ -223,22 +227,19 @@ export class EntryRetrievalService extends BaseAIService {
     const tier1And2Ids = new Set([...tier1Ids, ...tier2.map((e) => e.entry.id)])
 
     // Remaining entries for Tier 3 LLM selection
-    const remainingEntries = candidateEntries.filter((e) => !tier1And2Ids.has(e.id))
-    log('Remaining entries for Tier 3 LLM:', remainingEntries.length)
+    story.generationContext.loreEntriesForTier3 = candidateEntries.filter(
+      (e) => !tier1And2Ids.has(e.id),
+    )
+    log('Remaining entries for Tier 3 LLM:', story.generationContext.loreEntriesForTier3.length)
 
     // Tier 3: LLM selection - runs when there are remaining entries and LLM selection is enabled
     let tier3: RetrievedEntry[] = []
 
-    if (this.config.enableLLMSelection && remainingEntries.length > 0) {
+    if (this.config.enableLLMSelection && story.generationContext.loreEntriesForTier3.length > 0) {
       log('Tier 3 LLM selection triggered', {
-        remainingEntries: remainingEntries.length,
+        remainingEntries: story.generationContext.loreEntriesForTier3.length,
       })
-      tier3 = await this.getLLMSelectedEntries(
-        remainingEntries,
-        userInput,
-        recentStoryEntries,
-        signal,
-      )
+      tier3 = await this.getLLMSelectedEntries()
       log(
         'Tier 3 entries:',
         tier3.length,
@@ -575,33 +576,17 @@ export class EntryRetrievalService extends BaseAIService {
    * Tier 3: LLM-based selection for relevant lorebook entries.
    * Asks the LLM to select the most relevant entries from the candidate pool.
    */
-  private async getLLMSelectedEntries(
-    availableEntries: Entry[],
-    userInput: string,
-    recentStoryEntries: StoryEntry[],
-    signal?: AbortSignal,
-  ): Promise<RetrievedEntry[]> {
+  private async getLLMSelectedEntries(): Promise<RetrievedEntry[]> {
+    const generationContext = story.generationContext
+    const promptContext = generationContext.promptContext
+    const availableEntries = generationContext.loreEntriesForTier3
+
     if (availableEntries.length === 0) {
       return []
     }
 
-    // Build typed arrays for template iteration
-    const availableEntriesMapped: ContextAvailableEntry[] = availableEntries.map((e) => ({
-      name: e.name,
-      type: e.type,
-      description: e.description ? e.description.slice(0, 100) : '',
-    }))
-
-    const recentEntries: ContextStoryEntry[] = recentStoryEntries
-      .slice(-this.config.recentEntriesCount)
-      .filter(
-        (e): e is typeof e & { type: 'user_action' | 'narration' } =>
-          e.type === 'user_action' || e.type === 'narration',
-      )
-      .map((e) => ({ type: e.type, content: e.content }))
-
     const ctx = new ContextBuilder()
-    ctx.add({ recentEntries, userInput, availableEntries: availableEntriesMapped })
+    ctx.add(promptContext)
     const { system, user: prompt } = await ctx.render('tier3-entry-selection')
 
     try {
@@ -611,7 +596,7 @@ export class EntryRetrievalService extends BaseAIService {
           schema: entitySelectionSchema,
           system,
           prompt,
-          signal,
+          signal: story.generationContext.abortSignal,
         },
         'tier3-entry-selection',
       )
@@ -670,28 +655,6 @@ export class EntryRetrievalService extends BaseAIService {
 
     return false
   }
-}
-
-/**
- * Quick function to get relevant entries without a full service instance.
- * Uses settings from the settings store for configuration.
- */
-export async function getRelevantEntries(
-  entries: Entry[],
-  userInput: string,
-  recentStoryEntries: StoryEntry[],
-  liveState?: LiveWorldState,
-  activationTracker?: ActivationTracker,
-): Promise<EntryRetrievalResult> {
-  const config = getEntryRetrievalConfigFromSettings()
-  const service = new EntryRetrievalService(config, 'entryRetrieval')
-  return service.getRelevantEntries(
-    entries,
-    userInput,
-    recentStoryEntries,
-    liveState,
-    activationTracker,
-  )
 }
 
 /**

@@ -1,3 +1,5 @@
+import type { ContextStoryEntry } from '$lib/services/context/context-types'
+import { mapStoryEntriesToContext } from '$lib/services/context/storyEntryMapper'
 import { database } from '$lib/services/database'
 import { rollbackService } from '$lib/services/rollbackService'
 import type { STChatMessage } from '$lib/services/stChatImporter'
@@ -17,9 +19,23 @@ function log(...args: any[]) {
 export class StoryEntryStore {
   constructor(private story: StoryStore) {}
 
-  entries = $state<StoryEntry[]>([])
+  _entries = $state<StoryEntry[]>([])
 
   _entryIdToIndex: Map<string, number> = new Map()
+
+  get rawEntries(): StoryEntry[] {
+    return this._entries
+  }
+
+  set rawEntries(entries: StoryEntry[]) {
+    this._entries = entries
+    this.rebuildEntryIdIndex()
+  }
+
+  // Narratuve+user entries only
+  get entries(): ContextStoryEntry[] {
+    return mapStoryEntriesToContext(this._entries, { stripPicTags: true })
+  }
 
   // Add a new story entry
   // The optional id parameter allows pre-generating the entry ID before streaming starts,
@@ -59,7 +75,7 @@ export class StoryEntryStore {
       reasoning,
     })
 
-    this.entries = [...this.entries, entry]
+    this._entries = [...this._entries, entry]
 
     // Invalidate caches
     this.story.generationContext.invalidateWordCountCache()
@@ -82,7 +98,7 @@ export class StoryEntryStore {
       return
     }
 
-    const existingEntry = this.entries.find((e) => e.id === entryId)
+    const existingEntry = this._entries.find((e) => e.id === entryId)
     if (!existingEntry) throw new Error('Entry not found')
 
     // Prevent modifying inherited entries on a branch
@@ -101,7 +117,7 @@ export class StoryEntryStore {
     const updatedMetadata = { ...existingEntry.metadata, tokenCount }
 
     await database.updateStoryEntry(entryId, { content, metadata: updatedMetadata })
-    this.entries = this.entries.map((e) =>
+    this._entries = this._entries.map((e) =>
       e.id === entryId ? { ...e, content, metadata: updatedMetadata } : e,
     )
 
@@ -123,7 +139,7 @@ export class StoryEntryStore {
       return
     }
 
-    const existingEntry = this.entries.find((e) => e.id === entryId)
+    const existingEntry = this._entries.find((e) => e.id === entryId)
     if (!existingEntry) throw new Error('Entry not found')
 
     // Prevent deleting inherited entries on a branch
@@ -158,7 +174,7 @@ export class StoryEntryStore {
         this.story.id!,
         currentBranchId ?? null,
         existingEntry.position,
-        this.entries,
+        this._entries,
       )
 
       log('Rollback summary:', rollbackSummary)
@@ -183,7 +199,7 @@ export class StoryEntryStore {
 
     // Legacy behavior: delete just this one entry (no world state changes)
     await database.deleteStoryEntry(entryId)
-    this.story.entry.entries = this.story.entry.entries.filter((e) => e.id !== entryId)
+    this.story.entry._entries = this.story.entry._entries.filter((e) => e.id !== entryId)
 
     // Invalidate caches
     this.story.generationContext.invalidateWordCountCache()
@@ -203,7 +219,7 @@ export class StoryEntryStore {
   async updateEntryTimeEnd(entryId: string): Promise<void> {
     if (!this.story.id) throw new Error('No story loaded')
 
-    const entry = this.story.entry.entries.find((e) => e.id === entryId)
+    const entry = this.story.entry._entries.find((e) => e.id === entryId)
     if (!entry) {
       log('updateEntryTimeEnd: Entry not found', entryId)
       return
@@ -215,7 +231,7 @@ export class StoryEntryStore {
     const updatedMetadata = { ...entry.metadata, timeEnd }
 
     await database.updateStoryEntry(entryId, { metadata: updatedMetadata })
-    this.story.entry.entries = this.story.entry.entries.map((e) =>
+    this.story.entry._entries = this.story.entry._entries.map((e) =>
       e.id === entryId ? { ...e, metadata: updatedMetadata } : e,
     )
 
@@ -226,11 +242,11 @@ export class StoryEntryStore {
    * Update an entry's reasoning content and persist to database.
    */
   async updateEntryReasoning(entryId: string, reasoning: string): Promise<void> {
-    const entry = this.story.entry.entries.find((e) => e.id === entryId)
+    const entry = this.story.entry._entries.find((e) => e.id === entryId)
     if (!entry) return
 
     // Update in-memory state
-    this.story.entry.entries = this.story.entry.entries.map((e) =>
+    this.story.entry._entries = this.story.entry._entries.map((e) =>
       e.id === entryId ? { ...e, reasoning } : e,
     )
 
@@ -247,7 +263,7 @@ export class StoryEntryStore {
     if (!updatedEntry) return
 
     // Update in-memory state
-    this.story.entry.entries = this.story.entry.entries.map((e) =>
+    this.story.entry._entries = this.story.entry._entries.map((e) =>
       e.id === entryId ? updatedEntry : e,
     )
   }
@@ -275,7 +291,7 @@ export class StoryEntryStore {
           this.story.id!,
           this.story.branch.currentBranchId ?? null,
           position,
-          this.story.entry.entries,
+          this.story.entry._entries,
         )
         log('Rollback before deleteEntriesFromPosition:', rollbackSummary)
       } catch (error) {
@@ -284,13 +300,13 @@ export class StoryEntryStore {
     }
 
     // Find entries to delete (position >= the given position)
-    const entriesToDelete = this.story.entry.entries.filter((e) => e.position >= position)
+    const entriesToDelete = this.story.entry._entries.filter((e) => e.position >= position)
     const entryIdsToDelete = new Set(entriesToDelete.map((e) => e.id))
 
     log('Deleting entries from position', {
       position,
       entriesToDelete: entriesToDelete.length,
-      totalEntries: this.story.entry.entries.length,
+      totalEntries: this.story.entry._entries.length,
     })
 
     // Find chapters that reference any of the entries being deleted
@@ -326,7 +342,7 @@ export class StoryEntryStore {
     }
 
     // Update in-memory state
-    this.story.entry.entries = this.story.entry.entries.filter((e) => e.position < position)
+    this.story.entry._entries = this.story.entry._entries.filter((e) => e.position < position)
 
     // Invalidate caches
     this.story.generationContext.invalidateWordCountCache()
@@ -480,8 +496,8 @@ export class StoryEntryStore {
    */
   rebuildEntryIdIndex(): void {
     this._entryIdToIndex.clear()
-    for (let i = 0; i < this.entries.length; i++) {
-      this._entryIdToIndex.set(this.entries[i].id, i)
+    for (let i = 0; i < this._entries.length; i++) {
+      this._entryIdToIndex.set(this._entries[i].id, i)
     }
   }
 
@@ -493,9 +509,13 @@ export class StoryEntryStore {
   get visibleEntries(): StoryEntry[] {
     if (this.story.chapter.chapters.length === 0) {
       // No chapters yet, all entries are visible
-      return this.entries
+      return this._entries
     }
     // Return only entries after the last chapter
-    return this.entries.slice(this.story.chapter.lastChapterEndIndex)
+    return this._entries.slice(this.story.chapter.lastChapterEndIndex)
+  }
+
+  get visibleStoryEntries(): ContextStoryEntry[] {
+    return mapStoryEntriesToContext(this.visibleEntries, { stripPicTags: true })
   }
 }

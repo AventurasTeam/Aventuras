@@ -588,6 +588,10 @@ export class WizardStore {
     }
 
     await story.loadStory(newStory.id)
+    // Generate background image from opening scene
+    if (storyData.settings?.backgroundImagesEnabled) {
+      aiService.analyzeBackgroundChangeAndGenerateImage()
+    }
     ui.setActivePanel('story')
     this.onClose()
   }

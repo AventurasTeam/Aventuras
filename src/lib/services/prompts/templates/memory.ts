@@ -17,11 +17,13 @@ Select the message ID that represents the longest self-contained narrative arc w
 - Choose the point that creates the most complete, self-contained chapter
 - Prefer later messages that still complete the arc (avoid cutting mid-beat)`,
   userContent: `# Message Range for Auto-Summarize
+{%- assign firstValidId = lastChapterEndIndex | plus: 1 -%}
+{%- assign lastValidId = firstValidId | plus: chapterAnalysis.analysisEntries.size | minus: 1 -%}
 First valid message ID: {{ firstValidId }}
 Last valid message ID: {{ lastValidId }}
 
 # Messages in Range:
-{% for e in messagesInRange %}[Message {{ forloop.index0 | plus: firstValidId }}] [{{ e.type }}]: {{ e.content }}
+{% for e in analysisEntries %}[Message {{ forloop.index0 | plus: firstValidId }}] [{{ e.type }}]: {{ e.content }}
 
 {% endfor %}
 Select the single best chapter endpoint from this range.`,
@@ -50,50 +52,17 @@ For each chapter, create a concise summary that includes ONLY:
 - Dialogue excerpts (unless pivotal)
 - Stylistic or thematic analysis
 - Personal interpretations or opinions`,
-  userContent: `{% if previousChapters.size > 0 %}Previous chapters:
+  userContent: `{%- assign previousChapters = chapters | sort: "number" -%}
+{%- if previousChapters.size > 0 %}Previous chapters:
 {% for c in previousChapters %}Chapter {{ c.number }}: {{ c.summary }}
 
 {% endfor %}{% endif %}Summarize this story chapter and extract metadata.
 
 CHAPTER CONTENT:
 """
-{% for e in chapterEntries %}[{{ e.type }}]: {{ e.content }}
+{% for e in chapterAnalysis.chapterEntries %}[{{ e.type }}]: {{ e.content }}
 
 {% endfor %}"""`,
-}
-
-const retrievalDecisionPromptTemplate: PromptTemplate = {
-  id: 'retrieval-decision',
-  name: 'Retrieval Decision',
-  category: 'service',
-  description: 'Decides which past chapters are relevant for current context',
-  content: `You decide which story chapters are relevant for the current context.
-
-Guidelines:
-- Only include chapters that are ACTUALLY relevant to the current context
-- Often, no chapters need to be queried - return empty arrays if nothing is relevant
-- Consider: characters mentioned, locations being revisited, plot threads referenced`,
-  userContent: `Based on the user's input and current scene, decide which past chapters are relevant.
-
-USER INPUT:
-"{{ userInput }}"
-
-CURRENT SCENE (last few messages):
-"""
-{% for e in recentEntries %}[{{ e.type }}]: {{ e.content }}
-
-{% endfor %}"""
-
-CHAPTER SUMMARIES:
-{% for c in chapters %}Chapter {{ c.number }}: {{ c.summary }}
-
-{% endfor %}
-
-Guidelines:
-- Only include chapters that are ACTUALLY relevant to the current context
-- Often, no chapters need to be queried - return empty arrays if nothing is relevant
-- Maximum {{ maxChaptersPerRetrieval }} chapters per query
-- Consider: characters mentioned, locations being revisited, plot threads referenced`,
 }
 
 const loreManagementPromptTemplate: PromptTemplate = {
@@ -212,19 +181,23 @@ USER INPUT:
 "{{ userInput }}"
 
 RECENT SCENE:
-{% if recentEntries.size > 0 %}
-{% for entry in recentEntries %}
+{% assign neg_max = 0 | minus: userSettings.retrieval.maxStoryEntries -%}
+{%- assign recentStoryEntries = storyEntries | slice: neg_max, userSettings.retrieval.maxStoryEntries -%}
+{% if recentStoryEntries.size > 0 %}
+{% for entry in recentStoryEntries %}
 {{ entry.content }}
 {% endfor %}
 {% else %}
 No recent entries available.
 {% endif %}
 
-# Available Chapters: {{ chaptersCount }}
-{% if agenticChapters.size > 0 %}{% for c in agenticChapters %}- Chapter {{ c.number }}{% if c.title %}: {{ c.title }}{% endif %} - {{ c.summary }}
+{% assign agenticChapters = chapters | slice: 0, userSettings.agenticRetrieval.maxChapters -%}
+# Available Chapters: {{ agenticChapters.size }}
+{% if agenticChapters.size > 0 %}{% for c in agenticChapters %}- Chapter {{ c.number }}{% if c.title %}: {{ c.title }}{% endif %} - {{ c.summary | truncate: userSettings.agenticRetrieval.summaryCharLimit }}
 {% endfor %}{% else %}No chapters available.{% endif %}
 
-# Lorebook Entries: {{ entriesCount }}
+{% assign agenticEntries = lorebookEntries | slice: 0, userSettings.agenticRetrieval.maxLorebookEntries -%}
+# Lorebook Entries: {{ agenticEntries.size }}
 {% if agenticEntries.size > 0 %}{% for e in agenticEntries %}{{ forloop.index0 }}. [{{ e.type }}] {{ e.name }}
 {% endfor %}{% else %}No entries available.{% endif %}
 
@@ -234,7 +207,6 @@ Please gather relevant context from past chapters that will help respond to this
 export const memoryTemplates: PromptTemplate[] = [
   chapterAnalysisPromptTemplate,
   chapterSummarizationPromptTemplate,
-  retrievalDecisionPromptTemplate,
   loreManagementPromptTemplate,
   interactiveLorebookPromptTemplate,
   agenticRetrievalPromptTemplate,

@@ -56,7 +56,7 @@ import { createAutoTracer } from './utils/TestTracer'
 
 function getStoreState() {
   return {
-    entries: structuredClone(story.entry.entries),
+    entries: structuredClone(story.entry.rawEntries),
     characters: structuredClone(story.character.characters),
     locations: structuredClone(story.location.locations),
     items: structuredClone(story.item.items),
@@ -78,45 +78,7 @@ function getStoreState() {
 
 function buildMockCallbacks(): ActionInputCallbacks {
   return {
-    startStreaming: vi.fn(),
-    endStreaming: vi.fn(),
-    appendStreamContent: vi.fn(),
-    appendReasoningContent: vi.fn(),
-    setGenerating: vi.fn(),
-    clearGenerationError: vi.fn(),
-    setGenerationError: vi.fn(),
-    setGenerationStatus: vi.fn(),
-    setSuggestionsLoading: vi.fn(),
-    setActionChoicesLoading: vi.fn(),
-    setSuggestions: vi.fn(),
-    setActionChoices: vi.fn(),
-    clearSuggestions: vi.fn(),
-    clearActionChoices: vi.fn(),
-    createRetryBackup: vi.fn(),
-    clearRetryBackup: vi.fn(),
-    getRetryBackup: vi.fn().mockReturnValue(null),
-    isRetryingLastMessage: vi.fn().mockReturnValue(false),
-    setRetryingLastMessage: vi.fn(),
-    updateActivationData: vi.fn(),
-    getActivationTracker: vi.fn().mockReturnValue(null),
-    restoreActivationData: vi.fn(),
-    clearActivationData: vi.fn(),
-    setLastLorebookRetrieval: vi.fn(),
-    getLastStyleReview: vi.fn().mockReturnValue(null),
-    emitNarrativeResponse: vi.fn(),
-    emitUserInput: vi.fn(),
-    emitResponseStreaming: vi.fn(),
-    emitSuggestionsReady: vi.fn(),
-    emitTTSQueued: vi.fn(),
     sendGenerationNotification: vi.fn(),
-    wasBackgroundedDuringGeneration: vi.fn().mockReturnValue(false),
-    isAppBackgrounded: vi.fn().mockReturnValue(false),
-    resetBackgroundedFlag: vi.fn(),
-    startGenerationService: vi.fn(),
-    stopGenerationService: vi.fn(),
-    shouldUseBackgroundService: vi.fn().mockReturnValue(false),
-    resetScrollBreak: vi.fn(),
-    getLastGenerationError: vi.fn().mockReturnValue(null),
   }
 }
 

@@ -63,7 +63,7 @@ import { createAutoTracer } from './utils/TestTracer'
 
 function getStoreState() {
   return {
-    entries: structuredClone(story.entry.entries),
+    entries: structuredClone(story.entry.rawEntries),
     characters: structuredClone(story.character.characters),
     locations: structuredClone(story.location.locations),
     items: structuredClone(story.item.items),
@@ -198,7 +198,7 @@ function buildTestInput(storyId: string): {
   const input: BackgroundTaskInput = {
     styleReview: {
       storyId,
-      entries: story.entry.entries,
+      entries: story.entry.rawEntries,
       mode: story.mode,
       pov: story.settings.pov,
       tense: story.settings.tense,
@@ -216,7 +216,7 @@ function buildTestInput(storyId: string): {
     chapterCheck: {
       storyId,
       currentBranchId: story.branch.currentBranchId,
-      entries: story.entry.entries,
+      entries: story.entry.rawEntries,
       lastChapterEndIndex: story.chapter.lastChapterEndIndex,
       tokensSinceLastChapter: story.generationContext.tokensSinceLastChapter,
       tokensOutsideBuffer: story.generationContext.tokensOutsideBuffer,

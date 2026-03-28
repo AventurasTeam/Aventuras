@@ -45,7 +45,6 @@ export type { RetryBackupData, RetryStoreCallbacks, RestoreResult } from './Retr
 // Chapter service
 export { ChapterService } from './ChapterService'
 export type {
-  ChapterServiceDependencies,
   ChapterCheckInput,
   ChapterCreationResult,
   ChapterAnalysisResult,
@@ -58,45 +57,28 @@ export type {
   LoreManagementCallbacks,
   LoreManagementUICallbacks,
   LoreSessionInput,
-  LoreManagementDependencies,
   LoreSessionResult,
 } from './LoreManagementCoordinator'
 
 // Style review scheduler
 export { StyleReviewScheduler } from './StyleReviewScheduler'
-export type {
-  StyleReviewDependencies,
-  StyleReviewUICallbacks,
-  StyleReviewCheckInput,
-  StyleReviewCheckResult,
-} from './StyleReviewScheduler'
+export type { StyleReviewCheckInput, StyleReviewCheckResult } from './StyleReviewScheduler'
 
 // Background task coordinator
 export { BackgroundTaskCoordinator } from './BackgroundTaskCoordinator'
-export type {
-  BackgroundTaskDependencies,
-  BackgroundTaskInput,
-  BackgroundTaskResult,
-} from './BackgroundTaskCoordinator'
+export type { BackgroundTaskInput, BackgroundTaskResult } from './BackgroundTaskCoordinator'
 
 // World state translation service
 export { WorldStateTranslationService } from './WorldStateTranslationService'
 export type {
   ClassificationNewEntities,
   WorldStateEntities,
-  WorldStateTranslationCallbacks,
-  WorldStateTranslationDependencies,
-  WorldStateTranslationInput,
   WorldStateTranslationResult,
 } from './WorldStateTranslationService'
 
 // Suggestions refresh service
 export { SuggestionsRefreshService } from './SuggestionsRefreshService'
-export type {
-  SuggestionsRefreshDependencies,
-  SuggestionsRefreshInput,
-  SuggestionsRefreshResult,
-} from './SuggestionsRefreshService'
+export type { SuggestionsRefreshResult } from './SuggestionsRefreshService'
 
 // Pipeline event handler
 export { handleEvent } from './PipelineEventHandler'

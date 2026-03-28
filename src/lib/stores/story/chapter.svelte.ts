@@ -71,7 +71,7 @@ export class StoryChapterStore {
 
   // Get entries for a specific chapter
   getChapterEntries(chapter: Chapter): StoryEntry[] {
-    const entries = this.story.entry.entries
+    const entries = this.story.entry.rawEntries
     const startIdx = entries.findIndex((e) => e.id === chapter.startEntryId)
     const endIdx = entries.findIndex((e) => e.id === chapter.endEntryId)
     if (startIdx === -1 || endIdx === -1) return []
@@ -99,12 +99,12 @@ export class StoryChapterStore {
     const startIndex = this.lastChapterEndIndex
 
     // Validate the end index
-    if (endEntryIndex <= startIndex || endEntryIndex > this.story.entry.entries.length) {
+    if (endEntryIndex <= startIndex || endEntryIndex > this.story.entry.rawEntries.length) {
       throw new Error('Invalid entry index for chapter creation')
     }
 
     // Get the entries for this chapter
-    const chapterEntries = this.story.entry.entries.slice(startIndex, endEntryIndex)
+    const chapterEntries = this.story.entry.rawEntries.slice(startIndex, endEntryIndex)
     if (chapterEntries.length === 0) {
       throw new Error('No entries to create chapter from')
     }
@@ -116,13 +116,7 @@ export class StoryChapterStore {
     const { aiService } = await import('$lib/services/ai')
 
     // Generate summary with previous chapters as context
-    const chapterData = await aiService.summarizeChapter(
-      chapterEntries,
-      previousChapters,
-      this.story.mode,
-      this.story.settings.pov,
-      this.story.settings.tense,
-    )
+    const chapterData = await aiService.summarizeChapter()
 
     // Get the next chapter number
     const chapterNumber = await this.getNextChapterNumber()
@@ -167,7 +161,7 @@ export class StoryChapterStore {
     if (this.story.chapter.chapters.length === 0) return false
 
     let repairsMade = false
-    const entryIdSet = new Set(this.story.entry.entries.map((e) => e.id))
+    const entryIdSet = new Set(this.story.entry.rawEntries.map((e) => e.id))
     const chaptersToDelete: string[] = []
 
     // Sort chapters by number for proper validation
@@ -252,11 +246,11 @@ export class StoryChapterStore {
 
     // Check if cache is valid - invalidate if chapters or entries changed
     const chaptersChanged = this.chapters.length !== this._lastChaptersLength
-    const entriesChanged = this.story.entry.entries.length !== this._lastEntriesLength
+    const entriesChanged = this.story.entry.rawEntries.length !== this._lastEntriesLength
 
     if (chaptersChanged || entriesChanged || this._lastChapterEndIndexDirty) {
       this._lastChaptersLength = this.chapters.length
-      this._lastEntriesLength = this.story.entry.entries.length
+      this._lastEntriesLength = this.story.entry.rawEntries.length
       this._cachedLastChapterEndIndex = this._computeLastChapterEndIndex()
       this._lastChapterEndIndexDirty = false
     }
@@ -265,7 +259,7 @@ export class StoryChapterStore {
   }
 
   get messagesSinceLastChapter(): number {
-    return this.story.entry.entries.length - this.lastChapterEndIndex
+    return this.story.entry.rawEntries.length - this.lastChapterEndIndex
   }
 
   /**
@@ -278,7 +272,7 @@ export class StoryChapterStore {
     if (branchChapters.length === 0) return 0
 
     // Rebuild index map if needed
-    if (this.story.entry._entryIdToIndex.size !== this.story.entry.entries.length) {
+    if (this.story.entry._entryIdToIndex.size !== this.story.entry.rawEntries.length) {
       this.story.entry.rebuildEntryIdIndex()
     }
 
@@ -301,7 +295,7 @@ export class StoryChapterStore {
 
     // Sum up all branch chapter entry counts as a fallback estimate
     const totalChapterEntries = sortedChapters.reduce((sum, ch) => sum + ch.entryCount, 0)
-    return Math.min(totalChapterEntries, this.story.entry.entries.length)
+    return Math.min(totalChapterEntries, this.story.entry.rawEntries.length)
   }
 
   /**

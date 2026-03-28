@@ -2,6 +2,10 @@
  * PipelineEventHandler - Maps GenerationEvent pipeline events to UI callbacks.
  * Extracted from ActionInput.svelte for reusability and testability.
  */
+import { story } from '$lib/stores/story/index.svelte'
+import { ui } from '$lib/stores/ui.svelte'
+import { database } from '../database'
+import { emitSuggestionsReady, eventBus, type ResponseStreamingEvent } from '../events'
 import type { GenerationEvent } from './types'
 
 export interface PipelineUICallbacks {
@@ -26,35 +30,46 @@ export interface PipelineEventState {
   storyId?: string
 }
 
-export function handleEvent(
-  event: GenerationEvent,
-  state: PipelineEventState,
-  callbacks: PipelineUICallbacks,
-): void {
+const persistSuggestedActions = (actions: unknown[], type: 'suggestions' | 'choices') => {
+  const narrationEntry = story.generationContext.promptContext.lastNarrativeEntry
+  if (narrationEntry && actions.length > 0) {
+    database
+      .updateStoryEntry(narrationEntry.id, {
+        suggestedActions: JSON.stringify(actions),
+      })
+      .catch((err) => console.warn(`[ActionInput] Failed to save suggested ${type} to entry:`, err))
+  }
+}
+
+export function handleEvent(event: GenerationEvent, state: PipelineEventState): void {
   switch (event.type) {
     case 'phase_start':
       if (event.phase === 'narrative') {
-        callbacks.startStreaming(state.visualProseMode, state.streamingEntryId)
+        ui.startStreaming(state.visualProseMode, state.streamingEntryId)
       } else if (event.phase === 'classification') {
-        callbacks.setGenerationStatus('Updating world...')
+        ui.setGenerationStatus('Updating world...')
       } else if (event.phase === 'post') {
-        callbacks.setGenerationStatus(
+        ui.setGenerationStatus(
           state.isCreativeWritingMode ? 'Generating suggestions...' : 'Generating actions...',
         )
         if (state.isCreativeWritingMode) {
-          callbacks.setSuggestionsLoading(true)
+          ui.setSuggestionsLoading(true)
         } else {
-          callbacks.setActionChoicesLoading(true)
+          ui.setActionChoicesLoading(true)
         }
       }
       break
 
     case 'narrative_chunk':
       if (event.content) {
-        callbacks.appendStreamContent(event.content)
-        callbacks.emitResponseStreaming(event.content, state.fullResponse() + event.content)
+        ui.appendStreamContent(event.content)
+        eventBus.emit<ResponseStreamingEvent>({
+          type: 'ResponseStreaming',
+          chunk: event.content,
+          accumulated: state.fullResponse() + event.content,
+        })
       }
-      if (event.reasoning) callbacks.appendReasoningContent(event.reasoning)
+      if (event.reasoning) ui.appendReasoningContent(event.reasoning)
       break
 
     case 'phase_complete':
@@ -63,17 +78,19 @@ export function handleEvent(
           | { suggestions: any[] | null; actionChoices: any[] | null }
           | undefined
         if (postResult?.suggestions) {
-          callbacks.setSuggestions(postResult.suggestions, state.storyId)
-          callbacks.emitSuggestionsReady(
+          ui.setSuggestions(postResult.suggestions, state.storyId)
+          persistSuggestedActions(postResult.suggestions, 'suggestions')
+          emitSuggestionsReady(
             postResult.suggestions.map((s: any) => ({ text: s.text, type: s.type })),
           )
-          callbacks.setSuggestionsLoading(false)
+          ui.setSuggestionsLoading(false)
         } else if (postResult?.actionChoices) {
-          callbacks.setActionChoices(postResult.actionChoices, state.storyId)
-          callbacks.setActionChoicesLoading(false)
+          ui.setActionChoices(postResult.actionChoices, state.storyId)
+          persistSuggestedActions(postResult.actionChoices, 'choices')
+          ui.setActionChoicesLoading(false)
         } else {
-          callbacks.setSuggestionsLoading(false)
-          callbacks.setActionChoicesLoading(false)
+          ui.setSuggestionsLoading(false)
+          ui.setActionChoicesLoading(false)
         }
       }
       break

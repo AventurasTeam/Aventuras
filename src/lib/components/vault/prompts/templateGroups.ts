@@ -28,7 +28,6 @@ const TEMPLATE_GROUP_MAP: Record<string, string> = {
   // Memory
   'chapter-analysis': 'Memory',
   'chapter-summarization': 'Memory',
-  'retrieval-decision': 'Memory',
   'lore-management': 'Memory',
   'interactive-lorebook': 'Memory',
   'agentic-retrieval': 'Memory',

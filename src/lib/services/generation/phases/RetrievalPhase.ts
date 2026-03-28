@@ -54,7 +54,7 @@ export class RetrievalPhase {
     }
 
     // Task 2: Lorebook entry retrieval (skip if agentic retrieval handles it)
-    const useAgenticRetrieval = aiService.shouldUseAgenticRetrieval(new Array(chapters.length))
+    const useAgenticRetrieval = aiService.shouldUseAgenticRetrieval()
     const hasLoreContent =
       lorebookEntries.length > 0 ||
       characters.length > 0 ||
@@ -63,14 +63,7 @@ export class RetrievalPhase {
     if (hasLoreContent && !useAgenticRetrieval) {
       tasks.push(
         aiService
-          .getRelevantLorebookEntries(
-            lorebookEntries,
-            story.generationContext.userAction!.content,
-            story.entry.visibleEntries.slice(-10),
-            { characters, locations, items },
-            story.generationContext.activationTracker ?? undefined,
-            story.generationContext.abortSignal ?? undefined,
-          )
+          .getRelevantLorebookEntries()
           .then((result) => {
             lorebookRetrievalResult = result
           })
@@ -106,7 +99,6 @@ export class RetrievalPhase {
 
     yield { type: 'phase_complete', phase: 'retrieval' } satisfies PhaseCompleteEvent
 
-    // Write result to singleton before returning
     story.generationContext.retrievalResult = result
 
     return true
@@ -117,19 +109,8 @@ export class RetrievalPhase {
     timelineFillResult: TimelineFillResult | null
   }> {
     const chapters = story.chapter.currentBranchChapters
-    if (aiService.shouldUseAgenticRetrieval(new Array(chapters.length))) {
-      const result = await aiService.runAgenticRetrieval(
-        story.generationContext.userAction!.content,
-        story.entry.visibleEntries,
-        chapters,
-        story.lorebook.lorebookEntries,
-        (num, q) => aiService.answerChapterQuestion(num, q, chapters),
-        (start, end, q) => aiService.answerChapterRangeQuestion(start, end, q, chapters),
-        story.generationContext.abortSignal ?? undefined,
-        story.mode,
-        story.settings.pov,
-        story.settings.tense,
-      )
+    if (aiService.shouldUseAgenticRetrieval()) {
+      const result = await aiService.runAgenticRetrieval()
       const agenticRetrieval: AgenticRetrievalFields | null = result
         ? {
             agenticReasoning: result.agenticReasoning,

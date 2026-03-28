@@ -404,7 +404,7 @@ export class StoryBranchStore {
           database.getEntriesForBranch(this.story.id!, null),
         ])
 
-      this.story.entry.entries = entries
+      this.story.entry.rawEntries = entries
       this.story.chapter.chapters = chapters
       this.story.character.characters = characters
       this.story.location.locations = locations
@@ -449,12 +449,12 @@ export class StoryBranchStore {
         branchEntries.push(...entries)
       }
 
-      this.story.entry.entries = [...inheritedEntries, ...branchEntries].sort(
+      this.story.entry.rawEntries = [...inheritedEntries, ...branchEntries].sort(
         (a, b) => a.position - b.position,
       )
 
       const entryPositions = new SvelteMap<string, number>()
-      for (const entry of this.story.entry.entries) {
+      for (const entry of this.story.entry.rawEntries) {
         entryPositions.set(entry.id, entry.position)
       }
 
@@ -577,9 +577,9 @@ export class StoryBranchStore {
    * Called after loading entries for a branch to ensure time consistency.
    */
   private async restoreTimeFromLastEntry(): Promise<void> {
-    if (!this.story.id || this.story.entry.entries.length === 0) return
+    if (!this.story.id || this.story.entry.rawEntries.length === 0) return
 
-    const lastEntry = this.story.entry.entries[this.story.entry.entries.length - 1]
+    const lastEntry = this.story.entry.rawEntries[this.story.entry.rawEntries.length - 1]
     const timeEnd = lastEntry.metadata?.timeEnd
 
     if (timeEnd && typeof timeEnd === 'object') {

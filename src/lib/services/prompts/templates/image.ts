@@ -32,14 +32,22 @@ const imagePromptAnalysisTemplate: PromptTemplate = {
   content: `You identify visually striking moments in narrative text for image generation.
 
 ## Your Task
-Analyze the narrative and identify up to {{ maxImages }} key visual moments (0 = unlimited). Create DETAILED, descriptive image prompts (aim for below 500 characters each). **Do NOT exceed 500 characters per prompt - prompts over 500 characters will cause an error and fail to generate.**
+Analyze the narrative and identify up to {{ userSettings.imageGeneration.maxImages }} key visual moments (0 = unlimited). Create DETAILED, descriptive image prompts (aim for below 500 characters each). **Do NOT exceed 500 characters per prompt - prompts over 500 characters will cause an error and fail to generate.**
 
 ## Style (MUST include in every prompt)
-{{ imageStylePrompt }}
+{{ userSettings.imageGeneration.stylePrompt }}
 
 **You MUST incorporate this full style description into every prompt.** Include multiple style keywords and rendering details.
 
 ## Character Reference
+{%- assign presentCharacterNames = classificationResult.scene.presentCharacterNames | default: "" | split: "" -%}
+
+{%- assign sceneCharacters = "" | split: "" -%}
+{%- for character in characters -%}
+  {%- if presentCharacterNames contains character.name -%}
+    {%- assign sceneCharacters = sceneCharacters | concat: character -%}
+  {%- endif -%}
+{%- endfor -%}
 {%- for char in sceneCharacters %}{% if char.visualDescriptors %}
 **{{ char.name }}**:
   {%- if char.visualDescriptors.face %}
@@ -104,19 +112,22 @@ Analyze the narrative and identify up to {{ maxImages }} key visual moments (0 =
 - 5-7: Character introductions, emotions
 - 3-5: Environmental shots, atmosphere`,
   userContent: `## Story Context
-{%- if chatHistory.size > 0 %}
-{% for entry in chatHistory %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.timeStart != '' %} (at {{ entry.timeStart }}){% endif %} {{ entry.content }}
+{%- if storyEntriesVisible.size > 0 %}
+{% for entry in storyEntriesVisible %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.timeStart != '' %} (at {{ entry.timeStart }}){% endif %} {{ entry.content }}
 
 {% endfor %}
 {%- endif %}
 
 ## User Action
-{{ userAction }}
+{{ userInput }}
 
 ## English Narrative (use for understanding context)
-{{ narrativeResponse }}
+{{ lastNarrativeEntry.content }}
 
-{{ translatedNarrativeBlock }}
+{{% if translationResult.translatedContent and translationResult.targetLanguage -%}}
+## Display Narrative ({{ translationResult.targetLanguage }} - use this for sourceText)
+{{ translationResult.translatedContent }}
+{{%- endif %}}
 
 Identify the most visually striking moments and return the JSON array. Remember: sourceText must come from the Display Narrative (translated if provided), but prompts must ALWAYS be in English.`,
 }
@@ -129,7 +140,7 @@ const imagePromptAnalysisReferenceTemplate: PromptTemplate = {
   content: `You identify visually striking moments in narrative text for image generation WITH REFERENCE IMAGES.
 
 ## Your Task
-Analyze the narrative and identify up to {{ maxImages }} scene images (0 = unlimited). Portrait generations do NOT count towards this limit - generate portraits freely as needed. Create concise image prompts.
+Analyze the narrative and identify up to {{ userSettings.imageGeneration.maxImages }} scene images (0 = unlimited). Portrait generations do NOT count towards this limit - generate portraits freely as needed. Create concise image prompts.
 
 **Prompt length targets:**
 - Single character: 200-350 characters
@@ -146,8 +157,16 @@ Analyze the narrative and identify up to {{ maxImages }} scene images (0 = unlim
 - Think of portraits as "unlocking" a character for visual representation - no portrait = character cannot exist in images.
 
 ## Style Keywords (pick 2-3 relevant ones per prompt)
-{{ imageStylePrompt }}
+{{ userSettings.imageGeneration.stylePrompt }}
 
+{% assign presentCharacterNames = classificationResult.scene.presentCharacterNames | default: "" | split: "" -%}
+
+{%- assign sceneCharacters = "" | split: "" -%}
+{%- for character in characters -%}
+  {%- if presentCharacterNames contains character.name -%}
+    {%- assign sceneCharacters = sceneCharacters | concat: character -%}
+  {%- endif -%}
+{%- endfor -%}
 ## Characters With Portraits (can appear in scene images)
 {%- assign hasPortrait = false %}{% for char in sceneCharacters %}{% if char.portrait %}{% if hasPortrait %}, {% endif %}{{ char.name }}{% assign hasPortrait = true %}{% endif %}{% endfor %}{% unless hasPortrait %}None{% endunless %}
 
@@ -301,19 +320,22 @@ Match the angle to the emotional tone: action scenes benefit from low/dutch angl
 - 5-7: Emotional moments, reveals
 - 3-5: Environmental atmosphere`,
   userContent: `## Story Context
-{%- if chatHistory.size > 0 %}
-{% for entry in chatHistory %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.timeStart != '' %} (at {{ entry.timeStart }}){% endif %} {{ entry.content }}
+{%- if storyEntriesVisible.size > 0 %}
+{% for entry in storyEntriesVisible %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.timeStart != '' %} (at {{ entry.timeStart }}){% endif %} {{ entry.content }}
 
 {% endfor %}
 {%- endif %}
 
 ## User Action
-{{ userAction }}
+{{ userInput }}
 
 ## English Narrative (use for understanding context)
-{{ narrativeResponse }}
+{{ lastNarrativeEntry.content }}
 
-{{ translatedNarrativeBlock }}
+{{% if translationResult.translatedContent and translationResult.targetLanguage %}}
+## Display Narrative ({{ translationResult.targetLanguage }} - use this for sourceText)
+{{ translationResult.translatedContent }}
+{{% endif %}}
 
 Identify visually striking moments. Return JSON array. Remember: NEVER use character names in prompts - describe by visual traits only. Keep prompts concise. sourceText must come from the Display Narrative (translated if provided), but prompts must ALWAYS be in English.`,
 }
@@ -358,11 +380,20 @@ When generating a description, follow these standards:
 *   **Details**: Describe the environment with vibrant or atmospheric colors. Include elements like "soft lighting," "lens flare," or "depth of field" if applicable.
 *   **Composition**: Ensure the composition leaves negative space (usually the lower center or middle) for dialogue boxes and character sprites. Do not clutter the entire image; the edges should be detailed but the focal area should be relatively open.
 *   **Format**: A single, cohesive paragraph. 800 characters or less, any more **will break** the process.`,
-  userContent: `{% assign prevIdx = lastNarrationIndex | minus: 1 %}##Previous Message:
-{% if prevIdx >= 0 %}{{ narrationEntries[prevIdx].content }}{% endif %}
+  userContent: `{%- assign narrations = storyEntriesVisible | where: "type", "narration" -%}
+{%- assign last_narration = narrations | last -%}
+{%- assign narrations_size = narrations | size -%}
+{%- assign second_to_last_index = narrations_size | minus: 2 -%}
+{%- assign second_to_last_narration = narrations | slice: second_to_last_index -%}
+{%- if last_narration -%}
+##Previous Message:
+{{ last_narration.content }}
+{%- endif -%}
 
+{% if second_to_last_index >= 0 and second_to_last_narration -%}
 ##Current Message:
-{{ narrationEntries[lastNarrationIndex].content }}`,
+{{ second_to_last_narration.content }}
+{%- endif -%}`,
 }
 
 export const imageTemplates: PromptTemplate[] = [
