@@ -18,7 +18,7 @@ import type {
   TimeTracker,
 } from '$lib/types'
 import type { ContextStoryEntry, ContextLorebookEntry, ContextLorebookEntryBase } from '$lib/services/context/context-types'
-import type { WorldStateArrays } from '$lib/services/context/worldStateMapper'
+import type { WorldStateArrays } from '$lib/services/context/context-types'
 import type { RetrievalResult, AgenticRetrievalFields } from '$lib/services/generation/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
 import type { Suggestion } from '$lib/services/ai/sdk/schemas/suggestions'
@@ -188,27 +188,23 @@ const chapters: Chapter[] = [
 // ---------------------------------------------------------------------------
 
 const relevantWorldState: WorldStateArrays = {
-  characters: [
-    { name: 'Aria', relationship: 'companion', description: 'A resourceful elven scout', traits: ['brave', 'perceptive'], appearance: ['Silver hair', 'Green eyes'], tier: 1, status: 'active' },
-    { name: 'Marcus', relationship: 'ally', description: 'An old mercenary', traits: ['stoic'], appearance: ['Grey stubble'], tier: 2, status: 'active' },
-  ],
-  inventory: [
-    { name: 'Iron Sword', description: 'A sturdy blade', quantity: 1, equipped: true },
-    { name: 'Health Potion', description: 'Restores vitality', quantity: 3, equipped: false },
-  ],
+  characters,
+  inventory: items,
   relevantItems: [
-    { name: 'Crystal of Aethon', description: 'A powerful artifact', quantity: 1, equipped: false, tier: 2 },
+    {
+      id: 'i3', storyId: 's1', name: 'Crystal of Aethon', description: 'A powerful artifact',
+      quantity: 1, equipped: false, location: 'world', metadata: null, branchId: null,
+    },
   ],
-  storyBeats: [
-    { title: 'Find the Lost Temple', description: 'Locate the Sunken Temple in the Thornwood', type: 'quest', status: 'active' },
-    { title: 'Earn Marcus\'s Trust', description: 'Prove yourself to the old mercenary', type: 'quest', status: 'pending' },
-  ],
+  storyBeats: storyBeats.filter((b) => b.status === 'active' || b.status === 'pending'),
   relatedStoryBeats: [
-    { title: 'The Prophecy', description: 'An ancient prophecy speaks of a chosen one', type: 'revelation', status: 'active', tier: 3 },
+    {
+      id: 'b4', storyId: 's1', title: 'The Prophecy',
+      description: 'An ancient prophecy speaks of a chosen one',
+      type: 'revelation', status: 'active', triggeredAt: null, metadata: null, branchId: null,
+    },
   ],
-  locations: [
-    { name: 'Thornwood Edge', description: 'The cursed treeline at the forest border', visited: true, tier: 2 },
-  ],
+  locations: locations.filter((l) => !l.current),
 }
 
 // ---------------------------------------------------------------------------

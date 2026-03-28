@@ -8,7 +8,7 @@
  *   import { ... } from '../../test/contextFixtures'
  */
 
-import type { ContextResult } from '$lib/services/ai/generation/EntryInjector'
+import type { WorldStateArrays } from '$lib/services/context/context-types'
 import type {
   EntryRetrievalResult,
   RetrievedEntry,
@@ -24,141 +24,80 @@ import type {
 } from '$lib/types'
 
 // ---------------------------------------------------------------------------
-// contextResult: ContextResult
+// worldStateFixture: WorldStateArrays
 // ---------------------------------------------------------------------------
 
 /**
- * Main input fixture for worldStateMapper tests.
- *
- * tier1:
- *   - character 'Aria' with full visualDescriptors (companion, brave+loyal)
- *   - location 'The Crossroads Inn' with metadata.current=true  ← makes currentLocationObject non-null
- *   - item 'Iron Dagger' with quantity=1, equipped=true
- *   - storyBeat 'Find the Lost Key' with type='quest', status='active'
- * tier2:
- *   - character 'Lord Malachar' (goes into worldStateCharacters as tier-2)
- *   - item 'Ancient Tome' (no equipped/quantity defaults → goes into worldStateRelevantItems)
- *   - storyBeat 'The Dark Prophecy' (goes into worldStateRelatedBeats)
- * tier3:
- *   - location 'Dark Forest' (non-current, tier-3)
+ * Main input fixture for world state tests.
+ * Pre-split by tier matching the old worldStateMapper output:
+ *   characters: Aria (tier-1), Lord Malachar (tier-2)
+ *   inventory: Iron Dagger (tier-1)
+ *   relevantItems: Ancient Tome (tier-2)
+ *   storyBeats: Find the Lost Key (tier-1)
+ *   relatedStoryBeats: The Dark Prophecy (tier-2)
+ *   locations: Dark Forest (tier-3, non-current)
  */
-export const contextResult: ContextResult = {
-  tier1: [
+export const worldStateFixture: WorldStateArrays = {
+  characters: [
     {
-      type: 'character',
-      id: 'char-aria',
-      name: 'Aria',
+      id: 'char-aria', storyId: 'story-1', name: 'Aria',
       description: 'A skilled archer with a steady aim.',
-      tier: 1,
-      priority: 90,
-      metadata: {
-        relationship: 'companion',
-        traits: ['brave', 'loyal'],
-        visualDescriptors: {
-          face: 'Sharp cheekbones, warm olive skin, determined expression',
-          hair: 'Dark brown, shoulder-length, loosely braided',
-          eyes: 'Amber, slightly almond-shaped',
-          build: 'Lean and athletic, medium height',
-          clothing: 'Worn leather travelling gear, forest-green cloak',
-          accessories: 'Quiver of arrows, silver ring on left hand',
-          distinguishing: 'Small scar above right eyebrow',
-        },
+      relationship: 'companion', traits: ['brave', 'loyal'],
+      visualDescriptors: {
+        face: 'Sharp cheekbones, warm olive skin, determined expression',
+        hair: 'Dark brown, shoulder-length, loosely braided',
+        eyes: 'Amber, slightly almond-shaped',
+        build: 'Lean and athletic, medium height',
+        clothing: 'Worn leather travelling gear, forest-green cloak',
+        accessories: 'Quiver of arrows, silver ring on left hand',
+        distinguishing: 'Small scar above right eyebrow',
       },
+      portrait: null, status: 'active', metadata: null, branchId: null,
     },
     {
-      type: 'location',
-      id: 'loc-inn',
-      name: 'The Crossroads Inn',
-      description: 'A weathered tavern at a busy crossroads.',
-      tier: 1,
-      priority: 100,
-      metadata: {
-        current: true,
-      },
-    },
-    {
-      type: 'item',
-      id: 'item-dagger',
-      name: 'Iron Dagger',
-      description: 'A simple but reliable iron blade.',
-      tier: 1,
-      priority: 70,
-      metadata: {
-        quantity: 1,
-        equipped: true,
-      },
-    },
-    {
-      type: 'storyBeat',
-      id: 'beat-key',
-      name: 'Find the Lost Key',
-      description: 'Retrieve the key to the sealed vault.',
-      tier: 1,
-      priority: 80,
-      metadata: {
-        type: 'quest',
-        status: 'active',
-      },
-    },
-  ],
-  tier2: [
-    {
-      type: 'character',
-      id: 'char-malachar',
-      name: 'Lord Malachar',
+      id: 'char-malachar', storyId: 'story-1', name: 'Lord Malachar',
       description: 'A sinister nobleman with hidden ambitions.',
-      tier: 2,
-      priority: 60,
-      metadata: {
-        relationship: 'antagonist',
-        traits: ['cunning', 'ruthless'],
-        visualDescriptors: {},
-      },
+      relationship: 'antagonist', traits: ['cunning', 'ruthless'],
+      visualDescriptors: {},
+      portrait: null, status: 'active', metadata: null, branchId: null,
     },
+  ],
+  inventory: [
     {
-      type: 'item',
-      id: 'item-tome',
-      name: 'Ancient Tome',
+      id: 'item-dagger', storyId: 'story-1', name: 'Iron Dagger',
+      description: 'A simple but reliable iron blade.',
+      quantity: 1, equipped: true, location: 'inventory', metadata: null, branchId: null,
+    },
+  ],
+  relevantItems: [
+    {
+      id: 'item-tome', storyId: 'story-1', name: 'Ancient Tome',
       description: 'A crumbling book filled with arcane diagrams.',
-      tier: 2,
-      priority: 40,
-      metadata: {},
+      quantity: 1, equipped: false, location: 'world', metadata: null, branchId: null,
     },
+  ],
+  storyBeats: [
     {
-      type: 'storyBeat',
-      id: 'beat-prophecy',
-      name: 'The Dark Prophecy',
+      id: 'beat-key', storyId: 'story-1', title: 'Find the Lost Key',
+      description: 'Retrieve the key to the sealed vault.',
+      type: 'quest', status: 'active', triggeredAt: null, metadata: null, branchId: null,
+    },
+  ],
+  relatedStoryBeats: [
+    {
+      id: 'beat-prophecy', storyId: 'story-1', title: 'The Dark Prophecy',
       description: "A foreboding prophecy about the land's fate.",
-      tier: 2,
-      priority: 45,
-      metadata: {
-        type: 'revelation',
-        status: 'active',
-      },
+      type: 'revelation', status: 'active', triggeredAt: null, metadata: null, branchId: null,
     },
   ],
-  tier3: [
+  locations: [
     {
-      type: 'location',
-      id: 'loc-forest',
-      name: 'Dark Forest',
+      id: 'loc-forest', storyId: 'story-1', name: 'Dark Forest',
       description: 'A dense, foreboding woodland to the north.',
-      tier: 3,
-      priority: 30,
-      metadata: {
-        current: false,
-      },
+      visited: false, current: false, connections: [], metadata: null, branchId: null,
     },
   ],
-  all: [],
 }
-
-// Populate all after tier arrays are defined
-;(contextResult as { all: typeof contextResult.tier1 }).all = [
-  ...contextResult.tier1,
-  ...contextResult.tier2,
-  ...contextResult.tier3,
-]
 
 // ---------------------------------------------------------------------------
 // entryRetrievalResult: EntryRetrievalResult
