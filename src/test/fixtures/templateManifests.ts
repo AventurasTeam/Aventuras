@@ -316,3 +316,56 @@ export const backgroundImagePromptAnalysisManifest: TemplateVariableManifest = {
     { name: 'storyEntriesVisible (narrations)', expectedInUser: ['phosphorescent moss'] },
   ],
 }
+
+// ---------------------------------------------------------------------------
+// Narrative manifests
+// ---------------------------------------------------------------------------
+
+export const adventureManifest: TemplateVariableManifest = {
+  templateId: 'adventure',
+  hasUserContent: true,
+  variables: [
+    { name: 'protagonistName', expectedInSystem: ['Kael'] },
+    { name: 'genre', expectedInSystem: ['Fantasy'] },
+    { name: 'tone', expectedInSystem: ['Epic'] },
+    { name: 'settingDescription', expectedInSystem: ['dark medieval realm'] },
+    { name: 'themes', expectedInSystem: ['redemption'] },
+    { name: 'timeTracker.years', expectedInSystem: ['1'] },
+    { name: 'timeTracker.days', expectedInSystem: ['42'] },
+    { name: 'timeTracker.hours', expectedInSystem: ['14'] },
+    { name: 'timeTracker.minutes', expectedInSystem: ['30'] },
+    { name: 'relevantWorldState.characters', expectedInSystem: ['Aria', 'Marcus'] },
+    { name: 'relevantWorldState.inventory', expectedInSystem: ['Iron Sword', 'Health Potion'] },
+    { name: 'relevantWorldState.storyBeats', expectedInSystem: ['Find the Lost Temple'] },
+    { name: 'relevantWorldState.locations', expectedInSystem: ['Thornwood Edge'] },
+    { name: 'relevantWorldState.relevantItems', expectedInSystem: ['Crystal of Aethon'] },
+    { name: 'relevantWorldState.relatedStoryBeats', expectedInSystem: ['The Prophecy'] },
+    { name: 'retrievalResult.lorebookEntries', expectedInSystem: ['The Shadow Guild', 'Elder Dragon'] },
+    { name: 'retrievalResult.agenticRetrieval.agenticReasoning', expectedInSystem: ['Selected entries relevant to the temple exploration.'] },
+    { name: 'retrievalResult.agenticRetrieval.agenticChapterSummary', expectedInSystem: ['the party entered the Thornwood'] },
+    { name: 'retrievalResult.agenticRetrieval.agenticSelectedEntries', expectedInSystem: ['## Elder Dragon (character)'] },
+    { name: 'chapters', expectedInSystem: ['Into the Woods'] },
+    { name: 'styleReview', expectedInSystem: ['dark and stormy'] },
+    { name: 'storyEntriesVisibleRaw', expectedInUser: ['I draw my sword'] },
+  ],
+}
+
+export const creativeWritingManifest: TemplateVariableManifest = {
+  templateId: 'creative-writing',
+  hasUserContent: true,
+  variables: [
+    { name: 'protagonistName', expectedInSystem: ['Kael'], expectedInUser: ['Kael'] },
+    { name: 'genre', expectedInSystem: ['Fantasy'] },
+    { name: 'tone', expectedInSystem: ['Epic'] },
+    { name: 'settingDescription', expectedInSystem: ['dark medieval realm'] },
+    { name: 'themes', expectedInSystem: ['redemption'] },
+    { name: 'timeTracker.years', expectedInSystem: ['1'] },
+    { name: 'relevantWorldState.characters', expectedInSystem: ['Aria', 'Marcus'] },
+    { name: 'relevantWorldState.inventory', expectedInSystem: ['Iron Sword'] },
+    { name: 'relevantWorldState.storyBeats', expectedInSystem: ['Find the Lost Temple'] },
+    { name: 'retrievalResult.lorebookEntries', expectedInSystem: ['The Shadow Guild'] },
+    { name: 'retrievalResult.agenticRetrieval.agenticReasoning', expectedInSystem: ['Selected entries relevant to the temple exploration.'] },
+    { name: 'chapters', expectedInSystem: ['Into the Woods'] },
+    { name: 'storyEntriesVisibleRaw', expectedInUser: ['I draw my sword'] },
+  ],
+}
