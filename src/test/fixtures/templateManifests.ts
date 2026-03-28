@@ -202,3 +202,117 @@ export const timelineFillAnswerManifest: TemplateVariableManifest = {
     { name: 'answerChapters[].entries', expectedInUser: ['I open the gate.', 'The gate creaks open'] },
   ],
 }
+
+// ---------------------------------------------------------------------------
+// Analysis manifests
+// ---------------------------------------------------------------------------
+
+export const classifierManifest: TemplateVariableManifest = {
+  templateId: 'classifier',
+  hasUserContent: true,
+  variables: [
+    { name: 'genre', expectedInUser: ['Fantasy'] },
+    { name: 'mode', expectedInUser: ['adventure'] },
+    { name: 'characters', expectedInUser: ['Aria', 'Marcus'] },
+    { name: 'locations', expectedInUser: ['Thornwood Edge', 'Sunken Temple'] },
+    { name: 'items', expectedInUser: ['Iron Sword', 'Health Potion'] },
+    { name: 'storyBeats', expectedInUser: ['Find the Lost Temple'] },
+    { name: 'userInput', expectedInUser: ['I look around the chamber carefully'] },
+    { name: 'narrativeResult.content', expectedInUser: ['The gate opened slowly'] },
+    { name: 'timeTracker', expectedInUser: ['Year 1, Day 42'] },
+    { name: 'storyEntriesVisible', expectedInUser: ['I draw my sword'] },
+    { name: 'characters[].visualDescriptors', expectedInUser: ['Silver pendant'] },
+  ],
+}
+
+export const lorebookClassifierManifest: TemplateVariableManifest = {
+  templateId: 'lorebook-classifier',
+  hasUserContent: true,
+  variables: [
+    { name: 'entriesJson', expectedInUser: ['The Shadow Guild', 'Elder Dragon'] },
+  ],
+}
+
+export const styleReviewerManifest: TemplateVariableManifest = {
+  templateId: 'style-reviewer',
+  hasUserContent: true,
+  variables: [
+    { name: 'storyEntriesVisible (narration)', expectedInUser: ['The torches flickered'] },
+  ],
+}
+
+export const tier3EntrySelectionManifest: TemplateVariableManifest = {
+  templateId: 'tier3-entry-selection',
+  hasUserContent: true,
+  variables: [
+    { name: 'loreEntriesForTier3', expectedInUser: ['The Shadow Guild'] },
+    { name: 'storyEntries', expectedInUser: ['The torches flickered'] },
+    { name: 'userInput', expectedInUser: ['I look around the chamber carefully'] },
+  ],
+}
+
+// ---------------------------------------------------------------------------
+// Image manifests
+// ---------------------------------------------------------------------------
+
+export const imagePromptAnalysisManifest: TemplateVariableManifest = {
+  templateId: 'image-prompt-analysis',
+  hasUserContent: true,
+  variables: [
+    { name: 'userSettings.imageGeneration.maxImages', expectedInSystem: ['3'] },
+    { name: 'userSettings.imageGeneration.stylePrompt', expectedInSystem: ['Soft cel-shaded anime'] },
+    { name: 'characters[].visualDescriptors', expectedInSystem: ['Silver, waist-length, braided', 'Teal, sharp gaze'] },
+    { name: 'storyEntriesVisible', expectedInUser: ['The torches flickered'] },
+    { name: 'userInput', expectedInUser: ['I look around the chamber carefully'] },
+    { name: 'lastNarrativeEntry.content', expectedInUser: ['phosphorescent moss'] },
+  ],
+}
+
+export const imagePromptAnalysisReferenceManifest: TemplateVariableManifest = {
+  templateId: 'image-prompt-analysis-reference',
+  hasUserContent: true,
+  variables: [
+    { name: 'userSettings.imageGeneration.maxImages', expectedInSystem: ['3'] },
+    { name: 'userSettings.imageGeneration.stylePrompt', expectedInSystem: ['Soft cel-shaded anime'] },
+    { name: 'characters[].visualDescriptors', expectedInSystem: ['Silver, waist-length, braided'] },
+    { name: 'storyEntriesVisible', expectedInUser: ['The torches flickered'] },
+    { name: 'userInput', expectedInUser: ['I look around the chamber carefully'] },
+    { name: 'lastNarrativeEntry.content', expectedInUser: ['phosphorescent moss'] },
+  ],
+}
+
+export const imagePortraitGenerationManifest: TemplateVariableManifest = {
+  templateId: 'image-portrait-generation',
+  hasUserContent: false,
+  variables: [
+    {
+      name: 'visualDescriptors',
+      expectedInSystem: ['Angular features, bronze skin', 'Silver, waist-length, braided'],
+      requiresContext: {
+        visualDescriptors: {
+          face: 'Angular features, bronze skin',
+          hair: 'Silver, waist-length, braided',
+          eyes: 'Teal, sharp',
+          build: 'Tall, athletic',
+        },
+        imageStylePrompt: 'Anime style',
+      },
+    },
+    {
+      name: 'imageStylePrompt',
+      expectedInSystem: ['Anime style'],
+      requiresContext: {
+        visualDescriptors: { face: 'Test face' },
+        imageStylePrompt: 'Anime style',
+      },
+    },
+  ],
+}
+
+export const backgroundImagePromptAnalysisManifest: TemplateVariableManifest = {
+  templateId: 'background-image-prompt-analysis',
+  hasUserContent: true,
+  variables: [
+    { name: 'storyEntriesVisible (narrations)', expectedInUser: ['phosphorescent moss'] },
+  ],
+}
