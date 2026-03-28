@@ -244,7 +244,7 @@ export async function classifyEntriesWithLLM(
   mode: StoryMode = 'adventure',
 ): Promise<ImportedEntry[]> {
   const service = new LorebookClassifierService()
-  return service.classifyEntries(entries, onProgress, mode)
+  return service.classifyEntries(entries, onProgress)
 }
 
 function determineInjectionMode(entry: SillyTavernEntry): EntryInjectionMode {
