@@ -58,7 +58,7 @@
     dragOver = false
   }
 
-  async function processContent(text: string, _filename: string) {
+  async function processContent(text: string) {
     parseResult = null
 
     const result = LorebookImportExport.parse(text)
@@ -81,8 +81,7 @@
 
   async function processFile(file: File) {
     try {
-      const text = await file.text()
-      await processContent(text, file.name)
+      await processContent(await file.text())
     } catch (err) {
       ui.showToast(err instanceof Error ? err.message : 'Failed to read file', 'error')
     }
@@ -102,9 +101,7 @@
         return
       }
 
-      const content = await readTextFile(filePath)
-      const filename = filePath.split(/[/\\]/).pop() ?? 'lorebook.json'
-      await processContent(content, filename)
+      await processContent(await readTextFile(filePath))
     } catch (err) {
       ui.showToast(err instanceof Error ? err.message : 'Failed to open file', 'error')
     }
