@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { CustomVariable } from '$lib/services/packs/types'
-  import type { VariableDefinition } from '$lib/services/templates/types'
-  import { variableRegistry } from '$lib/services/templates/variables'
+  import {
+    getDisplayGroupsForTemplate,
+    getVariablesForTemplate,
+  } from '$lib/services/templates/templateContextMap'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import * as Collapsible from '$lib/components/ui/collapsible'
   import * as Select from '$lib/components/ui/select'
@@ -13,6 +15,7 @@
   import { RotateCcw, Search, ChevronDown } from 'lucide-svelte'
 
   interface Props {
+    templateId: string
     open: boolean
     customVariables: CustomVariable[]
     testValues: Record<string, string>
@@ -20,157 +23,27 @@
     onTestValuesChange: (values: Record<string, string>) => void
   }
 
-  let { open, customVariables, testValues, onOpenChange, onTestValuesChange }: Props = $props()
+  let { templateId, open, customVariables, testValues, onOpenChange, onTestValuesChange }: Props =
+    $props()
 
   let draft = $state<Record<string, string>>({})
   let searchQuery = $state('')
 
   // Collapsible open states
-  let systemOpen = $state(true)
   let customOpen = $state(true)
-  const systemVars = variableRegistry.getByCategory('system')
-  const runtimeVars = variableRegistry.getByCategory('runtime')
+  let groupOpenStates = $state<Record<string, boolean>>({})
 
-  // Runtime variable groupings
-  const RUNTIME_GROUPS: { name: string; varNames: string[] }[] = [
-    {
-      name: 'Narrative',
-      varNames: [
-        'recentContent',
-        'lorebookEntries',
-        'chapters',
-        'storyEntries',
-        'timelineFill',
-        'styleReview',
-        'agenticReasoning',
-        'agenticChapterSummary',
-        'agenticSelectedEntries',
-        'visualProseMode',
-        'inlineImageMode',
-      ],
-    },
-    {
-      name: 'Classifier',
-      varNames: [
-        'entityCounts',
-        'currentTimeInfo',
-        'chatHistory',
-        'characters',
-        'storyBeats',
-        'runtimeVariables',
-        'inputLabel',
-        'userAction',
-        'narrativeResponse',
-        'storyBeatTypes',
-        'itemLocationOptions',
-        'defaultItemLocation',
-      ],
-    },
-    {
-      name: 'Memory',
-      varNames: [
-        'chapterEntries',
-        'previousChapters',
-        'messagesInRange',
-        'firstValidId',
-        'lastValidId',
-        'recentEntries',
-        'maxChaptersPerRetrieval',
-      ],
-    },
-    {
-      name: 'Suggestions & Actions',
-      varNames: [
-        'activeThreads',
-        'npcsPresent',
-        'inventory',
-        'activeQuests',
-        'protagonistDescription',
-        'povInstruction',
-        'lengthInstruction',
-        'userInput',
-      ],
-    },
-    {
-      name: 'Style & Lore',
-      varNames: ['passageCount', 'passages'],
-    },
-    {
-      name: 'Retrieval',
-      varNames: ['chaptersCount', 'entriesCount', 'loreEntries', 'loreChapters'],
-    },
-    {
-      name: 'Translation',
-      varNames: [
-        'targetLanguage',
-        'sourceLanguage',
-        'content',
-        'elementsJson',
-        'suggestionsJson',
-        'choicesJson',
-      ],
-    },
-    {
-      name: 'Image',
-      varNames: [
-        'imageStylePrompt',
-        'sceneCharacters',
-        'narrationEntries',
-        'lastNarrationIndex',
-        'maxImages',
-        'chatHistory',
-        'translatedNarrativeBlock',
-        'visualDescriptors',
-      ],
-    },
-    {
-      name: 'Wizard',
-      varNames: [
-        'genreLabel',
-        'seed',
-        'customInstruction',
-        'currentSetting',
-        'toneInstruction',
-        'settingInstruction',
-        'characterInput',
-        'settingContext',
-        'currentCharacter',
-        'settingName',
-        'count',
-        'protagonist',
-        'title',
-        'atmosphere',
-        'supportingCharacters',
-        'tenseInstruction',
-        'currentOpening',
-        'openingGuidance',
-        'settingAtmosphere',
-        'settingThemesText',
-        'cardContent',
-        'lorebookName',
-        'entriesJson',
-        'entryCount',
-      ],
-    },
-    {
-      name: 'Timeline',
-      varNames: ['chapters', 'storyEntries', 'query'],
-    },
-  ]
-
-  const runtimeGroups = $derived.by(() =>
-    RUNTIME_GROUPS.map((g) => ({
-      name: g.name,
-      variables: g.varNames
-        .map((name) => runtimeVars.find((v) => v.name === name))
-        .filter((v): v is VariableDefinition => v != null),
-    })).filter((g) => g.variables.length > 0),
-  )
-
-  // Initialize runtime open states (all collapsed)
-  let runtimeOpenStates = $state<Record<string, boolean>>(
-    Object.fromEntries(RUNTIME_GROUPS.map((g) => [g.name, false])),
-  )
+  let displayGroups = $derived.by(() => {
+    const groups = getDisplayGroupsForTemplate(templateId)
+    const allVars = getVariablesForTemplate(templateId)
+    const varMap = new Map(allVars.map((v) => [v.name, v]))
+    return groups.map((g) => ({
+      label: g.label,
+      variables: g.variables
+        .map((name) => varMap.get(name))
+        .filter((v) => v != null),
+    }))
+  })
 
   // Sync draft when modal opens
   $effect(() => {
@@ -195,19 +68,18 @@
     return name.toLowerCase().includes(q) || description.toLowerCase().includes(q)
   }
 
-  let filteredSystem = $derived(systemVars.filter((v) => matchesSearch(v.name, v.description)))
-  let filteredCustom = $derived(
-    customVariables.filter((v) =>
-      matchesSearch(v.variableName, v.displayName + ' ' + (v.description ?? '')),
-    ),
-  )
-  let filteredRuntimeGroups = $derived(
-    runtimeGroups
+  let filteredGroups = $derived(
+    displayGroups
       .map((g) => ({
         ...g,
         variables: g.variables.filter((v) => matchesSearch(v.name, v.description)),
       }))
       .filter((g) => g.variables.length > 0),
+  )
+  let filteredCustom = $derived(
+    customVariables.filter((v) =>
+      matchesSearch(v.variableName, v.displayName + ' ' + (v.description ?? '')),
+    ),
   )
   let overrideCount = $derived(Object.values(draft).filter((v) => v !== '').length)
 </script>
@@ -301,29 +173,30 @@
     <!-- Scrollable variable list -->
     <div class="max-h-[60vh] overflow-y-auto px-6 py-3">
       <div class="divide-border divide-y">
-        <!-- System -->
-        {#if filteredSystem.length > 0}
-          <Collapsible.Root bind:open={systemOpen}>
+        {#each filteredGroups as group (group.label)}
+          <Collapsible.Root bind:open={groupOpenStates[group.label]}>
             <Collapsible.Trigger class="flex w-full">
               <div class="flex w-full items-center gap-2 py-1.5">
                 <ChevronDown
-                  class="text-muted-foreground h-4 w-4 shrink-0 transition-transform duration-200 {systemOpen
+                  class="text-muted-foreground h-4 w-4 shrink-0 transition-transform duration-200 {groupOpenStates[
+                    group.label
+                  ]
                     ? ''
                     : '-rotate-90'}"
                 />
-                <span class="text-sm font-medium">System</span>
-                <Badge variant="default" class="text-[10px]">{filteredSystem.length}</Badge>
+                <span class="text-sm font-medium">{group.label}</span>
+                <Badge variant="secondary" class="text-[10px]">{group.variables.length}</Badge>
               </div>
             </Collapsible.Trigger>
             <Collapsible.Content>
               <div class="divide-border/50 divide-y pl-6">
-                {#each filteredSystem as v (v.name)}
+                {#each group.variables as v (v.name)}
                   {@render varInput(v.name, v.description, v.type, v.enumValues)}
                 {/each}
               </div>
             </Collapsible.Content>
           </Collapsible.Root>
-        {/if}
+        {/each}
 
         <!-- Custom -->
         {#if filteredCustom.length > 0}
@@ -354,32 +227,6 @@
             </Collapsible.Content>
           </Collapsible.Root>
         {/if}
-
-        <!-- Runtime groups -->
-        {#each filteredRuntimeGroups as group (group.name)}
-          <Collapsible.Root bind:open={runtimeOpenStates[group.name]}>
-            <Collapsible.Trigger class="flex w-full">
-              <div class="flex w-full items-center gap-2 py-1.5">
-                <ChevronDown
-                  class="text-muted-foreground h-4 w-4 shrink-0 transition-transform duration-200 {runtimeOpenStates[
-                    group.name
-                  ]
-                    ? ''
-                    : '-rotate-90'}"
-                />
-                <span class="text-sm font-medium">{group.name}</span>
-                <Badge variant="secondary" class="text-[10px]">{group.variables.length}</Badge>
-              </div>
-            </Collapsible.Trigger>
-            <Collapsible.Content>
-              <div class="divide-border/50 divide-y pl-6">
-                {#each group.variables as v (v.name)}
-                  {@render varInput(v.name, v.description, v.type, v.enumValues)}
-                {/each}
-              </div>
-            </Collapsible.Content>
-          </Collapsible.Root>
-        {/each}
       </div>
     </div>
 

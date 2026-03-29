@@ -6,7 +6,7 @@
  */
 
 import { templateEngine } from './engine'
-import { variableRegistry } from './variables'
+import { getVariableNamesForTemplate } from './templateContextMap'
 import type { ValidationResult, ValidationError } from './types'
 import { createLogger } from '$lib/log'
 
@@ -212,6 +212,7 @@ function extractFilterNames(template: string): string[] {
  */
 export function validateTemplate(
   template: string,
+  templateId?: string,
   additionalVariables?: string[],
 ): ValidationResult {
   const errors: ValidationError[] = []
@@ -238,8 +239,9 @@ export function validateTemplate(
 
   // Step 2: Variable reference validation
   const variableNames = templateEngine.extractVariableNames(template)
+  const templateVarNames = templateId ? getVariableNamesForTemplate(templateId) : []
   const validVariables = new Set([
-    ...variableRegistry.getAllNames(),
+    ...templateVarNames,
     ...(additionalVariables || []),
   ])
 

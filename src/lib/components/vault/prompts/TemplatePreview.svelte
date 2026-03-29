@@ -1,34 +1,27 @@
 <script lang="ts">
   import { templateEngine } from '$lib/services/templates/engine'
-  import { variableRegistry } from '$lib/services/templates/variables'
-  import { allSamples } from './sampleContext'
+  import { getSamplesForTemplate } from './sampleContext'
+  import { getVariablesForTemplate } from '$lib/services/templates/templateContextMap'
   import type { CustomVariable } from '$lib/services/packs/types'
   import type { TemplateContext } from '$lib/services/templates/types'
   import { AlertTriangle } from 'lucide-svelte'
 
   interface Props {
+    templateId: string
     content: string
     customVariables: CustomVariable[]
     hideHeader?: boolean
     testValues?: Record<string, string>
   }
 
-  let { content, customVariables, hideHeader = false, testValues }: Props = $props()
+  let { templateId, content, customVariables, hideHeader = false, testValues }: Props = $props()
 
   function buildSampleContext(
     vars: CustomVariable[],
     overrides?: Record<string, string>,
   ): TemplateContext {
-    // Start with rich sample data (includes structured arrays/objects)
-    const context: TemplateContext = { ...allSamples }
-
-    // Bracket-name fallback only for variables missing from allSamples
-    for (const v of variableRegistry.getByCategory('system')) {
-      if (!(v.name in context)) {
-        context[v.name] = `[${v.name}]`
-      }
-    }
-    for (const v of variableRegistry.getByCategory('runtime')) {
+    const context: TemplateContext = { ...getSamplesForTemplate(templateId) }
+    for (const v of getVariablesForTemplate(templateId)) {
       if (!(v.name in context)) {
         context[v.name] = `[${v.name}]`
       }
@@ -38,8 +31,6 @@
         context[v.variableName] = `[${v.displayName}]`
       }
     }
-
-    // Apply test value overrides (string overrides from TestVariablesModal)
     if (overrides) {
       for (const [key, value] of Object.entries(overrides)) {
         if (value !== '') {
@@ -47,7 +38,6 @@
         }
       }
     }
-
     return context
   }
 

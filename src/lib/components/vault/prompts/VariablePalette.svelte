@@ -1,22 +1,35 @@
 <script lang="ts">
-  import { variableRegistry } from '$lib/services/templates/variables'
+  import {
+    getDisplayGroupsForTemplate,
+    getVariablesForTemplate,
+  } from '$lib/services/templates/templateContextMap'
   import type { CustomVariable } from '$lib/services/packs/types'
   import * as Popover from '$lib/components/ui/popover'
   import * as Command from '$lib/components/ui/command'
   import { Braces } from 'lucide-svelte'
 
   interface Props {
+    templateId: string
     customVariables: CustomVariable[]
     onInsert: (variableName: string) => void
     iconOnly?: boolean
   }
 
-  let { customVariables, onInsert, iconOnly = false }: Props = $props()
+  let { templateId, customVariables, onInsert, iconOnly = false }: Props = $props()
 
   let open = $state(false)
 
-  const systemVars = variableRegistry.getByCategory('system')
-  const runtimeVars = variableRegistry.getByCategory('runtime')
+  let displayGroups = $derived.by(() => {
+    const groups = getDisplayGroupsForTemplate(templateId)
+    const allVars = getVariablesForTemplate(templateId)
+    const varMap = new Map(allVars.map((v) => [v.name, v]))
+    return groups.map((g) => ({
+      label: g.label,
+      variables: g.variables
+        .map((name) => varMap.get(name))
+        .filter((v) => v != null),
+    }))
+  })
 
   function handleSelect(variableName: string) {
     onInsert(variableName)
@@ -54,28 +67,21 @@
       <Command.List class="max-h-75">
         <Command.Empty>No variable found.</Command.Empty>
 
-        <Command.Group heading="System">
-          {#each systemVars as v (v.name)}
-            <Command.Item value={v.name} onSelect={() => handleSelect(v.name)}>
-              <span class="font-mono text-xs">{v.name}</span>
-              <span class="text-muted-foreground ml-auto truncate text-xs">{v.description}</span>
-            </Command.Item>
-          {/each}
-        </Command.Group>
-
-        <Command.Separator />
-
-        <Command.Group heading="Runtime">
-          {#each runtimeVars as v (v.name)}
-            <Command.Item value={v.name} onSelect={() => handleSelect(v.name)}>
-              <span class="font-mono text-xs">{v.name}</span>
-              <span class="text-muted-foreground ml-auto truncate text-xs">{v.description}</span>
-            </Command.Item>
-          {/each}
-        </Command.Group>
+        {#each displayGroups as group (group.label)}
+          <Command.Group heading={group.label}>
+            {#each group.variables as v (v.name)}
+              <Command.Item value={v.name} onSelect={() => handleSelect(v.name)}>
+                <span class="font-mono text-xs">{v.name}</span>
+                <span class="text-muted-foreground ml-auto truncate text-xs"
+                  >{v.description}</span
+                >
+              </Command.Item>
+            {/each}
+          </Command.Group>
+          <Command.Separator />
+        {/each}
 
         {#if customVariables.length > 0}
-          <Command.Separator />
           <Command.Group heading="Custom">
             {#each customVariables as v (v.id)}
               <Command.Item value={v.variableName} onSelect={() => handleSelect(v.variableName)}>
