@@ -178,10 +178,14 @@ const lorebookEntryFields: VariableFieldInfo[] = [
   { name: 'name', type: 'string', description: 'Entry name' },
   { name: 'type', type: 'string', description: 'e.g. character, location, item, faction' },
   { name: 'description', type: 'string', description: 'Entry description' },
-  { name: 'tier', type: 'number', description: 'Retrieval tier 1-3 (omitted for wizard)' },
+  { name: 'tier', type: 'number', description: 'Retrieval tier 1-3 (optional)' },
   { name: 'disposition', type: 'string', description: 'Current disposition (character-only, optional)' },
   { name: 'hiddenInfo', type: 'string', description: 'Hidden lore (optional)' },
 ]
+
+const lorebookEntryWizardFields: VariableFieldInfo[] = lorebookEntryFields.filter(
+  (f) => f.name !== 'tier',
+)
 
 // ---------------------------------------------------------------------------
 // promptContext variable definitions
@@ -504,7 +508,7 @@ const WIZARD_VARS: VariableDefinition[] = [
   }),
 
   // Lorebook
-  v('lorebookEntries', 'array', 'Lorebook entries', { infoFields: lorebookEntryFields }),
+  v('lorebookEntries', 'array', 'Lorebook entries', { infoFields: lorebookEntryWizardFields }),
 
   // Supporting Characters
   v('supportingCharacters', 'array', 'Supporting characters', {
@@ -836,5 +840,5 @@ export function getDisplayGroupsForTemplate(templateId: string): DisplayGroup[] 
  * Convenience wrapper around getVariablesForTemplate().
  */
 export function getVariableNamesForTemplate(templateId: string): string[] {
-  return getVariablesForTemplate(templateId).map((v) => v.name)
+  return getVariablesForTemplate(templateId).map((def) => def.name)
 }
