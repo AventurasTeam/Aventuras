@@ -240,10 +240,7 @@ export function validateTemplate(
   // Step 2: Variable reference validation
   const variableNames = templateEngine.extractVariableNames(template)
   const templateVarNames = templateId ? getVariableNamesForTemplate(templateId) : []
-  const validVariables = new Set([
-    ...templateVarNames,
-    ...(additionalVariables || []),
-  ])
+  const validVariables = new Set([...templateVarNames, ...(additionalVariables || [])])
 
   // Extract loop-scoped variables from {% for X in Y %} constructs
   const loopVars = new Set<string>()

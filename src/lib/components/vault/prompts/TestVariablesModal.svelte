@@ -39,9 +39,7 @@
     const varMap = new Map(allVars.map((v) => [v.name, v]))
     return groups.map((g) => ({
       label: g.label,
-      variables: g.variables
-        .map((name) => varMap.get(name))
-        .filter((v) => v != null),
+      variables: g.variables.map((name) => varMap.get(name)).filter((v) => v != null),
     }))
   })
 

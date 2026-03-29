@@ -340,10 +340,7 @@ const PROMPT_CONTEXT_SAMPLES: TemplateContext = {
   },
 
   // Translation Data
-  suggestionsToTranslate: [
-    { text: 'Explore the ruins' },
-    { text: 'Talk to the stranger' },
-  ],
+  suggestionsToTranslate: [{ text: 'Explore the ruins' }, { text: 'Talk to the stranger' }],
   actionChoicesToTranslate: [
     { text: 'Draw your sword', description: 'Prepare for combat' },
     { text: 'Attempt to sneak past', description: 'Use stealth' },

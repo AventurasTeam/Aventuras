@@ -25,9 +25,7 @@
     const varMap = new Map(allVars.map((v) => [v.name, v]))
     return groups.map((g) => ({
       label: g.label,
-      variables: g.variables
-        .map((name) => varMap.get(name))
-        .filter((v) => v != null),
+      variables: g.variables.map((name) => varMap.get(name)).filter((v) => v != null),
     }))
   })
 
@@ -72,9 +70,7 @@
             {#each group.variables as v (v.name)}
               <Command.Item value={v.name} onSelect={() => handleSelect(v.name)}>
                 <span class="font-mono text-xs">{v.name}</span>
-                <span class="text-muted-foreground ml-auto truncate text-xs"
-                  >{v.description}</span
-                >
+                <span class="text-muted-foreground ml-auto truncate text-xs">{v.description}</span>
               </Command.Item>
             {/each}
           </Command.Group>

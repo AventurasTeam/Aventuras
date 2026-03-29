@@ -40,10 +40,10 @@ export interface DisplayGroup {
 
 const TEMPLATE_GROUP_MAP: Record<string, ContextGroupName> = {
   // promptContext
-  'adventure': 'promptContext',
+  adventure: 'promptContext',
   'creative-writing': 'promptContext',
-  'classifier': 'promptContext',
-  'suggestions': 'promptContext',
+  classifier: 'promptContext',
+  suggestions: 'promptContext',
   'action-choices': 'promptContext',
   'style-reviewer': 'promptContext',
   'chapter-analysis': 'promptContext',
@@ -179,7 +179,11 @@ const lorebookEntryFields: VariableFieldInfo[] = [
   { name: 'type', type: 'string', description: 'e.g. character, location, item, faction' },
   { name: 'description', type: 'string', description: 'Entry description' },
   { name: 'tier', type: 'number', description: 'Retrieval tier 1-3 (optional)' },
-  { name: 'disposition', type: 'string', description: 'Current disposition (character-only, optional)' },
+  {
+    name: 'disposition',
+    type: 'string',
+    description: 'Current disposition (character-only, optional)',
+  },
   { name: 'hiddenInfo', type: 'string', description: 'Hidden lore (optional)' },
 ]
 
@@ -253,7 +257,11 @@ const PROMPT_CONTEXT_VARS: VariableDefinition[] = [
   // World State
   v('relevantWorldState', 'object', 'Tiered world state from EntryInjector', {
     infoFields: [
-      { name: 'characters', type: 'array', description: 'Tiered characters with visual descriptors' },
+      {
+        name: 'characters',
+        type: 'array',
+        description: 'Tiered characters with visual descriptors',
+      },
       { name: 'inventory', type: 'array', description: 'Player inventory items' },
       { name: 'storyBeats', type: 'array', description: 'Active story threads' },
       { name: 'locations', type: 'array', description: 'Known locations' },
@@ -269,7 +277,11 @@ const PROMPT_CONTEXT_VARS: VariableDefinition[] = [
   // Settings
   v('userSettings', 'object', 'User and story settings', {
     infoFields: [
-      { name: 'visualProseMode', type: 'boolean', description: 'Whether visual prose mode is enabled' },
+      {
+        name: 'visualProseMode',
+        type: 'boolean',
+        description: 'Whether visual prose mode is enabled',
+      },
       {
         name: 'classifier.maxEntries',
         type: 'number',
@@ -360,9 +372,7 @@ const PROMPT_CONTEXT_VARS: VariableDefinition[] = [
   v('retrievalResult', 'object', 'Lorebook retrieval results'),
   v('classificationResult', 'object', 'World state classification results'),
   v('narrativeResult', 'object', 'Narrative generation result', {
-    infoFields: [
-      { name: 'content', type: 'string', description: 'Generated narrative text' },
-    ],
+    infoFields: [{ name: 'content', type: 'string', description: 'Generated narrative text' }],
   }),
   v('translationResult', 'object', 'Translation results'),
 
@@ -371,8 +381,16 @@ const PROMPT_CONTEXT_VARS: VariableDefinition[] = [
     infoFields: [
       { name: 'result', type: 'object', description: 'Chapter analysis result' },
       { name: 'protectedEntryCount', type: 'number', description: 'Protected entry count' },
-      { name: 'analysisEntries', type: 'array', description: 'Entries for analysis (StoryEntry[])' },
-      { name: 'chapterEntries', type: 'array', description: 'Entries within chapter (StoryEntry[])' },
+      {
+        name: 'analysisEntries',
+        type: 'array',
+        description: 'Entries for analysis (StoryEntry[])',
+      },
+      {
+        name: 'chapterEntries',
+        type: 'array',
+        description: 'Entries within chapter (StoryEntry[])',
+      },
     ],
   }),
   v('lastChapterEndIndex', 'number', 'Index of last chapter end'),
@@ -649,14 +667,7 @@ const PROMPT_CONTEXT_DISPLAY_GROUPS: DisplayGroup[] = [
   },
   {
     label: 'Entities',
-    variables: [
-      'characters',
-      'locations',
-      'items',
-      'storyBeats',
-      'chapters',
-      'lorebookEntries',
-    ],
+    variables: ['characters', 'locations', 'items', 'storyBeats', 'chapters', 'lorebookEntries'],
   },
   {
     label: 'World State',
