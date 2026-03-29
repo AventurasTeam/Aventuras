@@ -196,7 +196,7 @@
           </Collapsible.Root>
         {/each}
 
-        <!-- Custom -->
+        <!-- Custom (Pack Variables) -->
         {#if filteredCustom.length > 0}
           <Collapsible.Root bind:open={customOpen}>
             <Collapsible.Trigger class="flex w-full">
@@ -206,7 +206,7 @@
                     ? ''
                     : '-rotate-90'}"
                 />
-                <span class="text-sm font-medium">Custom</span>
+                <span class="text-sm font-medium">Custom (Pack Variables)</span>
                 <Badge variant="default" class="text-[10px]">{filteredCustom.length}</Badge>
               </div>
             </Collapsible.Trigger>
@@ -214,7 +214,7 @@
               <div class="divide-border/50 divide-y pl-6">
                 {#each filteredCustom as v (v.id)}
                   {@render varInput(
-                    v.variableName,
+                    'packVariables.' + v.variableName,
                     v.displayName + (v.description ? ` — ${v.description}` : ''),
                     v.variableType,
                     v.enumOptions?.map((o) => o.value),

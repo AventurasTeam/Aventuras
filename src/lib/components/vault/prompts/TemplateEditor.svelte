@@ -148,7 +148,7 @@
     }
     for (const v of customVariables) {
       result.push({
-        label: v.variableName,
+        label: 'packVariables.' + v.variableName,
         type: 'variable',
         detail: 'custom',
         info: v.displayName,

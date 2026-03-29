@@ -395,16 +395,32 @@ const PROMPT_CONTEXT_VARS: VariableDefinition[] = [
   }),
   v('lastChapterEndIndex', 'number', 'Index of last chapter end'),
 
-  // Pack Variables
-  v('packVariables', 'object', 'Pack runtime variable values', {
-    infoFields: [
-      {
-        name: 'runtimeVariables',
-        type: 'object',
-        description: 'Runtime variables grouped by entity type',
-      },
-    ],
-  }),
+  // Pack Variables (classifier uses packVariables.runtimeVariables for extraction instructions)
+  v(
+    'packVariables.runtimeVariables',
+    'object',
+    'Runtime variable definitions grouped by entity type (for classifier)',
+    {
+      infoFields: [
+        {
+          name: 'character',
+          type: 'RuntimeVariable[]',
+          description: 'Variables for character entities',
+        },
+        {
+          name: 'location',
+          type: 'RuntimeVariable[]',
+          description: 'Variables for location entities',
+        },
+        { name: 'item', type: 'RuntimeVariable[]', description: 'Variables for item entities' },
+        {
+          name: 'story_beat',
+          type: 'RuntimeVariable[]',
+          description: 'Variables for story beat entities',
+        },
+      ],
+    },
+  ),
 
   // Translation Data
   v('suggestionsToTranslate', 'array', 'Suggestions for translation'),
@@ -697,7 +713,7 @@ const PROMPT_CONTEXT_DISPLAY_GROUPS: DisplayGroup[] = [
   },
   {
     label: 'Pack Variables',
-    variables: ['packVariables'],
+    variables: ['packVariables.runtimeVariables'],
   },
   {
     label: 'Translation Data',

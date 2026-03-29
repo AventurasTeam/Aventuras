@@ -78,10 +78,13 @@
         {/each}
 
         {#if customVariables.length > 0}
-          <Command.Group heading="Custom">
+          <Command.Group heading="Custom (Pack Variables)">
             {#each customVariables as v (v.id)}
-              <Command.Item value={v.variableName} onSelect={() => handleSelect(v.variableName)}>
-                <span class="font-mono text-xs">{v.variableName}</span>
+              <Command.Item
+                value={'packVariables.' + v.variableName}
+                onSelect={() => handleSelect('packVariables.' + v.variableName)}
+              >
+                <span class="font-mono text-xs">packVariables.{v.variableName}</span>
                 <span class="text-muted-foreground ml-auto truncate text-xs">{v.displayName}</span>
               </Command.Item>
             {/each}

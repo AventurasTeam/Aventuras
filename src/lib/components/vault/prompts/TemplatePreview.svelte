@@ -16,6 +16,18 @@
 
   let { templateId, content, customVariables, hideHeader = false, testValues }: Props = $props()
 
+  function setNestedValue(obj: Record<string, unknown>, path: string, value: unknown) {
+    const parts = path.split('.')
+    let current: Record<string, unknown> = obj
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!(parts[i] in current) || typeof current[parts[i]] !== 'object') {
+        current[parts[i]] = {}
+      }
+      current = current[parts[i]] as Record<string, unknown>
+    }
+    current[parts[parts.length - 1]] = value
+  }
+
   function buildSampleContext(
     vars: CustomVariable[],
     overrides?: Record<string, string>,
@@ -26,15 +38,19 @@
         context[v.name] = `[${v.name}]`
       }
     }
+    // Custom pack variables: place under packVariables namespace
     for (const v of vars) {
-      if (!(v.variableName in context)) {
-        context[v.variableName] = `[${v.displayName}]`
-      }
+      const path = 'packVariables.' + v.variableName
+      setNestedValue(context, path, `[${v.displayName}]`)
     }
     if (overrides) {
       for (const [key, value] of Object.entries(overrides)) {
         if (value !== '') {
-          context[key] = value
+          if (key.includes('.')) {
+            setNestedValue(context, key, value)
+          } else {
+            context[key] = value
+          }
         }
       }
     }
