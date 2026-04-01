@@ -793,6 +793,15 @@ class StoryStore {
     return false
   }
 
+  /**
+   * Common cleanup logic after an entry is deleted.
+   * Restores suggested actions from the new last narration entry and invalidates the retry backup.
+   */
+  private postDeleteCleanup(): void {
+    this.restoreSuggestedActionsAfterDelete()
+    ui.clearRetryBackup(true)
+  }
+
   // Delete a story entry
   async deleteEntry(entryId: string): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
@@ -856,8 +865,7 @@ class StoryStore {
         this.currentStory = { ...this.currentStory, timeTracker: freshStory.timeTracker }
       }
 
-      // Restore suggested actions from the new last narration entry
-      this.restoreSuggestedActionsAfterDelete()
+      this.postDeleteCleanup()
 
       return
     }
@@ -873,8 +881,7 @@ class StoryStore {
     // Update story's updatedAt
     await database.updateStory(this.currentStory.id, {})
 
-    // Restore suggested actions from the new last narration entry
-    this.restoreSuggestedActionsAfterDelete()
+    this.postDeleteCleanup()
   }
 
   /**
@@ -1734,6 +1741,10 @@ class StoryStore {
 
   // ===== Lorebook Entry CRUD Methods =====
 
+  private invalidateRetrievalCache() {
+    ui.setLastRetrievalResult(null)
+  }
+
   /**
    * Add a new lorebook entry.
    * @param entryData - Entry data. branchId is optional and defaults to current branch.
@@ -1758,6 +1769,7 @@ class StoryStore {
 
     await database.addEntry(entry)
     this.lorebookEntries = [...this.lorebookEntries, entry]
+    this.invalidateRetrievalCache()
     log('Lorebook entry added:', entry.name)
     return entry
   }
@@ -1782,6 +1794,7 @@ class StoryStore {
 
     await database.bulkInsertEntries(entries)
     this.lorebookEntries = [...this.lorebookEntries, ...entries]
+    this.invalidateRetrievalCache()
     log('Lorebook entries bulk added:', entries.length)
     return entries.length
   }
@@ -1807,6 +1820,7 @@ class StoryStore {
     this.lorebookEntries = this.lorebookEntries.map((e) =>
       e.id === owned.id ? { ...e, ...updatesWithTimestamp } : e,
     )
+    this.invalidateRetrievalCache()
     log('Lorebook entry updated:', owned.id)
   }
 
@@ -1832,6 +1846,7 @@ class StoryStore {
       await database.deleteEntry(id)
     }
     this.lorebookEntries = this.lorebookEntries.filter((e) => e.id !== id)
+    this.invalidateRetrievalCache()
     log('Lorebook entry deleted:', id)
   }
 
@@ -1860,6 +1875,7 @@ class StoryStore {
       await Promise.all(ids.map((id) => database.deleteEntry(id)))
     }
     this.lorebookEntries = this.lorebookEntries.filter((e) => !ids.includes(e.id))
+    this.invalidateRetrievalCache()
     log('Lorebook entries deleted:', ids.length)
   }
 
@@ -2744,8 +2760,8 @@ class StoryStore {
     // Clear current retry story ID (backups are kept per-story)
     ui.setCurrentRetryStoryId(null)
 
-    // Clear style review state (will be loaded fresh for next story)
-    ui.clearStyleReviewState()
+    // Clear all generation caches (style review, retrieval, lorebook debug)
+    ui.clearGenerationCaches()
   }
 
   // Update story mode

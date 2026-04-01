@@ -1,5 +1,17 @@
 import { PROVIDERS } from '$lib/constants/providerConfig'
 import type { ProviderCapabilities, ProviderType } from '$lib/types'
+import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google'
+
+export const GOOGLE_SAFETY_SETTINGS: NonNullable<
+  GoogleGenerativeAIProviderOptions['safetySettings']
+> = [
+  { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: 'BLOCK_NONE' },
+] as const
+
 
 // ============================================================================
 // Helper Functions

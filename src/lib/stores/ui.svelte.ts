@@ -21,6 +21,7 @@ import type {
   EntryRetrievalResult,
   ActivationTracker,
 } from '$lib/services/ai/retrieval/EntryRetrievalService'
+import type { RetrievalResult } from '$lib/services/generation/types'
 import type { SyncMode } from '$lib/types/sync'
 import { SimpleActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import { database } from '$lib/services/database'
@@ -192,6 +193,9 @@ class UIStore {
   styleReviewLoading = $state(false)
   private currentStyleReviewStoryId = $state<string | null>(null)
   styleReviewStateWrite = Promise.resolve()
+
+  // Cached retrieval result (for regenerate skip)
+  lastRetrievalResult = $state<RetrievalResult | null>(null)
 
   // Lorebook debug state
   lastLorebookRetrieval = $state<EntryRetrievalResult | null>(null)
@@ -1118,6 +1122,16 @@ class UIStore {
   }
 
   /**
+   * Clear all generation-related caches (when switching stories).
+   * Includes style review state and retrieval cache.
+   */
+  clearGenerationCaches() {
+    this.clearStyleReviewState()
+    this.lastRetrievalResult = null
+    this.lastLorebookRetrieval = null
+  }
+
+  /**
    * Persist current style review state to database.
    */
   private persistStyleReviewState() {
@@ -1177,6 +1191,11 @@ class UIStore {
   setStyleReviewLoading(loading: boolean, storyId?: string | null) {
     if (storyId && storyId !== this.currentStyleReviewStoryId) return
     this.styleReviewLoading = loading
+  }
+
+  // Retrieval cache methods
+  setLastRetrievalResult(result: RetrievalResult | null) {
+    this.lastRetrievalResult = result
   }
 
   // Lorebook debug methods

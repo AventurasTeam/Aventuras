@@ -35,6 +35,7 @@
   const imageSizes = [
     { value: '512x512', label: '512x512 (Faster)' },
     { value: '1024x1024', label: '1024x1024 (Higher Quality)' },
+    { value: '1536x1536', label: '1536x1536 (High Quality)' },
     { value: '2048x2048', label: '2048x2048 (Highest Quality)' },
   ] as const
 
@@ -99,6 +100,10 @@
 
   // ===== Image Profile CRUD =====
   let editingProfileId = $state<string | null>(null)
+  const isEditingReferenceProfile = $derived(
+    editingProfileId !== null &&
+      editingProfileId === settings.systemServicesSettings.imageGeneration.referenceProfileId,
+  )
   let isNewProfile = $state(false)
   let suppressAutoSave = false
   let profileName = $state('')
@@ -1087,6 +1092,7 @@
         onModelChange={(id) => {
           profileModel = id
         }}
+        filterFunc={isEditingReferenceProfile ? (m) => m.supportsImg2Img : undefined}
         showCost={true}
         showImg2ImgIndicator={true}
         showDescription={false}

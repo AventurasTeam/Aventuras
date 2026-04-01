@@ -28,6 +28,7 @@
   } from 'lucide-svelte'
   import ModelSelector from './ModelSelector.svelte'
   import {
+    fetchModelsFromProvider,
     getReasoningExtraction,
     supportsCapabilityFetch,
     supportsReasoning,
@@ -241,8 +242,34 @@
   let tempPreset = $state<GenerationPreset | null>(null)
   let activeTaskMenu = $state<string | null>(null) // Just stores serviceId now
   let resettingProfiles = $state(false)
+  let isLoadingPresetModels = $state(false)
 
   const defaultAssignments = DEFAULT_SERVICE_PRESET_ASSIGNMENTS
+
+  async function fetchModelsForPreset() {
+    if (!tempPreset?.profileId) return
+    const profile = settings.getProfile(tempPreset.profileId)
+    if (!profile) return
+    if (isLoadingPresetModels) return
+
+    isLoadingPresetModels = true
+    try {
+      const result = await fetchModelsFromProvider(
+        profile.providerType,
+        profile.baseUrl,
+        profile.apiKey,
+      )
+      await settings.updateProfile(profile.id, {
+        ...profile,
+        fetchedModels: result,
+      })
+      console.log(`[AgentProfiles] Fetched ${result.length} models from ${profile.providerType}`)
+    } catch (error) {
+      console.error('[AgentProfiles] Failed to fetch models:', error)
+    } finally {
+      isLoadingPresetModels = false
+    }
+  }
 
   function getReasoningIndex(value?: string): number {
     const index = reasoningLevels.indexOf((value ?? 'off') as any)
@@ -601,16 +628,28 @@
         <ModelSelector
           profileId={tempPreset?.profileId ?? null}
           model={tempPreset?.model ?? ''}
-          onProfileChange={(id) => {
+          onProfileChange={async (id) => {
             if (!tempPreset) return
-            maybeEnableNanogptReasoning(id, tempPreset.model)
+            const previousModel = tempPreset.model
             tempPreset.profileId = id
+            await fetchModelsForPreset()
+
+            const models = settings.getAvailableModels(
+              tempPreset.profileId || settings.getDefaultProfileIdForProvider(),
+            )
+            if (!models.find((m) => m.id === previousModel)) {
+              tempPreset.model = ''
+            } else {
+              maybeEnableNanogptReasoning(id, previousModel)
+            }
           }}
           onModelChange={(m) => {
             if (!tempPreset) return
             maybeEnableNanogptReasoning(tempPreset.profileId, m)
             tempPreset.model = m
           }}
+          onRefreshModels={fetchModelsForPreset}
+          isRefreshingModels={isLoadingPresetModels}
         />
         {#if tempGlobalProviderReasoningCapability}
           {#if tempProviderModelCapabilityFetching}

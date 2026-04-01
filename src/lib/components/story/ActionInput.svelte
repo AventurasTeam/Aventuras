@@ -425,7 +425,11 @@
   async function generateResponse(
     userActionEntryId: string,
     userActionContent: string,
-    options?: { countStyleReview?: boolean; styleReviewSource?: string },
+    options?: {
+      countStyleReview?: boolean
+      styleReviewSource?: string
+      cachedRetrievalResult?: RetrievalResult | null
+    },
   ) {
     const countStyleReview = options?.countStyleReview ?? true
     const styleReviewSource =
@@ -528,6 +532,7 @@
         },
         disableSuggestions: settings.uiSettings.disableSuggestions,
         activeThreads: story.pendingQuests,
+        cachedRetrievalResult: options?.cachedRetrievalResult ?? null,
       }
 
       const deps = buildPipelineDependencies()
@@ -537,62 +542,64 @@
       let fullReasoning = ''
       let narrationEntry: Awaited<ReturnType<typeof story.addEntry>> | null = null
 
+      const eventState: PipelineEventState = {
+        fullResponse: () => fullResponse,
+        fullReasoning: () => fullReasoning,
+        streamingEntryId,
+        visualProseMode,
+        isCreativeMode,
+        storyId: currentStoryRef.id,
+        activeParallelPhases: new Set(),
+      }
+
+      const persistSuggestedActions = (actions: unknown[], type: 'suggestions' | 'choices') => {
+        if (narrationEntry && actions.length > 0) {
+          database
+            .updateStoryEntry(narrationEntry.id, {
+              suggestedActions: JSON.stringify(actions),
+            })
+            .catch((err) =>
+              console.warn(`[ActionInput] Failed to save suggested ${type} to entry:`, err),
+            )
+        }
+      }
+
+      const eventCallbacks: PipelineUICallbacks = {
+        startStreaming: ui.startStreaming.bind(ui),
+        appendStreamContent: ui.appendStreamContent.bind(ui),
+        appendReasoningContent: ui.appendReasoningContent.bind(ui),
+        setGenerationStatus: ui.setGenerationStatus.bind(ui),
+        setSuggestionsLoading: ui.setSuggestionsLoading.bind(ui),
+        setActionChoicesLoading: ui.setActionChoicesLoading.bind(ui),
+        setSuggestions: (suggestions, storyId) => {
+          ui.setSuggestions(suggestions, storyId)
+          persistSuggestedActions(suggestions, 'suggestions')
+        },
+        setActionChoices: (choices, storyId) => {
+          ui.setActionChoices(choices, storyId)
+          persistSuggestedActions(choices, 'choices')
+        },
+        emitResponseStreaming: (chunk, accumulated) => {
+          eventBus.emit<ResponseStreamingEvent>({
+            type: 'ResponseStreaming',
+            chunk,
+            accumulated,
+          })
+        },
+        emitSuggestionsReady: (suggestions) => {
+          emitSuggestionsReady(suggestions)
+        },
+      }
+
       for await (const event of pipeline.execute(ctx, cfg)) {
         if (stopRequested) break
-
-        const eventState: PipelineEventState = {
-          fullResponse: () => fullResponse,
-          fullReasoning: () => fullReasoning,
-          streamingEntryId,
-          visualProseMode,
-          isCreativeMode,
-          storyId: currentStoryRef.id,
-        }
-
-        const persistSuggestedActions = (actions: unknown[], type: 'suggestions' | 'choices') => {
-          if (narrationEntry && actions.length > 0) {
-            database
-              .updateStoryEntry(narrationEntry.id, {
-                suggestedActions: JSON.stringify(actions),
-              })
-              .catch((err) =>
-                console.warn(`[ActionInput] Failed to save suggested ${type} to entry:`, err),
-              )
-          }
-        }
-
-        const eventCallbacks: PipelineUICallbacks = {
-          startStreaming: ui.startStreaming.bind(ui),
-          appendStreamContent: ui.appendStreamContent.bind(ui),
-          appendReasoningContent: ui.appendReasoningContent.bind(ui),
-          setGenerationStatus: ui.setGenerationStatus.bind(ui),
-          setSuggestionsLoading: ui.setSuggestionsLoading.bind(ui),
-          setActionChoicesLoading: ui.setActionChoicesLoading.bind(ui),
-          setSuggestions: (suggestions, storyId) => {
-            ui.setSuggestions(suggestions, storyId)
-            persistSuggestedActions(suggestions, 'suggestions')
-          },
-          setActionChoices: (choices, storyId) => {
-            ui.setActionChoices(choices, storyId)
-            persistSuggestedActions(choices, 'choices')
-          },
-          emitResponseStreaming: (chunk, accumulated) => {
-            eventBus.emit<ResponseStreamingEvent>({
-              type: 'ResponseStreaming',
-              chunk,
-              accumulated,
-            })
-          },
-          emitSuggestionsReady: (suggestions) => {
-            emitSuggestionsReady(suggestions)
-          },
-        }
 
         handleEvent(event, eventState, eventCallbacks)
 
         if (event.type === 'phase_complete' && event.phase === 'retrieval') {
           const retrievalResult = event.result as RetrievalResult | undefined
           ui.setLastLorebookRetrieval(retrievalResult?.lorebookRetrievalResult ?? null)
+          ui.setLastRetrievalResult(retrievalResult ?? null)
         }
 
         if (event.type === 'narrative_chunk') {
@@ -1016,6 +1023,7 @@
       ui.restoreActivationData(backup.activationData, backup.storyPosition)
     }
     ui.setLastLorebookRetrieval(null)
+    ui.setLastRetrievalResult(null)
 
     const result = await retryService.handleStopGeneration(
       backup,
@@ -1084,7 +1092,6 @@
     ui.clearSuggestions(storyId)
     ui.clearActionChoices(storyId)
     lastImageGenContext = null
-    ui.setLastLorebookRetrieval(null)
 
     const result = await retryService.handleRetryLastMessage(
       backup,
@@ -1133,6 +1140,7 @@
       await generateResponse(userActionEntry.id, promptContent, {
         countStyleReview: false,
         styleReviewSource: 'retry-last-message',
+        cachedRetrievalResult: ui.lastRetrievalResult,
       })
     } finally {
       ui.setRetryingLastMessage(false)

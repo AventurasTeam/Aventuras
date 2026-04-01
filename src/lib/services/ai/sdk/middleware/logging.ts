@@ -64,20 +64,35 @@ export function loggingMiddleware(): LanguageModelV3Middleware {
       if (r.output) log('Output:', JSON.stringify(r.output, null, 2))
       if (result.usage) log('Usage:', result.usage)
       if (result.finishReason) log('Finish Reason:', result.finishReason)
+      if (result.providerMetadata) {
+        log('Provider Metadata:', JSON.stringify(result.providerMetadata, null, 2))
+      }
 
       return result
     },
 
     wrapStream: async ({ doStream, params }) => {
+      const startTime = Date.now()
       log('=== STREAM REQUEST ===')
       log('Prompt:\n' + promptToString(params.prompt))
       if (params.responseFormat) {
         log('Response Format:', JSON.stringify(params.responseFormat, null, 2))
       }
 
-      const result = await doStream()
+      const { stream, ...rest } = await doStream()
       log('=== STREAM STARTED ===')
-      return result
+
+      return {
+        ...rest,
+        stream: stream.pipeThrough(
+          new TransformStream({
+            flush() {
+              const duration = Date.now() - startTime
+              log(`=== STREAM FINISHED (${duration}ms) ===`)
+            },
+          }),
+        ),
+      }
     },
   }
 }
