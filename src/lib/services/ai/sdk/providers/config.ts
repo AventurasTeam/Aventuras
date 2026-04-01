@@ -12,7 +12,6 @@ export const GOOGLE_SAFETY_SETTINGS: NonNullable<
   { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: 'BLOCK_NONE' },
 ] as const
 
-
 // ============================================================================
 // Helper Functions
 // ============================================================================
