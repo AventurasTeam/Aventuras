@@ -27,10 +27,7 @@
     AlertCircle,
     AlertTriangle,
   } from 'lucide-svelte'
-  import {
-    fetchModelsFromProvider,
-    getReasoningExtraction,
-  } from '$lib/services/ai/sdk/providers'
+  import { fetchModelsFromProvider, getReasoningExtraction } from '$lib/services/ai/sdk/providers'
 
   // Shadcn Components
   import * as Card from '$lib/components/ui/card'
@@ -39,9 +36,7 @@
   import { Label } from '$lib/components/ui/label'
   import { Textarea } from '$lib/components/ui/textarea'
   import { Switch } from '$lib/components/ui/switch'
-  import { cn } from '$lib/utils/cn'
   import GenerationParamsForm from './GenerationParamsForm.svelte'
-
 
   // All system services that can be assigned to profiles
   const systemServices = [
@@ -409,7 +404,6 @@
   function isTaskMenuOpen(serviceId: string): boolean {
     return activeTaskMenu === serviceId
   }
-
 </script>
 
 <div class="border-t pt-6">
@@ -463,7 +457,7 @@
           <Copy class="mr-1 h-3 w-3" />
           Apply Main
         </Button>
-    <Button variant="secondary" size="sm" onclick={createNewPreset} class="text-xs">
+        <Button variant="secondary" size="sm" onclick={createNewPreset} class="text-xs">
           <Plus class="mr-1 h-3 w-3" />
           New Profile
         </Button>
@@ -474,157 +468,166 @@
   {#if editingPresetId}
     {@const preset = getEditingPreset()}
     {#if preset}
-    <Card.Root class="mb-6">
-      <Card.Header class="pb-3">
-        <div class="flex items-start justify-between">
-          <Card.Title class="text-base">
-            {settings.generationPresets.find((p) => p.id === editingPresetId)
-              ? 'Edit Profile'
-              : 'Create Profile'}
-          </Card.Title>
-          <Button
-            variant="text"
-            size="icon"
-            class="-mt-2 -mr-2 h-6 w-6"
-            onclick={closeEditingPreset}
-          >
-            <X class="h-4 w-4" />
-          </Button>
-        </div>
-      </Card.Header>
-
-      <Card.Content class="grid gap-4">
-        <div class="grid grid-cols-2 gap-3">
-          <div class="grid gap-2">
-            <Label>Name</Label>
-            <Input
-              type="text"
-              bind:value={preset.name}
-              oninput={() => debouncedSave()}
-              placeholder="e.g. Classification, Memory"
-            />
+      <Card.Root class="mb-6">
+        <Card.Header class="pb-3">
+          <div class="flex items-start justify-between">
+            <Card.Title class="text-base">
+              {settings.generationPresets.find((p) => p.id === editingPresetId)
+                ? 'Edit Profile'
+                : 'Create Profile'}
+            </Card.Title>
+            <Button
+              variant="text"
+              size="icon"
+              class="-mt-2 -mr-2 h-6 w-6"
+              onclick={closeEditingPreset}
+            >
+              <X class="h-4 w-4" />
+            </Button>
           </div>
-          <div class="grid gap-2">
-            <Label>Description</Label>
-            <Input
-              type="text"
-              bind:value={preset.description}
-              oninput={() => debouncedSave()}
-              placeholder="Brief description"
-            />
-          </div>
-        </div>
+        </Card.Header>
 
-        <!-- Warning if no model or deleted profile -->
-        {#if !preset.model || (preset.profileId && !settings.getProfile(preset.profileId))}
-          <div class="flex items-center gap-2 rounded border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">
-            <AlertCircle class="h-4 w-4 shrink-0" />
-            No model configured — story generation is blocked until you set one.
-          </div>
-        {/if}
-
-        <GenerationParamsForm
-          profileId={preset.profileId ?? null}
-          model={preset.model}
-          temperature={preset.temperature}
-          maxTokens={preset.maxTokens}
-          reasoningEffort={preset.reasoningEffort}
-          onProfileChange={async (id) => {
-            const previousModel = preset.model
-            preset.profileId = id
-            await fetchModelsForPreset()
-            const models = settings.getAvailableModels(
-              preset.profileId || settings.getDefaultProfileIdForProvider(),
-            )
-            if (!models.find((m) => m.id === previousModel)) {
-              preset.model = ''
-            }
-            debouncedSave()
-          }}
-          onModelChange={(m) => {
-            preset.model = m
-            debouncedSave()
-          }}
-          onTemperatureChange={(v) => { preset.temperature = v; debouncedSave() }}
-          onMaxTokensChange={(v) => { preset.maxTokens = v; debouncedSave() }}
-          onReasoningChange={(v) => { preset.reasoningEffort = v; debouncedSave() }}
-          onRefreshModels={fetchModelsForPreset}
-          isRefreshingModels={isLoadingPresetModels}
-          isManualMode={settings.advancedRequestSettings.manualMode}
-        />
-
-        <!-- Structured Output (unchanged) -->
-        <div class="grid gap-2">
-          <Label>Structured Output</Label>
-          <div class="flex rounded-md border">
-            {#each [['auto', 'Auto'], ['on', 'Force On'], ['off', 'Force Off']] as [val, label] (val)}
-              {@const isActive = (preset.structuredOutputOverride ?? 'auto') === val}
-              <button
-                type="button"
-                class="flex-1 px-3 py-1.5 text-xs transition-colors first:rounded-l-md last:rounded-r-md {isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted/50'}"
-                onclick={() => {
-                  preset.structuredOutputOverride = val as 'auto' | 'on' | 'off'
-                  debouncedSave()
-                }}
-              >
-                {label}
-              </button>
-            {/each}
-          </div>
-          <p class="text-muted-foreground text-xs">
-            Auto uses provider/model capability detection. Force On/Off to override. Using
-            structured output can break reasoning when using local model servers.
-          </p>
-        </div>
-
-        <!-- Thinking nudge (unchanged — only for openai-compatible / think-tag providers) -->
-        {#if preset.profileId && (() => {
-          const profile = settings.getProfile(preset.profileId)
-          return profile && (
-            profile.providerType === 'openai-compatible' ||
-            getReasoningExtraction(profile.providerType) === 'think-tag'
-          )
-        })()}
-          <div class="flex flex-row items-center justify-between gap-3">
-            <div class="space-y-0.5">
-              <Label class="text-sm">Thinking nudge</Label>
-              <p class="text-muted-foreground text-xs">
-                Inject a prompt to encourage the model to use <code>&lt;think&gt;</code> tags properly.
-                Useful for some local models such as Mistral models, but may cause issues with other models
-                such as Qwen 3.5. Has no effect when using structured output with local model servers.
-              </p>
+        <Card.Content class="grid gap-4">
+          <div class="grid grid-cols-2 gap-3">
+            <div class="grid gap-2">
+              <Label>Name</Label>
+              <Input
+                type="text"
+                bind:value={preset.name}
+                oninput={() => debouncedSave()}
+                placeholder="e.g. Classification, Memory"
+              />
             </div>
-            <Switch
-              checked={!!preset.thinkingNudgePrompt}
-              onCheckedChange={(v) => {
-                preset.thinkingNudgePrompt = !!v
-                debouncedSave()
-              }}
-            />
+            <div class="grid gap-2">
+              <Label>Description</Label>
+              <Input
+                type="text"
+                bind:value={preset.description}
+                oninput={() => debouncedSave()}
+                placeholder="Brief description"
+              />
+            </div>
           </div>
-        {/if}
 
-        <!-- Manual Request Body (unchanged) -->
-        {#if settings.advancedRequestSettings.manualMode}
-          <div class="border-t pt-2">
-            <Label class="mb-2 block">Manual Request Body (JSON)</Label>
-            <Textarea
-              bind:value={preset.manualBody}
-              onblur={() => debouncedSave()}
-              class="min-h-[100px] font-mono text-xs"
-              rows={4}
-              placeholder={'{"temperature": 0.7, "top_p": 0.9}'}
-            />
-            <p class="text-muted-foreground mt-1 text-xs">
-              Overrides request parameters; messages and tools are managed by Aventuras.
+          <!-- Warning if no model or deleted profile -->
+          {#if !preset.model || (preset.profileId && !settings.getProfile(preset.profileId))}
+            <div
+              class="flex items-center gap-2 rounded border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400"
+            >
+              <AlertCircle class="h-4 w-4 shrink-0" />
+              No model configured — story generation is blocked until you set one.
+            </div>
+          {/if}
+
+          <GenerationParamsForm
+            profileId={preset.profileId ?? null}
+            model={preset.model}
+            temperature={preset.temperature}
+            maxTokens={preset.maxTokens}
+            reasoningEffort={preset.reasoningEffort}
+            onProfileChange={async (id) => {
+              const previousModel = preset.model
+              preset.profileId = id
+              await fetchModelsForPreset()
+              const models = settings.getAvailableModels(
+                preset.profileId || settings.getDefaultProfileIdForProvider(),
+              )
+              if (!models.find((m) => m.id === previousModel)) {
+                preset.model = ''
+              }
+              debouncedSave()
+            }}
+            onModelChange={(m) => {
+              preset.model = m
+              debouncedSave()
+            }}
+            onTemperatureChange={(v) => {
+              preset.temperature = v
+              debouncedSave()
+            }}
+            onMaxTokensChange={(v) => {
+              preset.maxTokens = v
+              debouncedSave()
+            }}
+            onReasoningChange={(v) => {
+              preset.reasoningEffort = v
+              debouncedSave()
+            }}
+            onRefreshModels={fetchModelsForPreset}
+            isRefreshingModels={isLoadingPresetModels}
+            isManualMode={settings.advancedRequestSettings.manualMode}
+          />
+
+          <!-- Structured Output (unchanged) -->
+          <div class="grid gap-2">
+            <Label>Structured Output</Label>
+            <div class="flex rounded-md border">
+              {#each [['auto', 'Auto'], ['on', 'Force On'], ['off', 'Force Off']] as [val, label] (val)}
+                {@const isActive = (preset.structuredOutputOverride ?? 'auto') === val}
+                <button
+                  type="button"
+                  class="flex-1 px-3 py-1.5 text-xs transition-colors first:rounded-l-md last:rounded-r-md {isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-muted/50'}"
+                  onclick={() => {
+                    preset.structuredOutputOverride = val as 'auto' | 'on' | 'off'
+                    debouncedSave()
+                  }}
+                >
+                  {label}
+                </button>
+              {/each}
+            </div>
+            <p class="text-muted-foreground text-xs">
+              Auto uses provider/model capability detection. Force On/Off to override. Using
+              structured output can break reasoning when using local model servers.
             </p>
           </div>
-        {/if}
-      </Card.Content>
-      <!-- No Card.Footer: auto-persist replaces explicit Save/Cancel -->
-    </Card.Root>
+
+          <!-- Thinking nudge (unchanged — only for openai-compatible / think-tag providers) -->
+          {#if preset.profileId && (() => {
+              const profile = settings.getProfile(preset.profileId)
+              return profile && (profile.providerType === 'openai-compatible' || getReasoningExtraction(profile.providerType) === 'think-tag')
+            })()}
+            <div class="flex flex-row items-center justify-between gap-3">
+              <div class="space-y-0.5">
+                <Label class="text-sm">Thinking nudge</Label>
+                <p class="text-muted-foreground text-xs">
+                  Inject a prompt to encourage the model to use <code>&lt;think&gt;</code> tags properly.
+                  Useful for some local models such as Mistral models, but may cause issues with other
+                  models such as Qwen 3.5. Has no effect when using structured output with local model
+                  servers.
+                </p>
+              </div>
+              <Switch
+                checked={!!preset.thinkingNudgePrompt}
+                onCheckedChange={(v) => {
+                  preset.thinkingNudgePrompt = !!v
+                  debouncedSave()
+                }}
+              />
+            </div>
+          {/if}
+
+          <!-- Manual Request Body (unchanged) -->
+          {#if settings.advancedRequestSettings.manualMode}
+            <div class="border-t pt-2">
+              <Label class="mb-2 block">Manual Request Body (JSON)</Label>
+              <Textarea
+                bind:value={preset.manualBody}
+                onblur={() => debouncedSave()}
+                class="min-h-[100px] font-mono text-xs"
+                rows={4}
+                placeholder={'{"temperature": 0.7, "top_p": 0.9}'}
+              />
+              <p class="text-muted-foreground mt-1 text-xs">
+                Overrides request parameters; messages and tools are managed by Aventuras.
+              </p>
+            </div>
+          {/if}
+        </Card.Content>
+        <!-- No Card.Footer: auto-persist replaces explicit Save/Cancel -->
+      </Card.Root>
     {/if}
   {/if}
 
@@ -672,7 +675,7 @@
                 variant="text"
                 size="icon"
                 class="text-muted-foreground hover:text-foreground h-6 w-6"
-              onclick={() => startEditingPreset(preset)}
+                onclick={() => startEditingPreset(preset)}
                 title="Edit Profile"
               >
                 <Settings2 class="h-3 w-3" />

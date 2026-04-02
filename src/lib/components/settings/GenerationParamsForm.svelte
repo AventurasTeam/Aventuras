@@ -13,7 +13,6 @@
   import { Slider } from '$lib/components/ui/slider'
   import { Switch } from '$lib/components/ui/switch'
   import { Input } from '$lib/components/ui/input'
-  import { Button } from '$lib/components/ui/button'
   import ModelSelector from './ModelSelector.svelte'
 
   interface Props {
@@ -57,9 +56,22 @@
   // ============================================================================
 
   const TOKEN_STEPS = [
-    1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, // step 1024 (indices 0–7)
-    10240, 12288, 14336, 16384,                       // step 2048 (indices 8–11)
-    20480, 24576, 28672, 32768,                       // step 4096 (indices 12–15)
+    1024,
+    2048,
+    3072,
+    4096,
+    5120,
+    6144,
+    7168,
+    8192, // step 1024 (indices 0–7)
+    10240,
+    12288,
+    14336,
+    16384, // step 2048 (indices 8–11)
+    20480,
+    24576,
+    28672,
+    32768, // step 4096 (indices 12–15)
   ]
 
   function snapToSliderIndex(value: number): number {
@@ -82,12 +94,14 @@
 
   // Numeric override UI state
   let showNumericOverride = $state(false)
-  let numericValue = $state(0) // populated by $effect below
-
-  // Keep numericValue in sync when the prop changes externally
-  $effect(() => {
-    numericValue = maxTokens
-  })
+  const numericValue = {
+    get value() {
+      return maxTokens
+    },
+    set value(v: number) {
+      onMaxTokensChange(v)
+    },
+  }
 
   function handleSliderTokenChange(idx: number) {
     showNumericOverride = false
@@ -98,19 +112,16 @@
   function handleNumericInput(e: Event) {
     const raw = parseInt((e.currentTarget as HTMLInputElement).value, 10)
     if (!isNaN(raw)) {
-      numericValue = raw
-      onMaxTokensChange(raw)
+      numericValue.value = raw
     }
   }
 
   function handleNumericBlur(e: Event) {
     const raw = parseInt((e.currentTarget as HTMLInputElement).value, 10)
     if (isNaN(raw) || raw < 256) {
-      numericValue = 256
-      onMaxTokensChange(256)
+      numericValue.value = 256
     } else if (raw > 262144) {
-      numericValue = 262144
-      onMaxTokensChange(262144)
+      numericValue.value = 262144
     }
   }
 
@@ -118,9 +129,8 @@
     if (showNumericOverride) {
       // closing: snap slider to nearest TOKEN_STEP
       showNumericOverride = false
-      const snapped = TOKEN_STEPS[snapToSliderIndex(numericValue)]
-      numericValue = snapped
-      onMaxTokensChange(snapped)
+      const snapped = TOKEN_STEPS[snapToSliderIndex(numericValue.value)]
+      numericValue.value = snapped
     } else {
       showNumericOverride = true
     }
@@ -276,7 +286,9 @@
         </div>
         <div class="flex items-center gap-1.5">
           {#if isTokenManualOverride || showNumericOverride}
-            <span class="text-muted-foreground rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+            <span
+              class="text-muted-foreground rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400"
+            >
               Manual
             </span>
           {:else}
@@ -289,11 +301,11 @@
             onclick={toggleNumericOverride}
             class={cn(
               'rounded p-0.5 transition-colors',
-              showNumericOverride
-                ? 'text-primary'
-                : 'text-muted-foreground hover:text-foreground',
+              showNumericOverride ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
             )}
-            title={showNumericOverride ? 'Close manual override (snap to slider)' : 'Set exact value (expert)'}
+            title={showNumericOverride
+              ? 'Close manual override (snap to slider)'
+              : 'Set exact value (expert)'}
           >
             <Settings2 class="h-3.5 w-3.5" />
           </button>
@@ -329,7 +341,7 @@
         <Input
           type="number"
           class="h-8 w-full text-left"
-          value={numericValue}
+          value={numericValue.value}
           min={256}
           max={262144}
           step={256}
