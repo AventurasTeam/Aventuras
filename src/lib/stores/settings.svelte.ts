@@ -3186,6 +3186,48 @@ class SettingsStore {
   hasInvalidProfiles(): boolean {
     return this.getInvalidProfiles().length > 0
   }
+
+  /**
+   * Reactive getter: returns true if generation is blocked due to config issues.
+   * Declared as a getter so Svelte 5 memoizes it — the for...of loop over
+   * generationPresets doesn't re-run on every render, only when $state changes.
+   *
+   * Covers:
+   * - Any structurally invalid API profile (migration from old versions)
+   * - Main Narrative: missing/deleted API profile, or no model selected
+   * - Any Generation Preset: missing/deleted API profile, or no model selected
+   */
+  get hasGenerationConfigIssues(): boolean {
+    // 1. Any structurally invalid API profile
+    if (this.getInvalidProfiles().length > 0) return true
+
+    // 2. Main Narrative: missing or deleted API profile
+    if (!this.getProfile(this.apiSettings.mainNarrativeProfileId)) return true
+
+    // 3. Main Narrative: no model
+    if (!this.apiSettings.defaultModel) return true
+
+    // 4. Each Generation Preset
+    for (const preset of this.generationPresets) {
+      if (!preset.profileId || !this.getProfile(preset.profileId)) return true
+      if (!preset.model) return true
+    }
+
+    return false
+  }
+
+  /**
+   * Check whether selecting a model should auto-force reasoning effort to 'high'.
+   * This is a NanoGPT-specific behavior: reasoning models on NanoGPT require
+   * effort set to high (the provider enforces it).
+   */
+  shouldForceHighReasoning(profileId: string | null | undefined, modelId: string): boolean {
+    if (!profileId) return false
+    const profile = this.getProfile(profileId)
+    if (!profile || profile.providerType !== 'nanogpt') return false
+    const model = this.getProfileModels(profileId).find((m) => m.id === modelId)
+    return !!model?.reasoning
+  }
 }
 
 export const settings = new SettingsStore()

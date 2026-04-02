@@ -1553,9 +1553,7 @@ class UIStore {
     }
   }
 
-  // Profile warning banner state
-  // This banner persists until the user fixes their profiles or dismisses it
-  profileWarningDismissed = $state(false)
+  // Settings navigation state
   private settingsActiveTab = $state<string>('api')
 
   /**
@@ -1566,18 +1564,18 @@ class UIStore {
   }
 
   /**
-   * Dismiss the profile warning banner for the current session.
-   * Users can still fix it later via Settings > API.
-   */
-  dismissProfileWarning() {
-    this.profileWarningDismissed = true
-  }
-
-  /**
    * Open settings modal and navigate to the API tab to fix profiles.
    */
   openSettingsToApiTab() {
     this.settingsActiveTab = 'api'
+    this.settingsModalOpen = true
+  }
+
+  /**
+   * Open settings modal and navigate to the Generation tab to configure models.
+   */
+  openSettingsToGenerationTab() {
+    this.settingsActiveTab = 'generation'
     this.settingsModalOpen = true
   }
 

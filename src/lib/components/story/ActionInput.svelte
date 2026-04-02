@@ -117,6 +117,9 @@
     isTouchDevice() ? 'Shift+Enter to send' : 'Enter to send, Shift+Enter for new line',
   )
 
+  // Block generation when any service is missing a model or has an invalid profile
+  const blockGeneration = $derived(settings.hasGenerationConfigIssues)
+
   // ============================================================================
   // Action Type Configuration
   // ============================================================================
@@ -1248,9 +1251,11 @@
             >{/if}
         {:else}<button
             onclick={handleSubmit}
-            disabled={!inputValue.trim()}
+            disabled={!inputValue.trim() || blockGeneration}
             class="text-accent-400 hover:text-accent-300 hover:bg-accent-500/10 flex h-11 w-11 flex-shrink-0 -translate-y-0.5 items-center justify-center rounded-lg p-0 transition-all active:scale-95 disabled:opacity-50 sm:translate-y-0"
-            title="Send direction ({sendKeyHint})"><Send class="h-6 w-6" /></button
+            title={blockGeneration
+              ? 'AI configuration incomplete — check Settings'
+              : `Send direction (${sendKeyHint})`}><Send class="h-6 w-6" /></button
           >{/if}
       </div>
     </div>
@@ -1315,11 +1320,13 @@
             >{/if}
         {:else}<button
             onclick={handleSubmit}
-            disabled={!inputValue.trim()}
+            disabled={!inputValue.trim() || blockGeneration}
             class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg p-0 transition-all active:scale-95 disabled:opacity-50 {actionButtonStyles[
               actionType
             ]} -translate-y-0.5 sm:translate-y-0"
-            title="Send ({sendKeyHint})"><Send class="h-6 w-6" /></button
+            title={blockGeneration
+              ? 'AI configuration incomplete — check Settings'
+              : `Send (${sendKeyHint})`}><Send class="h-6 w-6" /></button
           >{/if}
       </div>
     </div>
