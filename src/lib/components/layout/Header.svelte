@@ -314,7 +314,7 @@
 
     {#if !story.currentStory}
       <Button
-        href="https://discord.gg/DqVzhSPC46"
+        href="https://discord.gg/aventuras"
         target="_blank"
         rel="noopener noreferrer"
         variant="text"
