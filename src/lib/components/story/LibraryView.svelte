@@ -162,7 +162,7 @@
 
   <!-- Discord Link -->
   <a
-    href="https://discord.gg/DqVzhSPC46"
+    href="https://discord.gg/aventuras"
     target="_blank"
     rel="noopener noreferrer"
     class="bg-secondary text-secondary-foreground hover:bg-secondary/80 fixed bottom-6 left-6 z-40 hidden items-center gap-2 rounded-lg px-3 py-2 text-sm shadow-lg transition-all hover:scale-105 sm:flex"
