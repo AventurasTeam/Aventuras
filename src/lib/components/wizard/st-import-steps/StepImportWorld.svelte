@@ -19,9 +19,9 @@
   import { ScrollArea } from '$lib/components/ui/scroll-area'
   import UniversalVaultBrowser from '$lib/components/vault/UniversalVaultBrowser.svelte'
   import type { ExpandedSetting } from '$lib/services/ai/sdk'
-  import type { VaultLorebook } from '$lib/types'
-  import type { ImportedLorebookItem, EntryType } from '$lib/components/wizard/wizardTypes'
-  import { getTypeCounts, getTypeColor } from '$lib/components/wizard/wizardTypes'
+  import type { EntryType, VaultLorebook } from '$lib/types'
+  import type { ImportedLorebookItem } from '../wizardTypes'
+  import { getTypeCounts, getTypeColor } from '../wizardTypes'
 
   interface Props {
     settingSeed: string

@@ -2,7 +2,7 @@
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
   import type { VaultLorebook } from '$lib/types'
-  import { convertToEntries } from '$lib/services/lorebookImporter'
+  import { LorebookImportExport } from '$lib/services/lorebookImportExport'
   import UniversalVaultBrowser from '$lib/components/vault/UniversalVaultBrowser.svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -30,7 +30,7 @@
         priority: e.priority ?? 100,
       }))
 
-      const entries = convertToEntries(importedEntries, 'import')
+      const entries = LorebookImportExport.convertToEntries(importedEntries, 'import')
       const count = await story.addLorebookEntries(entries)
 
       ui.showToast(

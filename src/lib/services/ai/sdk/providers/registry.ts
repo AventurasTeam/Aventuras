@@ -19,6 +19,27 @@ import type { APIProfile } from '$lib/types'
 import { createTimeoutFetch } from './fetch'
 import { PROVIDERS, getBaseUrl } from './config'
 import { settings } from '$lib/stores/settings.svelte'
+import type { LanguageModelV3 } from '@ai-sdk/provider'
+
+export function createModelFromProfile(options: {
+  profile: APIProfile
+  modelId: string
+  presetId: string
+  debugId?: string
+  structuredOutputs?: boolean
+  manualBody?: string
+}): LanguageModelV3 {
+  const { profile, modelId, presetId, debugId, structuredOutputs, manualBody } = options
+  const provider = createProviderFromProfile({
+    profile,
+    presetId,
+    debugId,
+    structuredOutputs,
+    manualBody,
+  })
+
+  return provider(modelId) as LanguageModelV3
+}
 
 export function createProviderFromProfile(options: {
   profile: APIProfile

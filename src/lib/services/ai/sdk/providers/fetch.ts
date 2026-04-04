@@ -82,11 +82,23 @@ export function createTimeoutFetch(
       parsedBody = undefined
     }
 
+    const rawHeaders = normalizeHeaders(init?.headers)
+    const sanitizedHeaders: Record<string, string> = {}
+    const sensitiveKeys = new Set(['authorization', 'x-api-key', 'api-key'])
+    for (const [key, value] of Object.entries(rawHeaders)) {
+      if (sensitiveKeys.has(key.toLowerCase()) && value.length > 8) {
+        sanitizedHeaders[key] = value.slice(0, 4) + '...' + value.slice(-4)
+      } else {
+        sanitizedHeaders[key] = value
+      }
+    }
+
     const debugId = debug.addDebugRequest(
       serviceId,
       {
         url: input.toString(),
         method: init?.method ?? 'GET',
+        headers: sanitizedHeaders,
         body: parsedBody,
       },
       debugIdExternal,
@@ -98,40 +110,60 @@ export function createTimeoutFetch(
         body: parsedBody ? JSON.stringify(parsedBody) : undefined,
       })
 
+      // Path A: Error Response (Non-2xx)
+      // We log the error asynchronously and return the original response immediately.
+      // This ensures the SDK receives the correct status and body for its own error handling.
       if (!response.ok) {
-        const error = await response.text()
-        let errorPayload
-        try {
-          errorPayload = JSON.parse(error)
-        } catch {
-          errorPayload = error
-        }
-        debug.addDebugResponse(
-          debugId,
-          serviceId,
-          { status: response.status, error: errorPayload, statusText: response.statusText },
-          startTime,
-          error,
-        )
+        const clonedResponse = response.clone()
+        clonedResponse
+          .text()
+          .then((text) => {
+            let errorPayload
+            try {
+              errorPayload = JSON.parse(text)
+            } catch {
+              errorPayload = text
+            }
+            debug.addDebugResponse(
+              debugId,
+              serviceId,
+              {
+                status: response.status,
+                statusText: response.statusText,
+                error: errorPayload,
+              },
+              startTime,
+              text,
+            )
+          })
+          .catch((err) => {
+            console.warn('[Fetch] Failed to read error response for logging:', err)
+          })
+        return response
       }
 
+      // Path B: Non-JSON Success Response (mostly Streams)
       if (!response.headers.get('content-type')?.includes('application/json')) {
-        // For streams (e.g. text/event-stream), we must not consume the origin body.
-        // We clone it, read the clone in the background, and log the final accumulated payload.
         const clonedResponse = response.clone()
         clonedResponse
           .text()
           .then((text) => {
             let parsedBody: any = text
+            const providerMetadata: Record<string, any> = {}
             try {
-              // Attempt to parse SSE stream into a JSON array for better debug display
               const chunks = text.split('\n\n').filter((c) => c.trim())
               const parsedChunks = chunks.map((chunk) => {
                 if (chunk.startsWith('data: ')) {
                   const dataStr = chunk.slice(6)
                   if (dataStr === '[DONE]') return { done: true }
                   try {
-                    return JSON.parse(dataStr)
+                    const parsed = JSON.parse(dataStr)
+                    if (parsed.promptFeedback)
+                      providerMetadata.promptFeedback = parsed.promptFeedback
+                    if (parsed.candidates?.[0]?.safetyRatings) {
+                      providerMetadata.safetyRatings = parsed.candidates[0].safetyRatings
+                    }
+                    return parsed
                   } catch {
                     return chunk
                   }
@@ -139,7 +171,7 @@ export function createTimeoutFetch(
                 return chunk
               })
 
-              // Aggregate chunks into a single response object
+              // Aggregation logic for streaming choices...
               const aggregatedChoices: Record<number, any> = {}
               let aggregatedId = ''
               let aggregatedModel = ''
@@ -162,16 +194,12 @@ export function createTimeoutFetch(
                   }
                   const agg = aggregatedChoices[idx]
                   const delta = choice.delta || {}
-
                   if (delta.role) agg.message.role = delta.role
                   if (delta.content) agg.message.content += delta.content
-                  if (delta.reasoning) {
+                  if (delta.reasoning)
                     agg.message.reasoning = (agg.message.reasoning || '') + delta.reasoning
-                  }
-
                   if (delta.tool_calls) {
                     if (!agg.message.tool_calls) agg.message.tool_calls = []
-
                     for (const tc of delta.tool_calls) {
                       const tcIdx = tc.index
                       let aggTc = agg.message.tool_calls.find((t: any) => t.index === tcIdx)
@@ -184,32 +212,25 @@ export function createTimeoutFetch(
                         }
                         agg.message.tool_calls.push(aggTc)
                       }
-
                       if (tc.id) aggTc.id = tc.id
                       if (tc.type) aggTc.type = tc.type
                       if (tc.function?.name) aggTc.function.name = tc.function.name
-                      if (typeof tc.function?.arguments === 'string') {
+                      if (typeof tc.function?.arguments === 'string')
                         aggTc.function.arguments += tc.function.arguments
-                      }
                     }
                   }
-
-                  if (choice.finish_reason !== undefined && choice.finish_reason !== null) {
+                  if (choice.finish_reason !== undefined && choice.finish_reason !== null)
                     agg.finish_reason = choice.finish_reason
-                  }
                 }
               }
 
               if (hasAggregation) {
-                // Parse the tool call arguments into objects for even better readability
                 const finalChoices = Object.values(aggregatedChoices).map((choice: any) => {
                   if (choice.message.tool_calls) {
                     choice.message.tool_calls = choice.message.tool_calls.map((tc: any) => {
                       try {
                         tc.function.parsed_arguments = JSON.parse(tc.function.arguments)
-                      } catch {
-                        // ignore
-                      }
+                      } catch {}
                       return tc
                     })
                   }
@@ -225,76 +246,73 @@ export function createTimeoutFetch(
               } else if (parsedChunks.length > 0) {
                 parsedBody = parsedChunks
               }
-            } catch {
-              // Fallback to raw text
-            }
+            } catch {}
 
             debug.addDebugResponse(
               debugId,
               serviceId,
               {
-                url: input.toString(),
-                method: init?.method ?? 'GET',
                 body: parsedBody,
+                providerMetadata:
+                  Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined,
                 stream: true,
               },
               startTime,
             )
           })
           .catch((err) => {
-            console.warn('[Fetch] Failed to read streaming debug response:', err)
+            console.warn('[Fetch] Failed to read streaming response for logging:', err)
           })
-
         return response
       }
 
+      // Path C: JSON Success Response (Normal completion)
       const text = await response.text()
-
       let responsePayload
-      if (parsedBody && !(parsedBody as Record<string, unknown>).stream) {
-        try {
-          responsePayload = JSON.parse(text)
-        } catch {
-          responsePayload = text
+      try {
+        responsePayload = JSON.parse(text)
+      } catch {
+        responsePayload = text
+      }
+
+      const providerMetadata: Record<string, any> = {}
+      if (typeof responsePayload === 'object' && responsePayload !== null) {
+        if (responsePayload.promptFeedback)
+          providerMetadata.promptFeedback = responsePayload.promptFeedback
+        if (
+          Array.isArray(responsePayload.candidates) &&
+          responsePayload.candidates[0]?.safetyRatings
+        ) {
+          providerMetadata.safetyRatings = responsePayload.candidates[0].safetyRatings
         }
-        debug.addDebugResponse(
-          debugId,
-          serviceId,
-          {
-            url: input.toString(),
-            method: init?.method ?? 'GET',
-            body: responsePayload,
-          },
-          startTime,
-        )
       }
 
       debug.addDebugResponse(
         debugId,
         serviceId,
         {
-          url: input.toString(),
-          method: init?.method ?? 'GET',
           body: responsePayload,
+          providerMetadata: Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined,
         },
         startTime,
       )
 
-      try {
-        const json = JSON.parse(text)
-        const patched = JSON.stringify(patchResponseJson(json))
+      if (typeof responsePayload === 'object' && responsePayload !== null) {
+        const patched = JSON.stringify(
+          patchResponseJson(responsePayload as Record<string, unknown>),
+        )
         return new Response(patched, {
           status: response.status,
           statusText: response.statusText,
           headers: response.headers,
         })
-      } catch {
-        return new Response(text, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: response.headers,
-        })
       }
+
+      return new Response(text, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      })
     } finally {
       clearTimeout(timeoutId)
     }

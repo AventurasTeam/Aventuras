@@ -1,12 +1,11 @@
 <script lang="ts">
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
-  import { lorebookImportService, type ImportProgress } from '$lib/services/lorebook'
-  import type { LorebookImportResult } from '$lib/services/lorebookImporter'
+  import { database } from '$lib/services/database'
+  import { LorebookImportExport } from '$lib/services/lorebookImportExport'
   import { open } from '@tauri-apps/plugin-dialog'
   import { readTextFile } from '@tauri-apps/plugin-fs'
-  import { Upload, FileJson, Loader2, Check } from 'lucide-svelte'
-
+  import { Check, FileJson, Loader2, Upload } from 'lucide-svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
   import { Progress } from '$lib/components/ui/progress'
@@ -15,10 +14,10 @@
   import { cn } from '$lib/utils/cn'
 
   let dragOver = $state(false)
-  let parseResult = $state<LorebookImportResult | null>(null)
+  let parseResult = $state<LorebookImportExport.LorebookImportResult | null>(null)
   let useAIClassification = $state(true)
   let importing = $state(false)
-  let importProgress = $state<ImportProgress | null>(null)
+  let importProgress = $state<LorebookImportExport.ImportProgress | null>(null)
 
   const previewCount = $derived(parseResult?.entries.length ?? 0)
 
@@ -59,15 +58,10 @@
     dragOver = false
   }
 
-  async function processContent(text: string, filename: string) {
+  async function processContent(text: string) {
     parseResult = null
 
-    const result = lorebookImportService.parseFile(text, filename)
-
-    if (!result) {
-      ui.showToast('Please select a JSON or Aventuras file (.json or .avt)', 'error')
-      return
-    }
+    const result = LorebookImportExport.parse(text)
 
     if (!result.success) {
       ui.showToast(
@@ -87,8 +81,7 @@
 
   async function processFile(file: File) {
     try {
-      const text = await file.text()
-      await processContent(text, file.name)
+      await processContent(await file.text())
     } catch (err) {
       ui.showToast(err instanceof Error ? err.message : 'Failed to read file', 'error')
     }
@@ -108,9 +101,7 @@
         return
       }
 
-      const content = await readTextFile(filePath)
-      const filename = filePath.split(/[/\\]/).pop() ?? 'lorebook.json'
-      await processContent(content, filename)
+      await processContent(await readTextFile(filePath))
     } catch (err) {
       ui.showToast(err instanceof Error ? err.message : 'Failed to open file', 'error')
     }
@@ -123,7 +114,7 @@
     importProgress = null
 
     try {
-      const result = await lorebookImportService.importEntries(parseResult, {
+      const result = await LorebookImportExport.importEntries(parseResult, {
         storyId: story.currentStory.id,
         useAIClassification,
         storyMode: story.currentStory.mode ?? 'adventure',
@@ -134,8 +125,7 @@
 
       if (result.success) {
         // Reload entries into store
-        const allEntries = await lorebookImportService.getStoryEntries(story.currentStory.id)
-        story.lorebookEntries = allEntries
+        story.lorebookEntries = await database.getEntries(story.currentStory.id)
 
         ui.showToast(`Successfully imported ${result.entriesImported} entries`, 'info')
         ui.closeLorebookImport()

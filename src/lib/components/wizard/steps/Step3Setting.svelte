@@ -17,8 +17,8 @@
     MapPin,
   } from 'lucide-svelte'
   import UniversalVaultBrowser from '$lib/components/vault/UniversalVaultBrowser.svelte'
+  import type { ExpandedSetting, GeneratedCharacter } from '$lib/services/ai/sdk'
   import type { VaultScenario } from '$lib/types'
-  import type { ExpandedSetting, GeneratedCharacter } from '../wizardTypes'
   import { QUICK_START_SEEDS } from '$lib/services/templates'
 
   // Shadcn Components

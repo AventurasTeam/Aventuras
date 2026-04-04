@@ -1,9 +1,13 @@
 /**
  * GenerationPipeline - Orchestrates narrative generation phases
- * Order: pre → retrieval → narrative → classification → translation → image → post
+ * Order: pre → retrieval → narrative → [(classification ‖ translation → image) ‖ background ‖ post]
  */
 
-import type { GenerationEvent, GenerationContext, ErrorEvent } from './types'
+import { createLogger } from '$lib/log'
+
+const log = createLogger('GenerationPipeline')
+
+import type { GenerationEvent, GenerationContext, ErrorEvent, RetrievalResult } from './types'
 import type {
   EmbeddedImage,
   ActionInputType,
@@ -71,6 +75,7 @@ export interface PipelineConfig {
   promptContext: PromptContext
   disableSuggestions: boolean
   activeThreads: StoryBeat[]
+  cachedRetrievalResult?: RetrievalResult | null
 }
 
 export interface PipelineResult {
@@ -130,15 +135,23 @@ export class GenerationPipeline {
       })
       if (ctx.abortSignal?.aborted) return { ...r, aborted: true }
 
-      const retrieval = yield* this.retrievalPhase.execute({
-        context: ctx,
-        dependencies: this.deps,
-        timelineFillEnabled: cfg.timelineFillEnabled,
-        activationTracker: cfg.activationTracker,
-        storyMode: cfg.storyMode,
-        pov: cfg.pov,
-        tense: cfg.tense,
-      })
+      let retrieval: RetrievalResult
+      if (cfg.cachedRetrievalResult) {
+        log('Using cached retrieval result (regenerate)')
+        yield { type: 'phase_start', phase: 'retrieval' } as GenerationEvent
+        retrieval = cfg.cachedRetrievalResult
+        yield { type: 'phase_complete', phase: 'retrieval', result: retrieval } as GenerationEvent
+      } else {
+        retrieval = yield* this.retrievalPhase.execute({
+          context: ctx,
+          dependencies: this.deps,
+          timelineFillEnabled: cfg.timelineFillEnabled,
+          activationTracker: cfg.activationTracker,
+          storyMode: cfg.storyMode,
+          pov: cfg.pov,
+          tense: cfg.tense,
+        })
+      }
       if (ctx.abortSignal?.aborted) return { ...r, aborted: true }
 
       r.narrative = yield* this.narrativePhase.execute({
@@ -151,53 +164,44 @@ export class GenerationPipeline {
       })
       if (!r.narrative || ctx.abortSignal?.aborted) return { ...r, aborted: true }
 
-      const parallelPhases = yield* mergeGenerators({
+      // All post-narrative phases run in parallel. Image needs classification
+      // + translation results, so it chains after them via imagePipeline.
+      // Background and postGeneration are fully independent.
+      const allPhases = yield* mergeGenerators({
+        // [Classification ‖ Translation] → Image (sequential dependency)
+        imagePipeline: this.runImagePipeline(
+          ctx,
+          cfg,
+          r.narrative!.content,
+          r.preGeneration?.visualProseMode ?? false,
+        ),
+        // Independent phases
         background: this.backgroundPhase.execute({
           storyId: ctx.story.id,
           storyEntries: ctx.visibleEntries,
           imageSettings: cfg.imageSettings,
           abortSignal: ctx.abortSignal,
         }),
-        classification: this.classificationPhase.execute({
-          narrativeContent: r.narrative.content,
-          narrativeEntryId: ctx.userAction.entryId,
-          userActionContent: ctx.userAction.content,
+        postGeneration: this.postPhase.execute({
+          isCreativeMode: cfg.storyMode === 'creative-writing',
+          disableSuggestions: cfg.disableSuggestions,
+          entries: ctx.visibleEntries,
+          activeThreads: cfg.activeThreads,
+          lorebookEntries: ctx.worldState.lorebookEntries,
+          promptContext: cfg.promptContext,
           worldState: ctx.worldState,
-          story: ctx.story,
-          visibleEntries: ctx.visibleEntries,
+          narrativeResponse: r.narrative.content,
+          pov: cfg.pov,
+          translationSettings: cfg.translationSettings,
           abortSignal: ctx.abortSignal,
         }),
       })
 
-      r.background = parallelPhases.background
-      r.classification = parallelPhases.classification
-      if (ctx.abortSignal?.aborted) return { ...r, aborted: true }
-
-      r.translation = yield* this.translationPhase.execute({
-        narrativeContent: r.narrative.content,
-        narrativeEntryId: ctx.userAction.entryId,
-        isVisualProse: r.preGeneration?.visualProseMode ?? false,
-        translationSettings: cfg.translationSettings,
-        abortSignal: ctx.abortSignal,
-      })
-      if (ctx.abortSignal?.aborted) return { ...r, aborted: true }
-
-      r.image = yield* this.imagePhase.execute(this.buildImageInput(ctx, cfg, r))
-      if (ctx.abortSignal?.aborted) return { ...r, aborted: true }
-
-      r.postGeneration = yield* this.postPhase.execute({
-        isCreativeMode: cfg.storyMode === 'creative-writing',
-        disableSuggestions: cfg.disableSuggestions,
-        entries: ctx.visibleEntries,
-        activeThreads: cfg.activeThreads,
-        lorebookEntries: ctx.worldState.lorebookEntries,
-        promptContext: cfg.promptContext,
-        worldState: ctx.worldState,
-        narrativeResponse: r.narrative.content,
-        pov: cfg.pov,
-        translationSettings: cfg.translationSettings,
-        abortSignal: ctx.abortSignal,
-      })
+      r.classification = allPhases.imagePipeline.classification
+      r.translation = allPhases.imagePipeline.translation
+      r.image = allPhases.imagePipeline.image
+      r.background = allPhases.background
+      r.postGeneration = allPhases.postGeneration
       if (ctx.abortSignal?.aborted) return { ...r, aborted: true }
 
       return r
@@ -208,20 +212,87 @@ export class GenerationPipeline {
     }
   }
 
-  private buildImageInput(ctx: GenerationContext, cfg: PipelineConfig, r: PipelineResult) {
-    const names = r.classification?.classificationResult?.scene?.presentCharacterNames ?? []
+  /**
+   * Runs classification and translation in parallel, then image once both complete.
+   * This way image starts as soon as its dependencies are ready, without waiting
+   * for unrelated phases like postGeneration or background.
+   */
+  private async *runImagePipeline(
+    ctx: GenerationContext,
+    cfg: PipelineConfig,
+    narrativeContent: string,
+    isVisualProse: boolean,
+  ): AsyncGenerator<
+    GenerationEvent,
+    {
+      classification: ClassificationPhaseResult | null
+      translation: TranslationResult2
+      image: ImageResult
+    }
+  > {
+    const imageDeps = yield* mergeGenerators({
+      classification: this.classificationPhase.execute({
+        narrativeContent,
+        narrativeEntryId: ctx.userAction.entryId,
+        userActionContent: ctx.userAction.content,
+        worldState: ctx.worldState,
+        story: ctx.story,
+        visibleEntries: ctx.visibleEntries,
+        abortSignal: ctx.abortSignal,
+      }),
+      translation: this.translationPhase.execute({
+        narrativeContent,
+        narrativeEntryId: ctx.userAction.entryId,
+        isVisualProse,
+        translationSettings: cfg.translationSettings,
+        abortSignal: ctx.abortSignal,
+      }),
+    })
+
+    if (ctx.abortSignal?.aborted) {
+      return {
+        classification: imageDeps.classification,
+        translation: imageDeps.translation,
+        image: { started: false, skippedReason: 'aborted' },
+      }
+    }
+
+    const imageInput = this.buildImageInput(
+      ctx,
+      cfg,
+      narrativeContent,
+      imageDeps.classification,
+      imageDeps.translation,
+    )
+    const image = yield* this.imagePhase.execute(imageInput)
+
+    return {
+      classification: imageDeps.classification,
+      translation: imageDeps.translation,
+      image,
+    }
+  }
+
+  private buildImageInput(
+    ctx: GenerationContext,
+    cfg: PipelineConfig,
+    narrativeContent: string,
+    classification: ClassificationPhaseResult | null,
+    translation: TranslationResult2,
+  ) {
+    const names = classification?.classificationResult?.scene?.presentCharacterNames ?? []
     const presentCharacters: Character[] = ctx.worldState.characters.filter((c) =>
       names.includes(c.name),
     )
     return {
       storyId: ctx.story.id,
       entryId: ctx.narrationEntryId || ctx.userAction.entryId,
-      narrativeContent: r.narrative?.content ?? '',
+      narrativeContent,
       userAction: ctx.userAction.content,
       presentCharacters,
       currentLocation: ctx.worldState.currentLocation?.name,
-      translatedNarrative: r.translation?.translatedContent ?? undefined,
-      translationLanguage: r.translation?.targetLanguage ?? undefined,
+      translatedNarrative: translation?.translatedContent ?? undefined,
+      translationLanguage: translation?.targetLanguage ?? undefined,
       imageSettings: cfg.imageSettings,
       abortSignal: ctx.abortSignal,
     }

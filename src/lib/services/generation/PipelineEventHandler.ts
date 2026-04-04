@@ -24,6 +24,33 @@ export interface PipelineEventState {
   visualProseMode: boolean
   isCreativeMode: boolean
   storyId?: string
+  /** Tracks which parallel phases are currently running */
+  activeParallelPhases: Set<string>
+}
+
+/** Phases that run concurrently after the narrative phase.
+ *  Note: BackgroundImagePhase and ImagePhase both emit phase 'image',
+ *  but are not tracked here — they run inside imagePipeline or independently. */
+const PARALLEL_PHASES = new Set(['classification', 'translation', 'post'])
+
+/** Human-readable labels shown when a single parallel phase remains.
+ *  'post' is handled separately in parallelStatusMessage (creative vs adventure). */
+const PHASE_LABELS: Record<string, string> = {
+  classification: 'Updating world...',
+  translation: 'Translating...',
+}
+
+/** Build the status message based on how many parallel phases are active */
+function parallelStatusMessage(activePhases: Set<string>, isCreativeMode: boolean): string {
+  if (activePhases.size === 0) return ''
+  if (activePhases.size === 1) {
+    const phase = activePhases.values().next().value!
+    if (phase === 'post') {
+      return isCreativeMode ? 'Generating suggestions...' : 'Generating actions...'
+    }
+    return PHASE_LABELS[phase] ?? 'Processing...'
+  }
+  return `Processing ${activePhases.size} tasks...`
 }
 
 export function handleEvent(
@@ -35,16 +62,19 @@ export function handleEvent(
     case 'phase_start':
       if (event.phase === 'narrative') {
         callbacks.startStreaming(state.visualProseMode, state.streamingEntryId)
-      } else if (event.phase === 'classification') {
-        callbacks.setGenerationStatus('Updating world...')
-      } else if (event.phase === 'post') {
+      } else if (PARALLEL_PHASES.has(event.phase)) {
+        state.activeParallelPhases.add(event.phase)
         callbacks.setGenerationStatus(
-          state.isCreativeMode ? 'Generating suggestions...' : 'Generating actions...',
+          parallelStatusMessage(state.activeParallelPhases, state.isCreativeMode),
         )
-        if (state.isCreativeMode) {
-          callbacks.setSuggestionsLoading(true)
-        } else {
-          callbacks.setActionChoicesLoading(true)
+
+        // Keep loading spinners for suggestions/actions
+        if (event.phase === 'post') {
+          if (state.isCreativeMode) {
+            callbacks.setSuggestionsLoading(true)
+          } else {
+            callbacks.setActionChoicesLoading(true)
+          }
         }
       }
       break
@@ -58,6 +88,13 @@ export function handleEvent(
       break
 
     case 'phase_complete':
+      if (PARALLEL_PHASES.has(event.phase)) {
+        state.activeParallelPhases.delete(event.phase)
+        callbacks.setGenerationStatus(
+          parallelStatusMessage(state.activeParallelPhases, state.isCreativeMode),
+        )
+      }
+
       if (event.phase === 'post') {
         const postResult = event.result as
           | { suggestions: any[] | null; actionChoices: any[] | null }

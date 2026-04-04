@@ -117,6 +117,9 @@
     isTouchDevice() ? 'Shift+Enter to send' : 'Enter to send, Shift+Enter for new line',
   )
 
+  // Block generation when any service is missing a model or has an invalid profile
+  const blockGeneration = $derived(settings.hasGenerationConfigIssues)
+
   // ============================================================================
   // Action Type Configuration
   // ============================================================================
@@ -425,7 +428,11 @@
   async function generateResponse(
     userActionEntryId: string,
     userActionContent: string,
-    options?: { countStyleReview?: boolean; styleReviewSource?: string },
+    options?: {
+      countStyleReview?: boolean
+      styleReviewSource?: string
+      cachedRetrievalResult?: RetrievalResult | null
+    },
   ) {
     const countStyleReview = options?.countStyleReview ?? true
     const styleReviewSource =
@@ -528,6 +535,7 @@
         },
         disableSuggestions: settings.uiSettings.disableSuggestions,
         activeThreads: story.pendingQuests,
+        cachedRetrievalResult: options?.cachedRetrievalResult ?? null,
       }
 
       const deps = buildPipelineDependencies()
@@ -537,62 +545,64 @@
       let fullReasoning = ''
       let narrationEntry: Awaited<ReturnType<typeof story.addEntry>> | null = null
 
+      const eventState: PipelineEventState = {
+        fullResponse: () => fullResponse,
+        fullReasoning: () => fullReasoning,
+        streamingEntryId,
+        visualProseMode,
+        isCreativeMode,
+        storyId: currentStoryRef.id,
+        activeParallelPhases: new Set(),
+      }
+
+      const persistSuggestedActions = (actions: unknown[], type: 'suggestions' | 'choices') => {
+        if (narrationEntry && actions.length > 0) {
+          database
+            .updateStoryEntry(narrationEntry.id, {
+              suggestedActions: JSON.stringify(actions),
+            })
+            .catch((err) =>
+              console.warn(`[ActionInput] Failed to save suggested ${type} to entry:`, err),
+            )
+        }
+      }
+
+      const eventCallbacks: PipelineUICallbacks = {
+        startStreaming: ui.startStreaming.bind(ui),
+        appendStreamContent: ui.appendStreamContent.bind(ui),
+        appendReasoningContent: ui.appendReasoningContent.bind(ui),
+        setGenerationStatus: ui.setGenerationStatus.bind(ui),
+        setSuggestionsLoading: ui.setSuggestionsLoading.bind(ui),
+        setActionChoicesLoading: ui.setActionChoicesLoading.bind(ui),
+        setSuggestions: (suggestions, storyId) => {
+          ui.setSuggestions(suggestions, storyId)
+          persistSuggestedActions(suggestions, 'suggestions')
+        },
+        setActionChoices: (choices, storyId) => {
+          ui.setActionChoices(choices, storyId)
+          persistSuggestedActions(choices, 'choices')
+        },
+        emitResponseStreaming: (chunk, accumulated) => {
+          eventBus.emit<ResponseStreamingEvent>({
+            type: 'ResponseStreaming',
+            chunk,
+            accumulated,
+          })
+        },
+        emitSuggestionsReady: (suggestions) => {
+          emitSuggestionsReady(suggestions)
+        },
+      }
+
       for await (const event of pipeline.execute(ctx, cfg)) {
         if (stopRequested) break
-
-        const eventState: PipelineEventState = {
-          fullResponse: () => fullResponse,
-          fullReasoning: () => fullReasoning,
-          streamingEntryId,
-          visualProseMode,
-          isCreativeMode,
-          storyId: currentStoryRef.id,
-        }
-
-        const persistSuggestedActions = (actions: unknown[], type: 'suggestions' | 'choices') => {
-          if (narrationEntry && actions.length > 0) {
-            database
-              .updateStoryEntry(narrationEntry.id, {
-                suggestedActions: JSON.stringify(actions),
-              })
-              .catch((err) =>
-                console.warn(`[ActionInput] Failed to save suggested ${type} to entry:`, err),
-              )
-          }
-        }
-
-        const eventCallbacks: PipelineUICallbacks = {
-          startStreaming: ui.startStreaming.bind(ui),
-          appendStreamContent: ui.appendStreamContent.bind(ui),
-          appendReasoningContent: ui.appendReasoningContent.bind(ui),
-          setGenerationStatus: ui.setGenerationStatus.bind(ui),
-          setSuggestionsLoading: ui.setSuggestionsLoading.bind(ui),
-          setActionChoicesLoading: ui.setActionChoicesLoading.bind(ui),
-          setSuggestions: (suggestions, storyId) => {
-            ui.setSuggestions(suggestions, storyId)
-            persistSuggestedActions(suggestions, 'suggestions')
-          },
-          setActionChoices: (choices, storyId) => {
-            ui.setActionChoices(choices, storyId)
-            persistSuggestedActions(choices, 'choices')
-          },
-          emitResponseStreaming: (chunk, accumulated) => {
-            eventBus.emit<ResponseStreamingEvent>({
-              type: 'ResponseStreaming',
-              chunk,
-              accumulated,
-            })
-          },
-          emitSuggestionsReady: (suggestions) => {
-            emitSuggestionsReady(suggestions)
-          },
-        }
 
         handleEvent(event, eventState, eventCallbacks)
 
         if (event.type === 'phase_complete' && event.phase === 'retrieval') {
           const retrievalResult = event.result as RetrievalResult | undefined
           ui.setLastLorebookRetrieval(retrievalResult?.lorebookRetrievalResult ?? null)
+          ui.setLastRetrievalResult(retrievalResult ?? null)
         }
 
         if (event.type === 'narrative_chunk') {
@@ -1016,6 +1026,7 @@
       ui.restoreActivationData(backup.activationData, backup.storyPosition)
     }
     ui.setLastLorebookRetrieval(null)
+    ui.setLastRetrievalResult(null)
 
     const result = await retryService.handleStopGeneration(
       backup,
@@ -1084,7 +1095,6 @@
     ui.clearSuggestions(storyId)
     ui.clearActionChoices(storyId)
     lastImageGenContext = null
-    ui.setLastLorebookRetrieval(null)
 
     const result = await retryService.handleRetryLastMessage(
       backup,
@@ -1133,6 +1143,7 @@
       await generateResponse(userActionEntry.id, promptContent, {
         countStyleReview: false,
         styleReviewSource: 'retry-last-message',
+        cachedRetrievalResult: ui.lastRetrievalResult,
       })
     } finally {
       ui.setRetryingLastMessage(false)
@@ -1240,9 +1251,11 @@
             >{/if}
         {:else}<button
             onclick={handleSubmit}
-            disabled={!inputValue.trim()}
+            disabled={!inputValue.trim() || blockGeneration}
             class="text-accent-400 hover:text-accent-300 hover:bg-accent-500/10 flex h-11 w-11 flex-shrink-0 -translate-y-0.5 items-center justify-center rounded-lg p-0 transition-all active:scale-95 disabled:opacity-50 sm:translate-y-0"
-            title="Send direction ({sendKeyHint})"><Send class="h-6 w-6" /></button
+            title={blockGeneration
+              ? 'AI configuration incomplete — check Settings'
+              : `Send direction (${sendKeyHint})`}><Send class="h-6 w-6" /></button
           >{/if}
       </div>
     </div>
@@ -1307,11 +1320,13 @@
             >{/if}
         {:else}<button
             onclick={handleSubmit}
-            disabled={!inputValue.trim()}
+            disabled={!inputValue.trim() || blockGeneration}
             class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg p-0 transition-all active:scale-95 disabled:opacity-50 {actionButtonStyles[
               actionType
             ]} -translate-y-0.5 sm:translate-y-0"
-            title="Send ({sendKeyHint})"><Send class="h-6 w-6" /></button
+            title={blockGeneration
+              ? 'AI configuration incomplete — check Settings'
+              : `Send (${sendKeyHint})`}><Send class="h-6 w-6" /></button
           >{/if}
       </div>
     </div>

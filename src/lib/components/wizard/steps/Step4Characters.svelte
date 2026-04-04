@@ -12,8 +12,8 @@
     AlertCircle,
   } from 'lucide-svelte'
   import UniversalVaultBrowser from '$lib/components/vault/UniversalVaultBrowser.svelte'
-  import type { VaultCharacter } from '$lib/types'
-  import type { ExpandedSetting, GeneratedProtagonist, StoryMode } from '../wizardTypes'
+  import type { ExpandedSetting, GeneratedProtagonist } from '$lib/services/ai/sdk'
+  import type { StoryMode, VaultCharacter } from '$lib/types'
 
   // Shadcn Components
   import * as Card from '$lib/components/ui/card'

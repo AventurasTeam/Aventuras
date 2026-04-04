@@ -3,7 +3,7 @@
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
   import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
-  import { entryToVaultEntry } from '$lib/services/lorebookImporter'
+  import { LorebookImportExport } from '$lib/services/lorebookImportExport'
   import { onMount } from 'svelte'
   import LorebookList from './LorebookList.svelte'
   import LorebookDetail from './LorebookDetail.svelte'
@@ -104,7 +104,7 @@
   async function handleSaveToVault() {
     if (!story.currentStory || story.lorebookEntries.length === 0) return
     try {
-      const vaultEntries = story.lorebookEntries.map(entryToVaultEntry)
+      const vaultEntries = story.lorebookEntries.map(LorebookImportExport.entryToVaultEntry)
       const name = `${story.currentStory.title} Lorebook`
       await lorebookVault.saveFromStory(name, vaultEntries, story.currentStory.id)
       ui.showToast(

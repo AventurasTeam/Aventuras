@@ -2,17 +2,15 @@ import { settings } from '$lib/stores/settings.svelte'
 /**
  * LorebookClassifierService
  *
- * Wraps the LLM-based entry classification in lorebookImporter.ts using the
- * standard serviceId + dynamic getter pattern, consistent with all other AI services.
+ * LLM-based entry type classification service
  */
 
-import type { StoryMode } from '$lib/types'
-import type { EntryType } from '$lib/types'
-import { BaseAIService } from '../BaseAIService'
-import { ContextBuilder } from '$lib/services/context'
-import { lorebookClassificationResultSchema } from '../sdk/schemas/lorebook'
 import { createLogger } from '$lib/log'
-import type { ImportedEntry } from '$lib/services/lorebookImporter'
+import type { StoryMode, EntryType } from '$lib/types'
+import { BaseAIService } from '$lib/services/ai/BaseAIService'
+import { lorebookClassificationResultSchema } from '$lib/services/ai/sdk/schemas'
+import { ContextBuilder } from '$lib/services/context'
+import type { ImportedEntry } from '../types'
 
 const log = createLogger('LorebookClassifierService')
 
@@ -21,10 +19,6 @@ export class LorebookClassifierService extends BaseAIService {
     super(serviceId)
   }
 
-  /**
-   * LLM-based entry type classification.
-   * Classifies entries in batches to avoid token limits.
-   */
   async classifyEntries(
     entries: ImportedEntry[],
     onProgress?: (classified: number, total: number) => void,

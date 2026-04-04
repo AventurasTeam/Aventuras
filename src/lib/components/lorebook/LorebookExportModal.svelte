@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
-  import { exportLorebook, getFormatInfo, type ExportFormat } from '$lib/services/lorebookExporter'
+  import { LorebookImportExport } from '$lib/services/lorebookImportExport'
   import { Download, FileJson, FileText, Loader2 } from 'lucide-svelte'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
@@ -10,11 +10,11 @@
   import { Label } from '$lib/components/ui/label'
   import { cn } from '$lib/utils/cn'
 
-  let selectedFormat = $state<ExportFormat>('aventura')
+  let selectedFormat = $state<LorebookImportExport.ExportFormat>('aventura')
   let exportSelected = $state(false)
   let exporting = $state(false)
 
-  const formats: ExportFormat[] = ['aventura', 'sillytavern', 'text']
+  const formats: LorebookImportExport.ExportFormat[] = ['aventura', 'sillytavern', 'text']
 
   const entriesToExport = $derived(() => {
     if (exportSelected && ui.lorebookBulkSelection.size > 0) {
@@ -35,7 +35,7 @@
     exporting = true
 
     try {
-      await exportLorebook({
+      await LorebookImportExport.exportLorebook({
         format: selectedFormat,
         entries: entriesToExport(),
         filename: story.currentStory?.title ? `${story.currentStory.title}-lorebook` : undefined,
@@ -115,10 +115,10 @@
         <Label>Export format</Label>
         <RadioGroup
           value={selectedFormat}
-          onValueChange={(v) => (selectedFormat = v as ExportFormat)}
+          onValueChange={(v) => (selectedFormat = v as LorebookImportExport.ExportFormat)}
         >
           {#each formats as format (format)}
-            {@const info = getFormatInfo(format)}
+            {@const info = LorebookImportExport.getFormatInfo(format)}
             <div
               class={cn(
                 'hover:bg-muted/50 flex cursor-pointer items-start space-x-3 rounded-lg border p-3 transition-colors',

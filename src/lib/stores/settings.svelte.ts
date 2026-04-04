@@ -15,11 +15,6 @@ import type {
   UpdateSettings,
 } from '$lib/types'
 import { database } from '$lib/services/database'
-import {
-  type AdvancedWizardSettings,
-  getDefaultAdvancedSettings,
-  getDefaultAdvancedSettingsForProvider,
-} from '$lib/services/ai/wizard/ScenarioService'
 import { grammarService } from '$lib/services/grammar'
 import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
 import { ui } from '$lib/stores/ui.svelte'
@@ -56,6 +51,122 @@ function normalizeProfile(profile: APIProfile): APIProfile {
 }
 
 // ===== System Services Settings =====
+
+// Advanced settings for customizing generation processes
+interface ProcessSettings {
+  profileId?: string | null
+  presetId?: string
+  model?: string
+  temperature?: number
+  topP?: number
+  maxTokens?: number
+  reasoningEffort?: ReasoningEffort
+  manualBody?: string
+}
+
+interface AdvancedWizardSettings {
+  settingExpansion: ProcessSettings
+  settingRefinement: ProcessSettings
+  protagonistGeneration: ProcessSettings
+  characterElaboration: ProcessSettings
+  characterRefinement: ProcessSettings
+  supportingCharacters: ProcessSettings
+  openingGeneration: ProcessSettings
+  openingRefinement: ProcessSettings
+}
+
+function getDefaultAdvancedWizardSettings(): AdvancedWizardSettings {
+  return getDefaultAdvancedSettingsForProvider('openrouter')
+}
+
+export function getDefaultAdvancedSettingsForProvider(
+  provider: ProviderType,
+): AdvancedWizardSettings {
+  const preset = getPresetDefaults(provider, 'wizard')
+
+  return {
+    settingExpansion: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    settingRefinement: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    protagonistGeneration: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    characterElaboration: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    characterRefinement: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    supportingCharacters: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    openingGeneration: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    openingRefinement: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+  }
+}
 
 export interface AdvancedRequestSettings {
   manualMode: boolean
@@ -1066,7 +1177,7 @@ class SettingsStore {
   advancedRequestSettings = $state<AdvancedRequestSettings>(getDefaultAdvancedRequestSettings())
 
   // Advanced wizard settings for scenario generation
-  wizardSettings = $state<AdvancedWizardSettings>(getDefaultAdvancedSettings())
+  wizardSettings = $state<AdvancedWizardSettings>(getDefaultAdvancedWizardSettings())
 
   // System services settings (classifier, memory, suggestions)
   systemServicesSettings = $state<SystemServicesSettings>(getDefaultSystemServicesSettings())
@@ -1371,7 +1482,7 @@ class SettingsStore {
         try {
           const loaded = JSON.parse(wizardSettingsJson)
           // Merge with defaults to ensure all fields exist
-          const defaults = getDefaultAdvancedSettings()
+          const defaults = getDefaultAdvancedWizardSettings()
           this.wizardSettings = {
             settingExpansion: { ...defaults.settingExpansion, ...loaded.settingExpansion },
             settingRefinement: { ...defaults.settingRefinement, ...loaded.settingRefinement },
@@ -1393,7 +1504,7 @@ class SettingsStore {
           }
         } catch {
           // If parsing fails, use defaults
-          this.wizardSettings = getDefaultAdvancedSettings()
+          this.wizardSettings = getDefaultAdvancedWizardSettings()
         }
       }
 
@@ -2363,6 +2474,19 @@ class SettingsStore {
   }
 
   // Wizard settings methods
+  /** Persist main narrative API settings (temperature, max tokens, reasoning) to the database. */
+  async saveApiSettings() {
+    await Promise.allSettled([
+      database.setSetting('temperature', this.apiSettings.temperature.toString()),
+      database.setSetting('max_tokens', this.apiSettings.maxTokens.toString()),
+      database.setSetting('main_reasoning_effort', this.apiSettings.reasoningEffort),
+      database.setSetting('enable_thinking', this.apiSettings.enableThinking.toString()),
+      database.setSetting('default_model', this.apiSettings.defaultModel),
+      database.setSetting('main_narrative_profile_id', this.apiSettings.mainNarrativeProfileId),
+      database.setSetting('main_manual_body', this.apiSettings.manualBody),
+    ])
+  }
+
   async saveWizardSettings() {
     await database.setSetting('wizard_settings', JSON.stringify(this.wizardSettings))
   }
@@ -3074,6 +3198,48 @@ class SettingsStore {
    */
   hasInvalidProfiles(): boolean {
     return this.getInvalidProfiles().length > 0
+  }
+
+  /**
+   * Reactive getter: returns true if generation is blocked due to config issues.
+   * Declared as a getter so Svelte 5 memoizes it — the for...of loop over
+   * generationPresets doesn't re-run on every render, only when $state changes.
+   *
+   * Covers:
+   * - Any structurally invalid API profile (migration from old versions)
+   * - Main Narrative: missing/deleted API profile, or no model selected
+   * - Any Generation Preset: missing/deleted API profile, or no model selected
+   */
+  get hasGenerationConfigIssues(): boolean {
+    // 1. Any structurally invalid API profile
+    if (this.getInvalidProfiles().length > 0) return true
+
+    // 2. Main Narrative: missing or deleted API profile
+    if (!this.getProfile(this.apiSettings.mainNarrativeProfileId)) return true
+
+    // 3. Main Narrative: no model
+    if (!this.apiSettings.defaultModel) return true
+
+    // 4. Each Generation Preset
+    for (const preset of this.generationPresets) {
+      if (!preset.profileId || !this.getProfile(preset.profileId)) return true
+      if (!preset.model) return true
+    }
+
+    return false
+  }
+
+  /**
+   * Check whether selecting a model should auto-force reasoning effort to 'high'.
+   * This is a NanoGPT-specific behavior: reasoning models on NanoGPT require
+   * effort set to high (the provider enforces it).
+   */
+  shouldForceHighReasoning(profileId: string | null | undefined, modelId: string): boolean {
+    if (!profileId) return false
+    const profile = this.getProfile(profileId)
+    if (!profile || profile.providerType !== 'nanogpt') return false
+    const model = this.getProfileModels(profileId).find((m) => m.id === modelId)
+    return !!model?.reasoning
   }
 }
 

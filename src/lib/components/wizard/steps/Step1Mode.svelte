@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Sword, Feather } from 'lucide-svelte'
   import * as Card from '$lib/components/ui/card'
-  import type { StoryMode } from '../wizardTypes'
+  import type { StoryMode } from '$lib/types'
 
   interface Props {
     selectedMode: StoryMode

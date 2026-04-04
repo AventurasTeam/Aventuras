@@ -30,7 +30,7 @@ import { extractInlineCustomVars } from '$lib/services/ai/sdk/schemas/runtime-va
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
 import type { RuntimeVariable } from '$lib/services/packs/types'
 import { DEFAULT_MEMORY_CONFIG } from '$lib/services/ai/generation/MemoryService'
-import { convertToEntries, type ImportedEntry } from '$lib/services/lorebookImporter'
+import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import { countTokens } from '$lib/services/tokenizer'
 import type { STChatMessage } from '$lib/services/stChatImporter'
 import {
@@ -45,6 +45,7 @@ import {
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { aiService } from '$lib/services/ai'
 import { createLogger } from '$lib/log'
+import { grammarService } from '$lib/services/grammar'
 
 const log = createLogger('StoryStore')
 
@@ -435,11 +436,9 @@ class StoryStore {
     return repairsMade
   }
 
-  // Close the current story and reset state
-  closeStory(): void {
+  private resetStoryState(): void {
     this.currentStory = null
     this.entries = []
-    this.currentBgImage = null
     this.characters = []
     this.locations = []
     this.items = []
@@ -447,9 +446,16 @@ class StoryStore {
     this.chapters = []
     this.checkpoints = []
     this.lorebookEntries = []
-    this.branches = []
     this.invalidateWordCountCache()
     this.invalidateChapterCache()
+    grammarService.clearEntityWords()
+  }
+
+  // Close the current story and reset state
+  closeStory(): void {
+    this.resetStoryState()
+    this.currentBgImage = null
+    this.branches = []
     log('Story closed')
   }
 
@@ -491,6 +497,16 @@ class StoryStore {
     this.checkpoints = checkpoints
     this.lorebookEntries = lorebookEntries
     this.branches = branches
+
+    // Import entity names into spell checker so they are not flagged as errors
+    const entityNames = [
+      ...characters.map((c) => c.name),
+      ...locations.map((l) => l.name),
+      ...items.map((i) => i.name),
+      ...lorebookEntries.map((e) => e.name),
+      ...lorebookEntries.flatMap((e) => e.aliases ?? []),
+    ].filter(Boolean)
+    grammarService.importEntityWords(entityNames)
 
     // Load entries and chapters based on current branch
     await this.reloadEntriesForCurrentBranch()
@@ -777,6 +793,15 @@ class StoryStore {
     return false
   }
 
+  /**
+   * Common cleanup logic after an entry is deleted.
+   * Restores suggested actions from the new last narration entry and invalidates the retry backup.
+   */
+  private postDeleteCleanup(): void {
+    this.restoreSuggestedActionsAfterDelete()
+    ui.clearRetryBackup(true)
+  }
+
   // Delete a story entry
   async deleteEntry(entryId: string): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
@@ -840,8 +865,7 @@ class StoryStore {
         this.currentStory = { ...this.currentStory, timeTracker: freshStory.timeTracker }
       }
 
-      // Restore suggested actions from the new last narration entry
-      this.restoreSuggestedActionsAfterDelete()
+      this.postDeleteCleanup()
 
       return
     }
@@ -857,8 +881,7 @@ class StoryStore {
     // Update story's updatedAt
     await database.updateStory(this.currentStory.id, {})
 
-    // Restore suggested actions from the new last narration entry
-    this.restoreSuggestedActionsAfterDelete()
+    this.postDeleteCleanup()
   }
 
   /**
@@ -1718,6 +1741,10 @@ class StoryStore {
 
   // ===== Lorebook Entry CRUD Methods =====
 
+  private invalidateRetrievalCache() {
+    ui.setLastRetrievalResult(null)
+  }
+
   /**
    * Add a new lorebook entry.
    * @param entryData - Entry data. branchId is optional and defaults to current branch.
@@ -1742,6 +1769,7 @@ class StoryStore {
 
     await database.addEntry(entry)
     this.lorebookEntries = [...this.lorebookEntries, entry]
+    this.invalidateRetrievalCache()
     log('Lorebook entry added:', entry.name)
     return entry
   }
@@ -1766,6 +1794,7 @@ class StoryStore {
 
     await database.bulkInsertEntries(entries)
     this.lorebookEntries = [...this.lorebookEntries, ...entries]
+    this.invalidateRetrievalCache()
     log('Lorebook entries bulk added:', entries.length)
     return entries.length
   }
@@ -1791,6 +1820,7 @@ class StoryStore {
     this.lorebookEntries = this.lorebookEntries.map((e) =>
       e.id === owned.id ? { ...e, ...updatesWithTimestamp } : e,
     )
+    this.invalidateRetrievalCache()
     log('Lorebook entry updated:', owned.id)
   }
 
@@ -1816,6 +1846,7 @@ class StoryStore {
       await database.deleteEntry(id)
     }
     this.lorebookEntries = this.lorebookEntries.filter((e) => e.id !== id)
+    this.invalidateRetrievalCache()
     log('Lorebook entry deleted:', id)
   }
 
@@ -1844,6 +1875,7 @@ class StoryStore {
       await Promise.all(ids.map((id) => database.deleteEntry(id)))
     }
     this.lorebookEntries = this.lorebookEntries.filter((e) => !ids.includes(e.id))
+    this.invalidateRetrievalCache()
     log('Lorebook entries deleted:', ids.length)
   }
 
@@ -2723,25 +2755,13 @@ class StoryStore {
 
   // Clear current story (when switching or closing)
   clearCurrentStory(): void {
-    this.currentStory = null
-    this.entries = []
-    this.lorebookEntries = []
-    this.characters = []
-    this.locations = []
-    this.items = []
-    this.storyBeats = []
-    this.chapters = []
-    this.checkpoints = []
-
-    // Reset all caches
-    this.invalidateWordCountCache()
-    this.invalidateChapterCache()
+    this.resetStoryState()
 
     // Clear current retry story ID (backups are kept per-story)
     ui.setCurrentRetryStoryId(null)
 
-    // Clear style review state (will be loaded fresh for next story)
-    ui.clearStyleReviewState()
+    // Clear all generation caches (style review, retrieval, lorebook debug)
+    ui.clearGenerationCaches()
   }
 
   // Update story mode
@@ -4086,7 +4106,7 @@ class StoryStore {
     initialItems: Partial<Item>[]
     openingScene: string
     characters: Partial<Character>[]
-    importedEntries?: ImportedEntry[]
+    importedEntries?: LorebookImportExport.ImportedEntry[]
     // Translation data (optional)
     translations?: {
       language: string
@@ -4287,7 +4307,7 @@ class StoryStore {
 
     // Add imported lorebook entries
     if (data.importedEntries && data.importedEntries.length > 0) {
-      const entries = convertToEntries(data.importedEntries, 'import')
+      const entries = LorebookImportExport.convertToEntries(data.importedEntries, 'import')
       for (const entryData of entries) {
         const entry: Entry = {
           ...entryData,
