@@ -9,14 +9,17 @@
   let throttledLogs = $state<DebugLogEntry[]>([])
   let lastUpdateTime = 0
   let pendingUpdate: ReturnType<typeof setTimeout> | null = null
+  let showContent = $state(false)
 
-  // Update throttled logs when modal opens or logs change (throttled)
+  // Single effect to handle both modal opening and log updates
   $effect(() => {
+    // Early exit if modal is closed or window is popped out
     if (!debug.debugModalOpen || debug.debugWindowActive) {
       if (pendingUpdate) {
         clearTimeout(pendingUpdate)
         pendingUpdate = null
       }
+      showContent = false
       return
     }
 
@@ -24,27 +27,34 @@
     const now = Date.now()
     const timeSinceLastUpdate = now - lastUpdateTime
 
-    if (timeSinceLastUpdate >= 500) {
-      throttledLogs = [...logs]
+    // Immediate update if: first open (lastUpdateTime === 0) or throttle period elapsed
+    if (lastUpdateTime === 0 || timeSinceLastUpdate >= 500) {
+      throttledLogs = logs
       lastUpdateTime = now
       if (pendingUpdate) {
         clearTimeout(pendingUpdate)
         pendingUpdate = null
       }
+
+      // Defer content rendering to next frame when modal first opens
+      if (!showContent) {
+        const scheduleContent = () => {
+          showContent = true
+        }
+        // Use requestIdleCallback if available, otherwise setTimeout
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(scheduleContent, { timeout: 50 })
+        } else {
+          setTimeout(scheduleContent, 0)
+        }
+      }
     } else if (!pendingUpdate) {
+      // Schedule update for remaining throttle time
       pendingUpdate = setTimeout(() => {
-        throttledLogs = [...debug.debugLogs]
+        throttledLogs = debug.debugLogs
         lastUpdateTime = Date.now()
         pendingUpdate = null
       }, 500 - timeSinceLastUpdate)
-    }
-  })
-
-  // Sync immediately when modal opens
-  $effect(() => {
-    if (debug.debugModalOpen && !debug.debugWindowActive) {
-      throttledLogs = [...debug.debugLogs]
-      lastUpdateTime = Date.now()
     }
   })
 
@@ -110,6 +120,10 @@
             <RefreshCcw class="h-4 w-4" />
             Bring Back to Modal
           </Button>
+        </div>
+      {:else if !showContent}
+        <div class="flex flex-1 flex-col items-center justify-center p-8">
+          <div class="text-muted-foreground animate-pulse text-sm">Loading logs...</div>
         </div>
       {:else}
         <DebugLogView
