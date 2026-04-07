@@ -29,7 +29,7 @@
 
     // Immediate update if: first open (lastUpdateTime === 0) or throttle period elapsed
     if (lastUpdateTime === 0 || timeSinceLastUpdate >= 500) {
-      throttledLogs = logs
+      throttledLogs = [...logs]
       lastUpdateTime = now
       if (pendingUpdate) {
         clearTimeout(pendingUpdate)
@@ -51,7 +51,7 @@
     } else if (!pendingUpdate) {
       // Schedule update for remaining throttle time
       pendingUpdate = setTimeout(() => {
-        throttledLogs = debug.debugLogs
+        throttledLogs = [...debug.debugLogs]
         lastUpdateTime = Date.now()
         pendingUpdate = null
       }, 500 - timeSinceLastUpdate)
