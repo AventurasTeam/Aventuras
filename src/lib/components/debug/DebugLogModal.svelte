@@ -20,6 +20,8 @@
         pendingUpdate = null
       }
       showContent = false
+      lastUpdateTime = 0 // Reset to force immediate sync on next open
+      throttledLogs = [] // Clear stale snapshot
       return
     }
 
