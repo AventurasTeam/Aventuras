@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
+  import { createDebouncedSave } from '$lib/utils/debounce'
   import { settings } from '$lib/stores/settings.svelte'
   import { Cpu, AlertTriangle } from 'lucide-svelte'
   import { fetchModelsFromProvider } from '$lib/services/ai/sdk/providers'
@@ -21,22 +22,9 @@
   let modelError = $state<string | null>(null)
 
   // Debounced save for sliders
-  let saveTimer: ReturnType<typeof setTimeout> | null = null
-
-  function debouncedSave() {
-    if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => {
-      settings.saveApiSettings()
-    }, 300)
-  }
-
-  function flushSave() {
-    if (saveTimer) {
-      clearTimeout(saveTimer)
-      saveTimer = null
-      settings.saveApiSettings()
-    }
-  }
+  const { trigger: debouncedSave, flush: flushSave } = createDebouncedSave(() =>
+    settings.saveApiSettings(),
+  )
 
   onDestroy(() => flushSave())
 

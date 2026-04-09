@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
+  import { createDebouncedSave } from '$lib/utils/debounce'
   import { settings } from '$lib/stores/settings.svelte'
   import type { APIProfile, ProviderType, TextModel } from '$lib/types'
   import { fetchModelsFromProvider } from '$lib/services/ai/sdk/providers'
@@ -29,8 +30,9 @@
   let formFavoriteModels = $state<string[]>([])
 
   // Auto-save debounce state
-  let saveTimeout: ReturnType<typeof setTimeout> | null = null
+  let mounted = true
   let saveStatus = $state<'idle' | 'saving' | 'saved'>('idle')
+  const { trigger: triggerAutoSave, flush: flushAutoSave } = createDebouncedSave(autoSaveEdit)
 
   // UI state
   let isFetchingModels = $state(false)
@@ -39,8 +41,7 @@
 
   function startEdit(profile: APIProfile) {
     if (editingProfileId && editingProfileId !== profile.id && !isNewProfile) {
-      if (saveTimeout) clearTimeout(saveTimeout)
-      autoSaveEdit()
+      flushAutoSave()
     }
 
     editingProfileId = profile.id
@@ -177,8 +178,7 @@
       openCollapsibles = new SvelteSet(openCollapsibles)
 
       if (editingProfileId === profile.id) {
-        if (saveTimeout) clearTimeout(saveTimeout)
-        autoSaveEdit()
+        flushAutoSave()
         editingProfileId = null
       }
     }
@@ -210,18 +210,11 @@
 
     saveStatus = 'saving'
     await settings.updateProfile(profile.id, profile)
+    if (!mounted) return
     saveStatus = 'saved'
     setTimeout(() => {
-      saveStatus = 'idle'
+      if (mounted) saveStatus = 'idle'
     }, 2000)
-  }
-
-  function triggerAutoSave() {
-    if (saveTimeout) clearTimeout(saveTimeout)
-    saveTimeout = setTimeout(() => {
-      autoSaveEdit()
-      saveTimeout = null
-    }, 500)
   }
 
   $effect(() => {
@@ -241,10 +234,8 @@
   })
 
   onDestroy(() => {
-    if (saveTimeout) {
-      clearTimeout(saveTimeout)
-      saveTimeout = null
-    }
+    mounted = false
+    flushAutoSave()
   })
 
   // Fix #1: shared handler to avoid duplication between new-profile and edit forms
