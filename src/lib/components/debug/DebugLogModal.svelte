@@ -25,13 +25,12 @@
       return
     }
 
-    const logs = debug.debugLogs
     const now = Date.now()
     const timeSinceLastUpdate = now - lastUpdateTime
 
     // Immediate update if: first open (lastUpdateTime === 0) or throttle period elapsed
     if (lastUpdateTime === 0 || timeSinceLastUpdate >= 500) {
-      throttledLogs = [...logs]
+      throttledLogs = [...debug.debugLogs]
       lastUpdateTime = now
       if (pendingUpdate) {
         clearTimeout(pendingUpdate)
