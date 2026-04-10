@@ -1105,6 +1105,8 @@ export const STORY_WIDTH_OPTIONS = [
   { key: '9xl' as const, label: 'Extra wide', maxWidth: '96rem' },
 ] as const
 
+const VALID_STORY_WIDTH_KEYS: string[] = STORY_WIDTH_OPTIONS.map((o) => o.key)
+
 export function getDefaultUISettings(): UISettings {
   return {
     theme: 'dark',
@@ -1476,10 +1478,7 @@ class SettingsStore {
         this.uiSettings.showScrollToBottom = showScrollToBottom === 'true'
 
       const storyMaxWidth = await database.getSetting('story_max_width')
-      if (
-        storyMaxWidth &&
-        (STORY_WIDTH_OPTIONS.map((o) => o.key) as string[]).includes(storyMaxWidth)
-      )
+      if (storyMaxWidth && VALID_STORY_WIDTH_KEYS.includes(storyMaxWidth))
         this.uiSettings.storyMaxWidth = storyMaxWidth as UISettings['storyMaxWidth']
 
       const debugMode = await database.getSetting('debug_mode')
