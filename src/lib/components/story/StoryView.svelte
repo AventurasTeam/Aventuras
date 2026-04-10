@@ -1,9 +1,9 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
-  import { settings } from '$lib/stores/settings.svelte'
+  import { settings, STORY_WIDTH_OPTIONS } from '$lib/stores/settings.svelte'
   import { Loader2, BookOpen, ChevronDown, ChevronUp } from 'lucide-svelte'
-  import { tick } from 'svelte'
+  import { tick, untrack } from 'svelte'
   import { fade } from 'svelte/transition'
   import StoryEntry from './StoryEntry.svelte'
   import StreamingEntry from './StreamingEntry.svelte'
@@ -11,6 +11,13 @@
   import ActionChoices from './ActionChoices.svelte'
   import { Button } from '$lib/components/ui/button'
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
+
+  const storyMaxWidthStyle = $derived.by(() => {
+    const maxWidth =
+      STORY_WIDTH_OPTIONS.find((o) => o.key === settings.uiSettings.storyMaxWidth)?.maxWidth ??
+      '48rem'
+    return `max-width: ${maxWidth}`
+  })
 
   let storyContainer: HTMLDivElement
   let containerHeight = $state(0)
@@ -30,6 +37,8 @@
 
   // Track if user has scrolled away from top (for showing scroll-to-top button)
   let userScrolledDown = $state(false)
+  // Track physical scroll position at bottom (updated on scroll AND on content resize)
+  let isAtPhysicalBottom = $state(true)
 
   // Track the current story ID to detect story switches
   let lastStoryId = $state<string | null>(null)
@@ -39,6 +48,13 @@
   let scrollRAF: number | null = null
   let prevEntryCount = 0
   let suppressScrollHandler = false
+
+  // No reactive reads — runs once on mount, cleanup cancels any in-flight RAF on unmount
+  $effect(() => {
+    return () => {
+      if (scrollRAF !== null) cancelAnimationFrame(scrollRAF)
+    }
+  })
 
   // Anchor the window to the end (latest entries) or start (oldest entries)
   function anchorToBottom(total: number) {
@@ -57,7 +73,9 @@
 
     if (currentStoryId !== lastStoryId) {
       lastStoryId = currentStoryId
+      prevEntryCount = story.entries.length
       anchorToBottom(story.entries.length)
+      tick().then(() => performScroll())
     }
   })
 
@@ -100,6 +118,7 @@
       const trimCount = Math.min(windowEnd - windowStart - MAX_VISIBLE_ENTRIES, LOAD_MORE_BATCH)
       windowEnd -= trimCount
       await tick()
+      if (!storyContainer) return
       // No scroll compensation: removed entries were below the viewport
     }
   }
@@ -124,13 +143,16 @@
       const trimCount = Math.min(windowEnd - windowStart - MAX_VISIBLE_ENTRIES, LOAD_MORE_BATCH)
       windowStart += trimCount
       await tick()
+      if (!storyContainer) return
       // Compensate: removed entries above shift all content up
       storyContainer.scrollTop = prevScrollTop - (prevScrollHeight - storyContainer.scrollHeight)
     }
   }
 
-  // Helper function to perform smooth scroll with RAF batching
-  function performScroll(scrollPosition: number) {
+  // Helper function to perform scroll with RAF batching.
+  // Pass scrollPosition for an exact position, or omit/pass undefined to scroll to the
+  // current bottom at RAF execution time (avoids stale scrollHeight from content changes).
+  function performScroll(scrollPosition?: number) {
     if (!storyContainer) return
 
     if (scrollRAF !== null) {
@@ -139,7 +161,7 @@
 
     scrollRAF = requestAnimationFrame(() => {
       if (storyContainer) {
-        storyContainer.scrollTop = scrollPosition
+        storyContainer.scrollTop = scrollPosition ?? storyContainer.scrollHeight
       }
       scrollRAF = null
     })
@@ -147,9 +169,7 @@
 
   function scrollToBottom() {
     anchorToBottom(story.entries.length)
-    requestAnimationFrame(() => {
-      performScroll(storyContainer?.scrollHeight ?? 0)
-    })
+    performScroll()
   }
 
   async function scrollToTop() {
@@ -158,6 +178,8 @@
     anchorToTop(story.entries.length)
     await tick()
     performScroll(0)
+    // Reset in the frame AFTER performScroll's RAF fires, so the scroll event
+    // triggered by scrollTop=0 is still ignored by handleScroll
     requestAnimationFrame(() => {
       suppressScrollHandler = false
     })
@@ -176,7 +198,7 @@
       SCROLL_THRESHOLD
     )
   }
-  // Handle scroll events during streaming
+  // Handle scroll events — update scroll break state, button visibility, and lazy-load triggers
   function handleScroll() {
     if (!storyContainer || suppressScrollHandler) return
 
@@ -192,11 +214,12 @@
 
     // Track if user has scrolled down from top (for scroll-to-top button)
     userScrolledDown = !nearTop
+    isAtPhysicalBottom = nearBottom
   }
 
   // Disabled when truly at the very start/end of the entire story
   const atVeryTop = $derived(displayedEntries.hiddenAtTop === 0 && !userScrolledDown)
-  const atVeryBottom = $derived(displayedEntries.hiddenAtBottom === 0 && !ui.userScrolledUp)
+  const atVeryBottom = $derived(displayedEntries.hiddenAtBottom === 0 && isAtPhysicalBottom)
 
   // Auto-scroll to bottom when new entries are added or streaming content changes
   $effect(() => {
@@ -205,33 +228,67 @@
     const _ = innerHeight
     const __ = containerHeight
 
-    // Detect if entries were added (vs deleted or unchanged)
-    const wasAdded = currentCount > prevEntryCount
+    // Update physical bottom state on content/viewport resize (scroll events handle it during scrolling)
+    if (storyContainer) isAtPhysicalBottom = isNearEdge('bottom')
+
+    // Detect if entries were added (vs deleted or unchanged).
+    // wasEmpty: entries just loaded for the first time for this story.
+    const prevCount = prevEntryCount
+    const wasAdded = currentCount > prevCount
+    const wasEmpty = prevCount === 0 && wasAdded
     prevEntryCount = currentCount
 
-    // Detect if we should scroll:
-    // 1. We are NOT user-scrolled-up (pinned mode)
-    // 2. OR on user action send message/retry
     const lastEntry = story.entries[story.entries.length - 1]
+    // Key entries (user action, narration, retry) must never be hidden behind
+    // the "N later entries hidden" collapse indicator.
+    const isKeyEntry =
+      wasAdded && lastEntry && ['user_action', 'retry', 'narration'].includes(lastEntry.type)
+
+    if (wasAdded) {
+      if (!ui.userScrolledUp) {
+        // Normal case: anchor window to the latest entries
+        anchorToBottom(currentCount)
+      } else if (isKeyEntry) {
+        // User is scrolled up but a key entry arrived: extend windowEnd so the
+        // entry is in the virtual window (no collapse), but do NOT call
+        // anchorToBottom (which trims windowStart and can re-trigger this effect
+        // via innerHeight changes, inadvertently causing a scroll to bottom).
+        windowEnd = currentCount
+      }
+    }
+
+    // Initial story load: entries just went from 0 → N (loaded asynchronously
+    // after the story switch). Always scroll to bottom here — autoScroll only
+    // applies during generation, not when positioning on story open.
+    // This fires AFTER the story-switch effect's early performScroll (which ran
+    // against an empty container) and its cancelAnimationFrame ensures it wins.
+    if (wasEmpty) {
+      performScroll()
+      return
+    }
+
+    // Physical scroll: autoScroll setting must be enabled. user_action/retry
+    // additionally override the userScrolledUp check (sending a message always
+    // re-engages auto-scroll). Narration does NOT — if the user scrolled up
+    // during streaming they stay where they are.
     const shouldScroll =
       settings.uiSettings.autoScroll &&
+      (ui.isStreaming || wasAdded) &&
       (!ui.userScrolledUp ||
         (wasAdded && lastEntry && ['user_action', 'retry'].includes(lastEntry.type)))
 
     if (!shouldScroll) return
 
-    // New entries: re-anchor window to the latest entries
-    if (wasAdded) {
-      anchorToBottom(currentCount)
-    }
-
-    performScroll(storyContainer?.scrollHeight ?? 0)
+    performScroll()
   })
 
-  // Scroll to bottom when returning from gallery or other panels
+  // Scroll to bottom when opening/returning to story panel — always, regardless of autoScroll
+  // (autoScroll only controls scrolling during generation, not initial panel positioning)
+  // untrack prevents story.entries.length (accessed inside scrollToBottom) from being
+  // tracked as a dependency — otherwise this effect would re-fire on every new entry.
   $effect(() => {
     if (ui.activePanel === 'story' && storyContainer) {
-      scrollToBottom()
+      untrack(() => scrollToBottom())
     }
   })
 
@@ -270,7 +327,11 @@
     class="relative z-10 flex-1 overflow-y-auto px-3 pt-3 pb-1 sm:px-6 sm:pt-4 sm:pb-2"
     onscroll={handleScroll}
   >
-    <div class="mx-auto max-w-3xl space-y-2.5 sm:space-y-3" bind:clientHeight={innerHeight}>
+    <div
+      class="mx-auto space-y-2.5 sm:space-y-3"
+      style={storyMaxWidthStyle}
+      bind:clientHeight={innerHeight}
+    >
       {#if story.entries.length === 0 && !ui.isStreaming}
         <EmptyState
           icon={BookOpen}
@@ -351,31 +412,33 @@
       <div class="pointer-events-none sticky right-0 bottom-0 left-0 z-20 flex justify-center py-2">
         <div class="pointer-events-auto flex gap-2">
           <!-- Scroll to top button -->
-          {#if settings.uiSettings.showScrollToTop}
-            <Button
-              variant="secondary"
-              size="sm"
-              class={buttonClasses}
-              onclick={scrollToTop}
-              disabled={atVeryTop}
-              aria-label="Scroll to first message"
-            >
-              <ChevronUp class={iconClasses} />
-            </Button>
+          {#if settings.uiSettings.showScrollToTop && !atVeryTop}
+            <div transition:fade={{ duration: 150 }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                class={buttonClasses}
+                onclick={scrollToTop}
+                aria-label="Scroll to first message"
+              >
+                <ChevronUp class={iconClasses} />
+              </Button>
+            </div>
           {/if}
 
           <!-- Scroll to bottom button -->
-          {#if settings.uiSettings.showScrollToBottom}
-            <Button
-              variant="secondary"
-              size="sm"
-              class={buttonClasses}
-              onclick={scrollToBottom}
-              disabled={atVeryBottom}
-              aria-label="Scroll to bottom"
-            >
-              <ChevronDown class={iconClasses} />
-            </Button>
+          {#if settings.uiSettings.showScrollToBottom && !atVeryBottom}
+            <div transition:fade={{ duration: 150 }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                class={buttonClasses}
+                onclick={scrollToBottom}
+                aria-label="Scroll to bottom"
+              >
+                <ChevronDown class={iconClasses} />
+              </Button>
+            </div>
           {/if}
         </div>
       </div>
@@ -388,7 +451,7 @@
       ? 'bg-background/60 backdrop-blur-md'
       : 'bg-card'}"
   >
-    <div class="mx-auto max-w-3xl">
+    <div class="mx-auto" style={storyMaxWidthStyle}>
       <ActionInput />
     </div>
   </div>

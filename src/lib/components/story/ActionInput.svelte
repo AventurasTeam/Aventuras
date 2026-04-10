@@ -616,7 +616,6 @@
         }
 
         if (event.type === 'phase_complete' && event.phase === 'narrative' && fullResponse.trim()) {
-          ui.endStreaming()
           narrationEntry = await story.addEntry(
             'narration',
             fullResponse,
@@ -624,6 +623,7 @@
             fullReasoning || undefined,
             narrationEntryId,
           )
+          ui.endStreaming()
           emitNarrativeResponse(narrationEntry.id, fullResponse)
           if (inlineImageTracker?.hasPendingImages) await inlineImageTracker.flushToDatabase()
         }

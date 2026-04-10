@@ -1629,7 +1629,6 @@
 
   /* Inline image display styles */
   :global(.inline-image-display) {
-    margin: 0.75rem 0;
     border-radius: 0.5rem;
     overflow: hidden;
     border: 1px solid var(--surface-600);
@@ -1679,7 +1678,8 @@
   :global(.inline-image-content) {
     display: block;
     width: 100%;
-    max-width: 28rem;
+    max-height: 70vh;
+    object-fit: contain;
     margin: 0 auto;
   }
 
@@ -1888,6 +1888,8 @@
     display: block;
     width: 100%;
     height: auto;
+    max-height: 70vh;
+    object-fit: contain;
     transition:
       filter 0.2s ease,
       transform 0.2s ease;

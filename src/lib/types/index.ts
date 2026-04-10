@@ -741,6 +741,7 @@ export interface UISettings {
   autoScroll: boolean
   showScrollToTop: boolean
   showScrollToBottom: boolean
+  storyMaxWidth: '2xl' | '3xl' | '4xl' | '5xl' | '7xl' | '9xl'
 }
 
 export interface UpdateSettings {
