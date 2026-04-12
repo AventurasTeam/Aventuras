@@ -99,7 +99,7 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
         const headers: Record<string, string> = { Accept: 'application/json' }
         if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
 
-        const response = await fetch(MODELS_ENDPOINT, { headers })
+        const response = await imageGetFetch(MODELS_ENDPOINT, headers)
         if (!response.ok) return getFallbackModels()
 
         const data = await response.json()
