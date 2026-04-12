@@ -164,12 +164,15 @@ export async function listImageModels(profileId: string): Promise<ImageModelInfo
  */
 export async function listImageModelsByProvider(
   providerType: ImageProviderType,
-  apiKey?: string,
+  apiKey: string,
+  forceReload: boolean,
 ): Promise<ImageModelInfo[]> {
   const cacheKey = getCacheKey(providerType, apiKey)
-  const cached = modelCaches.get(cacheKey)
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.models
+  if (!forceReload) {
+    const cached = modelCaches.get(cacheKey)
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.models
+    }
   }
 
   try {

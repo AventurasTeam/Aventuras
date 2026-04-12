@@ -256,12 +256,15 @@
   const loraItems = $derived(availableLoras.map((l) => ({ value: l, label: l })))
 
   // Load models for the profile form when provider/apiKey change
-  async function loadProfileFormModels(providerType: ImageProviderType, apiKey: string) {
+  async function loadProfileFormModels(
+    providerType: ImageProviderType,
+    apiKey: string,
+    forceReload: boolean,
+  ) {
     isLoadingProfileModels = true
     profileModelsError = null
     try {
-      const models = await listImageModelsByProvider(providerType, apiKey)
-      profileModels = models
+      profileModels = await listImageModelsByProvider(providerType, apiKey, forceReload)
     } catch (error) {
       profileModelsError = error instanceof Error ? error.message : 'Failed to load models'
     } finally {
@@ -272,7 +275,7 @@
   // Reactively load models when provider or apiKey changes in profile form
   $effect(() => {
     if (editingProfileId && profileProviderType) {
-      loadProfileFormModels(profileProviderType, profileApiKey)
+      loadProfileFormModels(profileProviderType, profileApiKey, false)
       if (profileProviderType === 'comfyui') {
         loadSamplerInfo(profileBaseUrl)
         loadLoras(profileBaseUrl)
@@ -1099,7 +1102,7 @@
         isLoading={isLoadingProfileModels}
         errorMessage={profileModelsError}
         showRefreshButton={true}
-        onRefresh={() => loadProfileFormModels(profileProviderType, profileApiKey)}
+        onRefresh={() => loadProfileFormModels(profileProviderType, profileApiKey, true)}
       />
       <p class="text-muted-foreground mt-1 text-xs">
         The image model this profile will use for generation.
