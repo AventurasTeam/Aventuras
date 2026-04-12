@@ -135,6 +135,7 @@
   let profileLoraStrengthClip = $state(1.0)
   let availableLoras = $state<string[]>([])
   let saveTimeout: ReturnType<typeof setTimeout> | null = null
+  let loadingInEffect = false
 
   onDestroy(() => {
     if (saveTimeout) {
@@ -275,7 +276,12 @@
   // Reactively load models when provider or apiKey changes in profile form
   $effect(() => {
     if (editingProfileId && profileProviderType) {
-      loadProfileFormModels(profileProviderType, profileApiKey, false)
+      if (loadingInEffect) return
+      loadingInEffect = true
+
+      loadProfileFormModels(profileProviderType, profileApiKey, false).finally(() => {
+        loadingInEffect = false
+      })
       if (profileProviderType === 'comfyui') {
         loadSamplerInfo(profileBaseUrl)
         loadLoras(profileBaseUrl)
