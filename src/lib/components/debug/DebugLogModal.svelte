@@ -25,12 +25,16 @@
       return
     }
 
+    // Track logsVersion to know when logs change
+    // noinspection JSUnusedLocalSymbols
+    const _version = debug.logsVersion
+
     const now = Date.now()
     const timeSinceLastUpdate = now - lastUpdateTime
 
     // Immediate update if: first open (lastUpdateTime === 0) or throttle period elapsed
     if (lastUpdateTime === 0 || timeSinceLastUpdate >= 500) {
-      throttledLogs = [...debug.debugLogs]
+      throttledLogs = debug.getSnapshot()
       lastUpdateTime = now
       if (pendingUpdate) {
         clearTimeout(pendingUpdate)
@@ -52,7 +56,7 @@
     } else if (!pendingUpdate) {
       // Schedule update for remaining throttle time
       pendingUpdate = setTimeout(() => {
-        throttledLogs = [...debug.debugLogs]
+        throttledLogs = debug.getSnapshot()
         lastUpdateTime = Date.now()
         pendingUpdate = null
       }, 500 - timeSinceLastUpdate)
@@ -82,7 +86,7 @@
             <span
               class="bg-secondary text-secondary-foreground rounded px-2 py-0.5 font-mono text-xs"
             >
-              {debug.debugLogs.length}
+              {Math.ceil(throttledLogs.length / 2)}
             </span>
           </div>
 

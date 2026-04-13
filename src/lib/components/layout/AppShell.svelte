@@ -275,11 +275,11 @@
       title="View API Debug Logs (drag to move)"
     >
       <Bug class="pointer-events-none h-5 w-5" />
-      {#if debug.debugLogs.length > 0}
+      {#if debug.logCount > 0}
         <span
           class="pointer-events-none absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-medium"
         >
-          {debug.debugLogs.length > 99 ? '99+' : debug.debugLogs.length}
+          {debug.logCount > 99 ? '99+' : debug.logCount}
         </span>
       {/if}
     </button>

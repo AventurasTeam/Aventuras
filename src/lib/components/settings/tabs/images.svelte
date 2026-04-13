@@ -262,6 +262,7 @@
     apiKey: string,
     forceReload: boolean,
   ) {
+    if (isLoadingProfileModels) return
     isLoadingProfileModels = true
     profileModelsError = null
     try {
@@ -1108,7 +1109,8 @@
         isLoading={isLoadingProfileModels}
         errorMessage={profileModelsError}
         showRefreshButton={true}
-        onRefresh={() => loadProfileFormModels(profileProviderType, profileApiKey, true)}
+        onRefresh={() =>
+          untrack(() => loadProfileFormModels(profileProviderType, profileApiKey, true))}
       />
       <p class="text-muted-foreground mt-1 text-xs">
         The image model this profile will use for generation.
