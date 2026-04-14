@@ -154,8 +154,7 @@
     if (loadingProfileModelsIds.has(profileId)) return
     loadingProfileModelsIds.add(profileId)
     try {
-      const models = await listImageModels(profileId)
-      activeProfilesModelInfo[profileId] = models
+      activeProfilesModelInfo[profileId] = await listImageModels(profileId)
     } finally {
       loadingProfileModelsIds.delete(profileId)
     }
@@ -1109,8 +1108,7 @@
         isLoading={isLoadingProfileModels}
         errorMessage={profileModelsError}
         showRefreshButton={true}
-        onRefresh={() =>
-          untrack(() => loadProfileFormModels(profileProviderType, profileApiKey, true))}
+        onRefresh={() => loadProfileFormModels(profileProviderType, profileApiKey, true)}
       />
       <p class="text-muted-foreground mt-1 text-xs">
         The image model this profile will use for generation.

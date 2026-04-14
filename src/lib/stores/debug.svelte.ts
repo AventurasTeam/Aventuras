@@ -38,10 +38,12 @@ class DebugStore {
   /**
    * Get current log count reactively.
    */
-  get logCount(): number {
+  get requestCount(): number {
     // touch logsVersion to make this reactive
     void this.logsVersion
-    return Math.ceil(this.debugLogs.length / 2)
+    return this.debugLogs.reduce((req, e) => {
+      return req + (e.type === 'request' ? 1 : 0)
+    }, 0)
   }
 
   // Debug log methods

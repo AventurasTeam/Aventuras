@@ -86,7 +86,9 @@
             <span
               class="bg-secondary text-secondary-foreground rounded px-2 py-0.5 font-mono text-xs"
             >
-              {Math.ceil(throttledLogs.length / 2)}
+              {throttledLogs.reduce((req, e) => {
+                return req + (e.type === 'request' ? 1 : 0)
+              }, 0)}
             </span>
           </div>
 

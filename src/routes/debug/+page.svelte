@@ -86,7 +86,9 @@
     <div class="flex items-center gap-3">
       <h1 class="text-lg font-semibold">API Debug Logs</h1>
       <span class="bg-secondary text-secondary-foreground rounded px-2 py-0.5 font-mono text-xs">
-        {logs.length}
+        {logs.reduce((req, e) => {
+          return req + (e.type === 'request' ? 1 : 0)
+        }, 0)}
       </span>
     </div>
 
