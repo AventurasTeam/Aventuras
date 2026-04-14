@@ -1,6 +1,12 @@
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 
+export function countRequests(debugLogs: Array<DebugLogEntry>) {
+  return debugLogs.reduce((req, e) => {
+    return req + (e.type === 'request' ? 1 : 0)
+  }, 0)
+}
+
 // Debug log entry for request/response logging
 export type DebugLogEntry = {
   id: string
@@ -41,9 +47,7 @@ class DebugStore {
   get requestCount(): number {
     // touch logsVersion to make this reactive
     void this.logsVersion
-    return this.debugLogs.reduce((req, e) => {
-      return req + (e.type === 'request' ? 1 : 0)
-    }, 0)
+    return countRequests(this.debugLogs)
   }
 
   // Debug log methods

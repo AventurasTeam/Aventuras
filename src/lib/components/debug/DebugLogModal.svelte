@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { debug, type DebugLogEntry } from '$lib/stores/debug.svelte'
+  import { countRequests, debug, type DebugLogEntry } from '$lib/stores/debug.svelte'
   import { ExternalLink, RefreshCcw } from 'lucide-svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -86,9 +86,7 @@
             <span
               class="bg-secondary text-secondary-foreground rounded px-2 py-0.5 font-mono text-xs"
             >
-              {throttledLogs.reduce((req, e) => {
-                return req + (e.type === 'request' ? 1 : 0)
-              }, 0)}
+              {countRequests(throttledLogs)}
             </span>
           </div>
 
