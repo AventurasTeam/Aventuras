@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
+  import { createDebouncedSave } from '$lib/utils/debounce'
   import { settings } from '$lib/stores/settings.svelte'
   import type { APIProfile, ProviderType, TextModel } from '$lib/types'
   import { fetchModelsFromProvider } from '$lib/services/ai/sdk/providers'
@@ -29,8 +30,9 @@
   let formFavoriteModels = $state<string[]>([])
 
   // Auto-save debounce state
-  let saveTimeout: ReturnType<typeof setTimeout> | null = null
-  let saveStatus = $state<'idle' | 'saving' | 'saved'>('idle')
+  let mounted = true
+  let saveStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const { trigger: triggerAutoSave, flush: flushAutoSave } = createDebouncedSave(autoSaveEdit)
 
   // UI state
   let isFetchingModels = $state(false)
@@ -39,8 +41,7 @@
 
   function startEdit(profile: APIProfile) {
     if (editingProfileId && editingProfileId !== profile.id && !isNewProfile) {
-      if (saveTimeout) clearTimeout(saveTimeout)
-      autoSaveEdit()
+      flushAutoSave()
     }
 
     editingProfileId = profile.id
@@ -177,8 +178,7 @@
       openCollapsibles = new SvelteSet(openCollapsibles)
 
       if (editingProfileId === profile.id) {
-        if (saveTimeout) clearTimeout(saveTimeout)
-        autoSaveEdit()
+        flushAutoSave()
         editingProfileId = null
       }
     }
@@ -209,19 +209,21 @@
     }
 
     saveStatus = 'saving'
-    await settings.updateProfile(profile.id, profile)
-    saveStatus = 'saved'
-    setTimeout(() => {
-      saveStatus = 'idle'
-    }, 2000)
-  }
-
-  function triggerAutoSave() {
-    if (saveTimeout) clearTimeout(saveTimeout)
-    saveTimeout = setTimeout(() => {
-      autoSaveEdit()
-      saveTimeout = null
-    }, 500)
+    try {
+      await settings.updateProfile(profile.id, profile)
+      if (!mounted) return
+      saveStatus = 'saved'
+      setTimeout(() => {
+        if (mounted && saveStatus === 'saved') saveStatus = 'idle'
+      }, 2000)
+    } catch (err) {
+      console.error('Failed to save API profile', err)
+      if (!mounted) return
+      saveStatus = 'error'
+      setTimeout(() => {
+        if (mounted && saveStatus === 'error') saveStatus = 'idle'
+      }, 3000)
+    }
   }
 
   $effect(() => {
@@ -241,10 +243,8 @@
   })
 
   onDestroy(() => {
-    if (saveTimeout) {
-      clearTimeout(saveTimeout)
-      saveTimeout = null
-    }
+    mounted = false
+    flushAutoSave()
   })
 
   // Fix #1: shared handler to avoid duplication between new-profile and edit forms
@@ -420,8 +420,10 @@
               <p class="text-muted-foreground mt-2 min-h-[1lh] text-right text-xs">
                 {#if saveStatus === 'saving'}
                   Saving...
-                {:else if saveStatus !== 'idle'}
+                {:else if saveStatus === 'saved'}
                   ✓ Saved
+                {:else if saveStatus === 'error'}
+                  <span class="text-destructive">⚠ Save failed</span>
                 {/if}
               </p>
             </div>

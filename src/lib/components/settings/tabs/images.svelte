@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, untrack } from 'svelte'
+  import { createDebouncedSave } from '$lib/utils/debounce'
   import { settings } from '$lib/stores/settings.svelte'
   import { Label } from '$lib/components/ui/label'
   import { Button } from '$lib/components/ui/button'
@@ -134,14 +135,9 @@
   let profileLoraStrengthModel = $state(1.0)
   let profileLoraStrengthClip = $state(1.0)
   let availableLoras = $state<string[]>([])
-  let saveTimeout: ReturnType<typeof setTimeout> | null = null
+  const { trigger: triggerAutoSave, flush: flushAutoSave } = createDebouncedSave(autoSaveProfile)
 
-  onDestroy(() => {
-    if (saveTimeout) {
-      clearTimeout(saveTimeout)
-      saveTimeout = null
-    }
-  })
+  onDestroy(() => flushAutoSave())
 
   // Model info cache for active profiles
   let activeProfilesModelInfo = $state<Record<string, ImageModelInfo[]>>({})
@@ -356,14 +352,6 @@
     })
   }
 
-  function triggerAutoSave() {
-    if (saveTimeout) clearTimeout(saveTimeout)
-    saveTimeout = setTimeout(() => {
-      autoSaveProfile()
-      saveTimeout = null
-    }, 500)
-  }
-
   $effect(() => {
     if (editingProfileId && !isNewProfile) {
       // Touch all form fields so Svelte tracks them as dependencies
@@ -395,11 +383,7 @@
 
   // Aliased for clarity in UI but uses the same logic
   function saveEditingProfile() {
-    if (saveTimeout) {
-      clearTimeout(saveTimeout)
-      saveTimeout = null
-    }
-    autoSaveProfile()
+    flushAutoSave()
   }
 
   function startNewProfile() {
