@@ -31,7 +31,7 @@
 
   // Auto-save debounce state
   let mounted = true
-  let saveStatus = $state<'idle' | 'saving' | 'saved'>('idle')
+  let saveStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const { trigger: triggerAutoSave, flush: flushAutoSave } = createDebouncedSave(autoSaveEdit)
 
   // UI state
@@ -209,12 +209,21 @@
     }
 
     saveStatus = 'saving'
-    await settings.updateProfile(profile.id, profile)
-    if (!mounted) return
-    saveStatus = 'saved'
-    setTimeout(() => {
-      if (mounted) saveStatus = 'idle'
-    }, 2000)
+    try {
+      await settings.updateProfile(profile.id, profile)
+      if (!mounted) return
+      saveStatus = 'saved'
+      setTimeout(() => {
+        if (mounted && saveStatus === 'saved') saveStatus = 'idle'
+      }, 2000)
+    } catch (err) {
+      console.error('Failed to save API profile', err)
+      if (!mounted) return
+      saveStatus = 'error'
+      setTimeout(() => {
+        if (mounted && saveStatus === 'error') saveStatus = 'idle'
+      }, 3000)
+    }
   }
 
   $effect(() => {
@@ -411,8 +420,10 @@
               <p class="text-muted-foreground mt-2 min-h-[1lh] text-right text-xs">
                 {#if saveStatus === 'saving'}
                   Saving...
-                {:else if saveStatus !== 'idle'}
+                {:else if saveStatus === 'saved'}
                   ✓ Saved
+                {:else if saveStatus === 'error'}
+                  <span class="text-destructive">⚠ Save failed</span>
                 {/if}
               </p>
             </div>

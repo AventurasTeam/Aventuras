@@ -7,20 +7,36 @@
  * - `flush()` cancels any pending timer and runs `saveFn` immediately (useful
  *   in `onDestroy` or before navigating away).
  *
- * @param saveFn  The function to call (may be async; errors are not caught).
+ * Errors thrown synchronously or via a rejected Promise from `saveFn` are
+ * logged to `console.error` so fire-and-forget callers (e.g. `onDestroy`)
+ * don't produce unhandled rejections. Callers that need UI-level error
+ * handling should do it inside their own `saveFn`.
+ *
+ * @param saveFn  The function to call on debounce fire or flush.
  * @param delay   Debounce window in milliseconds (default: 500).
  */
 export function createDebouncedSave(
-  saveFn: () => void,
+  saveFn: () => void | Promise<void>,
   delay = 500,
 ): { trigger: () => void; flush: () => void } {
   let timer: ReturnType<typeof setTimeout> | null = null
+
+  function safeSave() {
+    try {
+      const result = saveFn()
+      if (result instanceof Promise) {
+        result.catch((err) => console.error('Debounced save failed:', err))
+      }
+    } catch (err) {
+      console.error('Debounced save failed:', err)
+    }
+  }
 
   function trigger() {
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => {
       timer = null
-      saveFn()
+      safeSave()
     }, delay)
   }
 
@@ -28,7 +44,7 @@ export function createDebouncedSave(
     if (timer) {
       clearTimeout(timer)
       timer = null
-      saveFn()
+      safeSave()
     }
   }
 
