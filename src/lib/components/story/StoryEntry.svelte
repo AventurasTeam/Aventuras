@@ -249,6 +249,19 @@
   // Can create checkpoint: latest entry, not a system entry, and no checkpoint exists yet
   const canCreateCheckpoint = $derived(isLatestEntry && entry.type !== 'system' && !entryCheckpoint)
 
+  // Is this the last user_action in the story? (used for the regeneration hint)
+  const isLastUserAction = $derived(
+    entry.type === 'user_action' && story.lastUserActionId === entry.id,
+  )
+
+  // Show regeneration hint when editing the last user_action and retry is available
+  const canSaveAndRegenerate = $derived(
+    isLastUserAction &&
+      !!ui.retryBackup &&
+      !!story.currentStory &&
+      ui.retryBackup.storyId === story.currentStory.id,
+  )
+
   async function handleCreateCheckpoint() {
     if (!checkpointName.trim()) return
     try {
@@ -924,42 +937,16 @@
     }
 
     try {
-      // Check if this is the last user_action entry
-      const isLastUserAction = entry.type === 'user_action' && isLastUserActionEntry()
-
-      if (
-        isLastUserAction &&
-        ui.retryBackup &&
-        story.currentStory &&
-        ui.retryBackup.storyId === story.currentStory.id
-      ) {
-        // Update the backup with the new content and trigger retry
-        console.log('[StoryEntry] Editing last user action, triggering retry with new content')
+      await story.updateEntry(entry.id, newContent)
+      // Keep retry backup in sync so a subsequent Retry uses the updated text
+      if (canSaveAndRegenerate) {
         ui.updateRetryBackupContent(newContent)
-        isEditing = false
-        await ui.triggerRetryLastMessage()
-      } else {
-        // Normal edit - just update the entry
-        await story.updateEntry(entry.id, newContent)
-        isEditing = false
       }
+      isEditing = false
     } catch (error) {
       console.error('[StoryEntry] Failed to save edit:', error)
       alert(error instanceof Error ? error.message : 'Failed to save edit')
     }
-  }
-
-  /**
-   * Check if this entry is the last user_action in the story.
-   */
-  function isLastUserActionEntry(): boolean {
-    // Find all user_action entries
-    const userActions = story.entries.filter((e) => e.type === 'user_action')
-    if (userActions.length === 0) return false
-
-    // Check if this entry is the last one
-    const lastUserAction = userActions[userActions.length - 1]
-    return lastUserAction.id === entry.id
   }
 
   /**
@@ -1236,6 +1223,11 @@
         <p class="text-muted-foreground hidden text-xs sm:block">
           Ctrl+Enter to save, Esc to cancel
         </p>
+        {#if canSaveAndRegenerate}
+          <p class="text-muted-foreground/50 hidden text-xs sm:block">
+            Regenerate narration after significant changes
+          </p>
+        {/if}
       </div>
     {:else if isDeleting}
       <div class="space-y-2">

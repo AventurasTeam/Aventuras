@@ -175,6 +175,16 @@ class StoryStore {
     return this.storyBeats.filter((b) => b.status === 'pending' || b.status === 'active')
   }
 
+  get lastUserActionId(): string | null {
+    // Search from the end for efficiency
+    for (let i = this.entries.length - 1; i >= 0; i--) {
+      if (this.entries[i].type === 'user_action') {
+        return this.entries[i].id
+      }
+    }
+    return null
+  }
+
   get wordCount(): number {
     // Use cached value if available, recalculate only when dirty
     if (this._wordCountDirty) {
