@@ -104,7 +104,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       'x-ai/grok-4.1-fast',
       'google/gemini-3-flash-preview',
       'deepseek/deepseek-v3.2',
-      'stepfun/step-3.5-flash:free',
+      'minimax/minimax-m2.5:free',
     ],
     services: {
       narrative: {
@@ -172,7 +172,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     fallbackModels: [
       'deepseek/deepseek-v3.2',
       'zai-org/glm-5:thinking',
-      'stepfun-ai/step-3.5-flash',
+      'stepfun-ai/step-3.5-flash-2603',
       'openai/gpt-oss-120b',
     ],
     services: {
@@ -183,13 +183,13 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
         reasoningEffort: 'high',
       },
       classification: {
-        model: 'stepfun-ai/step-3.5-flash',
+        model: 'stepfun-ai/step-3.5-flash-2603',
         temperature: 0.5,
         maxTokens: 8192,
         reasoningEffort: 'high',
       },
       memory: {
-        model: 'stepfun-ai/step-3.5-flash',
+        model: 'stepfun-ai/step-3.5-flash-2603',
         temperature: 0.5,
         maxTokens: 8192,
         reasoningEffort: 'high',
