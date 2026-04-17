@@ -68,6 +68,21 @@
     testValues = values
   }
 
+  function getSampleAtPath(samples: unknown, path: string): unknown {
+    let current: unknown = samples
+    for (const part of path.split('.')) {
+      if (current == null || typeof current !== 'object') return undefined
+      current = (current as Record<string, unknown>)[part]
+    }
+    return current
+  }
+
+  function stringifySample(value: unknown): string {
+    if (typeof value === 'string') return value
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+    return JSON.stringify(value, null, 2)
+  }
+
   // Sync testValues when variables change: all samples + custom defaults as base, user overrides on top
   $effect(() => {
     const vars = fullPack?.variables
@@ -76,23 +91,10 @@
     const samples = selectedTemplateId ? getSamplesForTemplate(selectedTemplateId) : {}
     const registryVars = selectedTemplateId ? getVariablesForTemplate(selectedTemplateId) : []
     const defaults: Record<string, string> = {}
-    const getSampleAtPath = (path: string): unknown => {
-      let current: unknown = samples
-      for (const part of path.split('.')) {
-        if (current == null || typeof current !== 'object') return undefined
-        current = (current as Record<string, unknown>)[part]
-      }
-      return current
-    }
-    const stringify = (value: unknown): string => {
-      if (typeof value === 'string') return value
-      if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-      return JSON.stringify(value, null, 2)
-    }
     for (const v of registryVars) {
-      const sample = getSampleAtPath(v.name)
+      const sample = getSampleAtPath(samples, v.name)
       if (sample === null || sample === undefined) continue
-      defaults[v.name] = stringify(sample)
+      defaults[v.name] = stringifySample(sample)
     }
     for (const v of vars) {
       if (v.defaultValue) {

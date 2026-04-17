@@ -242,6 +242,14 @@ export function validateTemplate(
   const templateVarNames = templateId ? getVariableNamesForTemplate(templateId) : []
   const validVariables = new Set([...templateVarNames, ...(additionalVariables || [])])
 
+  // Namespaced variables (e.g. `packVariables.runtimeVariables`) register their
+  // full path, but user input is validated by root (`packVariables`). Seed the
+  // set with those roots so dotted access like `{{ packVariables.foo }}` resolves.
+  for (const name of [...validVariables]) {
+    const dotIndex = name.indexOf('.')
+    if (dotIndex > 0) validVariables.add(name.slice(0, dotIndex))
+  }
+
   // Extract loop-scoped variables from {% for X in Y %} constructs
   const loopVars = new Set<string>()
   const forPattern = /\{%-?\s*for\s+(\w+)\s+in\s+/g

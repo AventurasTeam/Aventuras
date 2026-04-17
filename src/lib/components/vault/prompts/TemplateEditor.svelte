@@ -335,7 +335,7 @@
   function validateContent(content: string) {
     clearTimeout(validationTimer)
     validationTimer = setTimeout(() => {
-      const additionalVarNames = customVariables.map((v) => v.variableName)
+      const additionalVarNames = customVariables.map((v) => 'packVariables.' + v.variableName)
       const result = validateTemplate(content, templateId, additionalVarNames)
       validationErrors = result.errors
     }, 500)

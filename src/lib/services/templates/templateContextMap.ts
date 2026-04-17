@@ -146,6 +146,8 @@ const characterFields: VariableFieldInfo[] = [
 const locationFields: VariableFieldInfo[] = [
   { name: 'name', type: 'string', description: 'Location name' },
   { name: 'description', type: 'string', description: 'Location description' },
+  { name: 'visited', type: 'boolean', description: 'Whether the protagonist has visited' },
+  { name: 'current', type: 'boolean', description: 'Whether this is the current location' },
 ]
 
 const itemFields: VariableFieldInfo[] = [
@@ -293,7 +295,7 @@ const PROMPT_CONTEXT_VARS: VariableDefinition[] = [
         description: 'Max entries for classifier',
       },
       {
-        name: 'retieval.maxStoryEntries',
+        name: 'retrieval.maxStoryEntries',
         type: 'number',
         description: 'Max story entries for retrieval',
       },
