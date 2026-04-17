@@ -1096,6 +1096,17 @@ export function getPresetDefaults(provider: ProviderType, presetId: string): Gen
   return preset
 }
 
+export const STORY_WIDTH_OPTIONS = [
+  { key: '2xl' as const, label: 'Narrow', maxWidth: '42rem' },
+  { key: '3xl' as const, label: 'Default', maxWidth: '48rem' },
+  { key: '4xl' as const, label: 'Wide', maxWidth: '56rem' },
+  { key: '5xl' as const, label: 'Wider', maxWidth: '64rem' },
+  { key: '7xl' as const, label: 'Very wide', maxWidth: '80rem' },
+  { key: '9xl' as const, label: 'Extra wide', maxWidth: '96rem' },
+] as const
+
+const VALID_STORY_WIDTH_KEYS: string[] = STORY_WIDTH_OPTIONS.map((o) => o.key)
+
 export function getDefaultUISettings(): UISettings {
   return {
     theme: 'dark',
@@ -1113,6 +1124,7 @@ export function getDefaultUISettings(): UISettings {
     autoScroll: true,
     showScrollToTop: false,
     showScrollToBottom: true,
+    storyMaxWidth: '3xl',
   }
 }
 
@@ -1465,11 +1477,18 @@ class SettingsStore {
       if (showScrollToBottom !== null)
         this.uiSettings.showScrollToBottom = showScrollToBottom === 'true'
 
+      const storyMaxWidth = await database.getSetting('story_max_width')
+      if (storyMaxWidth && VALID_STORY_WIDTH_KEYS.includes(storyMaxWidth))
+        this.uiSettings.storyMaxWidth = storyMaxWidth as UISettings['storyMaxWidth']
+
       const debugMode = await database.getSetting('debug_mode')
       if (debugMode !== null) debug.isActive = this.uiSettings.debugMode = debugMode === 'true'
 
       const sidebarWidth = await database.getSetting('sidebar_width')
       if (sidebarWidth) this.uiSettings.sidebarWidth = parseInt(sidebarWidth, 10)
+
+      const sidebarOpen = await database.getSetting('sidebar_open')
+      if (sidebarOpen !== null) ui.sidebarOpen = sidebarOpen === 'true'
 
       const manualMode = await database.getSetting('advanced_manual_mode')
       if (manualMode !== null) {
@@ -2456,6 +2475,11 @@ class SettingsStore {
   async setShowScrollToBottom(enabled: boolean) {
     this.uiSettings.showScrollToBottom = enabled
     await database.setSetting('show_scroll_to_bottom', enabled.toString())
+  }
+
+  async setStoryMaxWidth(width: UISettings['storyMaxWidth']) {
+    this.uiSettings.storyMaxWidth = width
+    await database.setSetting('story_max_width', width)
   }
 
   async setSidebarWidth(width: number) {

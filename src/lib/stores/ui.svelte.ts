@@ -308,6 +308,9 @@ class UIStore {
 
   toggleSidebar() {
     this.sidebarOpen = !this.sidebarOpen
+    database
+      .setSetting('sidebar_open', this.sidebarOpen.toString())
+      .catch((err) => console.warn('[UI] Failed to persist sidebar state:', err))
   }
 
   /**
@@ -317,6 +320,8 @@ class UIStore {
   setMobileDefaults() {
     if (typeof window !== 'undefined' && window.innerWidth < 640) {
       this.sidebarOpen = false
+      // No DB persist — this is a layout constraint, not a user preference.
+      // Persisting here would overwrite the desktop sidebar preference.
     }
   }
 

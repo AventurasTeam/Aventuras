@@ -1,6 +1,7 @@
 <script lang="ts">
   import { SvelteMap } from 'svelte/reactivity'
   import { onDestroy } from 'svelte'
+  import { createDebouncedSave } from '$lib/utils/debounce'
   import { settings, DEFAULT_SERVICE_PRESET_ASSIGNMENTS } from '$lib/stores/settings.svelte'
   import type { GenerationPreset } from '$lib/types'
   import { ask } from '@tauri-apps/plugin-dialog'
@@ -229,20 +230,9 @@
   let isLoadingPresetModels = $state(false)
 
   // Auto-persist: debounced save to avoid a DB write on every slider tick
-  let saveTimer: ReturnType<typeof setTimeout> | null = null
-
-  function debouncedSave() {
-    if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => settings.saveGenerationPresets(), 300)
-  }
-
-  function flushSave() {
-    if (saveTimer) {
-      clearTimeout(saveTimer)
-      saveTimer = null
-      settings.saveGenerationPresets()
-    }
-  }
+  const { trigger: debouncedSave, flush: flushSave } = createDebouncedSave(() =>
+    settings.saveGenerationPresets(),
+  )
 
   // Flush any pending save when the component is destroyed (e.g. Settings modal closed)
   onDestroy(() => flushSave())
