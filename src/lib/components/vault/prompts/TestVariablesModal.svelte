@@ -33,6 +33,14 @@
   let customOpen = $state(true)
   let groupOpenStates = $state<Record<string, boolean>>({})
 
+  function isGroupOpen(label: string): boolean {
+    return groupOpenStates[label] ?? true
+  }
+
+  function setGroupOpen(label: string, open: boolean) {
+    groupOpenStates = { ...groupOpenStates, [label]: open }
+  }
+
   let displayGroups = $derived.by(() => {
     const groups = getDisplayGroupsForTemplate(templateId)
     const allVars = getVariablesForTemplate(templateId)
@@ -172,13 +180,16 @@
     <div class="max-h-[60vh] overflow-y-auto px-6 py-3">
       <div class="divide-border divide-y">
         {#each filteredGroups as group (group.label)}
-          <Collapsible.Root bind:open={groupOpenStates[group.label]}>
+          <Collapsible.Root
+            open={isGroupOpen(group.label)}
+            onOpenChange={(v) => setGroupOpen(group.label, v)}
+          >
             <Collapsible.Trigger class="flex w-full">
               <div class="flex w-full items-center gap-2 py-1.5">
                 <ChevronDown
-                  class="text-muted-foreground h-4 w-4 shrink-0 transition-transform duration-200 {groupOpenStates[
-                    group.label
-                  ]
+                  class="text-muted-foreground h-4 w-4 shrink-0 transition-transform duration-200 {isGroupOpen(
+                    group.label,
+                  )
                     ? ''
                     : '-rotate-90'}"
                 />
