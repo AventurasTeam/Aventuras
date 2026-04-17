@@ -1224,8 +1224,9 @@
           Ctrl+Enter to save, Esc to cancel
         </p>
         {#if canSaveAndRegenerate}
-          <p class="text-muted-foreground/50 hidden text-xs sm:block">
+          <p class="hidden items-center gap-1 text-xs text-amber-500/80 sm:flex">
             Regenerate narration after significant changes
+            <RotateCcw class="h-3 w-3" />
           </p>
         {/if}
       </div>
