@@ -812,6 +812,7 @@
       retryBtn.addEventListener('click', async () => {
         const imageId = retryBtn.getAttribute('data-image-id')
         if (imageId && expandedImage) {
+          ;(retryBtn as HTMLButtonElement).disabled = true
           await regenerateInlineImage(imageId, expandedImage.prompt)
           expandedImageId = null
           clickedElement = null
@@ -1704,6 +1705,7 @@
   :global(.inline-image-placeholder) {
     position: relative;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     margin: 1rem 0;
@@ -1724,6 +1726,31 @@
   :global(.inline-image-placeholder.failed) {
     border-color: var(--color-red-500, #ef4444);
     background: linear-gradient(135deg, var(--surface-800) 0%, rgba(239, 68, 68, 0.1) 100%);
+    gap: 0.5rem;
+    padding: 1rem;
+  }
+
+  :global(.placeholder-text) {
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+    text-align: center;
+    max-width: 100%;
+    word-break: break-word;
+  }
+
+  :global(.inline-image-retry) {
+    margin-top: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    background-color: var(--surface-600);
+    color: var(--foreground);
+    border: 1px solid var(--surface-500);
+    cursor: pointer;
+  }
+
+  :global(.inline-image-retry:hover) {
+    background-color: var(--surface-500);
   }
 
   /* Shimmer effect */

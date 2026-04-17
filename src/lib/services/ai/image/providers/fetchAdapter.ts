@@ -103,8 +103,13 @@ export async function imageFetch(options: {
         startTime,
         errorText,
       )
+      const err = errorPayload as any
+      const humanMessage =
+        typeof errorPayload === 'string'
+          ? errorPayload
+          : (err?.error?.message ?? err?.message ?? err?.error)
       throw new Error(
-        `Image API error ${response.status}: ${typeof errorPayload === 'string' ? errorPayload : JSON.stringify(errorPayload)}`,
+        `Image API error ${response.status}: ${humanMessage ?? JSON.stringify(errorPayload)}`,
       )
     }
 

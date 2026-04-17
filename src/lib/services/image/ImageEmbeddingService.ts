@@ -30,7 +30,10 @@ function getDisplayableAgenticImages(images: EmbeddedImage[]): EmbeddedImage[] {
   return images.filter(
     (img) =>
       img.generationMode !== 'inline' &&
-      (img.status === 'complete' || img.status === 'generating' || img.status === 'pending' || img.status === 'failed') &&
+      (img.status === 'complete' ||
+        img.status === 'generating' ||
+        img.status === 'pending' ||
+        img.status === 'failed') &&
       img.sourceText.length >= 20,
   )
 }
