@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { countRequests, debug, type DebugLogEntry } from '$lib/stores/debug.svelte'
   import { ExternalLink, RefreshCcw } from 'lucide-svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
@@ -26,8 +27,7 @@
     }
 
     // Track logsVersion to know when logs change
-    // noinspection JSUnusedLocalSymbols
-    const _version = debug.logsVersion
+    void debug.logsVersion
 
     const now = Date.now()
     const timeSinceLastUpdate = now - lastUpdateTime
@@ -42,7 +42,7 @@
       }
 
       // Defer content rendering to next frame when modal first opens
-      if (!showContent) {
+      if (untrack(() => !showContent)) {
         const scheduleContent = () => {
           showContent = true
         }
