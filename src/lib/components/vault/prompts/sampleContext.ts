@@ -205,6 +205,7 @@ const PROMPT_CONTEXT_SAMPLES: TemplateContext = {
   storyEntriesVisibleRaw: sampleStoryEntries.map((e, i) => ({ ...e, id: `entry-${i}` })),
   userInput: 'I want to explore the ancient ruins to the north.',
   userActionOriginal: 'I want to explore the ancient ruins to the north.',
+  narrationEntryId: 'entry-1',
   lastNarrativeEntry: {
     type: 'narration',
     content:

@@ -148,7 +148,7 @@ Already tracking: {{ characters.size }} characters, {{ locations.size }} locatio
 {%- if recentEntries.size > 0 %}
 
 ## Recent Chat History
-{% for entry in recentEntries %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.metadata.timeStart %} (at Year {{ entry.metadata.timeStart.years }}, Day {{ entry.metadata.timeStart.days }}, {{ entry.metadata.timeStart.hours }}:{{ entry.metadata.timeStart.minutes }}){% endif %} {{ entry.content }}
+{% for entry in recentEntries %}{% if entry.type == 'user_action' %}[ACTION]{% else %}[NARRATIVE]{% endif %}{% if entry.metadata.timeStart %} (at Y{{ entry.metadata.timeStart.years }}D{{ entry.metadata.timeStart.days }} {% if entry.metadata.timeStart.hours < 10 %}0{% endif %}{{ entry.metadata.timeStart.hours }}:{% if entry.metadata.timeStart.minutes < 10 %}0{% endif %}{{ entry.metadata.timeStart.minutes }}){% endif %} {{ entry.content | truncate: 500 }}
 
 {% endfor %}
 {%- endif %}

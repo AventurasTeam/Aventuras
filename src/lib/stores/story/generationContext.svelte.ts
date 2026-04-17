@@ -115,6 +115,7 @@ interface StoryPromptContext {
   }
   narrativeResult?: NarrativeResult
   userActionOriginal?: string
+  narrationEntryId?: string | null
 }
 
 export class StoryGenerationContextStore {
@@ -251,6 +252,7 @@ export class StoryGenerationContextStore {
       lastChapterEndIndex: this.story.chapter.lastChapterEndIndex,
       chapterAnalysis: this.chapterAnalysis,
       narrativeResult: this.narrativeResult,
+      narrationEntryId: this.narrationEntryId,
     }
   }
 

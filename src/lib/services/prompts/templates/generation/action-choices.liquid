@@ -31,7 +31,7 @@ Do NOT generate actions for {{ protagonistName }} as if they were a separate cha
 ## Current Scene
 {%- assign currentLocation = locations | where: "current" -%}
 Location: {{ currentLocation }}
-{%- assign npcsPresent = c | reject: "relationship", "self" | where: "status", "active" | map: "name" | join: ", " | default: "None" -%}
+{%- assign npcsPresent = characters | reject: "relationship", "self" | where: "status", "active" | map: "name" | join: ", " | default: "None" -%}
 NPCs Present: {{ npcsPresent }}
 {%- assign inventory = items | where: "equipped" | map: "name" | join: "," | default: "None" -%}
 {{ protagonistName }}'s Inventory: {{ inventory }}

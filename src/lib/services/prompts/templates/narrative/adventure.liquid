@@ -203,7 +203,7 @@ Elena drew her blade, firelight dancing along the steel edge as she faced the cr
 </InlineImages>{% endif %}
 [CURRENT STORY TIME]
 Year {{ timeTracker.years }}, Day {{ timeTracker.days }}, {{ timeTracker.hours }} hours {{ timeTracker.minutes }} minutes
-{% assign currentLocationObject = location | where: "curent", true | first -%}
+{% assign currentLocationObject = locations | where: "current", true | first -%}
 {%- if currentLocationObject %}
 
 [CURRENT LOCATION]

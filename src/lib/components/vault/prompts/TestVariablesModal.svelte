@@ -1,9 +1,11 @@
 <script lang="ts">
   import type { CustomVariable } from '$lib/services/packs/types'
+  import type { VariableDefinition } from '$lib/services/templates/types'
   import {
     getDisplayGroupsForTemplate,
     getVariablesForTemplate,
   } from '$lib/services/templates/templateContextMap'
+  import { getSamplesForTemplate } from './sampleContext'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import * as Collapsible from '$lib/components/ui/collapsible'
   import * as Select from '$lib/components/ui/select'
@@ -41,13 +43,24 @@
     groupOpenStates = { ...groupOpenStates, [label]: open }
   }
 
+  let samples = $derived(getSamplesForTemplate(templateId))
+
+  function shouldUseTextarea(name: string): boolean {
+    const sample = samples[name]
+    return typeof sample === 'string' && (sample.length > 80 || sample.includes('\n'))
+  }
+
   let displayGroups = $derived.by(() => {
     const groups = getDisplayGroupsForTemplate(templateId)
     const allVars = getVariablesForTemplate(templateId)
     const varMap = new Map(allVars.map((v) => [v.name, v]))
     return groups.map((g) => ({
       label: g.label,
-      variables: g.variables.map((name) => varMap.get(name)).filter((v) => v != null),
+      variables: g.variables
+        .map((name) => varMap.get(name))
+        .filter(
+          (v): v is VariableDefinition => v != null && v.type !== 'array' && v.type !== 'object',
+        ),
     }))
   })
 
@@ -200,7 +213,13 @@
             <Collapsible.Content>
               <div class="divide-border/50 divide-y pl-6">
                 {#each group.variables as v (v.name)}
-                  {@render varInput(v.name, v.description, v.type, v.enumValues)}
+                  {@render varInput(
+                    v.name,
+                    v.description,
+                    v.type,
+                    v.enumValues,
+                    shouldUseTextarea(v.name),
+                  )}
                 {/each}
               </div>
             </Collapsible.Content>

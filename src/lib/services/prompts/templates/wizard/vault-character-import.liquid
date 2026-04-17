@@ -8,7 +8,7 @@ description: Cleans SillyTavern character cards and extracts structured characte
 You are extracting and cleaning character data from a SillyTavern character card for storage in a character vault.
 
 ## Your Task
-1. IDENTIFY who "{{char}}" refers to based on the content (the actual character name)
+1. IDENTIFY who "{% raw %}{{char}}{% endraw %}" refers to based on the content (the actual character name)
 2. EXTRACT clean, prose-format character information
 3. REMOVE all roleplay instructions, meta-content, and formatting artifacts
 4. Convert any structured formats (PList, W++, etc.) to natural prose
@@ -16,8 +16,8 @@ You are extracting and cleaning character data from a SillyTavern character card
 ## REMOVE THESE PATTERNS (delete entirely):
 
 ### Roleplay Instructions:
-- "You are {{char}}", "You will portray...", "Play as..."
-- "Do not speak for {{user}}", "Never speak for {{user}}"
+- "You are {% raw %}{{char}}{% endraw %}", "You will portray...", "Play as..."
+- "Do not speak for {% raw %}{{user}}{% endraw %}", "Never speak for {% raw %}{{user}}{% endraw %}"
 - "Stay in character", "Never break character"
 - Instructions telling an AI how to behave
 
@@ -29,7 +29,7 @@ You are extracting and cleaning character data from a SillyTavern character card
 - Section headers like "=== Narration ===" or "=== Scenario ==="
 
 ### User References:
-- Replace "{{user}}" with "the protagonist" or remove sentences that only make sense in a roleplay context
+- Replace "{% raw %}{{user}}{% endraw %}" with "the protagonist" or remove sentences that only make sense in a roleplay context
 
 ## CONVERT TO NATURAL PROSE:
 - [Character: trait1, trait2; clothes: x] → Natural sentences

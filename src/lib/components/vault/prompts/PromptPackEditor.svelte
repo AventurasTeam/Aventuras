@@ -81,7 +81,7 @@
     }
     for (const v of vars) {
       if (v.defaultValue) {
-        defaults[v.variableName] = v.defaultValue
+        defaults['packVariables.' + v.variableName] = v.defaultValue
       }
     }
     // Read current testValues without creating a dependency (avoid infinite loop)

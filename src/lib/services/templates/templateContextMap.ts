@@ -239,6 +239,11 @@ const PROMPT_CONTEXT_VARS: VariableDefinition[] = [
   }),
   v('userInput', 'text', 'Current user input text'),
   v('userActionOriginal', 'text', 'Original user action before processing'),
+  v(
+    'narrationEntryId',
+    'text',
+    'ID of the narration entry currently being classified (used to exclude it from chat history)',
+  ),
   v('lastNarrativeEntry', 'object', 'Most recent narrative entry', {
     infoFields: [
       { name: 'type', type: 'string', description: 'Always narration' },
@@ -678,6 +683,7 @@ const PROMPT_CONTEXT_DISPLAY_GROUPS: DisplayGroup[] = [
       'storyEntriesVisibleRaw',
       'userInput',
       'userActionOriginal',
+      'narrationEntryId',
       'lastNarrativeEntry',
     ],
   },
