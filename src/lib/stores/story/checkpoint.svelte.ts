@@ -66,18 +66,6 @@ export class StoryCheckpointStore {
     return checkpoint
   }
 
-  /**
-   * @deprecated Checkpoint restoration is no longer supported.
-   * Use createBranchFromCheckpoint() instead to explore alternate timelines.
-   * This prevents data loss issues when restoring across branches.
-   */
-  async restoreCheckpoint(_checkpointId: string): Promise<void> {
-    throw new Error(
-      'Checkpoint restoration is no longer supported. ' +
-        'To explore alternate paths, create a new branch from a checkpoint instead.',
-    )
-  }
-
   // Delete a checkpoint
   async deleteCheckpoint(checkpointId: string): Promise<void> {
     await database.deleteCheckpoint(checkpointId)

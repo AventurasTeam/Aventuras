@@ -2,8 +2,6 @@
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story/index.svelte'
   import { settings } from '$lib/stores/settings.svelte'
-  import { aiService } from '$lib/services/ai'
-  import { hasRequiredCredentials, getProviderDisplayName } from '$lib/services/ai/image'
   import {
     Send,
     Wand2,
@@ -14,18 +12,11 @@
     X,
     PenLine,
     Square,
-    ImageIcon,
-    Loader2,
   } from 'lucide-svelte'
   import Suggestions from './Suggestions.svelte'
   import GrammarCheck from './GrammarCheck.svelte'
-  import { Button } from '$lib/components/ui/button'
   import { isTouchDevice } from '$lib/utils/swipe'
   import { ActionInputController, type ActionType } from '$lib/services/generation'
-
-  function log(...args: any[]) {
-    console.log('[ActionInput]', ...args)
-  }
 
   // ============================================================================
   // UI State
@@ -34,7 +25,6 @@
   let inputValue = $state('')
   let actionType = $state<ActionType>('do')
   let isRawActionChoice = $state(false)
-  let isManualImageGenRunning = $state(false)
 
   // ============================================================================
   // Controller
@@ -45,13 +35,6 @@
   // ============================================================================
   // Derived State
   // ============================================================================
-
-  const canShowManualImageGen = $derived(story.settings.imageGenerationMode === 'none')
-
-  const manualImageGenDisabled = $derived.by(() => {
-    if (ui.isGenerating || isManualImageGenRunning) return true
-    return !hasRequiredCredentials()
-  })
 
   const isCreativeWritingMode = $derived(story.mode === 'creative-writing')
 
@@ -172,19 +155,6 @@
   function handleSuggestionSelect(text: string) {
     inputValue = text
     document.querySelector('textarea')?.focus()
-  }
-
-  async function handleManualImageGeneration() {
-    if (manualImageGenDisabled) return
-    if (story.settings.imageGenerationMode === 'none') return
-    isManualImageGenRunning = true
-    try {
-      await aiService.generateImagesForNarrative()
-    } catch (error) {
-      log('Manual image generation failed (non-fatal)', error)
-    } finally {
-      isManualImageGenRunning = false
-    }
   }
 
   async function handleSubmit() {
@@ -399,26 +369,6 @@
             title="Send ({sendKeyHint})"><Send class="h-6 w-6" /></button
           >{/if}
       </div>
-    </div>
-  {/if}
-
-  {#if canShowManualImageGen}
-    <div class="flex justify-end">
-      <Button
-        variant="secondary"
-        size="sm"
-        onclick={handleManualImageGeneration}
-        disabled={manualImageGenDisabled}
-        title={manualImageGenDisabled && !hasRequiredCredentials()
-          ? `Add a ${getProviderDisplayName()} API key in Settings to generate images`
-          : 'Generate images for the last narration'}
-        class="gap-1.5 text-xs"
-      >
-        {#if isManualImageGenRunning}<Loader2 class="h-4 w-4 animate-spin" />{:else}<ImageIcon
-            class="h-4 w-4"
-          />{/if}
-        {isManualImageGenRunning ? 'Generating...' : 'Generate Images'}
-      </Button>
     </div>
   {/if}
 </div>

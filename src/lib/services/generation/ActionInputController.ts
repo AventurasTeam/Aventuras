@@ -40,6 +40,7 @@ import {
 import type { ClassificationCompleteEvent } from '$lib/services/events'
 import { ui } from '$lib/stores/ui.svelte'
 import { isAndroid } from '$lib/utils/platform'
+import { sendNotification, isPermissionGranted } from '@tauri-apps/plugin-notification'
 
 function log(...args: any[]) {
   console.log('[ActionInput]', ...args)
@@ -96,8 +97,6 @@ export async function translateUserInput(): Promise<{
 
 const sendGenerationNotification = async (responseText: string, success: boolean) => {
   try {
-    const { sendNotification, isPermissionGranted } =
-      await import('@tauri-apps/plugin-notification')
     const permitted = await isPermissionGranted()
     if (!permitted) return
 
@@ -133,13 +132,12 @@ export class ActionInputController {
   // --------------------------------------------------------------------------
 
   async generateResponse(options?: { countStyleReview?: boolean; styleReviewSource?: string }) {
+    if (!story.isLoaded) return
     const userActionContent = story.generationContext.userAction?.content ?? ''
     const userActionEntryId = story.generationContext.userAction?.entryId ?? ''
     const countStyleReview = options?.countStyleReview ?? true
     const styleReviewSource =
       options?.styleReviewSource ?? (countStyleReview ? 'new' : 'regenerate')
-
-    if (!story.isLoaded) return
 
     this.stopRequested = false
     this.activeAbortController = new AbortController()
@@ -148,13 +146,12 @@ export class ActionInputController {
     const inlineImageMode = story.settings.imageGenerationMode === 'inline'
     const streamingEntryId = crypto.randomUUID()
     const narrationEntryId = crypto.randomUUID()
+    const storyId = story.id!
 
     ui.setGenerating(true)
     ui.clearGenerationError()
-    ui.clearActionChoices(story.id!)
+    ui.clearActionChoices(storyId)
     ui.startStreaming(visualProseMode, streamingEntryId)
-
-    const storyId = story.id!
 
     let inlineImageTracker: InlineImageTracker | null = null
     if (inlineImageMode) {
@@ -214,12 +211,6 @@ export class ActionInputController {
 
         handleEvent(event, eventState)
 
-        if (event.type === 'phase_complete' && event.phase === 'retrieval') {
-          ui.setLastLorebookRetrieval(
-            story.generationContext.retrievalResult?.lorebookRetrievalResult ?? null,
-          )
-        }
-
         if (event.type === 'narrative_chunk') {
           fullResponse += event.content
           if (event.reasoning) fullReasoning += event.reasoning
@@ -273,11 +264,6 @@ export class ActionInputController {
             })
             await story.entry.refreshEntry(narrationEntry.id)
           }
-        }
-
-        if (event.type === 'error' && event.fatal) {
-          console.error('[ActionInput] Fatal pipeline error:', event.error)
-          break
         }
       }
 
