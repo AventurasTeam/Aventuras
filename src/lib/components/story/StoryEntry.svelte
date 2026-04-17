@@ -1598,6 +1598,12 @@
     text-decoration-style: dashed;
   }
 
+  :global(.embedded-image-link.failed) {
+    color: var(--destructive);
+    text-decoration-style: wavy;
+    cursor: pointer;
+  }
+
   :global(.embedded-image-link.regenerating) {
     color: var(--accent-400);
     animation: pulse-glow 1s ease-in-out infinite;
