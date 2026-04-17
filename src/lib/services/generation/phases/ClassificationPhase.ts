@@ -14,33 +14,10 @@ import type {
   AbortedEvent,
   ErrorEvent,
   ClassificationCompleteEvent,
-  WorldState,
 } from '../types'
-import type { Story, StoryEntry, TimeTracker } from '$lib/types'
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
-
-/** Dependencies for classification phase - injected to avoid tight coupling */
-export interface ClassificationDependencies {
-  classifyResponse: (
-    narrativeResponse: string,
-    userAction: string,
-    worldState: WorldState,
-    story: Story | null | undefined,
-    chatHistoryEntries: StoryEntry[],
-    timeTracker: TimeTracker | null | undefined,
-  ) => Promise<ClassificationResult>
-}
-
-/** Input for the classification phase */
-export interface ClassificationInput {
-  narrativeContent: string
-  narrativeEntryId: string
-  userActionContent: string
-  worldState: WorldState
-  story: Story | null | undefined
-  visibleEntries: StoryEntry[]
-  abortSignal?: AbortSignal
-}
+import { story } from '$lib/stores/story/index.svelte'
+import { aiService } from '$lib/services/ai'
 
 /** Result from classification phase */
 export interface ClassificationPhaseResult {
@@ -53,46 +30,27 @@ export interface ClassificationPhaseResult {
  * Extracts world state changes from narrative using AI classifier.
  */
 export class ClassificationPhase {
-  constructor(private deps: ClassificationDependencies) {}
-
   /** Execute the classification phase - yields events and returns result */
-  async *execute(
-    input: ClassificationInput,
-  ): AsyncGenerator<GenerationEvent, ClassificationPhaseResult | null> {
-    yield { type: 'phase_start', phase: 'classification' } satisfies PhaseStartEvent
+  async *execute(): AsyncGenerator<GenerationEvent> {
+    // === CONCURRENT PHASE SAFETY: Snapshot singleton inputs before first yield ===
+    const narrativeEntryId = story.generationContext.narrationEntryId ?? ''
+    const abortSignal = story.generationContext.abortSignal ?? undefined
+    // === End snapshot block ===
 
-    const {
-      narrativeContent,
-      narrativeEntryId,
-      userActionContent,
-      worldState,
-      story,
-      visibleEntries,
-      abortSignal,
-    } = input
+    yield { type: 'phase_start', phase: 'classification' } satisfies PhaseStartEvent
 
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'classification' } satisfies AbortedEvent
-      return null
+      return
     }
 
     try {
-      // Filter out the current narration entry to avoid sending it twice
-      // (once in chatHistory, once as narrativeResponse)
-      const chatHistoryEntries = visibleEntries.filter((e) => e.id !== narrativeEntryId)
-
-      const classificationResult = await this.deps.classifyResponse(
-        narrativeContent,
-        userActionContent,
-        worldState,
-        story,
-        chatHistoryEntries,
-        story?.timeTracker,
-      )
+      // ClassifierService.classify() reads all data from singleton (narrationEntryId filtering included)
+      const classificationResult = await aiService.classifyResponse()
 
       if (abortSignal?.aborted) {
         yield { type: 'aborted', phase: 'classification' } satisfies AbortedEvent
-        return null
+        return
       }
 
       // Emit classification complete event
@@ -112,11 +70,12 @@ export class ClassificationPhase {
         result,
       } satisfies PhaseCompleteEvent
 
-      return result
+      story.generationContext.classificationResult = result
+      return
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         yield { type: 'aborted', phase: 'classification' } satisfies AbortedEvent
-        return null
+        return
       }
 
       // Classification errors are non-fatal - world state just won't be updated
@@ -127,7 +86,7 @@ export class ClassificationPhase {
         fatal: false,
       } satisfies ErrorEvent
 
-      return null
+      return
     }
   }
 }

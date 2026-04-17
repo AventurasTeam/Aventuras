@@ -1,474 +1,362 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { templateEngine } from '$lib/services/templates/engine'
-import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const adventureTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'adventure')!
-const creativeWritingTemplate = PROMPT_TEMPLATES.find((t) => t.id === 'creative-writing')!
+const dbMockRef = vi.hoisted(() => ({ current: null as any }))
 
-const adventureBase = {
-  protagonistName: 'Kael',
-  pov: 'second',
-  tense: 'present',
-  genre: '',
-  tone: '',
-  settingDescription: '',
-  themes: '',
-  storyEntries: [],
-  lorebookEntries: [],
-  worldStateCharacters: [],
-  worldStateInventory: [],
-  worldStateBeats: [],
-  worldStateLocations: [],
-  worldStateRelevantItems: [],
-  worldStateRelatedBeats: [],
-  chapters: [],
-  timelineFill: [],
-}
+vi.mock('$lib/services/database', () => ({
+  get database() {
+    return dbMockRef.current
+  },
+}))
+
+import {
+  renderTemplate,
+  createTemplateTestMock,
+  testVariableInjection,
+  testManifestCoverage,
+} from '$test/helpers/templateTestHelper'
+import { promptContext, promptContextMinimal } from '$test/fixtures/promptContext'
+import { adventureManifest, creativeWritingManifest } from '$test/fixtures/templateManifests'
 
 beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {})
-  vi.resetModules()
+  dbMockRef.current = createTemplateTestMock()
 })
 
 // ---------------------------------------------------------------------------
-// Adventure template
+// adventure
 // ---------------------------------------------------------------------------
 
-describe('adventure template', () => {
+describe('adventure', () => {
   describe('variable injection', () => {
-    it('renders protagonistName in content', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
-        protagonistName: 'Kael',
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('Kael')
-    })
-
-    it('renders genre in Story Context when genre is set', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
-        genre: 'Fantasy',
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('Fantasy')
-    })
+    testVariableInjection(adventureManifest, promptContext)
   })
 
-  describe('conditional suppression', () => {
-    it('Story Context absent when genre, tone, settingDescription, themes all empty', () => {
-      const result = templateEngine.render(adventureTemplate.content, { ...adventureBase })
-      expect(result).not.toBeNull()
-      expect(result).not.toContain('# Story Context')
+  describe('conditional sections', () => {
+    it('Story Context present when genre set', async () => {
+      const result = await renderTemplate('adventure', promptContext)
+      expect(result.system).toContain('# Story Context')
     })
 
-    it('Story Context present when genre is set', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
-        genre: 'Fantasy',
+    it('Story Context absent when all empty', async () => {
+      const result = await renderTemplate('adventure', { ...promptContextMinimal, themes: '' })
+      expect(result.system).not.toContain('# Story Context')
+    })
+
+    it('Known Characters section present when characters exist', async () => {
+      const result = await renderTemplate('adventure', promptContext)
+      expect(result.system).toContain('[KNOWN CHARACTERS]')
+    })
+
+    it('Known Characters section absent when characters empty', async () => {
+      const result = await renderTemplate('adventure', promptContextMinimal)
+      expect(result.system).not.toContain('[KNOWN CHARACTERS]')
+    })
+
+    it('lorebook section present when lorebookEntries has items', async () => {
+      const result = await renderTemplate('adventure', promptContext)
+      expect(result.system).toContain('(CANONICAL')
+    })
+
+    it('lorebook section absent when lorebookEntries empty', async () => {
+      const result = await renderTemplate('adventure', promptContextMinimal)
+      expect(result.system).not.toContain('(CANONICAL')
+    })
+
+    it('story_history present when chapters has items', async () => {
+      const result = await renderTemplate('adventure', promptContext)
+      expect(result.system).toContain('<story_history>')
+    })
+
+    it('story_history absent when chapters and timelineFill empty', async () => {
+      const result = await renderTemplate('adventure', promptContextMinimal)
+      expect(result.system).not.toContain('<story_history>')
+    })
+
+    it('style_guidance present when styleReview.phrases has items', async () => {
+      const result = await renderTemplate('adventure', promptContext)
+      expect(result.system).toContain('<style_guidance>')
+    })
+
+    it('style_guidance absent when styleReview not provided', async () => {
+      const result = await renderTemplate('adventure', promptContextMinimal)
+      expect(result.system).not.toContain('<style_guidance>')
+    })
+
+    it('VisualProse section present when visualProseMode true', async () => {
+      const result = await renderTemplate('adventure', {
+        ...promptContext,
+        userSettings: { ...promptContext.userSettings, visualProseMode: true },
       })
-      expect(result).not.toBeNull()
-      expect(result).toContain('# Story Context')
+      expect(result.system).toContain('<VisualProse>')
     })
 
-    it('lorebook section absent when lorebookEntries is empty', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
-        lorebookEntries: [],
-      })
-      expect(result).not.toBeNull()
-      // The dynamic lorebook section starts with this canonical disclaimer; absent when empty
-      expect(result).not.toContain('(CANONICAL')
+    it('VisualProse section absent when visualProseMode false', async () => {
+      const result = await renderTemplate('adventure', promptContext)
+      expect(result.system).not.toContain('<VisualProse>')
     })
 
-    it('lorebook section present when lorebookEntries has 1 item', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
-        lorebookEntries: [
-          { name: 'Elder Dragon', type: 'character', description: 'An ancient beast.' },
-        ],
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('(CANONICAL')
-    })
-
-    it('worldStateCharacters absent when empty', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
-        worldStateCharacters: [],
-      })
-      expect(result).not.toBeNull()
-      expect(result).not.toContain('[KNOWN CHARACTERS]')
-    })
-
-    it('worldStateCharacters present when has items', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
-        worldStateCharacters: [
-          { name: 'Aria', relationship: 'companion', description: '', traits: [], appearance: [] },
-        ],
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('[KNOWN CHARACTERS]')
-    })
-
-    it('story_history absent when chapters and timelineFill both empty', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
-        chapters: [],
-        timelineFill: [],
-      })
-      expect(result).not.toBeNull()
-      expect(result).not.toContain('<story_history>')
-    })
-
-    it('story_history present when chapters has 1 item', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
-        chapters: [
-          {
-            number: 1,
-            title: 'The Beginning',
-            summary: 'Things began.',
-            startTime: null,
-            endTime: null,
-            characters: [],
-            locations: [],
-            emotionalTone: '',
-          },
-        ],
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('<story_history>')
-    })
-
-    it('style_guidance absent when styleReview not provided', () => {
-      const result = templateEngine.render(adventureTemplate.content, { ...adventureBase })
-      expect(result).not.toBeNull()
-      expect(result).not.toContain('<style_guidance>')
-    })
-
-    it('style_guidance present when styleReview.phrases has items', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
-        styleReview: {
-          phrases: [
-            {
-              phrase: 'dark and stormy',
-              count: 3,
-              frequency: 3,
-              severity: 'low',
-              alternatives: [],
-            },
-          ],
-          overallAssessment: 'Good variety.',
-          reviewedEntryCount: 5,
+    it('InlineImages section present when inlineImageMode true', async () => {
+      const result = await renderTemplate('adventure', {
+        ...promptContext,
+        userSettings: {
+          ...promptContext.userSettings,
+          imageGeneration: { ...promptContext.userSettings.imageGeneration, inlineImageMode: true },
         },
       })
-      expect(result).not.toBeNull()
-      expect(result).toContain('<style_guidance>')
+      expect(result.system).toContain('<InlineImages>')
     })
 
-    it('Recent Story section present in userContent when storyEntries.size > 1', () => {
-      const result = templateEngine.render(adventureTemplate.userContent!, {
-        ...adventureBase,
-        storyEntries: [
-          { type: 'narration', content: 'The torches flickered.' },
-          { type: 'user_action', content: 'I draw my sword.' },
-        ],
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('## Recent Story:')
+    it('InlineImages section absent when inlineImageMode false', async () => {
+      const result = await renderTemplate('adventure', promptContext)
+      expect(result.system).not.toContain('<InlineImages>')
     })
 
-    it('Recent Story section absent in userContent when storyEntries.size <= 1', () => {
-      const result = templateEngine.render(adventureTemplate.userContent!, {
-        ...adventureBase,
-        storyEntries: [{ type: 'user_action', content: 'I draw my sword.' }],
+    it('Recent Story section present when storyEntriesVisibleRaw.size > 1', async () => {
+      const result = await renderTemplate('adventure', promptContext)
+      expect(result.user).toContain('## Recent Story:')
+    })
+
+    it('Recent Story section absent when storyEntriesVisibleRaw.size <= 1', async () => {
+      const result = await renderTemplate('adventure', {
+        ...promptContextMinimal,
+        storyEntriesVisibleRaw: [{ type: 'user_action', content: 'I draw my sword.' }],
       })
-      expect(result).not.toBeNull()
-      expect(result).not.toContain('## Recent Story:')
+      expect(result.user).not.toContain('## Recent Story:')
+    })
+  })
+
+  describe('conditional branches', () => {
+    it('second-person present renders "second person"', async () => {
+      const result = await renderTemplate('adventure', {
+        ...promptContext,
+        pov: 'second',
+        tense: 'present',
+      })
+      expect(result.user).toContain('second person')
+    })
+
+    it('third-person past renders "third person"', async () => {
+      const result = await renderTemplate('adventure', {
+        ...promptContext,
+        pov: 'third',
+        tense: 'past',
+      })
+      expect(result.user).toContain('third person')
+    })
+
+    it('second and third person produce distinct outputs', async () => {
+      const second = await renderTemplate('adventure', {
+        ...promptContext,
+        pov: 'second',
+        tense: 'present',
+      })
+      const third = await renderTemplate('adventure', {
+        ...promptContext,
+        pov: 'third',
+        tense: 'past',
+      })
+      expect(second.user).not.toEqual(third.user)
+    })
+
+    it('third-person system content refers to protagonist by name', async () => {
+      const result = await renderTemplate('adventure', {
+        ...promptContext,
+        pov: 'third',
+        tense: 'present',
+      })
+      expect(result.system).toContain('Refer to the protagonist as "Kael"')
     })
   })
 
   describe('array iteration', () => {
-    it('worldStateCharacters with 2 entries renders both names', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
-        worldStateCharacters: [
-          { name: 'Alice', relationship: '', description: '', traits: [], appearance: [] },
-          { name: 'Bob', relationship: '', description: '', traits: [], appearance: [] },
-        ],
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('Alice')
-      expect(result).toContain('Bob')
+    it('renders all character names with nested visual descriptors', async () => {
+      const result = await renderTemplate('adventure', promptContext)
+      expect(result.system).toContain('Aria')
+      expect(result.system).toContain('Marcus')
+      expect(result.system).toContain('Silver pendant')
+      expect(result.system).toContain('Angular features, bronze skin')
     })
 
-    it('lorebookEntries with 2 items renders both lorebook names', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
-        lorebookEntries: [
-          { name: 'The Shadow Guild', type: 'faction', description: 'A secretive org.' },
-          { name: 'Lord Malachar', type: 'character', description: 'A sinister nobleman.' },
-        ],
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('The Shadow Guild')
-      expect(result).toContain('Lord Malachar')
+    it('renders inventory items with quantity and equipped markers', async () => {
+      const result = await renderTemplate('adventure', promptContext)
+      expect(result.system).toContain('Iron Sword')
+      expect(result.system).toContain('[equipped]')
+      expect(result.system).toContain('Health Potion')
+      expect(result.system).toContain('×3')
     })
 
-    it('storyEntries with 2 items in userContent renders both content strings', () => {
-      const result = templateEngine.render(adventureTemplate.userContent!, {
-        ...adventureBase,
-        storyEntries: [
-          { type: 'narration', content: 'The torches flickered.' },
-          { type: 'user_action', content: 'I draw my sword.' },
-        ],
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('The torches flickered.')
-      expect(result).toContain('I draw my sword.')
+    it('renders lorebook entries grouped by type', async () => {
+      const result = await renderTemplate('adventure', promptContext)
+      expect(result.system).toContain('The Shadow Guild')
+      expect(result.system).toContain('Elder Dragon')
+    })
+
+    it('renders chapter metadata (characters, locations, tone)', async () => {
+      const result = await renderTemplate('adventure', promptContext)
+      expect(result.system).toContain('Kael, Aria')
+      expect(result.system).toContain('Thornwood, River Crossing')
+      expect(result.system).toContain('Tense')
+    })
+
+    it('renders story entries in user content with NARRATIVE labels', async () => {
+      const result = await renderTemplate('adventure', promptContext)
+      // Entries before the last user_action are shown in Recent Story;
+      // entry0 is narration so it gets [NARRATIVE], the last action (entry1)
+      // is shown under Current Action without a label prefix.
+      expect(result.user).toContain('[NARRATIVE]')
+      expect(result.user).toContain('The torches flickered')
+      expect(result.user).toContain('I draw my sword')
     })
   })
 
-  describe('no crash on missing optional vars', () => {
-    it('renders content with only required vars present', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
+  describe('filter behavior', () => {
+    it('| join renders traits as comma-separated', async () => {
+      const result = await renderTemplate('adventure', promptContext)
+      expect(result.system).toContain('brave, perceptive')
+    })
+
+    it('| where filters lorebook entries by type', async () => {
+      const result = await renderTemplate('adventure', promptContext)
+      expect(result.system).toContain('Factions:')
+    })
+  })
+
+  describe('edge cases', () => {
+    it('renders content with only required vars present', async () => {
+      const result = await renderTemplate('adventure', {
         protagonistName: 'Hero',
         pov: 'second',
         tense: 'present',
       })
-      expect(result).not.toBeNull()
+      expect(result.system.length).toBeGreaterThan(0)
     })
 
-    it('renders userContent with minimal vars present', () => {
-      const result = templateEngine.render(adventureTemplate.userContent!, {
+    it('renders userContent with minimal vars present', async () => {
+      const result = await renderTemplate('adventure', {
         protagonistName: 'Hero',
         pov: 'second',
         tense: 'present',
-        storyEntries: [],
+        storyEntriesVisibleRaw: [],
       })
-      expect(result).not.toBeNull()
-    })
-  })
-
-  describe('POV/tense branches', () => {
-    it('second-person-present: userContent contains "second person"', () => {
-      const result = templateEngine.render(adventureTemplate.userContent!, {
-        ...adventureBase,
-        pov: 'second',
-        tense: 'present',
-        storyEntries: [{ type: 'user_action', content: 'I open the door.' }],
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('second person')
+      expect(result.user.length).toBeGreaterThan(0)
     })
 
-    it('third-person-past: userContent contains "third person"', () => {
-      const result = templateEngine.render(adventureTemplate.userContent!, {
-        ...adventureBase,
-        pov: 'third',
-        tense: 'past',
-        protagonistName: 'Kael',
-        storyEntries: [{ type: 'user_action', content: 'I open the door.' }],
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('third person')
-    })
-
-    it('second-person-present and third-person-past renders produce distinct output', () => {
-      const secondPerson = templateEngine.render(adventureTemplate.userContent!, {
-        ...adventureBase,
-        pov: 'second',
-        tense: 'present',
-        storyEntries: [{ type: 'user_action', content: 'I open the door.' }],
-      })
-      const thirdPerson = templateEngine.render(adventureTemplate.userContent!, {
-        ...adventureBase,
-        pov: 'third',
-        tense: 'past',
-        protagonistName: 'Kael',
-        storyEntries: [{ type: 'user_action', content: 'I open the door.' }],
-      })
-      expect(secondPerson).not.toEqual(thirdPerson)
-    })
-  })
-
-  describe('agentic retrieval fields', () => {
-    it('agenticReasoning section absent when not provided', () => {
-      const result = templateEngine.render(adventureTemplate.content, { ...adventureBase })
-      expect(result).not.toBeNull()
-      expect(result).not.toContain('[AGENT CONTEXT]')
-    })
-
-    it('agenticReasoning section present when set', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
-        agenticReasoning: 'Selected for relevance.',
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('Selected for relevance.')
-    })
-
-    it('agenticChapterSummary renders when set', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
-        agenticChapterSummary: 'Protagonist learned about X in chapter 3.',
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('Protagonist learned about X')
-      expect(result).toContain('## Past Story Context')
-    })
-
-    it('agenticSelectedEntries renders heading-per-entry format', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
-        agenticSelectedEntries: [
-          { name: 'Elder Maren', type: 'character', description: 'A wandering sage.' },
-        ],
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('## Elder Maren (character)')
-      expect(result).toContain('A wandering sage.')
-    })
-
-    it('agenticRetrievalContext absent from template (old variable no longer rendered)', () => {
-      const result = templateEngine.render(adventureTemplate.content, {
-        ...adventureBase,
+    it('agenticRetrievalContext absent from template (old variable)', async () => {
+      const result = await renderTemplate('adventure', {
+        ...promptContextMinimal,
         agenticRetrievalContext: 'STALE_STRING',
       })
-      expect(result).not.toBeNull()
-      expect(result).not.toContain('STALE_STRING')
+      expect(result.system).not.toContain('STALE_STRING')
     })
   })
 })
 
 // ---------------------------------------------------------------------------
-// Creative-writing template
+// creative-writing
 // ---------------------------------------------------------------------------
 
-describe('creative-writing template', () => {
+describe('creative-writing', () => {
   describe('variable injection', () => {
-    it('renders protagonistName in content', () => {
-      const result = templateEngine.render(creativeWritingTemplate.content, {
-        ...adventureBase,
-        protagonistName: 'Kael',
+    testVariableInjection(creativeWritingManifest, promptContext)
+  })
+
+  describe('conditional sections', () => {
+    it('Story Context present when genre set', async () => {
+      const result = await renderTemplate('creative-writing', promptContext)
+      expect(result.system).toContain('# Story Context')
+    })
+
+    it('Story Context absent when all empty', async () => {
+      const result = await renderTemplate('creative-writing', {
+        ...promptContextMinimal,
+        themes: '',
       })
-      expect(result).not.toBeNull()
-      expect(result).toContain('Kael')
+      expect(result.system).not.toContain('# Story Context')
+    })
+
+    it('lorebook section present when lorebookEntries has items', async () => {
+      const result = await renderTemplate('creative-writing', promptContext)
+      expect(result.system).toContain('(CANONICAL')
+    })
+
+    it('lorebook section absent when empty', async () => {
+      const result = await renderTemplate('creative-writing', promptContextMinimal)
+      expect(result.system).not.toContain('(CANONICAL')
     })
   })
 
-  describe('conditional suppression', () => {
-    it('Story Context absent when genre, tone, settingDescription, themes all empty', () => {
-      const result = templateEngine.render(creativeWritingTemplate.content, { ...adventureBase })
-      expect(result).not.toBeNull()
-      expect(result).not.toContain('# Story Context')
+  describe('conditional branches', () => {
+    it('first-person present renders correct style instruction', async () => {
+      const result = await renderTemplate('creative-writing', {
+        ...promptContext,
+        pov: 'first',
+        tense: 'present',
+      })
+      expect(result.system).toContain('PRESENT TENSE, FIRST PERSON')
     })
 
-    it('Story Context present when genre is set', () => {
-      const result = templateEngine.render(creativeWritingTemplate.content, {
-        ...adventureBase,
-        genre: 'Literary Fiction',
+    it('third-person past renders correct style instruction', async () => {
+      const result = await renderTemplate('creative-writing', {
+        ...promptContext,
+        pov: 'third',
+        tense: 'past',
       })
-      expect(result).not.toBeNull()
-      expect(result).toContain('# Story Context')
+      expect(result.system).toContain('PAST TENSE, THIRD PERSON')
     })
 
-    it('lorebook section absent when lorebookEntries is empty', () => {
-      const result = templateEngine.render(creativeWritingTemplate.content, {
-        ...adventureBase,
-        lorebookEntries: [],
-      })
-      expect(result).not.toBeNull()
-      // The dynamic lorebook section starts with this canonical disclaimer; absent when empty
-      expect(result).not.toContain('(CANONICAL')
-    })
-
-    it('lorebook section present when lorebookEntries has 1 item', () => {
-      const result = templateEngine.render(creativeWritingTemplate.content, {
-        ...adventureBase,
-        lorebookEntries: [
-          { name: 'Elder Dragon', type: 'character', description: 'An ancient beast.' },
-        ],
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('(CANONICAL')
+    it('all 6 pov/tense combos produce distinct system output', async () => {
+      const combos = [
+        { pov: 'first', tense: 'present' },
+        { pov: 'first', tense: 'past' },
+        { pov: 'second', tense: 'present' },
+        { pov: 'second', tense: 'past' },
+        { pov: 'third', tense: 'present' },
+        { pov: 'third', tense: 'past' },
+      ]
+      const results = await Promise.all(
+        combos.map(({ pov, tense }) =>
+          renderTemplate('creative-writing', { ...promptContext, pov, tense }),
+        ),
+      )
+      const systemOutputs = results.map((r) => r.system)
+      const unique = new Set(systemOutputs)
+      expect(unique.size).toBe(6)
     })
   })
 
   describe('array iteration', () => {
-    it('worldStateCharacters with 2 entries renders both names', () => {
-      const result = templateEngine.render(creativeWritingTemplate.content, {
-        ...adventureBase,
-        worldStateCharacters: [
-          { name: 'Alice', relationship: '', description: '', traits: [], appearance: [] },
-          { name: 'Bob', relationship: '', description: '', traits: [], appearance: [] },
-        ],
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('Alice')
-      expect(result).toContain('Bob')
+    it('renders all character names', async () => {
+      const result = await renderTemplate('creative-writing', promptContext)
+      expect(result.system).toContain('Aria')
+      expect(result.system).toContain('Marcus')
     })
   })
 
-  describe('no crash on missing optional vars', () => {
-    it('renders content with only required vars present', () => {
-      const result = templateEngine.render(creativeWritingTemplate.content, {
+  describe('edge cases', () => {
+    it('renders with only required vars', async () => {
+      const result = await renderTemplate('creative-writing', {
         protagonistName: 'Hero',
         pov: 'second',
         tense: 'present',
       })
-      expect(result).not.toBeNull()
-    })
-  })
-
-  describe('agentic retrieval fields', () => {
-    it('agenticReasoning section absent when not provided', () => {
-      const result = templateEngine.render(creativeWritingTemplate.content, { ...adventureBase })
-      expect(result).not.toBeNull()
-      expect(result).not.toContain('[AGENT CONTEXT]')
+      expect(result.system.length).toBeGreaterThan(0)
     })
 
-    it('agenticReasoning section present when set', () => {
-      const result = templateEngine.render(creativeWritingTemplate.content, {
-        ...adventureBase,
-        agenticReasoning: 'Selected for relevance.',
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('Selected for relevance.')
-    })
-
-    it('agenticChapterSummary renders when set', () => {
-      const result = templateEngine.render(creativeWritingTemplate.content, {
-        ...adventureBase,
-        agenticChapterSummary: 'Protagonist learned about X in chapter 3.',
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('Protagonist learned about X')
-      expect(result).toContain('## Past Story Context')
-    })
-
-    it('agenticSelectedEntries renders heading-per-entry format', () => {
-      const result = templateEngine.render(creativeWritingTemplate.content, {
-        ...adventureBase,
-        agenticSelectedEntries: [
-          { name: 'Elder Maren', type: 'character', description: 'A wandering sage.' },
-        ],
-      })
-      expect(result).not.toBeNull()
-      expect(result).toContain('## Elder Maren (character)')
-      expect(result).toContain('A wandering sage.')
-    })
-
-    it('agenticRetrievalContext absent from template (old variable no longer rendered)', () => {
-      const result = templateEngine.render(creativeWritingTemplate.content, {
-        ...adventureBase,
+    it('agenticRetrievalContext absent from template (old variable)', async () => {
+      const result = await renderTemplate('creative-writing', {
+        ...promptContextMinimal,
         agenticRetrievalContext: 'STALE_STRING',
       })
-      expect(result).not.toBeNull()
-      expect(result).not.toContain('STALE_STRING')
+      expect(result.system).not.toContain('STALE_STRING')
     })
   })
+})
+
+// ---------------------------------------------------------------------------
+// manifest coverage
+// ---------------------------------------------------------------------------
+
+describe('manifest coverage', () => {
+  testManifestCoverage(adventureManifest)
+  testManifestCoverage(creativeWritingManifest)
 })

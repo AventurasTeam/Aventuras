@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { characterVault } from '$lib/stores/characterVault.svelte'
@@ -73,15 +73,15 @@
   let editRuntimeVars = $state<RuntimeVarsMap>({})
 
   $effect(() => {
-    if (story.currentStory) {
+    if (story.isLoaded) {
       loadRuntimeVarDefs()
     }
   })
 
   async function loadRuntimeVarDefs() {
-    if (!story.currentStory) return
+    if (!story.isLoaded) return
     try {
-      const packId = await database.getStoryPackId(story.currentStory.id)
+      const packId = await database.getStoryPackId(story.id!)
       if (packId) {
         runtimeVarDefs = await database.getRuntimeVariablesByEntityType(packId, 'character')
       } else {
@@ -114,7 +114,7 @@
   }
 
   const currentProtagonistName = $derived.by(
-    () => story.characters.find((c) => c.relationship === 'self')?.name ?? 'current',
+    () => story.character.characters.find((c) => c.relationship === 'self')?.name ?? 'current',
   )
 
   import type { VisualDescriptors } from '$lib/types'
@@ -178,7 +178,7 @@
 
   async function addCharacter() {
     if (!newName.trim()) return
-    await story.addCharacter(
+    await story.character.addCharacter(
       newName.trim(),
       newDescription.trim() || undefined,
       newRelationship.trim() || undefined,
@@ -190,14 +190,14 @@
   }
 
   async function saveCharacterToVault(character: Character) {
-    if (!story.currentStory) return
+    if (!story.isLoaded) return
 
     // Ensure vault is loaded
     if (!characterVault.isLoaded) {
       await characterVault.load()
     }
 
-    await characterVault.saveFromStory(character, story.currentStory.id)
+    await characterVault.saveFromStory(character, story.id!)
 
     savedToVaultId = character.id
     setTimeout(() => (savedToVaultId = null), 2000)
@@ -255,7 +255,7 @@
         }
       : character.metadata
 
-    await story.updateCharacter(character.id, {
+    await story.character.updateCharacter(character.id, {
       name,
       description: editDescription.trim() || null,
       relationship: character.relationship === 'self' ? 'self' : relationship || null,
@@ -270,7 +270,7 @@
   }
 
   async function deleteCharacter(character: Character) {
-    await story.deleteCharacter(character.id)
+    await story.character.deleteCharacter(character.id)
   }
 
   function beginSwap(character: Character) {
@@ -293,7 +293,7 @@
         swapError = 'Enter a custom label for the previous protagonist.'
         return
       }
-      await story.setProtagonist(character.id, label)
+      await story.character.setProtagonist(character.id, label)
       cancelSwap()
     } catch (error) {
       swapError = error instanceof Error ? error.message : 'Failed to swap protagonists.'
@@ -419,13 +419,8 @@
       // Build the portrait generation prompt using ContextBuilder
       const ctx = new ContextBuilder()
       ctx.add({
-        mode: 'adventure',
-        pov: 'second',
-        tense: 'present',
-        protagonistName: '',
         imageStylePrompt: stylePrompt,
         visualDescriptors: stringToDescriptors(editVisualDescriptors),
-        characterName: editName || character.name,
       })
       const { system: portraitPrompt } = await ctx.render('image-portrait-generation')
 
@@ -516,7 +511,7 @@
   {/if}
 
   <!-- Empty State -->
-  {#if story.characters.length === 0}
+  {#if story.character.characters.length === 0}
     <div
       class="border-border bg-muted/20 flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center"
     >
@@ -536,7 +531,7 @@
   {:else}
     <!-- Character List -->
     <div class="flex flex-col gap-2">
-      {#each story.characters as character (character.id)}
+      {#each story.character.characters as character (character.id)}
         {@const statusConfig = getStatusConfig(character.status)}
         {@const isProtagonist = character.relationship === 'self'}
         {@const isCollapsed = ui.isEntityCollapsed(character.id)}

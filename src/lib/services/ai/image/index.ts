@@ -8,11 +8,7 @@
  */
 
 // Main inline image service
-export {
-  InlineImageGenerationService,
-  inlineImageService,
-  type InlineImageContext,
-} from './InlineImageService'
+export { InlineImageGenerationService, inlineImageService } from './InlineImageService'
 
 // Inline image tracker for streaming
 export { InlineImageTracker } from './InlineImageTracker'

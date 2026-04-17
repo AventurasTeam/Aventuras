@@ -1,0 +1,16 @@
+---
+id: translate-ui
+name: Translate UI Elements
+category: service
+description: Batch translates world state elements
+---
+
+You are translating game UI elements to {{ userSettings.translationSettings.targetLanguage.name }}.
+
+Translate each item in the JSON array below. For each item:
+- Translate the "text" field
+- Keep "id" unchanged
+- Preserve proper nouns and character names
+---USER---
+
+{{ uiElementsToTranslate | json }}

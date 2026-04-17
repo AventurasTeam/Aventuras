@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { BookOpen, Volume2, Pencil, Trash2 } from 'lucide-svelte'
   import { parseMarkdown } from '$lib/utils/markdown'
   import ReasoningBlock from './ReasoningBlock.svelte'
@@ -14,7 +14,7 @@
   let isVisualProse = $derived(ui.isVisualProseStreaming())
 
   // Check if inline image mode is enabled
-  let inlineImageMode = $derived(story.currentStory?.settings?.imageGenerationMode === 'inline')
+  let inlineImageMode = $derived(story.settings.imageGenerationMode === 'inline')
 
   // For Visual Prose, content is already wrapped HTML; for regular, parse as markdown
   // Also process <pic> tags to show generating placeholders when inline mode is enabled
@@ -47,7 +47,8 @@
 
 <!-- Streaming content container -->
 <div
-  class="border-border border-l-muted-foreground/40 animate-fade-in rounded-lg border border-l-4 px-4 pt-3 pb-4 shadow-sm {story.currentBgImage
+  class="border-border border-l-muted-foreground/40 animate-fade-in rounded-lg border border-l-4 px-4 pt-3 pb-4 shadow-sm {story
+    .image.currentBgImage
     ? 'bg-card/60 backdrop-blur-md'
     : 'bg-card'}"
 >

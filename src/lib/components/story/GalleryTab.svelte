@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { database } from '$lib/services/database'
   import { imageExportService } from '$lib/services/imageExport'
@@ -46,7 +46,7 @@
   }
 
   async function refreshImages() {
-    const storyId = story.currentStory?.id
+    const storyId = story.id
     if (!storyId) return
 
     ui.clearGalleryImages(storyId)
@@ -69,7 +69,7 @@
   }
 
   $effect(() => {
-    const storyId = story.currentStory?.id
+    const storyId = story.id
     resetSelection() // Always reset selection on story change
 
     if (storyId) {
@@ -107,14 +107,14 @@
   }
 
   async function handleSaveImages() {
-    if (!story.currentStory || images.length === 0) return
+    if (!story.isLoaded || images.length === 0) return
 
     const imagesToSave = selectedImageIds.size || images.length
 
     isSaving = true
     try {
       const success = await imageExportService.exportImages(
-        story.currentStory.title,
+        story.title!,
         images,
         selectedImageIds.size > 0 ? selectedImageIds : undefined,
       )
@@ -273,7 +273,7 @@
             variant="ghost"
             size="icon"
             onclick={refreshImages}
-            disabled={isLoading || !story.currentStory}
+            disabled={isLoading || !story.isLoaded}
             title="Refresh gallery"
             class="h-8 w-8"
           >

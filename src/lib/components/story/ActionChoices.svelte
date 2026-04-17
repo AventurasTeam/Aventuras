@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { Sword, MessageCircle, Search, MapPin, Loader2 } from 'lucide-svelte'
   import type { ActionChoice } from '$lib/services/ai/sdk/schemas/actionchoices'
@@ -24,7 +24,7 @@
 
   function handleChoiceClick(choice: ActionChoice) {
     // Set the pending action choice - ActionInput will pick this up and submit
-    ui.setPendingActionChoice(choice.text, story.currentStory?.id)
+    ui.setPendingActionChoice(choice.text, story.id ?? undefined)
   }
 
   // Key bindings for quick selection (1-4)
@@ -56,7 +56,8 @@
   </div>
 {:else if ui.actionChoices.length > 0}
   <div
-    class="border-border border-l-muted-foreground/20 mt-3 space-y-2 rounded-lg border border-l-4 p-3 shadow-sm sm:mt-4 sm:p-4 {story.currentBgImage
+    class="border-border border-l-muted-foreground/20 mt-3 space-y-2 rounded-lg border border-l-4 p-3 shadow-sm sm:mt-4 sm:p-4 {story
+      .image.currentBgImage
       ? 'bg-card/60 backdrop-blur-md'
       : 'bg-card'}"
   >

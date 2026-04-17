@@ -290,7 +290,6 @@ class LorebookVaultStore {
       (current, total) => {
         // Update progress logic could go here if we tracked it in metadata
       },
-      'adventure',
     )
 
     const vaultEntries = entries.map((e) => {
@@ -386,7 +385,6 @@ class LorebookVaultStore {
       (current, total) => {
         // Update progress logic could go here if we tracked it in metadata
       },
-      'adventure',
     )
 
     const vaultEntries = entries.map((e) => {

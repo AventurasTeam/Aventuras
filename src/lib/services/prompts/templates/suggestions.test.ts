@@ -1,87 +1,109 @@
-import { describe, it, expect } from 'vitest'
-import { templateEngine } from '$lib/services/templates/engine'
-import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const template = PROMPT_TEMPLATES.find((t) => t.id === 'suggestions')!
+const dbMockRef = vi.hoisted(() => ({ current: null as any }))
 
-const suggestionsBase = {
-  storyEntries: [],
-  lorebookEntries: [],
-  activeThreads: '',
-  genre: '',
-}
+vi.mock('$lib/services/database', () => ({
+  get database() {
+    return dbMockRef.current
+  },
+}))
 
-describe('suggestions template', () => {
+import {
+  renderTemplate,
+  createTemplateTestMock,
+  testVariableInjection,
+  testManifestCoverage,
+} from '$test/helpers/templateTestHelper'
+import { promptContext, promptContextMinimal } from '$test/fixtures/promptContext'
+import { suggestionsManifest } from '$test/fixtures/templateManifests'
+
+beforeEach(() => {
+  dbMockRef.current = createTemplateTestMock()
+})
+
+describe('suggestions', () => {
   describe('variable injection', () => {
-    it('renders genre in userContent', () => {
-      const result = templateEngine.render(template.userContent!, {
-        ...suggestionsBase,
-        genre: 'Fantasy',
-      })
-      expect(result).toContain('Fantasy')
-    })
-
-    it('renders activeThreads in userContent', () => {
-      const result = templateEngine.render(template.userContent!, {
-        ...suggestionsBase,
-        activeThreads: 'Quest for the artifact',
-      })
-      expect(result).toContain('Quest for the artifact')
-    })
+    testVariableInjection(suggestionsManifest, promptContext)
   })
 
-  describe('conditional suppression', () => {
-    it('lorebook section absent when lorebookEntries empty', () => {
-      const result = templateEngine.render(template.userContent!, { ...suggestionsBase })
-      expect(result).not.toContain('## Lorebook/World Elements')
+  describe('conditional sections', () => {
+    it('lorebook section absent when lorebookEntries empty', async () => {
+      const result = await renderTemplate('suggestions', promptContextMinimal)
+      expect(result.user).not.toContain('## Lorebook/World Elements')
     })
 
-    it('lorebook section present when lorebookEntries has items', () => {
-      const result = templateEngine.render(template.userContent!, {
-        ...suggestionsBase,
-        lorebookEntries: [
-          { name: 'Dragon', type: 'creature', description: 'Fire breather', tier: 1 },
-        ],
-      })
-      expect(result).toContain('## Lorebook/World Elements')
+    it('lorebook section present when lorebookEntries has items', async () => {
+      const result = await renderTemplate('suggestions', promptContext)
+      expect(result.user).toContain('## Lorebook/World Elements')
+    })
+
+    it('active threads section present when storyBeats has active/pending items', async () => {
+      const result = await renderTemplate('suggestions', promptContext)
+      expect(result.user).toContain('Find the Lost Temple')
+    })
+
+    it('active threads absent when storyBeats empty', async () => {
+      const result = await renderTemplate('suggestions', promptContextMinimal)
+      expect(result.user).not.toContain('Find the Lost Temple')
     })
   })
 
   describe('array iteration', () => {
-    it('storyEntries loop renders 2 entries', () => {
-      const result = templateEngine.render(template.userContent!, {
-        ...suggestionsBase,
-        storyEntries: [
-          { type: 'narrative', content: 'The sun rose.' },
-          { type: 'user_action', content: 'I ran.' },
-        ],
-      })
-      expect(result).toContain('The sun rose.')
-      expect(result).toContain('I ran.')
+    it('renders recent story entries (sliced to last 5)', async () => {
+      const result = await renderTemplate('suggestions', promptContext)
+      expect(result.user).toContain('[DIRECTION]')
+      expect(result.user).toContain('[NARRATIVE]')
     })
 
-    it('lorebookEntries loop renders 2 entries when present', () => {
-      const result = templateEngine.render(template.userContent!, {
-        ...suggestionsBase,
-        lorebookEntries: [
-          { name: 'The Forest', type: 'location', description: 'Dense and dark.', tier: 1 },
-          { name: 'Elder Mage', type: 'character', description: 'Ancient and wise.', tier: 2 },
-        ],
-      })
-      expect(result).toContain('The Forest')
-      expect(result).toContain('Elder Mage')
+    it('renders lorebook entry names, types, descriptions', async () => {
+      const result = await renderTemplate('suggestions', promptContext)
+      expect(result.user).toContain('The Shadow Guild')
+      expect(result.user).toContain('faction')
     })
   })
 
-  describe('no crash on missing optional vars', () => {
-    it('userContent renders without crash when all optional vars absent', () => {
-      const result = templateEngine.render(template.userContent!, {})
-      expect(result).not.toBeNull()
+  describe('filter behavior', () => {
+    it('| where filters storyBeats to active/pending only', async () => {
+      const result = await renderTemplate('suggestions', promptContext)
+      expect(result.user).not.toContain('Defeated the Wolves')
     })
 
-    it('content renders without crash', () => {
-      const result = templateEngine.render(template.content, {})
-      expect(result).not.toBeNull()
+    it('| slice limits lorebook entries to maxForSuggestions', async () => {
+      const manyEntries = Array.from({ length: 20 }, (_, i) => ({
+        name: `Entry${i}`,
+        type: 'concept',
+        description: `Desc${i}`,
+      }))
+      const result = await renderTemplate('suggestions', {
+        ...promptContext,
+        retrievalResult: {
+          ...promptContext.retrievalResult,
+          lorebookEntries: manyEntries,
+        },
+      })
+      expect(result.user).toContain('Entry0')
+      expect(result.user).toContain('Entry4')
+      expect(result.user).not.toContain('Entry5')
     })
   })
+
+  describe('edge cases', () => {
+    it('renders without crash with empty context', async () => {
+      const result = await renderTemplate('suggestions', {})
+      expect(result.system.length).toBeGreaterThan(0)
+    })
+
+    it('does not contain [object Object]', async () => {
+      const result = await renderTemplate('suggestions', promptContext)
+      expect(result.user).not.toContain('[object Object]')
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// manifest coverage
+// ---------------------------------------------------------------------------
+
+describe('manifest coverage', () => {
+  testManifestCoverage(suggestionsManifest)
 })

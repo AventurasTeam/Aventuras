@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { exportService } from '$lib/services/export'
   import { ask } from '@tauri-apps/plugin-dialog'

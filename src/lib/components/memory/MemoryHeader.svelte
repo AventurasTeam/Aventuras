@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { Plus, Settings } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
@@ -15,11 +15,11 @@
 
   let { onCreateChapter }: Props = $props()
 
-  const tokensOutsideBuffer = $derived(story.tokensOutsideBuffer)
-  const threshold = $derived(story.memoryConfig.tokenThreshold)
-  const autoSummarize = $derived(story.memoryConfig.autoSummarize)
-  const messagesSinceLastChapter = $derived(story.messagesSinceLastChapter)
-  const bufferSize = $derived(story.memoryConfig.chapterBuffer)
+  const tokensOutsideBuffer = $derived(story.generationContext.tokensOutsideBuffer)
+  const threshold = $derived(story.settings.memoryConfig.tokenThreshold)
+  const autoSummarize = $derived(story.settings.memoryConfig.autoSummarize)
+  const messagesSinceLastChapter = $derived(story.chapter.messagesSinceLastChapter)
+  const bufferSize = $derived(story.settings.memoryConfig.chapterBuffer)
 
   const percentage = $derived(
     threshold > 0 ? Math.min(100, Math.round((tokensOutsideBuffer / threshold) * 100)) : 0,
@@ -32,7 +32,7 @@
   }
 
   async function toggleAutoSummarize() {
-    await story.updateMemoryConfig({ autoSummarize: !autoSummarize })
+    await story.settings.updateMemoryConfig({ autoSummarize: !autoSummarize })
   }
 
   function handleCreateChapter() {

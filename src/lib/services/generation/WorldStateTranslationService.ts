@@ -6,6 +6,10 @@
 import type { Character, Location, Item, StoryBeat } from '$lib/types'
 import type { UITranslationItem } from '$lib/services/ai/utils/TranslationService'
 import { hasDescriptors, descriptorsToString } from '$lib/utils/visualDescriptors'
+import { story } from '$lib/stores/story/index.svelte'
+import { aiService } from '../ai'
+import { database } from '../database'
+import { settings } from '$lib/stores/settings.svelte'
 
 function log(...args: unknown[]) {
   console.log('[WorldStateTranslationService]', ...args)
@@ -33,28 +37,6 @@ export interface WorldStateEntities {
   storyBeats: StoryBeat[]
 }
 
-/** Callbacks for persisting translations. */
-export interface WorldStateTranslationCallbacks {
-  updateCharacter: (id: string, data: Record<string, string | string[] | null>) => Promise<void>
-  updateLocation: (id: string, data: Record<string, string | null>) => Promise<void>
-  updateItem: (id: string, data: Record<string, string | null>) => Promise<void>
-  updateStoryBeat: (id: string, data: Record<string, string | null>) => Promise<void>
-  refreshWorldState: () => Promise<void>
-}
-
-export interface WorldStateTranslationDependencies {
-  translateUIElements: (
-    items: UITranslationItem[],
-    targetLanguage: string,
-  ) => Promise<UITranslationItem[]>
-}
-
-export interface WorldStateTranslationInput {
-  classificationResult: ClassificationNewEntities
-  worldState: WorldStateEntities
-  targetLanguage: string
-}
-
 export interface WorldStateTranslationResult {
   translatedCount: number
 }
@@ -68,13 +50,23 @@ interface TranslationItem extends UITranslationItem {
 }
 
 export class WorldStateTranslationService {
-  constructor(private deps: WorldStateTranslationDependencies) {}
+  async translateEntities(): Promise<WorldStateTranslationResult> {
+    const targetLanguage = settings.translationSettings.targetLanguage
+    const result = story.generationContext.classificationResult?.classificationResult
+    const classificationResult = {
+      newCharacters: result?.entryUpdates.newCharacters || [],
+      newLocations: result?.entryUpdates.newLocations || [],
+      newItems: result?.entryUpdates.newItems || [],
+      newStoryBeats: result?.entryUpdates.newStoryBeats || [],
+    }
 
-  async translateEntities(
-    input: WorldStateTranslationInput,
-    callbacks: WorldStateTranslationCallbacks,
-  ): Promise<WorldStateTranslationResult> {
-    const { classificationResult, worldState, targetLanguage } = input
+    const worldState = {
+      characters: story.character.characters,
+      locations: story.location.locations,
+      items: story.item.items,
+      storyBeats: story.storyBeat.storyBeats,
+    }
+
     const items: TranslationItem[] = []
 
     // Collect character fields
@@ -189,10 +181,12 @@ export class WorldStateTranslationService {
     if (items.length === 0) return { translatedCount: 0 }
 
     log('Translating world state elements', { count: items.length, targetLanguage })
-    const translated = await this.deps.translateUIElements(
-      items.map(({ id, text, type }) => ({ id, text, type })),
-      targetLanguage,
-    )
+    story.generationContext.uiElementsToTranslate = items.map(({ id, text, type }) => ({
+      id,
+      text,
+      type,
+    }))
+    const translated = await aiService.translateUIElements()
 
     // Apply translations
     for (const t of translated) {
@@ -211,16 +205,16 @@ export class WorldStateTranslationService {
         translationLanguage: targetLanguage,
       }
 
-      if (orig.entityType === 'character') await callbacks.updateCharacter(entityId, data)
+      if (orig.entityType === 'character') await database.updateCharacter(entityId, data)
       else if (orig.entityType === 'location')
-        await callbacks.updateLocation(entityId, data as Record<string, string | null>)
+        await database.updateLocation(entityId, data as Record<string, string | null>)
       else if (orig.entityType === 'item')
-        await callbacks.updateItem(entityId, data as Record<string, string | null>)
+        await database.updateItem(entityId, data as Record<string, string | null>)
       else if (orig.entityType === 'storyBeat')
-        await callbacks.updateStoryBeat(entityId, data as Record<string, string | null>)
+        await database.updateStoryBeat(entityId, data as Record<string, string | null>)
     }
 
-    await callbacks.refreshWorldState()
+    await story.refreshWorldState()
     log('World state elements translated', { count: translated.length })
     return { translatedCount: translated.length }
   }

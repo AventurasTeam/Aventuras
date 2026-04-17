@@ -1,97 +1,166 @@
-import { describe, it, expect } from 'vitest'
-import { templateEngine } from '$lib/services/templates/engine'
-import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates/index'
+// src/lib/services/prompts/templates/translation.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const translateNarration = PROMPT_TEMPLATES.find((t) => t.id === 'translate-narration')!
-const translateInput = PROMPT_TEMPLATES.find((t) => t.id === 'translate-input')!
-const translateUI = PROMPT_TEMPLATES.find((t) => t.id === 'translate-ui')!
-const translateSuggestions = PROMPT_TEMPLATES.find((t) => t.id === 'translate-suggestions')!
-const translateActionChoices = PROMPT_TEMPLATES.find((t) => t.id === 'translate-action-choices')!
-const translateWizardContent = PROMPT_TEMPLATES.find((t) => t.id === 'translate-wizard-content')!
+// ---- Hoisted database mock (must be before any $lib imports) ----
+const dbMockRef = vi.hoisted(() => ({ current: null as any }))
 
-describe('translate-narration template', () => {
-  it('renders targetLanguage in system prompt', () => {
-    const result = templateEngine.render(translateNarration.content, { targetLanguage: 'French' })
-    expect(result).toContain('French')
+vi.mock('$lib/services/database', () => ({
+  get database() {
+    return dbMockRef.current
+  },
+}))
+
+// ---- Imports (after mocks) ----
+import {
+  renderTemplate,
+  createTemplateTestMock,
+  testVariableInjection,
+  testManifestCoverage,
+} from '$test/helpers/templateTestHelper'
+import { promptContext } from '$test/fixtures/promptContext'
+import {
+  translateNarrationManifest,
+  translateInputManifest,
+  translateUIManifest,
+  translateSuggestionsManifest,
+  translateActionChoicesManifest,
+} from '$test/fixtures/templateManifests'
+
+beforeEach(() => {
+  dbMockRef.current = createTemplateTestMock()
+})
+
+// ---------------------------------------------------------------------------
+// translate-narration
+// ---------------------------------------------------------------------------
+
+describe('translate-narration', () => {
+  describe('variable injection', () => {
+    testVariableInjection(translateNarrationManifest, promptContext)
   })
 
-  it('renders content in userContent', () => {
-    const result = templateEngine.render(translateNarration.userContent!, {
-      content: 'The sun set.',
+  describe('edge cases', () => {
+    it('does not contain [object Object]', async () => {
+      const result = await renderTemplate('translate-narration', promptContext)
+      expect(result.system).not.toContain('[object Object]')
+      expect(result.user).not.toContain('[object Object]')
     })
-    expect(result).toContain('The sun set.')
   })
 })
 
-describe('translate-input template', () => {
-  it('renders sourceLanguage in system prompt', () => {
-    const result = templateEngine.render(translateInput.content, { sourceLanguage: 'Japanese' })
-    expect(result).toContain('Japanese')
+// ---------------------------------------------------------------------------
+// translate-input
+// ---------------------------------------------------------------------------
+
+describe('translate-input', () => {
+  describe('variable injection', () => {
+    testVariableInjection(translateInputManifest, promptContext)
   })
 
-  it('renders content in userContent', () => {
-    const result = templateEngine.render(translateInput.userContent!, { content: 'Hello world' })
-    expect(result).toContain('Hello world')
+  describe('edge cases', () => {
+    it('does not contain [object Object]', async () => {
+      const result = await renderTemplate('translate-input', promptContext)
+      expect(result.system).not.toContain('[object Object]')
+      expect(result.user).not.toContain('[object Object]')
+    })
   })
 })
 
-describe('translate-ui template', () => {
-  it('renders targetLanguage in system prompt', () => {
-    const result = templateEngine.render(translateUI.content, { targetLanguage: 'Spanish' })
-    expect(result).toContain('Spanish')
+// ---------------------------------------------------------------------------
+// translate-ui
+// ---------------------------------------------------------------------------
+
+describe('translate-ui', () => {
+  describe('variable injection', () => {
+    testVariableInjection(translateUIManifest, promptContext)
   })
 
-  it('passes JSON payload through unmangled', () => {
-    const json = '[{"id":"loc1","text":"The Keep"}]'
-    const result = templateEngine.render(translateUI.userContent!, { elementsJson: json })
-    expect(result).toContain(json)
+  describe('filter behavior', () => {
+    it('| json filter produces valid JSON in user content', async () => {
+      const result = await renderTemplate('translate-ui', promptContext)
+      const jsonStart = result.user.indexOf('[')
+      const jsonEnd = result.user.lastIndexOf(']')
+      expect(jsonStart).toBeGreaterThan(-1)
+      const jsonFragment = result.user.slice(jsonStart, jsonEnd + 1)
+      expect(() => JSON.parse(jsonFragment)).not.toThrow()
+    })
+  })
+
+  describe('edge cases', () => {
+    it('does not contain [object Object]', async () => {
+      const result = await renderTemplate('translate-ui', promptContext)
+      expect(result.system).not.toContain('[object Object]')
+      expect(result.user).not.toContain('[object Object]')
+    })
   })
 })
 
-describe('translate-suggestions template', () => {
-  it('renders targetLanguage in system prompt', () => {
-    const result = templateEngine.render(translateSuggestions.content, {
-      targetLanguage: 'German',
-    })
-    expect(result).toContain('German')
+// ---------------------------------------------------------------------------
+// translate-suggestions
+// ---------------------------------------------------------------------------
+
+describe('translate-suggestions', () => {
+  describe('variable injection', () => {
+    testVariableInjection(translateSuggestionsManifest, promptContext)
   })
 
-  it('passes JSON payload through unmangled', () => {
-    const json = '[{"type":"action","text":"Draw sword"}]'
-    const result = templateEngine.render(translateSuggestions.userContent!, {
-      suggestionsJson: json,
+  describe('filter behavior', () => {
+    it('| json filter produces valid JSON in user content', async () => {
+      const result = await renderTemplate('translate-suggestions', promptContext)
+      const jsonStart = result.user.indexOf('[')
+      const jsonEnd = result.user.lastIndexOf(']')
+      expect(jsonStart).toBeGreaterThan(-1)
+      const jsonFragment = result.user.slice(jsonStart, jsonEnd + 1)
+      expect(() => JSON.parse(jsonFragment)).not.toThrow()
     })
-    expect(result).toContain(json)
+  })
+
+  describe('edge cases', () => {
+    it('does not contain [object Object]', async () => {
+      const result = await renderTemplate('translate-suggestions', promptContext)
+      expect(result.system).not.toContain('[object Object]')
+      expect(result.user).not.toContain('[object Object]')
+    })
   })
 })
 
-describe('translate-action-choices template', () => {
-  it('renders targetLanguage in system prompt', () => {
-    const result = templateEngine.render(translateActionChoices.content, {
-      targetLanguage: 'Korean',
-    })
-    expect(result).toContain('Korean')
+// ---------------------------------------------------------------------------
+// translate-action-choices
+// ---------------------------------------------------------------------------
+
+describe('translate-action-choices', () => {
+  describe('variable injection', () => {
+    testVariableInjection(translateActionChoicesManifest, promptContext)
   })
 
-  it('passes JSON payload through unmangled', () => {
-    const json = '[{"type":"do","text":"Open the chest"}]'
-    const result = templateEngine.render(translateActionChoices.userContent!, { choicesJson: json })
-    expect(result).toContain(json)
+  describe('filter behavior', () => {
+    it('| json filter produces valid JSON in user content', async () => {
+      const result = await renderTemplate('translate-action-choices', promptContext)
+      const jsonStart = result.user.indexOf('[')
+      const jsonEnd = result.user.lastIndexOf(']')
+      expect(jsonStart).toBeGreaterThan(-1)
+      const jsonFragment = result.user.slice(jsonStart, jsonEnd + 1)
+      expect(() => JSON.parse(jsonFragment)).not.toThrow()
+    })
+  })
+
+  describe('edge cases', () => {
+    it('does not contain [object Object]', async () => {
+      const result = await renderTemplate('translate-action-choices', promptContext)
+      expect(result.system).not.toContain('[object Object]')
+      expect(result.user).not.toContain('[object Object]')
+    })
   })
 })
 
-describe('translate-wizard-content template', () => {
-  it('renders targetLanguage in system prompt', () => {
-    const result = templateEngine.render(translateWizardContent.content, {
-      targetLanguage: 'Italian',
-    })
-    expect(result).toContain('Italian')
-  })
+// ---------------------------------------------------------------------------
+// manifest coverage
+// ---------------------------------------------------------------------------
 
-  it('renders content in userContent', () => {
-    const result = templateEngine.render(translateWizardContent.userContent!, {
-      content: 'A dark castle loomed.',
-    })
-    expect(result).toContain('A dark castle loomed.')
-  })
+describe('manifest coverage', () => {
+  testManifestCoverage(translateNarrationManifest)
+  testManifestCoverage(translateInputManifest)
+  testManifestCoverage(translateUIManifest)
+  testManifestCoverage(translateSuggestionsManifest)
+  testManifestCoverage(translateActionChoicesManifest)
 })

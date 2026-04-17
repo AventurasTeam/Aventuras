@@ -1,4 +1,4 @@
-import { story } from '$lib/stores/story.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 import { ui } from '$lib/stores/ui.svelte'
 import { settings } from '$lib/stores/settings.svelte'
 import { aiService } from '$lib/services/ai'
@@ -588,6 +588,10 @@ export class WizardStore {
     }
 
     await story.loadStory(newStory.id)
+    // Generate background image from opening scene
+    if (storyData.settings?.backgroundImagesEnabled) {
+      aiService.analyzeBackgroundChangeAndGenerateImage()
+    }
     ui.setActivePanel('story')
     this.onClose()
   }

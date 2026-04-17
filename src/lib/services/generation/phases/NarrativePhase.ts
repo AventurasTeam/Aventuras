@@ -15,41 +15,11 @@ import type {
   NarrativeChunkEvent,
   AbortedEvent,
   ErrorEvent,
-  WorldState,
-  RetrievalResult,
-  AgenticRetrievalFields,
 } from '../types'
-import type { Story, StoryEntry } from '$lib/types'
-import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
-import type { StreamChunk } from '$lib/services/ai/core/types'
-import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import { story } from '$lib/stores/story/index.svelte'
+import { aiService } from '$lib/services/ai'
 
 const MAX_EMPTY_RESPONSE_RETRIES = 3
-
-/** Dependencies for narrative phase - injected to avoid tight coupling */
-export interface NarrativeDependencies {
-  streamNarrative: (
-    entries: StoryEntry[],
-    worldState: WorldState,
-    story: Story | null | undefined,
-    useTieredContext: boolean,
-    styleReview: StyleReviewResult | null | undefined,
-    agenticRetrieval: AgenticRetrievalFields | null | undefined,
-    signal: AbortSignal | undefined,
-    timelineFillResult: RetrievalResult['timelineFillResult'],
-    lorebookEntries: ContextLorebookEntry[],
-  ) => AsyncIterable<StreamChunk>
-}
-
-/** Input for the narrative phase */
-export interface NarrativeInput {
-  visibleEntries: StoryEntry[]
-  worldState: WorldState
-  story: Story | null | undefined
-  retrievalResult: RetrievalResult
-  styleReview: StyleReviewResult | null | undefined
-  abortSignal?: AbortSignal
-}
 
 /** Result from narrative phase */
 export interface NarrativeResult {
@@ -64,13 +34,12 @@ export interface NarrativeResult {
  * Handles automatic retry on empty responses (up to 3 attempts).
  */
 export class NarrativePhase {
-  constructor(private deps: NarrativeDependencies) {}
-
   /** Execute the narrative phase - yields chunk events and phase events */
-  async *execute(input: NarrativeInput): AsyncGenerator<GenerationEvent, NarrativeResult | null> {
+  async *execute(): AsyncGenerator<GenerationEvent> {
     yield { type: 'phase_start', phase: 'narrative' } satisfies PhaseStartEvent
 
-    const { visibleEntries, worldState, story, retrievalResult, styleReview, abortSignal } = input
+    const abortSignal = story.generationContext.abortSignal ?? undefined
+
     let fullResponse = ''
     let fullReasoning = ''
     let chunkCount = 0
@@ -79,7 +48,7 @@ export class NarrativePhase {
     while (retryCount < MAX_EMPTY_RESPONSE_RETRIES) {
       if (abortSignal?.aborted) {
         yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
-        return null
+        return
       }
 
       fullResponse = ''
@@ -87,20 +56,10 @@ export class NarrativePhase {
       chunkCount = 0
 
       try {
-        for await (const chunk of this.deps.streamNarrative(
-          visibleEntries,
-          worldState,
-          story,
-          true, // useTieredContext
-          styleReview,
-          retrievalResult.agenticRetrieval,
-          abortSignal,
-          retrievalResult.timelineFillResult,
-          retrievalResult.lorebookEntries,
-        )) {
+        for await (const chunk of aiService.streamNarrative()) {
           if (abortSignal?.aborted) {
             yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
-            return null
+            return
           }
 
           chunkCount++
@@ -134,7 +93,7 @@ export class NarrativePhase {
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
           yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
-          return null
+          return
         }
         yield {
           type: 'error',
@@ -142,13 +101,13 @@ export class NarrativePhase {
           error: error instanceof Error ? error : new Error(String(error)),
           fatal: true,
         } satisfies ErrorEvent
-        return null
+        return
       }
     }
 
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent
-      return null
+      return
     }
 
     if (!fullResponse.trim()) {
@@ -158,7 +117,7 @@ export class NarrativePhase {
         error: new Error(`Empty response after ${MAX_EMPTY_RESPONSE_RETRIES} attempts`),
         fatal: true,
       } satisfies ErrorEvent
-      return null
+      return
     }
 
     const result: NarrativeResult = {
@@ -170,9 +129,11 @@ export class NarrativePhase {
     yield {
       type: 'phase_complete',
       phase: 'narrative',
-      result,
     } satisfies PhaseCompleteEvent
 
-    return result
+    // Write result to singleton before returning (only on success path)
+    story.generationContext.narrativeResult = result
+
+    return
   }
 }

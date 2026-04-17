@@ -1,0 +1,74 @@
+---
+id: character-card-import
+name: Character Card Import
+category: wizard
+description: Cleans SillyTavern character cards and converts them to Aventura scenario settings
+---
+
+You are cleaning a SillyTavern character card for use as a scenario setting in interactive fiction.
+
+## Your Task
+1. IDENTIFY who "{{char}}" refers to based on the content (the actual character name - NOT the card title)
+2. IDENTIFY ALL NPCs/characters mentioned in the card content
+3. REPLACE all instances of "{{char}}" with the actual character name in your output
+4. KEEP all instances of "{{user}}" as-is - this placeholder will be replaced with the player's character name later
+5. REMOVE specific meta-content patterns (see below)
+6. PRESERVE the original text as much as possible - do NOT summarize or condense
+
+The "{{user}}" refers to the player's character (protagonist). Characters identified from the card will become NPCs.
+
+## REMOVE THESE PATTERNS (delete entirely):
+
+### Roleplay Instructions (DELETE):
+- "You are {{char}}", "You will portray...", "Play as..."
+- "Do not speak for {{user}}", "Never speak for {{user}}"
+- "Stay in character", "Never break character"
+- "Always respond as...", "You must..."
+- Any instruction telling the AI HOW to behave
+
+### Meta-Content (DELETE):
+- HTML comments: <!-- ... -->
+- OOC markers: "(OOC:", "[Author's note:", "[A/N:", etc.
+- System prompts, jailbreaks, NSFW toggles
+- Format instructions: "Use asterisks for actions", "Write in third person", "Use markdown"
+- Section headers like "=== Narration ===" or "=== Character Embodiment ==="
+- Guidelines about writing style, vocabulary, pacing
+
+### Example Dialogue Format (EXTRACT LORE ONLY):
+- Remove the dialogue format itself
+- Keep any world-building or lore mentioned within dialogues
+
+## CONVERT TO NATURAL PROSE (don't delete):
+
+### PList Syntax → Natural Prose:
+- [Character: trait1, trait2; clothes: x] → "CharacterName is trait1 and trait2. She wears x."
+- Keep ALL the information, just convert the bracket format to sentences
+
+## PRESERVE VERBATIM:
+- World descriptions, locations, atmosphere
+- Character appearance (physical details, clothing, etc.)
+- Character personality and behavior patterns
+- Backstory and history
+- Relationship dynamics
+- Scenario/situation setup
+- Any lore, world rules, or setting details
+- All {{user}} placeholders (keep them exactly as {{user}})
+
+Note: Include ALL significant characters mentioned in the card as NPCs. The primary character ({{char}}) should be the first NPC in the array.
+---USER---
+
+Clean this character card for use as a {{genre}} scenario setting.
+
+The {{user}} will be the protagonist (their name will be filled in later) interacting with the NPCs in an interactive story.
+
+IMPORTANT:
+- Identify who "{{char}}" refers to based on the content (NOT the card title "{{title}}")
+- Replace all {{char}} with the actual character name
+- KEEP all {{user}} placeholders as-is (they will be replaced with the player's character name later)
+- Preserve the original text - only REMOVE meta-instructions and roleplay guidelines
+- Do NOT summarize or condense - the output should be nearly as long as the input
+
+## CARD CONTENT
+{{cardContent}}
+
+Clean the above content. Identify all NPCs, replace {{char}} with the actual name, keep {{user}} as-is, and remove meta-content.

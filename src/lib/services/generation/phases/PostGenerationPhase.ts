@@ -17,79 +17,12 @@ import type {
   AbortedEvent,
   ErrorEvent,
 } from '../types'
-import type {
-  StoryEntry,
-  TranslationSettings,
-  Character,
-  Location,
-  Item,
-  StoryBeat,
-} from '$lib/types'
-import type { ContextLorebookEntry } from '$lib/services/context/context-types'
+import type { TranslationSettings } from '$lib/types'
 import type { Suggestion, ActionChoice } from '$lib/services/ai/sdk/schemas'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
-import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
-
-/** Prompt context for macro expansion */
-export interface PromptContext {
-  mode: 'adventure' | 'creative-writing'
-  pov: 'first' | 'second' | 'third'
-  tense: 'past' | 'present'
-  protagonistName: string
-  genre?: string
-  settingDescription?: string
-  tone?: string
-  themes?: string[]
-}
-
-/** World state for action choices */
-export interface PostWorldState {
-  characters: Character[]
-  locations: Location[]
-  items: Item[]
-  storyBeats: StoryBeat[]
-}
-
-/** Dependencies for post-generation phase */
-export interface PostGenerationDependencies {
-  generateSuggestions: (
-    entries: StoryEntry[],
-    activeThreads: StoryBeat[],
-    lorebookEntries?: ContextLorebookEntry[],
-    promptContext?: PromptContext,
-    latestNarrativeResponse?: string,
-  ) => Promise<{ suggestions: Suggestion[] }>
-  translateSuggestions: (suggestions: Suggestion[], targetLanguage: string) => Promise<Suggestion[]>
-  generateActionChoices: (
-    entries: StoryEntry[],
-    worldState: PostWorldState,
-    narrativeResponse: string,
-    lorebookEntries: ContextLorebookEntry[],
-    promptContext: PromptContext,
-    pov: 'first' | 'second' | 'third',
-    styleReview?: StyleReviewResult | null,
-  ) => Promise<{ choices: ActionChoice[] }>
-  translateActionChoices: (
-    choices: ActionChoice[],
-    targetLanguage: string,
-  ) => Promise<ActionChoice[]>
-}
-
-/** Input for the post-generation phase */
-export interface PostGenerationInput {
-  isCreativeMode: boolean
-  disableSuggestions: boolean
-  entries: StoryEntry[]
-  activeThreads: StoryBeat[]
-  lorebookEntries: ContextLorebookEntry[]
-  styleReview?: StyleReviewResult | null
-  promptContext: PromptContext
-  worldState: PostWorldState
-  narrativeResponse: string
-  pov: 'first' | 'second' | 'third'
-  translationSettings: TranslationSettings
-  abortSignal?: AbortSignal
-}
+import { story } from '$lib/stores/story/index.svelte'
+import { settings } from '$lib/stores/settings.svelte'
+import { aiService } from '$lib/services/ai'
 
 /** Result from post-generation phase */
 export interface PostGenerationResult {
@@ -103,62 +36,47 @@ export interface PostGenerationResult {
  * Errors are non-fatal - generation continues even if suggestions fail.
  */
 export class PostGenerationPhase {
-  constructor(private deps: PostGenerationDependencies) {}
-
-  async *execute(
-    input: PostGenerationInput,
-  ): AsyncGenerator<GenerationEvent, PostGenerationResult> {
+  async *execute(): AsyncGenerator<GenerationEvent> {
     yield { type: 'phase_start', phase: 'post' } satisfies PhaseStartEvent
 
-    const { isCreativeMode, disableSuggestions, abortSignal } = input
+    const isCreativeWritingMode = story.mode === 'creative-writing'
+    const abortSignal = story.generationContext.abortSignal ?? undefined
+    const disableSuggestions = settings.uiSettings.disableSuggestions
 
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'post' } satisfies AbortedEvent
-      return { suggestions: null, actionChoices: null }
+      return
     }
 
     const result: PostGenerationResult = { suggestions: null, actionChoices: null }
 
     if (!disableSuggestions) {
-      if (isCreativeMode) {
-        try {
-          result.suggestions = await this.generateSuggestions(input)
-        } catch (error) {
-          yield this.errorEvent(error)
+      try {
+        if (isCreativeWritingMode) {
+          result.suggestions = await this.generateSuggestions(settings.translationSettings)
+        } else {
+          result.actionChoices = await this.generateActionChoices(settings.translationSettings)
         }
-      } else {
-        try {
-          result.actionChoices = await this.generateActionChoices(input)
-        } catch (error) {
-          yield this.errorEvent(error)
-        }
+      } catch (error) {
+        yield this.errorEvent(error)
+        return
       }
     }
 
+    story.generationContext.postGenerationResult = result
     yield { type: 'phase_complete', phase: 'post', result } satisfies PhaseCompleteEvent
-    return result
+    return
   }
 
-  private async generateSuggestions(input: PostGenerationInput): Promise<Suggestion[]> {
-    const {
-      entries,
-      activeThreads,
-      lorebookEntries,
-      promptContext,
-      narrativeResponse,
-      translationSettings,
-    } = input
-    const { suggestions } = await this.deps.generateSuggestions(
-      entries,
-      activeThreads,
-      lorebookEntries,
-      promptContext,
-      narrativeResponse,
-    )
+  private async generateSuggestions(
+    translationSettings: TranslationSettings,
+  ): Promise<Suggestion[]> {
+    const { suggestions } = await aiService.generateSuggestions()
 
     if (TranslationService.shouldTranslate(translationSettings)) {
       try {
-        return await this.deps.translateSuggestions(suggestions, translationSettings.targetLanguage)
+        story.generationContext.suggestionsToTranslate = suggestions
+        return await aiService.translateSuggestions()
       } catch {
         return suggestions
       }
@@ -166,30 +84,15 @@ export class PostGenerationPhase {
     return suggestions
   }
 
-  private async generateActionChoices(input: PostGenerationInput): Promise<ActionChoice[]> {
-    const {
-      entries,
-      lorebookEntries,
-      styleReview,
-      promptContext,
-      worldState,
-      narrativeResponse,
-      pov,
-      translationSettings,
-    } = input
-    const { choices } = await this.deps.generateActionChoices(
-      entries,
-      worldState,
-      narrativeResponse,
-      lorebookEntries,
-      promptContext,
-      pov,
-      styleReview,
-    )
+  private async generateActionChoices(
+    translationSettings: TranslationSettings,
+  ): Promise<ActionChoice[]> {
+    const { choices } = await aiService.generateActionChoices()
 
     if (TranslationService.shouldTranslate(translationSettings)) {
       try {
-        return await this.deps.translateActionChoices(choices, translationSettings.targetLanguage)
+        story.generationContext.actionChoicesToTranslate = choices
+        return await aiService.translateActionChoices()
       } catch {
         return choices
       }

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Chapter } from '$lib/types'
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { aiService } from '$lib/services/ai'
   import MemoryHeader from './MemoryHeader.svelte'
@@ -14,11 +14,11 @@
 
   // Get chapters sorted by number (descending - newest first)
 
-  const sortedChapters = $derived([...story.chapters].sort((a, b) => b.number - a.number))
+  const sortedChapters = $derived([...story.chapter.chapters].sort((a, b) => b.number - a.number))
 
   // Get entries for each chapter
   function getChapterEntries(chapter: Chapter) {
-    return story.getChapterEntries(chapter)
+    return story.chapter.getChapterEntries(chapter)
   }
 
   /**
@@ -26,7 +26,7 @@
    * Same as ActionInput's lore management, triggered per design doc section 3.4.
    */
   async function runLoreManagement() {
-    if (!story.currentStory) return
+    if (!story.isLoaded) return
 
     console.log('[MemoryView] Starting lore management...')
     ui.startLoreManagement()
@@ -38,71 +38,7 @@
     }
 
     try {
-      const result = await aiService.runLoreManagement(
-        story.currentStory.id,
-        story.currentStory.currentBranchId,
-        [...story.lorebookEntries],
-        story.chapters,
-        {
-          onCreateEntry: async (entry) => {
-            await story.addLorebookEntry({
-              name: entry.name,
-              type: entry.type,
-              description: entry.description,
-              hiddenInfo: entry.hiddenInfo,
-              aliases: entry.aliases,
-              state: entry.state,
-              adventureState: entry.adventureState,
-              creativeState: entry.creativeState,
-              injection: entry.injection,
-              firstMentioned: entry.firstMentioned,
-              lastMentioned: entry.lastMentioned,
-              mentionCount: entry.mentionCount,
-              createdBy: entry.createdBy,
-              loreManagementBlacklisted: entry.loreManagementBlacklisted,
-            })
-            ui.updateLoreManagementProgress('Creating entries...', bumpChanges())
-          },
-          onUpdateEntry: async (id, updates) => {
-            await story.updateLorebookEntry(id, updates)
-            ui.updateLoreManagementProgress('Updating entries...', bumpChanges())
-          },
-          onDeleteEntry: async (id) => {
-            await story.deleteLorebookEntry(id)
-            ui.updateLoreManagementProgress('Cleaning up entries...', bumpChanges())
-          },
-          onMergeEntries: async (entryIds, mergedEntry) => {
-            await story.deleteLorebookEntries(entryIds)
-            await story.addLorebookEntry({
-              name: mergedEntry.name,
-              type: mergedEntry.type,
-              description: mergedEntry.description,
-              hiddenInfo: mergedEntry.hiddenInfo,
-              aliases: mergedEntry.aliases,
-              state: mergedEntry.state,
-              adventureState: mergedEntry.adventureState,
-              creativeState: mergedEntry.creativeState,
-              injection: mergedEntry.injection,
-              firstMentioned: mergedEntry.firstMentioned,
-              lastMentioned: mergedEntry.lastMentioned,
-              mentionCount: mergedEntry.mentionCount,
-              createdBy: mergedEntry.createdBy,
-              loreManagementBlacklisted: mergedEntry.loreManagementBlacklisted,
-            })
-            ui.updateLoreManagementProgress('Merging entries...', bumpChanges())
-          },
-          onQueryChapter: async (chapterNumber, question) => {
-            return aiService.answerChapterQuestion(
-              chapterNumber,
-              question,
-              story.currentBranchChapters,
-            )
-          },
-        },
-        story.currentStory?.mode ?? 'adventure',
-        story.pov,
-        story.tense,
-      )
+      const result = await aiService.runLoreManagement(bumpChanges)
 
       console.log('[MemoryView] Lore management complete', {
         changesCount: result.changes.length,
@@ -121,7 +57,7 @@
   async function handleCreateManualChapter(endEntryIndex: number) {
     ui.setMemoryLoading(true)
     try {
-      await story.createManualChapter(endEntryIndex)
+      await story.chapter.createManualChapter(endEntryIndex)
       ui.closeManualChapterModal()
 
       // Trigger lore management after successful chapter creation
@@ -143,23 +79,17 @@
     const chapterId = ui.resummarizeChapterId
     if (!chapterId) return
 
-    const chapter = story.chapters.find((c) => c.id === chapterId)
+    const chapter = story.chapter.chapters.find((c) => c.id === chapterId)
     if (!chapter) return
 
     ui.setMemoryLoading(true)
     try {
       const entries = getChapterEntries(chapter)
-      const newSummary = await aiService.resummarizeChapter(
-        chapter,
-        entries,
-        story.chapters,
-        story.currentStory?.mode ?? 'adventure',
-        story.pov,
-        story.tense,
-      )
+      story.generationContext.chapterAnalysis.chapterEntries = entries
+      const newSummary = await aiService.resummarizeChapter()
 
       // Update the chapter with new summary and metadata
-      await story.updateChapter(chapter.id, {
+      await story.chapter.updateChapter(chapter.id, {
         summary: newSummary.summary,
         title: newSummary.title,
         keywords: newSummary.keywords,

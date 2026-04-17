@@ -9,12 +9,11 @@
  */
 
 import type { Character } from '$lib/types'
-import type { ContextChatEntry } from '$lib/services/context/context-types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
 import { sceneAnalysisResultSchema, type ImageableScene } from '../sdk/schemas/imageanalysis'
-import { mapPresentCharacters } from '$lib/services/context/imageMapper'
+import { story } from '$lib/stores/story/index.svelte'
 
 const log = createLogger('ImageAnalysis')
 
@@ -34,8 +33,6 @@ export interface ImageAnalysisContext {
   stylePrompt: string
   /** Maximum number of images (0 = unlimited) */
   maxImages: number
-  /** Full chat history for comprehensive context */
-  chatHistory?: ContextChatEntry[]
   /** Translated narrative text - use this for sourceText extraction when available */
   translatedNarrative?: string
   /** Target language for translation */
@@ -60,38 +57,17 @@ export class ImageAnalysisService extends BaseAIService {
    * Analyze narrative text to identify visually striking moments.
    * Returns an array of imageable scenes sorted by priority (highest first).
    */
-  async identifyScenes(context: ImageAnalysisContext): Promise<ImageableScene[]> {
-    log('identifyScenes called', {
-      narrativeLength: context.narrativeResponse.length,
-      presentCharactersCount: context.presentCharacters.length,
-      referenceMode: context.referenceMode,
-      maxImages: context.maxImages,
-      hasTranslation: !!context.translatedNarrative,
-    })
-
-    // Build translated narrative block if available
-    let translatedNarrativeBlock = ''
-    if (context.translatedNarrative && context.translationLanguage) {
-      translatedNarrativeBlock = `## Display Narrative (${context.translationLanguage} - use this for sourceText)
-${context.translatedNarrative}`
-    }
+  async identifyScenes(): Promise<ImageableScene[]> {
+    log('identifyScenes called')
 
     // Select template based on portrait mode
-    const templateId = context.referenceMode
+    const templateId = story.settings.referenceMode
       ? 'image-prompt-analysis-reference'
       : 'image-prompt-analysis'
 
     // Build context and render
     const ctx = new ContextBuilder()
-    ctx.add({
-      imageStylePrompt: context.stylePrompt,
-      sceneCharacters: mapPresentCharacters(context.presentCharacters),
-      maxImages: context.maxImages === 0 ? '0 (unlimited)' : String(context.maxImages),
-      narrativeResponse: context.narrativeResponse,
-      userAction: context.userAction,
-      chatHistory: context.chatHistory || [],
-      translatedNarrativeBlock,
-    })
+    ctx.add(story.generationContext.promptContext)
     const { system, user: prompt } = await ctx.render(templateId)
 
     try {

@@ -1,0 +1,8 @@
+---
+id: image-portrait-generation
+name: Portrait Generation
+category: service
+description: Direct image prompt template for character portraits
+---
+
+Full body portrait of a character:{% if visualDescriptors.face %} {{ visualDescriptors.face }}.{% endif %}{% if visualDescriptors.hair %} {{ visualDescriptors.hair }}.{% endif %}{% if visualDescriptors.eyes %} {{ visualDescriptors.eyes }}.{% endif %}{% if visualDescriptors.build %} {{ visualDescriptors.build }}.{% endif %}{% if visualDescriptors.clothing %} {{ visualDescriptors.clothing }}.{% endif %}{% if visualDescriptors.accessories %} {{ visualDescriptors.accessories }}.{% endif %}{% if visualDescriptors.distinguishing %} {{ visualDescriptors.distinguishing }}.{% endif %} Standing in a relaxed natural pose, facing the viewer, full body visible from head to feet. Neutral expression or slight smile. Plain solid color gradient background only, no objects, no environment, no scenery. Portrait composition, centered framing, professional lighting. {{ imageStylePrompt }}

@@ -832,12 +832,21 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
     infoFields: [
       { name: 'name', type: 'string', description: 'Character name' },
-      { name: 'relationship', type: 'string', description: 'e.g. companion, rival, ally' },
-      { name: 'description', type: 'string', description: 'Character description' },
+      {
+        name: 'relationship',
+        type: 'string',
+        description: 'e.g. companion, rival, ally (nullable)',
+      },
+      { name: 'description', type: 'string', description: 'Character description (nullable)' },
       { name: 'traits', type: 'string[]', description: 'Personality traits' },
-      { name: 'appearance', type: 'string[]', description: 'Visual appearance details' },
-      { name: 'tier', type: 'number', description: 'Retrieval tier 1-3' },
+      {
+        name: 'visualDescriptors',
+        type: 'object',
+        description:
+          'Visual appearance (face, hair, eyes, build, clothing, accessories, distinguishing)',
+      },
       { name: 'status', type: 'string', description: 'active, inactive, or deceased' },
+      { name: 'portrait', type: 'string', description: 'Portrait data URL (nullable)' },
     ] satisfies VariableFieldInfo[],
   },
   {
@@ -848,9 +857,10 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
     infoFields: [
       { name: 'name', type: 'string', description: 'Item name' },
-      { name: 'description', type: 'string', description: 'Item description' },
+      { name: 'description', type: 'string', description: 'Item description (nullable)' },
       { name: 'quantity', type: 'number', description: 'Quantity held' },
       { name: 'equipped', type: 'boolean', description: 'Whether the item is currently equipped' },
+      { name: 'location', type: 'string', description: 'Item location (inventory, world, etc.)' },
     ] satisfies VariableFieldInfo[],
   },
   {
@@ -874,9 +884,9 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
     infoFields: [
       { name: 'name', type: 'string', description: 'Location name' },
-      { name: 'description', type: 'string', description: 'Location description' },
+      { name: 'description', type: 'string', description: 'Location description (nullable)' },
       { name: 'visited', type: 'boolean', description: 'Whether the protagonist has visited' },
-      { name: 'tier', type: 'number', description: 'Retrieval tier 1-3' },
+      { name: 'current', type: 'boolean', description: 'Whether this is the current location' },
     ] satisfies VariableFieldInfo[],
   },
   {
@@ -887,8 +897,10 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
     infoFields: [
       { name: 'name', type: 'string', description: 'Item name' },
-      { name: 'description', type: 'string', description: 'Item description' },
-      { name: 'tier', type: 'number', description: 'Retrieval tier (2 or 3)' },
+      { name: 'description', type: 'string', description: 'Item description (nullable)' },
+      { name: 'quantity', type: 'number', description: 'Quantity held' },
+      { name: 'equipped', type: 'boolean', description: 'Whether the item is currently equipped' },
+      { name: 'location', type: 'string', description: 'Item location' },
     ] satisfies VariableFieldInfo[],
   },
   {
@@ -899,18 +911,17 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
     infoFields: [
       { name: 'title', type: 'string', description: 'Beat title' },
-      { name: 'description', type: 'string', description: 'Beat description' },
+      { name: 'description', type: 'string', description: 'Beat description (nullable)' },
       {
         name: 'type',
         type: 'string',
-        description: 'Beat type (discovery, conflict, quest, revelation)',
+        description: 'Beat type (milestone, quest, revelation, event, plot_point)',
       },
       {
         name: 'status',
         type: 'string',
-        description: 'Beat status (active, completed, failed)',
+        description: 'Beat status (pending, active, completed, failed)',
       },
-      { name: 'tier', type: 'number', description: 'Retrieval tier (2 or 3)' },
     ] satisfies VariableFieldInfo[],
   },
   {

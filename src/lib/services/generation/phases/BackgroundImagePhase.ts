@@ -11,32 +11,13 @@ import type {
   AbortedEvent,
   ErrorEvent,
 } from '../types'
-import type { StoryEntry } from '$lib/types'
-
-/** Dependencies for image phase - injected to avoid tight coupling */
-export interface BackgroundImageDependencies {
-  analyzeBackgroundChangeAndGenerateImage: (
-    storyId: string,
-    visibleEntries: StoryEntry[],
-  ) => Promise<void>
-  isImageGenerationEnabled: (
-    storySettings?: any,
-    type?: 'standard' | 'background' | 'portrait' | 'reference',
-  ) => boolean
-}
+import { story } from '$lib/stores/story/index.svelte'
+import { aiService } from '$lib/services/ai'
 
 /** Settings needed for image phase decision making */
 export interface BackgroundImageSettings {
   backgroundImagesEnabled?: boolean
   imageGenerationMode?: 'none' | 'agentic' | 'inline'
-}
-
-/** Input for the image phase */
-export interface BackgroundImageInput {
-  storyId: string
-  storyEntries: StoryEntry[]
-  imageSettings: BackgroundImageSettings
-  abortSignal?: AbortSignal
 }
 
 /** Result from image phase */
@@ -47,53 +28,56 @@ export interface BackgroundImageResult {
 
 /** Coordinates image generation. Errors are non-fatal. */
 export class BackgroundImagePhase {
-  constructor(private deps: BackgroundImageDependencies) {}
-
   /** Execute the image phase - yields events and returns result */
-  async *execute(
-    input: BackgroundImageInput,
-  ): AsyncGenerator<GenerationEvent, BackgroundImageResult> {
-    console.log('BackgroundImagePhase.execute')
-    yield { type: 'phase_start', phase: 'image' } satisfies PhaseStartEvent
+  async *execute(): AsyncGenerator<GenerationEvent> {
+    const abortSignal = story.generationContext.abortSignal ?? undefined
+    const imageSettings: BackgroundImageSettings = {
+      backgroundImagesEnabled: story.settings.backgroundImagesEnabled ?? false,
+      imageGenerationMode: story.settings.imageGenerationMode ?? 'agentic',
+    }
 
-    const { storyId, storyEntries, imageSettings, abortSignal } = input
+    yield { type: 'phase_start', phase: 'image' } satisfies PhaseStartEvent
 
     // Check if background image generation is disabled
     if (imageSettings.backgroundImagesEnabled === false) {
       const result: BackgroundImageResult = { started: false, skippedReason: 'disabled' }
-      yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
-      return result
+      story.generationContext.backgroundResult = result
+      yield { type: 'phase_complete', phase: 'image' } satisfies PhaseCompleteEvent
+      return
     }
 
     // Skip in inline mode - we don't want agentic background analysis in pure inline mode
     if (imageSettings.imageGenerationMode === 'inline') {
       const result: BackgroundImageResult = { started: false, skippedReason: 'inline_mode' }
-      yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
-      return result
+      story.generationContext.backgroundResult = result
+      yield { type: 'phase_complete', phase: 'image' } satisfies PhaseCompleteEvent
+      return
     }
 
     // Check if image generation is actually configured (profile exists)
-    if (!this.deps.isImageGenerationEnabled(imageSettings, 'background')) {
+    if (!aiService.isImageGenerationEnabled(imageSettings, 'background')) {
       const result: BackgroundImageResult = { started: false, skippedReason: 'not_configured' }
-      yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
-      return result
+      story.generationContext.backgroundResult = result
+      yield { type: 'phase_complete', phase: 'image' } satisfies PhaseCompleteEvent
+      return
     }
 
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'image' } satisfies AbortedEvent
-      return { started: false, skippedReason: 'aborted' }
+      return
     }
 
     try {
-      await this.deps.analyzeBackgroundChangeAndGenerateImage(storyId, storyEntries)
+      await aiService.analyzeBackgroundChangeAndGenerateImage()
 
       const result: BackgroundImageResult = { started: true }
+      story.generationContext.backgroundResult = result
       yield { type: 'phase_complete', phase: 'image', result } satisfies PhaseCompleteEvent
-      return result
+      return
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         yield { type: 'aborted', phase: 'image' } satisfies AbortedEvent
-        return { started: false, skippedReason: 'aborted' }
+        return
       }
 
       // Image generation errors are non-fatal
@@ -104,7 +88,7 @@ export class BackgroundImagePhase {
         fatal: false,
       } satisfies ErrorEvent
 
-      return { started: false }
+      return
     }
   }
 }

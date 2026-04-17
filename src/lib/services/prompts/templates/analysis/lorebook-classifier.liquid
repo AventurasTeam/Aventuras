@@ -1,0 +1,20 @@
+---
+id: lorebook-classifier
+name: Lorebook Classifier
+category: service
+description: Classifies lorebook entries into appropriate categories
+---
+
+You are a precise classifier for fantasy/RPG lorebook entries. Analyze the name, content, and keywords to determine the most appropriate category. Be decisive - pick the single best category for each entry.
+---USER---
+
+Classify each lorebook entry into exactly one category. The categories are:
+- character: A person, creature, or being with personality/traits (NPCs, monsters, etc.)
+- location: A place, area, building, or geographic feature
+- item: An object, weapon, artifact, tool, or piece of equipment
+- faction: An organization, group, guild, kingdom, or collective entity
+- concept: A magic system, rule, tradition, technology, or abstract idea
+- event: A historical occurrence, battle, ceremony, or significant happening
+
+Entries to classify:
+{{entriesJson}}

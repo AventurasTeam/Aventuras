@@ -68,6 +68,7 @@ export default [
       'prettier/prettier': 'error',
       'svelte/no-navigation-without-resolve': 'off',
       'svelte/no-at-html-tags': 'off',
+      'svelte/prefer-svelte-reactivity': 'off',
     },
   },
 ]

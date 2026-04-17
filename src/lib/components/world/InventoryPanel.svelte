@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import {
     Plus,
@@ -44,15 +44,15 @@
   let editRuntimeVars = $state<RuntimeVarsMap>({})
 
   $effect(() => {
-    if (story.currentStory) {
+    if (story.isLoaded) {
       loadRuntimeVarDefs()
     }
   })
 
   async function loadRuntimeVarDefs() {
-    if (!story.currentStory) return
+    if (!story.isLoaded) return
     try {
-      const packId = await database.getStoryPackId(story.currentStory.id)
+      const packId = await database.getStoryPackId(story.id!)
       if (packId) {
         runtimeVarDefs = await database.getRuntimeVariablesByEntityType(packId, 'item')
       } else {
@@ -74,7 +74,7 @@
     }
   }
 
-  const worldItems = $derived(story.items.filter((item) => item.location !== 'inventory'))
+  const worldItems = $derived(story.item.items.filter((item) => item.location !== 'inventory'))
 
   function toggleCollapse(itemId: string) {
     const isCollapsed = ui.isEntityCollapsed(itemId)
@@ -83,7 +83,7 @@
 
   async function addItem() {
     if (!newName.trim()) return
-    await story.addItem(newName.trim(), newDescription.trim() || undefined, newQuantity)
+    await story.item.addItem(newName.trim(), newDescription.trim() || undefined, newQuantity)
     newName = ''
     newDescription = ''
     newQuantity = 1
@@ -131,7 +131,7 @@
         }
       : item.metadata
 
-    await story.updateItem(item.id, {
+    await story.item.updateItem(item.id, {
       name,
       description: editDescription.trim() || null,
       quantity,
@@ -143,13 +143,17 @@
   }
 
   async function deleteItem(item: Item) {
-    await story.deleteItem(item.id)
+    await story.item.deleteItem(item.id)
   }
 
   function beginDrop(item: Item) {
     droppingItemId = item.id
-    const preferredLocation = story.locations.find((loc) => loc.id === item.location)?.id
-    dropLocationId = preferredLocation || story.currentLocation?.id || story.locations[0]?.id || ''
+    const preferredLocation = story.location.locations.find((loc) => loc.id === item.location)?.id
+    dropLocationId =
+      preferredLocation ||
+      story.location.currentLocation?.id ||
+      story.location.locations[0]?.id ||
+      ''
     // Reset other modes
     editingId = null
   }
@@ -161,7 +165,7 @@
 
   async function dropItem(item: Item) {
     if (!dropLocationId) return
-    await story.updateItem(item.id, {
+    await story.item.updateItem(item.id, {
       location: dropLocationId,
       equipped: false,
     })
@@ -169,14 +173,14 @@
   }
 
   async function pickUpItem(item: Item) {
-    await story.updateItem(item.id, {
+    await story.item.updateItem(item.id, {
       location: 'inventory',
     })
   }
 
   async function moveItemToLocation(item: Item) {
     if (!dropLocationId) return
-    await story.updateItem(item.id, {
+    await story.item.updateItem(item.id, {
       location: dropLocationId,
     })
     cancelDrop()
@@ -184,7 +188,7 @@
 
   function getLocationLabel(locationId: string) {
     if (locationId === 'inventory') return 'Inventory'
-    const location = story.locations.find((loc) => loc.id === locationId)
+    const location = story.location.locations.find((loc) => loc.id === locationId)
     return location?.name || 'Unknown location'
   }
 
@@ -235,12 +239,12 @@
   {/if}
 
   <!-- Equipped Items -->
-  {#if story.equippedItems.length > 0}
+  {#if story.item.equippedItems.length > 0}
     <div class="mb-4 space-y-2">
       <h4 class="text-muted-foreground pl-1 text-xs font-semibold tracking-wider uppercase">
         Equipped
       </h4>
-      {#each story.equippedItems as item (item.id)}
+      {#each story.item.equippedItems as item (item.id)}
         {@const isCollapsed = ui.isEntityCollapsed(item.id)}
         {@const isEditing = editingId === item.id}
 
@@ -337,16 +341,16 @@
                 <Select.Trigger class="h-8 text-xs">
                   <div class="flex items-center gap-2 overflow-hidden">
                     <span class="truncate">
-                      {story.locations.find((l) => l.id === dropLocationId)?.name ||
+                      {story.location.locations.find((l) => l.id === dropLocationId)?.name ||
                         'Select location'}
                     </span>
                   </div>
                 </Select.Trigger>
                 <Select.Content class="max-h-50">
-                  {#if story.locations.length === 0}
+                  {#if story.location.locations.length === 0}
                     <Select.Item value="" disabled>No locations available</Select.Item>
                   {:else}
-                    {#each story.locations as location (location.id)}
+                    {#each story.location.locations as location (location.id)}
                       <Select.Item value={location.id} label={location.name}
                         >{location.name}</Select.Item
                       >
@@ -478,14 +482,14 @@
   {/if}
 
   <!-- Inventory Items -->
-  {#if story.inventoryItems.filter((item) => !item.equipped).length > 0}
+  {#if story.item.inventoryItems.filter((item) => !item.equipped).length > 0}
     <div class="space-y-2">
-      {#if story.equippedItems.length > 0}
+      {#if story.item.equippedItems.length > 0}
         <h4 class="text-muted-foreground mt-4 pl-1 text-xs font-semibold tracking-wider uppercase">
           Backpack
         </h4>
       {/if}
-      {#each story.inventoryItems.filter((item) => !item.equipped) as item (item.id)}
+      {#each story.item.inventoryItems.filter((item) => !item.equipped) as item (item.id)}
         {@const isCollapsed = ui.isEntityCollapsed(item.id)}
         {@const isEditing = editingId === item.id}
 
@@ -582,16 +586,16 @@
                 <Select.Trigger class="h-8 text-xs">
                   <div class="flex items-center gap-2 overflow-hidden">
                     <span class="truncate">
-                      {story.locations.find((l) => l.id === dropLocationId)?.name ||
+                      {story.location.locations.find((l) => l.id === dropLocationId)?.name ||
                         'Select location'}
                     </span>
                   </div>
                 </Select.Trigger>
                 <Select.Content class="max-h-[200px]">
-                  {#if story.locations.length === 0}
+                  {#if story.location.locations.length === 0}
                     <Select.Item value="" disabled>No locations available</Select.Item>
                   {:else}
-                    {#each story.locations as location (location.id)}
+                    {#each story.location.locations as location (location.id)}
                       <Select.Item value={location.id} label={location.name}
                         >{location.name}</Select.Item
                       >
@@ -715,7 +719,7 @@
   {/if}
 
   <!-- Empty State (Only if no equipped and no inventory) -->
-  {#if story.inventoryItems.length === 0 && story.equippedItems.length === 0}
+  {#if story.item.inventoryItems.length === 0 && story.item.equippedItems.length === 0}
     <div
       class="border-border bg-muted/20 flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center"
     >
@@ -830,16 +834,16 @@
                 <Select.Trigger class="h-8 text-xs">
                   <div class="flex items-center gap-2 overflow-hidden">
                     <span class="truncate">
-                      {story.locations.find((l) => l.id === dropLocationId)?.name ||
+                      {story.location.locations.find((l) => l.id === dropLocationId)?.name ||
                         'Select location'}
                     </span>
                   </div>
                 </Select.Trigger>
                 <Select.Content class="max-h-[200px]">
-                  {#if story.locations.length === 0}
+                  {#if story.location.locations.length === 0}
                     <Select.Item value="" disabled>No locations available</Select.Item>
                   {:else}
-                    {#each story.locations as location (location.id)}
+                    {#each story.location.locations as location (location.id)}
                       <Select.Item value={location.id} label={location.name}
                         >{location.name}</Select.Item
                       >

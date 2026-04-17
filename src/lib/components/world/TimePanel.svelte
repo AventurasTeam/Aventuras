@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { Pencil, RotateCcw, Save } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
@@ -12,7 +12,7 @@
   let editMinutes = $state(0)
 
   function startEdit() {
-    const time = story.timeTracker
+    const time = story.time.timeTracker
     editYears = time.years
     editDays = time.days
     editHours = time.hours
@@ -25,7 +25,7 @@
   }
 
   async function saveEdit() {
-    await story.setTimeTracker({
+    await story.time.setTimeTracker({
       years: Math.max(0, Number(editYears) || 0),
       days: Math.max(0, Number(editDays) || 0),
       hours: Math.max(0, Number(editHours) || 0),
@@ -40,7 +40,7 @@
       resolve(result)
     })
     if (!confirmed) return
-    await story.setTimeTracker({ years: 0, days: 0, hours: 0, minutes: 0 })
+    await story.time.setTimeTracker({ years: 0, days: 0, hours: 0, minutes: 0 })
   }
 
   // Helper to pad numbers for display
@@ -114,7 +114,7 @@
       <div class="grid grid-cols-4 gap-2 text-center">
         <div class="bg-muted/50 border-border/50 rounded border p-2">
           <div class="text-foreground text-lg font-medium">
-            {story.timeTracker.years}
+            {story.time.timeTracker.years}
           </div>
           <div class="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
             Years
@@ -122,7 +122,7 @@
         </div>
         <div class="bg-muted/50 border-border/50 rounded border p-2">
           <div class="text-foreground text-lg font-medium">
-            {story.timeTracker.days}
+            {story.time.timeTracker.days}
           </div>
           <div class="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
             Days
@@ -130,7 +130,7 @@
         </div>
         <div class="bg-muted/50 border-border/50 rounded border p-2">
           <div class="text-foreground text-lg font-medium">
-            {pad(story.timeTracker.hours)}
+            {pad(story.time.timeTracker.hours)}
           </div>
           <div class="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
             Hours
@@ -138,7 +138,7 @@
         </div>
         <div class="bg-muted/50 border-border/50 rounded border p-2">
           <div class="text-foreground text-lg font-medium">
-            {pad(story.timeTracker.minutes)}
+            {pad(story.time.timeTracker.minutes)}
           </div>
           <div class="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
             Min

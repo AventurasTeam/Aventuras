@@ -6,7 +6,6 @@ import { settings } from '$lib/stores/settings.svelte'
  * standard serviceId + dynamic getter pattern, consistent with all other AI services.
  */
 
-import type { StoryMode } from '$lib/types'
 import type { EntryType } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
@@ -28,7 +27,6 @@ export class LorebookClassifierService extends BaseAIService {
   async classifyEntries(
     entries: ImportedEntry[],
     onProgress?: (classified: number, total: number) => void,
-    mode: StoryMode = 'adventure',
   ): Promise<ImportedEntry[]> {
     if (entries.length === 0) return entries
 
@@ -62,7 +60,7 @@ export class LorebookClassifierService extends BaseAIService {
         )
 
         const ctx = new ContextBuilder()
-        ctx.add({ mode, pov: 'second', tense: 'present', protagonistName: '', entriesJson })
+        ctx.add({ entriesJson })
         const { system, user: prompt } = await ctx.render('lorebook-classifier')
 
         let classifications: Array<{ index: number; type: string }> = []

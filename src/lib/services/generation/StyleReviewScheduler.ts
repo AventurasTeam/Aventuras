@@ -3,39 +3,19 @@
  * Manages counter state via callbacks and triggers review when threshold is met.
  */
 
-import type { StoryEntry, StoryMode, POV, Tense } from '$lib/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
+import { aiService } from '../ai'
+import { settings } from '$lib/stores/settings.svelte'
+import { story } from '$lib/stores/story/index.svelte'
+import { ui } from '$lib/stores/ui.svelte'
 
 function log(...args: unknown[]) {
   console.log('[StyleReviewScheduler]', ...args)
 }
 
 export interface StyleReviewCheckInput {
-  storyId: string
-  entries: StoryEntry[]
-  mode: StoryMode
-  pov: POV
-  tense: Tense
-  enabled: boolean
-  triggerInterval: number
-  currentCounter: number
   shouldIncrement: boolean
   source: string
-}
-
-export interface StyleReviewDependencies {
-  analyzeStyle: (
-    entries: StoryEntry[],
-    mode: StoryMode,
-    pov: POV,
-    tense: Tense,
-  ) => Promise<StyleReviewResult>
-}
-
-export interface StyleReviewUICallbacks {
-  incrementCounter: () => void
-  setLoading: (loading: boolean, storyId: string) => void
-  setResult: (result: StyleReviewResult, storyId: string) => void
 }
 
 export interface StyleReviewCheckResult {
@@ -44,31 +24,15 @@ export interface StyleReviewCheckResult {
 }
 
 export class StyleReviewScheduler {
-  private deps: StyleReviewDependencies
-
-  constructor(deps: StyleReviewDependencies) {
-    this.deps = deps
-  }
-
   /**
    * Check if style review should be triggered and run it if threshold met.
    */
-  async checkAndTrigger(
-    input: StyleReviewCheckInput,
-    uiCallbacks?: StyleReviewUICallbacks,
-  ): Promise<StyleReviewCheckResult> {
-    const {
-      storyId,
-      entries,
-      mode,
-      pov,
-      tense,
-      enabled,
-      triggerInterval,
-      currentCounter,
-      shouldIncrement,
-      source,
-    } = input
+  async checkAndTrigger(input: StyleReviewCheckInput): Promise<StyleReviewCheckResult> {
+    const enabled = settings.systemServicesSettings.styleReviewer.enabled
+    const triggerInterval = settings.systemServicesSettings.styleReviewer.triggerInterval
+    const storyId = story.id ?? ''
+    const currentCounter = ui.messagesSinceLastStyleReview
+    const { shouldIncrement, source } = input
 
     if (!enabled || !storyId) return { triggered: false }
 
@@ -76,12 +40,11 @@ export class StyleReviewScheduler {
     let effectiveCounter = currentCounter
     if (shouldIncrement) {
       effectiveCounter = currentCounter + 1
-      uiCallbacks?.incrementCounter()
+      ui.incrementStyleReviewCounter()
     }
 
     log('Style review counter', {
       source,
-      storyId,
       counter: effectiveCounter,
       triggerInterval,
       incremented: shouldIncrement,
@@ -90,18 +53,18 @@ export class StyleReviewScheduler {
     if (effectiveCounter < triggerInterval) return { triggered: false }
 
     log('Triggering style review...')
-    uiCallbacks?.setLoading(true, storyId)
+    ui.setStyleReviewLoading(true, storyId)
 
     try {
-      const result = await this.deps.analyzeStyle(entries, mode, pov, tense)
-      uiCallbacks?.setResult(result, storyId)
+      const result = await aiService.analyzeStyle()
+      ui.setStyleReview(result, storyId)
       log('Style review complete', { phrasesFound: result.phrases.length })
       return { triggered: true, result }
     } catch (error) {
       log('Style review failed (non-fatal)', error)
       return { triggered: false }
     } finally {
-      uiCallbacks?.setLoading(false, storyId)
+      ui.setStyleReviewLoading(false, storyId)
     }
   }
 }

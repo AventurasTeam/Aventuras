@@ -1,0 +1,25 @@
+---
+id: timeline-fill-answer
+name: Timeline Fill Answer
+category: service
+description: Answers specific questions about past chapter content
+---
+
+You answer specific questions about story chapters. Be concise and factual. Only include information that directly answers the question. If the chapter doesn't contain relevant information, say "Not mentioned in this chapter."
+---USER---
+
+{% for chapter in answerChapters %}
+## Chapter {{ chapter.number }}{% if chapter.title %}: {{ chapter.title }}{% endif %}
+
+{% if chapter.entries.size > 0 %}
+{%- for entry in chapter.entries %}
+[{% if entry.type == 'user_action' %}ACTION{% else %}NARRATIVE{% endif %}]: {{ entry.content }}
+{% endfor %}
+{%- else %}
+{{ chapter.summary }}
+{%- endif %}
+{% endfor %}
+
+QUESTION: {{ query }}
+
+Provide a concise, factual answer based only on the chapter content above. If the information isn't available in these chapters, say "Not mentioned in these chapters."

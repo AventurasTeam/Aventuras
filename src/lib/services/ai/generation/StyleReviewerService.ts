@@ -5,12 +5,12 @@
  * Uses the Vercel AI SDK for structured output with Zod schema validation.
  */
 
-import type { StoryEntry, StoryMode, POV, Tense } from '$lib/types'
+import type { Tense } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
 import { styleReviewResultSchema, type PhraseAnalysis } from '../sdk/schemas/style'
-import type { ContextPassage } from '$lib/services/context/context-types'
+import { story } from '$lib/stores/story/index.svelte'
 
 const log = createLogger('StyleReviewer')
 
@@ -42,12 +42,8 @@ export class StyleReviewerService extends BaseAIService {
    * @param pov - Point of view for prompt context
    * @param tense - Tense for prompt context
    */
-  async analyzeStyle(
-    entries: StoryEntry[],
-    mode: StoryMode = 'adventure',
-    pov: POV = 'second',
-    tense: Tense = 'present',
-  ): Promise<StyleReviewResult> {
+  async analyzeStyle(): Promise<StyleReviewResult> {
+    const entries = story.entry.entries
     log('analyzeStyle', { entriesCount: entries.length })
 
     // Filter to narration entries only
@@ -61,20 +57,8 @@ export class StyleReviewerService extends BaseAIService {
       }
     }
 
-    // Build typed passages array for template iteration
-    const passages: ContextPassage[] = narrationEntries.map((e) => ({
-      content: e.content,
-      entryId: e.id ?? '',
-    }))
-
     const ctx = new ContextBuilder()
-    ctx.add({
-      mode,
-      pov,
-      tense,
-      passageCount: narrationEntries.length.toString(),
-      passages,
-    })
+    ctx.add(story.generationContext.promptContext)
     const { system, user: prompt } = await ctx.render('style-reviewer')
 
     try {

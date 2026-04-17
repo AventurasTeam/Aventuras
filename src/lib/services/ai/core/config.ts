@@ -8,7 +8,7 @@
  * for values that should be user-configurable via Advanced Settings.
  */
 
-import { settings } from '$lib/stores/settings.svelte'
+import { settings, type LorebookLimitsSettings } from '$lib/stores/settings.svelte'
 
 /**
  * AI service configuration constants (defaults).
@@ -89,7 +89,7 @@ export function getContextConfig() {
  * Get lorebook limits configuration from user settings with fallback to defaults.
  * Use this instead of AI_CONFIG.lorebook for user-configurable values.
  */
-export function getLorebookConfig() {
+export function getLorebookConfig(): LorebookLimitsSettings {
   const lb = settings.serviceSpecificSettings?.lorebookLimits
   return {
     maxForActionChoices: lb?.maxForActionChoices ?? AI_CONFIG.lorebook.maxForActionChoices,

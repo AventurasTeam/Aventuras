@@ -5,7 +5,6 @@
  * serviceId + dynamic getter pattern, consistent with all other AI services.
  */
 
-import type { StoryMode } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import type { Genre } from '$lib/services/ai/wizard/ScenarioService'
 import { ContextBuilder } from '$lib/services/context'
@@ -54,11 +53,7 @@ export class CharacterCardImportService extends BaseAIService {
   /**
    * Convert a parsed character card into a scenario setting using LLM.
    */
-  async convertCardToScenario(
-    jsonString: string,
-    mode: StoryMode,
-    genre: Genre,
-  ): Promise<CardImportResult> {
+  async convertCardToScenario(jsonString: string, genre: Genre): Promise<CardImportResult> {
     const card = parseCharacterCard(jsonString)
     if (!card) {
       return {
@@ -84,10 +79,6 @@ export class CharacterCardImportService extends BaseAIService {
 
     const ctx = new ContextBuilder()
     ctx.add({
-      mode,
-      pov: 'second',
-      tense: 'present',
-      protagonistName: '',
       genre,
       title: cardTitle,
       cardContent,
@@ -143,10 +134,6 @@ export class CharacterCardImportService extends BaseAIService {
 
     const ctx = new ContextBuilder()
     ctx.add({
-      mode: 'adventure',
-      pov: 'second',
-      tense: 'present',
-      protagonistName: '',
       cardContent,
     })
     const { system, user: prompt } = await ctx.render('vault-character-import')

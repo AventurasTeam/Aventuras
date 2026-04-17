@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Entry, EntryType } from '$lib/types'
   import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { Search, Plus, Download, Upload, Trash2, X, Filter, ArrowUpDown } from 'lucide-svelte'
   import LorebookEntryCard from './LorebookEntryCard.svelte'
 
@@ -52,7 +52,7 @@
 
   // Filtered and sorted entries
   const filteredEntries = $derived.by(() => {
-    let result = [...story.lorebookEntries] // Create a copy to avoid mutating original
+    let result = [...story.lorebook.lorebookEntries] // Create a copy to avoid mutating original
 
     // Filter by type
     if (ui.lorebookTypeFilter !== 'all') {
@@ -111,7 +111,7 @@
     const ids = Array.from(ui.lorebookBulkSelection)
     isDeleting = true
     try {
-      await story.deleteLorebookEntries(ids)
+      await story.lorebook.deleteLorebookEntries(ids)
       ui.clearBulkSelection()
       ui.showToast(`Deleted ${ids.length} entries`, 'info')
     } catch (error) {
@@ -300,7 +300,7 @@
     {filteredEntries.length} entr{filteredEntries.length === 1 ? 'y' : 'ies'}
     {#if ui.lorebookTypeFilter !== 'all' || ui.lorebookSearchQuery}
       <span class="opacity-70">
-        (filtered from {story.lorebookEntries.length})
+        (filtered from {story.lorebook.lorebookEntries.length})
       </span>
     {/if}
   </div>
@@ -309,7 +309,7 @@
   <ScrollArea class="flex-1 pb-16 sm:pb-10">
     <div class="space-y-2 p-3">
       {#if filteredEntries.length === 0}
-        {#if story.lorebookEntries.length === 0}
+        {#if story.lorebook.lorebookEntries.length === 0}
           <div class="text-muted-foreground py-8 text-center">
             <p>No lorebook entries yet.</p>
             <p class="mt-1 text-sm">Create one or import a lorebook to get started.</p>

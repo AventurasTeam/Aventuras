@@ -4,7 +4,6 @@
  */
 
 import type {
-  GenerationContext,
   GenerationEvent,
   PhaseStartEvent,
   PhaseCompleteEvent,
@@ -12,82 +11,26 @@ import type {
   AbortedEvent,
   AgenticRetrievalFields,
 } from '../types'
-import type { StoryMode, POV, Tense } from '$lib/types'
 import type { TimelineFillResult } from '$lib/services/ai/retrieval/TimelineFillService'
-import type { RetrievalResult as AgenticServiceResult } from '$lib/services/ai/retrieval/AgenticRetrievalService'
-import type {
-  EntryRetrievalResult,
-  ActivationTracker,
-} from '$lib/services/ai/retrieval/EntryRetrievalService'
+import type { EntryRetrievalResult } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import { getEntryRetrievalConfigFromSettings } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import { mapEntryRetrievalToLorebookEntries } from '$lib/services/context/lorebookMapper'
-import type { ContextLorebookEntry } from '$lib/services/context/context-types'
-
-/** Dependencies injected from AIService - phase calls these methods rather than duplicating logic */
-export interface RetrievalDependencies {
-  shouldUseAgenticRetrieval: (chaptersLength: number) => boolean
-  runAgenticRetrieval: (
-    userInput: string,
-    recentEntries: GenerationContext['visibleEntries'],
-    chapters: GenerationContext['worldState']['chapters'],
-    entries: GenerationContext['worldState']['lorebookEntries'],
-    onQueryChapter: (chapterNumber: number, question: string) => Promise<string>,
-    onQueryChapters: (
-      startChapter: number,
-      endChapter: number,
-      question: string,
-    ) => Promise<string>,
-    signal?: AbortSignal,
-    mode?: StoryMode,
-    pov?: POV,
-    tense?: Tense,
-  ) => Promise<AgenticServiceResult>
-  runTimelineFill: (
-    visibleEntries: GenerationContext['visibleEntries'],
-    chapters: GenerationContext['worldState']['chapters'],
-  ) => Promise<TimelineFillResult>
-  answerChapterQuestion: (
-    chapterNumber: number,
-    question: string,
-    chapters: GenerationContext['worldState']['chapters'],
-  ) => Promise<string>
-  answerChapterRangeQuestion: (
-    startChapter: number,
-    endChapter: number,
-    question: string,
-    chapters: GenerationContext['worldState']['chapters'],
-  ) => Promise<string>
-  getRelevantLorebookEntries: (
-    entries: GenerationContext['worldState']['lorebookEntries'],
-    userInput: string,
-    recentStoryEntries: GenerationContext['visibleEntries'],
-    liveState: {
-      characters: GenerationContext['worldState']['characters']
-      locations: GenerationContext['worldState']['locations']
-      items: GenerationContext['worldState']['items']
-    },
-    activationTracker?: ActivationTracker,
-    signal?: AbortSignal,
-  ) => Promise<EntryRetrievalResult>
-}
-
-export interface RetrievalInput {
-  context: GenerationContext
-  dependencies: RetrievalDependencies
-  timelineFillEnabled: boolean
-  activationTracker?: ActivationTracker
-  storyMode: StoryMode
-  pov?: POV
-  tense?: Tense
-}
+import type { Entry } from '$lib/types'
+import { story } from '$lib/stores/story/index.svelte'
+import { settings } from '$lib/stores/settings.svelte'
+import { aiService } from '$lib/services/ai'
 
 export class RetrievalPhase {
-  async *execute(input: RetrievalInput): AsyncGenerator<GenerationEvent, RetrievalResult> {
+  async *execute(): AsyncGenerator<GenerationEvent> {
     yield { type: 'phase_start', phase: 'retrieval' } satisfies PhaseStartEvent
 
-    const { context, dependencies, timelineFillEnabled, activationTracker } = input
-    const { worldState, visibleEntries, userAction, abortSignal } = context
-    const { chapters, lorebookEntries, characters, locations, items, memoryConfig } = worldState
+    const timelineFillEnabled = settings.systemServicesSettings.timelineFill?.enabled ?? true
+    const chapters = story.chapter.currentBranchChapters
+    const lorebookEntries = story.lorebook.lorebookEntries
+    const characters = story.character.characters
+    const locations = story.location.locations
+    const items = story.item.items
+    const memoryConfig = story.settings.memoryConfig
 
     let agenticRetrieval: AgenticRetrievalFields | null = null
     let lorebookRetrievalResult: EntryRetrievalResult | null = null
@@ -98,7 +41,7 @@ export class RetrievalPhase {
     // Task 1: Memory retrieval (timeline fill or agentic)
     if (chapters.length > 0 && timelineFillEnabled && memoryConfig.enableRetrieval) {
       tasks.push(
-        this.runMemoryRetrieval(input)
+        this.runMemoryRetrieval()
           .then((result) => {
             agenticRetrieval = result.agenticRetrieval
             timelineFillResult = result.timelineFillResult
@@ -111,7 +54,7 @@ export class RetrievalPhase {
     }
 
     // Task 2: Lorebook entry retrieval (skip if agentic retrieval handles it)
-    const useAgenticRetrieval = dependencies.shouldUseAgenticRetrieval(chapters.length)
+    const useAgenticRetrieval = aiService.shouldUseAgenticRetrieval()
     const hasLoreContent =
       lorebookEntries.length > 0 ||
       characters.length > 0 ||
@@ -119,15 +62,8 @@ export class RetrievalPhase {
       items.length > 0
     if (hasLoreContent && !useAgenticRetrieval) {
       tasks.push(
-        dependencies
-          .getRelevantLorebookEntries(
-            lorebookEntries,
-            userAction.content,
-            visibleEntries.slice(-10),
-            { characters, locations, items },
-            activationTracker,
-            abortSignal,
-          )
+        aiService
+          .getRelevantLorebookEntries()
           .then((result) => {
             lorebookRetrievalResult = result
           })
@@ -140,19 +76,14 @@ export class RetrievalPhase {
 
     if (tasks.length > 0) await Promise.all(tasks)
 
-    if (abortSignal?.aborted) {
+    if (story.generationContext.abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'retrieval' } satisfies AbortedEvent
-      return {
-        agenticRetrieval: null,
-        lorebookEntries: [],
-        lorebookRetrievalResult: null,
-        timelineFillResult: null,
-      }
+      return
     }
 
-    // Map raw retrieval result to typed ContextLorebookEntry[]
+    // Extract Entry[] from retrieval result (with optional description truncation)
     const entryRetrievalConfig = getEntryRetrievalConfigFromSettings()
-    const mappedLorebookEntries: ContextLorebookEntry[] = lorebookRetrievalResult
+    const mappedLorebookEntries: Entry[] = lorebookRetrievalResult
       ? mapEntryRetrievalToLorebookEntries(
           lorebookRetrievalResult,
           entryRetrievalConfig.maxWordsPerEntry,
@@ -166,31 +97,20 @@ export class RetrievalPhase {
       timelineFillResult,
     }
 
-    yield { type: 'phase_complete', phase: 'retrieval', result } satisfies PhaseCompleteEvent
-    return result
+    yield { type: 'phase_complete', phase: 'retrieval' } satisfies PhaseCompleteEvent
+
+    story.generationContext.retrievalResult = result
+
+    return
   }
 
-  private async runMemoryRetrieval(input: RetrievalInput): Promise<{
+  private async runMemoryRetrieval(): Promise<{
     agenticRetrieval: AgenticRetrievalFields | null
     timelineFillResult: TimelineFillResult | null
   }> {
-    const { context, dependencies, storyMode, pov, tense } = input
-    const { worldState, visibleEntries, userAction, abortSignal } = context
-    const { chapters, lorebookEntries } = worldState
-
-    if (dependencies.shouldUseAgenticRetrieval(chapters.length)) {
-      const result = await dependencies.runAgenticRetrieval(
-        userAction.content,
-        visibleEntries,
-        chapters,
-        lorebookEntries,
-        (num, q) => dependencies.answerChapterQuestion(num, q, chapters),
-        (start, end, q) => dependencies.answerChapterRangeQuestion(start, end, q, chapters),
-        abortSignal,
-        storyMode,
-        pov,
-        tense,
-      )
+    const chapters = story.chapter.currentBranchChapters
+    if (aiService.shouldUseAgenticRetrieval()) {
+      const result = await aiService.runAgenticRetrieval()
       const agenticRetrieval: AgenticRetrievalFields | null = result
         ? {
             agenticReasoning: result.agenticReasoning,
@@ -206,7 +126,7 @@ export class RetrievalPhase {
 
     return {
       agenticRetrieval: null,
-      timelineFillResult: await dependencies.runTimelineFill(visibleEntries, chapters),
+      timelineFillResult: await aiService.runTimelineFill(story.entry.visibleEntries, chapters),
     }
   }
 }

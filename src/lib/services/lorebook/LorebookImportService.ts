@@ -8,7 +8,7 @@
  * - Batch database insertion
  */
 
-import type { Entry, StoryMode } from '$lib/types'
+import type { Entry } from '$lib/types'
 import { database } from '$lib/services/database'
 import {
   parseLorebook,
@@ -28,7 +28,6 @@ export interface ImportProgress {
 export interface ImportOptions {
   storyId: string
   useAIClassification: boolean
-  storyMode: StoryMode
   onProgress?: (progress: ImportProgress) => void
 }
 
@@ -57,13 +56,11 @@ export class LorebookImportService {
    */
   async classifyEntries(
     entries: ImportedEntry[],
-    storyMode: StoryMode,
     onProgress?: (current: number, total: number) => void,
   ): Promise<ImportedEntry[]> {
     return classifyEntriesWithLLM(
       entries,
       onProgress ? (current, total) => onProgress(current, total) : undefined,
-      storyMode,
     )
   }
 
@@ -79,7 +76,7 @@ export class LorebookImportService {
     parseResult: LorebookImportResult,
     options: ImportOptions,
   ): Promise<ImportResult> {
-    const { storyId, useAIClassification, storyMode, onProgress } = options
+    const { storyId, useAIClassification, onProgress } = options
     const errors: string[] = []
     const warnings: string[] = [...parseResult.warnings]
 
@@ -95,18 +92,14 @@ export class LorebookImportService {
           message: 'Classifying entries...',
         })
 
-        entriesToImport = await this.classifyEntries(
-          entriesToImport,
-          storyMode,
-          (current, total) => {
-            onProgress?.({
-              phase: 'classifying',
-              current,
-              total,
-              message: `Classifying entries (${current}/${total})...`,
-            })
-          },
-        )
+        entriesToImport = await this.classifyEntries(entriesToImport, (current, total) => {
+          onProgress?.({
+            phase: 'classifying',
+            current,
+            total,
+            message: `Classifying entries (${current}/${total})...`,
+          })
+        })
       }
 
       // Phase 2: Convert to Entry format

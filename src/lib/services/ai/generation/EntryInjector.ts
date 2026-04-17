@@ -9,11 +9,13 @@
  */
 
 import type { Character, Location, Item, StoryBeat, StoryEntry, Chapter } from '$lib/types'
+import type { WorldStateArrays } from '$lib/services/context/context-types'
 import { BaseAIService } from '../BaseAIService'
 import { AI_CONFIG } from '../core/config'
 import { createLogger } from '$lib/log'
 import { entitySelectionSchema } from '../sdk/schemas/context'
 import { ContextBuilder as ContextPipeline } from '$lib/services/context'
+import { story } from '$lib/stores/story/index.svelte'
 
 const log = createLogger('EntryInjector')
 
@@ -54,12 +56,7 @@ export interface RelevantEntry {
   metadata?: Record<string, any>
 }
 
-export interface ContextResult {
-  tier1: RelevantEntry[]
-  tier2: RelevantEntry[]
-  tier3: RelevantEntry[]
-  all: RelevantEntry[]
-}
+export type Tier3Candidate = Omit<RelevantEntry, 'metadata' | 'tier' | 'priority'>
 
 /**
  * Service that builds context from world state using tiered injection.
@@ -76,21 +73,28 @@ export class EntryInjector extends BaseAIService {
 
   /**
    * Build context from world state using tiered injection.
+   * Zero-arg overload reads all data from the storyContext singleton.
    * NOTE: Tier 3 is currently disabled pending SDK migration.
    */
-  async buildContext(
-    worldState: WorldState,
-    userInput: string,
-    recentEntries: StoryEntry[],
-  ): Promise<ContextResult> {
+
+  async buildContext(): Promise<WorldStateArrays> {
+    const worldState: WorldState = {
+      characters: story.character.characters,
+      locations: story.location.locations,
+      items: story.item.items,
+      storyBeats: story.storyBeat.storyBeats,
+      currentLocation: story.location.currentLocation,
+      chapters: story.chapter.currentBranchChapters,
+    }
     log('buildContext called', {
       characters: worldState.characters.length,
       locations: worldState.locations.length,
       items: worldState.items.length,
       storyBeats: worldState.storyBeats.length,
-      userInputLength: userInput.length,
-      recentEntriesCount: recentEntries.length,
     })
+
+    const userInput = story.generationContext.promptContext.userInput
+    const recentEntries = story.entry.visibleEntries.slice(-this.config.recentEntriesCount)
 
     // Tier 1: Always inject - state-based entries
     const tier1 = this.getTier1Entries(worldState)
@@ -119,10 +123,39 @@ export class EntryInjector extends BaseAIService {
       log('Tier 3 entries:', tier3.length)
     }
 
-    // Combine all entries
-    const all = [...tier1, ...tier2, ...tier3]
+    // Collect all IDs per tier for lookup
+    const tier1IdSet = tier1Ids
+    const tier2IdSet = new Set(tier2.map((e) => e.id))
+    const tier3IdSet = new Set(tier3.map((e) => e.id))
 
-    return { tier1, tier2, tier3, all }
+    // Characters: all tiers, ordered tier1 → tier2 → tier3
+    const characters = [
+      ...worldState.characters.filter((c) => tier1IdSet.has(c.id)),
+      ...worldState.characters.filter((c) => tier2IdSet.has(c.id)),
+      ...worldState.characters.filter((c) => tier3IdSet.has(c.id)),
+    ]
+
+    // Items: tier-1 → inventory, tier-2/3 → relevantItems
+    const inventory = worldState.items.filter((i) => tier1IdSet.has(i.id))
+    const relevantItems = [
+      ...worldState.items.filter((i) => tier2IdSet.has(i.id)),
+      ...worldState.items.filter((i) => tier3IdSet.has(i.id)),
+    ]
+
+    // Story beats: tier-1 → storyBeats, tier-2/3 → relatedStoryBeats
+    const storyBeats = worldState.storyBeats.filter((b) => tier1IdSet.has(b.id))
+    const relatedStoryBeats = [
+      ...worldState.storyBeats.filter((b) => tier2IdSet.has(b.id)),
+      ...worldState.storyBeats.filter((b) => tier3IdSet.has(b.id)),
+    ]
+
+    // Locations: tier-2/3 non-current only (current location is injected separately)
+    const locations = [
+      ...worldState.locations.filter((l) => tier2IdSet.has(l.id) && !l.current),
+      ...worldState.locations.filter((l) => tier3IdSet.has(l.id) && !l.current),
+    ]
+
+    return { characters, inventory, relevantItems, storyBeats, relatedStoryBeats, locations }
   }
 
   /**
@@ -305,12 +338,7 @@ export class EntryInjector extends BaseAIService {
     excludeIds: Set<string>,
   ): Promise<RelevantEntry[]> {
     // Collect all remaining entries not in Tier 1 or 2
-    const candidates: {
-      type: RelevantEntry['type']
-      id: string
-      name: string
-      description: string | null
-    }[] = []
+    const candidates: Tier3Candidate[] = []
 
     for (const char of worldState.characters) {
       if (!excludeIds.has(char.id)) {
@@ -357,22 +385,10 @@ export class EntryInjector extends BaseAIService {
       return []
     }
 
-    // Format entries for the prompt
-    const entrySummaries = candidates
-      .map(
-        (e, i) =>
-          `${i}. [${e.type}] ${e.name}${e.description ? `: ${e.description.slice(0, 100)}` : ''}`,
-      )
-      .join('\n')
-
-    // Build recent content for context
-    const recentContent = recentEntries
-      .slice(-this.config.recentEntriesCount)
-      .map((e) => e.content)
-      .join('\n\n')
+    story.generationContext.worldStateForTier3 = candidates
 
     const ctx = new ContextPipeline()
-    ctx.add({ recentContent, userInput, entrySummaries })
+    ctx.add(story.generationContext)
     const { system, user: prompt } = await ctx.render('tier3-entry-selection')
 
     try {

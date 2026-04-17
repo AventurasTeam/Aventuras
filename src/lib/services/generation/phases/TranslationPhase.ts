@@ -17,27 +17,10 @@ import type {
   AbortedEvent,
   ErrorEvent,
 } from '../types'
-import type { TranslationSettings } from '$lib/types'
-import type { TranslationResult } from '$lib/services/ai/utils/TranslationService'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
-
-/** Dependencies for translation phase - injected to avoid tight coupling */
-export interface TranslationDependencies {
-  translateNarration: (
-    content: string,
-    targetLanguage: string,
-    isVisualProse: boolean,
-  ) => Promise<TranslationResult>
-}
-
-/** Input for the translation phase */
-export interface TranslationInput {
-  narrativeContent: string
-  narrativeEntryId: string
-  isVisualProse: boolean
-  translationSettings: TranslationSettings
-  abortSignal?: AbortSignal
-}
+import { story } from '$lib/stores/story/index.svelte'
+import { settings } from '$lib/stores/settings.svelte'
+import { aiService } from '$lib/services/ai'
 
 /** Result from translation phase */
 export interface TranslationResult2 {
@@ -52,13 +35,12 @@ export interface TranslationResult2 {
  * Errors are non-fatal - if translation fails, the pipeline continues with original content.
  */
 export class TranslationPhase {
-  constructor(private deps: TranslationDependencies) {}
-
-  /** Execute the translation phase - yields events and returns result */
-  async *execute(input: TranslationInput): AsyncGenerator<GenerationEvent, TranslationResult2> {
+  /** Execute the translation phase - yields events */
+  async *execute(): AsyncGenerator<GenerationEvent> {
     yield { type: 'phase_start', phase: 'translation' } satisfies PhaseStartEvent
 
-    const { narrativeContent, isVisualProse, translationSettings, abortSignal } = input
+    const abortSignal = story.generationContext.abortSignal ?? undefined
+    const translationSettings = settings.translationSettings
 
     // Check if translation should be skipped
     if (!TranslationService.shouldTranslateNarration(translationSettings)) {
@@ -68,40 +50,41 @@ export class TranslationPhase {
         targetLanguage: null,
       }
 
+      story.generationContext.translationResult = result
       yield {
         type: 'phase_complete',
         phase: 'translation',
         result,
       } satisfies PhaseCompleteEvent
 
-      return result
+      return
     }
 
     if (abortSignal?.aborted) {
       yield { type: 'aborted', phase: 'translation' } satisfies AbortedEvent
-      return {
+      const result: TranslationResult2 = {
         translated: false,
         translatedContent: null,
         targetLanguage: null,
       }
+      story.generationContext.translationResult = result
+      return
     }
 
     const targetLanguage = translationSettings.targetLanguage
 
     try {
-      const translationResult = await this.deps.translateNarration(
-        narrativeContent,
-        targetLanguage,
-        isVisualProse,
-      )
+      const translationResult = await aiService.translateNarration()
 
       if (abortSignal?.aborted) {
         yield { type: 'aborted', phase: 'translation' } satisfies AbortedEvent
-        return {
+        const result: TranslationResult2 = {
           translated: false,
           translatedContent: null,
           targetLanguage: null,
         }
+        story.generationContext.translationResult = result
+        return
       }
 
       const result: TranslationResult2 = {
@@ -110,21 +93,24 @@ export class TranslationPhase {
         targetLanguage,
       }
 
+      story.generationContext.translationResult = result
       yield {
         type: 'phase_complete',
         phase: 'translation',
         result,
       } satisfies PhaseCompleteEvent
 
-      return result
+      return
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         yield { type: 'aborted', phase: 'translation' } satisfies AbortedEvent
-        return {
+        const result: TranslationResult2 = {
           translated: false,
           translatedContent: null,
           targetLanguage: null,
         }
+        story.generationContext.translationResult = result
+        return
       }
 
       // Translation errors are non-fatal - log and continue with original content
@@ -135,11 +121,13 @@ export class TranslationPhase {
         fatal: false,
       } satisfies ErrorEvent
 
-      return {
+      const result: TranslationResult2 = {
         translated: false,
         translatedContent: null,
         targetLanguage: null,
       }
+      story.generationContext.translationResult = result
+      return
     }
   }
 }

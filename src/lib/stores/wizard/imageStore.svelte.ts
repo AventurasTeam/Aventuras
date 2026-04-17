@@ -36,17 +36,11 @@ async function getStylePrompt(styleId: string): Promise<string> {
 async function buildPortraitPrompt(
   stylePrompt: string,
   visualDescriptors: VisualDescriptors,
-  characterName: string,
 ): Promise<string> {
   const ctx = new ContextBuilder()
   ctx.add({
-    mode: 'adventure',
-    pov: 'second',
-    tense: 'present',
-    protagonistName: '',
     imageStylePrompt: stylePrompt,
     visualDescriptors,
-    characterName,
   })
   const { system } = await ctx.render('image-portrait-generation')
   return system
@@ -95,7 +89,7 @@ export class ImageStore {
 
     try {
       const stylePrompt = await getStylePrompt(imageSettings.styleId)
-      const portraitPrompt = await buildPortraitPrompt(stylePrompt, descriptors, protagonist.name)
+      const portraitPrompt = await buildPortraitPrompt(stylePrompt, descriptors)
 
       log('Sending protagonist portrait request', {
         promptLength: portraitPrompt.length,
@@ -156,7 +150,7 @@ export class ImageStore {
 
     try {
       const stylePrompt = await getStylePrompt(imageSettings.portraitStyleId)
-      const portraitPrompt = await buildPortraitPrompt(stylePrompt, descriptors, char.name)
+      const portraitPrompt = await buildPortraitPrompt(stylePrompt, descriptors)
 
       log('Sending supporting character portrait request', {
         characterName: charName,

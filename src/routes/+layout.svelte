@@ -3,7 +3,7 @@
   import { onMount } from 'svelte'
   import Toast from '$lib/components/Toast.svelte'
   import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { isAndroid } from '$lib/utils/platform'
 
   let { children } = $props()
@@ -45,7 +45,7 @@
         ) {
           ui.setActivePanel('story')
         } else {
-          if (story.currentStory) story.closeStory()
+          if (story.isLoaded) story.closeStory()
           ui.setActivePanel('library')
         }
         return

@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
   import { parseSTChat, type STChatParseResult } from '$lib/services/stChatImporter'
   import { open } from '@tauri-apps/plugin-dialog'
   import { readTextFile } from '@tauri-apps/plugin-fs'
@@ -92,10 +92,10 @@
   }
 
   async function handleImport() {
-    if (!parseResult || !story.currentStory) return
+    if (!parseResult || !story.isLoaded) return
     importing = true
     try {
-      await story.importSTChat(parseResult.messages)
+      await story.entry.importSTChat(parseResult.messages)
       imported = true
     } catch (err) {
       ui.showToast(err instanceof Error ? err.message : 'Import failed', 'error')
@@ -105,7 +105,7 @@
   }
 
   function handleKeepWorldState() {
-    story.triggerSuggestionsAfterImport()
+    story.entry.triggerSuggestionsAfterImport()
     ui.showToast(`Imported ${total} messages`, 'info')
     ui.closeSTChatImport()
   }
@@ -114,7 +114,7 @@
     resettingWorldState = true
     try {
       await story.resetWorldStateAfterImport()
-      story.triggerSuggestionsAfterImport()
+      story.entry.triggerSuggestionsAfterImport()
       ui.showToast(`Imported ${total} messages — world state reset`, 'info')
     } catch (err) {
       ui.showToast(err instanceof Error ? err.message : 'Reset failed', 'error')
@@ -142,14 +142,15 @@
     </ResponsiveModal.Header>
 
     <div class="flex-1 space-y-4 overflow-y-auto px-6 py-6">
-      {#if story.branches.length > 0}
+      {#if story.branch.branches.length > 0}
         <!-- Blocking error: branches must be deleted first -->
         <div class="border-destructive/40 bg-destructive/10 flex gap-3 rounded-lg border p-4">
           <GitBranch class="text-destructive mt-0.5 h-5 w-5 shrink-0" />
           <div class="space-y-1 text-sm">
             <p class="text-foreground font-medium">Branches must be deleted first</p>
             <p class="text-muted-foreground">
-              This story has {story.branches.length} branch{story.branches.length === 1
+              This story has {story.branch.branches.length} branch{story.branch.branches.length ===
+              1
                 ? ''
                 : 'es'}. Because branches reference main-branch entries via fork points, importing
               would leave them broken. Delete all branches in the Branch panel, then re-open this
@@ -237,7 +238,7 @@
           <AlertTriangle class="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
           <div class="space-y-1 text-sm">
             <p class="text-foreground font-medium">
-              This will permanently replace all entries in "{story.currentStory?.title}".
+              This will permanently replace all entries in "{story.title}".
             </p>
             <p class="text-muted-foreground">
               Back up first: use <strong>Export → Aventuras (.avt)</strong> in the header, or
@@ -279,7 +280,7 @@
         <Button variant="outline" onclick={close} disabled={importing}>Cancel</Button>
         <Button
           onclick={handleImport}
-          disabled={!parseResult || importing || story.branches.length > 0}
+          disabled={!parseResult || importing || story.branch.branches.length > 0}
           class="bg-destructive text-destructive-foreground hover:bg-destructive/90 gap-2"
         >
           {#if importing}

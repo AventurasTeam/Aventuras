@@ -6,6 +6,8 @@
  */
 
 import type { TranslationSettings } from '$lib/types'
+import type { Suggestion } from '../sdk/schemas/suggestions'
+import type { ActionChoice } from '../sdk/schemas/actionchoices'
 import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '$lib/log'
 import { generatePlainText } from '../sdk/generate'
@@ -16,6 +18,8 @@ import {
   translatedActionChoicesResultSchema,
   translatedWizardBatchResultSchema,
 } from '../sdk/schemas/translation'
+import { story } from '$lib/stores/story/index.svelte'
+import { settings } from '$lib/stores/settings.svelte'
 
 const log = createLogger('Translation')
 
@@ -88,7 +92,7 @@ export class TranslationService extends BaseAIService {
   /**
    * Get the human-readable name for a language code using Intl API
    */
-  private getLanguageName(code: string): string {
+  static getLanguageName(code: string): string {
     if (code === 'auto') return 'auto-detect'
     try {
       return languageDisplayNames.of(code) || code
@@ -101,11 +105,10 @@ export class TranslationService extends BaseAIService {
    * Translate narration (post-generation).
    * Preserves HTML tags and <pic> tags in the content.
    */
-  async translateNarration(
-    content: string,
-    targetLanguage: string,
-    _isVisualProse: boolean = false,
-  ): Promise<TranslationResult> {
+  async translateNarration(): Promise<TranslationResult> {
+    const targetLanguage =
+      story.generationContext.promptContext.userSettings.translationSettings.targetLanguage.code
+    const content = story.generationContext.narrativeResult?.content ?? ''
     // Skip if target is English or content is empty
     if (targetLanguage === 'en' || !content.trim()) {
       return { translatedContent: content }
@@ -113,7 +116,7 @@ export class TranslationService extends BaseAIService {
 
     try {
       const ctx = new ContextBuilder()
-      ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), content })
+      ctx.add(story.generationContext.promptContext)
       const { system, user: prompt } = await ctx.render('translate-narration')
 
       const translatedContent = await generatePlainText(
@@ -136,15 +139,18 @@ export class TranslationService extends BaseAIService {
   /**
    * Translate user input to English.
    */
-  async translateInput(content: string, sourceLanguage: string): Promise<TranslationResult> {
+  async translateInput(): Promise<TranslationResult> {
     // Skip if source is English or content is empty
+    const content = story.generationContext.userActionOriginal!
+    const sourceLanguage = settings.translationSettings.sourceLanguage
+
     if (sourceLanguage === 'en' || !content.trim()) {
       return { translatedContent: content }
     }
 
     try {
       const ctx = new ContextBuilder()
-      ctx.add({ sourceLanguage: this.getLanguageName(sourceLanguage), content })
+      ctx.add(story.generationContext.promptContext)
       const { system, user: prompt } = await ctx.render('translate-input')
 
       const translatedContent = await generatePlainText(
@@ -167,23 +173,15 @@ export class TranslationService extends BaseAIService {
   /**
    * Batch translate UI elements.
    */
-  async translateUIElements(
-    items: UITranslationItem[],
-    targetLanguage: string,
-  ): Promise<UITranslationItem[]> {
+  async translateUIElements(): Promise<UITranslationItem[]> {
+    const items = story.generationContext.uiElementsToTranslate ?? []
+    const targetLanguage = settings.translationSettings.targetLanguage
     if (items.length === 0) return []
     if (targetLanguage === 'en') return items
 
     try {
-      const elementsJson = JSON.stringify(
-        items.map((item) => ({
-          id: item.id,
-          text: item.text,
-          type: item.type,
-        })),
-      )
       const ctx = new ContextBuilder()
-      ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), elementsJson })
+      ctx.add(story.generationContext.promptContext)
       const { system, user: prompt } = await ctx.render('translate-ui')
 
       const result = await this.generate(translatedUIResultSchema, system, prompt, 'translate-ui')
@@ -204,22 +202,15 @@ export class TranslationService extends BaseAIService {
    * Translate suggestions.
    * Preserves the original object structure, only replacing the text field.
    */
-  async translateSuggestions<T extends { text: string; type?: string }>(
-    suggestions: T[],
-    targetLanguage: string,
-  ): Promise<T[]> {
+  async translateSuggestions(): Promise<Suggestion[]> {
+    const suggestions = story.generationContext.suggestionsToTranslate ?? []
+    const targetLanguage = settings.translationSettings.targetLanguage
     if (suggestions.length === 0) return []
     if (targetLanguage === 'en') return suggestions
 
     try {
-      const suggestionsJson = JSON.stringify(
-        suggestions.map((s) => ({
-          text: s.text,
-          type: s.type,
-        })),
-      )
       const ctx = new ContextBuilder()
-      ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), suggestionsJson })
+      ctx.add(story.generationContext.promptContext)
       const { system, user: prompt } = await ctx.render('translate-suggestions')
 
       const result = await this.generate(
@@ -245,22 +236,15 @@ export class TranslationService extends BaseAIService {
    * Translate action choices.
    * Preserves the original object structure, only replacing the text field.
    */
-  async translateActionChoices<T extends { text: string; type?: string }>(
-    choices: T[],
-    targetLanguage: string,
-  ): Promise<T[]> {
+  async translateActionChoices(): Promise<ActionChoice[]> {
+    const choices = story.generationContext.actionChoicesToTranslate ?? []
+    const targetLanguage = settings.translationSettings.targetLanguage
     if (choices.length === 0) return []
     if (targetLanguage === 'en') return choices
 
     try {
-      const choicesJson = JSON.stringify(
-        choices.map((c) => ({
-          text: c.text,
-          type: c.type,
-        })),
-      )
       const ctx = new ContextBuilder()
-      ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), choicesJson })
+      ctx.add(story.generationContext.promptContext)
       const { system, user: prompt } = await ctx.render('translate-action-choices')
 
       const result = await this.generate(
@@ -295,7 +279,7 @@ export class TranslationService extends BaseAIService {
 
     try {
       const ctx = new ContextBuilder()
-      ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), content })
+      ctx.add({ targetLanguage: TranslationService.getLanguageName(targetLanguage), content })
       const { system, user: prompt } = await ctx.render('translate-wizard-content')
 
       const translatedContent = await generatePlainText(
@@ -335,10 +319,13 @@ export class TranslationService extends BaseAIService {
       // Format as JSON object with field keys
       const fieldsJson = JSON.stringify(fields)
       const ctx = new ContextBuilder()
-      ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), content: fieldsJson })
+      ctx.add({
+        targetLanguage: TranslationService.getLanguageName(targetLanguage),
+        content: fieldsJson,
+      })
       const { system } = await ctx.render('translate-wizard-content')
 
-      const prompt = `Translate each value in this JSON object to ${this.getLanguageName(targetLanguage)}. Keep the keys unchanged. Return a JSON object with the same keys and translated values.
+      const prompt = `Translate each value in this JSON object to ${TranslationService.getLanguageName(targetLanguage)}. Keep the keys unchanged. Return a JSON object with the same keys and translated values.
 
 ${fieldsJson}`
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { slide } from 'svelte/transition'
   import { Card, CardContent } from '$lib/components/ui/card'
@@ -7,8 +7,8 @@
   import { Label } from '$lib/components/ui/label'
   import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group'
 
-  const threshold = $derived(story.memoryConfig.tokenThreshold)
-  const bufferMessages = $derived(story.memoryConfig.chapterBuffer)
+  const threshold = $derived(story.settings.memoryConfig.tokenThreshold)
+  const bufferMessages = $derived(story.settings.memoryConfig.chapterBuffer)
 
   // Local state for editing
   let localThreshold = $derived(threshold)
@@ -21,7 +21,7 @@
     localThreshold = value
     if (saveTimeout) clearTimeout(saveTimeout)
     saveTimeout = setTimeout(() => {
-      story.updateMemoryConfig({ tokenThreshold: value })
+      story.settings.updateMemoryConfig({ tokenThreshold: value })
     }, 500)
   }
 
@@ -29,7 +29,7 @@
     localBuffer = value
     if (saveTimeout) clearTimeout(saveTimeout)
     saveTimeout = setTimeout(() => {
-      story.updateMemoryConfig({ chapterBuffer: value })
+      story.settings.updateMemoryConfig({ chapterBuffer: value })
     }, 500)
   }
 

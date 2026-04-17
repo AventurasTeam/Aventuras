@@ -12,9 +12,14 @@
 import { database } from '$lib/services/database'
 import { templateEngine } from '$lib/services/templates/engine'
 import { createLogger } from '$lib/log'
+import { story } from '$lib/stores/story/index.svelte'
 import type { RenderResult } from './types'
-import type { Character, Location, Item, StoryBeat } from '$lib/types'
 import type { RuntimeVariable, RuntimeVarsMap } from '$lib/services/packs/types'
+
+export interface EntityRuntimeVars {
+  name: string
+  vars: Array<{ label: string; value: string }>
+}
 
 const log = createLogger('ContextBuilder')
 
@@ -24,82 +29,6 @@ export class ContextBuilder {
 
   constructor(packId?: string) {
     if (packId) this.packId = packId
-  }
-
-  /**
-   * Convenience factory: create a ContextBuilder pre-populated from a story.
-   * Loads story settings, protagonist, location, time, and pack custom variables.
-   */
-  static async forStory(storyId: string, packIdOverride?: string): Promise<ContextBuilder> {
-    const story = await database.getStory(storyId)
-    if (!story) {
-      log('forStory: story not found', { storyId })
-      return new ContextBuilder()
-    }
-
-    const packId = packIdOverride || (await database.getStoryPackId(storyId)) || 'default-pack'
-    const builder = new ContextBuilder(packId)
-
-    // Load story data into context
-    builder.add({
-      mode: story.mode || 'adventure',
-      pov: story.settings?.pov || 'second',
-      tense: story.settings?.tense || 'present',
-      genre: story.genre || '',
-      tone: story.settings?.tone || '',
-      themes: story.settings?.themes?.join(', ') || '',
-      settingDescription: story.description || '',
-      visualProseMode: story.settings?.visualProseMode || false,
-      inlineImageMode: story.settings?.imageGenerationMode === 'inline',
-    })
-
-    // Protagonist
-    const characters = await database.getCharacters(storyId)
-    const protagonist = characters.find((c) => c.relationship === 'self')
-    builder.add({
-      protagonistName: protagonist?.name || 'the protagonist',
-      protagonistDescription: protagonist?.description || '',
-    })
-
-    // Current location
-    const locations = await database.getLocations(storyId)
-    const currentLocation = locations.find((l) => l.current)
-    builder.add({ currentLocation: currentLocation?.name || '' })
-    builder.add({
-      currentLocationObject: currentLocation
-        ? { name: currentLocation.name, description: currentLocation.description || '' }
-        : null,
-    })
-
-    // Story time
-    if (story.timeTracker) {
-      const t = story.timeTracker
-      builder.add({
-        storyTime: `Year ${t.years + 1}, Day ${t.days + 1}, ${t.hours} hours ${t.minutes} minutes`,
-      })
-    }
-
-    // Pack custom variable defaults
-    await builder.loadCustomVariables()
-
-    // Override pack variable defaults with story-specific values
-    const storyVarValues = await database.getStoryCustomVariables(story.id)
-    if (storyVarValues) {
-      builder.add(storyVarValues)
-    }
-
-    // Runtime variable values from entities
-    const items = await database.getItems(storyId)
-    const storyBeats = await database.getStoryBeats(storyId)
-    await builder.loadRuntimeVariableContext(characters, locations, items, storyBeats, protagonist)
-
-    log('forStory complete', {
-      storyId,
-      packId,
-      contextKeys: Object.keys(builder.context).length,
-      storyVarOverrides: storyVarValues ? Object.keys(storyVarValues).length : 0,
-    })
-    return builder
   }
 
   /**
@@ -162,50 +91,33 @@ export class ContextBuilder {
   }
 
   /**
-   * Load custom variable defaults from the active pack.
-   * Only sets variables not already in context.
-   */
-  private async loadCustomVariables(): Promise<void> {
-    try {
-      const variables = await database.getPackVariables(this.packId)
-      for (const v of variables) {
-        if (!(v.variableName in this.context)) {
-          this.context[v.variableName] = v.defaultValue ?? ''
-        }
-      }
-    } catch (error) {
-      log('loadCustomVariables failed', { packId: this.packId, error })
-    }
-  }
-
-  /**
-   * Load runtime variable values from story entities and add formatted text blocks
-   * to the context. Each entity type gets a separate variable:
-   *   runtimeVars_characters, runtimeVars_locations, runtimeVars_items,
-   *   runtimeVars_storyBeats, runtimeVars_protagonist
+   * Get runtime variable values from story entities.
+   * Each entity type gets a separate variable:
+   *   characters, locations, items,
+   *   storyBeats, protagonist
    *
    * Format per entity: "EntityName: VarLabel = value, VarLabel = value"
    * Empty string when no runtime variables are defined or no values exist.
    */
-  private async loadRuntimeVariableContext(
-    characters: Character[],
-    locations: Location[],
-    items: Item[],
-    storyBeats: StoryBeat[],
-    protagonist: Character | undefined,
-  ): Promise<void> {
+  static async getRuntimeVariableContext(
+    packId: string,
+  ): Promise<Record<string, EntityRuntimeVars[]>> {
+    const { characters } = story.character
+    const { locations } = story.location
+    const { items } = story.item
+    const { storyBeats } = story.storyBeat
+    const { protagonist } = story.character
+    const empty: Record<string, EntityRuntimeVars[]> = {
+      characters: [],
+      locations: [],
+      items: [],
+      storyBeats: [],
+      protagonist: [],
+    }
+
     try {
-      const defs = await database.getRuntimeVariables(this.packId)
-      if (defs.length === 0) {
-        this.add({
-          runtimeVars_characters: '',
-          runtimeVars_locations: '',
-          runtimeVars_items: '',
-          runtimeVars_storyBeats: '',
-          runtimeVars_protagonist: '',
-        })
-        return
-      }
+      const defs = await database.getRuntimeVariables(packId)
+      if (defs.length === 0) return empty
 
       // Group definitions by entity type for fast lookup
       const defsByType: Record<string, RuntimeVariable[]> = {}
@@ -214,77 +126,61 @@ export class ContextBuilder {
         defsByType[d.entityType].push(d)
       }
 
-      const formatEntities = (
+      const collectEntities = (
         entities: Array<{ name: string; metadata: Record<string, unknown> | null }>,
         entityType: string,
-      ): string => {
+      ): EntityRuntimeVars[] => {
         const typeDefs = defsByType[entityType]
-        if (!typeDefs || typeDefs.length === 0) return ''
+        if (!typeDefs || typeDefs.length === 0) return []
 
-        const lines: string[] = []
+        const result: EntityRuntimeVars[] = []
         for (const entity of entities) {
           const runtimeVars = (entity.metadata as Record<string, unknown> | null)?.runtimeVars as
             | RuntimeVarsMap
             | undefined
           if (!runtimeVars) continue
 
-          const pairs: string[] = []
+          const vars: Array<{ label: string; value: string }> = []
           for (const def of typeDefs) {
             const entry = runtimeVars[def.id]
             if (entry && entry.v != null && entry.v !== '') {
-              pairs.push(`${def.displayName} = ${entry.v}`)
+              vars.push({ label: def.displayName, value: String(entry.v) })
             }
           }
-          if (pairs.length > 0) {
-            lines.push(`${entity.name}: ${pairs.join(', ')}`)
+          if (vars.length > 0) {
+            result.push({ name: entity.name, vars })
           }
         }
-        return lines.join('\n')
+        return result
       }
 
-      // Format entity name helper for story beats (uses title instead of name)
       const beatsWithName = storyBeats.map((b) => ({
         name: b.title,
         metadata: b.metadata,
       }))
 
-      const runtimeVarsCharacters = formatEntities(characters, 'character')
-      const runtimeVarsLocations = formatEntities(locations, 'location')
-      const runtimeVarsItems = formatEntities(items, 'item')
-      const runtimeVarsStoryBeats = formatEntities(beatsWithName, 'story_beat')
-
-      // Protagonist-specific: filter to just the protagonist
-      let runtimeVarsProtagonist = ''
-      if (protagonist) {
-        runtimeVarsProtagonist = formatEntities([protagonist], 'character')
+      const result = {
+        characters: collectEntities(characters, 'character'),
+        locations: collectEntities(locations, 'location'),
+        items: collectEntities(items, 'item'),
+        storyBeats: collectEntities(beatsWithName, 'story_beat'),
+        protagonist: protagonist ? collectEntities([protagonist], 'character') : [],
       }
 
-      this.add({
-        runtimeVars_characters: runtimeVarsCharacters,
-        runtimeVars_locations: runtimeVarsLocations,
-        runtimeVars_items: runtimeVarsItems,
-        runtimeVars_storyBeats: runtimeVarsStoryBeats,
-        runtimeVars_protagonist: runtimeVarsProtagonist,
+      log('getRuntimeVariableContext', {
+        packId: packId,
+        defCount: defs.length,
+        charCount: result.characters.length,
+        locCount: result.locations.length,
+        itemCount: result.items.length,
+        beatCount: result.storyBeats.length,
+        hasProtagonist: result.protagonist.length > 0,
       })
 
-      log('loadRuntimeVariableContext', {
-        packId: this.packId,
-        defCount: defs.length,
-        hasCharVars: runtimeVarsCharacters.length > 0,
-        hasLocVars: runtimeVarsLocations.length > 0,
-        hasItemVars: runtimeVarsItems.length > 0,
-        hasBeatVars: runtimeVarsStoryBeats.length > 0,
-        hasProtagonistVars: runtimeVarsProtagonist.length > 0,
-      })
+      return result
     } catch (error) {
-      log('loadRuntimeVariableContext failed', { packId: this.packId, error })
-      this.add({
-        runtimeVars_characters: '',
-        runtimeVars_locations: '',
-        runtimeVars_items: '',
-        runtimeVars_storyBeats: '',
-        runtimeVars_protagonist: '',
-      })
+      log('getRuntimeVariableContext failed', { packId: packId, error })
+      return empty
     }
   }
 }

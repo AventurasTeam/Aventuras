@@ -1,0 +1,27 @@
+---
+id: protagonist-generation
+name: Protagonist Generation
+category: wizard
+description: Creates compelling protagonists for interactive fiction
+---
+
+You are a character creation expert for interactive fiction. Create compelling protagonists that readers will want to embody or follow.
+
+Create a protagonist that fits naturally into the setting and has interesting story potential.
+---USER---
+
+Create a protagonist for this {{ genreLabel }} setting:
+
+SETTING: {{ settingName }}
+{{ settingDescription }}
+{% if settingAtmosphere %}
+ATMOSPHERE: {{ settingAtmosphere }}
+{% endif %}{% if settingThemesText %}
+THEMES: {{ settingThemesText }}
+{% endif %}
+{% if pov == 'first' %}POV: First person (I/me/my). Create a named protagonist the player will embody using first-person perspective.
+{% elsif pov == 'second' %}POV: Second person (You/your). The protagonist's name can be left generic or "the protagonist" — the reader IS this character. Appearance is optional.
+{% else %}POV: Third person (he/she/they). Create a fully named protagonist readers will follow as a character.
+{% endif %}
+
+Create a compelling protagonist who fits naturally into this world.

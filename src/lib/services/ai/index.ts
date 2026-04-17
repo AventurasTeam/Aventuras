@@ -7,11 +7,11 @@
  * WORKING (SDK-migrated):
  * - streamNarrative(), generateNarrative() - NarrativeService
  * - classifyResponse() - ClassifierService
- * - analyzeForChapter(), summarizeChapter(), decideRetrieval() - MemoryService
+ * - analyzeForChapter(), summarizeChapter() - MemoryService
  * - generateSuggestions() - SuggestionsService
  * - generateActionChoices() - ActionChoicesService
  * - runTimelineFill(), answerChapterQuestion(), answerChapterRangeQuestion() - TimelineFillService
- * - buildTieredContext(), getRelevantLorebookEntries() - EntryInjector/EntryRetrievalService
+ * - getRelevantLorebookEntries() - EntryInjector/EntryRetrievalService
  * - analyzeStyle() - StyleReviewerService
  * - runLoreManagement() - LoreManagementService
  * - generateImagesForNarrative() (both inline and analyzed modes) - ImageAnalysisService
@@ -22,41 +22,25 @@
  */
 
 import { settings } from '$lib/stores/settings.svelte'
-import { story } from '$lib/stores/story.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 import { database } from '$lib/services/database'
-import type { StoryMode, POV, Tense } from '$lib/types'
-import type { PromptContext } from '../generation/phases/PostGenerationPhase'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from './image/constants'
-import { type ClassificationContext } from './generation/ClassifierService'
 import type { ClassificationResult } from './sdk/schemas/classifier'
-import { MemoryService, type RetrievalContext } from './generation/MemoryService'
-import type { ChapterAnalysis, ChapterSummaryResult, RetrievalDecision } from './sdk/schemas/memory'
-import type { SuggestionsResult } from './sdk/schemas/suggestions'
-import type { ActionChoicesResult } from './sdk/schemas/actionchoices'
+import type { ChapterSummaryResult } from './sdk/schemas/memory'
+import type { Suggestion, SuggestionsResult } from './sdk/schemas/suggestions'
+import type { ActionChoice, ActionChoicesResult } from './sdk/schemas/actionchoices'
 import type { StyleReviewResult } from './generation/StyleReviewerService'
-import type {
-  RetrievalContext as AgenticRetrievalContext,
-  RetrievalResult as AgenticRetrievalResult,
-} from './retrieval/AgenticRetrievalService'
-import type { AgenticRetrievalFields } from '$lib/services/generation/types'
+import type { RetrievalResult as AgenticRetrievalResult } from './retrieval/AgenticRetrievalService'
 import type { TimelineFillResult } from './retrieval/TimelineFillService'
-import { EntryInjector, type ContextResult, type ContextConfig } from './generation/EntryInjector'
-import {
-  mapContextResultToArrays,
-  type WorldStateArrays,
-} from '$lib/services/context/worldStateMapper'
-import type { ContextChatEntry, ContextLorebookEntry } from '$lib/services/context/context-types'
+
 import {
   EntryRetrievalService,
   type EntryRetrievalResult,
-  type ActivationTracker,
   getEntryRetrievalConfigFromSettings,
 } from './retrieval/EntryRetrievalService'
 import {
   inlineImageService,
-  type InlineImageContext,
   isImageGenerationEnabled as isImageGenerationEnabledUtil,
-  type ImageAnalysisContext,
 } from './image'
 import {
   emitImageAnalysisStarted,
@@ -75,47 +59,24 @@ import { normalizeImageDataUrl, parseImageSize } from '$lib/utils/image'
 import type { ImageableScene } from './sdk/schemas/imageanalysis'
 import type { EmbeddedImage } from '$lib/types'
 
-// Re-export ImageGenerationContext type for backwards compatibility
-export interface ImageGenerationContext {
-  storyId: string
-  entryId: string
-  narrativeResponse: string
-  userAction: string
-  presentCharacters: Character[]
-  currentLocation?: string
-  chatHistory?: ContextChatEntry[]
-  translatedNarrative?: string
-  translationLanguage?: string
-  referenceMode: boolean
-}
 import type { TranslationResult, UITranslationItem } from './utils/TranslationService'
 import type { StreamChunk } from './core/types'
 import type {
-  Story,
   StoryEntry,
   Character,
   Location,
-  Item,
-  StoryBeat,
   Chapter,
-  MemoryConfig,
   Entry,
   LoreManagementResult,
   LoreChange,
-  TimeTracker,
   StorySettings,
 } from '$lib/types'
 import { createLogger } from '$lib/log'
 import { serviceFactory } from './core/factory'
 import { NarrativeService } from './generation/NarrativeService'
-import type { WorldStateContext } from './generation/NarrativeService'
+import { ui } from '$lib/stores/ui.svelte'
 
 const log = createLogger('AIService')
-
-interface WorldState extends WorldStateContext {
-  memoryConfig?: MemoryConfig
-  lorebookEntries?: Entry[]
-}
 
 class AIService {
   private narrativeService: NarrativeService
@@ -125,358 +86,86 @@ class AIService {
   }
 
   /**
-   * Generate a complete narrative response (non-streaming).
-   */
-  async generateNarrative(
-    entries: StoryEntry[],
-    worldState: WorldState,
-    story?: Story | null,
-  ): Promise<string> {
-    return this.narrativeService.generate(entries, worldState, story)
-  }
-
-  /**
-   * Stream a narrative response.
+   * Stream a narrative response (zero-arg).
+   * Reads all story data from the storyContext singleton.
    * This is the primary method for real-time story generation.
    */
-  async *streamNarrative(
-    entries: StoryEntry[],
-    worldState: WorldState,
-    currentStory?: Story | null,
-    useTieredContext = true,
-    styleReview?: StyleReviewResult | null,
-    agenticRetrieval?: AgenticRetrievalFields | null,
-    signal?: AbortSignal,
-    timelineFillResult?: TimelineFillResult | null,
-    lorebookEntries: ContextLorebookEntry[] = [],
-  ): AsyncIterable<StreamChunk> {
-    log('streamNarrative called', {
-      entriesCount: entries.length,
-      useTieredContext,
-      hasStyleReview: !!styleReview,
-      hasAgenticContext: !!agenticRetrieval,
-      hasTimelineFill: !!timelineFillResult,
-      lorebookEntriesCount: lorebookEntries.length,
-    })
-
-    // Build tiered context if requested
-    let worldStateArrays: WorldStateArrays | undefined
-    if (useTieredContext) {
-      const lastEntry = entries[entries.length - 1]
-      const userInput = lastEntry?.content ?? ''
-      const contextResult = await this.buildTieredContext(worldState, userInput, entries)
-      worldStateArrays = mapContextResultToArrays(contextResult, worldState)
-    }
-
-    // Delegate to NarrativeService
-    yield* this.narrativeService.stream(entries, worldState, currentStory, {
-      worldStateArrays,
-      styleReview,
-      agenticRetrieval,
-      lorebookEntries,
-      signal,
-      timelineFillResult,
-    })
+  async *streamNarrative(): AsyncIterable<StreamChunk> {
+    log('streamNarrative called (zero-arg delegate)')
+    yield* this.narrativeService.stream()
   }
 
   /**
-   * Classify a narrative response to extract world state changes.
+   * Classify a narrative response to extract world state changes (zero-arg).
+   * Reads all context from the storyContext singleton.
    */
-  async classifyResponse(
-    narrativeResponse: string,
-    userAction: string,
-    worldState: WorldState,
-    story?: Story | null,
-    visibleEntries?: StoryEntry[],
-    currentStoryTime?: TimeTracker | null,
-  ): Promise<ClassificationResult> {
-    log('classifyResponse called', {
-      narrativeLength: narrativeResponse.length,
-      userActionLength: userAction.length,
-      hasStory: !!story,
-      hasVisibleEntries: !!visibleEntries,
-    })
-
-    if (!story) {
-      log('classifyResponse: No story provided, returning empty result')
-      return {
-        entryUpdates: {
-          characterUpdates: [],
-          locationUpdates: [],
-          itemUpdates: [],
-          storyBeatUpdates: [],
-          newCharacters: [],
-          newLocations: [],
-          newItems: [],
-          newStoryBeats: [],
-        },
-        scene: {
-          currentLocationName: null,
-          presentCharacterNames: [],
-          timeProgression: 'none',
-        },
-      }
-    }
-
+  async classifyResponse(): Promise<ClassificationResult> {
+    log('classifyResponse called (zero-arg delegate)')
     const classifierService = serviceFactory.createClassifierService()
-    const context: ClassificationContext = {
-      storyId: story.id,
-      story,
-      narrativeResponse,
-      userAction,
-      existingCharacters: worldState.characters,
-      existingLocations: worldState.locations,
-      existingItems: worldState.items,
-      existingStoryBeats: worldState.storyBeats ?? [],
-    }
-
-    return classifierService.classify(context, visibleEntries, currentStoryTime)
+    return classifierService.classify()
   }
 
   /**
-   * Generate story direction suggestions for creative writing mode.
+   * Generate story direction suggestions for creative writing mode (zero-arg).
+   * Reads all context from the storyContext singleton.
    */
-  async generateSuggestions(
-    entries: StoryEntry[],
-    activeThreads: StoryBeat[],
-    lorebookEntries?: ContextLorebookEntry[],
-    promptContext?: PromptContext,
-    latestNarrativeResponse?: string,
-  ): Promise<SuggestionsResult> {
-    log('generateSuggestions called', {
-      entriesCount: entries.length,
-      threadsCount: activeThreads.length,
-      hasPromptContext: !!promptContext,
-      lorebookEntriesCount: lorebookEntries?.length ?? 0,
-      latestNarrativeLength: latestNarrativeResponse?.length ?? 0,
-    })
-
+  async generateSuggestions(): Promise<SuggestionsResult> {
+    log('generateSuggestions called (zero-arg delegate)')
     const suggestionsService = serviceFactory.createSuggestionsService()
-    return await suggestionsService.generateSuggestions(
-      entries,
-      activeThreads,
-      lorebookEntries,
-      story.currentStory?.id,
-      latestNarrativeResponse,
-    )
+    return suggestionsService.generateSuggestions()
   }
 
   /**
-   * Generate RPG-style action choices for adventure mode.
+   * Generate RPG-style action choices for adventure mode (zero-arg).
+   * Reads all context from the storyContext singleton.
    */
-  async generateActionChoices(
-    entries: StoryEntry[],
-    worldState: WorldState,
-    narrativeResponse: string,
-    lorebookEntries?: ContextLorebookEntry[],
-    promptContext?: PromptContext,
-    pov?: 'first' | 'second' | 'third',
-    styleReview?: StyleReviewResult | null,
-  ): Promise<ActionChoicesResult> {
-    log('generateActionChoices called', {
-      entriesCount: entries.length,
-      narrativeLength: narrativeResponse.length,
-      hasPromptContext: !!promptContext,
-      lorebookEntriesCount: lorebookEntries?.length ?? 0,
-    })
-
+  async generateActionChoices(): Promise<ActionChoicesResult> {
+    log('generateActionChoices called (zero-arg delegate)')
     const actionChoicesService = serviceFactory.createActionChoicesService()
-
-    // Find protagonist
-    const protagonist = worldState.characters?.find((c) => c.relationship === 'self')
-
-    // Find last user action
-    const lastUserAction = entries.filter((e) => e.type === 'user_action').pop()
-
-    // Get present characters (NPCs, excluding the protagonist)
-    const presentCharacters = worldState.characters?.filter(
-      (c) => c.relationship !== 'self' && c.status === 'active',
-    )
-
-    // Get inventory items (those that are equipped)
-    const inventory = worldState.items?.filter((i) => i.equipped)
-
-    // Build context for the service
-    const context = {
-      storyId: story.currentStory?.id,
-      narrativeResponse,
-      userAction: lastUserAction?.content ?? '',
-      recentEntries: entries.slice(-10),
-      protagonistName: protagonist?.name ?? promptContext?.protagonistName ?? 'the protagonist',
-      protagonistDescription: protagonist?.description,
-      mode: promptContext?.mode ?? 'adventure',
-      pov: pov ?? promptContext?.pov ?? 'second',
-      tense: promptContext?.tense ?? 'present',
-      currentLocation: worldState.currentLocation,
-      presentCharacters,
-      inventory,
-      activeQuests: worldState.storyBeats?.filter(
-        (b) => b.status === 'pending' || b.status === 'active',
-      ),
-      lorebookEntries,
-      styleReview,
-    }
-
-    const choices = await actionChoicesService.generateChoices(context)
+    const choices = await actionChoicesService.generateChoices()
     return { choices }
   }
 
   /**
    * Analyze narration entries for style issues.
    */
-  async analyzeStyle(
-    entries: StoryEntry[],
-    mode: StoryMode = 'adventure',
-    pov?: POV,
-    tense?: Tense,
-  ): Promise<StyleReviewResult> {
+  async analyzeStyle(): Promise<StyleReviewResult> {
     const service = serviceFactory.createStyleReviewerService()
-    return service.analyzeStyle(entries, mode, pov, tense)
+    return service.analyzeStyle()
   }
 
   /**
    * Analyze if a new chapter should be created.
    */
-  async analyzeForChapter(
-    entries: StoryEntry[],
-    lastChapterEndIndex: number,
-    config: MemoryConfig,
-    tokensOutsideBuffer: number,
-    mode: StoryMode = 'adventure',
-    pov?: POV,
-    tense?: Tense,
-  ): Promise<ChapterAnalysis> {
+  async analyzeForChapter(): Promise<boolean> {
     const memoryService = serviceFactory.createMemoryService()
-    return memoryService.analyzeForChapter(
-      entries,
-      lastChapterEndIndex,
-      tokensOutsideBuffer,
-      mode,
-      pov,
-      tense,
-    )
+    return memoryService.analyzeForChapter()
   }
 
   /**
    * Generate a summary and metadata for a chapter.
    */
-  async summarizeChapter(
-    entries: StoryEntry[],
-    previousChapters?: Chapter[],
-    mode: StoryMode = 'adventure',
-    pov?: POV,
-    tense?: Tense,
-  ): Promise<ChapterSummaryResult> {
+  async summarizeChapter(): Promise<ChapterSummaryResult> {
     const memoryService = serviceFactory.createMemoryService()
-    return memoryService.summarizeChapter(entries, previousChapters, mode, pov, tense)
+    return memoryService.summarizeChapter()
   }
 
   /**
    * Resummarize an existing chapter.
    */
-  async resummarizeChapter(
-    chapter: Chapter,
-    entries: StoryEntry[],
-    allChapters: Chapter[],
-    mode: StoryMode = 'adventure',
-    pov?: POV,
-    tense?: Tense,
-  ): Promise<ChapterSummaryResult> {
+  async resummarizeChapter(): Promise<ChapterSummaryResult> {
     const memoryService = serviceFactory.createMemoryService()
-    return memoryService.summarizeChapter(entries, allChapters, mode, pov, tense)
-  }
-
-  /**
-   * Decide which chapters are relevant for the current context.
-   */
-  async decideRetrieval(
-    userInput: string,
-    recentEntries: StoryEntry[],
-    chapters: Chapter[],
-    config: MemoryConfig,
-    mode: StoryMode = 'adventure',
-    pov?: POV,
-    tense?: Tense,
-  ): Promise<RetrievalDecision> {
-    const memoryService = serviceFactory.createMemoryService()
-    const context: RetrievalContext = {
-      userInput,
-      recentEntries,
-      availableChapters: chapters,
-    }
-    return memoryService.decideRetrieval(context, mode, pov, tense)
-  }
-
-  /**
-   * Build context block from retrieved chapters.
-   * NOTE: This method works - it's just string building.
-   */
-  buildRetrievedContextBlock(chapters: Chapter[], decision: RetrievalDecision): string {
-    const memory = new MemoryService('memory')
-    // Pass callback to fetch full chapter entries for richer context
-    const getChapterEntries = (chapter: Chapter) => story.getChapterEntries(chapter)
-    return memory.buildRetrievedContextBlock(chapters, decision, getChapterEntries)
-  }
-
-  /**
-   * Build tiered context using the EntryInjector.
-   * NOTE: Tier 1 & 2 work. Tier 3 (LLM selection) is stubbed.
-   */
-  async buildTieredContext(
-    worldState: WorldState,
-    userInput: string,
-    recentEntries: StoryEntry[],
-    config?: Partial<ContextConfig>,
-  ): Promise<ContextResult> {
-    log('buildTieredContext called', {
-      userInputLength: userInput.length,
-      recentEntriesCount: recentEntries.length,
-    })
-
-    const contextBuilder = new EntryInjector(config, 'entryRetrieval')
-    const result = await contextBuilder.buildContext(worldState, userInput, recentEntries)
-
-    log('buildTieredContext complete', {
-      tier1: result.tier1.length,
-      tier2: result.tier2.length,
-      tier3: result.tier3.length,
-      total: result.all.length,
-    })
-
-    return result
+    return memoryService.summarizeChapter()
   }
 
   /**
    * Get relevant lorebook entries using tiered injection.
    * NOTE: Tier 1 & 2 work. Tier 3 (LLM selection) is stubbed.
    */
-  async getRelevantLorebookEntries(
-    entries: Entry[],
-    userInput: string,
-    recentStoryEntries: StoryEntry[],
-    liveState?: { characters: Character[]; locations: Location[]; items: Item[] },
-    activationTracker?: ActivationTracker,
-    signal?: AbortSignal,
-  ): Promise<EntryRetrievalResult> {
-    log('getRelevantLorebookEntries called', {
-      totalEntries: entries.length,
-      userInputLength: userInput.length,
-      liveCharacters: liveState?.characters.length ?? 0,
-      liveLocations: liveState?.locations.length ?? 0,
-      liveItems: liveState?.items.length ?? 0,
-      hasActivationTracker: !!activationTracker,
-    })
-
+  async getRelevantLorebookEntries(): Promise<EntryRetrievalResult> {
     const config = getEntryRetrievalConfigFromSettings()
     const entryService = new EntryRetrievalService(config, 'entryRetrieval')
-    const result = await entryService.getRelevantEntries(
-      entries,
-      userInput,
-      recentStoryEntries,
-      liveState,
-      activationTracker,
-      signal,
-    )
+    const result = await entryService.getRelevantEntries()
 
     log('getRelevantLorebookEntries complete', {
       tier1: result.tier1.length,
@@ -492,27 +181,12 @@ class AIService {
    * Run a lore management session.
    * Analyzes recent narrative and updates lorebook entries accordingly.
    */
-  async runLoreManagement(
-    storyId: string,
-    branchId: string | null,
-    entries: Entry[],
-    chapters: Chapter[],
-    callbacks: {
-      onCreateEntry: (entry: Entry) => Promise<void>
-      onUpdateEntry: (id: string, updates: Partial<Entry>) => Promise<void>
-      onDeleteEntry: (id: string) => Promise<void>
-      onMergeEntries: (entryIds: string[], mergedEntry: Entry) => Promise<void>
-      onQueryChapter?: (chapterNumber: number, question: string) => Promise<string>
-    },
-    _mode: StoryMode = 'adventure',
-    _pov?: POV,
-    _tense?: Tense,
-  ): Promise<LoreManagementResult> {
+  async runLoreManagement(bumpChanges: () => number): Promise<LoreManagementResult> {
     // Build chapters info for lore management
     // Deep clone to avoid Svelte proxy issues with AI SDK structured cloning
     const chapterInfos = JSON.parse(
       JSON.stringify(
-        chapters.map((c) => ({
+        story.chapter.chapters.map((c) => ({
           number: c.number,
           title: c.title,
           summary: c.summary,
@@ -525,10 +199,10 @@ class AIService {
     // Create service and run session
     const service = serviceFactory.createLoreManagementService()
     const sessionResult = await service.runSession({
-      storyId,
-      existingEntries: entries,
+      storyId: story.id!,
+      existingEntries: story.lorebook.lorebookEntries,
       chapters: chapterInfos,
-      queryChapter: callbacks.onQueryChapter,
+      queryChapter: aiService.answerChapterQuestion,
     })
 
     // Build changes array for the result
@@ -540,14 +214,16 @@ class AIService {
       const newEntry: Entry = {
         ...entry,
         id: crypto.randomUUID(),
-        branchId,
+        branchId: story.branch.currentBranchId,
       }
-      await callbacks.onCreateEntry(newEntry)
+      await story.lorebook.addLorebookEntry(entry)
+      ui.updateLoreManagementProgress('Creating entries...', bumpChanges())
       changes.push({ type: 'create', entry: newEntry })
     }
 
     for (const entry of sessionResult.updatedEntries) {
-      await callbacks.onUpdateEntry(entry.id, entry)
+      await story.lorebook.updateLorebookEntry(entry.id, entry)
+      ui.updateLoreManagementProgress('Updating entries...', bumpChanges())
       changes.push({ type: 'update', entry })
     }
 
@@ -567,42 +243,9 @@ class AIService {
    * Run agentic retrieval to find relevant lorebook entries and chapter context.
    * Uses an LLM agent with tools to intelligently search and select entries.
    */
-  async runAgenticRetrieval(
-    userInput: string,
-    recentEntries: StoryEntry[],
-    chapters: Chapter[],
-    entries: Entry[],
-    onQueryChapter?: (chapterNumber: number, question: string) => Promise<string>,
-    onQueryChapters?: (
-      startChapter: number,
-      endChapter: number,
-      question: string,
-    ) => Promise<string>,
-    signal?: AbortSignal,
-    _mode: StoryMode = 'adventure',
-    _pov?: POV,
-    _tense?: Tense,
-  ): Promise<AgenticRetrievalResult> {
-    log('runAgenticRetrieval called', {
-      userInputLength: userInput.length,
-      recentEntriesCount: recentEntries.length,
-      chaptersCount: chapters.length,
-      entriesCount: entries.length,
-    })
-
+  async runAgenticRetrieval(): Promise<AgenticRetrievalResult> {
     const service = serviceFactory.createAgenticRetrievalService()
-
-    // Build context for the service
-    const context: AgenticRetrievalContext = {
-      userInput,
-      recentEntries,
-      availableEntries: entries,
-      chapters,
-      // Pass through the chapter query callback directly
-      queryChapter: onQueryChapter,
-    }
-
-    const result = await service.runRetrieval(context, signal)
+    const result = await service.runRetrieval()
 
     log('runAgenticRetrieval complete', {
       entriesFound: result.entries.length,
@@ -615,7 +258,7 @@ class AIService {
   /**
    * Determine if agentic retrieval should be used.
    */
-  shouldUseAgenticRetrieval(_chapters: Chapter[]): boolean {
+  shouldUseAgenticRetrieval(): boolean {
     const timelineFillSettings = settings.systemServicesSettings.timelineFill
     if (!timelineFillSettings?.enabled) {
       return false
@@ -637,34 +280,21 @@ class AIService {
     })
 
     const timelineFillService = serviceFactory.createTimelineFillService()
-    // Pass callback to fetch full chapter entries for richer context
-    const getChapterEntries = (chapter: Chapter) => story.getChapterEntries(chapter)
-    return timelineFillService.runTimelineFill(visibleEntries, chapters, getChapterEntries)
+    return timelineFillService.runTimelineFill()
   }
 
   /**
    * Answer a specific chapter question.
    */
-  async answerChapterQuestion(
-    chapterNumber: number,
-    question: string,
-    chapters: Chapter[],
-  ): Promise<string> {
+  async answerChapterQuestion(chapterNumber: number, question: string): Promise<string> {
     log('answerChapterQuestion called', {
       chapterNumber,
       question,
-      chaptersCount: chapters.length,
+      chaptersCount: story.generationContext.promptContext.chapters.length,
     })
 
     const chapterQueryService = serviceFactory.createChapterQueryService()
-    // Pass callback to fetch full chapter entries for richer context
-    const getChapterEntries = (chapter: Chapter) => story.getChapterEntries(chapter)
-    const answer = await chapterQueryService.answerQuestion(
-      question,
-      chapters,
-      [chapterNumber],
-      getChapterEntries,
-    )
+    const answer = await chapterQueryService.answerQuestion(question, [chapterNumber])
     return answer.answer
   }
 
@@ -691,14 +321,7 @@ class AIService {
     }
 
     const chapterQueryService = serviceFactory.createChapterQueryService()
-    // Pass callback to fetch full chapter entries for richer context
-    const getChapterEntries = (chapter: Chapter) => story.getChapterEntries(chapter)
-    const answer = await chapterQueryService.answerQuestion(
-      question,
-      chapters,
-      chapterNumbers,
-      getChapterEntries,
-    )
+    const answer = await chapterQueryService.answerQuestion(question, chapterNumbers)
     return answer.answer
   }
 
@@ -761,14 +384,8 @@ class AIService {
    * - Inline mode: Process <pic> tags from AI response
    * - Analyzed mode: Use LLM to identify imageable scenes
    */
-  async generateImagesForNarrative(context: ImageGenerationContext): Promise<void> {
-    log('generateImagesForNarrative called', {
-      storyId: context.storyId,
-      entryId: context.entryId,
-      narrativeLength: context.narrativeResponse.length,
-      hasTranslation: !!context.translatedNarrative,
-      translationLanguage: context.translationLanguage,
-    })
+  async generateImagesForNarrative(): Promise<void> {
+    log('generateImagesForNarrative called')
 
     if (!this.isImageGenerationEnabled(undefined, 'standard')) {
       log('Image generation not enabled or not configured')
@@ -776,26 +393,16 @@ class AIService {
     }
 
     // Check if inline image mode is enabled for this story
-    const inlineImageMode = story.currentStory?.settings?.imageGenerationMode === 'inline'
+    const inlineImageMode = story.settings.imageGenerationMode === 'inline'
     try {
       if (inlineImageMode) {
         // Use inline image generation (process <pic> tags from AI response)
-        const narrativeToProcess = context.translatedNarrative || context.narrativeResponse
-        log('Using inline image mode', {
-          usingTranslated: !!context.translatedNarrative,
-        })
-        const inlineContext: InlineImageContext = {
-          storyId: context.storyId,
-          entryId: context.entryId,
-          narrativeContent: narrativeToProcess,
-          presentCharacters: context.presentCharacters,
-          referenceMode: context.referenceMode,
-        }
-        await inlineImageService.processNarrativeForInlineImages(inlineContext)
+        log('Using inline image mode')
+        await inlineImageService.processNarrativeForInlineImages()
       } else {
         // Analyzed mode: Use LLM to identify imageable scenes
         log('Using analyzed image mode')
-        await this.runAnalyzedImageGeneration(context)
+        await this.runAnalyzedImageGeneration()
       }
     } catch (error) {
       log('Image generation failed (non-fatal)', error)
@@ -807,38 +414,28 @@ class AIService {
    * Run analyzed image generation mode.
    * Uses LLM to identify visually striking moments in narrative text.
    */
-  private async runAnalyzedImageGeneration(context: ImageGenerationContext): Promise<void> {
+  private async runAnalyzedImageGeneration(): Promise<void> {
     const imageSettings = settings.systemServicesSettings.imageGeneration
-    const referenceMode = context.referenceMode ?? false
+    const entryId =
+      story.generationContext.narrationEntryId ?? story.generationContext.userAction?.entryId ?? ''
 
-    // Build style prompt
-    const stylePrompt = await this.getStylePrompt(imageSettings.styleId)
-
-    // Build analysis context
-    const analysisContext: ImageAnalysisContext = {
-      narrativeResponse: context.narrativeResponse,
-      userAction: context.userAction,
-      presentCharacters: context.presentCharacters,
-      currentLocation: context.currentLocation,
-      stylePrompt,
-      maxImages: imageSettings.maxImagesPerMessage ?? 3,
-      chatHistory: context.chatHistory,
-      referenceMode,
-      translatedNarrative: context.translatedNarrative,
-      translationLanguage: context.translationLanguage,
-    }
-
+    const presentCharacterNames =
+      story.generationContext.classificationResult?.classificationResult?.scene
+        ?.presentCharacterNames ?? []
+    const presentCharacters: Character[] = story.character.characters.filter((c) =>
+      presentCharacterNames.includes(c.name),
+    )
     // Emit analysis started
-    emitImageAnalysisStarted(context.entryId)
+    emitImageAnalysisStarted(entryId)
 
     try {
       // Create service and identify scenes
       const analysisService = serviceFactory.createImageAnalysisService()
-      const scenes = await analysisService.identifyScenes(analysisContext)
+      const scenes = await analysisService.identifyScenes()
 
       if (scenes.length === 0) {
         log('No imageable scenes identified')
-        emitImageAnalysisComplete(context.entryId, 0, 0)
+        emitImageAnalysisComplete(entryId, 0, 0)
         return
       }
 
@@ -851,22 +448,22 @@ class AIService {
         scenes: sceneCount,
         portraits: portraitCount,
       })
-      emitImageAnalysisComplete(context.entryId, sceneCount, portraitCount)
+      emitImageAnalysisComplete(entryId, sceneCount, portraitCount)
 
       // Queue image generation for each scene
       for (const scene of scenes) {
         await this.queueAnalyzedImageGeneration(
-          context.storyId,
-          context.entryId,
+          story.id ?? '',
+          entryId,
           scene,
           imageSettings,
-          context.presentCharacters,
+          presentCharacters,
         )
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       log('Scene analysis failed', error)
-      emitImageAnalysisFailed(context.entryId, errorMessage)
+      emitImageAnalysisFailed(entryId, errorMessage)
     }
   }
 
@@ -881,7 +478,7 @@ class AIService {
     presentCharacters: Character[],
   ): Promise<void> {
     const imageId = crypto.randomUUID()
-    const referenceMode = story.currentStory?.settings?.referenceMode ?? false
+    const referenceMode = story.settings.referenceMode ?? false
 
     // Determine profile and model
     let profileId = imageSettings.profileId
@@ -940,7 +537,7 @@ class AIService {
     }
 
     // Build full prompt with style
-    const stylePrompt = await this.getStylePrompt(styleId)
+    const stylePrompt = await AIService.getStylePrompt(styleId)
     const fullPrompt = `${scene.prompt}. ${stylePrompt}`
 
     const { width, height } = parseImageSize(sizeToUse)
@@ -1065,14 +662,11 @@ class AIService {
    * Analyze the difference between two story responses and generate a new background image if needed.
    * This is used to detect when the scene has changed enough to warrant a new background image and generate it.
    */
-  async analyzeBackgroundChangeAndGenerateImage(
-    storyId: string,
-    visibleEntries: StoryEntry[],
-  ): Promise<void> {
+  async analyzeBackgroundChangeAndGenerateImage(): Promise<void> {
     try {
       const service = serviceFactory.createBackgroundImageService()
       emitBackgroundImageAnalysisStarted()
-      const result = await service.analyzeResponsesForBackgroundImage(visibleEntries)
+      const result = await service.analyzeResponsesForBackgroundImage()
       emitBackgroundImageAnalysisComplete()
       // Ai returns empty string or short response if no change, otherwise the image prompt
       if (result.changeNecessary) {
@@ -1083,7 +677,7 @@ class AIService {
         if (image) {
           emitBackgroundImageReady()
           log('Background image generated successfully', { image })
-          story.updateCurrentBackgroundImage(image)
+          story.image.updateBackgroundImage(image)
         } else {
           log('Background image generation failed')
         }
@@ -1098,7 +692,7 @@ class AIService {
    * Get the style prompt for the selected style ID.
    * Image style templates are external (raw text) -- fetched directly from the database.
    */
-  private async getStylePrompt(styleId: string): Promise<string> {
+  static async getStylePrompt(styleId: string): Promise<string> {
     try {
       const template = await database.getPackTemplate('default-pack', styleId)
       if (template?.content) {
@@ -1116,54 +710,41 @@ class AIService {
   /**
    * Translate narrative content.
    */
-  async translateNarration(
-    content: string,
-    targetLanguage: string,
-    isVisualProse: boolean = false,
-  ): Promise<TranslationResult> {
+  async translateNarration(): Promise<TranslationResult> {
     const service = serviceFactory.createTranslationService('narration')
-    return service.translateNarration(content, targetLanguage, isVisualProse)
+    return service.translateNarration()
   }
 
   /**
    * Translate user input to English.
    */
-  async translateInput(content: string, sourceLanguage: string): Promise<TranslationResult> {
+  async translateInput(): Promise<TranslationResult> {
     const service = serviceFactory.createTranslationService('input')
-    return service.translateInput(content, sourceLanguage)
+    return service.translateInput()
   }
 
   /**
    * Batch translate UI elements.
    */
-  async translateUIElements(
-    items: UITranslationItem[],
-    targetLanguage: string,
-  ): Promise<UITranslationItem[]> {
+  async translateUIElements(): Promise<UITranslationItem[]> {
     const service = serviceFactory.createTranslationService('ui')
-    return service.translateUIElements(items, targetLanguage)
+    return service.translateUIElements()
   }
 
   /**
    * Translate suggestions.
    */
-  async translateSuggestions<T extends { text: string; type?: string }>(
-    suggestions: T[],
-    targetLanguage: string,
-  ): Promise<T[]> {
+  async translateSuggestions(): Promise<Suggestion[]> {
     const service = serviceFactory.createTranslationService('suggestions')
-    return service.translateSuggestions(suggestions, targetLanguage)
+    return service.translateSuggestions()
   }
 
   /**
    * Translate action choices.
    */
-  async translateActionChoices<T extends { text: string; type?: string }>(
-    choices: T[],
-    targetLanguage: string,
-  ): Promise<T[]> {
+  async translateActionChoices(): Promise<ActionChoice[]> {
     const service = serviceFactory.createTranslationService('actionChoices')
-    return service.translateActionChoices(choices, targetLanguage)
+    return service.translateActionChoices()
   }
 
   /**
