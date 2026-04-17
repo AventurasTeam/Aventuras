@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import type { FullPack } from '$lib/services/packs/types'
-  import { getSamplesForTemplate } from './sampleContext'
+  import { getSamplesForTemplate, getSampleAtPath, stringifySample } from './sampleContext'
   import { getVariablesForTemplate } from '$lib/services/templates/templateContextMap'
   import { packService } from '$lib/services/packs/pack-service'
   import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
@@ -66,21 +66,6 @@
 
   function handleTestValuesChange(values: Record<string, string>) {
     testValues = values
-  }
-
-  function getSampleAtPath(samples: unknown, path: string): unknown {
-    let current: unknown = samples
-    for (const part of path.split('.')) {
-      if (current == null || typeof current !== 'object') return undefined
-      current = (current as Record<string, unknown>)[part]
-    }
-    return current
-  }
-
-  function stringifySample(value: unknown): string {
-    if (typeof value === 'string') return value
-    if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-    return JSON.stringify(value, null, 2)
   }
 
   // Sync testValues when variables change: all samples + custom defaults as base, user overrides on top
@@ -331,7 +316,7 @@
           {/if}
 
           <VariablePalette
-            templateId={selectedTemplateId ?? ''}
+            templateId={selectedTemplateId}
             iconOnly
             customVariables={fullPack?.variables ?? []}
             onInsert={(name) => editorRef?.insertVariable(name)}
@@ -429,7 +414,7 @@
         {/if}
 
         <VariablePalette
-          templateId={selectedTemplateId ?? ''}
+          templateId={selectedTemplateId}
           customVariables={fullPack?.variables ?? []}
           onInsert={(name) => editorRef?.insertVariable(name)}
         />
@@ -653,15 +638,18 @@
   </Drawer.Root>
 {/if}
 
-<!-- Test Variables modal -->
-<TestVariablesModal
-  templateId={selectedTemplateId ?? ''}
-  open={showTestVars}
-  customVariables={fullPack?.variables ?? []}
-  {testValues}
-  onOpenChange={(open) => (showTestVars = open)}
-  onTestValuesChange={handleTestValuesChange}
-/>
+<!-- Test Variables modal — only mounted when a template is selected to avoid
+     rendering an empty palette with no context. -->
+{#if selectedTemplateId}
+  <TestVariablesModal
+    templateId={selectedTemplateId}
+    open={showTestVars}
+    customVariables={fullPack?.variables ?? []}
+    {testValues}
+    onOpenChange={(open) => (showTestVars = open)}
+    onTestValuesChange={handleTestValuesChange}
+  />
+{/if}
 
 <!-- Dirty guard dialog -->
 <Dialog.Root bind:open={showDirtyDialog}>

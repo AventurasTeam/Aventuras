@@ -5,7 +5,7 @@
     getDisplayGroupsForTemplate,
     getVariablesForTemplate,
   } from '$lib/services/templates/templateContextMap'
-  import { getSamplesForTemplate } from './sampleContext'
+  import { getSamplesForTemplate, getSampleAtPath } from './sampleContext'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import * as Collapsible from '$lib/components/ui/collapsible'
   import * as Select from '$lib/components/ui/select'
@@ -45,18 +45,9 @@
 
   let samples = $derived(getSamplesForTemplate(templateId))
 
-  function getSampleAtPath(path: string): unknown {
-    let current: unknown = samples
-    for (const part of path.split('.')) {
-      if (current == null || typeof current !== 'object') return undefined
-      current = (current as Record<string, unknown>)[part]
-    }
-    return current
-  }
-
   function shouldUseTextarea(name: string, type?: string): boolean {
     if (type === 'array' || type === 'object') return true
-    const sample = getSampleAtPath(name)
+    const sample = getSampleAtPath(samples, name)
     return typeof sample === 'string' && (sample.length > 80 || sample.includes('\n'))
   }
 

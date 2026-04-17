@@ -1,11 +1,6 @@
 /**
  * Sample values for template preview rendering.
  * Organized per context group to match actual runtime shapes.
- *
- * Used by:
- * - TemplatePreview.svelte (rendering previews)
- * - TemplateEditor.svelte (tooltip example values)
- * - PromptPackEditor.svelte (test value defaults)
  */
 
 import { getContextGroup, type ContextGroupName } from '$lib/services/templates/templateContextMap'
@@ -585,6 +580,7 @@ const GROUP_SAMPLES: Record<ContextGroupName, TemplateContext> = {
   import: IMPORT_SAMPLES,
   portrait: PORTRAIT_SAMPLES,
   translateWizard: TRANSLATE_WIZARD_SAMPLES,
+  staticContent: {},
 }
 
 // ---------------------------------------------------------------------------
@@ -599,4 +595,19 @@ export function getSamplesForTemplate(templateId: string): TemplateContext {
   const group = getContextGroup(templateId)
   if (!group) return {}
   return GROUP_SAMPLES[group]
+}
+
+export function getSampleAtPath(samples: unknown, path: string): unknown {
+  let current: unknown = samples
+  for (const part of path.split('.')) {
+    if (current == null || typeof current !== 'object') return undefined
+    current = (current as Record<string, unknown>)[part]
+  }
+  return current
+}
+
+export function stringifySample(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return JSON.stringify(value, null, 2)
 }

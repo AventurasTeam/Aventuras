@@ -2,12 +2,15 @@
  * Template Context Map
  *
  * Maps each templateId to a context group name and defines the variables
- * available in each group. Replaces the flat VariableRegistry with a
- * structured, per-group approach that reflects what data each family of
- * templates actually receives at render time.
+ * available in that group. This is the single source of truth for which
+ * variables each template family can reference at render time.
  */
 
 import type { VariableDefinition, VariableFieldInfo } from './types'
+import { createLogger } from '$lib/log'
+
+const log = createLogger('TemplateContextMap')
+const warnedUnmappedIds = new Set<string>()
 
 // ---------------------------------------------------------------------------
 // Context group names
@@ -22,16 +25,15 @@ export type ContextGroupName =
   | 'import'
   | 'portrait'
   | 'translateWizard'
+  | 'staticContent'
 
 // ---------------------------------------------------------------------------
 // Display group (semantic UI grouping)
 // ---------------------------------------------------------------------------
 
 export interface DisplayGroup {
-  /** Human-readable group label */
   label: string
-  /** Variable names in this group */
-  variables: string[]
+  variables: readonly string[]
 }
 
 // ---------------------------------------------------------------------------
@@ -60,7 +62,8 @@ const TEMPLATE_GROUP_MAP: Record<string, ContextGroupName> = {
   'translate-suggestions': 'promptContext',
   'translate-action-choices': 'promptContext',
 
-  // timelineFillAnswer
+  // timelineFillAnswer — same variables as promptContext plus `answerChapters`
+  // and `query`, which only exist during the second stage of timeline fill.
   'timeline-fill-answer': 'timelineFillAnswer',
 
   // wizard
@@ -91,6 +94,11 @@ const TEMPLATE_GROUP_MAP: Record<string, ContextGroupName> = {
 
   // translateWizard
   'translate-wizard-content': 'translateWizard',
+
+  // staticContent (partials with no variables, included by other templates)
+  'image-style-photorealistic': 'staticContent',
+  'image-style-semi-realistic': 'staticContent',
+  'image-style-soft-anime': 'staticContent',
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +197,8 @@ const lorebookEntryFields: VariableFieldInfo[] = [
   { name: 'hiddenInfo', type: 'string', description: 'Hidden lore (optional)' },
 ]
 
+// Wizard runs before retrieval tiers are assigned, so `tier` is meaningless
+// there — drop it from the documented fields to avoid misleading authors.
 const lorebookEntryWizardFields: VariableFieldInfo[] = lorebookEntryFields.filter(
   (f) => f.name !== 'tier',
 )
@@ -655,6 +665,7 @@ const GROUP_VARIABLES: Record<ContextGroupName, VariableDefinition[]> = {
   import: IMPORT_VARS,
   portrait: PORTRAIT_VARS,
   translateWizard: TRANSLATE_WIZARD_VARS,
+  staticContent: [],
 }
 
 // ---------------------------------------------------------------------------
@@ -835,45 +846,69 @@ const GROUP_DISPLAY_GROUPS: Record<ContextGroupName, DisplayGroup[]> = {
   import: IMPORT_DISPLAY_GROUPS,
   portrait: PORTRAIT_DISPLAY_GROUPS,
   translateWizard: TRANSLATE_WIZARD_DISPLAY_GROUPS,
+  staticContent: [],
 }
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-/**
- * Returns the context group name for a given template ID,
- * or null if the template is not mapped.
- */
 export function getContextGroup(templateId: string): ContextGroupName | null {
-  return TEMPLATE_GROUP_MAP[templateId] ?? null
+  const group = TEMPLATE_GROUP_MAP[templateId]
+  if (group) return group
+  if (templateId && !warnedUnmappedIds.has(templateId)) {
+    warnedUnmappedIds.add(templateId)
+    log('unmapped templateId — no context group registered', { templateId })
+  }
+  return null
 }
 
-/**
- * Returns all variable definitions available for a given template ID.
- * Returns an empty array if the template is not mapped.
- */
-export function getVariablesForTemplate(templateId: string): VariableDefinition[] {
+export function getVariablesForTemplate(templateId: string): readonly VariableDefinition[] {
   const group = getContextGroup(templateId)
-  if (!group) return []
+  if (!group) return EMPTY_VARS
   return GROUP_VARIABLES[group]
 }
 
-/**
- * Returns semantic display groups for a given template ID.
- * Each group contains a label and the variable names in that group.
- * Returns an empty array if the template is not mapped.
- */
-export function getDisplayGroupsForTemplate(templateId: string): DisplayGroup[] {
+export function getDisplayGroupsForTemplate(templateId: string): readonly DisplayGroup[] {
   const group = getContextGroup(templateId)
-  if (!group) return []
+  if (!group) return EMPTY_DISPLAY_GROUPS
   return GROUP_DISPLAY_GROUPS[group]
 }
 
-/**
- * Returns a flat list of variable names available for a given template ID.
- * Convenience wrapper around getVariablesForTemplate().
- */
 export function getVariableNamesForTemplate(templateId: string): string[] {
   return getVariablesForTemplate(templateId).map((def) => def.name)
+}
+
+const EMPTY_VARS: readonly VariableDefinition[] = Object.freeze([])
+const EMPTY_DISPLAY_GROUPS: readonly DisplayGroup[] = Object.freeze([])
+
+/**
+ * Integrity report used by tests and dev tooling to surface map drift:
+ * templateIds loaded from .liquid files that lack a group entry, and
+ * display-group variable names that don't match any definition.
+ */
+export interface ContextMapIntegrityReport {
+  unmappedTemplateIds: string[]
+  orphanedDisplayVariables: { group: ContextGroupName; label: string; name: string }[]
+}
+
+export function validateContextMapIntegrity(
+  templateIds: readonly string[],
+): ContextMapIntegrityReport {
+  const unmappedTemplateIds = templateIds.filter((id) => !(id in TEMPLATE_GROUP_MAP))
+  const orphanedDisplayVariables: ContextMapIntegrityReport['orphanedDisplayVariables'] = []
+  for (const [group, displayGroups] of Object.entries(GROUP_DISPLAY_GROUPS) as [
+    ContextGroupName,
+    DisplayGroup[],
+  ][]) {
+    const definedNames = new Set(GROUP_VARIABLES[group].map((v) => v.name))
+    for (const dg of displayGroups) {
+      for (const name of dg.variables) {
+        if (!definedNames.has(name)) {
+          orphanedDisplayVariables.push({ group, label: dg.label, name })
+        }
+      }
+    }
+  }
+  return { unmappedTemplateIds, orphanedDisplayVariables }
 }

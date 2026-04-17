@@ -6,7 +6,7 @@
  */
 
 import { templateEngine } from './engine'
-import { getVariableNamesForTemplate } from './templateContextMap'
+import { getContextGroup, getVariableNamesForTemplate } from './templateContextMap'
 import type { ValidationResult, ValidationError } from './types'
 import { createLogger } from '$lib/log'
 
@@ -239,7 +239,21 @@ export function validateTemplate(
 
   // Step 2: Variable reference validation
   const variableNames = templateEngine.extractVariableNames(template)
-  const templateVarNames = templateId ? getVariableNamesForTemplate(templateId) : []
+
+  // Distinguish "template has no context group registered" (a map bug) from a
+  // template whose id simply wasn't passed in. Without this branch, an unmapped
+  // id floods the caller with false unknown-variable errors for every reference.
+  const unmapped = templateId != null && getContextGroup(templateId) === null
+  if (unmapped) {
+    log('template has no registered context group', { templateId })
+    errors.push({
+      type: 'unknown_variable',
+      message: `Template '${templateId}' has no registered context group. Variable validation skipped — contact maintainers.`,
+      severity: 'warning',
+    })
+  }
+
+  const templateVarNames = templateId && !unmapped ? getVariableNamesForTemplate(templateId) : []
   const validVariables = new Set([...templateVarNames, ...(additionalVariables || [])])
 
   // Namespaced variables (e.g. `packVariables.runtimeVariables`) register their
@@ -270,7 +284,8 @@ export function validateTemplate(
   // Built-in Liquid variables available in loops and elsewhere
   const builtinRoots = new Set(['forloop', 'tablerowloop'])
 
-  for (const varName of variableNames) {
+  // Skip per-variable checks when we already surfaced the unmapped-template warning.
+  for (const varName of unmapped ? [] : variableNames) {
     // Extract root name (before first dot)
     const root = varName.split('.')[0]
 
