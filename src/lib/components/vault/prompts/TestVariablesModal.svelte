@@ -45,8 +45,18 @@
 
   let samples = $derived(getSamplesForTemplate(templateId))
 
-  function shouldUseTextarea(name: string): boolean {
-    const sample = samples[name]
+  function getSampleAtPath(path: string): unknown {
+    let current: unknown = samples
+    for (const part of path.split('.')) {
+      if (current == null || typeof current !== 'object') return undefined
+      current = (current as Record<string, unknown>)[part]
+    }
+    return current
+  }
+
+  function shouldUseTextarea(name: string, type?: string): boolean {
+    if (type === 'array' || type === 'object') return true
+    const sample = getSampleAtPath(name)
     return typeof sample === 'string' && (sample.length > 80 || sample.includes('\n'))
   }
 
@@ -58,9 +68,7 @@
       label: g.label,
       variables: g.variables
         .map((name) => varMap.get(name))
-        .filter(
-          (v): v is VariableDefinition => v != null && v.type !== 'array' && v.type !== 'object',
-        ),
+        .filter((v): v is VariableDefinition => v != null),
     }))
   })
 
@@ -145,6 +153,14 @@
           oninput={(e) => updateDraft(name, e.currentTarget.value)}
           class="h-7 text-xs"
         />
+      {:else if type === 'array' || type === 'object'}
+        <Textarea
+          value={draft[name] ?? ''}
+          oninput={(e) => updateDraft(name, e.currentTarget.value)}
+          rows={6}
+          class="font-mono text-[11px]"
+          placeholder="JSON"
+        />
       {:else if useTextarea}
         <Textarea
           value={draft[name] ?? ''}
@@ -218,7 +234,7 @@
                     v.description,
                     v.type,
                     v.enumValues,
-                    shouldUseTextarea(v.name),
+                    shouldUseTextarea(v.name, v.type),
                   )}
                 {/each}
               </div>

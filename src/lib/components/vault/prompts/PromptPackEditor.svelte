@@ -2,6 +2,7 @@
   import { untrack } from 'svelte'
   import type { FullPack } from '$lib/services/packs/types'
   import { getSamplesForTemplate } from './sampleContext'
+  import { getVariablesForTemplate } from '$lib/services/templates/templateContextMap'
   import { packService } from '$lib/services/packs/pack-service'
   import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
   import TemplateGroupList from './TemplateGroupList.svelte'
@@ -71,13 +72,27 @@
   $effect(() => {
     const vars = fullPack?.variables
     if (!vars) return
-    // Build complete defaults: system + runtime samples + custom variable defaults
+    // Build complete defaults: registry variable samples (by declared path) + custom variable defaults
     const samples = selectedTemplateId ? getSamplesForTemplate(selectedTemplateId) : {}
+    const registryVars = selectedTemplateId ? getVariablesForTemplate(selectedTemplateId) : []
     const defaults: Record<string, string> = {}
-    for (const [key, value] of Object.entries(samples)) {
-      if (typeof value === 'string') {
-        defaults[key] = value
+    const getSampleAtPath = (path: string): unknown => {
+      let current: unknown = samples
+      for (const part of path.split('.')) {
+        if (current == null || typeof current !== 'object') return undefined
+        current = (current as Record<string, unknown>)[part]
       }
+      return current
+    }
+    const stringify = (value: unknown): string => {
+      if (typeof value === 'string') return value
+      if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+      return JSON.stringify(value, null, 2)
+    }
+    for (const v of registryVars) {
+      const sample = getSampleAtPath(v.name)
+      if (sample === null || sample === undefined) continue
+      defaults[v.name] = stringify(sample)
     }
     for (const v of vars) {
       if (v.defaultValue) {

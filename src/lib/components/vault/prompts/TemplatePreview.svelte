@@ -3,7 +3,7 @@
   import { getSamplesForTemplate } from './sampleContext'
   import { getVariablesForTemplate } from '$lib/services/templates/templateContextMap'
   import type { CustomVariable } from '$lib/services/packs/types'
-  import type { TemplateContext } from '$lib/services/templates/types'
+  import type { TemplateContext, VariableType } from '$lib/services/templates/types'
   import { AlertTriangle } from 'lucide-svelte'
 
   interface Props {
@@ -28,12 +28,32 @@
     current[parts[parts.length - 1]] = value
   }
 
+  function parseOverride(value: string, type: VariableType | undefined): unknown {
+    if (type === 'array' || type === 'object') {
+      try {
+        return JSON.parse(value)
+      } catch {
+        return undefined
+      }
+    }
+    if (type === 'number') {
+      const n = Number(value)
+      return Number.isFinite(n) ? n : value
+    }
+    if (type === 'boolean') {
+      return value === 'true'
+    }
+    return value
+  }
+
   function buildSampleContext(
     vars: CustomVariable[],
     overrides?: Record<string, string>,
   ): TemplateContext {
     const context: TemplateContext = { ...getSamplesForTemplate(templateId) }
-    for (const v of getVariablesForTemplate(templateId)) {
+    const registryVars = getVariablesForTemplate(templateId)
+    const typesByName = new Map(registryVars.map((v) => [v.name, v.type]))
+    for (const v of registryVars) {
       if (!(v.name in context)) {
         context[v.name] = `[${v.name}]`
       }
@@ -45,12 +65,13 @@
     }
     if (overrides) {
       for (const [key, value] of Object.entries(overrides)) {
-        if (value !== '') {
-          if (key.includes('.')) {
-            setNestedValue(context, key, value)
-          } else {
-            context[key] = value
-          }
+        if (value === '') continue
+        const parsed = parseOverride(value, typesByName.get(key))
+        if (parsed === undefined) continue
+        if (key.includes('.')) {
+          setNestedValue(context, key, parsed)
+        } else {
+          context[key] = parsed
         }
       }
     }
