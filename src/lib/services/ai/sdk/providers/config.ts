@@ -104,7 +104,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       'x-ai/grok-4.1-fast',
       'google/gemini-3-flash-preview',
       'deepseek/deepseek-v3.2',
-      'stepfun/step-3.5-flash:free',
+      'minimax/minimax-m2.5:free',
     ],
     services: {
       narrative: {
