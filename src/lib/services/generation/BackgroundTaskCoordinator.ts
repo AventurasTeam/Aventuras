@@ -34,12 +34,6 @@ export class BackgroundTaskCoordinator {
   private loreCoordinator = new LoreManagementCoordinator()
   private styleScheduler = new StyleReviewScheduler()
 
-  /* constructor(deps: BackgroundTaskDependencies) {
-    this.chapterService = new ChapterService(deps.chapterService)
-    this.loreCoordinator = new LoreManagementCoordinator(deps.loreManagement)
-    this.styleScheduler = new StyleReviewScheduler(deps.styleReview)
-  } */
-
   /**
    * Static convenience method that builds deps + input from stores and runs all background tasks.
    * Called from ActionInput after pipeline.execute() completes.

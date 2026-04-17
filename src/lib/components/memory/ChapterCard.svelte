@@ -75,7 +75,7 @@
 
   async function saveEdit() {
     if (editedSummary !== chapter.summary) {
-      await story.chapter.updateChapterSummary(chapter.id, editedSummary)
+      await story.chapter.updateChapter(chapter.id, { summary: editedSummary })
     }
     ui.setMemoryEditingChapter(null)
   }

@@ -93,6 +93,16 @@ export function handleEvent(event: GenerationEvent, state: PipelineEventState): 
           ui.setActionChoicesLoading(false)
         }
       }
+      if (event.phase === 'retrieval') {
+        ui.setLastLorebookRetrieval(
+          story.generationContext.retrievalResult?.lorebookRetrievalResult ?? null,
+        )
+      }
+      break
+    case 'error':
+      if (event.fatal) {
+        console.error('[ActionInput] Fatal pipeline error:', event.error)
+      }
       break
   }
 }

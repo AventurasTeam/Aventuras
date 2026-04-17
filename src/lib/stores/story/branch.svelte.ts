@@ -69,11 +69,6 @@ export class StoryBranchStore {
       throw new Error(`Fork entry ${forkEntryId} not found in database`)
     }
 
-    const dbStory = await database.getStory(this.story.id!)
-    if (!dbStory) {
-      throw new Error(`Story ${this.story.id!} not found in database`)
-    }
-
     // Determine parent branch (current branch, or null for main)
     // IMPORTANT: Ensure it's explicitly null, not undefined
     const parentBranchId = this.story.branch.currentBranchId ?? null

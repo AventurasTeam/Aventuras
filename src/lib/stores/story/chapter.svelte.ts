@@ -51,15 +51,6 @@ export class StoryChapterStore {
     return maxNumber + 1
   }
 
-  // Update a chapter's summary
-  async updateChapterSummary(chapterId: string, summary: string): Promise<void> {
-    if (!this.story.id) throw new Error('No story loaded')
-
-    await database.updateChapter(chapterId, { summary })
-    this.chapters = this.chapters.map((ch) => (ch.id === chapterId ? { ...ch, summary } : ch))
-    log('Chapter summary updated:', chapterId)
-  }
-
   // Update a chapter with multiple fields
   async updateChapter(chapterId: string, updates: Partial<Chapter>): Promise<void> {
     if (!this.story.id) throw new Error('No story loaded')
@@ -200,11 +191,6 @@ export class StoryChapterStore {
       this.invalidateChapterCache()
     }
 
-    // Ensure chapters are sorted by number
-    this.story.chapter.chapters = [...this.story.chapter.chapters].sort(
-      (a, b) => a.number - b.number,
-    )
-
     if (repairsMade) {
       log('Chapter integrity validation complete', {
         deletedChapters: chaptersToDelete.length,
@@ -273,9 +259,7 @@ export class StoryChapterStore {
       this.story.entry.rebuildEntryIdIndex()
     }
 
-    // Sort chapters by number to ensure we get the actual last chapter for this branch
-    const sortedChapters = [...branchChapters].sort((a, b) => a.number - b.number)
-    const lastChapter = sortedChapters[sortedChapters.length - 1]
+    const lastChapter = branchChapters.reduce((max, ch) => (ch.number > max.number ? ch : max))
 
     // Use O(1) map lookup instead of O(n) find + indexOf
     const endIndex = this.story.entry._entryIdToIndex.get(lastChapter.endEntryId)
@@ -291,7 +275,7 @@ export class StoryChapterStore {
     })
 
     // Sum up all branch chapter entry counts as a fallback estimate
-    const totalChapterEntries = sortedChapters.reduce((sum, ch) => sum + ch.entryCount, 0)
+    const totalChapterEntries = branchChapters.reduce((sum, ch) => sum + ch.entryCount, 0)
     return Math.min(totalChapterEntries, this.story.entry.rawEntries.length)
   }
 

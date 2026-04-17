@@ -51,20 +51,15 @@ export class PostGenerationPhase {
     const result: PostGenerationResult = { suggestions: null, actionChoices: null }
 
     if (!disableSuggestions) {
-      if (isCreativeWritingMode) {
-        try {
+      try {
+        if (isCreativeWritingMode) {
           result.suggestions = await this.generateSuggestions(settings.translationSettings)
-        } catch (error) {
-          yield this.errorEvent(error)
-          return
-        }
-      } else {
-        try {
+        } else {
           result.actionChoices = await this.generateActionChoices(settings.translationSettings)
-        } catch (error) {
-          yield this.errorEvent(error)
-          return
         }
+      } catch (error) {
+        yield this.errorEvent(error)
+        return
       }
     }
 
