@@ -135,6 +135,15 @@
         : null,
   )
 
+  const entityTabLabel = $derived(() => {
+    const type = vaultEditor.activeChange?.entityType
+    if (type === 'character') return 'Character'
+    if (type === 'lorebook') return 'Lorebook'
+    if (type === 'lorebook-entry') return 'Entry'
+    if (type === 'scenario') return 'Scenario'
+    return 'Entity'
+  })
+
   const entityIcons = {
     character: User,
     'lorebook-entry': BookOpen,
@@ -872,7 +881,7 @@
               )}
               onclick={() => (activeTab = 'entity')}
             >
-              Entity
+              {entityTabLabel()}
               {#if vaultEditor.pendingCount > 0}
                 <span
                   class="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500/20 px-1 text-[10px] font-bold text-emerald-300"
@@ -1161,6 +1170,7 @@
               <VaultEntityEditPanel
                 bind:this={editPanelRef}
                 change={vaultEditor.activeChange}
+                hideHeader={true}
                 onApprove={(specificChange) =>
                   handleApprove(specificChange ?? vaultEditor.activeChange!)}
                 onReject={(change) => handleReject(change)}
@@ -1203,7 +1213,7 @@
   }}
 >
   <Dialog.Content
-    class="max-h-[90vh] max-w-[90vw] overflow-hidden border-none bg-transparent p-0 shadow-none"
+    class="z-[60] max-h-[90vh] max-w-[90vw] overflow-hidden border-none bg-transparent p-0 shadow-none"
   >
     <Dialog.Title class="sr-only">Generated Image</Dialog.Title>
     <button class="flex items-center justify-center" onclick={() => (enlargedImageUrl = null)}>
