@@ -136,7 +136,10 @@
 
     <!-- Operation Cards -->
     {#if !collapsed}
-      <div class="space-y-0.5 px-1.5 py-1.5" transition:slide={{ duration: 150 }}>
+      <div
+        class="max-h-[40vh] space-y-0.5 overflow-y-auto px-1.5 py-1.5"
+        transition:slide={{ duration: 150 }}
+      >
         {#each operations as op (op.id)}
           {@const config = typeConfig[op.type]}
           {@const Icon = config.icon}
