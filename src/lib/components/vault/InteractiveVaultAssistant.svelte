@@ -139,7 +139,7 @@
     const type = vaultEditor.activeChange?.entityType
     if (type === 'character') return 'Character'
     if (type === 'lorebook') return 'Lorebook'
-    if (type === 'lorebook-entry') return 'Entry'
+    if (type === 'lorebook-entry') return 'Lorebook'
     if (type === 'scenario') return 'Scenario'
     return 'Entity'
   })
