@@ -895,12 +895,7 @@
                     message.role === 'user' ? 'justify-end' : 'justify-start',
                   )}
                 >
-                  <div
-                    class={cn(
-                      'max-w-[90%] md:max-w-[85%]',
-                      message.role === 'user' ? 'order-2' : 'order-1',
-                    )}
-                  >
+                  <div class={cn('max-w-[85%]', message.role === 'user' ? 'order-2' : 'order-1')}>
                     <!-- Message bubble -->
                     <div
                       class={cn(
@@ -1054,7 +1049,7 @@
             <!-- Progress indicator -->
             {#if isGenerating}
               <div class="flex justify-start" in:fade>
-                <div class="max-w-[90%] md:max-w-[85%]">
+                <div class="max-w-[85%]">
                   <div class="border-surface-700 bg-surface-800 rounded-xl border px-3.5 py-2.5">
                     <div class="flex items-start gap-2.5">
                       <div
