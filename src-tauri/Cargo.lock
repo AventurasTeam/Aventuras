@@ -287,6 +287,7 @@ dependencies = [
  "local-ip-address 0.6.11",
  "qrcode",
  "reqwest 0.12.28",
+ "rustls",
  "serde",
  "serde_json",
  "sqlx",

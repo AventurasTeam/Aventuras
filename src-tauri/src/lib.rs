@@ -11,6 +11,8 @@ use sync::commands::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let migrations = vec![
         Migration {
             version: 1,
