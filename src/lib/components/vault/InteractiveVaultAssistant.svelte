@@ -322,10 +322,15 @@
 
   let editPanelRef = $state<ReturnType<typeof VaultEntityEditPanel> | null>(null)
 
-  function handleSetPortrait(imageId: string) {
+  async function handleSetPortrait(imageId: string) {
     if (!activeCharacterEntity || !service) return
     const dataUrl = service.generatedImages.get(imageId)
     if (!dataUrl) return
+    // On compact, the panel only mounts inside the Entity tab — switch first so the ref exists.
+    if (isCompact.current && activeTab !== 'entity') {
+      activeTab = 'entity'
+      await tick()
+    }
     editPanelRef?.setPortrait(dataUrl)
   }
 
