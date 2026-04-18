@@ -257,6 +257,7 @@
     service.reset()
     vaultEditor.reset()
     activeTab = 'chat'
+    prevPendingCount = 0
     initializeService()
     await loadConversationsList()
   }
@@ -271,6 +272,7 @@
     if (loaded) {
       vaultEditor.reset()
       activeTab = 'chat'
+      prevPendingCount = 0
       // Restore full UI state from persisted data
       if (loaded.chatMessages.length > 0) {
         messages = loaded.chatMessages
@@ -307,6 +309,7 @@
         service.reset()
         vaultEditor.reset()
         activeTab = 'chat'
+        prevPendingCount = 0
         initializeService()
       }
       await loadConversationsList()
@@ -573,6 +576,7 @@
 </script>
 
 {#snippet assistantContent()}
+  <Dialog.Title class="sr-only">Vault Assistant</Dialog.Title>
   <div class="flex flex-col overflow-hidden" style="height: 100%">
     <!-- Top Bar -->
     <div
@@ -1178,7 +1182,6 @@
     <Dialog.Content
       class="flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-none p-0"
     >
-      <Dialog.Title class="sr-only">Vault Assistant</Dialog.Title>
       {@render assistantContent()}
     </Dialog.Content>
   </Dialog.Root>
