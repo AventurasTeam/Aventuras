@@ -77,7 +77,7 @@
   let inputValue = $state('')
   let isGenerating = $state(false)
   let error = $state<string | null>(null)
-  let messagesContainer: HTMLDivElement
+  let messagesContainer = $state<HTMLDivElement | null>(null)
   let expandedReasoning = $state<Set<string>>(new Set())
 
   // Progress state
