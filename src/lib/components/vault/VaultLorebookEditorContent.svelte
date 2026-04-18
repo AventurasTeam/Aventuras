@@ -49,6 +49,7 @@
     onRejectEntry?: (change: VaultPendingChange) => void
     onUpdatePendingChange?: (change: VaultPendingChange, newData: VaultLorebookEntry) => void
     onOpenAssistant?: (entity: FocusedEntity) => void
+    hideHeader?: boolean
   }
 
   let {
@@ -64,6 +65,7 @@
     onRejectEntry,
     onUpdatePendingChange,
     onOpenAssistant,
+    hideHeader = false,
   }: Props = $props()
 
   // Local state for editing - initialized from props but mutable
@@ -616,7 +618,7 @@
         </div>
       {/if}
     </div>
-  {:else}
+  {:else if !hideHeader}
     <!-- Embedded header with close button -->
     <div
       class="border-surface-700 bg-surface-900 flex flex-shrink-0 items-center justify-between border-b px-4 py-2"
@@ -636,13 +638,13 @@
         <X class="h-3.5 w-3.5" />
       </Button>
     </div>
-    {#if error}
-      <div
-        class="w-full border-b border-red-500/20 bg-red-500/8 py-1 text-center text-xs text-red-400"
-      >
-        {error}
-      </div>
-    {/if}
+  {/if}
+  {#if isEmbedded && error}
+    <div
+      class="w-full border-b border-red-500/20 bg-red-500/8 py-1 text-center text-xs text-red-400"
+    >
+      {error}
+    </div>
   {/if}
 
   <Tabs.Root bind:value={activeTab} class="flex flex-1 flex-col overflow-hidden">

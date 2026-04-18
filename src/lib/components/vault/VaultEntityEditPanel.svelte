@@ -18,9 +18,10 @@
     onApprove: (change?: VaultPendingChange) => void
     onReject?: (change: VaultPendingChange) => void
     onClose: () => void
+    hideHeader?: boolean
   }
 
-  let { change, onApprove, onReject, onClose }: Props = $props()
+  let { change, onApprove, onReject, onClose, hideHeader = false }: Props = $props()
 
   // Local state for the editable data (character / scenario)
   let charData = $state<VaultCharacterInput | null>(null)
@@ -208,42 +209,45 @@
             data: newData,
           } as VaultPendingChange)
         }}
+        {hideHeader}
       />
     {/key}
   {:else}
     <!-- Standard UI for character / scenario -->
-    <!-- Header -->
-    <div
-      class="border-surface-700 bg-surface-900 flex shrink-0 items-center justify-between border-b px-4 py-2.5"
-    >
-      <div class="flex items-center gap-2.5">
-        <div
-          class="flex h-6 w-6 items-center justify-center rounded-md {change.entityType ===
-          'character'
-            ? 'bg-amber-500/15'
-            : change.entityType === 'lorebook-entry'
-              ? 'bg-cyan-500/15'
-              : 'bg-violet-500/15'}"
-        >
-          {#if change.entityType === 'character'}
-            <User class="h-3 w-3 text-amber-400" />
-          {:else if change.entityType === 'lorebook-entry'}
-            <BookOpen class="h-3 w-3 text-cyan-400" />
-          {:else}
-            <MapIcon class="h-3 w-3 text-violet-400" />
-          {/if}
-        </div>
-        <span class="text-surface-200 text-xs font-semibold">{actionLabel} {entityLabel}</span>
-      </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        class="text-surface-400 hover:text-foreground h-6 w-6"
-        onclick={onClose}
+    {#if !hideHeader}
+      <!-- Header -->
+      <div
+        class="border-surface-700 bg-surface-900 flex shrink-0 items-center justify-between border-b px-4 py-2.5"
       >
-        <X class="h-3.5 w-3.5" />
-      </Button>
-    </div>
+        <div class="flex items-center gap-2.5">
+          <div
+            class="flex h-6 w-6 items-center justify-center rounded-md {change.entityType ===
+            'character'
+              ? 'bg-amber-500/15'
+              : change.entityType === 'lorebook-entry'
+                ? 'bg-cyan-500/15'
+                : 'bg-violet-500/15'}"
+          >
+            {#if change.entityType === 'character'}
+              <User class="h-3 w-3 text-amber-400" />
+            {:else if change.entityType === 'lorebook-entry'}
+              <BookOpen class="h-3 w-3 text-cyan-400" />
+            {:else}
+              <MapIcon class="h-3 w-3 text-violet-400" />
+            {/if}
+          </div>
+          <span class="text-surface-200 text-xs font-semibold">{actionLabel} {entityLabel}</span>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="text-surface-400 hover:text-foreground h-6 w-6"
+          onclick={onClose}
+        >
+          <X class="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    {/if}
 
     <!-- Form -->
     <div class="flex-1 space-y-4 overflow-y-auto">
