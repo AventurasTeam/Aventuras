@@ -545,106 +545,199 @@
   }
 </script>
 
-<ResponsiveModal.Root open={true} onOpenChange={(open) => !open && onClose()}>
-  <ResponsiveModal.Content
-    class={cn(
-      'flex h-[90vh] w-full flex-col gap-0 overflow-hidden p-0',
-      vaultEditor.editorOpen && !isCompact.current ? 'max-w-[90vw]' : 'max-w-2xl',
-    )}
-  >
-    <div class="flex flex-col overflow-hidden" style="height: 100%">
-      <!-- Top Bar -->
-      <div
-        class="border-surface-700 bg-surface-900 flex items-center justify-between border-b px-4 py-2.5"
-      >
-        <div class="flex items-center gap-2.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            class="text-surface-400 hover:text-foreground hover:bg-foreground/5 h-8 w-8"
-            onclick={onClose}
-            title="Back to Vault"
-          >
-            <ChevronLeft class="h-4 w-4" />
-          </Button>
-          <div class="flex items-center gap-2">
-            <div class="bg-accent-500/15 flex h-7 w-7 items-center justify-center rounded-lg">
-              <Bot class="text-accent-400 h-4 w-4" />
-            </div>
-            <h2 class="text-surface-100 text-sm font-semibold tracking-tight">Vault Assistant</h2>
-          </div>
-        </div>
-        {#if vaultEditor.pendingCount > 0}
-          <div in:fade={{ duration: 150 }}>
-            <Button
-              variant="outline"
-              size="sm"
-              class="h-7 gap-1.5 border-emerald-500/30 bg-emerald-500/8 px-2.5 text-xs text-emerald-400 hover:bg-emerald-500/15"
-              onclick={handleApproveAll}
-              disabled={isGenerating}
-            >
-              <CheckCheck class="h-3.5 w-3.5" />
-              Approve All
-              <span
-                class="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300"
-              >
-                {vaultEditor.pendingBreakdown}
-              </span>
-            </Button>
-          </div>
-        {/if}
-      </div>
-
-      <!-- Two-panel layout -->
-      <div class="flex flex-1 overflow-hidden">
-        <!-- Entity Editor Panel (left, desktop only) -->
-        {#if vaultEditor.editorOpen && vaultEditor.activeChange && !isCompact.current}
-          <div
-            class="border-surface-700 flex flex-1 flex-col overflow-hidden border-r"
-            transition:fade={{ duration: 100 }}
-          >
-            <VaultEntityEditPanel
-              bind:this={editPanelRef}
-              change={vaultEditor.activeChange}
-              onApprove={(specificChange) =>
-                handleApprove(specificChange ?? vaultEditor.activeChange!)}
-              onReject={(change) => handleReject(change)}
-              onClose={() => vaultEditor.closeEditor()}
-            />
-          </div>
-        {/if}
-
-        <!-- Chat Panel (right, or full-width on mobile) -->
-        <div
-          class="flex flex-col overflow-hidden {vaultEditor.editorOpen && !isCompact.current
-            ? 'w-full max-w-2xl shrink-0'
-            : 'mx-auto w-full max-w-2xl'}"
+{#snippet assistantContent()}
+  <div class="flex flex-col overflow-hidden" style="height: 100%">
+    <!-- Top Bar -->
+    <div
+      class="border-surface-700 bg-surface-900 flex items-center justify-between border-b px-4 py-2.5"
+    >
+      <div class="flex items-center gap-2.5">
+        <Button
+          variant="ghost"
+          size="icon"
+          class="text-surface-400 hover:text-foreground hover:bg-foreground/5 h-8 w-8"
+          onclick={onClose}
+          title="Back to Vault"
         >
-          <!-- Conversation selector -->
-          <div class="relative {conversationSelectorOpen ? 'z-20' : 'z-10'}">
+          <ChevronLeft class="h-4 w-4" />
+        </Button>
+        <div class="flex items-center gap-2">
+          <div class="bg-accent-500/15 flex h-7 w-7 items-center justify-center rounded-lg">
+            <Bot class="text-accent-400 h-4 w-4" />
+          </div>
+          <h2 class="text-surface-100 text-sm font-semibold tracking-tight">Vault Assistant</h2>
+        </div>
+      </div>
+      {#if vaultEditor.pendingCount > 0}
+        <div in:fade={{ duration: 150 }}>
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-7 gap-1.5 border-emerald-500/30 bg-emerald-500/8 px-2.5 text-xs text-emerald-400 hover:bg-emerald-500/15"
+            onclick={handleApproveAll}
+            disabled={isGenerating}
+          >
+            <CheckCheck class="h-3.5 w-3.5" />
+            Approve All
+            <span
+              class="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300"
+            >
+              {vaultEditor.pendingBreakdown}
+            </span>
+          </Button>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Two-panel layout -->
+    <div class="flex flex-1 overflow-hidden">
+      <!-- Entity Editor Panel (left, desktop only) -->
+      {#if vaultEditor.editorOpen && vaultEditor.activeChange && !isCompact.current}
+        <div
+          class="border-surface-700 flex flex-1 flex-col overflow-hidden border-r"
+          transition:fade={{ duration: 100 }}
+        >
+          <VaultEntityEditPanel
+            bind:this={editPanelRef}
+            change={vaultEditor.activeChange}
+            onApprove={(specificChange) =>
+              handleApprove(specificChange ?? vaultEditor.activeChange!)}
+            onReject={(change) => handleReject(change)}
+            onClose={() => vaultEditor.closeEditor()}
+          />
+        </div>
+      {/if}
+
+      <!-- Chat Panel (right, or full-width on mobile) -->
+      <div
+        class="flex flex-col overflow-hidden {vaultEditor.editorOpen && !isCompact.current
+          ? 'w-full max-w-2xl shrink-0'
+          : 'mx-auto w-full max-w-2xl'}"
+      >
+        <!-- Conversation selector -->
+        <div class="relative {conversationSelectorOpen ? 'z-20' : 'z-10'}">
+          <button
+            class="border-surface-700 text-surface-400 hover:text-foreground hover:bg-foreground/5 flex w-full items-center gap-2 border-b px-3 py-1.5 text-xs transition-colors"
+            onclick={() => (conversationSelectorOpen = !conversationSelectorOpen)}
+          >
+            <History class="h-3.5 w-3.5" />
+            <span class="font-medium">
+              {conversations.length > 0
+                ? `${conversations.length} conversation${conversations.length !== 1 ? 's' : ''}`
+                : 'No history'}
+            </span>
+            {#if conversationSelectorOpen}
+              <ChevronUp class="ml-auto h-3 w-3" />
+            {:else}
+              <ChevronDown class="ml-auto h-3 w-3" />
+            {/if}
+          </button>
+          {#if conversationSelectorOpen}
+            <!-- Backdrop -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <div
+              class="fixed inset-0 z-10"
+              onclick={() => (conversationSelectorOpen = false)}
+              transition:fade={{ duration: 100 }}
+            ></div>
+            <!-- Floating panel -->
+            <div
+              class="border-surface-700 bg-surface-900 absolute right-2 left-2 z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border shadow-xl shadow-black/30"
+              transition:slide={{ duration: 150 }}
+            >
+              <div class="space-y-1 p-1.5">
+                <!-- New conversation button -->
+                <button
+                  class="text-surface-300 hover:text-foreground hover:bg-foreground/5 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs transition-colors"
+                  onclick={() => {
+                    conversationSelectorOpen = false
+                    handleNewConversation()
+                  }}
+                >
+                  <div
+                    class="bg-accent-500/15 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md"
+                  >
+                    <Plus class="text-accent-400 h-3.5 w-3.5" />
+                  </div>
+                  <span class="font-medium">New Conversation</span>
+                </button>
+
+                {#if conversations.length > 0}
+                  <div class="border-surface-700 mx-2 border-t"></div>
+                  {#each conversations as conv, i (conv.id)}
+                    <div
+                      class="group bg-surface-800 hover:bg-foreground/5 flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors"
+                    >
+                      <button
+                        class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                        onclick={() => {
+                          conversationSelectorOpen = false
+                          handleSwitchConversation(conv.id)
+                        }}
+                      >
+                        <div
+                          class="bg-surface-700 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md"
+                        >
+                          <History class="text-surface-400 h-3.5 w-3.5" />
+                        </div>
+                        <div class="min-w-0 flex-1">
+                          <div class="text-surface-200 truncate text-xs font-medium">
+                            {conv.title || 'Untitled'}
+                          </div>
+                          <div class="text-surface-500 mt-0.5 text-[10px]">
+                            {new Date(conv.updatedAt).toLocaleString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            })}
+                            {#if i === conversations.length - 1 && conversations.length >= MAX_CONVERSATIONS}
+                              <span class="text-surface-600 ml-1">· oldest</span>
+                            {/if}
+                          </div>
+                        </div>
+                      </button>
+                      <button
+                        class="text-surface-500 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md opacity-0 transition-all group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400"
+                        onclick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteConversation(conv.id)
+                        }}
+                        title="Delete conversation"
+                      >
+                        <Trash2 class="h-3 w-3" />
+                      </button>
+                    </div>
+                  {/each}
+                {/if}
+              </div>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Pending Changes Quick List (popover) -->
+        {#if pendingOnly.length > 0}
+          <div class="relative z-10">
             <button
               class="border-surface-700 text-surface-400 hover:text-foreground hover:bg-foreground/5 flex w-full items-center gap-2 border-b px-3 py-1.5 text-xs transition-colors"
-              onclick={() => (conversationSelectorOpen = !conversationSelectorOpen)}
+              onclick={() => (pendingListOpen = !pendingListOpen)}
             >
-              <History class="h-3.5 w-3.5" />
-              <span class="font-medium">
-                {conversations.length > 0
-                  ? `${conversations.length} conversation${conversations.length !== 1 ? 's' : ''}`
-                  : 'No history'}
-              </span>
-              {#if conversationSelectorOpen}
+              <ListChecks class="h-3.5 w-3.5" />
+              <span class="font-medium">{pendingOnly.length} pending</span>
+              {#if pendingListOpen}
                 <ChevronUp class="ml-auto h-3 w-3" />
               {:else}
                 <ChevronDown class="ml-auto h-3 w-3" />
               {/if}
             </button>
-            {#if conversationSelectorOpen}
+            {#if pendingListOpen}
               <!-- Backdrop -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <div
                 class="fixed inset-0 z-10"
-                onclick={() => (conversationSelectorOpen = false)}
+                onclick={() => (pendingListOpen = false)}
                 transition:fade={{ duration: 100 }}
               ></div>
               <!-- Floating panel -->
@@ -653,382 +746,219 @@
                 transition:slide={{ duration: 150 }}
               >
                 <div class="space-y-1 p-1.5">
-                  <!-- New conversation button -->
-                  <button
-                    class="text-surface-300 hover:text-foreground hover:bg-foreground/5 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs transition-colors"
-                    onclick={() => {
-                      conversationSelectorOpen = false
-                      handleNewConversation()
-                    }}
-                  >
+                  {#each pendingOnly as change (change.id)}
+                    {@const Icon = entityIcons[change.entityType]}
+                    {@const eStyle = entityStyles[change.entityType]}
+                    {@const aStyle = actionStyles[change.action]}
                     <div
-                      class="bg-accent-500/15 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md"
+                      class="group flex items-center gap-2.5 rounded-lg border-l-2 px-2.5 py-2 transition-colors {eStyle.border} {eStyle.bg} cursor-pointer hover:brightness-125"
+                      role="button"
+                      tabindex="0"
+                      onclick={() => handleEdit(change)}
+                      onkeydown={(e) => e.key === 'Enter' && handleEdit(change)}
                     >
-                      <Plus class="text-accent-400 h-3.5 w-3.5" />
-                    </div>
-                    <span class="font-medium">New Conversation</span>
-                  </button>
-
-                  {#if conversations.length > 0}
-                    <div class="border-surface-700 mx-2 border-t"></div>
-                    {#each conversations as conv, i (conv.id)}
+                      <!-- Entity icon -->
                       <div
-                        class="group bg-surface-800 hover:bg-foreground/5 flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors"
+                        class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md {eStyle.bg}"
+                      >
+                        <Icon class="h-3.5 w-3.5 {eStyle.text}" />
+                      </div>
+                      <!-- Info -->
+                      <div class="min-w-0 flex-1">
+                        <div class="text-surface-200 truncate text-xs font-medium">
+                          {getChangeName(change)}
+                        </div>
+                        <div class="mt-0.5 flex items-center gap-1.5">
+                          <span
+                            class="inline-flex items-center rounded px-1 py-px text-[10px] font-semibold uppercase {aStyle.text} {aStyle.bg}"
+                          >
+                            {aStyle.label}
+                          </span>
+                          <span class="text-surface-500 text-[10px]">
+                            {change.entityType === 'lorebook-entry' ? 'entry' : change.entityType}
+                          </span>
+                        </div>
+                      </div>
+                      <!-- Actions -->
+                      <!-- svelte-ignore a11y_no_static_element_interactions -->
+                      <!-- svelte-ignore a11y_click_events_have_key_events -->
+                      <div
+                        class="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+                        onclick={(e) => e.stopPropagation()}
                       >
                         <button
-                          class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                          onclick={() => {
-                            conversationSelectorOpen = false
-                            handleSwitchConversation(conv.id)
-                          }}
+                          class="flex h-6 w-6 items-center justify-center rounded-md text-red-400/70 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                          onclick={() => handleReject(change)}
+                          title="Reject"
                         >
-                          <div
-                            class="bg-surface-700 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md"
-                          >
-                            <History class="text-surface-400 h-3.5 w-3.5" />
-                          </div>
-                          <div class="min-w-0 flex-1">
-                            <div class="text-surface-200 truncate text-xs font-medium">
-                              {conv.title || 'Untitled'}
-                            </div>
-                            <div class="text-surface-500 mt-0.5 text-[10px]">
-                              {new Date(conv.updatedAt).toLocaleString(undefined, {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: 'numeric',
-                                minute: '2-digit',
-                              })}
-                              {#if i === conversations.length - 1 && conversations.length >= MAX_CONVERSATIONS}
-                                <span class="text-surface-600 ml-1">· oldest</span>
-                              {/if}
-                            </div>
-                          </div>
+                          <X class="h-3.5 w-3.5" />
                         </button>
                         <button
-                          class="text-surface-500 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md opacity-0 transition-all group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400"
-                          onclick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteConversation(conv.id)
-                          }}
-                          title="Delete conversation"
+                          class="flex h-6 w-6 items-center justify-center rounded-md text-emerald-400/70 transition-colors hover:bg-emerald-500/20 hover:text-emerald-400"
+                          onclick={() => handleApprove(change)}
+                          title="Approve"
                         >
-                          <Trash2 class="h-3 w-3" />
+                          <Check class="h-3.5 w-3.5" />
                         </button>
                       </div>
-                    {/each}
-                  {/if}
+                    </div>
+                  {/each}
                 </div>
               </div>
             {/if}
           </div>
+        {/if}
 
-          <!-- Pending Changes Quick List (popover) -->
-          {#if pendingOnly.length > 0}
-            <div class="relative z-10">
-              <button
-                class="border-surface-700 text-surface-400 hover:text-foreground hover:bg-foreground/5 flex w-full items-center gap-2 border-b px-3 py-1.5 text-xs transition-colors"
-                onclick={() => (pendingListOpen = !pendingListOpen)}
+        <!-- Messages -->
+        <div class="flex-1 space-y-3 overflow-y-auto px-4 py-3" bind:this={messagesContainer}>
+          {#each messages as message (message.id)}
+            <div in:fade={{ duration: 150 }}>
+              <div
+                class={cn('flex w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}
               >
-                <ListChecks class="h-3.5 w-3.5" />
-                <span class="font-medium">{pendingOnly.length} pending</span>
-                {#if pendingListOpen}
-                  <ChevronUp class="ml-auto h-3 w-3" />
-                {:else}
-                  <ChevronDown class="ml-auto h-3 w-3" />
-                {/if}
-              </button>
-              {#if pendingListOpen}
-                <!-- Backdrop -->
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <!-- svelte-ignore a11y_click_events_have_key_events -->
-                <div
-                  class="fixed inset-0 z-10"
-                  onclick={() => (pendingListOpen = false)}
-                  transition:fade={{ duration: 100 }}
-                ></div>
-                <!-- Floating panel -->
-                <div
-                  class="border-surface-700 bg-surface-900 absolute right-2 left-2 z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border shadow-xl shadow-black/30"
-                  transition:slide={{ duration: 150 }}
-                >
-                  <div class="space-y-1 p-1.5">
-                    {#each pendingOnly as change (change.id)}
-                      {@const Icon = entityIcons[change.entityType]}
-                      {@const eStyle = entityStyles[change.entityType]}
-                      {@const aStyle = actionStyles[change.action]}
-                      <div
-                        class="group flex items-center gap-2.5 rounded-lg border-l-2 px-2.5 py-2 transition-colors {eStyle.border} {eStyle.bg} cursor-pointer hover:brightness-125"
-                        role="button"
-                        tabindex="0"
-                        onclick={() => handleEdit(change)}
-                        onkeydown={(e) => e.key === 'Enter' && handleEdit(change)}
-                      >
-                        <!-- Entity icon -->
-                        <div
-                          class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md {eStyle.bg}"
-                        >
-                          <Icon class="h-3.5 w-3.5 {eStyle.text}" />
-                        </div>
-                        <!-- Info -->
-                        <div class="min-w-0 flex-1">
-                          <div class="text-surface-200 truncate text-xs font-medium">
-                            {getChangeName(change)}
-                          </div>
-                          <div class="mt-0.5 flex items-center gap-1.5">
-                            <span
-                              class="inline-flex items-center rounded px-1 py-px text-[10px] font-semibold uppercase {aStyle.text} {aStyle.bg}"
-                            >
-                              {aStyle.label}
-                            </span>
-                            <span class="text-surface-500 text-[10px]">
-                              {change.entityType === 'lorebook-entry' ? 'entry' : change.entityType}
-                            </span>
-                          </div>
-                        </div>
-                        <!-- Actions -->
-                        <!-- svelte-ignore a11y_no_static_element_interactions -->
-                        <!-- svelte-ignore a11y_click_events_have_key_events -->
-                        <div
-                          class="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
-                          onclick={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            class="flex h-6 w-6 items-center justify-center rounded-md text-red-400/70 transition-colors hover:bg-red-500/20 hover:text-red-400"
-                            onclick={() => handleReject(change)}
-                            title="Reject"
-                          >
-                            <X class="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            class="flex h-6 w-6 items-center justify-center rounded-md text-emerald-400/70 transition-colors hover:bg-emerald-500/20 hover:text-emerald-400"
-                            onclick={() => handleApprove(change)}
-                            title="Approve"
-                          >
-                            <Check class="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    {/each}
-                  </div>
-                </div>
-              {/if}
-            </div>
-          {/if}
-
-          <!-- Messages -->
-          <div class="flex-1 space-y-3 overflow-y-auto px-4 py-3" bind:this={messagesContainer}>
-            {#each messages as message (message.id)}
-              <div in:fade={{ duration: 150 }}>
                 <div
                   class={cn(
-                    'flex w-full',
-                    message.role === 'user' ? 'justify-end' : 'justify-start',
+                    'max-w-[90%] md:max-w-[85%]',
+                    message.role === 'user' ? 'order-2' : 'order-1',
                   )}
                 >
+                  <!-- Message bubble -->
                   <div
                     class={cn(
-                      'max-w-[90%] md:max-w-[85%]',
-                      message.role === 'user' ? 'order-2' : 'order-1',
+                      'rounded-xl text-sm',
+                      message.role === 'user'
+                        ? 'bg-accent-600/90 px-3.5 py-2.5 text-white'
+                        : 'bg-surface-800 border-surface-700 border px-3.5 py-2.5',
                     )}
                   >
-                    <!-- Message bubble -->
-                    <div
-                      class={cn(
-                        'rounded-xl text-sm',
-                        message.role === 'user'
-                          ? 'bg-accent-600/90 px-3.5 py-2.5 text-white'
-                          : 'bg-surface-800 border-surface-700 border px-3.5 py-2.5',
-                      )}
-                    >
-                      <!-- Icon + content -->
-                      <div class="flex items-start gap-2.5">
-                        {#if message.role === 'assistant'}
-                          <div
-                            class="bg-accent-500/15 mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md"
-                          >
-                            <Bot class="text-accent-400 h-3 w-3" />
-                          </div>
-                        {:else}
-                          <div
-                            class="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-white/10"
-                          >
-                            <User class="h-3 w-3 opacity-90" />
-                          </div>
-                        {/if}
-                        <div class="min-w-0 flex-1">
-                          <div class="chat-markdown prose-content break-words">
-                            {@html parseMarkdown(message.content)}
-                          </div>
+                    <!-- Icon + content -->
+                    <div class="flex items-start gap-2.5">
+                      {#if message.role === 'assistant'}
+                        <div
+                          class="bg-accent-500/15 mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md"
+                        >
+                          <Bot class="text-accent-400 h-3 w-3" />
                         </div>
-                      </div>
-
-                      <!-- Reasoning (collapsible) -->
-                      {#if message.role === 'assistant' && message.reasoning}
-                        <div class="border-surface-700 mt-2 border-t pt-2">
-                          <button
-                            class="text-surface-400 hover:text-foreground flex items-center gap-1.5 text-xs transition-colors"
-                            onclick={() => toggleReasoning(message.id)}
-                          >
-                            <Brain class="h-3 w-3" />
-                            <span>Reasoning</span>
-                            {#if expandedReasoning.has(message.id)}
-                              <ChevronUp class="h-3 w-3" />
-                            {:else}
-                              <ChevronDown class="h-3 w-3" />
-                            {/if}
-                          </button>
-                          {#if expandedReasoning.has(message.id)}
-                            <div
-                              class="bg-surface-900 text-surface-400 mt-2 rounded-lg p-2.5 font-mono text-xs whitespace-pre-wrap"
-                              in:slide
-                            >
-                              {message.reasoning}
-                            </div>
-                          {/if}
+                      {:else}
+                        <div
+                          class="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-white/10"
+                        >
+                          <User class="h-3 w-3 opacity-90" />
                         </div>
                       {/if}
-                    </div>
-
-                    <!-- Tool calls for this message -->
-                    {#if message.toolCalls && message.toolCalls.length > 0}
-                      <div class="mt-1.5 space-y-1">
-                        {#each message.toolCalls as toolCall (toolCall.id)}
-                          {#if !IMAGE_TOOL_NAMES.has(toolCall.name) || toolCall.imageUrl}
-                            <div
-                              class="border-surface-700 bg-surface-800 flex items-center gap-2 rounded-lg border px-2.5 py-1 text-xs"
-                            >
-                              {#if IMAGE_TOOL_NAMES.has(toolCall.name)}
-                                <ImageIcon class="text-surface-500 h-3 w-3 flex-shrink-0" />
-                              {:else}
-                                <Wrench class="text-surface-500 h-3 w-3 flex-shrink-0" />
-                              {/if}
-                              <span class="text-surface-400 font-medium"
-                                >{formatToolCallName(toolCall.name)}</span
-                              >
-                            </div>
-                          {/if}
-                          {#if toolCall.imageUrl}
-                            <div class="group relative mt-1 inline-block">
-                              <button
-                                class="border-surface-700 block cursor-pointer overflow-hidden rounded-lg border transition-transform hover:scale-[1.02]"
-                                onclick={() => (enlargedImageUrl = toolCall.imageUrl!)}
-                                title="Click to enlarge"
-                              >
-                                <img
-                                  src={toolCall.imageUrl}
-                                  alt="AI generated result"
-                                  class="h-auto max-h-52 w-auto max-w-full object-contain"
-                                />
-                              </button>
-                              {#if toolCall.imageId}
-                                <button
-                                  class="absolute right-1.5 bottom-1.5 flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/90"
-                                  onclick={(e) => {
-                                    e.stopPropagation()
-                                    handleReferenceImage(toolCall.imageId!)
-                                  }}
-                                  title="Add image reference to message"
-                                >
-                                  <CornerDownLeft class="h-2.5 w-2.5" />
-                                  Use
-                                </button>
-                                {#if activeCharacterEntity}
-                                  <button
-                                    class="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/90"
-                                    onclick={(e) => {
-                                      e.stopPropagation()
-                                      handleSetPortrait(toolCall.imageId!)
-                                    }}
-                                    title="Set as portrait for {activeCharacterEntity.entityName}"
-                                  >
-                                    <CircleUser class="h-2.5 w-2.5" />
-                                    Set Portrait
-                                  </button>
-                                {/if}
-                              {/if}
-                            </div>
-                          {/if}
-                        {/each}
-                      </div>
-                    {/if}
-
-                    <!-- Timestamp -->
-                    <div
-                      class={cn(
-                        'text-surface-500 mt-1 px-1 text-[10px]',
-                        message.role === 'user' ? 'text-right' : '',
-                      )}
-                    >
-                      {new Date(message.timestamp).toLocaleTimeString()}
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Inline diff cards for pending changes produced by this message -->
-                {#if message.pendingChanges && message.pendingChanges.length > 0}
-                  <div class="mt-3 space-y-2">
-                    {#each message.pendingChanges as change (change.id)}
-                      {@const liveChange = vaultEditor.getLiveChange(change.id) ?? change}
-                      <VaultDiffView
-                        change={liveChange}
-                        onApprove={() => handleApprove(liveChange)}
-                        onReject={() => handleReject(liveChange)}
-                        onEdit={() => handleEdit(liveChange)}
-                      />
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {/each}
-
-            <!-- Progress indicator -->
-            {#if isGenerating}
-              <div class="flex justify-start" in:fade>
-                <div class="max-w-[90%] md:max-w-[85%]">
-                  <div class="border-surface-700 bg-surface-800 rounded-xl border px-3.5 py-2.5">
-                    <div class="flex items-start gap-2.5">
-                      <div
-                        class="bg-accent-500/15 mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md"
-                      >
-                        <Bot class="text-accent-400 h-3 w-3" />
-                      </div>
                       <div class="min-w-0 flex-1">
-                        {#if activeToolCalls.length > 0}
-                          <div class="space-y-1">
-                            {#each activeToolCalls as toolCall (toolCall.id)}
-                              <div
-                                class="border-surface-700 bg-surface-900 flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs"
-                                in:fade
-                              >
-                                {#if toolCall.result === '...'}
-                                  <Loader2
-                                    class="text-accent-400 h-3 w-3 flex-shrink-0 animate-spin"
-                                  />
-                                {:else}
-                                  <Wrench class="text-surface-500 h-3 w-3 flex-shrink-0" />
-                                {/if}
-                                <span class="text-surface-300 font-medium"
-                                  >{formatToolCallName(toolCall.name)}</span
-                                >
-                              </div>
-                            {/each}
-                          </div>
-                        {:else if isThinking}
-                          <div class="text-surface-400 flex items-center gap-2 text-sm">
-                            <Loader2 class="text-accent-400 h-3.5 w-3.5 animate-spin" />
-                            <span>Thinking...</span>
+                        <div class="chat-markdown prose-content break-words">
+                          {@html parseMarkdown(message.content)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Reasoning (collapsible) -->
+                    {#if message.role === 'assistant' && message.reasoning}
+                      <div class="border-surface-700 mt-2 border-t pt-2">
+                        <button
+                          class="text-surface-400 hover:text-foreground flex items-center gap-1.5 text-xs transition-colors"
+                          onclick={() => toggleReasoning(message.id)}
+                        >
+                          <Brain class="h-3 w-3" />
+                          <span>Reasoning</span>
+                          {#if expandedReasoning.has(message.id)}
+                            <ChevronUp class="h-3 w-3" />
+                          {:else}
+                            <ChevronDown class="h-3 w-3" />
+                          {/if}
+                        </button>
+                        {#if expandedReasoning.has(message.id)}
+                          <div
+                            class="bg-surface-900 text-surface-400 mt-2 rounded-lg p-2.5 font-mono text-xs whitespace-pre-wrap"
+                            in:slide
+                          >
+                            {message.reasoning}
                           </div>
                         {/if}
                       </div>
+                    {/if}
+                  </div>
+
+                  <!-- Tool calls for this message -->
+                  {#if message.toolCalls && message.toolCalls.length > 0}
+                    <div class="mt-1.5 space-y-1">
+                      {#each message.toolCalls as toolCall (toolCall.id)}
+                        {#if !IMAGE_TOOL_NAMES.has(toolCall.name) || toolCall.imageUrl}
+                          <div
+                            class="border-surface-700 bg-surface-800 flex items-center gap-2 rounded-lg border px-2.5 py-1 text-xs"
+                          >
+                            {#if IMAGE_TOOL_NAMES.has(toolCall.name)}
+                              <ImageIcon class="text-surface-500 h-3 w-3 flex-shrink-0" />
+                            {:else}
+                              <Wrench class="text-surface-500 h-3 w-3 flex-shrink-0" />
+                            {/if}
+                            <span class="text-surface-400 font-medium"
+                              >{formatToolCallName(toolCall.name)}</span
+                            >
+                          </div>
+                        {/if}
+                        {#if toolCall.imageUrl}
+                          <div class="group relative mt-1 inline-block">
+                            <button
+                              class="border-surface-700 block cursor-pointer overflow-hidden rounded-lg border transition-transform hover:scale-[1.02]"
+                              onclick={() => (enlargedImageUrl = toolCall.imageUrl!)}
+                              title="Click to enlarge"
+                            >
+                              <img
+                                src={toolCall.imageUrl}
+                                alt="AI generated result"
+                                class="h-auto max-h-52 w-auto max-w-full object-contain"
+                              />
+                            </button>
+                            {#if toolCall.imageId}
+                              <button
+                                class="absolute right-1.5 bottom-1.5 flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/90"
+                                onclick={(e) => {
+                                  e.stopPropagation()
+                                  handleReferenceImage(toolCall.imageId!)
+                                }}
+                                title="Add image reference to message"
+                              >
+                                <CornerDownLeft class="h-2.5 w-2.5" />
+                                Use
+                              </button>
+                              {#if activeCharacterEntity}
+                                <button
+                                  class="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/90"
+                                  onclick={(e) => {
+                                    e.stopPropagation()
+                                    handleSetPortrait(toolCall.imageId!)
+                                  }}
+                                  title="Set as portrait for {activeCharacterEntity.entityName}"
+                                >
+                                  <CircleUser class="h-2.5 w-2.5" />
+                                  Set Portrait
+                                </button>
+                              {/if}
+                            {/if}
+                          </div>
+                        {/if}
+                      {/each}
                     </div>
+                  {/if}
+
+                  <!-- Timestamp -->
+                  <div
+                    class={cn(
+                      'text-surface-500 mt-1 px-1 text-[10px]',
+                      message.role === 'user' ? 'text-right' : '',
+                    )}
+                  >
+                    {new Date(message.timestamp).toLocaleTimeString()}
                   </div>
                 </div>
               </div>
 
-              <!-- Streaming diff cards (shown before step message arrives) -->
-              {#if streamingChanges.length > 0}
+              <!-- Inline diff cards for pending changes produced by this message -->
+              {#if message.pendingChanges && message.pendingChanges.length > 0}
                 <div class="mt-3 space-y-2">
-                  {#each streamingChanges as change (change.id)}
+                  {#each message.pendingChanges as change (change.id)}
                     {@const liveChange = vaultEditor.getLiveChange(change.id) ?? change}
                     <VaultDiffView
                       change={liveChange}
@@ -1039,58 +969,140 @@
                   {/each}
                 </div>
               {/if}
-            {/if}
-          </div>
+            </div>
+          {/each}
 
-          <!-- Error display -->
-          {#if error}
-            <div class="border-t border-red-500/20 bg-red-500/8 px-4 py-2" in:slide>
-              <div class="flex items-center gap-2 text-xs text-red-400">
-                <AlertCircle class="h-3.5 w-3.5" />
-                <span>{error}</span>
+          <!-- Progress indicator -->
+          {#if isGenerating}
+            <div class="flex justify-start" in:fade>
+              <div class="max-w-[90%] md:max-w-[85%]">
+                <div class="border-surface-700 bg-surface-800 rounded-xl border px-3.5 py-2.5">
+                  <div class="flex items-start gap-2.5">
+                    <div
+                      class="bg-accent-500/15 mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md"
+                    >
+                      <Bot class="text-accent-400 h-3 w-3" />
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      {#if activeToolCalls.length > 0}
+                        <div class="space-y-1">
+                          {#each activeToolCalls as toolCall (toolCall.id)}
+                            <div
+                              class="border-surface-700 bg-surface-900 flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs"
+                              in:fade
+                            >
+                              {#if toolCall.result === '...'}
+                                <Loader2
+                                  class="text-accent-400 h-3 w-3 flex-shrink-0 animate-spin"
+                                />
+                              {:else}
+                                <Wrench class="text-surface-500 h-3 w-3 flex-shrink-0" />
+                              {/if}
+                              <span class="text-surface-300 font-medium"
+                                >{formatToolCallName(toolCall.name)}</span
+                              >
+                            </div>
+                          {/each}
+                        </div>
+                      {:else if isThinking}
+                        <div class="text-surface-400 flex items-center gap-2 text-sm">
+                          <Loader2 class="text-accent-400 h-3.5 w-3.5 animate-spin" />
+                          <span>Thinking...</span>
+                        </div>
+                      {/if}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          {/if}
 
-          <!-- Input area -->
-          <div class="border-surface-700 bg-surface-900 border-t p-3">
-            <div class="flex items-end gap-2">
-              <Textarea
-                bind:value={inputValue}
-                onkeydown={handleKeyDown}
-                placeholder="Ask me to create characters, organize lorebooks, set up scenarios..."
-                rows={2}
-                class="border-surface-700 bg-surface-800 placeholder:text-surface-500 min-h-[2.5rem] resize-none rounded-xl text-sm"
-                disabled={isGenerating || !service}
-              />
-              <Button
-                size="icon"
-                class={cn(
-                  'h-10 w-10 shrink-0 rounded-xl',
-                  isGenerating ? 'opacity-70' : 'bg-accent-600 hover:bg-accent-500',
-                )}
-                onclick={handleSend}
-                disabled={!inputValue.trim() || isGenerating || !service}
-                title="Send message"
-              >
-                {#if isGenerating}
-                  <Loader2 class="h-5 w-5 animate-spin" />
-                {:else}
-                  <Send class="h-5 w-5" />
-                {/if}
-              </Button>
+            <!-- Streaming diff cards (shown before step message arrives) -->
+            {#if streamingChanges.length > 0}
+              <div class="mt-3 space-y-2">
+                {#each streamingChanges as change (change.id)}
+                  {@const liveChange = vaultEditor.getLiveChange(change.id) ?? change}
+                  <VaultDiffView
+                    change={liveChange}
+                    onApprove={() => handleApprove(liveChange)}
+                    onReject={() => handleReject(liveChange)}
+                    onEdit={() => handleEdit(liveChange)}
+                  />
+                {/each}
+              </div>
+            {/if}
+          {/if}
+        </div>
+
+        <!-- Error display -->
+        {#if error}
+          <div class="border-t border-red-500/20 bg-red-500/8 px-4 py-2" in:slide>
+            <div class="flex items-center gap-2 text-xs text-red-400">
+              <AlertCircle class="h-3.5 w-3.5" />
+              <span>{error}</span>
             </div>
-            <div class="text-surface-500 mt-1.5 hidden text-center text-[10px] md:block">
-              {isTouchDevice()
-                ? 'Shift+Enter to send, Enter for new line'
-                : 'Enter to send, Shift+Enter for new line'}
-            </div>
+          </div>
+        {/if}
+
+        <!-- Input area -->
+        <div class="border-surface-700 bg-surface-900 border-t p-3">
+          <div class="flex items-end gap-2">
+            <Textarea
+              bind:value={inputValue}
+              onkeydown={handleKeyDown}
+              placeholder="Ask me to create characters, organize lorebooks, set up scenarios..."
+              rows={2}
+              class="border-surface-700 bg-surface-800 placeholder:text-surface-500 min-h-[2.5rem] resize-none rounded-xl text-sm"
+              disabled={isGenerating || !service}
+            />
+            <Button
+              size="icon"
+              class={cn(
+                'h-10 w-10 shrink-0 rounded-xl',
+                isGenerating ? 'opacity-70' : 'bg-accent-600 hover:bg-accent-500',
+              )}
+              onclick={handleSend}
+              disabled={!inputValue.trim() || isGenerating || !service}
+              title="Send message"
+            >
+              {#if isGenerating}
+                <Loader2 class="h-5 w-5 animate-spin" />
+              {:else}
+                <Send class="h-5 w-5" />
+              {/if}
+            </Button>
+          </div>
+          <div class="text-surface-500 mt-1.5 hidden text-center text-[10px] md:block">
+            {isTouchDevice()
+              ? 'Shift+Enter to send, Enter for new line'
+              : 'Enter to send, Shift+Enter for new line'}
           </div>
         </div>
       </div>
     </div>
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
+  </div>
+{/snippet}
+
+{#if isCompact.current}
+  <Dialog.Root open={true} onOpenChange={(open) => !open && onClose()}>
+    <Dialog.Content
+      class="flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-none p-0"
+    >
+      <Dialog.Title class="sr-only">Vault Assistant</Dialog.Title>
+      {@render assistantContent()}
+    </Dialog.Content>
+  </Dialog.Root>
+{:else}
+  <ResponsiveModal.Root open={true} onOpenChange={(open) => !open && onClose()}>
+    <ResponsiveModal.Content
+      class={cn(
+        'flex h-[90vh] w-full flex-col gap-0 overflow-hidden p-0',
+        vaultEditor.editorOpen ? 'max-w-[90vw]' : 'max-w-2xl',
+      )}
+    >
+      {@render assistantContent()}
+    </ResponsiveModal.Content>
+  </ResponsiveModal.Root>
+{/if}
 
 <!-- Mobile entity editor — bottom sheet -->
 {#if isCompact.current && vaultEditor.activeChange}
