@@ -1117,7 +1117,10 @@
           {/if}
 
           <!-- Input area -->
-          <div class="border-surface-700 bg-surface-900 border-t p-3">
+          <div
+            class="border-surface-700 bg-surface-900 border-t p-3"
+            style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom));"
+          >
             <div class="flex items-end gap-2">
               <Textarea
                 bind:value={inputValue}
