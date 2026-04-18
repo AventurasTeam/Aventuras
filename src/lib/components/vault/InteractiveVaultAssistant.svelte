@@ -52,6 +52,7 @@
   import { isTouchDevice } from '$lib/utils/swipe'
   import { SvelteSet } from 'svelte/reactivity'
   import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
+  import { createIsCompact } from '$lib/hooks/is-compact.svelte'
 
   interface Props {
     onClose: () => void
@@ -61,8 +62,10 @@
 
   let { onClose, onEditEntity, focusedEntity = null }: Props = $props()
 
-  // Mobile detection
+  // Mobile detection (touch/native-device flavour + 768px breakpoint — kept for non-layout guards)
   const isMobile = createIsMobile()
+  // Layout breakpoint: below 1024px we use the compact (tabs, full-screen) layout
+  const isCompact = createIsCompact()
 
   // AbortController for cancelling ongoing requests
   let abortController: AbortController | null = null
@@ -546,7 +549,7 @@
   <ResponsiveModal.Content
     class={cn(
       'flex h-[90vh] w-full flex-col gap-0 overflow-hidden p-0',
-      vaultEditor.editorOpen && !isMobile.current ? 'max-w-[90vw]' : 'max-w-2xl',
+      vaultEditor.editorOpen && !isCompact.current ? 'max-w-[90vw]' : 'max-w-2xl',
     )}
   >
     <div class="flex flex-col overflow-hidden" style="height: 100%">
@@ -595,7 +598,7 @@
       <!-- Two-panel layout -->
       <div class="flex flex-1 overflow-hidden">
         <!-- Entity Editor Panel (left, desktop only) -->
-        {#if vaultEditor.editorOpen && vaultEditor.activeChange && !isMobile.current}
+        {#if vaultEditor.editorOpen && vaultEditor.activeChange && !isCompact.current}
           <div
             class="border-surface-700 flex flex-1 flex-col overflow-hidden border-r"
             transition:fade={{ duration: 100 }}
@@ -613,7 +616,7 @@
 
         <!-- Chat Panel (right, or full-width on mobile) -->
         <div
-          class="flex flex-col overflow-hidden {vaultEditor.editorOpen && !isMobile.current
+          class="flex flex-col overflow-hidden {vaultEditor.editorOpen && !isCompact.current
             ? 'w-full max-w-2xl shrink-0'
             : 'mx-auto w-full max-w-2xl'}"
         >
@@ -1090,7 +1093,7 @@
 </ResponsiveModal.Root>
 
 <!-- Mobile entity editor — bottom sheet -->
-{#if isMobile.current && vaultEditor.activeChange}
+{#if isCompact.current && vaultEditor.activeChange}
   <Sheet.Root
     open={vaultEditor.editorOpen}
     onOpenChange={(open) => {
