@@ -1,5 +1,6 @@
 <script lang="ts">
   import { story } from '$lib/stores/story/index.svelte'
+  import { debug } from '$lib/stores/debug.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import Sidebar from './Sidebar.svelte'
@@ -111,7 +112,7 @@
 
   function handleDebugClick() {
     if (suppressNextClickFromPointer) return
-    ui.toggleDebugModal()
+    debug.toggleDebugModal()
   }
 
   function handleWindowResize() {
@@ -255,7 +256,7 @@
   <STChatImportModal />
 
   <!-- Floating Debug Button (when debug mode enabled) - draggable, high z-index -->
-  {#if settings.uiSettings.debugMode && !ui.debugModalOpen}
+  {#if settings.uiSettings.debugMode && !debug.debugModalOpen}
     <button
       class="fixed z-30 flex h-12 w-12 items-center justify-center rounded-full bg-amber-600 text-white shadow-lg transition-shadow hover:bg-amber-500 active:shadow-xl"
       class:cursor-grabbing={isDraggingDebug}
@@ -274,11 +275,11 @@
       title="View API Debug Logs (drag to move)"
     >
       <Bug class="pointer-events-none h-5 w-5" />
-      {#if ui.debugLogs.length > 0}
+      {#if debug.requestCount > 0}
         <span
           class="pointer-events-none absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-medium"
         >
-          {ui.debugLogs.length > 99 ? '99+' : ui.debugLogs.length}
+          {debug.requestCount > 99 ? '99+' : debug.requestCount}
         </span>
       {/if}
     </button>

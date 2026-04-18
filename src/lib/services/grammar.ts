@@ -1,18 +1,14 @@
 import { LocalLinter, BinaryModule, type Lint, type Suggestion, type LintConfig } from 'harper.js'
 import wasmUrl from 'harper.js/dist/harper_wasm_bg.wasm?url'
 import { database } from '$lib/services/database'
+import { createLogger } from '$lib/log'
 
-const DEBUG = false
+const log = createLogger('Grammar')
+
 const CUSTOM_DICTIONARY_KEY = 'harper_custom_dictionary_words'
 
 export type AddWordResult = 'added' | 'exists' | 'invalid'
 export type RemoveWordResult = 'removed' | 'not_found' | 'invalid'
-
-function log(...args: unknown[]) {
-  if (DEBUG) {
-    console.log('[Grammar]', ...args)
-  }
-}
 
 export interface GrammarIssue {
   message: string
@@ -29,6 +25,7 @@ class GrammarService {
   private enabled = true
   private customWordsLoaded = false
   private customWords = new Map<string, string>()
+  private entityWords = new Set<string>()
   private dictionaryQueue: Promise<void> = Promise.resolve()
 
   private queueDictionaryOperation<T>(operation: () => Promise<T>): Promise<T> {
@@ -239,11 +236,7 @@ class GrammarService {
 
       if (this.linter) {
         try {
-          await this.linter.clearWords()
-          const remainingWords = [...this.customWords.values()]
-          if (remainingWords.length > 0) {
-            await this.linter.importWords(remainingWords)
-          }
+          await this.reimportAllWords()
         } catch (error) {
           log('Failed to rebuild dictionary after removal:', error)
         }
@@ -261,11 +254,63 @@ class GrammarService {
 
       if (this.linter) {
         try {
-          await this.linter.clearWords()
+          await this.reimportEntityWords()
         } catch (error) {
           log('Failed to clear dictionary words:', error)
         }
       }
+    })
+  }
+
+  private async reimportAllWords(): Promise<void> {
+    if (!this.linter) return
+    try {
+      await this.linter.clearWords()
+      const allWords = [...this.customWords.values(), ...this.entityWords]
+      if (allWords.length > 0) {
+        await this.linter.importWords(allWords)
+      }
+    } catch (error) {
+      log('Failed to reimport words:', error)
+    }
+  }
+
+  private async reimportEntityWords(): Promise<void> {
+    if (!this.linter) return
+    try {
+      await this.linter.clearWords()
+      if (this.entityWords.size > 0) {
+        await this.linter.importWords([...this.entityWords])
+      }
+    } catch (error) {
+      log('Failed to reimport entity words:', error)
+    }
+  }
+
+  async importEntityWords(names: string[]): Promise<void> {
+    return this.queueDictionaryOperation(async () => {
+      this.entityWords.clear()
+
+      names
+        .flatMap((name) => name.split(/\s+/))
+        .forEach((word) => {
+          const normalized = this.normalizeWord(word)
+          if (normalized) {
+            this.entityWords.add(normalized.display)
+          }
+        })
+
+      await this.setup()
+      await this.reimportAllWords()
+      log('Imported', this.entityWords.size, 'entity words into spell checker')
+    })
+  }
+
+  async clearEntityWords(): Promise<void> {
+    return this.queueDictionaryOperation(async () => {
+      this.entityWords.clear()
+      await this.reimportAllWords()
+      log('Cleared entity words from spell checker')
     })
   }
 }

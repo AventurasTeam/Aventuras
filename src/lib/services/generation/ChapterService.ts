@@ -15,10 +15,9 @@ import type {
 import type { ChapterAnalysis, ChapterSummaryResult } from '$lib/services/ai/sdk/schemas/memory'
 import { aiService } from '../ai'
 import { story } from '$lib/stores/story/index.svelte'
+import { createLogger } from '$lib/log'
 
-function log(...args: unknown[]) {
-  console.log('[ChapterService]', ...args)
-}
+const log = createLogger('ChapterService')
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface ChapterAnalysisResult extends ChapterAnalysis {}

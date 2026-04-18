@@ -46,11 +46,10 @@ export function handleEvent(event: GenerationEvent, state: PipelineEventState): 
     case 'phase_start':
       if (event.phase === 'narrative') {
         ui.startStreaming(state.visualProseMode, state.streamingEntryId)
-      } else if (event.phase === 'classification') {
-        ui.setGenerationStatus('Updating world...')
-      } else if (event.phase === 'post') {
+      } else if (PARALLEL_PHASES.has(event.phase)) {
+        state.activeParallelPhases.add(event.phase)
         ui.setGenerationStatus(
-          state.isCreativeWritingMode ? 'Generating suggestions...' : 'Generating actions...',
+          parallelStatusMessage(state.activeParallelPhases, state.isCreativeMode),
         )
         if (state.isCreativeWritingMode) {
           ui.setSuggestionsLoading(true)
@@ -73,6 +72,13 @@ export function handleEvent(event: GenerationEvent, state: PipelineEventState): 
       break
 
     case 'phase_complete':
+      if (PARALLEL_PHASES.has(event.phase)) {
+        state.activeParallelPhases.delete(event.phase)
+        callbacks.setGenerationStatus(
+          parallelStatusMessage(state.activeParallelPhases, state.isCreativeMode),
+        )
+      }
+
       if (event.phase === 'post') {
         const postResult = event.result as
           | { suggestions: any[] | null; actionChoices: any[] | null }

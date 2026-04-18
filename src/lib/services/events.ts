@@ -9,6 +9,7 @@
 import { createLogger } from '$lib/log'
 
 const log = createLogger('EventBus')
+const logStreamingEvents = false
 
 // Event types per design doc section 2.3
 export type EventType =
@@ -276,7 +277,9 @@ class EventBus {
       this.eventLog.shift()
     }
 
-    log('Emit', event.type, event)
+    if (event.type !== 'ResponseStreaming' || logStreamingEvents) {
+      log('Emit', event.type, event)
+    }
 
     // Notify subscribers
     const handlers = this.listeners.get(event.type as EventType)

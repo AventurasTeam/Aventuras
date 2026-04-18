@@ -1,24 +1,14 @@
 import type { VaultScenario, VaultScenarioNpc } from '$lib/types'
-import type { CardImportResult } from '$lib/services/characterCardImporter'
 import { database } from '$lib/services/database'
 import { discoveryService, type DiscoveryCard } from '$lib/services/discovery'
-import {
-  readCharacterCardFile,
-  convertCardToScenario,
-  parseCharacterCard,
-} from '$lib/services/characterCardImporter'
-import { extractEmbeddedLorebook } from '$lib/services/lorebookImporter'
+import { CharacterCardImport } from '$lib/services/characterCardImport'
+import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import { lorebookVault } from './lorebookVault.svelte'
 import type { Genre } from '$lib/services/ai/wizard/ScenarioService'
 import { ui } from './ui.svelte'
+import { createLogger } from '$lib/log'
 
-const DEBUG = true
-
-function log(...args: any[]) {
-  if (DEBUG) {
-    console.log('[ScenarioVault]', ...args)
-  }
-}
+const log = createLogger('ScenarioVault')
 
 /**
  * Store for managing the global Scenario Vault.
@@ -99,7 +89,7 @@ class ScenarioVaultStore {
    * Save a CardImportResult to the vault.
    */
   async saveFromImport(
-    result: CardImportResult,
+    result: CharacterCardImport.CardImportResult,
     filename: string,
     options?: { tags?: string[]; sourceUrl?: string },
   ): Promise<VaultScenario> {
@@ -268,12 +258,8 @@ class ScenarioVaultStore {
     options: { sourceUrl?: string; tags?: string[]; genre?: Genre },
   ): Promise<void> {
     // Parse and convert
-    const jsonString = await readCharacterCardFile(file)
-    const result = await convertCardToScenario(
-      jsonString,
-      'adventure', // Default mode
-      options.genre || 'fantasy',
-    )
+    const jsonString = await CharacterCardImport.readFile(file)
+    const result = await CharacterCardImport.clean(jsonString, options.genre)
 
     if (!result.success && result.errors.length > 0 && !result.settingSeed) {
       throw new Error(result.errors.join('; '))
@@ -312,9 +298,12 @@ class ScenarioVaultStore {
     }
 
     // Extract embedded lorebook if present
-    const parsed = parseCharacterCard(jsonString)
+    const parsed = CharacterCardImport.parseJson(jsonString)
     if (parsed?.characterBook) {
-      const extracted = extractEmbeddedLorebook(parsed.characterBook, parsed.name)
+      const extracted = LorebookImportExport.extractEmbeddedLorebook(
+        parsed.characterBook,
+        parsed.name,
+      )
       if (extracted) {
         try {
           if (!lorebookVault.isLoaded) await lorebookVault.load()

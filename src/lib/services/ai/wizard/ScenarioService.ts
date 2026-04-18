@@ -7,9 +7,7 @@
  * All generation methods throw errors. Non-LLM utility methods preserved.
  */
 
-import { settings, getPresetDefaults } from '$lib/stores/settings.svelte'
-import type { ProviderType } from '$lib/types'
-import type { ReasoningEffort } from '$lib/types'
+import { settings } from '$lib/stores/settings.svelte'
 import type { StoryMode, POV, Character, Location, Item } from '$lib/types'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
@@ -35,122 +33,6 @@ export const SCENARIO_PROVIDER = { order: ['deepseek'], require_parameters: fals
 
 export type Genre = 'fantasy' | 'scifi' | 'modern' | 'horror' | 'mystery' | 'romance' | 'custom'
 export type Tense = 'past' | 'present'
-
-// Advanced settings for customizing generation processes
-export interface ProcessSettings {
-  profileId?: string | null
-  presetId?: string
-  model?: string
-  temperature?: number
-  topP?: number
-  maxTokens?: number
-  reasoningEffort?: ReasoningEffort
-  manualBody?: string
-}
-
-export interface AdvancedWizardSettings {
-  settingExpansion: ProcessSettings
-  settingRefinement: ProcessSettings
-  protagonistGeneration: ProcessSettings
-  characterElaboration: ProcessSettings
-  characterRefinement: ProcessSettings
-  supportingCharacters: ProcessSettings
-  openingGeneration: ProcessSettings
-  openingRefinement: ProcessSettings
-}
-
-export function getDefaultAdvancedSettings(): AdvancedWizardSettings {
-  return getDefaultAdvancedSettingsForProvider('openrouter')
-}
-
-export function getDefaultAdvancedSettingsForProvider(
-  provider: ProviderType,
-): AdvancedWizardSettings {
-  const preset = getPresetDefaults(provider, 'wizard')
-
-  return {
-    settingExpansion: {
-      presetId: 'wizard',
-      profileId: null,
-      model: preset.model,
-      temperature: 0.3,
-      topP: 0.95,
-      maxTokens: 8192,
-      reasoningEffort: preset.reasoningEffort,
-      manualBody: '',
-    },
-    settingRefinement: {
-      presetId: 'wizard',
-      profileId: null,
-      model: preset.model,
-      temperature: 0.3,
-      topP: 0.95,
-      maxTokens: 8192,
-      reasoningEffort: preset.reasoningEffort,
-      manualBody: '',
-    },
-    protagonistGeneration: {
-      presetId: 'wizard',
-      profileId: null,
-      model: preset.model,
-      temperature: 0.3,
-      topP: 0.95,
-      maxTokens: 8192,
-      reasoningEffort: preset.reasoningEffort,
-      manualBody: '',
-    },
-    characterElaboration: {
-      presetId: 'wizard',
-      profileId: null,
-      model: preset.model,
-      temperature: 0.3,
-      topP: 0.95,
-      maxTokens: 8192,
-      reasoningEffort: preset.reasoningEffort,
-      manualBody: '',
-    },
-    characterRefinement: {
-      presetId: 'wizard',
-      profileId: null,
-      model: preset.model,
-      temperature: 0.3,
-      topP: 0.95,
-      maxTokens: 8192,
-      reasoningEffort: preset.reasoningEffort,
-      manualBody: '',
-    },
-    supportingCharacters: {
-      presetId: 'wizard',
-      profileId: null,
-      model: preset.model,
-      temperature: 0.3,
-      topP: 0.95,
-      maxTokens: 8192,
-      reasoningEffort: preset.reasoningEffort,
-      manualBody: '',
-    },
-    openingGeneration: {
-      presetId: 'wizard',
-      profileId: null,
-      model: preset.model,
-      temperature: 0.3,
-      topP: 0.95,
-      maxTokens: 8192,
-      reasoningEffort: preset.reasoningEffort,
-      manualBody: '',
-    },
-    openingRefinement: {
-      presetId: 'wizard',
-      profileId: null,
-      model: preset.model,
-      temperature: 0.3,
-      topP: 0.95,
-      maxTokens: 8192,
-      reasoningEffort: preset.reasoningEffort,
-      manualBody: '',
-    },
-  }
-}
 
 export interface WizardData {
   mode: StoryMode

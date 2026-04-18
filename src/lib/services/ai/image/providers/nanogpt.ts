@@ -13,7 +13,7 @@ import type {
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { imageFetch } from './fetchAdapter'
+import { imageFetch, imageGetFetch } from './fetchAdapter'
 
 const DEFAULT_BASE_URL = 'https://nano-gpt.com/api/v1'
 const MODELS_ENDPOINT = 'https://nano-gpt.com/api/models'
@@ -80,7 +80,7 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
 
     async listModels(): Promise<ImageModelInfo[]> {
       try {
-        const response = await fetch(MODELS_ENDPOINT)
+        const response = await imageGetFetch(MODELS_ENDPOINT)
         if (!response.ok) return getFallbackModels()
 
         const data = await response.json()

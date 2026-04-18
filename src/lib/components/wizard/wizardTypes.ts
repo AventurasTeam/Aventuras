@@ -3,27 +3,9 @@
  */
 
 import type { Wand2 } from 'lucide-svelte'
-import type { Genre, Tense } from '$lib/services/ai/wizard/ScenarioService'
-import type { LorebookImportResult, ImportedEntry } from '$lib/services/lorebookImporter'
-import type { StoryMode, POV, EntryType } from '$lib/types'
-import type {
-  ExpandedSetting,
-  GeneratedProtagonist,
-  GeneratedCharacter,
-  GeneratedOpening,
-} from '$lib/services/ai/sdk'
-
-// Re-export types from scenario service for convenience
-export type {
-  Genre,
-  ExpandedSetting,
-  GeneratedProtagonist,
-  GeneratedCharacter,
-  GeneratedOpening,
-  Tense,
-}
-export type { ImportedEntry, LorebookImportResult }
-export type { StoryMode, POV, EntryType }
+import type { Genre, Tense } from '$lib/services/ai/wizard'
+import { LorebookImportExport } from '$lib/services/lorebookImportExport'
+import type { POV, EntryType } from '$lib/types'
 
 /**
  * An imported lorebook with its entries and metadata
@@ -32,8 +14,8 @@ export interface ImportedLorebookItem {
   id: string
   vaultId?: string // If imported from vault
   filename: string
-  result: LorebookImportResult
-  entries: ImportedEntry[]
+  result: LorebookImportExport.LorebookImportResult
+  entries: LorebookImportExport.ImportedEntry[]
   expanded: boolean
   /** Whether this lorebook is currently being processed (parsing or classifying) */
   isLoading?: boolean
@@ -96,7 +78,9 @@ export function getTypeColor(type: EntryType): string {
 /**
  * Get type counts from entries array
  */
-export function getTypeCounts(entries: ImportedEntry[]): Record<string, number> {
+export function getTypeCounts(
+  entries: LorebookImportExport.ImportedEntry[],
+): Record<string, number> {
   return {
     character: entries.filter((e) => e.type === 'character').length,
     location: entries.filter((e) => e.type === 'location').length,

@@ -1,37 +1,34 @@
 <script lang="ts">
   import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
+  import { onDestroy } from 'svelte'
   import { slide } from 'svelte/transition'
+  import { createDebouncedSave } from '$lib/utils/debounce'
   import { Card, CardContent } from '$lib/components/ui/card'
   import { Slider } from '$lib/components/ui/slider'
   import { Label } from '$lib/components/ui/label'
   import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group'
 
-  const threshold = $derived(story.settings.memoryConfig.tokenThreshold)
-  const bufferMessages = $derived(story.settings.memoryConfig.chapterBuffer)
+  // Local state for editing — seeded from store, written back on debounced save
+  let localThreshold = $state(story.settings.memoryConfig.tokenThreshold)
+  let localBuffer = $state(story.settings.memoryConfig.chapterBuffer)
 
-  // Local state for editing
-  let localThreshold = $derived(threshold)
-  let localBuffer = $derived(bufferMessages)
-
-  // Debounced save
-  let saveTimeout: ReturnType<typeof setTimeout> | null = null
+  // Single debounced save: flushes both values in one call
+  const { trigger, flush } = createDebouncedSave(() =>
+    story.settings.updateMemoryConfig({ tokenThreshold: localThreshold, chapterBuffer: localBuffer }),
+  )
 
   function scheduleThresholdSave(value: number) {
     localThreshold = value
-    if (saveTimeout) clearTimeout(saveTimeout)
-    saveTimeout = setTimeout(() => {
-      story.settings.updateMemoryConfig({ tokenThreshold: value })
-    }, 500)
+    trigger()
   }
 
   function scheduleBufferSave(value: number) {
     localBuffer = value
-    if (saveTimeout) clearTimeout(saveTimeout)
-    saveTimeout = setTimeout(() => {
-      story.settings.updateMemoryConfig({ chapterBuffer: value })
-    }, 500)
+    trigger()
   }
+
+  onDestroy(() => flush())
 
   function formatNumber(num: number): string {
     return num.toLocaleString()

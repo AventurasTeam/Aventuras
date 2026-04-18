@@ -1,31 +1,29 @@
 import type {
-  APISettings,
-  UISettings,
-  ThemeId,
-  FontSource,
-  UpdateSettings,
   APIProfile,
+  APISettings,
+  ExperimentalFeatures,
+  FontSource,
   GenerationPreset,
-  TranslationSettings,
-  ProviderType,
   ImageProfile,
   ImageProviderType,
-  ExperimentalFeatures,
+  ProviderType,
+  ReasoningEffort,
+  TextModel,
+  ThemeId,
+  TranslationSettings,
+  UISettings,
+  UpdateSettings,
 } from '$lib/types'
 import { database } from '$lib/services/database'
-import {
-  type AdvancedWizardSettings,
-  getDefaultAdvancedSettings,
-  getDefaultAdvancedSettingsForProvider,
-} from '$lib/services/ai/wizard/ScenarioService'
 import { grammarService } from '$lib/services/grammar'
 import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
-import type { ReasoningEffort } from '$lib/types'
 import { ui } from '$lib/stores/ui.svelte'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '$lib/constants/timeout'
 import { SvelteSet, SvelteMap } from 'svelte/reactivity'
-import { dedupeTextModels, type TextModel } from '$lib/services/ai/sdk/providers'
+import { dedupeTextModels } from '$lib/utils/dedupeTextModels'
+import type { ImageGenerationServiceSettings, TimelineFillSettings } from '$lib/services/ai'
+import { debug } from './debug.svelte'
 
 // Provider preset type (used by WelcomeScreen)
 export type ProviderPreset = 'openrouter' | 'nanogpt' | 'openai-compatible'
@@ -53,6 +51,122 @@ function normalizeProfile(profile: APIProfile): APIProfile {
 }
 
 // ===== System Services Settings =====
+
+// Advanced settings for customizing generation processes
+interface ProcessSettings {
+  profileId?: string | null
+  presetId?: string
+  model?: string
+  temperature?: number
+  topP?: number
+  maxTokens?: number
+  reasoningEffort?: ReasoningEffort
+  manualBody?: string
+}
+
+interface AdvancedWizardSettings {
+  settingExpansion: ProcessSettings
+  settingRefinement: ProcessSettings
+  protagonistGeneration: ProcessSettings
+  characterElaboration: ProcessSettings
+  characterRefinement: ProcessSettings
+  supportingCharacters: ProcessSettings
+  openingGeneration: ProcessSettings
+  openingRefinement: ProcessSettings
+}
+
+function getDefaultAdvancedWizardSettings(): AdvancedWizardSettings {
+  return getDefaultAdvancedSettingsForProvider('openrouter')
+}
+
+export function getDefaultAdvancedSettingsForProvider(
+  provider: ProviderType,
+): AdvancedWizardSettings {
+  const preset = getPresetDefaults(provider, 'wizard')
+
+  return {
+    settingExpansion: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    settingRefinement: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    protagonistGeneration: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    characterElaboration: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    characterRefinement: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    supportingCharacters: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    openingGeneration: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+    openingRefinement: {
+      presetId: 'wizard',
+      profileId: null,
+      model: preset.model,
+      temperature: 0.3,
+      topP: 0.95,
+      maxTokens: 8192,
+      reasoningEffort: preset.reasoningEffort,
+      manualBody: '',
+    },
+  }
+}
 
 export interface AdvancedRequestSettings {
   manualMode: boolean
@@ -345,19 +459,6 @@ export function getDefaultAgenticRetrievalSettingsForProvider(
   }
 }
 
-// Timeline Fill service settings (per design doc section 3.1.4: Static Retrieval)
-export interface TimelineFillSettings {
-  presetId?: string
-  profileId: string | null // API profile to use (null = use default profile)
-  enabled: boolean
-  mode: 'static' | 'agentic' // 'static' is default, 'agentic' for tool-calling retrieval
-  model: string
-  temperature: number
-  maxQueries: number
-  reasoningEffort: ReasoningEffort
-  manualBody: string
-}
-
 export function getDefaultTimelineFillSettings(): TimelineFillSettings {
   return getDefaultTimelineFillSettingsForProvider('openrouter')
 }
@@ -449,39 +550,6 @@ export function getDefaultUpdateSettings(): UpdateSettings {
     checkInterval: 24, // Check every 24 hours
     lastChecked: null,
   }
-}
-
-// Image Generation settings (automatic image generation for narrative)
-export interface ImageGenerationServiceSettings {
-  // Profile-based image generation (profiles must have supportsImageGeneration capability)
-  profileId: string | null // API profile for standard image generation
-  size: string // Regular image size
-
-  // Reference model settings (for image-to-image with portrait references)
-  referenceProfileId: string | null // API profile for image-to-image with portrait references
-  referenceSize: string // Reference image size
-
-  // General story image settings
-  styleId: string // Selected image style template
-  maxImagesPerMessage: number // Max images per narrative (0 = unlimited, default: 3)
-
-  // Portrait model settings (character reference images)
-  portraitProfileId: string | null // API profile for generating character portraits
-  portraitStyleId: string // Selected character portrait style template
-  portraitSize: string // Portrait image size
-
-  // Scene analysis model settings (for identifying imageable scenes)
-  promptProfileId: string | null // API profile for scene analysis
-  promptModel: string // Model for scene analysis (empty = use profile default)
-  promptTemperature: number
-  promptMaxTokens: number
-  reasoningEffort: ReasoningEffort
-  manualBody: string
-
-  // Background image settings
-  backgroundProfileId: string | null // API profile for background image generation
-  backgroundSize: string // Background image size (default: '1280x720')
-  backgroundBlur: number // Background blur amount in pixels (default: 0)
 }
 
 export function getDefaultImageGenerationSettings(): ImageGenerationServiceSettings {
@@ -1030,6 +1098,17 @@ export function getPresetDefaults(provider: ProviderType, presetId: string): Gen
   return preset
 }
 
+export const STORY_WIDTH_OPTIONS = [
+  { key: '2xl' as const, label: 'Narrow', maxWidth: '42rem' },
+  { key: '3xl' as const, label: 'Default', maxWidth: '48rem' },
+  { key: '4xl' as const, label: 'Wide', maxWidth: '56rem' },
+  { key: '5xl' as const, label: 'Wider', maxWidth: '64rem' },
+  { key: '7xl' as const, label: 'Very wide', maxWidth: '80rem' },
+  { key: '9xl' as const, label: 'Extra wide', maxWidth: '96rem' },
+] as const
+
+const VALID_STORY_WIDTH_KEYS: string[] = STORY_WIDTH_OPTIONS.map((o) => o.key)
+
 export function getDefaultUISettings(): UISettings {
   return {
     theme: 'dark',
@@ -1047,6 +1126,7 @@ export function getDefaultUISettings(): UISettings {
     autoScroll: true,
     showScrollToTop: false,
     showScrollToBottom: true,
+    storyMaxWidth: '3xl',
   }
 }
 
@@ -1111,7 +1191,7 @@ class SettingsStore {
   advancedRequestSettings = $state<AdvancedRequestSettings>(getDefaultAdvancedRequestSettings())
 
   // Advanced wizard settings for scenario generation
-  wizardSettings = $state<AdvancedWizardSettings>(getDefaultAdvancedSettings())
+  wizardSettings = $state<AdvancedWizardSettings>(getDefaultAdvancedWizardSettings())
 
   // System services settings (classifier, memory, suggestions)
   systemServicesSettings = $state<SystemServicesSettings>(getDefaultSystemServicesSettings())
@@ -1251,13 +1331,13 @@ class SettingsStore {
       const profilesJson = await database.getSetting('api_profiles')
       if (profilesJson) {
         try {
-          const parsed = JSON.parse(profilesJson) as (import('$lib/types').APIProfile & {
+          const parsed = JSON.parse(profilesJson) as (APIProfile & {
             reasoningModels?: string[]
           })[]
           // Ensure new fields have defaults for profiles saved before these fields existed
           this.apiSettings.profiles = parsed.map((p) => {
             // Migrate fetchedModels: old format was string[], new format is TextModel[]
-            let fetchedModels: import('$lib/services/ai/sdk/providers').TextModel[] = []
+            let fetchedModels: TextModel[] = []
             if (Array.isArray(p.fetchedModels) && p.fetchedModels.length > 0) {
               if (typeof p.fetchedModels[0] === 'string') {
                 // Old format: string[] + optional reasoningModels string[]
@@ -1399,11 +1479,18 @@ class SettingsStore {
       if (showScrollToBottom !== null)
         this.uiSettings.showScrollToBottom = showScrollToBottom === 'true'
 
+      const storyMaxWidth = await database.getSetting('story_max_width')
+      if (storyMaxWidth && VALID_STORY_WIDTH_KEYS.includes(storyMaxWidth))
+        this.uiSettings.storyMaxWidth = storyMaxWidth as UISettings['storyMaxWidth']
+
       const debugMode = await database.getSetting('debug_mode')
-      if (debugMode !== null) this.uiSettings.debugMode = debugMode === 'true'
+      if (debugMode !== null) debug.isActive = this.uiSettings.debugMode = debugMode === 'true'
 
       const sidebarWidth = await database.getSetting('sidebar_width')
       if (sidebarWidth) this.uiSettings.sidebarWidth = parseInt(sidebarWidth, 10)
+
+      const sidebarOpen = await database.getSetting('sidebar_open')
+      if (sidebarOpen !== null) ui.sidebarOpen = sidebarOpen === 'true'
 
       const manualMode = await database.getSetting('advanced_manual_mode')
       if (manualMode !== null) {
@@ -1416,7 +1503,7 @@ class SettingsStore {
         try {
           const loaded = JSON.parse(wizardSettingsJson)
           // Merge with defaults to ensure all fields exist
-          const defaults = getDefaultAdvancedSettings()
+          const defaults = getDefaultAdvancedWizardSettings()
           this.wizardSettings = {
             settingExpansion: { ...defaults.settingExpansion, ...loaded.settingExpansion },
             settingRefinement: { ...defaults.settingRefinement, ...loaded.settingRefinement },
@@ -1438,7 +1525,7 @@ class SettingsStore {
           }
         } catch {
           // If parsing fails, use defaults
-          this.wizardSettings = getDefaultAdvancedSettings()
+          this.wizardSettings = getDefaultAdvancedWizardSettings()
         }
       }
 
@@ -2392,13 +2479,18 @@ class SettingsStore {
     await database.setSetting('show_scroll_to_bottom', enabled.toString())
   }
 
+  async setStoryMaxWidth(width: UISettings['storyMaxWidth']) {
+    this.uiSettings.storyMaxWidth = width
+    await database.setSetting('story_max_width', width)
+  }
+
   async setSidebarWidth(width: number) {
     this.uiSettings.sidebarWidth = width
     await database.setSetting('sidebar_width', width.toString())
   }
 
   async setDebugMode(enabled: boolean) {
-    this.uiSettings.debugMode = enabled
+    debug.isActive = this.uiSettings.debugMode = enabled
     await database.setSetting('debug_mode', enabled.toString())
   }
 
@@ -2408,6 +2500,19 @@ class SettingsStore {
   }
 
   // Wizard settings methods
+  /** Persist main narrative API settings (temperature, max tokens, reasoning) to the database. */
+  async saveApiSettings() {
+    await Promise.allSettled([
+      database.setSetting('temperature', this.apiSettings.temperature.toString()),
+      database.setSetting('max_tokens', this.apiSettings.maxTokens.toString()),
+      database.setSetting('main_reasoning_effort', this.apiSettings.reasoningEffort),
+      database.setSetting('enable_thinking', this.apiSettings.enableThinking.toString()),
+      database.setSetting('default_model', this.apiSettings.defaultModel),
+      database.setSetting('main_narrative_profile_id', this.apiSettings.mainNarrativeProfileId),
+      database.setSetting('main_manual_body', this.apiSettings.manualBody),
+    ])
+  }
+
   async saveWizardSettings() {
     await database.setSetting('wizard_settings', JSON.stringify(this.wizardSettings))
   }
@@ -3119,6 +3224,48 @@ class SettingsStore {
    */
   hasInvalidProfiles(): boolean {
     return this.getInvalidProfiles().length > 0
+  }
+
+  /**
+   * Reactive getter: returns true if generation is blocked due to config issues.
+   * Declared as a getter so Svelte 5 memoizes it — the for...of loop over
+   * generationPresets doesn't re-run on every render, only when $state changes.
+   *
+   * Covers:
+   * - Any structurally invalid API profile (migration from old versions)
+   * - Main Narrative: missing/deleted API profile, or no model selected
+   * - Any Generation Preset: missing/deleted API profile, or no model selected
+   */
+  get hasGenerationConfigIssues(): boolean {
+    // 1. Any structurally invalid API profile
+    if (this.getInvalidProfiles().length > 0) return true
+
+    // 2. Main Narrative: missing or deleted API profile
+    if (!this.getProfile(this.apiSettings.mainNarrativeProfileId)) return true
+
+    // 3. Main Narrative: no model
+    if (!this.apiSettings.defaultModel) return true
+
+    // 4. Each Generation Preset
+    for (const preset of this.generationPresets) {
+      if (!preset.profileId || !this.getProfile(preset.profileId)) return true
+      if (!preset.model) return true
+    }
+
+    return false
+  }
+
+  /**
+   * Check whether selecting a model should auto-force reasoning effort to 'high'.
+   * This is a NanoGPT-specific behavior: reasoning models on NanoGPT require
+   * effort set to high (the provider enforces it).
+   */
+  shouldForceHighReasoning(profileId: string | null | undefined, modelId: string): boolean {
+    if (!profileId) return false
+    const profile = this.getProfile(profileId)
+    if (!profile || profile.providerType !== 'nanogpt') return false
+    const model = this.getProfileModels(profileId).find((m) => m.id === modelId)
+    return !!model?.reasoning
   }
 }
 

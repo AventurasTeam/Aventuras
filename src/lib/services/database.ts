@@ -2038,6 +2038,59 @@ class DatabaseService {
     return results.length > 0 ? this.mapEntry(results[0]) : null
   }
 
+  async bulkInsertEntries(entries: Entry[]): Promise<void> {
+    if (entries.length === 0) return
+    const db = await this.getDb()
+
+    // Single INSERT statement = single atomic SQLite operation.
+    // tauri-plugin-sql v2 exposes no JS transaction API and uses a sqlx connection
+    // pool, so BEGIN/COMMIT across separate execute() calls is unsafe (different
+    // pool connections). A single multi-row INSERT is atomically guaranteed by
+    // SQLite itself. Modern SQLite (3.32+, bundled with sqlx) supports up to
+    // 32,766 bind variables — at 21 params/row that's ~1,560 entries, well beyond
+    // any realistic lorebook size.
+    const valuePlaceholders = entries
+      .map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .join(',')
+    const values: unknown[] = []
+
+    for (const entry of entries) {
+      values.push(
+        entry.id,
+        entry.storyId,
+        entry.name,
+        entry.type,
+        entry.description,
+        entry.hiddenInfo,
+        JSON.stringify(entry.aliases),
+        JSON.stringify(entry.state),
+        entry.adventureState ? JSON.stringify(entry.adventureState) : null,
+        entry.creativeState ? JSON.stringify(entry.creativeState) : null,
+        JSON.stringify(entry.injection),
+        entry.firstMentioned,
+        entry.lastMentioned,
+        entry.mentionCount,
+        entry.createdBy,
+        entry.createdAt,
+        entry.updatedAt,
+        entry.loreManagementBlacklisted ? 1 : 0,
+        entry.branchId || null,
+        entry.overridesId || null,
+        entry.deleted ? 1 : 0,
+      )
+    }
+
+    await db.execute(
+      `INSERT INTO entries (
+        id, story_id, name, type, description, hidden_info, aliases,
+        state, adventure_state, creative_state, injection,
+        first_mentioned, last_mentioned, mention_count, created_by,
+        created_at, updated_at, lore_management_blacklisted, branch_id, overrides_id, deleted
+      ) VALUES ${valuePlaceholders}`,
+      values,
+    )
+  }
+
   async addEntry(entry: Entry): Promise<void> {
     const db = await this.getDb()
     await db.execute(

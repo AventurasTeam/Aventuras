@@ -8,10 +8,9 @@ import { aiService } from '../ai'
 import { settings } from '$lib/stores/settings.svelte'
 import { story } from '$lib/stores/story/index.svelte'
 import { ui } from '$lib/stores/ui.svelte'
+import { createLogger } from '$lib/log'
 
-function log(...args: unknown[]) {
-  console.log('[StyleReviewScheduler]', ...args)
-}
+const log = createLogger('StyleReviewScheduler')
 
 export interface StyleReviewCheckInput {
   shouldIncrement: boolean

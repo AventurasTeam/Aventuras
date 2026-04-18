@@ -250,6 +250,19 @@
   // Can create checkpoint: latest entry, not a system entry, and no checkpoint exists yet
   const canCreateCheckpoint = $derived(isLatestEntry && entry.type !== 'system' && !entryCheckpoint)
 
+  // Is this the last user_action in the story? (used for the regeneration hint)
+  const isLastUserAction = $derived(
+    entry.type === 'user_action' && story.lastUserActionId === entry.id,
+  )
+
+  // Show regeneration hint when editing the last user_action and retry is available
+  const canSaveAndRegenerate = $derived(
+    isLastUserAction &&
+      !!ui.retryBackup &&
+      !!story.currentStory &&
+      ui.retryBackup.storyId === story.currentStory.id,
+  )
+
   async function handleCreateCheckpoint() {
     if (!checkpointName.trim()) return
     try {
@@ -789,6 +802,7 @@
       retryBtn.addEventListener('click', async () => {
         const imageId = retryBtn.getAttribute('data-image-id')
         if (imageId && expandedImage) {
+          ;(retryBtn as HTMLButtonElement).disabled = true
           await regenerateInlineImage(imageId, expandedImage.prompt)
           expandedImageId = null
           clickedElement = null
@@ -914,42 +928,16 @@
     }
 
     try {
-      // Check if this is the last user_action entry
-      const isLastUserAction = entry.type === 'user_action' && isLastUserActionEntry()
-
-      if (
-        isLastUserAction &&
-        ui.retryBackup &&
-        story.isLoaded &&
-        ui.retryBackup.storyId === story.id
-      ) {
-        // Update the backup with the new content and trigger retry
-        console.log('[StoryEntry] Editing last user action, triggering retry with new content')
+      await story.updateEntry(entry.id, newContent)
+      // Keep retry backup in sync so a subsequent Retry uses the updated text
+      if (canSaveAndRegenerate) {
         ui.updateRetryBackupContent(newContent)
-        isEditing = false
-        await ui.triggerRetryLastMessage()
-      } else {
-        // Normal edit - just update the entry
-        await story.entry.updateEntry(entry.id, newContent)
-        isEditing = false
       }
+      isEditing = false
     } catch (error) {
       console.error('[StoryEntry] Failed to save edit:', error)
       alert(error instanceof Error ? error.message : 'Failed to save edit')
     }
-  }
-
-  /**
-   * Check if this entry is the last user_action in the story.
-   */
-  function isLastUserActionEntry(): boolean {
-    // Find all user_action entries
-    const userActions = story.entry.rawEntries.filter((e) => e.type === 'user_action')
-    if (userActions.length === 0) return false
-
-    // Check if this entry is the last one
-    const lastUserAction = userActions[userActions.length - 1]
-    return lastUserAction.id === entry.id
   }
 
   /**
@@ -1213,6 +1201,12 @@
         <p class="text-muted-foreground hidden text-xs sm:block">
           Ctrl+Enter to save, Esc to cancel
         </p>
+        {#if canSaveAndRegenerate}
+          <p class="hidden items-center gap-1 text-xs text-amber-500/80 sm:flex">
+            Regenerate narration after significant changes
+            <RotateCcw class="h-3 w-3" />
+          </p>
+        {/if}
       </div>
     {:else if isDeleting}
       <div class="space-y-2">
@@ -1582,6 +1576,12 @@
     text-decoration-style: dashed;
   }
 
+  :global(.embedded-image-link.failed) {
+    color: var(--destructive);
+    text-decoration-style: wavy;
+    cursor: pointer;
+  }
+
   :global(.embedded-image-link.regenerating) {
     color: var(--accent-400);
     animation: pulse-glow 1s ease-in-out infinite;
@@ -1606,7 +1606,6 @@
 
   /* Inline image display styles */
   :global(.inline-image-display) {
-    margin: 0.75rem 0;
     border-radius: 0.5rem;
     overflow: hidden;
     border: 1px solid var(--surface-600);
@@ -1656,7 +1655,8 @@
   :global(.inline-image-content) {
     display: block;
     width: 100%;
-    max-width: 28rem;
+    max-height: 70vh;
+    object-fit: contain;
     margin: 0 auto;
   }
 
@@ -1682,6 +1682,7 @@
   :global(.inline-image-placeholder) {
     position: relative;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     margin: 1rem 0;
@@ -1702,6 +1703,31 @@
   :global(.inline-image-placeholder.failed) {
     border-color: var(--color-red-500, #ef4444);
     background: linear-gradient(135deg, var(--surface-800) 0%, rgba(239, 68, 68, 0.1) 100%);
+    gap: 0.5rem;
+    padding: 1rem;
+  }
+
+  :global(.placeholder-text) {
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+    text-align: center;
+    max-width: 100%;
+    word-break: break-word;
+  }
+
+  :global(.inline-image-retry) {
+    margin-top: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    background-color: var(--surface-600);
+    color: var(--foreground);
+    border: 1px solid var(--surface-500);
+    cursor: pointer;
+  }
+
+  :global(.inline-image-retry:hover) {
+    background-color: var(--surface-500);
   }
 
   /* Shimmer effect */
@@ -1865,6 +1891,8 @@
     display: block;
     width: 100%;
     height: auto;
+    max-height: 70vh;
+    object-fit: contain;
     transition:
       filter 0.2s ease,
       transform 0.2s ease;

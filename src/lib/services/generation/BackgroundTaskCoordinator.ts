@@ -1,7 +1,7 @@
 /**
  * BackgroundTaskCoordinator - Orchestrates post-response background tasks.
- * Runs style review, chapter check, and lore management in sequence.
- * Each task is independent - one failure doesn't block others.
+ * Runs style review and chapter check in parallel, then lore management
+ * if chapter creation triggers it. Each task failure doesn't block others.
  */
 
 import { ChapterService, type ChapterCreationResult } from './ChapterService'
@@ -12,10 +12,9 @@ import {
   type StyleReviewCheckResult,
 } from './StyleReviewScheduler'
 import { story } from '$lib/stores/story/index.svelte'
+import { createLogger } from '$lib/log'
 
-function log(...args: unknown[]) {
-  console.log('[BackgroundTaskCoordinator]', ...args)
-}
+const log = createLogger('BackgroundTaskCoordinator')
 
 export interface BackgroundTaskInput {
   // Style review input
@@ -56,8 +55,8 @@ export class BackgroundTaskCoordinator {
   }
 
   /**
-   * Run all background tasks in order: styleReview, chapterCheck (which may trigger lore).
-   * Each task is independent - errors are logged but don't stop other tasks.
+   * Run all background tasks: styleReview and chapterCheck in parallel
+   * (they are independent), then lore management if chapter creation triggers it.
    */
   async runBackgroundTasks(input: BackgroundTaskInput): Promise<BackgroundTaskResult> {
     log('Starting background tasks')
@@ -68,28 +67,30 @@ export class BackgroundTaskCoordinator {
       loreManagement: null,
     }
 
-    // 1. Style review (runs first, independent)
-    try {
-      result.styleReview = await this.styleScheduler.checkAndTrigger(input.styleReview)
+    // 1. Style review and chapter check are independent - run in parallel
+    const [styleSettled, chapterSettled] = await Promise.allSettled([
+      this.styleScheduler.checkAndTrigger(input.styleReview),
+      this.chapterService.checkAndCreateChapter(),
+    ])
+
+    if (styleSettled.status === 'fulfilled') {
+      result.styleReview = styleSettled.value
       log('Style review complete', { triggered: result.styleReview.triggered })
-    } catch (error) {
-      log('Style review failed (non-fatal)', error)
+    } else {
+      log('Style review failed (non-fatal)', styleSettled.reason)
     }
 
-    // 2. Chapter check
-    if (input.shouldCheckChapter) {
-      try {
-        result.chapterCreation = await this.chapterService.checkAndCreateChapter()
-        log('Chapter check complete', {
-          created: result.chapterCreation.created,
-          loreManagementTriggered: result.chapterCreation.loreManagementTriggered,
-        })
-      } catch (error) {
-        log('Chapter check failed (non-fatal)', error)
-      }
+    if (chapterSettled.status === 'fulfilled') {
+      result.chapterCreation = chapterSettled.value
+      log('Chapter check complete', {
+        created: result.chapterCreation.created,
+        loreManagementTriggered: result.chapterCreation.loreManagementTriggered,
+      })
+    } else {
+      log('Chapter check failed (non-fatal)', chapterSettled.reason)
     }
 
-    // 3. Lore management (only if chapter creation triggered it)
+    // 2. Lore management (only if chapter creation triggered it)
     if (result.chapterCreation.loreManagementTriggered) {
       try {
         result.loreManagement = await this.loreCoordinator.runSession()

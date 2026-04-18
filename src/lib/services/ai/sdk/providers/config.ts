@@ -5,6 +5,7 @@
  */
 
 import type { ProviderType, ReasoningEffort } from '$lib/types'
+import { POLLINATIONS_SUPPORTED_SIZES } from '../../image/constants'
 import { OPENROUTER_SUPPORTED_SIZES } from '../../image/providers/openrouter'
 
 // ============================================================================
@@ -68,6 +69,18 @@ export interface ProviderConfig {
 // Provider Configurations
 // ============================================================================
 
+import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google'
+
+export const GOOGLE_SAFETY_SETTINGS: NonNullable<
+  GoogleGenerativeAIProviderOptions['safetySettings']
+> = [
+  { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: 'BLOCK_NONE' },
+] as const
+
 export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
   openrouter: {
     name: 'OpenRouter',
@@ -91,7 +104,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       'x-ai/grok-4.1-fast',
       'google/gemini-3-flash-preview',
       'deepseek/deepseek-v3.2',
-      'stepfun/step-3.5-flash:free',
+      'minimax/minimax-m2.5:free',
     ],
     services: {
       narrative: {
@@ -159,7 +172,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     fallbackModels: [
       'deepseek/deepseek-v3.2',
       'zai-org/glm-5:thinking',
-      'stepfun-ai/step-3.5-flash:thinking',
+      'stepfun-ai/step-3.5-flash-2603',
       'openai/gpt-oss-120b',
     ],
     services: {
@@ -170,13 +183,13 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
         reasoningEffort: 'high',
       },
       classification: {
-        model: 'stepfun-ai/step-3.5-flash:thinking',
+        model: 'stepfun-ai/step-3.5-flash-2603',
         temperature: 0.5,
         maxTokens: 8192,
         reasoningEffort: 'high',
       },
       memory: {
-        model: 'stepfun-ai/step-3.5-flash:thinking',
+        model: 'stepfun-ai/step-3.5-flash-2603',
         temperature: 0.5,
         maxTokens: 8192,
         reasoningEffort: 'high',
@@ -241,13 +254,14 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       imageGeneration: true,
       structuredOutput: false,
       reasoning: true,
+      modelCapabilityFetching: true,
     },
     imageDefaults: {
       defaultModel: 'flux',
       referenceModel: 'kontext',
-      supportedSizes: ['512x512', '1024x1024', '2048x2048'],
+      supportedSizes: POLLINATIONS_SUPPORTED_SIZES,
     },
-    fallbackModels: ['openai', 'mistral', 'llama'],
+    fallbackModels: ['openai', 'openai-fast', 'claude-fast', 'mistral', 'gemini'],
     // No service defaults - user must configure models in Generation Settings
   },
 
@@ -395,6 +409,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       imageGeneration: true,
       structuredOutput: true,
       reasoning: true,
+      modelCapabilityFetching: true,
     },
     imageDefaults: {
       defaultModel: 'imagen-3.0-generate-002',

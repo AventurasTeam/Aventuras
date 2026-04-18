@@ -4,6 +4,7 @@ import tseslint from 'typescript-eslint'
 import prettier from 'eslint-config-prettier'
 import eslintPluginPrettier from 'eslint-plugin-prettier'
 import unusedImports from 'eslint-plugin-unused-imports'
+import boundaries from 'eslint-plugin-boundaries'
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
@@ -51,6 +52,20 @@ export default [
     plugins: {
       'unused-imports': unusedImports,
       prettier: eslintPluginPrettier,
+      boundaries,
+    },
+    settings: {
+      'boundaries/elements': [
+        { type: 'service', pattern: 'src/lib/services/*', mode: 'folder' },
+        { type: 'store', pattern: 'src/lib/stores', mode: 'folder' },
+        { type: 'component', pattern: 'src/lib/components', mode: 'folder' },
+        { type: 'route', pattern: 'src/routes', mode: 'folder' },
+      ],
+      'import/resolver': {
+        typescript: {
+          alwaysTryTypes: true,
+        },
+      },
     },
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
@@ -69,6 +84,22 @@ export default [
       'svelte/no-navigation-without-resolve': 'off',
       'svelte/no-at-html-tags': 'off',
       'svelte/prefer-svelte-reactivity': 'off',
+      'boundaries/dependencies': [
+        'warn',
+        {
+          default: 'allow',
+          rules: [
+            {
+              to: ['service'],
+              disallow: {
+                to: { internalPath: '!index.ts' },
+              },
+              message:
+                'Import from the service public API (index.ts), not internal modules. Use relative imports within the same service.',
+            },
+          ],
+        },
+      ],
     },
   },
 ]

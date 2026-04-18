@@ -3,8 +3,9 @@
   import { ui } from '$lib/stores/ui.svelte'
   import { exportService } from '$lib/services/export'
   import { ask } from '@tauri-apps/plugin-dialog'
-  import { BookOpen, Upload, RefreshCw, Archive, Plus } from 'lucide-svelte'
+  import { BookOpen, Upload, RefreshCw, Archive, Plus, MessageSquareShare } from 'lucide-svelte'
   import SetupWizard from '../wizard/SetupWizard.svelte'
+  import STImportWizard from '../wizard/STImportWizard.svelte'
 
   import { Button } from '$lib/components/ui/button'
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
@@ -15,6 +16,8 @@
 
   let showSetupWizard = $state(false)
   let setupWizardKey = $state(0)
+  let showSTImportWizard = $state(false)
+  let stImportWizardKey = $state(0)
 
   // Load stories on mount
   $effect(() => {
@@ -24,6 +27,11 @@
   function openSetupWizard() {
     setupWizardKey += 1
     showSetupWizard = true
+  }
+
+  function openSTImportWizard() {
+    stImportWizardKey += 1
+    showSTImportWizard = true
   }
 
   async function openStory(storyId: string) {
@@ -117,6 +125,13 @@
           onchange={handleImportFileSelect}
         />
         <Button
+          icon={MessageSquareShare}
+          label="ST Import"
+          variant="outline"
+          title="Import from SillyTavern"
+          onclick={openSTImportWizard}
+        />
+        <Button
           variant="default"
           icon={Plus}
           label="New Story"
@@ -147,7 +162,7 @@
 
   <!-- Discord Link -->
   <a
-    href="https://discord.gg/DqVzhSPC46"
+    href="https://discord.gg/aventuras"
     target="_blank"
     rel="noopener noreferrer"
     class="bg-secondary text-secondary-foreground hover:bg-secondary/80 fixed bottom-6 left-6 z-40 hidden items-center gap-2 rounded-lg px-3 py-2 text-sm shadow-lg transition-all hover:scale-105 sm:flex"
@@ -165,5 +180,12 @@
 {#if showSetupWizard}
   {#key setupWizardKey}
     <SetupWizard onClose={() => (showSetupWizard = false)} />
+  {/key}
+{/if}
+
+<!-- ST Import Wizard -->
+{#if showSTImportWizard}
+  {#key stImportWizardKey}
+    <STImportWizard onClose={() => (showSTImportWizard = false)} />
   {/key}
 {/if}

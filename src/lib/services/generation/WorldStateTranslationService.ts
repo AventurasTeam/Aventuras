@@ -6,14 +6,13 @@
 import type { Character, Location, Item, StoryBeat } from '$lib/types'
 import type { UITranslationItem } from '$lib/services/ai/utils/TranslationService'
 import { hasDescriptors, descriptorsToString } from '$lib/utils/visualDescriptors'
+import { createLogger } from '$lib/log'
 import { story } from '$lib/stores/story/index.svelte'
 import { aiService } from '../ai'
 import { database } from '../database'
 import { settings } from '$lib/stores/settings.svelte'
 
-function log(...args: unknown[]) {
-  console.log('[WorldStateTranslationService]', ...args)
-}
+const log = createLogger('WorldStateTranslationService')
 
 /** New entities from classification result. */
 export interface ClassificationNewEntities {

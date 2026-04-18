@@ -21,27 +21,8 @@
  * - translate*() - TranslationService
  */
 
-import { settings } from '$lib/stores/settings.svelte'
-import { story } from '$lib/stores/story/index.svelte'
+import { createLogger } from '$lib/log'
 import { database } from '$lib/services/database'
-import { DEFAULT_FALLBACK_STYLE_PROMPT } from './image/constants'
-import type { ClassificationResult } from './sdk/schemas/classifier'
-import type { ChapterSummaryResult } from './sdk/schemas/memory'
-import type { Suggestion, SuggestionsResult } from './sdk/schemas/suggestions'
-import type { ActionChoice, ActionChoicesResult } from './sdk/schemas/actionchoices'
-import type { StyleReviewResult } from './generation/StyleReviewerService'
-import type { RetrievalResult as AgenticRetrievalResult } from './retrieval/AgenticRetrievalService'
-import type { TimelineFillResult } from './retrieval/TimelineFillService'
-
-import {
-  EntryRetrievalService,
-  type EntryRetrievalResult,
-  getEntryRetrievalConfigFromSettings,
-} from './retrieval/EntryRetrievalService'
-import {
-  inlineImageService,
-  isImageGenerationEnabled as isImageGenerationEnabledUtil,
-} from './image'
 import {
   emitImageAnalysisStarted,
   emitImageAnalysisComplete,
@@ -54,27 +35,132 @@ import {
   emitBackgroundImageQueued,
   emitBackgroundImageReady,
 } from '$lib/services/events'
-import { generateImage as registryGenerateImage } from './image/providers/registry'
-import { normalizeImageDataUrl, parseImageSize } from '$lib/utils/image'
-import type { ImageableScene } from './sdk/schemas/imageanalysis'
-import type { EmbeddedImage } from '$lib/types'
-
-import type { TranslationResult, UITranslationItem } from './utils/TranslationService'
-import type { StreamChunk } from './core/types'
+import type { PromptContext } from '$lib/services/generation'
 import type {
-  StoryEntry,
-  Character,
-  Location,
   Chapter,
+  Character,
+  EmbeddedImage,
   Entry,
-  LoreManagementResult,
+  ImageProfile,
+  Item,
+  Location,
   LoreChange,
+  LoreManagementResult,
+  MemoryConfig,
+  POV,
+  ReasoningEffort,
+  Story,
+  StoryBeat,
+  StoryEntry,
+  StoryMode,
   StorySettings,
+  Tense,
+  TimeTracker,
 } from '$lib/types'
-import { createLogger } from '$lib/log'
+import { normalizeImageDataUrl, parseImageSize } from '$lib/utils/image'
+import type { StreamChunk } from './core'
 import { serviceFactory } from './core/factory'
-import { NarrativeService } from './generation/NarrativeService'
-import { ui } from '$lib/stores/ui.svelte'
+import {
+  DEFAULT_FALLBACK_STYLE_PROMPT,
+  inlineImageService,
+  isImageGenerationEnabled as isImageGenerationEnabledUtil,
+} from './image'
+import type { InlineImageContext, ImageAnalysisContext } from './image'
+import { generateImage as registryGenerateImage } from './image/providers/registry'
+import { EntryInjector, MemoryService, NarrativeService } from './generation'
+import type {
+  ClassificationContext,
+  ContextConfig,
+  ContextResult,
+  RetrievalContext,
+  StyleReviewResult,
+  WorldStateContext,
+} from './generation'
+import { EntryRetrievalService, getEntryRetrievalConfigFromSettings } from './retrieval'
+import type { TimelineFillResult, EntryRetrievalResult, ActivationTracker } from './retrieval'
+import type {
+  AgenticRetrievalResult,
+  RetrievalContext as AgenticRetrievalContext,
+} from './retrieval/AgenticRetrievalService'
+import type {
+  ActionChoicesResult,
+  ChapterAnalysis,
+  ChapterSummaryResult,
+  ClassificationResult,
+  ImageableScene,
+  RetrievalDecision,
+  SuggestionsResult,
+} from './sdk'
+import type { TranslationResult, UITranslationItem } from './utils'
+
+// Timeline Fill service settings (per design doc section 3.1.4: Static Retrieval)
+export interface TimelineFillSettings {
+  presetId?: string
+  profileId: string | null // API profile to use (null = use default profile)
+  enabled: boolean
+  mode: 'static' | 'agentic' // 'static' is default, 'agentic' for tool-calling retrieval
+  model: string
+  temperature: number
+  maxQueries: number
+  reasoningEffort: ReasoningEffort
+  manualBody: string
+}
+
+// Image Generation settings (automatic image generation for narrative)
+export interface ImageGenerationServiceSettings {
+  // Profile-based image generation (profiles must have supportsImageGeneration capability)
+  profileId: string | null // API profile for standard image generation
+  size: string // Regular image size
+
+  // Reference model settings (for image-to-image with portrait references)
+  referenceProfileId: string | null // API profile for image-to-image with portrait references
+  referenceSize: string // Reference image size
+
+  // General story image settings
+  styleId: string // Selected image style template
+  maxImagesPerMessage: number // Max images per narrative (0 = unlimited, default: 3)
+
+  // Portrait model settings (character reference images)
+  portraitProfileId: string | null // API profile for generating character portraits
+  portraitStyleId: string // Selected character portrait style template
+  portraitSize: string // Portrait image size
+
+  // Scene analysis model settings (for identifying imageable scenes)
+  promptProfileId: string | null // API profile for scene analysis
+  promptModel: string // Model for scene analysis (empty = use profile default)
+  promptTemperature: number
+  promptMaxTokens: number
+  reasoningEffort: ReasoningEffort
+  manualBody: string
+
+  // Background image settings
+  backgroundProfileId: string | null // API profile for background image generation
+  backgroundSize: string // Background image size (default: '1280x720')
+  backgroundBlur: number // Background blur amount in pixels (default: 0)
+}
+
+// Re-export ImageGenerationContext type for backwards compatibility
+export interface ImageGenerationContext {
+  storyId: string
+  entryId: string
+  narrativeResponse: string
+  userAction: string
+  presentCharacters: Character[]
+  currentLocation?: string
+  chatHistory?: string
+  lorebookContext?: string
+  translatedNarrative?: string
+  translationLanguage?: string
+  referenceMode: boolean
+  /** Story-level image generation mode — supplied by caller to avoid store access */
+  imageGenerationMode?: string | null
+  /** All story characters — supplied by caller for portrait/reference lookups */
+  allCharacters?: Character[]
+  /** System image generation service settings — supplied by caller */
+  imageSettings?: ImageGenerationServiceSettings
+  /** Image profile lookup — supplied by caller */
+  getImageProfile?: (id: string) => ImageProfile | undefined
+}
 
 const log = createLogger('AIService')
 
@@ -328,8 +414,10 @@ class AIService {
   /**
    * Determine if timeline fill should be used.
    */
-  shouldUseTimelineFill(_chapters: Chapter[]): boolean {
-    const timelineFillSettings = settings.systemServicesSettings.timelineFill
+  shouldUseTimelineFill(
+    _chapters: Chapter[],
+    timelineFillSettings: Pick<TimelineFillSettings, 'enabled' | 'mode'>,
+  ): boolean {
     if (!timelineFillSettings?.enabled) {
       return false
     }
@@ -451,6 +539,7 @@ class AIService {
       emitImageAnalysisComplete(entryId, sceneCount, portraitCount)
 
       // Queue image generation for each scene
+      const getImageProfile = context.getImageProfile ?? (() => undefined)
       for (const scene of scenes) {
         await this.queueAnalyzedImageGeneration(
           story.id ?? '',
@@ -458,6 +547,8 @@ class AIService {
           scene,
           imageSettings,
           presentCharacters,
+          referenceMode,
+          getImageProfile,
         )
       }
     } catch (error) {
@@ -474,15 +565,16 @@ class AIService {
     storyId: string,
     entryId: string,
     scene: ImageableScene,
-    imageSettings: typeof settings.systemServicesSettings.imageGeneration,
+    imageSettings: ImageGenerationServiceSettings,
     presentCharacters: Character[],
+    referenceMode: boolean,
+    getImageProfile: (id: string) => ImageProfile | undefined,
   ): Promise<void> {
     const imageId = crypto.randomUUID()
-    const referenceMode = story.settings.referenceMode ?? false
 
     // Determine profile and model
     let profileId = imageSettings.profileId
-    let modelToUse = settings.getImageProfile(profileId ?? '')?.model ?? ''
+    let modelToUse = getImageProfile(profileId ?? '')?.model ?? ''
     let sizeToUse = imageSettings.size
     let referenceImageUrls: string[] | undefined
     let styleId: string | undefined = imageSettings.styleId
@@ -508,7 +600,7 @@ class AIService {
         }
         // Use reference profile and model for img2img
         profileId = imageSettings.referenceProfileId
-        modelToUse = settings.getImageProfile(profileId ?? '')?.model ?? ''
+        modelToUse = getImageProfile(profileId ?? '')?.model ?? ''
         sizeToUse = imageSettings.referenceSize
         referenceImageUrls = portraitUrls
         styleId = imageSettings.styleId
@@ -526,7 +618,7 @@ class AIService {
         return
       }
       profileId = imageSettings.portraitProfileId
-      modelToUse = settings.getImageProfile(profileId ?? '')?.model ?? ''
+      modelToUse = getImageProfile(profileId ?? '')?.model ?? ''
       sizeToUse = imageSettings.portraitSize
       styleId = imageSettings.portraitStyleId
     }

@@ -18,7 +18,7 @@ import {
 } from './providers/registry'
 import { database } from '$lib/services/database'
 import { settings } from '$lib/stores/settings.svelte'
-import { emitImageQueued, emitImageReady } from '$lib/services/events'
+import { emitImageQueued, emitImageReady, emitImageAnalysisFailed } from '$lib/services/events'
 import { normalizeImageDataUrl, parseImageSize } from '$lib/utils/image'
 import { extractPicTags, type ParsedPicTag } from '$lib/utils/inlineImageParser'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from './constants'
@@ -283,8 +283,9 @@ export class InlineImageGenerationService {
         errorMessage,
       })
 
-      // Emit ready event (with failure)
+      // Emit ready event (with failure) and notify UI
       emitImageReady(imageId, entryId, false)
+      emitImageAnalysisFailed(entryId, errorMessage)
     }
   }
 }

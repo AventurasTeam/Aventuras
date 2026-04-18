@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte'
+  import { onDestroy, untrack } from 'svelte'
+  import { createDebouncedSave } from '$lib/utils/debounce'
   import { settings } from '$lib/stores/settings.svelte'
   import { Label } from '$lib/components/ui/label'
   import { Button } from '$lib/components/ui/button'
@@ -35,6 +36,7 @@
   const imageSizes = [
     { value: '512x512', label: '512x512 (Faster)' },
     { value: '1024x1024', label: '1024x1024 (Higher Quality)' },
+    { value: '1536x1536', label: '1536x1536 (High Quality)' },
     { value: '2048x2048', label: '2048x2048 (Highest Quality)' },
   ] as const
 
@@ -99,7 +101,12 @@
 
   // ===== Image Profile CRUD =====
   let editingProfileId = $state<string | null>(null)
+  const isEditingReferenceProfile = $derived(
+    editingProfileId !== null &&
+      editingProfileId === settings.systemServicesSettings.imageGeneration.referenceProfileId,
+  )
   let isNewProfile = $state(false)
+  let suppressAutoSave = false
   let profileName = $state('')
   let profileProviderType = $state<ImageProviderType>('nanogpt')
   let profileApiKey = $state('')
@@ -128,23 +135,25 @@
   let profileLoraStrengthModel = $state(1.0)
   let profileLoraStrengthClip = $state(1.0)
   let availableLoras = $state<string[]>([])
-  let saveTimeout: ReturnType<typeof setTimeout> | null = null
+  const { trigger: triggerAutoSave, flush: flushAutoSave } = createDebouncedSave(autoSaveProfile)
+  let loadingInEffect = false
 
-  onDestroy(() => {
-    if (saveTimeout) {
-      clearTimeout(saveTimeout)
-      saveTimeout = null
-    }
-  })
+  onDestroy(() => flushAutoSave())
 
   // Model info cache for active profiles
   let activeProfilesModelInfo = $state<Record<string, ImageModelInfo[]>>({})
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  const loadingProfileModelsIds = new Set<string>()
 
   // Load models for active profiles to get resolution info
   async function loadModelsForProfile(profileId: string) {
-    if (activeProfilesModelInfo[profileId]) return
-    const models = await listImageModels(profileId)
-    activeProfilesModelInfo[profileId] = models
+    if (loadingProfileModelsIds.has(profileId)) return
+    loadingProfileModelsIds.add(profileId)
+    try {
+      activeProfilesModelInfo[profileId] = await listImageModels(profileId)
+    } finally {
+      loadingProfileModelsIds.delete(profileId)
+    }
   }
 
   // Effect to load models for all selected profiles
@@ -157,9 +166,15 @@
       testProfileId,
     ].filter(Boolean) as string[]
 
-    for (const id of profilesToLoad) {
-      loadModelsForProfile(id)
-    }
+    // Read profile IDs reactively above, but check cache without tracking
+    // to avoid re-running when loadModelsForProfile writes results back
+    untrack(() => {
+      for (const id of profilesToLoad) {
+        if (!activeProfilesModelInfo[id]) {
+          loadModelsForProfile(id)
+        }
+      }
+    })
   })
 
   /**
@@ -237,12 +252,16 @@
   const loraItems = $derived(availableLoras.map((l) => ({ value: l, label: l })))
 
   // Load models for the profile form when provider/apiKey change
-  async function loadProfileFormModels(providerType: ImageProviderType, apiKey: string) {
+  async function loadProfileFormModels(
+    providerType: ImageProviderType,
+    apiKey: string,
+    forceReload: boolean,
+  ) {
+    if (isLoadingProfileModels) return
     isLoadingProfileModels = true
     profileModelsError = null
     try {
-      const models = await listImageModelsByProvider(providerType, apiKey)
-      profileModels = models
+      profileModels = await listImageModelsByProvider(providerType, apiKey, forceReload)
     } catch (error) {
       profileModelsError = error instanceof Error ? error.message : 'Failed to load models'
     } finally {
@@ -253,7 +272,12 @@
   // Reactively load models when provider or apiKey changes in profile form
   $effect(() => {
     if (editingProfileId && profileProviderType) {
-      loadProfileFormModels(profileProviderType, profileApiKey)
+      if (loadingInEffect) return
+      loadingInEffect = true
+
+      loadProfileFormModels(profileProviderType, profileApiKey, false).finally(() => {
+        loadingInEffect = false
+      })
       if (profileProviderType === 'comfyui') {
         loadSamplerInfo(profileBaseUrl)
         loadLoras(profileBaseUrl)
@@ -337,18 +361,10 @@
     })
   }
 
-  function triggerAutoSave() {
-    if (saveTimeout) clearTimeout(saveTimeout)
-    saveTimeout = setTimeout(() => {
-      autoSaveProfile()
-      saveTimeout = null
-    }, 500)
-  }
-
   $effect(() => {
     if (editingProfileId && !isNewProfile) {
-      // Monitor all relevant form fields for auto-save
-      const _ = [
+      // Touch all form fields so Svelte tracks them as dependencies
+      void [
         profileName,
         profileProviderType,
         profileApiKey,
@@ -365,17 +381,18 @@
         profileLoraStrengthModel,
         profileLoraStrengthClip,
       ]
+      // Skip the first run after startEditProfile populates the form
+      if (suppressAutoSave) {
+        suppressAutoSave = false
+        return
+      }
       triggerAutoSave()
     }
   })
 
   // Aliased for clarity in UI but uses the same logic
   function saveEditingProfile() {
-    if (saveTimeout) {
-      clearTimeout(saveTimeout)
-      saveTimeout = null
-    }
-    autoSaveProfile()
+    flushAutoSave()
   }
 
   function startNewProfile() {
@@ -406,6 +423,7 @@
     if (editingProfileId && editingProfileId !== profile.id) {
       saveEditingProfile()
     }
+    suppressAutoSave = true
     editingProfileId = profile.id
     isNewProfile = false
     profileName = profile.name
@@ -1067,13 +1085,14 @@
         onModelChange={(id) => {
           profileModel = id
         }}
+        filterFunc={isEditingReferenceProfile ? (m) => m.supportsImg2Img : undefined}
         showCost={true}
         showImg2ImgIndicator={true}
         showDescription={false}
         isLoading={isLoadingProfileModels}
         errorMessage={profileModelsError}
         showRefreshButton={true}
-        onRefresh={() => loadProfileFormModels(profileProviderType, profileApiKey)}
+        onRefresh={() => loadProfileFormModels(profileProviderType, profileApiKey, true)}
       />
       <p class="text-muted-foreground mt-1 text-xs">
         The image model this profile will use for generation.

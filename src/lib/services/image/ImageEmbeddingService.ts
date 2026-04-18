@@ -30,7 +30,10 @@ function getDisplayableAgenticImages(images: EmbeddedImage[]): EmbeddedImage[] {
   return images.filter(
     (img) =>
       img.generationMode !== 'inline' &&
-      (img.status === 'complete' || img.status === 'generating' || img.status === 'pending') &&
+      (img.status === 'complete' ||
+        img.status === 'generating' ||
+        img.status === 'pending' ||
+        img.status === 'failed') &&
       img.sourceText.length >= 20,
   )
 }
@@ -131,7 +134,9 @@ function processUnified(
         ? 'complete'
         : marker.status === 'generating'
           ? 'generating'
-          : 'pending'
+          : marker.status === 'failed'
+            ? 'failed'
+            : 'pending'
 
     placeholderMap.set(
       placeholder,

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { type DebugLogEntry } from '$lib/stores/ui.svelte'
+  import { type DebugLogEntry } from '$lib/stores/debug.svelte'
   import {
     ArrowUpCircle,
     ArrowDownCircle,

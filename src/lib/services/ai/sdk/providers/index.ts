@@ -4,10 +4,11 @@
  * Single entry point for all Vercel AI SDK provider operations.
  */
 
-export { createProviderFromProfile } from './registry'
-export { dedupeTextModels, fetchModelsFromProvider, type TextModel } from './modelFetcher'
+export { createModelFromProfile, createProviderFromProfile } from './registry'
+export { fetchModelsFromProvider } from './modelFetcher'
 export {
   PROVIDERS,
+  GOOGLE_SAFETY_SETTINGS,
   getBaseUrl,
   hasDefaultEndpoint,
   getProviderList,
@@ -21,4 +22,3 @@ export {
   type ProviderCapabilities,
   type ImageDefaults,
 } from './config'
-export type { ProviderType, APIProfile } from '$lib/types'

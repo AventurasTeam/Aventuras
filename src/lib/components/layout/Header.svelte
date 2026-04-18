@@ -28,6 +28,7 @@
     Bug,
     ImageIcon,
     MessageSquare,
+    AlertTriangle,
   } from 'lucide-svelte'
 
   let showExportMenu = $state(false)
@@ -311,7 +312,7 @@
 
     {#if !story.isLoaded}
       <Button
-        href="https://discord.gg/DqVzhSPC46"
+        href="https://discord.gg/aventuras"
         target="_blank"
         rel="noopener noreferrer"
         variant="text"
@@ -326,13 +327,22 @@
       </Button>
     {/if}
 
-    <Button
-      icon={Settings}
-      label="Settings"
-      variant="text"
-      class="text-muted-foreground hover:text-primary min-h-11 min-w-11"
-      onclick={() => ui.openSettings()}
-    />
+    <div class="relative">
+      <Button
+        icon={Settings}
+        label="Settings"
+        variant="text"
+        class="text-muted-foreground hover:text-primary min-h-11 min-w-11"
+        onclick={() => ui.openSettings()}
+      />
+      {#if settings.hasGenerationConfigIssues}
+        <span
+          class="pointer-events-none absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500"
+        >
+          <AlertTriangle class="h-2.5 w-2.5 text-white" />
+        </span>
+      {/if}
+    </div>
 
     {#if story.isLoaded}
       <Button

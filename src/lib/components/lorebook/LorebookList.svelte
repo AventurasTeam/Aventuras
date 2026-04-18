@@ -2,16 +2,28 @@
   import type { Entry, EntryType } from '$lib/types'
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story/index.svelte'
-  import { Search, Plus, Download, Upload, Trash2, X, Filter, ArrowUpDown } from 'lucide-svelte'
+  import {
+    Search,
+    Plus,
+    Download,
+    Upload,
+    Trash2,
+    X,
+    Filter,
+    ArrowUpDown,
+    Archive,
+  } from 'lucide-svelte'
   import LorebookEntryCard from './LorebookEntryCard.svelte'
 
   import { Input } from '$lib/components/ui/input'
   import { Button } from '$lib/components/ui/button'
   import { ScrollArea } from '$lib/components/ui/scroll-area'
   import { Checkbox } from '$lib/components/ui/checkbox'
+  import * as Dialog from '$lib/components/ui/dialog'
   import {
     DropdownMenu,
     DropdownMenuContent,
+    DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuRadioGroup,
     DropdownMenuRadioItem,
@@ -21,12 +33,15 @@
 
   interface Props {
     onNewEntry?: () => void
+    onImportFromVault?: () => void
+    onSaveToVault?: () => void
   }
 
-  let { onNewEntry }: Props = $props()
+  let { onNewEntry, onImportFromVault, onSaveToVault }: Props = $props()
 
   let searchDebounceTimer: ReturnType<typeof setTimeout>
   let confirmingBulkDelete = $state(false)
+  let deleteAllDialogOpen = $state(false)
   let isDeleting = $state(false)
 
   const entryTypes: Array<EntryType | 'all'> = [
@@ -136,6 +151,22 @@
     ui.clearBulkSelection()
   }
 
+  async function handleDeleteAll() {
+    isDeleting = true
+    const ids = story.lorebookEntries.map((e) => e.id)
+    try {
+      await story.deleteLorebookEntries(ids)
+      ui.clearBulkSelection()
+      ui.selectLorebookEntry(null)
+      deleteAllDialogOpen = false
+      ui.showToast(`Deleted all ${ids.length} entries`, 'info')
+    } catch (error) {
+      ui.showToast(error instanceof Error ? error.message : 'Failed to delete entries', 'error')
+    } finally {
+      isDeleting = false
+    }
+  }
+
   function selectEntry(entry: Entry) {
     ui.selectLorebookEntry(entry.id)
   }
@@ -236,18 +267,91 @@
       <Plus class="h-4 w-4" />
       <span class="xs:inline hidden">New Entry</span>
     </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger>
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            variant="outline"
+            size="icon"
+            disabled={isLoreManagementActive}
+            title="Vault"
+          >
+            <Archive class="h-4 w-4" />
+          </Button>
+        {/snippet}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuLabel>Vault</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onclick={onImportFromVault}>
+          <Upload class="mr-2 h-4 w-4" />
+          Import from Vault
+        </DropdownMenuItem>
+        <DropdownMenuItem onclick={onSaveToVault} disabled={story.lorebookEntries.length === 0}>
+          <Download class="mr-2 h-4 w-4" />
+          Save to Vault
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
     <Button
       variant="outline"
       size="icon"
       onclick={() => ui.openLorebookImport()}
       disabled={isLoreManagementActive}
-      title={isLoreManagementActive ? 'Import disabled during lore management' : 'Import'}
+      title={isLoreManagementActive ? 'Import disabled during lore management' : 'Import from file'}
     >
       <Upload class="h-4 w-4" />
     </Button>
     <Button variant="outline" size="icon" onclick={() => ui.openLorebookExport()} title="Export">
       <Download class="h-4 w-4" />
     </Button>
+    {#if story.lorebookEntries.length > 0 && !isLoreManagementActive}
+      <Dialog.Root bind:open={deleteAllDialogOpen}>
+        <Dialog.Trigger>
+          {#snippet child({ props })}
+            <Button
+              {...props}
+              variant="outline"
+              size="icon"
+              class="border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+              title="Delete all entries"
+            >
+              <Trash2 class="h-4 w-4" />
+            </Button>
+          {/snippet}
+        </Dialog.Trigger>
+        <Dialog.Portal>
+          <Dialog.Overlay />
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>Delete all lorebook entries?</Dialog.Title>
+              <Dialog.Description>
+                This will permanently delete all {story.lorebookEntries.length} entr{story
+                  .lorebookEntries.length === 1
+                  ? 'y'
+                  : 'ies'} from this story's lorebook. This action cannot be undone.
+              </Dialog.Description>
+            </Dialog.Header>
+            <Dialog.Footer>
+              <Dialog.Close>
+                {#snippet child({ props })}
+                  <Button {...props} variant="outline">Cancel</Button>
+                {/snippet}
+              </Dialog.Close>
+              <Button
+                class="bg-destructive text-destructive-foreground hover:bg-destructive/80"
+                onclick={handleDeleteAll}
+                disabled={isDeleting}
+              >
+                <Trash2 class="mr-2 h-4 w-4" />
+                Delete all entries
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    {/if}
   </div>
 
   <!-- Bulk selection header -->
@@ -313,6 +417,17 @@
           <div class="text-muted-foreground py-8 text-center">
             <p>No lorebook entries yet.</p>
             <p class="mt-1 text-sm">Create one or import a lorebook to get started.</p>
+            {#if onImportFromVault}
+              <Button
+                variant="outline"
+                class="mt-4 gap-2"
+                onclick={onImportFromVault}
+                disabled={isLoreManagementActive}
+              >
+                <Archive class="h-4 w-4" />
+                Import from Vault
+              </Button>
+            {/if}
           </div>
         {:else}
           <div class="text-muted-foreground py-8 text-center">

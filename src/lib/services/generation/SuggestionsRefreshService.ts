@@ -6,13 +6,12 @@
 
 import type { Suggestion } from '$lib/services/ai/sdk/schemas/suggestions'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
+import { createLogger } from '$lib/log'
 import { story } from '$lib/stores/story/index.svelte'
 import { aiService } from '../ai'
 import { settings } from '$lib/stores/settings.svelte'
 
-function log(...args: unknown[]) {
-  console.log('[SuggestionsRefreshService]', ...args)
-}
+const log = createLogger('SuggestionsRefreshService')
 
 export interface SuggestionsRefreshResult {
   suggestions: Suggestion[]

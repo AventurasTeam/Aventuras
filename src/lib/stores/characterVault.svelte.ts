@@ -1,22 +1,13 @@
 import type { VaultCharacter, Character } from '$lib/types'
 import { database } from '$lib/services/database'
 import { discoveryService, type DiscoveryCard } from '$lib/services/discovery'
-import {
-  readCharacterCardFile,
-  parseCharacterCard,
-  sanitizeCharacterCard,
-} from '$lib/services/characterCardImporter'
-import { extractEmbeddedLorebook } from '$lib/services/lorebookImporter'
+import { CharacterCardImport } from '$lib/services/characterCardImport'
+import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import { lorebookVault } from './lorebookVault.svelte'
 import { ui } from './ui.svelte'
+import { createLogger } from '$lib/log'
 
-const DEBUG = true
-
-function log(...args: any[]) {
-  if (DEBUG) {
-    console.log('[CharacterVault]', ...args)
-  }
-}
+const log = createLogger('CharacterVault')
 
 /**
  * Store for managing the global Character Vault.
@@ -168,7 +159,7 @@ class CharacterVaultStore {
    * Import a sanitized character (from LLM processing).
    */
   async importSanitizedCharacter(
-    sanitized: import('$lib/services/characterCardImporter').SanitizedCharacter,
+    sanitized: CharacterCardImport.SanitizedCharacter,
     originalCard: {
       scenario?: string
       tags?: string[]
@@ -321,12 +312,12 @@ class CharacterVaultStore {
   ): Promise<void> {
     try {
       // Parse
-      const jsonString = await readCharacterCardFile(file)
-      const parsed = parseCharacterCard(jsonString)
+      const jsonString = await CharacterCardImport.readFile(file)
+      const parsed = CharacterCardImport.parseJson(jsonString)
       if (!parsed) throw new Error('Failed to parse character card')
 
       // Sanitize
-      const sanitized = await sanitizeCharacterCard(jsonString)
+      const sanitized = await CharacterCardImport.sanitize(jsonString)
 
       // Convert image if needed
       let portrait: string | null = null
@@ -382,7 +373,10 @@ class CharacterVaultStore {
 
       // Extract embedded lorebook if present
       if (parsed.characterBook) {
-        const extracted = extractEmbeddedLorebook(parsed.characterBook, parsed.name)
+        const extracted = LorebookImportExport.extractEmbeddedLorebook(
+          parsed.characterBook,
+          parsed.name,
+        )
         if (extracted) {
           try {
             if (!lorebookVault.isLoaded) await lorebookVault.load()

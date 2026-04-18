@@ -1,9 +1,13 @@
 /**
  * GenerationPipeline - Orchestrates narrative generation phases
- * Order: pre → retrieval → narrative → classification → translation → image → post
+ * Order: pre → retrieval → narrative → [(classification ‖ translation → image) ‖ background ‖ post]
  */
 
-import type { GenerationEvent, ErrorEvent } from './types'
+import { createLogger } from '$lib/log'
+
+const log = createLogger('GenerationPipeline')
+
+import type { GenerationEvent, GenerationContext, ErrorEvent } from './types'
 import {
   RetrievalPhase,
   NarrativePhase,
@@ -42,7 +46,6 @@ export class GenerationPipeline {
       yield* mergeGenerators({
         background: this.backgroundPhase.execute(),
         classification: this.classificationPhase.execute(),
-      })
       if (story.generationContext.abortSignal?.aborted) return { ...status, aborted: true }
 
       yield* this.translationPhase.execute()

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { ui, type DebugLogEntry } from '$lib/stores/ui.svelte'
+  import { untrack } from 'svelte'
+  import { countRequests, debug, type DebugLogEntry } from '$lib/stores/debug.svelte'
   import { ExternalLink, RefreshCcw } from 'lucide-svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -9,59 +10,73 @@
   let throttledLogs = $state<DebugLogEntry[]>([])
   let lastUpdateTime = 0
   let pendingUpdate: ReturnType<typeof setTimeout> | null = null
+  let showContent = $state(false)
 
-  // Update throttled logs when modal opens or logs change (throttled)
+  // Single effect to handle both modal opening and log updates
   $effect(() => {
-    if (!ui.debugModalOpen || ui.debugWindowActive) {
+    // Early exit if modal is closed or window is popped out
+    if (!debug.debugModalOpen || debug.debugWindowActive) {
       if (pendingUpdate) {
         clearTimeout(pendingUpdate)
         pendingUpdate = null
       }
+      showContent = false
+      lastUpdateTime = 0 // Reset to force immediate sync on next open
+      throttledLogs = [] // Clear stale snapshot
       return
     }
 
-    const logs = ui.debugLogs
+    // Track logsVersion to know when logs change
+    void debug.logsVersion
+
     const now = Date.now()
     const timeSinceLastUpdate = now - lastUpdateTime
 
-    if (timeSinceLastUpdate >= 500) {
-      throttledLogs = [...logs]
+    // Immediate update if: first open (lastUpdateTime === 0) or throttle period elapsed
+    if (lastUpdateTime === 0 || timeSinceLastUpdate >= 500) {
+      throttledLogs = debug.getSnapshot()
       lastUpdateTime = now
       if (pendingUpdate) {
         clearTimeout(pendingUpdate)
         pendingUpdate = null
       }
+
+      // Defer content rendering to next frame when modal first opens
+      if (untrack(() => !showContent)) {
+        const scheduleContent = () => {
+          showContent = true
+        }
+        // Use requestIdleCallback if available, otherwise setTimeout
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(scheduleContent, { timeout: 50 })
+        } else {
+          setTimeout(scheduleContent, 0)
+        }
+      }
     } else if (!pendingUpdate) {
+      // Schedule update for remaining throttle time
       pendingUpdate = setTimeout(() => {
-        throttledLogs = [...ui.debugLogs]
+        throttledLogs = debug.getSnapshot()
         lastUpdateTime = Date.now()
         pendingUpdate = null
       }, 500 - timeSinceLastUpdate)
     }
   })
 
-  // Sync immediately when modal opens
-  $effect(() => {
-    if (ui.debugModalOpen && !ui.debugWindowActive) {
-      throttledLogs = [...ui.debugLogs]
-      lastUpdateTime = Date.now()
-    }
-  })
-
   function handleClearLogs() {
-    ui.clearDebugLogs()
+    debug.clearDebugLogs()
   }
 
   async function handlePopOut() {
-    await ui.popOutDebug()
+    await debug.popOutDebug()
   }
 
   async function handlePopIn() {
-    await ui.popInDebug()
+    await debug.popInDebug()
   }
 </script>
 
-<ResponsiveModal.Root bind:open={ui.debugModalOpen}>
+<ResponsiveModal.Root bind:open={debug.debugModalOpen}>
   <ResponsiveModal.Content class="flex h-[85vh] max-h-[85vh] flex-col gap-0 p-0 sm:max-w-4xl">
     <ResponsiveModal.Header class="border-border border-b px-6 py-4">
       <div class="flex w-full items-center justify-between">
@@ -71,11 +86,11 @@
             <span
               class="bg-secondary text-secondary-foreground rounded px-2 py-0.5 font-mono text-xs"
             >
-              {ui.debugLogs.length}
+              {countRequests(throttledLogs)}
             </span>
           </div>
 
-          {#if !ui.debugWindowActive}
+          {#if !debug.debugWindowActive}
             <Button
               variant="ghost"
               size="icon"
@@ -94,7 +109,7 @@
     </ResponsiveModal.Header>
 
     <div class="flex flex-1 flex-col overflow-hidden">
-      {#if ui.debugWindowActive}
+      {#if debug.debugWindowActive}
         <div class="flex flex-1 flex-col items-center justify-center space-y-4 p-8 text-center">
           <div class="rounded-full bg-blue-500/10 p-4 text-blue-400">
             <ExternalLink class="h-8 w-8" />
@@ -111,12 +126,16 @@
             Bring Back to Modal
           </Button>
         </div>
+      {:else if !showContent}
+        <div class="flex flex-1 flex-col items-center justify-center p-8">
+          <div class="text-muted-foreground animate-pulse text-sm">Loading logs...</div>
+        </div>
       {:else}
         <DebugLogView
           logs={throttledLogs}
           onClear={handleClearLogs}
-          renderNewlines={ui.debugRenderNewlines}
-          onToggleRenderNewlines={() => ui.toggleDebugRenderNewlines()}
+          renderNewlines={debug.debugRenderNewlines}
+          onToggleRenderNewlines={() => debug.toggleDebugRenderNewlines()}
         />
       {/if}
     </div>
