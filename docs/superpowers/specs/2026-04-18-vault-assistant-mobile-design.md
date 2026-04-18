@@ -74,7 +74,7 @@ Branching happens at the `InteractiveVaultAssistant.svelte` level — it renders
 
 - **Segmented control** directly below the existing dropdowns (history selector and pending-list popover stay where they are).
 - **Entity tab visibility:** shown only when `vaultEditor.editorOpen && vaultEditor.activeChange` is truthy. When no active change exists, the tab bar is hidden entirely and the chat fills the viewport as today.
-- **Default tab:** `chat`. Resets to `chat` on new conversation and on conversation switch.
+- **Default tab:** `chat`. Resets to `chat` on new conversation, on conversation switch, and whenever the Entity tab disappears while active (e.g. user closed the editor from inside the panel, or the last pending change was approved/rejected and the editor closed) — a `$effect` watching `vaultEditor.editorOpen && vaultEditor.activeChange` flips `activeTab` back to `'chat'` when it goes falsy.
 - **Badge:** shows `vaultEditor.pendingCount` when >0. `0` → no badge.
 - **Pulse:** a one-shot Tailwind keyframe highlight on the Entity tab trigger for ~800ms, fired from an `$effect` watching `vaultEditor.pendingCount`. Only pulses when the increase happened while `activeTab === 'chat'`.
 - **Tab content:**
