@@ -111,6 +111,22 @@
     }
   })
 
+  // Pulse the Entity tab when a new pending change arrives while user is on Chat
+  let entityTabPulsing = $state(false)
+  let prevPendingCount = vaultEditor.pendingCount
+  $effect(() => {
+    const current = vaultEditor.pendingCount
+    if (current > prevPendingCount && activeTab === 'chat') {
+      entityTabPulsing = true
+      const timer = setTimeout(() => {
+        entityTabPulsing = false
+      }, 800)
+      prevPendingCount = current
+      return () => clearTimeout(timer)
+    }
+    prevPendingCount = current
+  })
+
   const activeCharacterEntity = $derived<FocusedEntity | null>(
     focusedEntity?.entityType === 'character'
       ? focusedEntity
@@ -841,6 +857,7 @@
                 activeTab === 'entity'
                   ? 'bg-surface-700 text-surface-100'
                   : 'text-surface-400 hover:text-foreground hover:bg-foreground/5',
+                entityTabPulsing && 'vault-tab-pulse',
               )}
               onclick={() => (activeTab = 'entity')}
             >
@@ -1192,3 +1209,21 @@
     </button>
   </Dialog.Content>
 </Dialog.Root>
+
+<style>
+  :global(.vault-tab-pulse) {
+    animation: vault-tab-pulse 800ms ease-out 1;
+  }
+
+  @keyframes vault-tab-pulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.45);
+    }
+    60% {
+      box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }
+  }
+</style>
