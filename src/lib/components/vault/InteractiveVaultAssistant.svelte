@@ -1188,6 +1188,7 @@
   <Dialog.Root open={true} onOpenChange={(open) => !open && onClose()}>
     <Dialog.Content
       class="flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-none p-0"
+      style="padding-top: env(safe-area-inset-top);"
     >
       {@render assistantContent()}
     </Dialog.Content>
