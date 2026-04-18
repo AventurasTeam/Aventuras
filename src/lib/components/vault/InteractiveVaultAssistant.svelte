@@ -639,11 +639,13 @@
         </div>
       {/if}
 
-      <!-- Chat Panel (right, or full-width on mobile) -->
+      <!-- Chat Panel (right, or full-width on compact) -->
       <div
-        class="flex flex-col overflow-hidden {vaultEditor.editorOpen && !isCompact.current
-          ? 'w-full max-w-2xl min-w-[22rem] flex-1'
-          : 'mx-auto w-full max-w-2xl'}"
+        class="flex flex-col overflow-hidden {isCompact.current
+          ? 'w-full'
+          : vaultEditor.editorOpen
+            ? 'w-full max-w-2xl min-w-[22rem] flex-1'
+            : 'mx-auto w-full max-w-2xl'}"
       >
         <!-- Conversation selector -->
         <div class="relative {conversationSelectorOpen ? 'z-20' : 'z-10'}">
