@@ -621,7 +621,7 @@
       <!-- Entity Editor Panel (left, desktop only) -->
       {#if vaultEditor.editorOpen && vaultEditor.activeChange && !isCompact.current}
         <div
-          class="border-surface-700 flex flex-1 flex-col overflow-hidden border-r"
+          class="border-surface-700 flex min-w-[28rem] flex-1 flex-col overflow-hidden border-r"
           transition:fade={{ duration: 100 }}
         >
           <VaultEntityEditPanel
@@ -638,7 +638,7 @@
       <!-- Chat Panel (right, or full-width on mobile) -->
       <div
         class="flex flex-col overflow-hidden {vaultEditor.editorOpen && !isCompact.current
-          ? 'w-full max-w-2xl shrink-0'
+          ? 'w-full max-w-2xl min-w-[22rem] flex-1'
           : 'mx-auto w-full max-w-2xl'}"
       >
         <!-- Conversation selector -->
