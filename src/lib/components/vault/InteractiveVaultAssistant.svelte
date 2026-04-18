@@ -50,7 +50,6 @@
   import { cn } from '$lib/utils/cn'
   import { isTouchDevice } from '$lib/utils/swipe'
   import { SvelteSet } from 'svelte/reactivity'
-  import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
   import { createIsCompact } from '$lib/hooks/is-compact.svelte'
 
   interface Props {
@@ -61,8 +60,6 @@
 
   let { onClose, onEditEntity, focusedEntity = null }: Props = $props()
 
-  // Mobile detection (touch/native-device flavour + 768px breakpoint — kept for non-layout guards)
-  const isMobile = createIsMobile()
   // Layout breakpoint: below 1024px we use the compact (tabs, full-screen) layout
   const isCompact = createIsCompact()
 
@@ -158,7 +155,7 @@
     loadConversationsList()
 
     // Auto-open focused entity if provided
-    if (focusedEntity && !isMobile.current) {
+    if (focusedEntity) {
       let entityData: any = null
       if (focusedEntity.entityType === 'character') {
         entityData = characterVault.getById(focusedEntity.entityId)
@@ -403,16 +400,13 @@
                 vaultEditor.addPendingChange(incoming)
                 await handleApprove(incoming)
                 // Open the newly created lorebook in the editor
-                if (!isMobile.current) {
-                  await tick()
-                  vaultEditor.openEditor(incoming)
-                }
+                await tick()
+                vaultEditor.openEditor(incoming)
               } else {
                 vaultEditor.addPendingChange(incoming)
-                // Auto-open entity editor on desktop (store handles same-lorebook skip)
-                if (!isMobile.current) {
-                  vaultEditor.openEditorSmart(incoming)
-                }
+                // Auto-open entity editor (store handles same-lorebook skip).
+                // On compact, the Entity tab becomes available — user still has to tap to switch.
+                vaultEditor.openEditorSmart(incoming)
               }
               // Track for immediate chat display
               streamingChanges = [...streamingChanges, incoming]
@@ -435,9 +429,7 @@
 
           case 'show_entity':
             // Open entity in view mode (no approval workflow)
-            if (!isMobile.current) {
-              vaultEditor.openViewer(event.change, event.entityId, event.entityType)
-            }
+            vaultEditor.openViewer(event.change, event.entityId, event.entityType)
             // Track which character is currently being viewed so the Set Portrait button appears
             if (event.entityType === 'character') {
               viewedEntity = {
