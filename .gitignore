@@ -124,6 +124,7 @@ DerivedData/
 .classpath
 .settings/
 .devcontainer/
+.devcontainer
 
 # JetBrains
 *.iws
