@@ -7,6 +7,8 @@ import android.webkit.WebView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 
 class MainActivity : TauriActivity() {
   private var webView: WebView? = null
@@ -65,6 +67,30 @@ class MainActivity : TauriActivity() {
     fun stopGenerationService() {
       val intent = Intent(this@MainActivity, GenerationForegroundService::class.java)
       stopService(intent)
+    }
+
+    /**
+     * Returns the current system-bar + display-cutout + mandatory-gesture insets
+     * as JSON (values in dp). Called from the inline pull script in src/app.html
+     * to populate --sat/--sab/--sal/--sar, used as a fallback on devices where
+     * env(safe-area-inset-*) misses system bars.
+     */
+    @JavascriptInterface
+    fun getInsets(): String {
+      val view = webView ?: return """{"top":0,"bottom":0,"left":0,"right":0}"""
+      val raw = ViewCompat.getRootWindowInsets(view)
+        ?: return """{"top":0,"bottom":0,"left":0,"right":0}"""
+      val bars = raw.getInsets(
+        WindowInsetsCompat.Type.systemBars()
+          or WindowInsetsCompat.Type.displayCutout()
+          or WindowInsetsCompat.Type.mandatorySystemGestures()
+      )
+      val d = resources.displayMetrics.density
+      val t = (bars.top / d).toInt()
+      val b = (bars.bottom / d).toInt()
+      val l = (bars.left / d).toInt()
+      val r = (bars.right / d).toInt()
+      return """{"top":$t,"bottom":$b,"left":$l,"right":$r}"""
     }
   }
 }

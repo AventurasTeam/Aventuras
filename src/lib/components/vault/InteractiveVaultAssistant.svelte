@@ -1129,7 +1129,7 @@
           <!-- Input area -->
           <div
             class="border-surface-700 bg-surface-900 border-t p-3"
-            style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom));"
+            style="padding-bottom: calc(0.75rem + var(--safe-bottom));"
           >
             <div class="flex items-end gap-2">
               <Textarea
@@ -1188,7 +1188,7 @@
   <Dialog.Root open={true} onOpenChange={(open) => !open && onClose()}>
     <Dialog.Content
       class="flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-none p-0"
-      style="padding-top: env(safe-area-inset-top);"
+      style="padding-top: var(--safe-top);"
     >
       {@render assistantContent()}
     </Dialog.Content>

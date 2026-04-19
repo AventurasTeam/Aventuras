@@ -153,12 +153,6 @@
 
 <style>
   .bottom-context-nav {
-    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
-  }
-
-  @media (min-width: 769px) {
-    .bottom-context-nav {
-      padding-bottom: 0.5rem;
-    }
+    padding-bottom: 0.5rem;
   }
 </style>

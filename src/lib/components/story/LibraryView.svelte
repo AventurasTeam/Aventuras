@@ -165,7 +165,8 @@
     href="https://discord.gg/aventuras"
     target="_blank"
     rel="noopener noreferrer"
-    class="bg-secondary text-secondary-foreground hover:bg-secondary/80 fixed bottom-6 left-6 z-40 hidden items-center gap-2 rounded-lg px-3 py-2 text-sm shadow-lg transition-all hover:scale-105 sm:flex"
+    class="bg-secondary text-secondary-foreground hover:bg-secondary/80 fixed z-40 hidden items-center gap-2 rounded-lg px-3 py-2 text-sm shadow-lg transition-all hover:scale-105 sm:flex"
+    style="bottom: calc(1.5rem + var(--safe-bottom)); left: calc(1.5rem + var(--safe-left));"
   >
     <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
       <path

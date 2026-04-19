@@ -76,6 +76,21 @@
     @apply bg-background text-foreground;
   }
 
+  /*
+   * Safe-area insets.
+   *
+   * Primary source: native env(safe-area-inset-*) (iOS; Android WebView with
+   * enableEdgeToEdge + viewport-fit=cover). Fallback: --sat/--sab/--sal/--sar
+   * pulled from AndroidBridge.getInsets() in app.html for devices where env()
+   * misses system bars or gesture insets.
+   */
+  :root {
+    --safe-top: max(env(safe-area-inset-top, 0px), var(--sat, 0px));
+    --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--sab, 0px));
+    --safe-left: max(env(safe-area-inset-left, 0px), var(--sal, 0px));
+    --safe-right: max(env(safe-area-inset-right, 0px), var(--sar, 0px));
+  }
+
   /* Scrollbar styling */
   ::-webkit-scrollbar {
     width: 4px;

@@ -196,7 +196,7 @@
   <div class="flex-1"></div>
 
   <!-- Right side: Export and Settings -->
-  <div class="flex items-center">
+  <div class="flex items-center [&_[data-button-label]]:max-lg:!hidden">
     <div class="flex items-center gap-2">
       {#if ui.isGenerating}
         <div class="text-accent-400 hidden items-center gap-1.5 text-sm sm:flex">
