@@ -244,8 +244,8 @@
 </script>
 
 <div
-  class="overflow-hidden rounded-xl border transition-all {isAutoApproved
-    ? 'border-teal-500/20 bg-teal-500/5 opacity-85'
+  class="overflow-hidden rounded-xl border {isAutoApproved
+    ? 'border-teal-500/30 bg-teal-500/8'
     : isApproved
       ? 'border-emerald-500/20 bg-emerald-500/5 opacity-75'
       : isRejected
@@ -257,7 +257,7 @@
   <div
     class="border-surface-700 bg-surface-800 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b px-3 py-2"
   >
-    <div class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+    <div class="flex flex-auto items-center gap-2">
       <!-- Entity type badge -->
       <div
         class="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold tracking-wider whitespace-nowrap uppercase {entityConfig.color} {entityConfig.bg}"
