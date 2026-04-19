@@ -6,7 +6,7 @@
  */
 
 import { templateEngine } from './engine'
-import { variableRegistry } from './variables'
+import { getContextGroup, getVariableNamesForTemplate } from './templateContextMap'
 import type { ValidationResult, ValidationError } from './types'
 import { createLogger } from '$lib/log'
 
@@ -212,6 +212,7 @@ function extractFilterNames(template: string): string[] {
  */
 export function validateTemplate(
   template: string,
+  templateId?: string,
   additionalVariables?: string[],
 ): ValidationResult {
   const errors: ValidationError[] = []
@@ -238,10 +239,30 @@ export function validateTemplate(
 
   // Step 2: Variable reference validation
   const variableNames = templateEngine.extractVariableNames(template)
-  const validVariables = new Set([
-    ...variableRegistry.getAllNames(),
-    ...(additionalVariables || []),
-  ])
+
+  // Distinguish "template has no context group registered" (a map bug) from a
+  // template whose id simply wasn't passed in. Without this branch, an unmapped
+  // id floods the caller with false unknown-variable errors for every reference.
+  const unmapped = templateId != null && getContextGroup(templateId) === null
+  if (unmapped) {
+    log('template has no registered context group', { templateId })
+    errors.push({
+      type: 'unknown_variable',
+      message: `Template '${templateId}' has no registered context group. Variable validation skipped — contact maintainers.`,
+      severity: 'warning',
+    })
+  }
+
+  const templateVarNames = templateId && !unmapped ? getVariableNamesForTemplate(templateId) : []
+  const validVariables = new Set([...templateVarNames, ...(additionalVariables || [])])
+
+  // Namespaced variables (e.g. `packVariables.runtimeVariables`) register their
+  // full path, but user input is validated by root (`packVariables`). Seed the
+  // set with those roots so dotted access like `{{ packVariables.foo }}` resolves.
+  for (const name of [...validVariables]) {
+    const dotIndex = name.indexOf('.')
+    if (dotIndex > 0) validVariables.add(name.slice(0, dotIndex))
+  }
 
   // Extract loop-scoped variables from {% for X in Y %} constructs
   const loopVars = new Set<string>()
@@ -263,7 +284,8 @@ export function validateTemplate(
   // Built-in Liquid variables available in loops and elsewhere
   const builtinRoots = new Set(['forloop', 'tablerowloop'])
 
-  for (const varName of variableNames) {
+  // Skip per-variable checks when we already surfaced the unmapped-template warning.
+  for (const varName of unmapped ? [] : variableNames) {
     // Extract root name (before first dot)
     const root = varName.split('.')[0]
 

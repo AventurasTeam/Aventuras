@@ -8,20 +8,20 @@ description: Cleans SillyTavern character cards and converts them to Aventura sc
 You are cleaning a SillyTavern character card for use as a scenario setting in interactive fiction.
 
 ## Your Task
-1. IDENTIFY who "{{char}}" refers to based on the content (the actual character name - NOT the card title)
+1. IDENTIFY who "{% raw %}{{char}}{% endraw %}" refers to based on the content (the actual character name - NOT the card title)
 2. IDENTIFY ALL NPCs/characters mentioned in the card content
-3. REPLACE all instances of "{{char}}" with the actual character name in your output
-4. KEEP all instances of "{{user}}" as-is - this placeholder will be replaced with the player's character name later
+3. REPLACE all instances of "{% raw %}{{char}}{% endraw %}" with the actual character name in your output
+4. KEEP all instances of "{% raw %}{{user}}{% endraw %}" as-is - this placeholder will be replaced with the player's character name later
 5. REMOVE specific meta-content patterns (see below)
 6. PRESERVE the original text as much as possible - do NOT summarize or condense
 
-The "{{user}}" refers to the player's character (protagonist). Characters identified from the card will become NPCs.
+The "{% raw %}{{user}}{% endraw %}" refers to the player's character (protagonist). Characters identified from the card will become NPCs.
 
 ## REMOVE THESE PATTERNS (delete entirely):
 
 ### Roleplay Instructions (DELETE):
-- "You are {{char}}", "You will portray...", "Play as..."
-- "Do not speak for {{user}}", "Never speak for {{user}}"
+- "You are {% raw %}{{char}}{% endraw %}", "You will portray...", "Play as..."
+- "Do not speak for {% raw %}{{user}}{% endraw %}", "Never speak for {% raw %}{{user}}{% endraw %}"
 - "Stay in character", "Never break character"
 - "Always respond as...", "You must..."
 - Any instruction telling the AI HOW to behave
@@ -52,23 +52,23 @@ The "{{user}}" refers to the player's character (protagonist). Characters identi
 - Relationship dynamics
 - Scenario/situation setup
 - Any lore, world rules, or setting details
-- All {{user}} placeholders (keep them exactly as {{user}})
+- All {% raw %}{{user}}{% endraw %} placeholders (keep them exactly as {% raw %}{{user}}{% endraw %})
 
-Note: Include ALL significant characters mentioned in the card as NPCs. The primary character ({{char}}) should be the first NPC in the array.
+Note: Include ALL significant characters mentioned in the card as NPCs. The primary character ({% raw %}{{char}}{% endraw %}) should be the first NPC in the array.
 ---USER---
 
 Clean this character card for use as a {{genre}} scenario setting.
 
-The {{user}} will be the protagonist (their name will be filled in later) interacting with the NPCs in an interactive story.
+The {% raw %}{{user}}{% endraw %} will be the protagonist (their name will be filled in later) interacting with the NPCs in an interactive story.
 
 IMPORTANT:
-- Identify who "{{char}}" refers to based on the content (NOT the card title "{{title}}")
-- Replace all {{char}} with the actual character name
-- KEEP all {{user}} placeholders as-is (they will be replaced with the player's character name later)
+- Identify who "{% raw %}{{char}}{% endraw %}" refers to based on the content (NOT the card title "{{title}}")
+- Replace all {% raw %}{{char}}{% endraw %} with the actual character name
+- KEEP all {% raw %}{{user}}{% endraw %} placeholders as-is (they will be replaced with the player's character name later)
 - Preserve the original text - only REMOVE meta-instructions and roleplay guidelines
 - Do NOT summarize or condense - the output should be nearly as long as the input
 
 ## CARD CONTENT
 {{cardContent}}
 
-Clean the above content. Identify all NPCs, replace {{char}} with the actual name, keep {{user}} as-is, and remove meta-content.
+Clean the above content. Identify all NPCs, replace {% raw %}{{char}}{% endraw %} with the actual name, keep {% raw %}{{user}}{% endraw %} as-is, and remove meta-content.

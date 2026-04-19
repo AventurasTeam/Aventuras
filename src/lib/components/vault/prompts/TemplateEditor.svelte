@@ -8,11 +8,11 @@
   import { database } from '$lib/services/database'
   import { packService } from '$lib/services/packs/pack-service'
   import { validateTemplate } from '$lib/services/templates/validator'
-  import { variableRegistry } from '$lib/services/templates/variables'
+  import { getVariablesForTemplate } from '$lib/services/templates/templateContextMap'
+  import { getSamplesForTemplate } from './sampleContext'
   import type { ValidationError, VariableDefinition } from '$lib/services/templates/types'
   import type { CustomVariable } from '$lib/services/packs/types'
   import type { Completion } from '@codemirror/autocomplete'
-  import { allSamples } from './sampleContext'
   import { AlertTriangle, CircleCheck, FlaskConical } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
   import TemplatePreview from './TemplatePreview.svelte'
@@ -123,7 +123,7 @@
         vals.textContent = `Values: ${v.enumValues.join(', ')}`
       } else if (v.type === 'text' || v.type === 'number') {
         // text/number variables show example value from sampleContext
-        const sample = allSamples[v.name]
+        const sample = getSamplesForTemplate(templateId)[v.name]
         if (sample != null) {
           const example = dom.appendChild(document.createElement('p'))
           example.className = 'cm-var-hint'
@@ -138,17 +138,17 @@
   // Build variable completions for CodeMirror autocomplete
   let completions: Completion[] = $derived.by(() => {
     const result: Completion[] = []
-    for (const v of variableRegistry.getAll()) {
+    for (const v of getVariablesForTemplate(templateId)) {
       result.push({
         label: v.name,
         type: 'variable',
-        detail: v.category,
+        detail: v.type,
         info: buildTooltipInfo(v),
       })
     }
     for (const v of customVariables) {
       result.push({
-        label: v.variableName,
+        label: 'packVariables.' + v.variableName,
         type: 'variable',
         detail: 'custom',
         info: v.displayName,
@@ -335,8 +335,8 @@
   function validateContent(content: string) {
     clearTimeout(validationTimer)
     validationTimer = setTimeout(() => {
-      const additionalVarNames = customVariables.map((v) => v.variableName)
-      const result = validateTemplate(content, additionalVarNames)
+      const additionalVarNames = customVariables.map((v) => 'packVariables.' + v.variableName)
+      const result = validateTemplate(content, templateId, additionalVarNames)
       validationErrors = result.errors
     }, 500)
   }
@@ -494,6 +494,7 @@
         class:hidden={isMobile.current && mobileView === 'editor'}
       >
         <TemplatePreview
+          {templateId}
           content={currentContent}
           {customVariables}
           hideHeader={isMobile.current}

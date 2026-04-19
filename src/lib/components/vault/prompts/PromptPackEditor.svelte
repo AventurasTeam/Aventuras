@@ -1,7 +1,8 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import type { FullPack } from '$lib/services/packs/types'
-  import { systemSamples, runtimeSamples } from './sampleContext'
+  import { getSamplesForTemplate, getSampleAtPath, stringifySample } from './sampleContext'
+  import { getVariablesForTemplate } from '$lib/services/templates/templateContextMap'
   import { packService } from '$lib/services/packs/pack-service'
   import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
   import TemplateGroupList from './TemplateGroupList.svelte'
@@ -71,11 +72,18 @@
   $effect(() => {
     const vars = fullPack?.variables
     if (!vars) return
-    // Build complete defaults: system + runtime samples + custom variable defaults
-    const defaults: Record<string, string> = { ...systemSamples, ...runtimeSamples }
+    // Build complete defaults: registry variable samples (by declared path) + custom variable defaults
+    const samples = selectedTemplateId ? getSamplesForTemplate(selectedTemplateId) : {}
+    const registryVars = selectedTemplateId ? getVariablesForTemplate(selectedTemplateId) : []
+    const defaults: Record<string, string> = {}
+    for (const v of registryVars) {
+      const sample = getSampleAtPath(samples, v.name)
+      if (sample === null || sample === undefined) continue
+      defaults[v.name] = stringifySample(sample)
+    }
     for (const v of vars) {
       if (v.defaultValue) {
-        defaults[v.variableName] = v.defaultValue
+        defaults['packVariables.' + v.variableName] = v.defaultValue
       }
     }
     // Read current testValues without creating a dependency (avoid infinite loop)
@@ -308,6 +316,7 @@
           {/if}
 
           <VariablePalette
+            templateId={selectedTemplateId}
             iconOnly
             customVariables={fullPack?.variables ?? []}
             onInsert={(name) => editorRef?.insertVariable(name)}
@@ -405,6 +414,7 @@
         {/if}
 
         <VariablePalette
+          templateId={selectedTemplateId}
           customVariables={fullPack?.variables ?? []}
           onInsert={(name) => editorRef?.insertVariable(name)}
         />
@@ -628,14 +638,18 @@
   </Drawer.Root>
 {/if}
 
-<!-- Test Variables modal -->
-<TestVariablesModal
-  open={showTestVars}
-  customVariables={fullPack?.variables ?? []}
-  {testValues}
-  onOpenChange={(open) => (showTestVars = open)}
-  onTestValuesChange={handleTestValuesChange}
-/>
+<!-- Test Variables modal — only mounted when a template is selected to avoid
+     rendering an empty palette with no context. -->
+{#if selectedTemplateId}
+  <TestVariablesModal
+    templateId={selectedTemplateId}
+    open={showTestVars}
+    customVariables={fullPack?.variables ?? []}
+    {testValues}
+    onOpenChange={(open) => (showTestVars = open)}
+    onTestValuesChange={handleTestValuesChange}
+  />
+{/if}
 
 <!-- Dirty guard dialog -->
 <Dialog.Root bind:open={showDirtyDialog}>

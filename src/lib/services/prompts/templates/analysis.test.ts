@@ -118,7 +118,7 @@ describe('classifier', () => {
 
     it('renders time display from entry metadata', async () => {
       const result = await renderTemplate('classifier', promptContext)
-      expect(result.user).toContain('at Year 1, Day 42, 14:0')
+      expect(result.user).toContain('at Y1D42 14:00')
     })
 
     it('renders enum runtime variables with pipe-separated options', async () => {

@@ -1,54 +1,91 @@
 <script lang="ts">
   import { templateEngine } from '$lib/services/templates/engine'
-  import { variableRegistry } from '$lib/services/templates/variables'
-  import { allSamples } from './sampleContext'
+  import { getSamplesForTemplate } from './sampleContext'
+  import { getVariablesForTemplate } from '$lib/services/templates/templateContextMap'
   import type { CustomVariable } from '$lib/services/packs/types'
-  import type { TemplateContext } from '$lib/services/templates/types'
+  import type { TemplateContext, VariableType } from '$lib/services/templates/types'
   import { AlertTriangle } from 'lucide-svelte'
 
   interface Props {
+    templateId: string
     content: string
     customVariables: CustomVariable[]
     hideHeader?: boolean
     testValues?: Record<string, string>
   }
 
-  let { content, customVariables, hideHeader = false, testValues }: Props = $props()
+  let { templateId, content, customVariables, hideHeader = false, testValues }: Props = $props()
+
+  function setNestedValue(obj: Record<string, unknown>, path: string, value: unknown) {
+    const parts = path.split('.')
+    let current: Record<string, unknown> = obj
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!(parts[i] in current) || typeof current[parts[i]] !== 'object') {
+        current[parts[i]] = {}
+      }
+      current = current[parts[i]] as Record<string, unknown>
+    }
+    current[parts[parts.length - 1]] = value
+  }
+
+  type ParseResult = { ok: true; value: unknown } | { ok: false; error: string }
+
+  function parseOverride(value: string, type: VariableType | undefined): ParseResult {
+    if (type === 'array' || type === 'object') {
+      try {
+        return { ok: true, value: JSON.parse(value) }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        return { ok: false, error: msg }
+      }
+    }
+    if (type === 'number') {
+      const n = Number(value)
+      if (!Number.isFinite(n)) {
+        return { ok: false, error: `'${value}' is not a valid number` }
+      }
+      return { ok: true, value: n }
+    }
+    if (type === 'boolean') {
+      return { ok: true, value: value === 'true' }
+    }
+    return { ok: true, value }
+  }
 
   function buildSampleContext(
     vars: CustomVariable[],
-    overrides?: Record<string, string>,
-  ): TemplateContext {
-    // Start with rich sample data (includes structured arrays/objects)
-    const context: TemplateContext = { ...allSamples }
-
-    // Bracket-name fallback only for variables missing from allSamples
-    for (const v of variableRegistry.getByCategory('system')) {
+    overrides: Record<string, string> | undefined,
+  ): { context: TemplateContext; overrideErrors: string[] } {
+    const context: TemplateContext = { ...getSamplesForTemplate(templateId) }
+    const registryVars = getVariablesForTemplate(templateId)
+    const typesByName = new Map(registryVars.map((v) => [v.name, v.type]))
+    for (const v of registryVars) {
       if (!(v.name in context)) {
         context[v.name] = `[${v.name}]`
       }
     }
-    for (const v of variableRegistry.getByCategory('runtime')) {
-      if (!(v.name in context)) {
-        context[v.name] = `[${v.name}]`
-      }
-    }
+    // Custom pack variables: place under packVariables namespace
     for (const v of vars) {
-      if (!(v.variableName in context)) {
-        context[v.variableName] = `[${v.displayName}]`
-      }
+      const path = 'packVariables.' + v.variableName
+      setNestedValue(context, path, `[${v.displayName}]`)
     }
-
-    // Apply test value overrides (string overrides from TestVariablesModal)
+    const overrideErrors: string[] = []
     if (overrides) {
       for (const [key, value] of Object.entries(overrides)) {
-        if (value !== '') {
-          context[key] = value
+        if (value === '') continue
+        const result = parseOverride(value, typesByName.get(key))
+        if (!result.ok) {
+          overrideErrors.push(`${key}: ${result.error}`)
+          continue
+        }
+        if (key.includes('.')) {
+          setNestedValue(context, key, result.value)
+        } else {
+          context[key] = result.value
         }
       }
     }
-
-    return context
+    return { context, overrideErrors }
   }
 
   // Debounced rendering
@@ -70,7 +107,7 @@
         return
       }
 
-      const context = buildSampleContext(currentVars, currentTestValues)
+      const { context, overrideErrors } = buildSampleContext(currentVars, currentTestValues)
       const result = templateEngine.render(currentContent, context)
 
       if (result === null) {
@@ -78,7 +115,10 @@
         previewOutput = ''
       } else {
         previewOutput = result
-        previewError = ''
+        previewError =
+          overrideErrors.length > 0
+            ? `Ignored invalid test override${overrideErrors.length === 1 ? '' : 's'}: ${overrideErrors.join('; ')}`
+            : ''
       }
     }, 300)
 

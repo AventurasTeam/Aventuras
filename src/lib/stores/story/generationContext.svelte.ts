@@ -54,7 +54,7 @@ interface StoryPromptContext {
   loreEntriesForTier3: Entry[]
   worldStateForTier3: Tier3Candidate[]
   userSettings: {
-    retieval: {
+    retrieval: {
       maxStoryEntries: number
     }
     agenticRetrieval: {
@@ -115,6 +115,7 @@ interface StoryPromptContext {
   }
   narrativeResult?: NarrativeResult
   userActionOriginal?: string
+  narrationEntryId?: string | null
 }
 
 export class StoryGenerationContextStore {
@@ -180,7 +181,7 @@ export class StoryGenerationContextStore {
     }
     return {
       userSettings: {
-        retieval: { maxStoryEntries: 10 },
+        retrieval: { maxStoryEntries: 10 },
         agenticRetrieval: {
           recentEntriesCount: 5,
           maxChapters: 20,
@@ -251,6 +252,7 @@ export class StoryGenerationContextStore {
       lastChapterEndIndex: this.story.chapter.lastChapterEndIndex,
       chapterAnalysis: this.chapterAnalysis,
       narrativeResult: this.narrativeResult,
+      narrationEntryId: this.narrationEntryId,
     }
   }
 
