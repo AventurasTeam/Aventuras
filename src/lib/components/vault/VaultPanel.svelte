@@ -408,8 +408,8 @@
   <!-- Header -->
   <div class="bg-muted/20 flex flex-col border-b">
     <!-- Top Bar -->
-    <div class="flex items-center justify-between px-4 py-3">
-      <div class="flex items-center gap-1">
+    <div class="flex items-center gap-2 px-4 py-3">
+      <div class="flex shrink-0 items-center gap-1">
         <Button
           variant="link"
           size="icon"
@@ -426,7 +426,9 @@
       </div>
 
       <!-- Right Side Actions -->
-      <div class="flex items-center gap-2">
+      <div
+        class="flex min-w-0 flex-1 items-center justify-end gap-2 overflow-x-auto [&>*]:shrink-0"
+      >
         <Button
           icon={Bot}
           label="Vault Assistant"
