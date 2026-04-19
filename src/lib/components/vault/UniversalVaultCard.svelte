@@ -175,7 +175,7 @@
           {#each asCharacter.traits.slice(0, 3) as trait, i (i)}
             <Badge
               variant="outline"
-              class="text-muted-foreground/80 border-muted-foreground/20 h-4 px-1.5 text-[10px] font-normal"
+              class="text-muted-foreground/80 border-muted-foreground/20 min-h-4 px-1.5 py-0 text-[10px] leading-4 font-normal"
             >
               {trait}
             </Badge>
