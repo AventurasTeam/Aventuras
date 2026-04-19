@@ -86,10 +86,10 @@ class MainActivity : TauriActivity() {
           or WindowInsetsCompat.Type.mandatorySystemGestures()
       )
       val d = resources.displayMetrics.density
-      val t = (bars.top / d).toInt()
-      val b = (bars.bottom / d).toInt()
-      val l = (bars.left / d).toInt()
-      val r = (bars.right / d).toInt()
+      val t = kotlin.math.ceil(bars.top / d).toInt()
+      val b = kotlin.math.ceil(bars.bottom / d).toInt()
+      val l = kotlin.math.ceil(bars.left / d).toInt()
+      val r = kotlin.math.ceil(bars.right / d).toInt()
       return """{"top":$t,"bottom":$b,"left":$l,"right":$r}"""
     }
   }
