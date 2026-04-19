@@ -12,7 +12,7 @@ export async function importEntries(
   parseResult: LorebookImportResult,
   options: ImportOptions,
 ): Promise<ImportResult> {
-  const { storyId, useAIClassification, storyMode, onProgress } = options
+  const { storyId, useAIClassification, onProgress } = options
   const errors: string[] = []
   const warnings: string[] = [...parseResult.warnings]
 
@@ -28,18 +28,14 @@ export async function importEntries(
         message: 'Classifying entries...',
       })
 
-      entriesToImport = await classifyEntries(
-        entriesToImport,
-        (current, total) => {
-          onProgress?.({
-            phase: 'classifying',
-            current,
-            total,
-            message: `Classifying entries (${current}/${total})...`,
-          })
-        },
-        storyMode,
-      )
+      entriesToImport = await classifyEntries(entriesToImport, (current, total) => {
+        onProgress?.({
+          phase: 'classifying',
+          current,
+          total,
+          message: `Classifying entries (${current}/${total})...`,
+        })
+      })
     }
 
     // Phase 2: Convert to Entry format

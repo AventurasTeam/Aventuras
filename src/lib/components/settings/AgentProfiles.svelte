@@ -344,7 +344,7 @@
   }
 
   async function handleAssignPreset(serviceId: string, presetId: string | 'custom') {
-    settings.setServicePresetId(serviceId, presetId === 'custom' ? '' : presetId)
+    await settings.setServicePresetId(serviceId, presetId === 'custom' ? '' : presetId)
   }
 
   async function handleApplyMainToAll() {
@@ -371,7 +371,7 @@
     // Assign tasks to their default profiles
     for (const service of systemServices) {
       const presetId = defaultAssignments[service.id] || ''
-      settings.setServicePresetId(service.id, presetId)
+      await settings.setServicePresetId(service.id, presetId)
     }
   }
 

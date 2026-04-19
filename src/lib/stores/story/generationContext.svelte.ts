@@ -54,7 +54,7 @@ interface StoryPromptContext {
   loreEntriesForTier3: Entry[]
   worldStateForTier3: Tier3Candidate[]
   userSettings: {
-    retieval: {
+    retrieval: {
       maxStoryEntries: number
     }
     agenticRetrieval: {
@@ -181,7 +181,7 @@ export class StoryGenerationContextStore {
     }
     return {
       userSettings: {
-        retieval: { maxStoryEntries: 10 },
+        retrieval: { maxStoryEntries: 10 },
         agenticRetrieval: {
           recentEntriesCount: 5,
           maxChapters: 20,

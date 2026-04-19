@@ -6,6 +6,8 @@
  * - Provider registry: Direct HTTP calls per provider
  * - imageUtils: Helper functions for image generation
  */
+// Background Image Service
+export { BackgroundImageService } from './BackgroundImageService'
 
 // Main inline image service
 export { InlineImageGenerationService, inlineImageService } from './InlineImageService'

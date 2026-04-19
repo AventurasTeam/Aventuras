@@ -40,7 +40,6 @@ export type ImportProgress = {
 export type ImportOptions = {
   storyId: string
   useAIClassification: boolean
-  storyMode: import('$lib/types').StoryMode
   onProgress?: (progress: ImportProgress) => void
 }
 

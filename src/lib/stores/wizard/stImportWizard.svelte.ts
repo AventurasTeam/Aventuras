@@ -1,4 +1,4 @@
-import { story } from '$lib/stores/story.svelte'
+import { story } from '$lib/stores/story/index.svelte'
 import { ui } from '$lib/stores/ui.svelte'
 import { settings } from '$lib/stores/settings.svelte'
 import { scenarioService, type WizardData } from '$lib/services/ai/wizard/ScenarioService'
@@ -725,7 +725,7 @@ export class STImportWizardStore {
             : this.chatParseResult.messages
 
         if (messagesToImport.length > 0) {
-          await story.importSTChat(messagesToImport)
+          await story.entry.importSTChat(messagesToImport)
         }
       }
 

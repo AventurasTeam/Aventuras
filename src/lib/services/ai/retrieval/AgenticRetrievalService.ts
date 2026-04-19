@@ -12,7 +12,7 @@ import { createAgentFromPreset, extractTerminalToolResult, stopOnTerminalTool } 
 import { createRetrievalTools, type RetrievalToolContext } from '../sdk/tools'
 import { ContextBuilder } from '$lib/services/context'
 import { story } from '$lib/stores/story/index.svelte'
-import { aiService } from '../generation'
+import { aiService } from '..'
 
 const log = createLogger('AgenticRetrieval')
 

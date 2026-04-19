@@ -36,7 +36,7 @@
 
     const models = settings.getAvailableModels(profileId)
     if (!models.find((m) => m.id === previousModel)) {
-      settings.setDefaultModel('')
+      await settings.setDefaultModel('')
     }
   }
 

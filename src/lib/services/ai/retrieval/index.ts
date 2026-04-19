@@ -22,7 +22,11 @@ export {
 } from './EntryRetrievalService'
 
 // Agentic Retrieval
-export { AgenticRetrievalService, type AgenticRetrievalContext } from './AgenticRetrievalService'
+export {
+  AgenticRetrievalService,
+  type AgenticRetrievalContext,
+  type RetrievalResult as AgenticRetrievalResult,
+} from './AgenticRetrievalService'
 
 // Timeline Fill
 export {

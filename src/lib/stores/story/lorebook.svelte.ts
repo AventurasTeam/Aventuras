@@ -43,6 +43,35 @@ export class StoryLorebookStore {
   }
 
   /**
+   * Add multiple lorebook entries in bulk.
+   * @param entriesData - Array of entry data
+   * @returns Number of entries added
+   */
+  async addLorebookEntries(
+    entriesData: Omit<Entry, 'id' | 'storyId' | 'createdAt' | 'updatedAt' | 'branchId'>[],
+  ): Promise<number> {
+    if (!this.story.id) throw new Error('No story loaded')
+    if (entriesData.length === 0) return 0
+
+    const now = Date.now()
+    const branchId = this.story.branch.currentBranchId
+    const storyId = this.story.id
+    const entries: Entry[] = entriesData.map((entryData) => ({
+      ...entryData,
+      id: crypto.randomUUID(),
+      storyId,
+      createdAt: now,
+      updatedAt: now,
+      branchId,
+    }))
+
+    await database.bulkInsertEntries(entries)
+    this.lorebookEntries = [...this.lorebookEntries, ...entries]
+    log('Lorebook entries added:', entries.length)
+    return entries.length
+  }
+
+  /**
    * Update a lorebook entry.
    */
   async updateLorebookEntry(id: string, updates: Partial<Entry>): Promise<void> {

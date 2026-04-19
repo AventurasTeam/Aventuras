@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ui } from '$lib/stores/ui.svelte'
-  import { story } from '$lib/stores/story.svelte'
+  import { story } from '$lib/stores/story/index.svelte'
   import type { VaultLorebook } from '$lib/types'
   import { LorebookImportExport } from '$lib/services/lorebookImportExport'
   import UniversalVaultBrowser from '$lib/components/vault/UniversalVaultBrowser.svelte'
@@ -18,7 +18,7 @@
   let importing = $state(false)
 
   async function handleSelectLorebook(lorebook: VaultLorebook) {
-    if (!story.currentStory || importing) return
+    if (!story.isLoaded || importing) return
     importing = true
     try {
       const importedEntries = lorebook.entries.map((e) => ({
@@ -31,7 +31,7 @@
       }))
 
       const entries = LorebookImportExport.convertToEntries(importedEntries, 'import')
-      const count = await story.addLorebookEntries(entries)
+      const count = await story.lorebook.addLorebookEntries(entries)
 
       ui.showToast(
         `Imported ${count} entr${count === 1 ? 'y' : 'ies'} from "${lorebook.name}"`,

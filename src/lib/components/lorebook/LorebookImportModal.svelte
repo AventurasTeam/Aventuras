@@ -1,8 +1,8 @@
 <script lang="ts">
   import { story } from '$lib/stores/story/index.svelte'
   import { ui } from '$lib/stores/ui.svelte'
-  import { database } from '$lib/services/database'
   import { LorebookImportExport } from '$lib/services/lorebookImportExport'
+  import { database } from '$lib/services/database'
   import { open } from '@tauri-apps/plugin-dialog'
   import { readTextFile } from '@tauri-apps/plugin-fs'
   import { Check, FileJson, Loader2, Upload } from 'lucide-svelte'
@@ -124,8 +124,7 @@
 
       if (result.success) {
         // Reload entries into store
-        const allEntries = await lorebookImportService.getStoryEntries(story.currentStory.id)
-        story.lorebookEntries = allEntries
+        story.lorebook.lorebookEntries = await database.getEntries(story.id!)
 
         ui.showToast(`Successfully imported ${result.entriesImported} entries`, 'info')
         ui.closeLorebookImport()

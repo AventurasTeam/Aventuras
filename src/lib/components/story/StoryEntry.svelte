@@ -252,15 +252,12 @@
 
   // Is this the last user_action in the story? (used for the regeneration hint)
   const isLastUserAction = $derived(
-    entry.type === 'user_action' && story.lastUserActionId === entry.id,
+    entry.type === 'user_action' && story.entry.lastUserAction?.id === entry.id,
   )
 
   // Show regeneration hint when editing the last user_action and retry is available
   const canSaveAndRegenerate = $derived(
-    isLastUserAction &&
-      !!ui.retryBackup &&
-      !!story.currentStory &&
-      ui.retryBackup.storyId === story.currentStory.id,
+    isLastUserAction && !!ui.retryBackup && story.isLoaded && ui.retryBackup.storyId === story.id,
   )
 
   async function handleCreateCheckpoint() {
@@ -928,7 +925,7 @@
     }
 
     try {
-      await story.updateEntry(entry.id, newContent)
+      await story.entry.updateEntry(entry.id, newContent)
       // Keep retry backup in sync so a subsequent Retry uses the updated text
       if (canSaveAndRegenerate) {
         ui.updateRetryBackupContent(newContent)

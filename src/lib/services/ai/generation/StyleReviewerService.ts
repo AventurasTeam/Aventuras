@@ -5,7 +5,6 @@
  * Uses the Vercel AI SDK for structured output with Zod schema validation.
  */
 
-import type { Tense } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'

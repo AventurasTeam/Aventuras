@@ -73,7 +73,7 @@
 
     if (currentStoryId !== lastStoryId) {
       lastStoryId = currentStoryId
-      prevEntryCount = story.entries.length
+      prevEntryCount = story.entry.entries.length
       anchorToBottom(story.entry.rawEntries.length)
       tick().then(() => performScroll())
     }
@@ -225,8 +225,8 @@
   $effect(() => {
     // Track primary scroll-inducing changes
     const currentCount = story.entry.rawEntries.length
-    const _ = innerHeight
-    const __ = containerHeight
+    void innerHeight
+    void containerHeight
 
     // Update physical bottom state on content/viewport resize (scroll events handle it during scrolling)
     if (storyContainer) isAtPhysicalBottom = isNearEdge('bottom')

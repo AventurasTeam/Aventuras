@@ -15,7 +15,10 @@
 
   // Single debounced save: flushes both values in one call
   const { trigger, flush } = createDebouncedSave(() =>
-    story.settings.updateMemoryConfig({ tokenThreshold: localThreshold, chapterBuffer: localBuffer }),
+    story.settings.updateMemoryConfig({
+      tokenThreshold: localThreshold,
+      chapterBuffer: localBuffer,
+    }),
   )
 
   function scheduleThresholdSave(value: number) {

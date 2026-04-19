@@ -179,7 +179,7 @@ export class StoryCharacterStore {
    */
   async restoreCharacterSnapshots(snapshots?: PersistentCharacterSnapshot[]): Promise<void> {
     log('restoreCharacterSnapshots called', {
-      hasCurrentStory: !!this.story.isLoaded,
+      hasCurrentStory: this.story.isLoaded,
       snapshotsCount: snapshots?.length ?? 0,
       snapshots: snapshots?.map((s) => ({ id: s.id, visualDescriptors: s.visualDescriptors })),
       currentCharacters: this.story.character.characters.map((c) => ({

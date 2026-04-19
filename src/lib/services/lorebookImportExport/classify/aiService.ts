@@ -6,7 +6,7 @@ import { settings } from '$lib/stores/settings.svelte'
  */
 
 import { createLogger } from '$lib/log'
-import type { StoryMode, EntryType } from '$lib/types'
+import type { EntryType } from '$lib/types'
 import { BaseAIService } from '$lib/services/ai/BaseAIService'
 import { lorebookClassificationResultSchema } from '$lib/services/ai/sdk/schemas'
 import { ContextBuilder } from '$lib/services/context'

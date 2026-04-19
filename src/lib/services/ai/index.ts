@@ -35,27 +35,21 @@ import {
   emitBackgroundImageQueued,
   emitBackgroundImageReady,
 } from '$lib/services/events'
-import type { PromptContext } from '$lib/services/generation'
+import { story } from '$lib/stores/story/index.svelte'
+import { settings } from '$lib/stores/settings.svelte'
+import { ui } from '$lib/stores/ui.svelte'
 import type {
   Chapter,
   Character,
   EmbeddedImage,
   Entry,
   ImageProfile,
-  Item,
   Location,
   LoreChange,
   LoreManagementResult,
-  MemoryConfig,
-  POV,
   ReasoningEffort,
-  Story,
-  StoryBeat,
   StoryEntry,
-  StoryMode,
   StorySettings,
-  Tense,
-  TimeTracker,
 } from '$lib/types'
 import { normalizeImageDataUrl, parseImageSize } from '$lib/utils/image'
 import type { StreamChunk } from './core'
@@ -65,30 +59,18 @@ import {
   inlineImageService,
   isImageGenerationEnabled as isImageGenerationEnabledUtil,
 } from './image'
-import type { InlineImageContext, ImageAnalysisContext } from './image'
 import { generateImage as registryGenerateImage } from './image/providers/registry'
-import { EntryInjector, MemoryService, NarrativeService } from './generation'
-import type {
-  ClassificationContext,
-  ContextConfig,
-  ContextResult,
-  RetrievalContext,
-  StyleReviewResult,
-  WorldStateContext,
-} from './generation'
+import { NarrativeService } from './generation'
+import type { StyleReviewResult } from './generation'
 import { EntryRetrievalService, getEntryRetrievalConfigFromSettings } from './retrieval'
-import type { TimelineFillResult, EntryRetrievalResult, ActivationTracker } from './retrieval'
+import type { AgenticRetrievalResult, TimelineFillResult, EntryRetrievalResult } from './retrieval'
 import type {
-  AgenticRetrievalResult,
-  RetrievalContext as AgenticRetrievalContext,
-} from './retrieval/AgenticRetrievalService'
-import type {
+  ActionChoice,
   ActionChoicesResult,
-  ChapterAnalysis,
   ChapterSummaryResult,
   ClassificationResult,
   ImageableScene,
-  RetrievalDecision,
+  Suggestion,
   SuggestionsResult,
 } from './sdk'
 import type { TranslationResult, UITranslationItem } from './utils'
@@ -539,7 +521,8 @@ class AIService {
       emitImageAnalysisComplete(entryId, sceneCount, portraitCount)
 
       // Queue image generation for each scene
-      const getImageProfile = context.getImageProfile ?? (() => undefined)
+      const referenceMode = story.settings.referenceMode ?? false
+      const getImageProfile = (id: string) => settings.getImageProfile(id)
       for (const scene of scenes) {
         await this.queueAnalyzedImageGeneration(
           story.id ?? '',
@@ -769,7 +752,7 @@ class AIService {
         if (image) {
           emitBackgroundImageReady()
           log('Background image generated successfully', { image })
-          story.image.updateBackgroundImage(image)
+          await story.image.updateBackgroundImage(image)
         } else {
           log('Background image generation failed')
         }

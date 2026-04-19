@@ -3,19 +3,19 @@
  * Coordinates AI analysis and chapter creation without triggering lore management directly.
  */
 
+import { createLogger } from '$lib/log'
+import type { ChapterAnalysis, ChapterSummaryResult } from '$lib/services/ai/sdk/schemas/memory'
+import { story } from '$lib/stores/story/index.svelte'
 import type {
   Chapter,
-  StoryEntry,
   MemoryConfig,
-  TimeTracker,
-  StoryMode,
   POV,
+  StoryEntry,
+  StoryMode,
   Tense,
+  TimeTracker,
 } from '$lib/types'
-import type { ChapterAnalysis, ChapterSummaryResult } from '$lib/services/ai/sdk/schemas/memory'
 import { aiService } from '../ai'
-import { story } from '$lib/stores/story/index.svelte'
-import { createLogger } from '$lib/log'
 
 const log = createLogger('ChapterService')
 
@@ -78,8 +78,10 @@ export class ChapterService {
     const protectedCount = Math.max(0, memoryConfig.chapterBuffer)
     const maxSelectableEndIndex = Math.max(0, entries.length - protectedCount)
     const startIndex = story.chapter.lastChapterEndIndex
-    const analysisEntries = entries.slice(startIndex, maxSelectableEndIndex)
-    story.generationContext.chapterAnalysis.analysisEntries = analysisEntries
+    story.generationContext.chapterAnalysis.analysisEntries = entries.slice(
+      startIndex,
+      maxSelectableEndIndex,
+    )
     if (maxSelectableEndIndex <= startIndex) {
       log('No non-protected entries available for chapter end, skipping', {
         startIndex,

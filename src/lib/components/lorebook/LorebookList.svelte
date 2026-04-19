@@ -153,9 +153,9 @@
 
   async function handleDeleteAll() {
     isDeleting = true
-    const ids = story.lorebookEntries.map((e) => e.id)
+    const ids = story.lorebook.lorebookEntries.map((e) => e.id)
     try {
-      await story.deleteLorebookEntries(ids)
+      await story.lorebook.deleteLorebookEntries(ids)
       ui.clearBulkSelection()
       ui.selectLorebookEntry(null)
       deleteAllDialogOpen = false
@@ -288,7 +288,10 @@
           <Upload class="mr-2 h-4 w-4" />
           Import from Vault
         </DropdownMenuItem>
-        <DropdownMenuItem onclick={onSaveToVault} disabled={story.lorebookEntries.length === 0}>
+        <DropdownMenuItem
+          onclick={onSaveToVault}
+          disabled={story.lorebook.lorebookEntries.length === 0}
+        >
           <Download class="mr-2 h-4 w-4" />
           Save to Vault
         </DropdownMenuItem>
@@ -306,7 +309,7 @@
     <Button variant="outline" size="icon" onclick={() => ui.openLorebookExport()} title="Export">
       <Download class="h-4 w-4" />
     </Button>
-    {#if story.lorebookEntries.length > 0 && !isLoreManagementActive}
+    {#if story.lorebook.lorebookEntries.length > 0 && !isLoreManagementActive}
       <Dialog.Root bind:open={deleteAllDialogOpen}>
         <Dialog.Trigger>
           {#snippet child({ props })}
@@ -327,8 +330,8 @@
             <Dialog.Header>
               <Dialog.Title>Delete all lorebook entries?</Dialog.Title>
               <Dialog.Description>
-                This will permanently delete all {story.lorebookEntries.length} entr{story
-                  .lorebookEntries.length === 1
+                This will permanently delete all {story.lorebook.lorebookEntries.length} entr{story
+                  .lorebook.lorebookEntries.length === 1
                   ? 'y'
                   : 'ies'} from this story's lorebook. This action cannot be undone.
               </Dialog.Description>

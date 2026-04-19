@@ -142,7 +142,7 @@
 
   // Model info cache for active profiles
   let activeProfilesModelInfo = $state<Record<string, ImageModelInfo[]>>({})
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+
   const loadingProfileModelsIds = new Set<string>()
 
   // Load models for active profiles to get resolution info

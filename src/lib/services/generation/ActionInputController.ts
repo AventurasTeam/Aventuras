@@ -228,7 +228,7 @@ export class ActionInputController {
             narrationEntryId,
           )
           emitNarrativeResponse(narrationEntry.id, fullResponse)
-          if (inlineImageTracker?.hasPendingImages) await inlineImageTracker.flushToDatabase()
+          if (inlineImageTracker?.hasPendingImages) await inlineImageTracker!.flushToDatabase()
         }
 
         if (event.type === 'classification_complete' && narrationEntry) {
@@ -301,7 +301,7 @@ export class ActionInputController {
         settings.experimentalFeatures.generationNotifications &&
         fullResponse.trim()
       ) {
-        sendGenerationNotification(fullResponse, true)
+        await sendGenerationNotification(fullResponse, true)
       }
     } catch (error) {
       if (this.stopRequested || (error instanceof Error && error.name === 'AbortError')) return
@@ -325,7 +325,7 @@ export class ActionInputController {
         ui.isAppBackgrounded &&
         settings.experimentalFeatures.generationNotifications
       ) {
-        sendGenerationNotification('', false)
+        await sendGenerationNotification('', false)
       }
     } finally {
       ui.endStreaming()

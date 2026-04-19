@@ -1,4 +1,4 @@
-import type { ClassificationResult } from '$lib/services/ai/generation'
+import type { ClassificationResult } from '$lib/services/ai/sdk'
 import { extractInlineCustomVars } from '$lib/services/ai/sdk/schemas/runtime-variables'
 import { database } from '$lib/services/database'
 import { emitStateUpdated } from '$lib/services/events'
@@ -230,7 +230,7 @@ export class StoryClassification {
         // If character doesn't exist yet, create it first
         if (!existing) {
           const newCharData = result.entryUpdates.newCharacters.find(
-            (nc) => nc.name.toLowerCase() === update.name.toLowerCase(),
+            (nc: { name: string }) => nc.name.toLowerCase() === update.name.toLowerCase(),
           )
           log('Creating character from update (not found):', update.name)
           const charMetadata: Record<string, unknown> = { source: 'classifier' }
@@ -276,13 +276,15 @@ export class StoryClassification {
           if (update.changes.newTraits?.length || update.changes.removeTraits?.length) {
             let traits = [...existing.traits]
             if (update.changes.removeTraits?.length) {
-              const toRemove = new Set(update.changes.removeTraits.map((t) => t.toLowerCase()))
+              const toRemove = new Set(
+                update.changes.removeTraits.map((t: string) => t.toLowerCase()),
+              )
               traits = traits.filter((t) => !toRemove.has(t.toLowerCase()))
             }
             if (update.changes.newTraits?.length) {
               traits = [...traits, ...update.changes.newTraits]
             }
-            const traitMap = new Map(traits.map((t) => [t.toLowerCase(), t]))
+            const traitMap = new Map(traits.map((t: string) => [t.toLowerCase(), t]))
             changes.traits = Array.from(traitMap.values())
           }
           // Handle visual descriptor updates for image generation
@@ -329,7 +331,7 @@ export class StoryClassification {
         if (!existing) {
           // Check if newLocations has data for this name
           const newLocData = result.entryUpdates.newLocations.find(
-            (nl) => nl.name.toLowerCase() === update.name.toLowerCase(),
+            (nl: { name: string }) => nl.name.toLowerCase() === update.name.toLowerCase(),
           )
           log('Creating location from update (not found):', update.name)
           const locMetadata: Record<string, unknown> = { source: 'classifier' }
@@ -465,7 +467,7 @@ export class StoryClassification {
         // If item doesn't exist yet, create it first
         if (!existing) {
           const newItemData = result.entryUpdates.newItems.find(
-            (ni) => ni.name.toLowerCase() === update.name.toLowerCase(),
+            (ni: { name: string }) => ni.name.toLowerCase() === update.name.toLowerCase(),
           )
           log('Creating item from update (not found):', update.name)
           const itemMetadata: Record<string, unknown> = { source: 'classifier' }
@@ -535,7 +537,7 @@ export class StoryClassification {
         // If story beat doesn't exist yet, create it first
         if (!existing) {
           const newBeatData = result.entryUpdates.newStoryBeats.find(
-            (nb) => nb.title.toLowerCase() === update.title.toLowerCase(),
+            (nb: { title: string }) => nb.title.toLowerCase() === update.title.toLowerCase(),
           )
           log('Creating story beat from update (not found):', update.title)
           const beatMetadata: Record<string, unknown> = { source: 'classifier' }

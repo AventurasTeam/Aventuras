@@ -102,11 +102,13 @@
   }
 
   async function handleSaveToVault() {
-    if (!story.currentStory || story.lorebookEntries.length === 0) return
+    if (!story.isLoaded || story.lorebook.lorebookEntries.length === 0) return
     try {
-      const vaultEntries = story.lorebookEntries.map(LorebookImportExport.entryToVaultEntry)
-      const name = `${story.currentStory.title} Lorebook`
-      await lorebookVault.saveFromStory(name, vaultEntries, story.currentStory.id)
+      const vaultEntries = story.lorebook.lorebookEntries.map(
+        LorebookImportExport.entryToVaultEntry,
+      )
+      const name = `${story.title} Lorebook`
+      await lorebookVault.saveFromStory(name, vaultEntries, story.id!)
       ui.showToast(
         `Saved ${vaultEntries.length} entr${vaultEntries.length === 1 ? 'y' : 'ies'} to vault as "${name}"`,
         'info',

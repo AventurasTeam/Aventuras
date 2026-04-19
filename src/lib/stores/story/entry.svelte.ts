@@ -32,7 +32,7 @@ export class StoryEntryStore {
     this.rebuildEntryIdIndex()
   }
 
-  // Narratuve+user entries only
+  // Narrative+user entries only
   get entries(): ContextStoryEntry[] {
     return mapStoryEntriesToContext(this._entries, { stripPicTags: true })
   }
@@ -419,6 +419,10 @@ export class StoryEntryStore {
     for (let i = 0; i < this._entries.length; i++) {
       this._entryIdToIndex.set(this._entries[i].id, i)
     }
+  }
+
+  get lastUserAction(): StoryEntry | null {
+    return this._entries.findLast((e) => e.type === 'user_action') ?? null
   }
 
   /**
