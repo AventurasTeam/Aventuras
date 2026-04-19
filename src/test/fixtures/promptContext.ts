@@ -313,9 +313,6 @@ const memoryConfig: MemoryConfig = {
 }
 
 const userSettings = {
-  // Note: interface has typo 'retieval', templates use 'retrieval'
-  // Provide both for compatibility
-  retieval: { maxStoryEntries: 10 },
   retrieval: { maxStoryEntries: 10 },
   agenticRetrieval: {
     recentEntriesCount: 5,

@@ -233,7 +233,7 @@ const PROMPT_CONTEXT_SAMPLES: TemplateContext = {
   userSettings: {
     visualProseMode: false,
     classifier: { maxEntries: 20 },
-    retieval: { maxStoryEntries: 50 },
+    retrieval: { maxStoryEntries: 50 },
     agenticRetrieval: {
       recentEntriesCount: 5,
       maxChapters: 3,
