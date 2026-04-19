@@ -87,7 +87,10 @@
 </script>
 
 <ResponsiveModal.Root bind:open {onOpenChange}>
-  <ResponsiveModal.Content class="flex max-w-2xl flex-col" style="height: 500px;">
+  <ResponsiveModal.Content
+    class="flex w-full max-w-none flex-col lg:w-[calc(100%-2rem)] lg:max-w-2xl"
+    style="height: 500px;"
+  >
     <ResponsiveModal.Header title="Manage Tags" />
 
     <div class="flex flex-1 flex-col gap-4 overflow-hidden p-4">

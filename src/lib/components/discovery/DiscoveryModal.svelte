@@ -254,7 +254,7 @@
 
 <ResponsiveModal.Root open={isOpen} onOpenChange={(v) => !v && onClose()}>
   <ResponsiveModal.Content
-    class="flex h-[85vh] w-full max-w-7xl flex-col gap-0 overflow-hidden p-0 sm:w-[calc(100%-2rem)]"
+    class="flex h-[85vh] w-full max-w-none flex-col gap-0 overflow-hidden p-0 lg:w-[calc(100%-2rem)] lg:max-w-7xl"
   >
     {#if selectedCard}
       <DiscoveryCardDetails
