@@ -135,7 +135,7 @@
         : null,
   )
 
-  const entityTabLabel = $derived(() => {
+  const entityTabLabel = $derived.by(() => {
     const type = vaultEditor.activeChange?.entityType
     if (type === 'character') return 'Character'
     if (type === 'lorebook') return 'Lorebook'
@@ -631,7 +631,7 @@
 
     <!-- Two-panel layout -->
     <div class="flex flex-1 overflow-hidden">
-      <!-- Entity Editor Panel (left, desktop only) -->
+      <!-- Entity Editor Panel (left, wide layout only) -->
       {#if vaultEditor.editorOpen && vaultEditor.activeChange && !isCompact.current}
         <div
           class="border-surface-700 flex min-w-[28rem] flex-1 flex-col overflow-hidden border-r"
@@ -881,7 +881,7 @@
               )}
               onclick={() => (activeTab = 'entity')}
             >
-              {entityTabLabel()}
+              {entityTabLabel}
               {#if vaultEditor.pendingCount > 0}
                 <span
                   class="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500/20 px-1 text-[10px] font-bold text-emerald-300"
@@ -1164,7 +1164,7 @@
             </div>
           </div>
         {:else}
-          <!-- Entity tab body (compact width only; wide width shows the left panel instead) -->
+          <!-- Entity tab body (compact only) -->
           {#if vaultEditor.activeChange}
             <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
               <VaultEntityEditPanel

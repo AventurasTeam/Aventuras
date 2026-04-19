@@ -426,7 +426,9 @@
       </div>
 
       <!-- Right Side Actions -->
-      <div class="flex flex-1 items-center justify-end gap-2 [&_span]:max-lg:!hidden">
+      <div
+        class="flex flex-1 items-center justify-end gap-2 [&_[data-button-label]]:max-lg:!hidden"
+      >
         <Button
           icon={Bot}
           label="Vault Assistant"

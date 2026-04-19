@@ -2,7 +2,8 @@ import { onMount } from 'svelte'
 
 /**
  * Layout breakpoint hook for components that need a tighter "compact" threshold
- * than the 768px `createIsMobile` gives. Fires true below 1024px (Tailwind lg).
+ * than the 768px `createIsMobile` gives. Returns true at widths <= 1023px
+ * (i.e. below the Tailwind `lg` breakpoint at 1024px).
  */
 export function createIsCompact() {
   let isCompact = $state(false)
