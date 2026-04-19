@@ -457,6 +457,7 @@
 <ResponsiveModal.Root bind:open={lightboxOpen}>
   <ResponsiveModal.Content class="gap-0 overflow-hidden p-0 sm:max-w-3xl">
     <!-- Image area with navigation -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="bg-surface-950 relative flex items-center justify-center p-4"
       ontouchstart={handleTouchStart}
