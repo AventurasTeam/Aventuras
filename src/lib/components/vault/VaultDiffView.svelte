@@ -254,7 +254,9 @@
   in:fade={{ duration: 150 }}
 >
   <!-- Header -->
-  <div class="border-surface-700 bg-surface-800 flex items-center gap-2 border-b px-3 py-2">
+  <div
+    class="border-surface-700 bg-surface-800 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b px-3 py-2"
+  >
     <div class="flex min-w-0 flex-1 items-center gap-2">
       <!-- Entity type badge -->
       <div
@@ -329,7 +331,7 @@
           New {entityConfig.label}
         </div>
         <pre
-          class="text-surface-200 font-mono text-xs leading-relaxed whitespace-pre-wrap">{formatChangeData()}</pre>
+          class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">{formatChangeData()}</pre>
       </div>
     {:else if change.action === 'update'}
       <!-- Update: Before / After -->
@@ -339,14 +341,14 @@
             Before
           </div>
           <pre
-            class="text-surface-400 font-mono text-xs leading-relaxed whitespace-pre-wrap">{formatPrevious()}</pre>
+            class="text-surface-400 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">{formatPrevious()}</pre>
         </div>
         <div class="rounded-lg border border-emerald-500/20 bg-emerald-500/8 p-2.5">
           <div class="mb-1.5 text-[10px] font-bold tracking-wider text-emerald-400 uppercase">
             After
           </div>
           <pre
-            class="text-surface-200 font-mono text-xs leading-relaxed whitespace-pre-wrap">{formatChangeData()}</pre>
+            class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">{formatChangeData()}</pre>
         </div>
       </div>
     {:else if change.action === 'delete'}
@@ -356,7 +358,7 @@
           {entityConfig.label} to Delete
         </div>
         <pre
-          class="text-surface-400 font-mono text-xs leading-relaxed whitespace-pre-wrap line-through opacity-70">{formatPrevious()}</pre>
+          class="text-surface-400 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap line-through opacity-70">{formatPrevious()}</pre>
       </div>
     {:else if change.action === 'merge'}
       <!-- Merge: Source entries and result (lorebook-entry only) -->
@@ -372,7 +374,7 @@
                   Entry {i + 1}: {entry.name}
                 </div>
                 <pre
-                  class="text-surface-300 font-mono text-xs leading-relaxed whitespace-pre-wrap">{formatEntry(
+                  class="text-surface-300 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">{formatEntry(
                     entry,
                   )}</pre>
               </div>
@@ -389,7 +391,7 @@
             Merged Entry
           </div>
           <pre
-            class="text-surface-200 font-mono text-xs leading-relaxed whitespace-pre-wrap">{formatEntry(
+            class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">{formatEntry(
               mergeData as VaultLorebookEntry | undefined,
             )}</pre>
         </div>
