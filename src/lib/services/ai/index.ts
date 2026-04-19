@@ -523,7 +523,9 @@ class AIService {
       // Queue image generation for each scene
       const referenceMode = story.settings.referenceMode ?? false
       const getImageProfile = (id: string) => settings.getImageProfile(id)
-      for (const scene of scenes) {
+      const maxImages = imageSettings.maxImagesPerMessage ?? 3
+      const scenesToProcess = maxImages > 0 ? scenes.slice(0, maxImages) : scenes
+      for (const scene of scenesToProcess) {
         await this.queueAnalyzedImageGeneration(
           story.id ?? '',
           entryId,
