@@ -140,7 +140,8 @@
     <a bind:this={ref} class={finalClass} {href} title={finalTitle} {...restProps}>
       {#if Icon}<Icon class={responsiveIconClass} />{/if}
       {#if mobileLabel}<span data-button-label class="inline sm:hidden">{mobileLabel}</span>{/if}
-      {#if label}<span data-button-label class="hidden -translate-y-px sm:inline">{label}</span>{/if}
+      {#if label}<span data-button-label class="hidden -translate-y-px sm:inline">{label}</span
+        >{/if}
       {#if children && !label}<span class="hidden sm:inline">{@render children()}</span>{/if}
       {#if EndIcon}<EndIcon class="hidden h-3 w-3 opacity-50 sm:inline" />{/if}
     </a>
@@ -148,7 +149,8 @@
     <button bind:this={ref} class={finalClass} {type} title={finalTitle} {...restProps}>
       {#if Icon}<Icon class={responsiveIconClass} />{/if}
       {#if mobileLabel}<span data-button-label class="inline sm:hidden">{mobileLabel}</span>{/if}
-      {#if label}<span data-button-label class="hidden -translate-y-px sm:inline">{label}</span>{/if}
+      {#if label}<span data-button-label class="hidden -translate-y-px sm:inline">{label}</span
+        >{/if}
       {#if children && !label}<span class="hidden sm:inline">{@render children()}</span>{/if}
       {#if EndIcon}<EndIcon class="hidden h-3 w-3 opacity-50 sm:inline" />{/if}
     </button>
