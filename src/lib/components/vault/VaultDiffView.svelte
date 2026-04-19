@@ -257,7 +257,9 @@
   <div
     class="border-surface-700 bg-surface-800 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b px-3 py-2"
   >
-    <div class="flex min-w-0 flex-1 items-center gap-2">
+    <div
+      class="flex w-full min-w-0 items-center gap-2 overflow-hidden sm:w-auto sm:flex-1"
+    >
       <!-- Entity type badge -->
       <div
         class="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold tracking-wider whitespace-nowrap uppercase {entityConfig.color} {entityConfig.bg}"
@@ -330,8 +332,9 @@
         <div class="mb-1.5 text-[10px] font-bold tracking-wider text-emerald-400 uppercase">
           New {entityConfig.label}
         </div>
-        <pre
-          class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">{formatChangeData()}</pre>
+        <div
+          class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
+        >{formatChangeData()}</div>
       </div>
     {:else if change.action === 'update'}
       <!-- Update: Before / After -->
@@ -340,15 +343,17 @@
           <div class="mb-1.5 text-[10px] font-bold tracking-wider text-red-400 uppercase">
             Before
           </div>
-          <pre
-            class="text-surface-400 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">{formatPrevious()}</pre>
+          <div
+            class="text-surface-400 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
+          >{formatPrevious()}</div>
         </div>
         <div class="rounded-lg border border-emerald-500/20 bg-emerald-500/8 p-2.5">
           <div class="mb-1.5 text-[10px] font-bold tracking-wider text-emerald-400 uppercase">
             After
           </div>
-          <pre
-            class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">{formatChangeData()}</pre>
+          <div
+            class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
+          >{formatChangeData()}</div>
         </div>
       </div>
     {:else if change.action === 'delete'}
@@ -357,8 +362,9 @@
         <div class="mb-1.5 text-[10px] font-bold tracking-wider text-red-400 uppercase">
           {entityConfig.label} to Delete
         </div>
-        <pre
-          class="text-surface-400 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap line-through opacity-70">{formatPrevious()}</pre>
+        <div
+          class="text-surface-400 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap line-through opacity-70"
+        >{formatPrevious()}</div>
       </div>
     {:else if change.action === 'merge'}
       <!-- Merge: Source entries and result (lorebook-entry only) -->
@@ -373,10 +379,9 @@
                 <div class="text-surface-400 mb-1 text-[10px] font-semibold">
                   Entry {i + 1}: {entry.name}
                 </div>
-                <pre
-                  class="text-surface-300 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">{formatEntry(
-                    entry,
-                  )}</pre>
+                <div
+                  class="text-surface-300 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
+                >{formatEntry(entry)}</div>
               </div>
             {/each}
           </div>
@@ -390,10 +395,9 @@
           <div class="mb-1.5 text-[10px] font-bold tracking-wider text-emerald-400 uppercase">
             Merged Entry
           </div>
-          <pre
-            class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">{formatEntry(
-              mergeData as VaultLorebookEntry | undefined,
-            )}</pre>
+          <div
+            class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
+          >{formatEntry(mergeData as VaultLorebookEntry | undefined)}</div>
         </div>
       </div>
     {/if}
