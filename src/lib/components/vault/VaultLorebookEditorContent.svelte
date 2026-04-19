@@ -775,7 +775,7 @@
           <!-- Sidebar (List) -->
           <div
             class={cn(
-              'sm:border-border sm:bg-foreground/[0.03] flex w-full min-h-0 flex-1 flex-col sm:w-72 sm:flex-none sm:border-r',
+              'sm:border-border sm:bg-foreground/[0.03] flex min-h-0 w-full flex-1 flex-col sm:w-72 sm:flex-none sm:border-r',
               selectedIndex !== null && 'hidden sm:flex',
             )}
           >

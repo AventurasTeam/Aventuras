@@ -332,7 +332,9 @@
         </div>
         <div
           class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
-        >{formatChangeData()}</div>
+        >
+          {formatChangeData()}
+        </div>
       </div>
     {:else if change.action === 'update'}
       <!-- Update: Before / After -->
@@ -343,7 +345,9 @@
           </div>
           <div
             class="text-surface-400 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
-          >{formatPrevious()}</div>
+          >
+            {formatPrevious()}
+          </div>
         </div>
         <div class="rounded-lg border border-emerald-500/20 bg-emerald-500/8 p-2.5">
           <div class="mb-1.5 text-[10px] font-bold tracking-wider text-emerald-400 uppercase">
@@ -351,7 +355,9 @@
           </div>
           <div
             class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
-          >{formatChangeData()}</div>
+          >
+            {formatChangeData()}
+          </div>
         </div>
       </div>
     {:else if change.action === 'delete'}
@@ -362,7 +368,9 @@
         </div>
         <div
           class="text-surface-400 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap line-through opacity-70"
-        >{formatPrevious()}</div>
+        >
+          {formatPrevious()}
+        </div>
       </div>
     {:else if change.action === 'merge'}
       <!-- Merge: Source entries and result (lorebook-entry only) -->
@@ -379,7 +387,9 @@
                 </div>
                 <div
                   class="text-surface-300 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
-                >{formatEntry(entry)}</div>
+                >
+                  {formatEntry(entry)}
+                </div>
               </div>
             {/each}
           </div>
@@ -395,7 +405,9 @@
           </div>
           <div
             class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
-          >{formatEntry(mergeData as VaultLorebookEntry | undefined)}</div>
+          >
+            {formatEntry(mergeData as VaultLorebookEntry | undefined)}
+          </div>
         </div>
       </div>
     {/if}
