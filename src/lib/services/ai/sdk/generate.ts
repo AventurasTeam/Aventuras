@@ -157,7 +157,12 @@ export function buildProviderOptions(
         const usesBudget = modelInfo?.isBudgetReasoning ?? preset.model.includes('gemini-2.5')
         if (usesBudget) {
           // Always send thinkingConfig for Gemini 2.5: 0=disabled, -1=unlimited, otherwise token count
-          const gemini25Budgets: Record<ReasoningEffort, number> = { off: 0, low: 2048, medium: -1, high: 8196 }
+          const gemini25Budgets: Record<ReasoningEffort, number> = {
+            off: 0,
+            low: 2048,
+            medium: -1,
+            high: 8196,
+          }
           options = {
             ...options,
             thinkingConfig: {
@@ -168,7 +173,9 @@ export function buildProviderOptions(
         } else if (reasoningEffort) {
           const isGemma = preset.model.toLowerCase().includes('gemma')
           const thinkingLevel = isGemma
-            ? reasoningEffort === 'high' ? 'high' : 'minimal'
+            ? reasoningEffort === 'high'
+              ? 'high'
+              : 'minimal'
             : reasoningEffort
           options = {
             ...options,

@@ -1101,8 +1101,8 @@
       />
       {#if referenceProfileImg2ImgWarning}
         <p class="text-warning mt-1 text-xs">
-          This profile is used for reference image generation (img2img), but the selected model
-          does not support img2img.
+          This profile is used for reference image generation (img2img), but the selected model does
+          not support img2img.
         </p>
       {:else}
         <p class="text-muted-foreground mt-1 text-xs">
