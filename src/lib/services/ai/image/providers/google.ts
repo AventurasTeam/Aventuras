@@ -62,7 +62,8 @@ function sizeToAspectRatio(size: string): string {
 async function fetchGoogleImageModels(baseUrl: string, apiKey?: string): Promise<ImageModelInfo[]> {
   if (!apiKey) return getFallbackImageModels()
 
-  const url = baseUrl.replace(/\/$/, '') + '/models?key=' + encodeURIComponent(apiKey) + '&pageSize=200'
+  const url =
+    baseUrl.replace(/\/$/, '') + '/models?key=' + encodeURIComponent(apiKey) + '&pageSize=200'
 
   try {
     const fetchFn = createTimeoutFetch(30000, 'google-image-models')

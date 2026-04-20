@@ -206,7 +206,11 @@ async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<Tex
     return getGoogleFallback()
   }
 
-  const modelsUrl = effectiveBaseUrl.replace(/\/$/, '') + '/models?key=' + encodeURIComponent(apiKey) + '&pageSize=200'
+  const modelsUrl =
+    effectiveBaseUrl.replace(/\/$/, '') +
+    '/models?key=' +
+    encodeURIComponent(apiKey) +
+    '&pageSize=200'
 
   try {
     const fetchFn = createTimeoutFetch(30000, 'model-fetch')
