@@ -266,16 +266,16 @@
     }
   })
 
-  // Trigger ping immediately when the toggle is switched on for an existing profile
-  let prevPingEnabled = $state(false)
+  // Trigger ping immediately when the toggle is switched on for an existing profile.
+  // Plain `let` (not $state): the effect writes to prevPingEnabled and we don't want
+  // that write to schedule a redundant effect rerun.
+  let prevPingEnabled = false
   $effect(() => {
     const current = formPingEnabled
     if (current && !prevPingEnabled && editingProfileId && !isNewProfile) {
       const existing = settings.getProfile(editingProfileId)
       if (existing && isPingEligible({ ...existing, pingEnabled: true })) {
-        pingProfileModels({ ...existing, pingEnabled: true }, undefined, 'manual').catch((e) =>
-          console.warn('[health] ping on enable failed', e),
-        )
+        void pingProfileModels({ ...existing, pingEnabled: true }, undefined, 'manual')
       }
     }
     prevPingEnabled = current

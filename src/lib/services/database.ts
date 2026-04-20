@@ -254,35 +254,42 @@ class DatabaseService {
   ): Promise<void> {
     if (rows.length === 0) return
     const db = await this.getDb()
-    const placeholders = rows.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(',')
-    const values: unknown[] = []
+    // Chunked to stay below SQLite's SQLITE_LIMIT_VARIABLE_NUMBER (default 999):
+    // 8 params/row × 50 rows = 400 params per statement.
+    const BATCH_SIZE = 50
 
-    for (const r of rows) {
-      values.push(
-        r.providerId,
-        r.modelId,
-        r.apiKeyHash,
-        r.status,
-        r.httpCode,
-        r.latencyMs,
-        r.quotaPercent,
-        r.checkedAt,
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const chunk = rows.slice(i, i + BATCH_SIZE)
+      const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(',')
+      const values: unknown[] = []
+
+      for (const r of chunk) {
+        values.push(
+          r.providerId,
+          r.modelId,
+          r.apiKeyHash,
+          r.status,
+          r.httpCode,
+          r.latencyMs,
+          r.quotaPercent,
+          r.checkedAt,
+        )
+      }
+
+      await db.execute(
+        `INSERT INTO model_health_cache
+          (provider_id, model_id, api_key_hash, status, http_code, latency_ms, quota_percent, checked_at)
+         VALUES ${placeholders}
+         ON CONFLICT(provider_id, model_id, api_key_hash)
+         DO UPDATE SET
+           status        = excluded.status,
+           http_code     = excluded.http_code,
+           latency_ms    = excluded.latency_ms,
+           quota_percent = excluded.quota_percent,
+           checked_at    = excluded.checked_at`,
+        values,
       )
     }
-
-    await db.execute(
-      `INSERT INTO model_health_cache
-        (provider_id, model_id, api_key_hash, status, http_code, latency_ms, quota_percent, checked_at)
-       VALUES ${placeholders}
-       ON CONFLICT(provider_id, model_id, api_key_hash)
-       DO UPDATE SET
-         status        = excluded.status,
-         http_code     = excluded.http_code,
-         latency_ms    = excluded.latency_ms,
-         quota_percent = excluded.quota_percent,
-         checked_at    = excluded.checked_at`,
-      values,
-    )
   }
 
   async deleteModelHealthForKey(providerId: string, apiKeyHash: string): Promise<void> {

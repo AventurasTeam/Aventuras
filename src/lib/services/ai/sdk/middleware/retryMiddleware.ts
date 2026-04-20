@@ -85,8 +85,11 @@ async function withRetry<T>(fn: () => PromiseLike<T>, signal?: AbortSignal): Pro
       }
 
       lastError = error
+      // Jitter only the default backoff to spread reconnections (anti-thundering-
+      // herd). Server-provided Retry-After is a floor — subtracting jitter would
+      // retry before the server is ready and earn another 429.
       const base = retryAfterMs ?? RETRY_DELAYS_MS[attempt]
-      const delay = withJitter(base)
+      const delay = retryAfterMs !== null ? base : withJitter(base)
       const src = retryAfterMs !== null ? 'Retry-After' : 'backoff'
       console.warn(
         `[retryMiddleware] 429 received, retrying in ${Math.round(delay / 1000)}s (${src}, attempt ${attempt + 1}/${RETRY_DELAYS_MS.length})`,
