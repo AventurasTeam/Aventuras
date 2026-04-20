@@ -103,7 +103,6 @@ async function withRetry<T>(fn: () => PromiseLike<T>, signal?: AbortSignal): Pro
 // OpenAI-compatible providers, but not impossible.
 export const retryOn429Middleware: LanguageModelV3Middleware = {
   specificationVersion: 'v3',
-  wrapGenerate: async ({ doGenerate, params }) =>
-    withRetry(() => doGenerate(), params.abortSignal),
+  wrapGenerate: async ({ doGenerate, params }) => withRetry(() => doGenerate(), params.abortSignal),
   wrapStream: async ({ doStream, params }) => withRetry(() => doStream(), params.abortSignal),
 }
