@@ -9,9 +9,11 @@
   import { Input } from '$lib/components/ui/input'
   import { Label } from '$lib/components/ui/label'
   import { Badge } from '$lib/components/ui/badge'
+  import { Switch } from '$lib/components/ui/switch'
   import { ScrollArea } from '$lib/components/ui/scroll-area'
   import { Alert, AlertDescription } from '$lib/components/ui/alert'
   import * as Dialog from '$lib/components/ui/dialog'
+  import { isPingEligibleProvider } from '$lib/constants/modelHealth'
   import {
     AlertCircle,
     Box,
@@ -34,6 +36,7 @@
     customModels: string[]
     hiddenModels: string[]
     favoriteModels: string[]
+    pingEnabled: boolean
 
     // UI state (from parent)
     isFetchingModels: boolean
@@ -61,6 +64,7 @@
     customModels = $bindable(),
     hiddenModels = $bindable(),
     favoriteModels = $bindable(),
+    pingEnabled = $bindable(),
     isFetchingModels,
     fetchError,
     onFetchModels,
@@ -155,6 +159,8 @@
     customModelDialogError = ''
     onProviderTypeChange(type)
   }
+
+  let canPing = $derived(isPingEligibleProvider(providerType))
 </script>
 
 <div class="space-y-3">
@@ -256,6 +262,23 @@
         </Button>
       </div>
     </div>
+
+    {#if canPing}
+      <div class="bg-muted/30 flex items-center gap-3 rounded-md border p-2">
+        <Switch id="ping-enabled-{providerType}" bind:checked={pingEnabled} />
+        <Label
+          for="ping-enabled-{providerType}"
+          class="cursor-pointer text-xs leading-snug font-normal"
+          title="Pings models to verify which ones respond and how fast. Shows a status icon next to each model and blocks sending if the selected model is unreachable. Consumes one API request per model every 30 minutes."
+        >
+          <span class="font-medium">Test model availability</span>
+          <span class="text-muted-foreground block">
+            Pings{providerType === 'openrouter' ? ' :free' : ''} models for latency and status. 1 request/model
+            per 30 min.
+          </span>
+        </Label>
+      </div>
+    {/if}
 
     {#if fetchError}
       <Alert variant="destructive">

@@ -5,6 +5,8 @@
   import type { APIProfile, ProviderType, TextModel } from '$lib/types'
   import { fetchModelsFromProvider } from '$lib/services/ai/sdk/providers'
   import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
+  import { pingProfileModels, isPingEligible } from '$lib/services/modelHealthOrchestrator'
+  import { isPingEligibleProvider } from '$lib/constants/modelHealth'
   import { Plus, Check, ChevronRight, Key as KeyIcon, Star } from 'lucide-svelte'
 
   import { Button } from '$lib/components/ui/button'
@@ -28,6 +30,7 @@
   let formFetchedModels = $state<TextModel[]>([])
   let formHiddenModels = $state<string[]>([])
   let formFavoriteModels = $state<string[]>([])
+  let formPingEnabled = $state(false)
 
   // Auto-save debounce state
   let mounted = true
@@ -54,6 +57,8 @@
     formFetchedModels = [...profile.fetchedModels]
     formHiddenModels = [...(profile.hiddenModels ?? [])]
     formFavoriteModels = [...(profile.favoriteModels ?? [])]
+    formPingEnabled = profile.pingEnabled ?? false
+    prevPingEnabled = formPingEnabled
     fetchError = null
     openCollapsibles = new SvelteSet([...openCollapsibles, profile.id])
   }
@@ -69,6 +74,8 @@
     formFetchedModels = []
     formHiddenModels = []
     formFavoriteModels = []
+    formPingEnabled = false
+    prevPingEnabled = false
     fetchError = null
   }
 
@@ -92,6 +99,7 @@
       fetchedModels: formFetchedModels,
       hiddenModels: formHiddenModels,
       favoriteModels: formFavoriteModels,
+      pingEnabled: formPingEnabled,
       createdAt: isNewProfile
         ? Date.now()
         : settings.apiSettings.profiles.find((p) => p.id === editingProfileId)?.createdAt ||
@@ -119,6 +127,20 @@
 
     try {
       formFetchedModels = await fetchModelsFromProvider(formProviderType, formBaseUrl, formApiKey)
+      if (formPingEnabled && editingProfileId && !isNewProfile) {
+        const existing = settings.getProfile(editingProfileId)
+        if (existing) {
+          pingProfileModels(
+            {
+              ...existing,
+              fetchedModels: formFetchedModels,
+              pingEnabled: true,
+            },
+            undefined,
+            'manual',
+          ).catch((e) => console.warn('[health] ping after fetch failed', e))
+        }
+      }
     } catch (err) {
       fetchError = err instanceof Error ? err.message : 'Failed to fetch models'
     } finally {
@@ -205,6 +227,7 @@
       fetchedModels: formFetchedModels,
       hiddenModels: formHiddenModels,
       favoriteModels: formFavoriteModels,
+      pingEnabled: formPingEnabled,
       createdAt: existingProfile.createdAt,
     }
 
@@ -237,9 +260,25 @@
         formFetchedModels,
         formHiddenModels,
         formFavoriteModels,
+        formPingEnabled,
       ]
       triggerAutoSave()
     }
+  })
+
+  // Trigger ping immediately when the toggle is switched on for an existing profile
+  let prevPingEnabled = $state(false)
+  $effect(() => {
+    const current = formPingEnabled
+    if (current && !prevPingEnabled && editingProfileId && !isNewProfile) {
+      const existing = settings.getProfile(editingProfileId)
+      if (existing && isPingEligible({ ...existing, pingEnabled: true })) {
+        pingProfileModels({ ...existing, pingEnabled: true }, undefined, 'manual').catch((e) =>
+          console.warn('[health] ping on enable failed', e),
+        )
+      }
+    }
+    prevPingEnabled = current
   })
 
   onDestroy(() => {
@@ -256,6 +295,7 @@
     formCustomModels = []
     formHiddenModels = []
     formFavoriteModels = []
+    if (!isPingEligibleProvider(v)) formPingEnabled = false
     fetchError = null
   }
 </script>
@@ -295,6 +335,7 @@
           bind:customModels={formCustomModels}
           bind:hiddenModels={formHiddenModels}
           bind:favoriteModels={formFavoriteModels}
+          bind:pingEnabled={formPingEnabled}
           {isFetchingModels}
           {fetchError}
           onFetchModels={handleFetchModels}
@@ -407,6 +448,7 @@
                 bind:customModels={formCustomModels}
                 bind:hiddenModels={formHiddenModels}
                 bind:favoriteModels={formFavoriteModels}
+                bind:pingEnabled={formPingEnabled}
                 {isFetchingModels}
                 {fetchError}
                 onFetchModels={handleFetchModels}

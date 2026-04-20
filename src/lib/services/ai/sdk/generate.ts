@@ -30,6 +30,7 @@ import { createLogger } from '$lib/log'
 import { createModelFromProfile } from './providers'
 import { PROVIDERS, getReasoningExtraction, GOOGLE_SAFETY_SETTINGS } from './providers/config'
 import { promptSchemaMiddleware, patchResponseMiddleware, loggingMiddleware } from './middleware'
+import { retryOn429Middleware } from './middleware/retryMiddleware'
 import { debug } from '$lib/stores/debug.svelte'
 import type { OpenAICompatibleProviderOptions } from '@ai-sdk/openai-compatible'
 import type { DeepSeekChatOptions } from '@ai-sdk/deepseek'
@@ -378,7 +379,11 @@ function buildStructuredMiddleware(
   reasoningEnabled: boolean,
   thinkingNudge: boolean,
 ): LanguageModelV3Middleware[] {
-  const base: LanguageModelV3Middleware[] = [patchResponseMiddleware()]
+  // retryOn429Middleware is intentionally outermost: it re-invokes the whole
+  // inner chain (including patchResponseMiddleware) on each retry. Do not
+  // reorder without understanding this — putting retry after patchResponse
+  // would cause patched state to leak across attempts.
+  const base: LanguageModelV3Middleware[] = [retryOn429Middleware, patchResponseMiddleware()]
 
   base.push(createJsonExtractMiddleware())
 
@@ -402,7 +407,11 @@ function buildStructuredMiddleware(
 }
 
 function buildPlainTextMiddleware(useThinkTag: boolean): LanguageModelV3Middleware[] {
-  const base: LanguageModelV3Middleware[] = [patchResponseMiddleware()]
+  // retryOn429Middleware is intentionally outermost: it re-invokes the whole
+  // inner chain (including patchResponseMiddleware) on each retry. Do not
+  // reorder without understanding this — putting retry after patchResponse
+  // would cause patched state to leak across attempts.
+  const base: LanguageModelV3Middleware[] = [retryOn429Middleware, patchResponseMiddleware()]
   if (useThinkTag) {
     base.push(thinkTagMiddleware)
   }

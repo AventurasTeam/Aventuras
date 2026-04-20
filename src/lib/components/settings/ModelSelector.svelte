@@ -6,6 +6,9 @@
   import { Button } from '$lib/components/ui/button'
   import { Label } from '$lib/components/ui/label'
   import { cn } from '$lib/utils/cn'
+  import { modelHealth } from '$lib/stores/modelHealth.svelte'
+  import { isPingEligible, shouldShowHealthFor } from '$lib/services/modelHealthOrchestrator'
+  import HealthIndicator from './HealthIndicator.svelte'
 
   interface Props {
     profileId: string | null
@@ -69,6 +72,36 @@
       label: p.name + (settings.apiSettings.defaultProfileId === p.id ? ' (Default)' : ''),
     })),
   )
+
+  // Resolve the actual profile object (may be undefined if the resolved id doesn't exist)
+  let resolvedProfile = $derived(
+    effectiveProfileId ? settings.getProfile(effectiveProfileId) : undefined,
+  )
+  let healthEligible = $derived(isPingEligible(resolvedProfile))
+  let apiKeyHash = $state<string | null>(null)
+
+  $effect(() => {
+    if (!resolvedProfile || !healthEligible) {
+      apiKeyHash = null
+      return
+    }
+    let cancelled = false
+    const profile = resolvedProfile
+    void modelHealth.ensureHash(profile).then((h) => {
+      if (cancelled) return
+      apiKeyHash = h
+      void modelHealth.hydrateFromDb(profile.providerType, h)
+    })
+    return () => {
+      cancelled = true
+    }
+  })
+
+  function getHealthFor(modelId: string) {
+    if (!resolvedProfile || !apiKeyHash) return undefined
+    if (!shouldShowHealthFor(resolvedProfile, modelId)) return undefined
+    return modelHealth.get(resolvedProfile.providerType, modelId, apiKeyHash)
+  }
 
   function checkModelReasoningCapability(modelId: string): boolean {
     const model = availableModels.find((m) => m.id === modelId)
@@ -167,8 +200,12 @@
           <Check class={cn('mr-2 h-4 w-4', model === modelOption ? 'opacity-100' : 'opacity-0')} />
         {/if}
         <span class="truncate">{modelOption}</span>
-        {#if checkModelReasoningCapability(modelOption) || checkModelStructuredCapability(modelOption)}
+        {@const health = healthEligible ? getHealthFor(modelOption) : undefined}
+        {#if health || checkModelReasoningCapability(modelOption) || checkModelStructuredCapability(modelOption)}
           <span class="ml-auto flex shrink-0 items-center gap-1">
+            {#if health}
+              <HealthIndicator {health} providerType={resolvedProfile!.providerType} />
+            {/if}
             {#if checkModelStructuredCapability(modelOption)}
               <Braces class="h-3 w-3 text-blue-400" />
             {/if}

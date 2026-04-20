@@ -112,12 +112,27 @@ function migrateVisualDescriptors(data: unknown): VisualDescriptors {
 
 class DatabaseService {
   private db: Database | null = null
+  /** Pending open promise — prevents concurrent callers from opening the DB twice. */
+  private dbPromise: Promise<Database> | null = null
 
   async init(): Promise<void> {
     if (this.db) return
-    this.db = await Database.load('sqlite:aventura.db')
-    // Enable foreign key enforcement (SQLite disables by default)
-    await this.db.execute('PRAGMA foreign_keys = ON')
+    if (!this.dbPromise) {
+      this.dbPromise = Database.load('sqlite:aventura.db')
+        .then(async (db) => {
+          // Enable foreign key enforcement (SQLite disables by default).
+          // Must run exactly once per connection; placing it here (instead of
+          // after the await below) avoids concurrent callers re-issuing it.
+          await db.execute('PRAGMA foreign_keys = ON')
+          this.db = db
+          return db
+        })
+        .catch((err) => {
+          this.dbPromise = null
+          throw err
+        })
+    }
+    await this.dbPromise
   }
 
   /**
@@ -128,6 +143,7 @@ class DatabaseService {
     if (this.db) {
       await this.db.close()
       this.db = null
+      this.dbPromise = null
     }
   }
 
@@ -200,6 +216,81 @@ class DatabaseService {
   async deleteSetting(key: string): Promise<void> {
     const db = await this.getDb()
     await db.execute('DELETE FROM settings WHERE key = ?', [key])
+  }
+
+  // Model health cache operations
+  async getModelHealthForKey(
+    providerId: string,
+    apiKeyHash: string,
+  ): Promise<
+    Array<{
+      model_id: string
+      status: string
+      http_code: number | null
+      latency_ms: number | null
+      quota_percent: number | null
+      checked_at: number
+    }>
+  > {
+    const db = await this.getDb()
+    return db.select(
+      `SELECT model_id, status, http_code, latency_ms, quota_percent, checked_at
+       FROM model_health_cache WHERE provider_id = ? AND api_key_hash = ?`,
+      [providerId, apiKeyHash],
+    )
+  }
+
+  async upsertModelHealthBatch(
+    rows: Array<{
+      providerId: string
+      modelId: string
+      apiKeyHash: string
+      status: string
+      httpCode: number | null
+      latencyMs: number | null
+      quotaPercent: number | null
+      checkedAt: number
+    }>,
+  ): Promise<void> {
+    if (rows.length === 0) return
+    const db = await this.getDb()
+    const placeholders = rows.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(',')
+    const values: unknown[] = []
+
+    for (const r of rows) {
+      values.push(
+        r.providerId,
+        r.modelId,
+        r.apiKeyHash,
+        r.status,
+        r.httpCode,
+        r.latencyMs,
+        r.quotaPercent,
+        r.checkedAt,
+      )
+    }
+
+    await db.execute(
+      `INSERT INTO model_health_cache
+        (provider_id, model_id, api_key_hash, status, http_code, latency_ms, quota_percent, checked_at)
+       VALUES ${placeholders}
+       ON CONFLICT(provider_id, model_id, api_key_hash)
+       DO UPDATE SET
+         status        = excluded.status,
+         http_code     = excluded.http_code,
+         latency_ms    = excluded.latency_ms,
+         quota_percent = excluded.quota_percent,
+         checked_at    = excluded.checked_at`,
+      values,
+    )
+  }
+
+  async deleteModelHealthForKey(providerId: string, apiKeyHash: string): Promise<void> {
+    const db = await this.getDb()
+    await db.execute('DELETE FROM model_health_cache WHERE provider_id = ? AND api_key_hash = ?', [
+      providerId,
+      apiKeyHash,
+    ])
   }
 
   async getAllSettings(): Promise<Record<string, string>> {

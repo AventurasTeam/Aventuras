@@ -211,6 +211,12 @@ pub fn run() {
             description: "vault_assistant_conversations",
             sql: include_str!("../migrations/033_vault_assistant_conversations.sql"),
             kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 34,
+            description: "model_health_cache",
+            sql: include_str!("../migrations/034_model_health_cache.sql"),
+            kind: MigrationKind::Up,
         }
     ];
 
