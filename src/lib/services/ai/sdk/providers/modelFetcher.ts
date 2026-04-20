@@ -175,6 +175,11 @@ async function fetchAnthropicModels(baseUrl?: string, apiKey?: string): Promise<
   }
 }
 
+/** Models with -image in the ID or nano-banana in the ID are image generation models, not text */
+export function isGoogleImageModel(id: string): boolean {
+  return id.includes('-image') || id.includes('nano-banana')
+}
+
 interface GoogleModelEntry {
   name: string
   supportedGenerationMethods?: string[]
@@ -201,7 +206,7 @@ async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<Tex
     return getGoogleFallback()
   }
 
-  const modelsUrl = effectiveBaseUrl.replace(/\/$/, '') + '/models?key=' + apiKey
+  const modelsUrl = effectiveBaseUrl.replace(/\/$/, '') + '/models?key=' + apiKey + '&pageSize=200'
 
   try {
     const fetchFn = createTimeoutFetch(30000, 'model-fetch')
@@ -216,6 +221,7 @@ async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<Tex
     if (data.models && Array.isArray(data.models)) {
       const models = (data.models as GoogleModelEntry[])
         .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+        .filter((m) => !isGoogleImageModel(m.name.replace(/^models\//, '')))
         .map((m) => {
           const id = m.name.replace(/^models\//, '')
           // Gemini 2.5 uses thinkingBudget (token count), Gemini 3.x uses thinkingLevel

@@ -60,7 +60,7 @@
     { value: 'openrouter', label: 'OpenRouter' },
     { value: 'chutes', label: 'Chutes' },
     { value: 'pollinations', label: 'Pollinations' },
-    { value: 'google', label: 'Google Imagen' },
+    { value: 'google', label: 'Google AI Studio' },
     { value: 'zhipu', label: 'Zhipu CogView' },
     { value: 'comfyui', label: 'ComfyUI' },
   ]
@@ -118,6 +118,11 @@
   // Profile form model state
   let profileModel = $state('')
   let profileModels = $state<ImageModelInfo[]>([])
+  const referenceProfileImg2ImgWarning = $derived(
+    isEditingReferenceProfile &&
+      !!profileModel &&
+      profileModels.find((m) => m.id === profileModel)?.supportsImg2Img === false,
+  )
   let isLoadingProfileModels = $state(false)
   let profileModelsError = $state<string | null>(null)
 
@@ -1085,7 +1090,7 @@
         onModelChange={(id) => {
           profileModel = id
         }}
-        filterFunc={isEditingReferenceProfile ? (m) => m.supportsImg2Img : undefined}
+        filterFunc={undefined}
         showCost={true}
         showImg2ImgIndicator={true}
         showDescription={false}
@@ -1094,9 +1099,16 @@
         showRefreshButton={true}
         onRefresh={() => loadProfileFormModels(profileProviderType, profileApiKey, true)}
       />
-      <p class="text-muted-foreground mt-1 text-xs">
-        The image model this profile will use for generation.
-      </p>
+      {#if referenceProfileImg2ImgWarning}
+        <p class="text-warning mt-1 text-xs">
+          This profile is used for reference image generation (img2img), but the selected model
+          does not support img2img.
+        </p>
+      {:else}
+        <p class="text-muted-foreground mt-1 text-xs">
+          The image model this profile will use for generation.
+        </p>
+      {/if}
     </div>
     {#if profileProviderType === 'comfyui'}
       <div class="grid grid-cols-2 gap-4 pt-2">
