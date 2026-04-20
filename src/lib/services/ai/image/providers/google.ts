@@ -16,6 +16,7 @@ import type {
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { generateImage } from 'ai'
 import { isGoogleImageModel } from '../../sdk/providers/modelFetcher'
+import { createTimeoutFetch } from '../../sdk/providers/fetch'
 
 const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
 
@@ -61,10 +62,11 @@ function sizeToAspectRatio(size: string): string {
 async function fetchGoogleImageModels(baseUrl: string, apiKey?: string): Promise<ImageModelInfo[]> {
   if (!apiKey) return getFallbackImageModels()
 
-  const url = baseUrl.replace(/\/$/, '') + '/models?key=' + apiKey + '&pageSize=200'
+  const url = baseUrl.replace(/\/$/, '') + '/models?key=' + encodeURIComponent(apiKey) + '&pageSize=200'
 
   try {
-    const response = await fetch(url)
+    const fetchFn = createTimeoutFetch(30000, 'google-image-models')
+    const response = await fetchFn(url)
     if (!response.ok) return getFallbackImageModels()
 
     const data = await response.json()
