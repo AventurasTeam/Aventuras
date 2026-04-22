@@ -86,5 +86,11 @@
       "target": "nsis"
     }
   },
-  "private": true
+  "private": true,
+  "author": {
+    "name": "Failerko",
+    "email": "20503476+failerko@users.noreply.github.com",
+    "url": "https://github.com/AventurasTeam"
+  },
+  "homepage": "https://github.com/AventurasTeam"
 }
