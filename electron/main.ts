@@ -6,6 +6,10 @@ const isDev = !app.isPackaged;
 const APP_SCHEME = 'app';
 const APP_HOST = 'bundle';
 
+if (isDev) {
+  app.commandLine.appendSwitch('remote-debugging-port', '9222');
+}
+
 protocol.registerSchemesAsPrivileged([
   {
     scheme: APP_SCHEME,
