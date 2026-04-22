@@ -11,13 +11,13 @@ const preview: Preview = {
       },
     },
     backgrounds: {
-      default: 'light',
-      values: [
-        { name: 'light', value: 'hsl(0 0% 100%)' },
-        { name: 'dark', value: 'hsl(0 0% 3.9%)' },
-      ],
+      options: {
+        light: { name: 'light', value: 'hsl(0 0% 100%)' },
+        dark: { name: 'dark', value: 'hsl(0 0% 3.9%)' }
+      }
     },
   },
+
   globalTypes: {
     theme: {
       description: 'Theme (toggles the .dark class on <html>)',
@@ -33,6 +33,7 @@ const preview: Preview = {
       },
     },
   },
+
   decorators: [
     (Story, context) => {
       const theme = context.globals.theme ?? 'light';
@@ -42,6 +43,12 @@ const preview: Preview = {
       return Story();
     },
   ],
+
+  initialGlobals: {
+    backgrounds: {
+      value: 'light'
+    }
+  }
 };
 
 export default preview;

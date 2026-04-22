@@ -4,3 +4,8 @@ onlyBuiltDependencies:
   - electron-winstaller
   - esbuild
   - unrs-resolver
+
+# Storybook 10.3.5's addon-docs nests an old @storybook/react-dom-shim@8.6.14
+# whose export map breaks the preset loader. Force the tree to a single copy.
+overrides:
+  '@storybook/react-dom-shim': '10.3.5'

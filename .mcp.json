@@ -6,6 +6,10 @@
       "env": {
         "SCREENSHOT_ENCRYPTION_KEY": "c10837a4f6096580903abab290d43e602878ce4e50c1075fe9d3938c7c93c66c"
       }
+    },
+    "storybook-mcp": {
+      "url": "http://localhost:6006/mcp",
+      "type": "http"
     }
   }
 }
