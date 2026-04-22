@@ -1,0 +1,62 @@
+import type { StorybookConfig } from '@storybook/react-vite';
+import path from 'node:path';
+
+const config: StorybookConfig = {
+  stories: [
+    '../components/**/*.stories.@(ts|tsx|mdx)',
+    '../app/**/*.stories.@(ts|tsx|mdx)',
+  ],
+  addons: ['@storybook/addon-essentials', '@storybook/addon-a11y'],
+  framework: {
+    name: '@storybook/react-vite',
+    options: {},
+  },
+  async viteFinal(cfg) {
+    cfg.resolve = cfg.resolve ?? {};
+    cfg.resolve.alias = {
+      ...(cfg.resolve.alias ?? {}),
+      'react-native': 'react-native-web',
+      '@': path.resolve(__dirname, '..'),
+    };
+    cfg.resolve.extensions = [
+      '.web.tsx',
+      '.web.ts',
+      '.web.jsx',
+      '.web.js',
+      '.tsx',
+      '.ts',
+      '.jsx',
+      '.js',
+      '.json',
+      '.mjs',
+    ];
+    cfg.define = {
+      ...(cfg.define ?? {}),
+      __DEV__: 'true',
+      'process.env.EXPO_OS': JSON.stringify('web'),
+    };
+    // @rn-primitives/* ship JSX inside .mjs / .js files; teach Vite's
+    // pre-bundler (esbuild) and runtime transformer to parse JSX from
+    // .js files so they don't blow up the build.
+    cfg.optimizeDeps = {
+      ...(cfg.optimizeDeps ?? {}),
+      include: [
+        ...(cfg.optimizeDeps?.include ?? []),
+        'react-native-web',
+        '@rn-primitives/slot',
+        '@rn-primitives/dialog',
+      ],
+      esbuildOptions: {
+        ...(cfg.optimizeDeps?.esbuildOptions ?? {}),
+        loader: {
+          ...(cfg.optimizeDeps?.esbuildOptions?.loader ?? {}),
+          '.js': 'jsx',
+          '.mjs': 'jsx',
+        },
+      },
+    };
+    return cfg;
+  },
+};
+
+export default config;
