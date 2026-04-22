@@ -35,6 +35,14 @@ const config: StorybookConfig = {
       __DEV__: 'true',
       'process.env.EXPO_OS': JSON.stringify('web'),
     };
+    // Expo's tsconfig sets `"jsx": "react-native"` (classic transform),
+    // which esbuild would otherwise honor and leave JSX compiling to
+    // React.createElement — forcing every story to `import React`.
+    // Override to the automatic runtime for the Storybook build.
+    cfg.esbuild = {
+      ...(cfg.esbuild ?? {}),
+      jsx: 'automatic',
+    };
     // @rn-primitives/* ship JSX inside .mjs / .js files; teach Vite's
     // pre-bundler (esbuild) and runtime transformer to parse JSX from
     // .js files so they don't blow up the build.
