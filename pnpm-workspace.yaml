@@ -1,0 +1,5 @@
+nodeLinker: hoisted
+onlyBuiltDependencies:
+  - electron
+  - electron-winstaller
+  - unrs-resolver
