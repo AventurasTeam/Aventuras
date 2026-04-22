@@ -2,6 +2,7 @@
   "name": "aventuras",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "description": "Aventuras — cross-platform app (Expo on mobile, Electron on desktop).",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",

@@ -1,7 +1,39 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, net, protocol } from 'electron';
 import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const isDev = !app.isPackaged;
+const APP_SCHEME = 'app';
+const APP_HOST = 'bundle';
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: APP_SCHEME,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      allowServiceWorkers: true,
+    },
+  },
+]);
+
+function resolveBundlePath(urlPath: string): string {
+  const distRoot = path.join(__dirname, '..', '..', 'dist');
+  const rel = decodeURIComponent(urlPath) || '/';
+  const normalized = rel === '/' ? '/index.html' : rel;
+  const resolved = path.normalize(path.join(distRoot, normalized));
+  return resolved.startsWith(distRoot) ? resolved : path.join(distRoot, 'index.html');
+}
+
+function registerBundleProtocol(): void {
+  protocol.handle(APP_SCHEME, async (request) => {
+    const url = new URL(request.url);
+    const filePath = resolveBundlePath(url.pathname);
+    return net.fetch(pathToFileURL(filePath).toString());
+  });
+}
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -19,11 +51,12 @@ function createWindow(): void {
     win.loadURL(process.env.EXPO_WEB_URL ?? 'http://localhost:8081');
     win.webContents.openDevTools({ mode: 'detach' });
   } else {
-    win.loadFile(path.join(__dirname, '..', '..', 'dist', 'index.html'));
+    win.loadURL(`${APP_SCHEME}://${APP_HOST}/`);
   }
 }
 
 app.whenReady().then(() => {
+  registerBundleProtocol();
   ipcMain.handle('native:ping', () => 'pong');
 
   createWindow();
