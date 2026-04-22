@@ -25,6 +25,7 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+logs
 
 # macOS
 .DS_Store
@@ -46,3 +47,5 @@ app-example
 /electron/dist
 /release
 
+# Local only files
+*.local.*
