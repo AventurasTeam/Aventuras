@@ -121,7 +121,7 @@ The virtue is that the classifier's output shape lives in exactly one file and d
 
 Mobile/touch UX doesn't serve prompt authoring well; tablets would benefit but don't earn the build complexity for v1. If demand arises later, a toggleable "advanced editor" mode backed by `react-native-webview` + CM6 can be added as an opt-in setting without disturbing the default.
 
-**Packs** themselves (the set of templates + metadata + runtime variable definitions bundled into a campaign/system kit) are a separate Tier-2 concern — deferred until the first classifier/agent actually needs templates. The editor above is the UI layer; packs are the data layer it edits.
+**Packs** themselves (the set of templates + metadata + runtime variable definitions bundled into a campaign/system kit) are a separate concern — deferred until the first classifier/agent actually needs templates. The editor above is the UI layer; packs are the data layer it edits.
 
 ### 9. Markdown rendering + HTML sanitization
 
