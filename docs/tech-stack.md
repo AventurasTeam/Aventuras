@@ -1,7 +1,8 @@
-# Aventuras — technical roadmap
+# Aventuras — tech stack
 
-Living notes on the stack and what's planned. Prose, not a task tracker.
-Delete sections as they land; add sections as decisions solidify.
+Living inventory of what's installed, what's decided, and what's parked.
+Prose, not a task tracker. Delete sections as they land; add sections as
+decisions solidify.
 
 ---
 
