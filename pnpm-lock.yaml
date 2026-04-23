@@ -75,8 +75,8 @@ importers:
         specifier: ~55.0.14
         version: 55.0.14(expo@55.0.17)(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))
       lucide-react-native:
-        specifier: ^1.8.0
-        version: 1.8.0(react-native-svg@15.15.4(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
+        specifier: ^0.577.0
+        version: 0.577.0(react-native-svg@15.15.4(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       nativewind:
         specifier: ^4.2.3
         version: 4.2.3(react-native-reanimated@4.2.1(react-native-worklets@0.7.4(@babel/core@7.29.0)(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native-safe-area-context@5.6.2(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native-svg@15.15.4(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(tailwindcss@3.4.19(yaml@2.8.3))
@@ -4682,8 +4682,8 @@ packages:
     resolution: {integrity: sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA==}
     engines: {node: '>=10'}
 
-  lucide-react-native@1.8.0:
-    resolution: {integrity: sha512-trgqSA2ghSHUE3yLUBTdhjF1EMbgcJuccI1VXe6zTI2u4tbeUXbtXeHGORRdeGUdC80XBn/XJa1YrG8uvKhpNg==}
+  lucide-react-native@0.577.0:
+    resolution: {integrity: sha512-blWv/YqBMrgkYGAgm2wgWiGP1+1GNBf4f/sUlpyfEL8mxvSzhr7H/0MTS1xQgtd1B6gPC/JIPgP3kcdFjnh8zg==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-native: '*'
@@ -11907,7 +11907,7 @@ snapshots:
     dependencies:
       yallist: 4.0.0
 
-  lucide-react-native@1.8.0(react-native-svg@15.15.4(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
+  lucide-react-native@0.577.0(react-native-svg@15.15.4(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
     dependencies:
       react: 19.2.0
       react-native: 0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0)
