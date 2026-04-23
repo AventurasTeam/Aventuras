@@ -35,10 +35,25 @@ Order below is the sensible install order: each step composes with the previous.
 - `drizzle-orm` for TypeScript-first queries — schema as source of truth; types flow from schema definitions
 - `drizzle-kit` for migrations generated from schema diffs
 
-**Open questions:**
+**Status: deferred — needs a dedicated data-shape session first.**
 
+Aventuras is an AI-assisted story-writing app with this rough domain shape:
+
+- **Story** — top-level container
+- **Entries** — individual text pieces making up a story, generally alternating user/AI messages
+- **Checkpoints** — a _flag_ on an entry, marking a snapshot of "world state" at that point (not every entry is one)
+- **Branches** — divergent continuations that fork from a checkpoint (not an arbitrary entry)
+
+"World state" implies more than text — likely characters / lore / plot state
+captured alongside each checkpoint. Shape TBD. There's a prior version of
+this app that already shipped these concepts; schema will lean on that.
+
+**Open questions to resolve in the design session:**
+
+- Concrete schema for a checkpoint's world-state payload (typed columns? JSON blob? separate side tables per kind of state?)
+- Whether entries are immutable once written, or can be edited post-hoc
+- Rollback semantics — which entries actually get deleted, and how branches that depend on them are handled
 - Schema migration strategy on first app boot vs. on user action
-- How/whether to seed defaults for a fresh install
 - Backup / export format for user data (JSON dump? `.sqlite` file? both?)
 
 ### 2. TanStack Query (React Query v5)
