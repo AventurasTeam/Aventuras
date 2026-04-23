@@ -1,7 +1,7 @@
 # Aventuras — tech stack
 
 Living inventory of what's installed, what's decided, and what's parked.
-Prose, not a task tracker. Update entries as choices change; move items
+Update entries as choices change; move items
 between sections as state shifts.
 
 ---
@@ -61,19 +61,27 @@ Plan to use:
 - Middleware: `persist` (for UI preferences like last-open-tab), `immer` (when state nests), `devtools` (for browser-extension time-travel)
 - `useShallow` selector helper to avoid re-render cascades when components pick multiple fields
 
-### 4. react-hook-form + zod
+### 4. react-hook-form
 
-Standard "the first form we ship" pair:
+Standard form library:
 
-- Zod schema doubles as runtime validation AND source of TypeScript types — one definition, both uses
-- RHF for uncontrolled inputs → minimal re-renders
-- Integration via `@hookform/resolvers/zod`
+- Uncontrolled inputs → minimal re-renders
+- Paired with Zod (item 5) via `@hookform/resolvers/zod` for validation
 
 Defer until the first real form exists; no reason to install speculatively.
 
-Note: Zod's role in this project is broader than forms — see **Zod (cross-cutting)** below.
+### 5. Zod
 
-### 5. Vercel AI SDK
+Schema library; single source of truth for every data shape that crosses a boundary:
+
+- **Form validation** — paired with react-hook-form (item 4); Zod schemas double as runtime validation AND TypeScript types (one definition, both uses)
+- **LLM structured outputs** — same schemas flow into Vercel AI SDK's `generateObject` (item 6), translated to JSON Schema internally, then validate the parsed result on the way back
+- **Runtime validation at system boundaries** — SQLite row parsing, user-imported JSON (story export/import), external API responses
+- Types flow automatically to TypeScript via `z.infer<typeof schema>` — one schema, every use
+
+The virtue is that the classifier's output shape lives in exactly one file and drives prompting, parsing, validation, and typing.
+
+### 6. Vercel AI SDK
 
 Provider-agnostic LLM layer. Same shape as the old app — proven choice.
 
@@ -82,7 +90,7 @@ Provider-agnostic LLM layer. Same shape as the old app — proven choice.
 - `streamText` / `streamObject` for incremental rendering during AI replies
 - Provider + model + API key are per-story settings (`stories.settings` in the data model), with keys persisted in SQLite per the local-first strategy
 
-### 6. js-tiktoken
+### 7. js-tiktoken
 
 Token counting for the chapter-close threshold (default 24k per-story, configurable) and general context-budget accounting.
 
@@ -91,7 +99,7 @@ Token counting for the chapter-close threshold (default 24k per-story, configura
 - Load encoding tables on demand to keep base bundle size modest
 - Accepted drift: the 24k threshold is a heuristic, so a few percent variance between OpenAI and Claude/Gemini tokenizers is irrelevant
 
-### 7. jsonrepair
+### 8. jsonrepair
 
 Fallback JSON parsing for LLM outputs that don't quite validate.
 
@@ -99,18 +107,7 @@ Fallback JSON parsing for LLM outputs that don't quite validate.
 - Handles common LLM mistakes — trailing commas, missing/extra quotes, unclosed strings, Python-style `True`/`None`
 - Tiny, MIT, actively maintained
 
-### Zod (cross-cutting)
-
-Zod schemas are the single source of truth for every data shape that crosses a boundary:
-
-- **Form validation** (via `@hookform/resolvers/zod`, see item 4)
-- **LLM structured outputs** — same schema flows into Vercel AI SDK's `generateObject`, translated to JSON Schema internally, then validates the parsed result on the way back
-- **Runtime validation at system boundaries** — SQLite row parsing, user-imported JSON (story export/import), external API responses
-- Types flow automatically to TypeScript via `z.infer<typeof schema>` — one schema, every use
-
-The virtue is that the classifier's output shape lives in exactly one file and drives prompting, parsing, validation, and typing.
-
-### 8. Prompt templates + editor (LiquidJS + CodeMirror 6)
+### 9. Prompt templates + editor (LiquidJS + CodeMirror 6)
 
 **Templating engine:** LiquidJS. Safe-by-default (no eval), readable syntax, familiar to anyone who's touched Shopify/Jekyll. Same reasoning as many AI platform template systems.
 
@@ -123,7 +120,7 @@ Mobile/touch UX doesn't serve prompt authoring well; tablets would benefit but d
 
 **Packs** themselves (the set of templates + metadata + runtime variable definitions bundled into a campaign/system kit) are a separate concern — deferred until the first classifier/agent actually needs templates. The editor above is the UI layer; packs are the data layer it edits.
 
-### 9. Markdown rendering + HTML sanitization
+### 10. Markdown rendering + HTML sanitization
 
 LLM replies arrive as markdown with inline HTML. Unified pipeline, platform-specific render tails.
 
@@ -142,7 +139,7 @@ markdown + inline HTML string
 
 **Streaming rendering:** port the `htmlStreaming` pattern from the old app (`src/lib/utils/htmlStreaming.ts` / `htmlSanitize.ts`). Buffer mid-stream chunks until tag boundaries, sanitize the completed fragment, then append — prevents half-tags reaching either renderer.
 
-### 10. Spellcheck + grammar (Harper, tiered)
+### 11. Spellcheck + grammar (Harper, tiered)
 
 Tiered assistance: heavy where authoring happens, free native elsewhere.
 
