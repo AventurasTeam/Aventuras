@@ -48,6 +48,10 @@ app-example
 /electron/dist
 /release
 
+# IDE stuff
+.vscode/
+.idea/
+
 # Local only files
 *.local.*
 *storybook.log
