@@ -1,14 +1,14 @@
 # Aventuras — tech stack
 
 Living inventory of what's installed, what's decided, and what's parked.
-Prose, not a task tracker. Delete sections as they land; add sections as
-decisions solidify.
+Prose, not a task tracker. Update entries as choices change; move items
+between sections as state shifts.
 
 ---
 
-## Shipped
+## Currently installed
 
-Foundation we've already set up:
+Foundation layer:
 
 - **Mobile:** Expo SDK 55 + Expo Router 6 (TypeScript)
 - **Desktop:** Electron 41 wrapping the Expo Web export
@@ -24,38 +24,19 @@ Foundation we've already set up:
 
 ---
 
-## Tier 2 — next up (feature-adjacent)
+## Decided, not yet installed
 
-Order below is the sensible install order: each step composes with the previous.
+Items numbered in install order — each layer composes with the previous.
 
 ### 1. SQLite + Drizzle ORM
 
-**Decision:** Local-first app. All user config and data lives in SQLite. **No env vars, no BaaS.**
+Local-first. All user config and data lives in SQLite. No env vars, no BaaS.
 
 - `expo-sqlite` for the underlying driver (works on iOS, Android, and under Electron via the same adapter)
 - `drizzle-orm` for TypeScript-first queries — schema as source of truth; types flow from schema definitions
 - `drizzle-kit` for migrations generated from schema diffs
 
-**Status: deferred — needs a dedicated data-shape session first.**
-
-Aventuras is an AI-assisted story-writing app with this rough domain shape:
-
-- **Story** — top-level container
-- **Entries** — individual text pieces making up a story, generally alternating user/AI messages
-- **Checkpoints** — a _flag_ on an entry, marking a snapshot of "world state" at that point (not every entry is one)
-- **Branches** — divergent continuations that fork from a checkpoint (not an arbitrary entry)
-
-"World state" implies more than text — likely characters / lore / plot state
-captured alongside each checkpoint. Shape TBD. There's a prior version of
-this app that already shipped these concepts; schema will lean on that.
-
-**Open questions to resolve in the design session:**
-
-- Concrete schema for a checkpoint's world-state payload (typed columns? JSON blob? separate side tables per kind of state?)
-- Whether entries are immutable once written, or can be edited post-hoc
-- Rollback semantics — which entries actually get deleted, and how branches that depend on them are handled
-- Schema migration strategy on first app boot vs. on user action
-- Backup / export format for user data (JSON dump? `.sqlite` file? both?)
+**Schema designed in full at [`docs/data-model.md`](./data-model.md).** Thirteen tables covering the narrative spine (stories, branches, story_entries, chapters), world-state (entities, lore, threads), the happenings fact-graph (happenings + involvements + awareness links), media (assets + entry_assets), and the append-only deltas log that powers rollback, branching, and CTRL-Z.
 
 ### 2. TanStack Query (React Query v5)
 
@@ -175,9 +156,9 @@ Same surface scope as the old app (narrative composer was the only place it show
 
 ---
 
-## Tier 3 — parked for pre-launch
+## Deferred
 
-Low priority until we're nearing a real release:
+Not pursued yet; revisit when the surrounding feature lands or a specific need arises.
 
 - App icon + splash screen (replace Expo placeholders)
 - Custom fonts via `expo-font`
@@ -188,7 +169,7 @@ Low priority until we're nearing a real release:
 
 ---
 
-## Known open threads
+## Known issues and pins
 
 - **`lucide-react-native` pinned to `^0.577.0`** because v1.x shipped a broken `./context.js` export. Revisit when v1 lands a fix — we only use named icon imports, so a re-bump should be safe.
 - **ESLint pinned to `^9.x`** because `eslint-plugin-react` (transitive via `eslint-config-expo`) doesn't yet support ESLint 10's new rule-context API. Revisit after eslint-plugin-react publishes compat.
