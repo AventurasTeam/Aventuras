@@ -57,7 +57,7 @@ erDiagram
         text kind "user_action | ai_reply | system"
         text content
         text chapter_id FK "null while in open region; set at chapter-create time"
-        json metadata "tokens / model / timing / in-world time"
+        json metadata "tokens, model, generation timing, and in-world time elapsed since story start (cumulative, not wall clock)"
         integer created_at
     }
 
@@ -171,7 +171,7 @@ erDiagram
         text action_id "groups deltas into one user-visible action (used for CTRL-Z batching)"
         integer log_position "append-only ordering within branch"
         text source "ai_classifier | user_edit | lore_agent | memory_compaction | chapter_close"
-        text target_table "entities | lore | threads | happenings | happening_involvements | happening_awareness | chapters | entry_assets"
+        text target_table "story_entries | entities | lore | threads | happenings | happening_involvements | happening_awareness | chapters | entry_assets"
         text target_id "id in target_table"
         text op "create | update | delete"
         json undo_payload "op=create: null; op=update: partial diff of changed fields with their PRE-change values; op=delete: full row to re-insert"
@@ -325,12 +325,21 @@ to storing full before+after snapshots, and prevents large state fields
 like portraits from polluting every unrelated update.
 
 **Delta scope: narrative state only.** Deltas cover the core narrative
-tables (`entities` narrative fields, `lore`, `threads`, `happenings` and
-their links, `chapters`, `entry_assets`). UI-only fields (`pinned`,
-`sort_order`, `ui_color`, etc.) bypass the log — rollback doesn't revert
-them, because they aren't story content. The write layer enforces this
-distinction: mutations to narrative fields write a delta + row update in
-one transaction; mutations to UI fields just update the row.
+tables (`story_entries` row-level changes, `entities` narrative fields,
+`lore`, `threads`, `happenings` and their links, `chapters`, `entry_assets`).
+UI-only fields (`pinned`, `sort_order`, `ui_color`, etc.) bypass the log
+— rollback doesn't revert them, because they aren't story content. The
+write layer enforces this distinction: mutations to narrative fields
+write a delta + row update in one transaction; mutations to UI fields
+just update the row.
+
+**Exception on `story_entries.content`.** The text content of an entry
+is the one narrative field deliberately exempted from the delta log
+(per the side-channel decision above). Row-level changes to
+`story_entries` (creates when an AI reply or user action is added,
+`chapter_id` assignment at chapter close, row deletes when a user
+manually removes an entry) ARE logged. In-place text edits are NOT.
+This is the only per-column exemption inside a delta-scoped table.
 
 **Audit/debug reconstruction** (of "what did delta N do?") comes from
 forward-replay against earliest state or comparison to the current live
@@ -349,24 +358,23 @@ by the same user-visible operation. Action boundaries:
 
 - **User direct edit** — one delta, one fresh `action_id`. CTRL-Z
   reverses that single delta.
-- **AI reply** — all classifier-produced deltas share one `action_id`.
-  CTRL-Z reverses all of them AND deletes the `story_entries` row for
-  that reply. (The entry row itself isn't in the delta log; deletion is
-  driven by the entry_id on the reversed deltas.)
-- **Chapter close** — the chapter row insert + lore-agent writes +
-  memory-compaction writes all share one `action_id`. CTRL-Z collapses
-  the entire batch as a single unit, because a user who clicks "undo"
-  expects the whole "the chapter closed" event to disappear in one press.
+- **AI reply** — the `story_entries` create delta plus all
+  classifier-produced deltas share one `action_id`. CTRL-Z reverses the
+  whole batch uniformly — the story_entries row is deleted as the
+  reversal of its `op=create` delta, no special case needed.
+- **Chapter close** — the chapter row insert + `story_entries.chapter_id`
+  updates across the range + lore-agent writes + memory-compaction
+  writes all share one `action_id`. CTRL-Z collapses the entire batch
+  as a single unit, because a user who clicks "undo" expects the whole
+  "the chapter closed" event to disappear in one press.
 
 Algorithm:
 
 1. Find the head delta (max `log_position` on current branch)
 2. Collect every delta with the same `action_id`
 3. Reverse them (newest to oldest) exactly as rollback does
-4. If `source=ai_classifier`, also `DELETE` the `story_entries` row
-   referenced by the deltas' `entry_id`
-5. Move the reversed deltas onto an in-memory redo stack (not persisted)
-6. Remove them from the `deltas` table
+4. Move the reversed deltas onto an in-memory redo stack (not persisted)
+5. Remove them from the `deltas` table
 
 Redo re-applies from the in-memory stack. The stack clears on any new
 action. Redo is runtime-only; no schema support needed. If the app
@@ -387,7 +395,7 @@ is split into two layers with clean responsibilities:
   ongoing states, and scheduled/future happenings. Two link tables
   connect outward:
   - `happening_involvements` — which entities are the subject matter
-    (character, location, item, faction; optional `role` label).
+    (character, location, item, faction; optional free-form `role` label).
   - `happening_awareness` — which characters know about it, with
     `learned_at_entry`, `salience`, and a free-form `source` descriptor
     ("overheard in tavern" / "told by Jorin" / "witnessed firsthand") that
@@ -413,12 +421,19 @@ have an enum kind anymore).
 **On the two time fields on `happenings`:** `occurred_at_entry` and
 `temporal` look overlapping but measure orthogonal axes. `occurred_at_entry`
 is the narrative log position — present for happenings that occurred
-during play, used for rollback ordering and scene-based retrieval.
-`temporal` is the in-world fictional time anchor — only populated when
-there is no narrative entry to derive from (pre-story history, scheduled
-future, ambient backdrop). In practice they're mutually exclusive per
-row. `threads` don't carry `temporal` because threads only exist during
-narrative and always resolve via entry positions.
+during play, used for rollback ordering and scene-based retrieval. The
+actual in-world time for a narrative happening is **derived** from the
+referenced entry's `metadata` (see `story_entries.metadata`), which
+carries the in-world time elapsed since the story began as a cumulative
+counter advanced by the classifier on each reply. No duplication on
+`happenings`. `temporal` is only populated when there is no narrative
+entry to derive from (pre-story history, scheduled future, ambient
+backdrop) — its free-form text is the anchor because out-of-narrative
+happenings have no cumulative counter to reference. In practice
+`occurred_at_entry` and `temporal` are mutually exclusive per row.
+`threads` don't carry `temporal` because threads only exist during
+narrative and always resolve via entry positions (same
+metadata-elapsed-time story as happenings).
 
 **Context-bloat note:** for long-running stories, character awareness lists
 grow unbounded. This is handled at injection time (retrieve top-K by
@@ -447,12 +462,13 @@ the ending entry explicitly.
 **Chapter-create is the single cadence trigger** for three operations,
 each logged as deltas so the whole thing is reversible via rollback:
 
-1. **LLM generates title, summary, theme, keywords** for the closed range.
+1. **LLM generates title, summary, theme, keywords, time range** for the closed range.
 2. **Lore-management agent runs** — promotes staged entities, updates
-   lore, creates new lore from events discovered in the range.
+   lore, creates new lore from events discovered in the range. Exact behavior TBD.
 3. **Memory compaction runs** — consolidates low-salience
    `happening_awareness` rows from the just-closed range into summary
-   happenings, decays salience, drops redundancies.
+   happenings, decays salience, drops redundancies. Exact behavior TBD.
+   Salience logic especially TBD.
 
 **Per-branch, forks cleanly.** Each branch has its own `chapters` rows
 with its own IDs. On branch creation, chapter rows (and all other state)
@@ -480,7 +496,7 @@ Branch model above. Chapters are user-visible structure, not gatekeepers.
    happenings + links, chapters, deltas, and entry→asset references.
    Binary assets are embedded as base64 or sidecar files (TBD). Version-
    tagged header so imports can migrate across schema changes. Intended
-   for sharing / archiving / migration.
+   for sharing / archiving / migration.1
 
 The two have genuinely different purposes and the old app's conflation
 into a single zip produced friction — users invoking "backup" got a
@@ -488,8 +504,7 @@ story export they didn't want, and vice versa. Split avoids that.
 
 ### Assets (images & future media)
 
-**Decided:** binary assets (generated images today, audio/files later)
-live **externally on disk**, not as SQLite BLOBs. The DB holds only
+**Decided:** binary assets live **externally on disk**, not as SQLite BLOBs. The DB holds only
 metadata (`file_path`, `mime_type`, `size_bytes`, `content_hash`).
 Change from the old app, which embedded image data as data-URLs in the
 DB — that bloated SQLite files and slowed VACUUM.
