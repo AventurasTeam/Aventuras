@@ -1,9 +1,9 @@
-import { defineConfig } from "vite";
+import { defineConfig } from 'vite';
 
 export default defineConfig({
   resolve: {
     alias: {
-      "react-native": "react-native-web",
+      'react-native': 'react-native-web',
     },
   },
 });

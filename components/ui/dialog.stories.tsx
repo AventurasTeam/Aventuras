@@ -29,7 +29,9 @@ export const Default: Story = {
   render: () => (
     <Dialog>
       <DialogTrigger asChild>
-        <Button><Text>Open dialog</Text></Button>
+        <Button>
+          <Text>Open dialog</Text>
+        </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -40,10 +42,14 @@ export const Default: Story = {
         </DialogHeader>
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="ghost"><Text>Stay</Text></Button>
+            <Button variant="ghost">
+              <Text>Stay</Text>
+            </Button>
           </DialogClose>
           <DialogClose asChild>
-            <Button variant="destructive"><Text>Leave</Text></Button>
+            <Button variant="destructive">
+              <Text>Leave</Text>
+            </Button>
           </DialogClose>
         </DialogFooter>
       </DialogContent>
@@ -55,7 +61,9 @@ export const OpenByDefault: Story = {
   render: () => (
     <Dialog defaultOpen>
       <DialogTrigger asChild>
-        <Button variant="outline"><Text>Reopen</Text></Button>
+        <Button variant="outline">
+          <Text>Reopen</Text>
+        </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -72,7 +80,9 @@ export const OpensOnClick: Story = {
   render: () => (
     <Dialog>
       <DialogTrigger asChild>
-        <Button><Text>Trigger</Text></Button>
+        <Button>
+          <Text>Trigger</Text>
+        </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -81,7 +91,9 @@ export const OpensOnClick: Story = {
         </DialogHeader>
         <DialogFooter>
           <DialogClose asChild>
-            <Button><Text>Close</Text></Button>
+            <Button>
+              <Text>Close</Text>
+            </Button>
           </DialogClose>
         </DialogFooter>
       </DialogContent>

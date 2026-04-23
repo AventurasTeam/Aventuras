@@ -3,9 +3,7 @@
   "compilerOptions": {
     "strict": true,
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     }
   },
   "include": [
@@ -16,10 +14,5 @@
     "types/**/*.d.ts",
     "nativewind-env.d.ts"
   ],
-  "exclude": [
-    "node_modules",
-    "electron",
-    "dist",
-    "release"
-  ]
+  "exclude": ["node_modules", "electron", "dist", "release"]
 }

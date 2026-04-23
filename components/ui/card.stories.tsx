@@ -31,7 +31,10 @@ export const Basic: Story = {
         <CardDescription>Pick a destination to start planning.</CardDescription>
       </CardHeader>
       <CardContent>
-        <Text>The rest of the content lives here — it&apos;s plain RN text so you can put whatever you want.</Text>
+        <Text>
+          The rest of the content lives here — it&apos;s plain RN text so you can put whatever you
+          want.
+        </Text>
       </CardContent>
     </Card>
   ),
@@ -48,8 +51,12 @@ export const WithFooter: Story = {
         <Text>Flights, stays, and activities are ready to book.</Text>
       </CardContent>
       <CardFooter className="justify-end gap-2">
-        <Button variant="ghost"><Text>Cancel</Text></Button>
-        <Button><Text>Book it</Text></Button>
+        <Button variant="ghost">
+          <Text>Cancel</Text>
+        </Button>
+        <Button>
+          <Text>Book it</Text>
+        </Button>
       </CardFooter>
     </Card>
   ),

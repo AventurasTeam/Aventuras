@@ -10,9 +10,7 @@ import Animated from 'react-native-reanimated';
  *   <Text>I am only animated on native</Text>
  * </NativeOnlyAnimatedView>
  */
-function NativeOnlyAnimatedView(
-  props: React.ComponentProps<typeof Animated.View>
-) {
+function NativeOnlyAnimatedView(props: React.ComponentProps<typeof Animated.View>) {
   if (Platform.OS === 'web') {
     return <>{props.children as React.ReactNode}</>;
   } else {

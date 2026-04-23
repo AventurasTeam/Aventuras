@@ -60,12 +60,24 @@ export const Ghost: Story = {
 export const AllVariants: Story = {
   render: () => (
     <View className="flex-row flex-wrap gap-3">
-      <Button variant="default"><Text>Default</Text></Button>
-      <Button variant="destructive"><Text>Destructive</Text></Button>
-      <Button variant="outline"><Text>Outline</Text></Button>
-      <Button variant="secondary"><Text>Secondary</Text></Button>
-      <Button variant="ghost"><Text>Ghost</Text></Button>
-      <Button variant="link"><Text>Link</Text></Button>
+      <Button variant="default">
+        <Text>Default</Text>
+      </Button>
+      <Button variant="destructive">
+        <Text>Destructive</Text>
+      </Button>
+      <Button variant="outline">
+        <Text>Outline</Text>
+      </Button>
+      <Button variant="secondary">
+        <Text>Secondary</Text>
+      </Button>
+      <Button variant="ghost">
+        <Text>Ghost</Text>
+      </Button>
+      <Button variant="link">
+        <Text>Link</Text>
+      </Button>
     </View>
   ),
 };
@@ -73,9 +85,15 @@ export const AllVariants: Story = {
 export const Sizes: Story = {
   render: () => (
     <View className="flex-row items-center gap-3">
-      <Button size="sm"><Text>Small</Text></Button>
-      <Button size="default"><Text>Default</Text></Button>
-      <Button size="lg"><Text>Large</Text></Button>
+      <Button size="sm">
+        <Text>Small</Text>
+      </Button>
+      <Button size="default">
+        <Text>Default</Text>
+      </Button>
+      <Button size="lg">
+        <Text>Large</Text>
+      </Button>
     </View>
   ),
 };

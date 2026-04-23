@@ -1,0 +1,11 @@
+node_modules
+.expo
+dist
+release
+storybook-static
+electron/dist
+pnpm-lock.yaml
+*.ico
+*.png
+*.jpg
+*.svg

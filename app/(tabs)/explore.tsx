@@ -20,13 +20,15 @@ export default function TabTwoScreen() {
           name="chevron.left.forwardslash.chevron.right"
           style={styles.headerImage}
         />
-      }>
+      }
+    >
       <ThemedView style={styles.titleContainer}>
         <ThemedText
           type="title"
           style={{
             fontFamily: Fonts.rounded,
-          }}>
+          }}
+        >
           Explore
         </ThemedText>
       </ThemedView>
