@@ -1,8 +1,8 @@
-import type { Meta, StoryObj } from '@storybook/react-native-web-vite';
-import { View } from 'react-native';
+import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { View } from 'react-native'
 
-import { Button } from './button';
-import { Text } from './text';
+import { Button } from './button'
+import { Text } from './text'
 
 const meta: Meta<typeof Button> = {
   title: 'UI/Button',
@@ -22,11 +22,11 @@ const meta: Meta<typeof Button> = {
     },
     disabled: { control: 'boolean' },
   },
-};
+}
 
-export default meta;
+export default meta
 
-type Story = StoryObj<typeof Button>;
+type Story = StoryObj<typeof Button>
 
 export const Default: Story = {
   args: {
@@ -34,28 +34,28 @@ export const Default: Story = {
     size: 'default',
     children: <Text>Click me</Text>,
   },
-};
+}
 
 export const Destructive: Story = {
   args: {
     variant: 'destructive',
     children: <Text>Delete</Text>,
   },
-};
+}
 
 export const Outline: Story = {
   args: {
     variant: 'outline',
     children: <Text>Outline</Text>,
   },
-};
+}
 
 export const Ghost: Story = {
   args: {
     variant: 'ghost',
     children: <Text>Ghost</Text>,
   },
-};
+}
 
 export const AllVariants: Story = {
   render: () => (
@@ -80,7 +80,7 @@ export const AllVariants: Story = {
       </Button>
     </View>
   ),
-};
+}
 
 export const Sizes: Story = {
   render: () => (
@@ -96,4 +96,4 @@ export const Sizes: Story = {
       </Button>
     </View>
   ),
-};
+}

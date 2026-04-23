@@ -1,5 +1,5 @@
-import { cn } from '@/lib/utils';
-import { Platform, TextInput } from 'react-native';
+import { cn } from '@/lib/utils'
+import { Platform, TextInput } from 'react-native'
 
 function Input({ className, ...props }: React.ComponentProps<typeof TextInput>) {
   return (
@@ -23,7 +23,7 @@ function Input({ className, ...props }: React.ComponentProps<typeof TextInput>) 
       )}
       {...props}
     />
-  );
+  )
 }
 
-export { Input };
+export { Input }

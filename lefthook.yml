@@ -1,0 +1,14 @@
+# https://lefthook.dev/configuration/
+# Only the staged files are linted / formatted. `stage_fixed: true` puts
+# any auto-fixes back in the index so the commit carries the fixed version.
+pre-commit:
+  parallel: true
+  commands:
+    prettier:
+      glob: '*.{js,jsx,ts,tsx,mjs,cjs,json,md,css,yml,yaml}'
+      run: pnpm exec prettier --write {staged_files}
+      stage_fixed: true
+    eslint:
+      glob: '*.{js,jsx,ts,tsx}'
+      run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
+      stage_fixed: true

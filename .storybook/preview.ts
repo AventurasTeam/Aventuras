@@ -1,6 +1,6 @@
-import type { Preview } from '@storybook/react-native-web-vite';
+import type { Preview } from '@storybook/react-native-web-vite'
 
-import '../global.css';
+import '../global.css'
 
 const preview: Preview = {
   parameters: {
@@ -43,13 +43,13 @@ const preview: Preview = {
   },
   decorators: [
     (Story, context) => {
-      const theme = context.globals.theme ?? 'light';
+      const theme = context.globals.theme ?? 'light'
       if (typeof document !== 'undefined') {
-        document.documentElement.classList.toggle('dark', theme === 'dark');
+        document.documentElement.classList.toggle('dark', theme === 'dark')
       }
-      return Story();
+      return Story()
     },
   ],
-};
+}
 
-export default preview;
+export default preview

@@ -1,7 +1,7 @@
-import type { Meta, StoryObj } from '@storybook/react-native-web-vite';
-import { expect, screen, userEvent } from 'storybook/test';
+import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { expect, screen, userEvent } from 'storybook/test'
 
-import { Button } from './button';
+import { Button } from './button'
 import {
   Dialog,
   DialogClose,
@@ -11,19 +11,19 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from './dialog';
-import { Text } from './text';
+} from './dialog'
+import { Text } from './text'
 
 const meta: Meta<typeof Dialog> = {
   title: 'UI/Dialog',
   component: Dialog,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],
-};
+}
 
-export default meta;
+export default meta
 
-type Story = StoryObj<typeof Dialog>;
+type Story = StoryObj<typeof Dialog>
 
 export const Default: Story = {
   render: () => (
@@ -55,7 +55,7 @@ export const Default: Story = {
       </DialogContent>
     </Dialog>
   ),
-};
+}
 
 export const OpenByDefault: Story = {
   render: () => (
@@ -73,7 +73,7 @@ export const OpenByDefault: Story = {
       </DialogContent>
     </Dialog>
   ),
-};
+}
 
 export const OpensOnClick: Story = {
   name: 'Opens on click (interactive)',
@@ -100,11 +100,11 @@ export const OpensOnClick: Story = {
     </Dialog>
   ),
   play: async ({ canvas }) => {
-    const trigger = await canvas.findByRole('button', { name: 'Trigger' });
-    await userEvent.click(trigger);
+    const trigger = await canvas.findByRole('button', { name: 'Trigger' })
+    await userEvent.click(trigger)
     // Dialog content mounts in a portal at document.body, not under the
     // story canvas root, so query via the document-scoped `screen`.
-    const title = await screen.findByText('You did it');
-    await expect(title).toBeInTheDocument();
+    const title = await screen.findByText('You did it')
+    await expect(title).toBeInTheDocument()
   },
-};
+}

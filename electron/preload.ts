@@ -1,10 +1,10 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron'
 
 const api = {
   platform: process.platform,
   ping: (): Promise<string> => ipcRenderer.invoke('native:ping'),
-} as const;
+} as const
 
-contextBridge.exposeInMainWorld('native', api);
+contextBridge.exposeInMainWorld('native', api)
 
-export type NativeApi = typeof api;
+export type NativeApi = typeof api

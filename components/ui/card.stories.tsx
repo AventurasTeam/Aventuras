@@ -1,9 +1,9 @@
-import type { Meta, StoryObj } from '@storybook/react-native-web-vite';
-import { View } from 'react-native';
+import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { View } from 'react-native'
 
-import { Button } from './button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './card';
-import { Text } from './text';
+import { Button } from './button'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './card'
+import { Text } from './text'
 
 const meta: Meta<typeof Card> = {
   title: 'UI/Card',
@@ -17,11 +17,11 @@ const meta: Meta<typeof Card> = {
       </View>
     ),
   ],
-};
+}
 
-export default meta;
+export default meta
 
-type Story = StoryObj<typeof Card>;
+type Story = StoryObj<typeof Card>
 
 export const Basic: Story = {
   render: () => (
@@ -38,7 +38,7 @@ export const Basic: Story = {
       </CardContent>
     </Card>
   ),
-};
+}
 
 export const WithFooter: Story = {
   render: () => (
@@ -60,7 +60,7 @@ export const WithFooter: Story = {
       </CardFooter>
     </Card>
   ),
-};
+}
 
 export const ContentOnly: Story = {
   render: () => (
@@ -70,4 +70,4 @@ export const ContentOnly: Story = {
       </CardContent>
     </Card>
   ),
-};
+}

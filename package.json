@@ -84,6 +84,7 @@
     "eslint-config-expo": "~55.0.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-storybook": "10.3.5",
+    "lefthook": "^2.1.6",
     "playwright": "^1.59.1",
     "postcss": "^8.5.10",
     "prettier": "^3.8.3",
@@ -131,5 +132,9 @@
     "email": "20503476+failerko@users.noreply.github.com",
     "url": "https://github.com/AventurasTeam"
   },
-  "homepage": "https://github.com/AventurasTeam"
+  "homepage": "https://github.com/AventurasTeam",
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@10.33.1"
 }

@@ -3,6 +3,7 @@ onlyBuiltDependencies:
   - electron
   - electron-winstaller
   - esbuild
+  - lefthook
   - unrs-resolver
 
 # Storybook 10.3.5's addon-docs nests an old @storybook/react-dom-shim@8.6.14

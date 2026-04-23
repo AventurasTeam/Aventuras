@@ -1,4 +1,4 @@
-import type { StorybookConfig } from '@storybook/react-native-web-vite';
+import type { StorybookConfig } from '@storybook/react-native-web-vite'
 
 const config: StorybookConfig = {
   stories: [
@@ -21,5 +21,5 @@ const config: StorybookConfig = {
       },
     },
   },
-};
-export default config;
+}
+export default config

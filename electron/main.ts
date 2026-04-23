@@ -1,13 +1,13 @@
-import { app, BrowserWindow, ipcMain, net, protocol } from 'electron';
-import * as path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { app, BrowserWindow, ipcMain, net, protocol } from 'electron'
+import * as path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
-const isDev = !app.isPackaged;
-const APP_SCHEME = 'app';
-const APP_HOST = 'bundle';
+const isDev = !app.isPackaged
+const APP_SCHEME = 'app'
+const APP_HOST = 'bundle'
 
 if (isDev) {
-  app.commandLine.appendSwitch('remote-debugging-port', '9222');
+  app.commandLine.appendSwitch('remote-debugging-port', '9222')
 }
 
 protocol.registerSchemesAsPrivileged([
@@ -21,22 +21,22 @@ protocol.registerSchemesAsPrivileged([
       allowServiceWorkers: true,
     },
   },
-]);
+])
 
 function resolveBundlePath(urlPath: string): string {
-  const distRoot = path.join(__dirname, '..', '..', 'dist');
-  const rel = decodeURIComponent(urlPath) || '/';
-  const normalized = rel === '/' ? '/index.html' : rel;
-  const resolved = path.normalize(path.join(distRoot, normalized));
-  return resolved.startsWith(distRoot) ? resolved : path.join(distRoot, 'index.html');
+  const distRoot = path.join(__dirname, '..', '..', 'dist')
+  const rel = decodeURIComponent(urlPath) || '/'
+  const normalized = rel === '/' ? '/index.html' : rel
+  const resolved = path.normalize(path.join(distRoot, normalized))
+  return resolved.startsWith(distRoot) ? resolved : path.join(distRoot, 'index.html')
 }
 
 function registerBundleProtocol(): void {
   protocol.handle(APP_SCHEME, async (request) => {
-    const url = new URL(request.url);
-    const filePath = resolveBundlePath(url.pathname);
-    return net.fetch(pathToFileURL(filePath).toString());
-  });
+    const url = new URL(request.url)
+    const filePath = resolveBundlePath(url.pathname)
+    return net.fetch(pathToFileURL(filePath).toString())
+  })
 }
 
 function createWindow(): void {
@@ -51,29 +51,29 @@ function createWindow(): void {
       nodeIntegration: false,
       sandbox: false,
     },
-  });
+  })
 
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => win.show())
 
   if (isDev) {
-    win.loadURL(process.env.EXPO_WEB_URL ?? 'http://localhost:8081');
-    win.webContents.openDevTools({ mode: 'detach' });
+    win.loadURL(process.env.EXPO_WEB_URL ?? 'http://localhost:8081')
+    win.webContents.openDevTools({ mode: 'detach' })
   } else {
-    win.loadURL(`${APP_SCHEME}://${APP_HOST}/`);
+    win.loadURL(`${APP_SCHEME}://${APP_HOST}/`)
   }
 }
 
 app.whenReady().then(() => {
-  registerBundleProtocol();
-  ipcMain.handle('native:ping', () => 'pong');
+  registerBundleProtocol()
+  ipcMain.handle('native:ping', () => 'pong')
 
-  createWindow();
+  createWindow()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+  if (process.platform !== 'darwin') app.quit()
+})

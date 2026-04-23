@@ -1,8 +1,8 @@
-import type { Meta, StoryObj } from '@storybook/react-native-web-vite';
-import { Info, ShieldAlert, Sparkles } from 'lucide-react-native';
-import { View } from 'react-native';
+import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { Info, ShieldAlert, Sparkles } from 'lucide-react-native'
+import { View } from 'react-native'
 
-import { Alert, AlertDescription, AlertTitle } from './alert';
+import { Alert, AlertDescription, AlertTitle } from './alert'
 
 const meta: Meta<typeof Alert> = {
   title: 'UI/Alert',
@@ -22,11 +22,11 @@ const meta: Meta<typeof Alert> = {
       options: ['default', 'destructive'],
     },
   },
-};
+}
 
-export default meta;
+export default meta
 
-type Story = StoryObj<typeof Alert>;
+type Story = StoryObj<typeof Alert>
 
 export const Default: Story = {
   args: { icon: Info },
@@ -36,7 +36,7 @@ export const Default: Story = {
       <AlertDescription>We just shipped a new way to plan your itinerary.</AlertDescription>
     </Alert>
   ),
-};
+}
 
 export const Destructive: Story = {
   args: { icon: ShieldAlert, variant: 'destructive' },
@@ -46,7 +46,7 @@ export const Destructive: Story = {
       <AlertDescription>We couldn&apos;t save your changes. Please try again.</AlertDescription>
     </Alert>
   ),
-};
+}
 
 export const TitleOnly: Story = {
   args: { icon: Sparkles },
@@ -55,4 +55,4 @@ export const TitleOnly: Story = {
       <AlertTitle>Heads up — this alert has no description.</AlertTitle>
     </Alert>
   ),
-};
+}

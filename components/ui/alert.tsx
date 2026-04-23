@@ -1,9 +1,9 @@
-import { Icon } from '@/components/ui/icon';
-import { Text, TextClassContext } from '@/components/ui/text';
-import { cn } from '@/lib/utils';
-import type { LucideIcon } from 'lucide-react-native';
-import * as React from 'react';
-import { View } from 'react-native';
+import { Icon } from '@/components/ui/icon'
+import { Text, TextClassContext } from '@/components/ui/text'
+import { cn } from '@/lib/utils'
+import type { LucideIcon } from 'lucide-react-native'
+import * as React from 'react'
+import { View } from 'react-native'
 
 function Alert({
   className,
@@ -13,9 +13,9 @@ function Alert({
   iconClassName,
   ...props
 }: React.ComponentProps<typeof View> & {
-  icon: LucideIcon;
-  variant?: 'default' | 'destructive';
-  iconClassName?: string;
+  icon: LucideIcon
+  variant?: 'default' | 'destructive'
+  iconClassName?: string
 }) {
   return (
     <TextClassContext.Provider
@@ -42,7 +42,7 @@ function Alert({
         {children}
       </View>
     </TextClassContext.Provider>
-  );
+  )
 }
 
 function AlertTitle({ className, ...props }: React.ComponentProps<typeof Text>) {
@@ -51,11 +51,11 @@ function AlertTitle({ className, ...props }: React.ComponentProps<typeof Text>) 
       className={cn('mb-1 ml-0.5 min-h-4 pl-6 font-medium leading-none tracking-tight', className)}
       {...props}
     />
-  );
+  )
 }
 
 function AlertDescription({ className, ...props }: React.ComponentProps<typeof Text>) {
-  const textClass = React.useContext(TextClassContext);
+  const textClass = React.useContext(TextClassContext)
   return (
     <Text
       className={cn(
@@ -65,7 +65,7 @@ function AlertDescription({ className, ...props }: React.ComponentProps<typeof T
       )}
       {...props}
     />
-  );
+  )
 }
 
-export { Alert, AlertDescription, AlertTitle };
+export { Alert, AlertDescription, AlertTitle }
