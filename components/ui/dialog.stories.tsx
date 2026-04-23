@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite';
-import { expect, userEvent } from 'storybook/test';
+import { expect, screen, userEvent } from 'storybook/test';
 
 import { Button } from './button';
 import {
@@ -102,7 +102,9 @@ export const OpensOnClick: Story = {
   play: async ({ canvas }) => {
     const trigger = await canvas.findByRole('button', { name: 'Trigger' });
     await userEvent.click(trigger);
-    const title = await canvas.findByText('You did it');
+    // Dialog content mounts in a portal at document.body, not under the
+    // story canvas root, so query via the document-scoped `screen`.
+    const title = await screen.findByText('You did it');
     await expect(title).toBeInTheDocument();
   },
 };

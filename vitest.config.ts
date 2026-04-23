@@ -12,6 +12,11 @@ const dirname =
 
 // More info at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
 export default defineConfig({
+  // react-native-web imports `react`; if vitest's dep optimizer bundles its
+  // own copy, RNW's hooks hit a null React dispatcher. Dedupe keeps one copy.
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
   test: {
     projects: [
       {
