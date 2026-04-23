@@ -50,3 +50,5 @@ app-example
 
 # Local only files
 *.local.*
+*storybook.log
+storybook-static

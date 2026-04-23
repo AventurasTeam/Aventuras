@@ -1,6 +1,6 @@
-import '../global.css';
+import type { Preview } from "@storybook/react-native-web-vite";
 
-import type { Preview } from '@storybook/react';
+import "../global.css";
 
 const preview: Preview = {
   parameters: {
@@ -10,45 +10,14 @@ const preview: Preview = {
         date: /Date$/i,
       },
     },
-    backgrounds: {
-      options: {
-        light: { name: 'light', value: 'hsl(0 0% 100%)' },
-        dark: { name: 'dark', value: 'hsl(0 0% 3.9%)' }
-      }
+
+    a11y: {
+      // 'todo' - show a11y violations in the test UI only
+      // 'error' - fail CI on a11y violations
+      // 'off' - skip a11y checks entirely
+      test: "todo",
     },
   },
-
-  globalTypes: {
-    theme: {
-      description: 'Theme (toggles the .dark class on <html>)',
-      defaultValue: 'light',
-      toolbar: {
-        title: 'Theme',
-        icon: 'circlehollow',
-        items: [
-          { value: 'light', title: 'Light' },
-          { value: 'dark', title: 'Dark' },
-        ],
-        dynamicTitle: true,
-      },
-    },
-  },
-
-  decorators: [
-    (Story, context) => {
-      const theme = context.globals.theme ?? 'light';
-      if (typeof document !== 'undefined') {
-        document.documentElement.classList.toggle('dark', theme === 'dark');
-      }
-      return Story();
-    },
-  ],
-
-  initialGlobals: {
-    backgrounds: {
-      value: 'light'
-    }
-  }
 };
 
 export default preview;

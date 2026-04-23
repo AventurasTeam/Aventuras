@@ -19,7 +19,8 @@
     "build:desktop:mac": "pnpm build:web && pnpm electron:compile && electron-builder --mac",
     "build:desktop:win": "pnpm build:web && pnpm electron:compile && electron-builder --win",
     "storybook": "storybook dev -p 6006",
-    "storybook:build": "storybook build"
+    "storybook:build": "storybook build",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
@@ -28,6 +29,7 @@
     "@react-navigation/native": "^7.1.33",
     "@rn-primitives/dialog": "^1.4.0",
     "@rn-primitives/slot": "^1.4.0",
+    "autoprefixer": "^10.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "expo": "~55.0.17",
@@ -43,6 +45,7 @@
     "expo-system-ui": "~55.0.16",
     "expo-web-browser": "~55.0.14",
     "nativewind": "^4.2.3",
+    "postcss": "^8.5.10",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-native": "0.83.6",
@@ -55,24 +58,31 @@
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@chromatic-com/storybook": "^5.1.2",
     "@storybook/addon-a11y": "^10.3.5",
     "@storybook/addon-docs": "^10.3.5",
     "@storybook/addon-mcp": "^0.6.0",
+    "@storybook/addon-vitest": "^10.3.5",
+    "@storybook/react-native-web-vite": "^10.3.5",
     "@storybook/react-vite": "^10.3.5",
     "@types/node": "^25.6.0",
     "@types/react": "~19.2.14",
     "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/browser-playwright": "^4.1.5",
+    "@vitest/coverage-v8": "^4.1.5",
     "concurrently": "^9.2.1",
     "electron": "^41.2.2",
     "electron-builder": "^26.8.1",
     "eslint": "^10.2.1",
     "eslint-config-expo": "~55.0.0",
     "eslint-plugin-storybook": "10.3.5",
+    "playwright": "^1.59.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
     "storybook": "^10.3.5",
     "tailwindcss": "^3.4.19",
     "typescript": "~5.9.3",
     "vite": "^8.0.9",
+    "vitest": "^4.1.5",
     "wait-on": "^9.0.5"
   },
   "build": {
