@@ -83,8 +83,14 @@ label.
 alphabetical within a tier.
 
 **Filter chips** (single-select). All / Active / Pending / Resolved /
-Failed. No accordion grouping — one status enum with four values,
-flat list is readable.
+Failed.
+
+**All view — accordion grouping by status tier.** Same pattern as
+World's accordion (per
+[principles → Accordion grouping](../../principles.md#accordion-grouping-on-all-view)),
+different grouping key. Groups: Active (default expanded), Pending,
+Resolved, Failed (all collapsed by default). Picking a non-All filter
+flattens to that single tier.
 
 **Search.** Across title + description.
 
@@ -119,6 +125,13 @@ knowledge / Out-of-narrative.
 `This chapter` filters to happenings whose `occurred_at_entry` falls
 within the currently-open chapter's range. `Out-of-narrative` filters
 to rows with `temporal` set (and null `occurred_at_entry`).
+
+**All view — accordion grouping by chapter bucket.** Same accordion
+pattern as World, different grouping key. Buckets:
+**Current chapter** (default expanded), **Earlier chapters**
+(collapsed; chapter-numbered sub-grouping deferred — flat list
+within for v1), **Out of narrative** (collapsed; rows with `temporal`
+set). Picking a non-All filter flattens to just the matching subset.
 
 **Search.** Across title + description.
 

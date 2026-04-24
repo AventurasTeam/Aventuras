@@ -377,6 +377,47 @@
         background: #fef7e8;
       }
 
+      /* accordion groups (All filter) */
+      .list-group {
+        border-bottom: 1px solid var(--line-soft);
+      }
+      .list-group:last-child {
+        border-bottom: none;
+      }
+      .list-group-header {
+        display: flex;
+        gap: 8px;
+        padding: 6px 8px;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--ink-muted);
+        cursor: pointer;
+        background: var(--bg);
+        align-items: center;
+      }
+      .list-group-header:hover {
+        color: var(--ink);
+      }
+      .list-group-header .group-collapse {
+        display: inline-block;
+        width: 10px;
+        transition: transform 0.1s;
+      }
+      .list-group-header .group-count {
+        margin-left: auto;
+        color: var(--ink-faint);
+        font-size: 10px;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+      .list-group.collapsed .list-group-body {
+        display: none;
+      }
+      .list-group.collapsed .group-collapse {
+        transform: rotate(-90deg);
+      }
+
       .list-footer {
         padding: 10px 12px;
         border-top: 1px solid var(--line-soft);
@@ -1074,102 +1115,162 @@
           </div>
         </div>
 
-        <!-- THREADS list -->
+        <!-- THREADS list — accordion by status tier on the All view -->
         <div class="list-items threads-only">
-          <div class="list-row recent-1 selected">
-            <span class="list-kind" title="thread">◇</span>
-            <span class="list-name">
-              <span class="name-text"><b>Crown's bargain</b></span>
-              <span class="when-marker">arc</span>
-            </span>
-            <span class="row-status-pill active">active</span>
+          <div class="list-group" data-group="active">
+            <div class="list-group-header">
+              <span class="group-collapse">&#9662;</span>
+              <span>Active</span>
+              <span class="group-count">2</span>
+            </div>
+            <div class="list-group-body">
+              <div class="list-row recent-1 selected">
+                <span class="list-kind" title="thread">◇</span>
+                <span class="list-name">
+                  <span class="name-text"><b>Crown's bargain</b></span>
+                  <span class="when-marker">arc</span>
+                </span>
+                <span class="row-status-pill active">active</span>
+              </div>
+              <div class="list-row">
+                <span class="list-kind" title="thread">◇</span>
+                <span class="list-name">
+                  <span class="name-text">The Warden's pursuit</span>
+                  <span class="when-marker">arc</span>
+                </span>
+                <span class="row-status-pill active">active</span>
+              </div>
+            </div>
           </div>
-          <div class="list-row">
-            <span class="list-kind" title="thread">◇</span>
-            <span class="list-name">
-              <span class="name-text">The Warden's pursuit</span>
-              <span class="when-marker">arc</span>
-            </span>
-            <span class="row-status-pill active">active</span>
+          <div class="list-group collapsed" data-group="pending">
+            <div class="list-group-header">
+              <span class="group-collapse">&#9662;</span>
+              <span>Pending</span>
+              <span class="group-count">1</span>
+            </div>
+            <div class="list-group-body">
+              <div class="list-row recent-2">
+                <span class="list-kind" title="thread">◇</span>
+                <span class="list-name">
+                  <span class="name-text">The lost heir</span>
+                  <span class="when-marker">prophecy</span>
+                </span>
+                <span class="row-status-pill pending">pending</span>
+              </div>
+            </div>
           </div>
-          <div class="list-row recent-2">
-            <span class="list-kind" title="thread">◇</span>
-            <span class="list-name">
-              <span class="name-text">The lost heir</span>
-              <span class="when-marker">prophecy</span>
-            </span>
-            <span class="row-status-pill pending">pending</span>
+          <div class="list-group collapsed" data-group="resolved">
+            <div class="list-group-header">
+              <span class="group-collapse">&#9662;</span>
+              <span>Resolved</span>
+              <span class="group-count">1</span>
+            </div>
+            <div class="list-group-body">
+              <div class="list-row">
+                <span class="list-kind" title="thread">◇</span>
+                <span class="list-name">
+                  <span class="name-text">Restore the silver coin</span>
+                  <span class="when-marker">quest</span>
+                </span>
+                <span class="row-status-pill resolved">resolved</span>
+              </div>
+            </div>
           </div>
-          <div class="list-row">
-            <span class="list-kind" title="thread">◇</span>
-            <span class="list-name">
-              <span class="name-text">Restore the silver coin</span>
-              <span class="when-marker">quest</span>
-            </span>
-            <span class="row-status-pill resolved">resolved</span>
-          </div>
-          <div class="list-row">
-            <span class="list-kind" title="thread">◇</span>
-            <span class="list-name">
-              <span class="name-text">Council's edict</span>
-              <span class="when-marker">arc</span>
-            </span>
-            <span class="row-status-pill failed">failed</span>
+          <div class="list-group collapsed" data-group="failed">
+            <div class="list-group-header">
+              <span class="group-collapse">&#9662;</span>
+              <span>Failed</span>
+              <span class="group-count">1</span>
+            </div>
+            <div class="list-group-body">
+              <div class="list-row">
+                <span class="list-kind" title="thread">◇</span>
+                <span class="list-name">
+                  <span class="name-text">Council's edict</span>
+                  <span class="when-marker">arc</span>
+                </span>
+                <span class="row-status-pill failed">failed</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- HAPPENINGS list -->
+        <!-- HAPPENINGS list — accordion by chapter bucket on the All view -->
         <div class="list-items happenings-only">
-          <div class="list-row recent-1 selected">
-            <span class="list-kind" title="happening">⚔</span>
-            <span class="list-name">
-              <span class="name-text"><b>Tavern brawl</b></span>
-              <span class="when-marker">e23 &middot; ch3</span>
-            </span>
-            <span class="common-dot placeholder" title="not common knowledge"></span>
+          <div class="list-group" data-group="current-chapter">
+            <div class="list-group-header">
+              <span class="group-collapse">&#9662;</span>
+              <span>Current chapter (3)</span>
+              <span class="group-count">2</span>
+            </div>
+            <div class="list-group-body">
+              <div class="list-row recent-1 selected">
+                <span class="list-kind" title="happening">⚔</span>
+                <span class="list-name">
+                  <span class="name-text"><b>Tavern brawl</b></span>
+                  <span class="when-marker">e23 &middot; ch3</span>
+                </span>
+                <span class="common-dot placeholder" title="not common knowledge"></span>
+              </div>
+              <div class="list-row recent-1">
+                <span class="list-kind" title="happening">✉</span>
+                <span class="list-name">
+                  <span class="name-text">Kael's warning</span>
+                  <span class="when-marker">e21 &middot; ch3</span>
+                </span>
+                <span class="common-dot placeholder"></span>
+              </div>
+            </div>
           </div>
-          <div class="list-row recent-1">
-            <span class="list-kind" title="happening">✉</span>
-            <span class="list-name">
-              <span class="name-text">Kael's warning</span>
-              <span class="when-marker">e21 &middot; ch3</span>
-            </span>
-            <span class="common-dot placeholder"></span>
+          <div class="list-group collapsed" data-group="earlier-chapters">
+            <div class="list-group-header">
+              <span class="group-collapse">&#9662;</span>
+              <span>Earlier chapters</span>
+              <span class="group-count">2</span>
+            </div>
+            <div class="list-group-body">
+              <div class="list-row recent-2">
+                <span class="list-kind" title="happening">✦</span>
+                <span class="list-name">
+                  <span class="name-text">The Warden's mark discovered</span>
+                  <span class="when-marker">e14 &middot; ch2</span>
+                </span>
+                <span class="common-dot" title="common knowledge"></span>
+              </div>
+              <div class="list-row">
+                <span class="list-kind" title="happening">⚜</span>
+                <span class="list-name">
+                  <span class="name-text">Coin's first owner</span>
+                  <span class="when-marker">e8 &middot; ch1</span>
+                </span>
+                <span class="common-dot placeholder"></span>
+              </div>
+            </div>
           </div>
-          <div class="list-row recent-2">
-            <span class="list-kind" title="happening">✦</span>
-            <span class="list-name">
-              <span class="name-text">The Warden's mark discovered</span>
-              <span class="when-marker">e14 &middot; ch2</span>
-            </span>
-            <span class="common-dot" title="common knowledge"></span>
-          </div>
-          <div class="list-row">
-            <span class="list-kind" title="happening">⚜</span>
-            <span class="list-name">
-              <span class="name-text">Coin's first owner</span>
-              <span class="when-marker">e8 &middot; ch1</span>
-            </span>
-            <span class="common-dot placeholder"></span>
-          </div>
-          <div style="font-size: 10px; color: var(--ink-faint); padding: 8px; text-align: center; text-transform: uppercase; letter-spacing: 0.08em">
-            &mdash; out of narrative &mdash;
-          </div>
-          <div class="list-row">
-            <span class="list-kind" title="happening">▣</span>
-            <span class="list-name">
-              <span class="name-text">Council Speaker's edict</span>
-              <span class="when-marker">pre-story</span>
-            </span>
-            <span class="common-dot" title="common knowledge"></span>
-          </div>
-          <div class="list-row">
-            <span class="list-kind" title="happening">▣</span>
-            <span class="list-name">
-              <span class="name-text">Kael's debt</span>
-              <span class="when-marker">pre-story</span>
-            </span>
-            <span class="common-dot placeholder"></span>
+          <div class="list-group collapsed" data-group="out-of-narrative">
+            <div class="list-group-header">
+              <span class="group-collapse">&#9662;</span>
+              <span>Out of narrative</span>
+              <span class="group-count">2</span>
+            </div>
+            <div class="list-group-body">
+              <div class="list-row">
+                <span class="list-kind" title="happening">▣</span>
+                <span class="list-name">
+                  <span class="name-text">Council Speaker's edict</span>
+                  <span class="when-marker">pre-story</span>
+                </span>
+                <span class="common-dot" title="common knowledge"></span>
+              </div>
+              <div class="list-row">
+                <span class="list-kind" title="happening">▣</span>
+                <span class="list-name">
+                  <span class="name-text">Kael's debt</span>
+                  <span class="when-marker">pre-story</span>
+                </span>
+                <span class="common-dot placeholder"></span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1673,6 +1774,13 @@
           row.addEventListener('click', () => {
             document.querySelectorAll('.list-row').forEach((r) => r.classList.remove('selected'));
             row.classList.add('selected');
+          });
+        });
+
+        // accordion groups
+        document.querySelectorAll('.list-group-header').forEach((h) => {
+          h.addEventListener('click', () => {
+            h.parentElement.classList.toggle('collapsed');
           });
         });
       })();
