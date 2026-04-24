@@ -138,6 +138,36 @@ rewrite branch.
   `useGenerationStore.getState().promptContext()`; templates render
   against that output.
 
+### Formatting lives in Liquid, not in the context builder
+
+A direct consequence of the single-context policy: **the unified
+context carries relatively raw data, and prompt-specific formatting
+happens inside the Liquid template.** The alternative — pre-formatted
+variants for each consuming template — would bloat the context and
+force every prompt to share identical text shape. Neither is
+acceptable.
+
+In practice:
+
+- The context carries structured data (entity arrays, happening sets,
+  chapter lists, etc.) in close-to-native form
+- Templates iterate, filter, conditionally render, and format using
+  Liquid's built-in tags + filters
+- Complex or reused transforms become **custom Liquid filters**
+  (`format_character`, `format_happening`, `token_count`, ...) —
+  still invoked from templates, implemented in code once
+- Pack authors use the same filter surface built-in templates do;
+  nothing privileged
+
+Benefits: prompt tuning happens in prompt files (no rebuild), pack
+authors have full control over emitted text, context shape stays flat.
+
+Trade-offs: templates get non-trivial (loops, conditionals, filter
+chains) — the prompt editor's Liquid mode autocomplete + variable
+registry really earn their keep here. LLM output quality becomes tied
+to template quality; debugging shifts to rendered template output
+rather than pre-computed data.
+
 ### Context groups
 
 Different surfaces need different variable sets. The template registry
