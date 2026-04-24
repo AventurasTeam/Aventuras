@@ -145,6 +145,15 @@ Same surface scope as the old app (narrative composer was the only place it show
 
 **Install:** when the narrative composer is built. No speculative dependencies.
 
+### 11. i18n (i18next + react-i18next)
+
+UI-string translation: menus, buttons, labels, settings, error messages — everything in the app chrome. Distinct from LLM-generated-content translation (that's handled by the `translations` table, documented in `docs/data-model.md` and `docs/architecture.md`).
+
+- `i18next` + `react-i18next` — industry standard, works uniformly across Expo, RN Web, Electron
+- English only to start; layout `locales/en/{common,story,settings,editor}.json` (namespace per feature area) or flat `locales/en.json` for v1 — decide at install time
+- Locale detection via `expo-localization` (native) and `navigator.language` (web) on first boot; user override lands in story-level settings eventually
+- **Install day-one** — every UI component uses translated strings from the start; retrofitting hardcoded strings later is the kind of tax we want to avoid
+
 ---
 
 ## Deferred

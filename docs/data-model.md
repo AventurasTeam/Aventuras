@@ -20,6 +20,7 @@ erDiagram
     branches ||--o{ threads : "tracks"
     branches ||--o{ happenings : "records"
     branches ||--o{ chapters : "segments into"
+    branches ||--o{ translations : "owns snapshot of"
     branches ||--o{ deltas : "logs changes in"
     story_entries ||--o{ deltas : "triggers"
     story_entries }o--|| chapters : "belongs to (once chaptered)"
@@ -164,6 +165,18 @@ erDiagram
         integer position "ordering within entry"
     }
 
+    translations {
+        text id PK
+        text branch_id FK "composite PK with id; translations fork with branches"
+        text target_kind "entity | lore | thread | happening | story_entry"
+        text target_id "id in the target table; polymorphic FK (no DB constraint)"
+        text field "which field of the target row is translated (name, description, body, title, content, etc.); supports dotted paths into state JSON"
+        text language "ISO 639-1 code (en, es, ja, ...)"
+        text translated_text
+        integer created_at
+        integer updated_at
+    }
+
     deltas {
         text id PK
         text branch_id FK
@@ -171,7 +184,7 @@ erDiagram
         text action_id "groups deltas into one user-visible action (used for CTRL-Z batching)"
         integer log_position "append-only ordering within branch"
         text source "ai_classifier | user_edit | lore_agent | memory_compaction | chapter_close"
-        text target_table "story_entries | entities | lore | threads | happenings | happening_involvements | happening_awareness | chapters | entry_assets"
+        text target_table "story_entries | entities | lore | threads | happenings | happening_involvements | happening_awareness | chapters | entry_assets | translations"
         text target_id "id in target_table"
         text op "create | update | delete"
         json undo_payload "op=create: null; op=update: partial diff of changed fields with their PRE-change values; op=delete: full row to re-insert"
@@ -440,6 +453,49 @@ grow unbounded. This is handled at injection time (retrieve top-K by
 salience + scene relevance, not full history) and by periodic compaction
 at chapter close (see below). Schema is unchanged; bloat is a runtime
 concern.
+
+### Translation
+
+**Decided:** translation of LLM-generated user-facing content (narrative,
+user action text, entity names/descriptions, lore bodies, thread titles,
+happening descriptions — everything the LLM produces) is stored in a
+dedicated `translations` table with a polymorphic target, rather than as
+per-column `translated_*` fields on each source row.
+
+Rationale: the old app spread `translated_name`, `translated_description`,
+`translated_relationship`, etc. across every world-state table — column
+proliferation that also hard-coded "one target language" and lost prior
+translations if the user reconfigured. Dedicated table fixes all three.
+
+**Shape:**
+
+- `(branch_id, id)` composite PK (translations fork with branches like
+  every other branch-scoped table)
+- `target_kind` + `target_id` = polymorphic FK (same convention as
+  `deltas.target_table` / `target_id`)
+- `field` names the translated field on the source row. Supports nested
+  paths (e.g. `state.condition` on entities) for kind-specific state JSON
+- `language` is an ISO 639-1 code; multiple target languages coexist
+- UNIQUE(branch_id, target_kind, target_id, field, language) prevents
+  duplicate translations per (source field, language)
+
+**Deltas participate.** `deltas.target_table` includes `translations`.
+Translation writes produce deltas under the same `action_id` as the
+originating action — so if the classifier creates a new entity that
+triggers a translation write, a single CTRL-Z reverses both the entity
+and its translation.
+
+**Runtime:** Zustand loads translations into an index
+`Map<(kind, id, field, lang), string>` for O(1) render-time lookup. UI
+renders translated text when a translation exists for the current
+language + field, else falls back to the source. Pipeline translation
+phase writes translation rows via Zustand actions, same pattern as
+every other state mutation.
+
+**Scope reminder:** this table handles LLM-authored content only.
+Translation of the app's own UI strings (menus, buttons, settings) is a
+separate concern — handled by `i18next` at the UI layer, backed by
+`locales/*.json` files in the repo.
 
 ### Chapters / memory system
 
