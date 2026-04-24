@@ -91,6 +91,7 @@
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.7.2",
     "remark-cli": "^12.0.1",
+    "remark-frontmatter": "^5.0.0",
     "remark-lint-no-duplicate-headings": "^4.0.1",
     "remark-preset-lint-recommended": "^7.0.1",
     "remark-validate-links": "^13.1.0",
@@ -134,6 +135,7 @@
   "private": true,
   "remarkConfig": {
     "plugins": [
+      "remark-frontmatter",
       [
         "remark-validate-links",
         {

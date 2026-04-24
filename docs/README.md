@@ -128,8 +128,17 @@ Plugins configured in `package.json` → `remarkConfig`:
 
 ## For Claude
 
-Claude-scoped operational rules live in
-[`.claude/CLAUDE.md`](../.claude/CLAUDE.md). They reference these
-structure rules; this doc is the source of truth for what / how /
-where, the Claude file adds operational reminders for AI-assisted
-edits.
+Two layers of project-scoped rules:
+
+- [`CLAUDE.md`](../CLAUDE.md) at repo root — general project context
+  (domain, repo layout, stack, workflow rules). Auto-loads at session
+  start.
+- [`.claude/rules/`](../.claude/rules/) — topic-scoped rules that
+  auto-load when Claude reads files matching their `paths`
+  frontmatter. Documentation rules live in
+  [`.claude/rules/docs.md`](../.claude/rules/docs.md) (loads on
+  `docs/**` or `.claude/rules/**`).
+
+This doc is the source of truth for what / how / where; the
+`.claude/rules/docs.md` file references it and adds operational
+reminders for AI-assisted edits.

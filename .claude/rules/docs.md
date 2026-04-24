@@ -1,9 +1,16 @@
-# Project rules — Aventuras
+---
+paths:
+  - 'docs/**'
+  - '.claude/rules/**'
+---
 
-Project-scoped instructions for Claude. The full doc structure and
-conventions live in [`docs/README.md`](../docs/README.md) — read that
-first when working with documentation. This file adds operational
-reminders for AI-assisted edits.
+# Documentation rules
+
+Project-scoped Claude rules for documentation work. Auto-loads when
+Claude reads anything under `docs/` or `.claude/rules/`. The full
+human-facing structure rules live in
+[`docs/README.md`](../../docs/README.md) — that's the source of
+truth; this file adds operational reminders for AI-assisted edits.
 
 ## Documentation conventions
 
@@ -20,7 +27,7 @@ When adding to or editing docs:
 - **Bracketed inline text**: prose containing `[A|B]` or
   `[Classification ‖ Translation]` is parsed as reference-style
   links. Wrap in backticks (`` `[A|B]` ``).
-- **Moving files**: use `git mv` to preserve history. Update all
+- **Moving doc files**: use `git mv` to preserve history. Update all
   inbound path references in the same commit.
 
 ## followups.md hygiene
@@ -44,19 +51,12 @@ as templates — review-controls bar at top, monochrome styling, vanilla
 JS only, no build/framework. Keep them low-fidelity; pixel-fidelity
 decisions land in the visual identity session.
 
-## Commits
-
-- Prefer multiple focused commits over one omnibus commit when the
-  work is logically separable.
-- Don't bypass pre-commit (`--no-verify`). If a hook fails, fix the
-  underlying issue.
-- Never amend committed work; create a new commit instead (matches
-  project preference).
-
-## Tooling reminders
+## Doc-tooling reminders
 
 - `pnpm lint:docs` runs remark over the whole `docs/` tree manually.
   Useful before staging large doc changes.
-- Pre-commit runs prettier (formats markdown) THEN remark (validates).
-  Order is configured via lefthook; don't fight it.
 - The `remarkConfig` lives in `package.json`. New plugins go there.
+- Pre-commit runs prettier (formats markdown) before remark
+  (validates). If prettier reformats and remark complains about the
+  reformatted output, the validate-links plugin's frontmatter is the
+  most likely lever (e.g. `repository: false`).
