@@ -56,3 +56,6 @@ app-example
 *.local.*
 *storybook.log
 storybook-static
+
+# Superpowers brainstorming scratch dir (visual companion mockups)
+.superpowers/

@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Reader / Composer (desktop)</title>
+<style>
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-highlight: #eef;
+    --warn: #c94;
+    --warn-bg: #fef4ee;
+    --ok: #4a8;
+  }
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+  .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .screen-label strong { color: var(--ink); }
+
+  /* review controls bar */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; }
+  .review-bar .rb-group > .gl { font-size: 10px; color: #967; margin-right: 4px; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+
+  /* top bar */
+  header.topbar { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
+  .logo { width: 28px; height: 28px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--ink-muted); }
+  .crumbs { display: flex; align-items: baseline; gap: 10px; min-width: 0; position: relative; }
+  .crumb-primary { font-size: 15px; font-weight: 600; color: var(--ink); border-bottom: 1px dotted var(--line-soft); padding-bottom: 1px; cursor: text; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 320px; }
+  .crumb-primary::after { content: "  ✎"; color: var(--ink-faint); font-size: 10px; font-weight: 400; }
+  .crumb-sep { font-size: 11px; color: var(--ink-faint); flex-shrink: 0; }
+  .crumb-chapter { font-size: 12px; color: var(--ink); cursor: pointer; padding: 3px 8px; border: 1px solid transparent; border-radius: 3px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .crumb-chapter:hover, .crumb-chapter.open { border-color: var(--line-soft); background: var(--bg); }
+  .crumb-chapter .chev { font-size: 9px; color: var(--ink-faint); }
+  /* in-world time chip — opaque string from metadata, format-agnostic */
+  .crumb-time { font-size: 12px; color: var(--ink-muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 1; min-width: 0; max-width: 260px; overflow: hidden; }
+  .crumb-time .clock { font-size: 11px; opacity: 0.8; }
+  .crumb-time .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* thin progress strip along the bottom edge of the top-bar — passive chrome */
+  .topbar-progress { height: 3px; background: var(--line-soft); position: relative; cursor: pointer; }
+  .topbar-progress .fill { position: absolute; top: 0; left: 0; height: 100%; background: var(--ok); transition: width 0.4s, background 0.2s; }
+  .topbar-progress.warn .fill { background: #d9a617; }
+  .topbar-progress.danger .fill { background: var(--warn); }
+  .topbar-progress:hover::after { content: attr(data-label); position: absolute; top: 100%; left: 16px; background: var(--ink); color: #fff; font-size: 10px; padding: 3px 8px; border-radius: 3px; white-space: nowrap; z-index: 5; }
+
+  /* chapter popover */
+  .chapter-popover { position: absolute; top: calc(100% + 8px); left: 0; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 6px 16px rgba(0,0,0,0.1); min-width: 300px; z-index: 20; display: none; }
+  .chapter-popover.open { display: block; }
+  .chapter-list { max-height: 260px; overflow: auto; }
+  .chapter-item { padding: 8px 12px; font-size: 12px; color: var(--ink); cursor: pointer; border-bottom: 1px solid var(--line-soft); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .chapter-item:hover { background: var(--bg-highlight); }
+  .chapter-item.current { background: var(--bg-highlight); font-weight: 500; cursor: default; }
+  .chapter-item .ch-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chapter-item .ch-meta { font-size: 10px; color: var(--ink-faint); font-family: ui-monospace, monospace; }
+  .chapter-popover-progress { padding: 10px 12px; border-bottom: 1px solid var(--line-soft); background: var(--bg); }
+  .chapter-popover-progress .label { font-size: 11px; color: var(--ink-muted); display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .chapter-popover-progress .bar { height: 6px; background: var(--line-soft); border-radius: 3px; overflow: hidden; }
+  .chapter-popover-progress .bar .fill { height: 100%; background: var(--ok); border-radius: 3px; transition: width 0.4s, background 0.2s; }
+  .chapter-popover-progress .bar.warn .fill { background: #d9a617; }
+  .chapter-popover-progress .bar.danger .fill { background: var(--warn); }
+  .chapter-popover-actions { padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; background: var(--bg); }
+  .chapter-popover-action { padding: 6px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 12px; cursor: pointer; color: var(--ink); text-align: center; }
+  .chapter-popover-action.link { border: none; color: var(--ink-muted); text-align: right; padding: 4px 10px; }
+  .chapter-popover-action.link:hover { color: var(--ink); }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .icon-btn { position: relative; width: 30px; height: 30px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 14px; cursor: pointer; }
+  .icon-btn .count-badge { position: absolute; top: -4px; right: -4px; background: var(--ink); color: #fff; font-size: 9px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-weight: 600; letter-spacing: 0; }
+
+  .gen-status { display: none; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); font-size: 11px; color: var(--ink); }
+  .gen-status.visible { display: flex; }
+  .gen-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(74,168,136,0.5);} 70% { box-shadow: 0 0 0 5px rgba(74,168,136,0);} 100% { box-shadow: 0 0 0 0 rgba(74,168,136,0);} }
+
+  /* layout */
+  .layout { flex: 1; display: grid; grid-template-columns: 1fr 300px; min-height: 0; position: relative; }
+
+  /* peek drawer */
+  .peek-overlay { position: absolute; top: 0; right: 0; bottom: 0; width: 440px; background: var(--bg-region); border-left: 1px solid var(--line); box-shadow: -4px 0 12px rgba(0,0,0,0.06); display: none; flex-direction: column; z-index: 10; }
+  .peek-overlay.open { display: flex; }
+  .peek-head { padding: 12px 16px 10px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .peek-head .crumb { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .peek-head .name { font-size: 16px; font-weight: 600; margin-top: 2px; }
+  .peek-close { font-size: 20px; color: var(--ink-faint); cursor: pointer; line-height: 1; padding: 0 4px; }
+  .peek-body { flex: 1; overflow: auto; padding: 14px 16px; }
+  .peek-field { margin-bottom: 14px; }
+  .peek-field .label { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; display: flex; justify-content: space-between; align-items: center; }
+  .peek-field .value { font-size: 13px; color: var(--ink); line-height: 1.5; }
+  .peek-field .value.placeholder { color: var(--ink-muted); font-style: italic; }
+  .peek-field .edit-pencil { color: var(--ink-faint); font-size: 11px; cursor: pointer; text-transform: none; letter-spacing: 0; }
+  .peek-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+  .peek-tag { font-size: 10px; padding: 2px 7px; border: 1px solid var(--line-soft); border-radius: 999px; color: var(--ink-muted); }
+  .peek-foot { padding: 10px 16px; border-top: 1px solid var(--line-soft); background: var(--bg); display: flex; justify-content: space-between; align-items: center; }
+  .peek-foot .link { font-size: 12px; color: var(--ink); font-weight: 500; cursor: pointer; }
+  .peek-foot .note { font-size: 10px; color: var(--ink-faint); font-style: italic; }
+
+  /* right rail */
+  aside.right { background: var(--bg-region); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
+  .rail-scope-chip { display: none; padding: 8px 12px; background: #fff7dc; border-bottom: 1px solid var(--line-soft); font-size: 11px; color: #765; justify-content: space-between; align-items: center; gap: 8px; }
+  .rail-scope-chip.visible { display: flex; }
+  .rail-scope-chip .clear { cursor: pointer; font-size: 14px; color: var(--ink-muted); line-height: 1; padding: 0 4px; }
+
+  .rail-section { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .section-head { padding: 10px 12px 4px; font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .section-head .count { color: var(--ink-faint); font-size: 10px; text-transform: none; letter-spacing: 0; }
+
+  .browse-controls { padding: 4px 12px 8px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--line-soft); }
+  .browse-select { padding: 5px 10px; border: 1px solid var(--line); border-radius: 3px; font-size: 12px; background: var(--bg-region); cursor: pointer; display: flex; justify-content: space-between; align-items: center; position: relative; }
+  .browse-menu { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--bg-region); border: 1px solid var(--line); border-radius: 3px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); z-index: 20; display: none; }
+  .browse-menu.open { display: block; }
+  .browse-menu-header { padding: 5px 10px; font-size: 9px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.08em; background: var(--bg); border-bottom: 1px solid var(--line-soft); font-weight: 600; }
+  .browse-menu-item { padding: 6px 12px; font-size: 12px; color: var(--ink); cursor: pointer; }
+  .browse-menu-item:hover { background: var(--bg-highlight); }
+  .browse-menu-item.active { background: var(--bg-highlight); font-weight: 500; }
+  .browse-toggles { display: flex; gap: 6px; font-size: 11px; color: var(--ink-muted); flex-wrap: wrap; }
+  .browse-toggle { padding: 3px 8px; border: 1px solid var(--line-soft); border-radius: 3px; cursor: pointer; }
+  .browse-toggle.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .browse-search { padding: 5px 10px; border: 1px solid var(--line-soft); border-radius: 3px; font-size: 12px; background: var(--bg-region); color: var(--ink-faint); font-style: italic; }
+  .browse-search::before { content: "⌕  "; font-style: normal; color: var(--ink-faint); }
+
+  .rail-list { flex: 1; overflow: auto; padding: 6px 8px 8px; min-height: 0; }
+  .entity-row { padding: 7px 6px; font-size: 12px; display: flex; align-items: center; gap: 6px; border-bottom: 1px dotted var(--line-soft); cursor: pointer; border-radius: 3px; border: 1px solid transparent; }
+  .entity-row:hover { background: var(--bg-highlight); }
+  .entity-row.selected { background: var(--bg-highlight); border: 1px solid var(--line); }
+  .entity-row:last-child { border-bottom: 1px dotted var(--line-soft); }
+  .entity-kind { font-size: 14px; color: var(--ink-muted); line-height: 1; padding: 0; border: 1px solid var(--line-soft); border-radius: 2px; flex-shrink: 0; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; background: var(--bg); }
+  .entity-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+  .entity-name .name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* status pill — always present, active muted */
+  .row-status-pill { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 2px; flex-shrink: 0; border: 1px solid var(--line-soft); background: var(--bg); color: var(--ink-faint); }
+  .row-status-pill.active { color: var(--ink-faint); border-color: var(--line-soft); background: var(--bg); }
+  .row-status-pill.staged { color: #686; border-color: #dec; background: #f4faef; }
+  .row-status-pill.retired { color: #963; border-color: #ecb; background: #fef7e8; }
+  /* scene presence — row-level accent */
+  .entity-row { border-left: 3px solid transparent; }
+  .entity-row.in-scene { border-left-color: var(--ok); background: linear-gradient(to right, rgba(74,168,136,0.05), transparent 60%); }
+  .lead-badge { font-size: 9px; color: #000; background: #ffe68a; padding: 2px 5px; border-radius: 2px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0; }
+
+  /* status accordion groups (All filter) */
+  .list-group { border-bottom: 1px solid var(--line-soft); }
+  .list-group:last-child { border-bottom: none; }
+  .list-group-header { display: flex; gap: 8px; padding: 6px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); cursor: pointer; background: var(--bg); align-items: center; }
+  .list-group-header:hover { color: var(--ink); }
+  .list-group-header .group-collapse { display: inline-block; width: 10px; transition: transform 0.1s; }
+  .list-group-header .group-count { margin-left: auto; color: var(--ink-faint); font-size: 10px; text-transform: none; letter-spacing: 0; }
+  .list-group.collapsed .list-group-body { display: none; }
+  .list-group.collapsed .group-collapse { transform: rotate(-90deg); }
+
+  .rail-footer { padding: 8px 12px; border-top: 1px solid var(--line-soft); display: flex; justify-content: center; }
+  .vault-import { font-size: 11px; color: var(--ink-muted); padding: 5px 10px; border: 1px dashed var(--line); border-radius: 3px; cursor: pointer; }
+  .vault-import i { font-style: normal; color: var(--ink-faint); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; margin-left: 4px; }
+
+  /* main */
+  main { display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+  .entries { flex: 1; overflow: auto; padding: 20px 28px; max-width: 860px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+  .chapter-break { display: flex; align-items: center; gap: 12px; margin: 28px 0 16px; color: var(--ink-faint); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; }
+  .chapter-break::before, .chapter-break::after { content: ""; flex: 1; border-top: 1px solid var(--line-soft); }
+  .chapter-break .bk-title { color: var(--ink-muted); }
+  .chapter-break .bk-time { color: var(--ink-faint); font-size: 9px; text-transform: none; letter-spacing: 0.04em; margin-left: 6px; }
+
+  .entry { margin: 10px 0; position: relative; }
+  .entry.removed { display: none; }
+  .bubble { padding: 10px 14px; border-radius: 6px; position: relative; min-width: 0; }
+  .entry.user .bubble { background: var(--bg-highlight); border: 1px solid var(--line-soft); }
+  .entry.ai .bubble { background: var(--bg-region); border: 1px solid var(--line); }
+  .entry.ai .bubble.streaming { border-style: dashed; }
+  .entry.system .bubble { background: var(--warn-bg); border: 1px solid var(--warn); color: #853; }
+  .bubble-kind { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .entry.system .bubble-kind { color: var(--warn); }
+  .bubble-content { font-size: 13px; line-height: 1.6; color: var(--ink); }
+  .bubble-content.placeholder { color: var(--ink-muted); font-style: italic; }
+  .entry.system .bubble-content { color: #642; font-style: normal; }
+  .err-actions { margin-top: 8px; display: flex; gap: 6px; }
+  .err-btn { padding: 4px 10px; border: 1px solid var(--warn); border-radius: 3px; background: var(--bg-region); color: var(--warn); font-size: 11px; font-weight: 500; cursor: pointer; }
+  .err-btn.primary { background: var(--warn); color: #fff; }
+
+  /* per-entry actions: permanent (same on desktop and mobile), muted by default, full opacity on hover/focus */
+  .entry-actions { position: absolute; top: 6px; right: 8px; display: flex; gap: 3px; opacity: 0.55; transition: opacity 0.15s; }
+  .entry:hover .entry-actions { opacity: 1; }
+  .entry-action { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; line-height: 1; border: 1px solid var(--line-soft); border-radius: 3px; background: var(--bg-region); color: var(--ink-muted); cursor: pointer; }
+  .entry-action:hover { color: var(--ink); border-color: var(--line); }
+  .entry-action.danger { color: var(--warn); border-color: #ebc; }
+  .entry-action.danger:hover { background: #fef4ee; }
+
+  /* reasoning icon in meta line + expandable body */
+  .bubble-meta { display: inline-flex; align-items: center; gap: 6px; }
+  .reasoning-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; font-size: 12px; cursor: pointer; opacity: 0.65; transition: opacity 0.15s, background 0.15s; line-height: 1; }
+  .reasoning-icon:hover { opacity: 1; background: var(--bg-highlight); }
+  .reasoning-icon.pulsing { animation: reasoning-pulse 1.6s infinite; opacity: 1; }
+  @keyframes reasoning-pulse { 0% { box-shadow: 0 0 0 0 rgba(74,168,136,0.5);} 70% { box-shadow: 0 0 0 6px rgba(74,168,136,0);} 100% { box-shadow: 0 0 0 0 rgba(74,168,136,0);} }
+  .bubble.reasoning-open .reasoning-icon { background: var(--bg-highlight); opacity: 1; }
+  .tok-display { font-size: 10px; color: var(--ink-faint); font-family: ui-monospace, monospace; }
+  .reasoning-body { display: none; margin-top: 10px; padding: 10px 12px; border-left: 2px solid var(--line-soft); font-size: 12px; color: var(--ink-muted); font-style: italic; line-height: 1.55; background: rgba(0,0,0,0.015); }
+  .bubble.reasoning-open .reasoning-body { display: block; }
+
+  /* streaming visibility follows gen state */
+  .streaming-entry { display: none; }
+  .streaming-entry.visible { display: block; }
+
+  /* next-turn suggestions */
+  .suggestions { border-top: 1px solid var(--line-soft); padding: 10px 24px 8px; background: var(--bg-region); }
+  .suggestions.collapsed .suggestions-list { display: none; }
+  .suggestions.hidden { display: none; }
+  .suggestions-inner { max-width: 860px; margin: 0 auto; }
+  .suggestions-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .suggestions-title { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; display: inline-flex; align-items: center; gap: 6px; }
+  .suggestions-title .collapse-icon { cursor: pointer; color: var(--ink-faint); }
+  .suggestions-title .collapse-icon:hover { color: var(--ink); }
+  .suggestions-actions { display: flex; gap: 10px; font-size: 11px; color: var(--ink-muted); }
+  .suggestions-regen { cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 3px; }
+  .suggestions-regen:hover { color: var(--ink); background: var(--bg-highlight); }
+  .suggestions-regen.loading { animation: reasoning-pulse 1.2s infinite; opacity: 0.7; }
+  .suggestions-list { display: flex; flex-direction: column; gap: 4px; }
+  .suggestion { display: flex; gap: 10px; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 4px; font-size: 12px; cursor: pointer; align-items: flex-start; background: var(--bg-region); transition: background 0.15s; }
+  .suggestion:hover { background: var(--bg-highlight); border-color: var(--line); }
+  .suggestion-kind { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; padding: 3px 8px; border-radius: 2px; font-weight: 600; flex-shrink: 0; margin-top: 0; min-width: 70px; text-align: center; }
+  .suggestion-kind.action { background: #dbe6f2; color: #3d5a7a; }
+  .suggestion-kind.dialogue { background: #d6ebd8; color: #3d6e46; }
+  .suggestion-kind.examine { background: #e4d9ef; color: #5c4478; }
+  .suggestion-kind.move { background: #f2e7d0; color: #7a6020; }
+  .suggestion-kind.revelation { background: #f5ddc5; color: #8a5528; }
+  .suggestion-kind.twist { background: #f2d0d0; color: #8a3030; }
+  .suggestion-text { flex: 1; color: var(--ink); line-height: 1.45; }
+  .suggestion.loading-state { opacity: 0.5; pointer-events: none; }
+  .suggestions-error { padding: 10px 12px; border: 1px dashed var(--warn); border-radius: 3px; font-size: 11px; color: var(--warn); display: none; }
+  .suggestions.error .suggestions-list { display: none; }
+  .suggestions.error .suggestions-error { display: block; }
+
+  /* composer */
+  .composer { border-top: 1px solid var(--line); padding: 12px 24px 14px; background: var(--bg-region); }
+  .composer-inner { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
+  .composer-input { min-height: 70px; border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; background: var(--bg); color: var(--ink-muted); font-style: italic; font-size: 13px; }
+  .composer-input .caret { display: inline-block; width: 1px; height: 14px; background: var(--ink-muted); vertical-align: middle; margin-left: 1px; }
+  .composer-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .composer-left { display: flex; gap: 6px; align-items: center; }
+  .composer-right { display: flex; gap: 6px; align-items: center; }
+  .mode-picker { position: relative; padding: 6px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); font-size: 12px; font-weight: 500; cursor: pointer; transition: opacity 0.1s; }
+  .mode-picker.hidden { display: none; }
+  .mode-picker .kind { font-size: 9px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px; }
+  .mode-menu { position: absolute; bottom: calc(100% + 4px); left: 0; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 -4px 12px rgba(0,0,0,0.08); z-index: 20; display: none; min-width: 120px; }
+  .mode-menu.open { display: block; }
+  .mode-menu-item { padding: 6px 12px; font-size: 12px; font-weight: 400; color: var(--ink); cursor: pointer; border-bottom: 1px solid var(--line-soft); }
+  .mode-menu-item:last-child { border-bottom: none; }
+  .mode-menu-item:hover { background: var(--bg-highlight); }
+  .mode-menu-item.active { background: var(--bg-highlight); font-weight: 600; }
+  .mode-menu-item .hint { display: block; font-size: 9px; color: var(--ink-muted); font-weight: 400; margin-top: 1px; text-transform: none; letter-spacing: 0; }
+  .regen-btn { padding: 6px 12px; border: 1px solid var(--line-soft); border-radius: 4px; background: var(--bg-region); font-size: 12px; color: var(--ink); cursor: pointer; transition: opacity 0.1s; }
+  .send-btn { padding: 8px 22px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: #fff; font-weight: 600; font-size: 13px; cursor: pointer; }
+  .cancel-btn { padding: 8px 22px; border: 1px solid var(--warn); border-radius: 4px; background: var(--warn); color: #fff; font-weight: 600; font-size: 13px; cursor: pointer; }
+  .composer.generating .mode-picker, .composer.generating .regen-btn { opacity: 0.45; pointer-events: none; }
+  .send-btn.hidden, .cancel-btn.hidden { display: none; }
+
+  /* error entry visibility */
+  .error-entry { display: none; }
+  .error-entry.visible { display: block; }
+
+  /* layout notes */
+  .notes { padding: 14px 20px; background: #fffbe6; border-top: 1px solid var(--line-soft); font-size: 11px; color: #594; line-height: 1.6; }
+  .notes b { color: #342; }
+  .notes code { background: #fff; padding: 2px 6px; border: 1px solid var(--line-soft); border-radius: 2px; font-size: 10px; }
+  .notes h4 { margin: 12px 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #342; }
+  .notes h4:first-child { margin-top: 0; }
+  .notes ul { margin: 4px 0 10px; padding-left: 18px; }
+  .notes ul li { margin-bottom: 3px; }
+  .notes .diff { background: #fff; padding: 2px 6px; border: 1px solid var(--line-soft); border-radius: 2px; font-family: ui-monospace, monospace; font-size: 10px; }
+  .notes kbd { background: #fff; padding: 1px 6px; border: 1px solid var(--line); border-radius: 3px; font-family: ui-monospace, monospace; font-size: 10px; color: var(--ink); }
+</style>
+</head>
+<body>
+
+<div class="screen-label"><strong>Wireframe:</strong> Reader / Composer &mdash; desktop (&ge; 1024px) &mdash; low-fi, interactive</div>
+
+<!-- Review controls -->
+<div class="review-bar">
+  <span class="rb-label">Review controls</span>
+
+  <div class="rb-group">
+    <span class="gl">gen:</span>
+    <button class="rb-btn active" data-gen="idle">idle</button>
+    <button class="rb-btn" data-gen="reasoning">reasoning</button>
+    <button class="rb-btn" data-gen="generating">replying</button>
+    <button class="rb-btn" data-gen="classifying">classifying</button>
+    <button class="rb-btn" data-gen="chapter-close">chapter-close</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">peek:</span>
+    <button class="rb-btn active" data-peek="closed">closed</button>
+    <button class="rb-btn" data-peek="open">open — Kael</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">scope filter:</span>
+    <button class="rb-btn active" data-scope="none">none</button>
+    <button class="rb-btn" data-scope="aria">through Aria</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">error entry:</span>
+    <button class="rb-btn active" data-err="hidden">hidden</button>
+    <button class="rb-btn" data-err="visible">visible</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">chapter progress:</span>
+    <button class="rb-btn active" data-progress="35">35% (safe)</button>
+    <button class="rb-btn" data-progress="85">85% (warn)</button>
+    <button class="rb-btn" data-progress="95">95% (danger)</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">in-world time:</span>
+    <button class="rb-btn active" data-time="Day 3, dusk">short (Earth)</button>
+    <button class="rb-btn" data-time="Tolfday 12th of Harvest, Tenth Age">long (fantasy)</button>
+    <button class="rb-btn" data-time="Year of the Phoenix, New Moon — 1872 AR">very long</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">story mode:</span>
+    <button class="rb-btn active" data-mode="adventure">adventure</button>
+    <button class="rb-btn" data-mode="creative">creative</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">suggestions:</span>
+    <button class="rb-btn active" data-sugg="visible">visible</button>
+    <button class="rb-btn" data-sugg="loading">loading</button>
+    <button class="rb-btn" data-sugg="error">error</button>
+    <button class="rb-btn" data-sugg="collapsed">collapsed</button>
+    <button class="rb-btn" data-sugg="hidden">hidden (disabled)</button>
+  </div>
+
+  <span class="rb-note">also: click a Browse row · <kbd>Esc</kbd> closes peek</span>
+</div>
+
+<!-- Top bar -->
+<header class="topbar">
+  <div class="logo">A</div>
+  <div class="crumbs">
+    <span class="crumb-primary">Aria's Descent</span>
+    <span class="crumb-sep">&middot;</span>
+    <span class="crumb-chapter" id="chapter-crumb" title="Chapter navigator">
+      Chapter 3
+      <span class="chev">&#9662;</span>
+    </span>
+    <span class="crumb-sep">&middot;</span>
+    <span class="crumb-time" id="crumb-time" title="Day 3, dusk">
+      <span class="clock">&#9201;</span>
+      <span class="label" id="time-label">Day 3, dusk</span>
+    </span>
+
+    <div class="chapter-popover" id="chapter-popover">
+      <div class="chapter-list">
+        <div class="chapter-item">
+          <span class="ch-title">1 &middot; Into the Undercity<br><span style="font-size: 10px; color: var(--ink-faint);">&#9201; Day 1 &rarr; Day 2, dawn</span></span>
+          <span class="ch-meta">12 entries &middot; 6.2k</span>
+        </div>
+        <div class="chapter-item">
+          <span class="ch-title">2 &middot; The Warden's Mark<br><span style="font-size: 10px; color: var(--ink-faint);">&#9201; Day 2, dawn &rarr; Day 3, dusk</span></span>
+          <span class="ch-meta">9 entries &middot; 5.0k</span>
+        </div>
+        <div class="chapter-item current">
+          <span class="ch-title">3 &middot; in progress<br><span style="font-size: 10px; color: var(--ink-faint);">&#9201; since Day 3, dusk</span></span>
+          <span class="ch-meta">5 entries &middot; 8.4k</span>
+        </div>
+      </div>
+      <div class="chapter-popover-progress">
+        <div class="label">
+          <span>chapter progress</span>
+          <span>8,420 / 24,000 tok</span>
+        </div>
+        <div class="bar"><div class="fill" style="width: 35%"></div></div>
+      </div>
+      <div class="chapter-popover-actions">
+        <span class="chapter-popover-action">Close chapter manually</span>
+        <span class="chapter-popover-action link">Manage chapters &rarr;</span>
+      </div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="gen-status" id="gen-pill"><span class="dot"></span><span id="gen-label">generating narrative&hellip;</span></div>
+    <div class="icon-btn" title="3 branches &middot; click to open Branch Navigator">&#9901;<span class="count-badge">3</span></div>
+    <div class="icon-btn" title="Actions (Cmd/Ctrl-K / tap to open)">&#9906;</div>
+    <div class="icon-btn" title="Story settings">&#9881;</div>
+    <div class="icon-btn" title="Back to story list">&larr;</div>
+  </div>
+</header>
+
+<!-- Chapter progress strip — passive chrome, always visible -->
+<div class="topbar-progress" data-label="Chapter 3 · 8,420 / 24,000 tok">
+  <div class="fill" style="width: 35%"></div>
+</div>
+
+<!-- Layout -->
+<div class="layout">
+
+  <main>
+    <div class="entries">
+
+      <div class="chapter-break"><span class="bk-title">Chapter 3<span class="bk-time">&#9201; Day 2, dawn</span></span></div>
+
+      <div class="entry user">
+        <div class="bubble">
+          <div class="bubble-kind">You</div>
+          <div class="bubble-content placeholder">[user action text &mdash; pack-wrapped per the composer mode at send time, stored verbatim on the entry. Mode is a send-time transform, not a saved field.]</div>
+          <div class="entry-actions">
+            <span class="entry-action" title="Edit">&#x270E;</span>
+            <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="entry ai">
+        <div class="bubble">
+          <div class="bubble-kind">
+            <span class="bubble-meta">
+              AI reply
+              <span class="reasoning-icon" data-reasoning-toggle title="Show reasoning trace">&#129504;</span>
+              <span class="tok-display" title="reply tok / reasoning tok">1.8k / 3.2k</span>
+            </span>
+          </div>
+          <div class="reasoning-body">
+            [Reasoning trace &mdash; the model's thinking tokens, shown only when the provider exposes them. Italic, muted, indented. Appears before the reply because that's the chronological order the model produced them in.]
+          </div>
+          <div class="bubble-content placeholder">[narrative response &mdash; several paragraphs of story prose.]</div>
+          <div class="entry-actions">
+            <span class="entry-action" title="Edit">&#x270E;</span>
+            <span class="entry-action" title="Regenerate this reply">&#x21BB;</span>
+            <span class="entry-action" title="Branch from this entry">&#x2387;</span>
+            <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="entry system error-entry" id="error-entry">
+        <div class="bubble">
+          <div class="bubble-kind">&#9888; System &middot; generation error</div>
+          <div class="bubble-content">
+            <b>API rate limit hit.</b> Claude returned 429 after 3 retries.
+            The narrative stream stopped at paragraph 2; no entry was committed.
+          </div>
+          <div class="err-actions">
+            <span class="err-btn primary">Retry</span>
+            <span class="err-btn">View details</span>
+            <span class="err-btn" id="err-dismiss">Dismiss</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="entry user">
+        <div class="bubble">
+          <div class="bubble-kind">You</div>
+          <div class="bubble-content placeholder">[latest user action &mdash; wrapped per the composer mode at send time]</div>
+          <div class="entry-actions">
+            <span class="entry-action" title="Edit">&#x270E;</span>
+            <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="entry ai streaming-entry" id="streaming-entry">
+        <div class="bubble streaming" id="streaming-bubble">
+          <div class="bubble-kind">
+            <span class="bubble-meta">
+              AI reply
+              <span class="reasoning-icon pulsing" id="streaming-brain" data-reasoning-toggle title="Reasoning in progress &mdash; click to show">&#129504;</span>
+              <span class="tok-display" id="streaming-toks">&mdash; / 0.8k &rarr;</span>
+            </span>
+          </div>
+          <div class="reasoning-body" id="streaming-reasoning-body">
+            [reasoning tokens streaming&hellip; thinking through the scene&hellip;]
+          </div>
+          <div class="bubble-content placeholder" id="streaming-content">
+            [reply hasn't started yet &mdash; model still reasoning]
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Next-turn suggestions — shown after a completed AI reply, collapses when not needed -->
+    <div class="suggestions" id="suggestions-panel">
+      <div class="suggestions-inner">
+        <div class="suggestions-header">
+          <span class="suggestions-title">
+            <span class="collapse-icon" id="suggestions-collapse" title="Collapse">&#9662;</span>
+            Suggestions
+          </span>
+          <div class="suggestions-actions">
+            <span class="suggestions-regen" id="suggestions-regen" title="Regenerate suggestions">&#8634; regenerate</span>
+          </div>
+        </div>
+        <div class="suggestions-list" id="suggestions-list">
+          <!-- Content swaps per story mode via review control: adventure = Action/Dialogue/Examine/Move; creative = Action/Dialogue/Revelation/Twist -->
+        </div>
+        <div class="suggestions-error">
+          &#9888; Couldn't generate suggestions. <span style="text-decoration: underline; cursor: pointer;">Retry</span> or dismiss.
+        </div>
+      </div>
+    </div>
+
+    <div class="composer" id="composer">
+      <div class="composer-inner">
+        <div class="composer-input">Write what your character does next&hellip;<span class="caret"></span></div>
+        <div class="composer-actions">
+          <div class="composer-left">
+            <div class="mode-picker" id="mode-picker" title="Wraps user text on send">
+              <span class="kind">mode</span><span id="mode-label">Do</span> &#9662;
+              <div class="mode-menu" id="mode-menu">
+                <div class="mode-menu-item active" data-mode-value="Do"><span>Do</span><span class="hint">action wrapper</span></div>
+                <div class="mode-menu-item" data-mode-value="Say"><span>Say</span><span class="hint">dialogue wrapper</span></div>
+                <div class="mode-menu-item" data-mode-value="Think"><span>Think</span><span class="hint">internal monologue</span></div>
+                <div class="mode-menu-item" data-mode-value="Free"><span>Free</span><span class="hint">no wrapping</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="composer-right">
+            <div class="regen-btn">&#8634; regen last</div>
+            <div class="send-btn" id="send-btn">Send &rarr;</div>
+            <div class="cancel-btn hidden" id="cancel-btn">&times; Cancel</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="right">
+    <div class="rail-scope-chip" id="scope-chip">
+      <span>Filtered through Aria's awareness</span>
+      <span class="clear" id="scope-clear" title="Clear filter">&times;</span>
+    </div>
+
+    <div class="rail-section">
+      <div class="section-head">
+        <span>Browse</span>
+        <span class="count">12 of 17 characters</span>
+      </div>
+
+      <div class="browse-controls">
+        <div class="browse-select" id="browse-select">
+          <span>Characters</span>
+          <span style="color: var(--ink-faint);">&#9662;</span>
+          <div class="browse-menu" id="browse-menu">
+            <div class="browse-menu-header">World</div>
+            <div class="browse-menu-item active">Characters</div>
+            <div class="browse-menu-item">Places</div>
+            <div class="browse-menu-item">Items</div>
+            <div class="browse-menu-item">Factions</div>
+            <div class="browse-menu-item">Lore</div>
+            <div class="browse-menu-header">Plot</div>
+            <div class="browse-menu-item">Threads</div>
+            <div class="browse-menu-item">Happenings</div>
+          </div>
+        </div>
+        <div class="browse-toggles" id="browse-toggles">
+          <span class="browse-toggle active" data-filter="all">All</span>
+          <span class="browse-toggle" data-filter="in-scene">In scene</span>
+          <span class="browse-toggle" data-filter="active">Active</span>
+          <span class="browse-toggle" data-filter="staged">Staged</span>
+          <span class="browse-toggle" data-filter="retired">Retired</span>
+        </div>
+        <div class="browse-search">Search in branch&hellip;</div>
+      </div>
+
+      <div class="rail-list" id="rail-list">
+        <!-- All view: grouped by status tier. Specific filter views would flatten. -->
+        <div class="list-group" data-group="active">
+          <div class="list-group-header">
+            <span class="group-collapse">&#9662;</span>
+            <span>Active</span>
+            <span class="group-count">4</span>
+          </div>
+          <div class="list-group-body">
+            <div class="entity-row" data-entity="aria">
+              <span class="entity-kind" title="character">☺</span>
+              <span class="entity-name">
+                <span class="name-text"><b>Aria</b></span>
+                <span class="lead-badge">You</span>
+              </span>
+              <span class="row-status-pill active">active</span>
+            </div>
+            <div class="entity-row in-scene" data-entity="bartender">
+              <span class="entity-kind" title="character">☺</span>
+              <span class="entity-name"><span class="name-text">Bartender</span></span>
+              <span class="row-status-pill active">active</span>
+            </div>
+            <div class="entity-row in-scene" data-entity="kael">
+              <span class="entity-kind" title="character">☺</span>
+              <span class="entity-name"><span class="name-text">Kael</span></span>
+              <span class="row-status-pill active">active</span>
+            </div>
+            <div class="entity-row" data-entity="jorin">
+              <span class="entity-kind" title="character">☺</span>
+              <span class="entity-name"><span class="name-text">Jorin</span></span>
+              <span class="row-status-pill active">active</span>
+            </div>
+          </div>
+        </div>
+        <div class="list-group collapsed" data-group="staged">
+          <div class="list-group-header">
+            <span class="group-collapse">&#9662;</span>
+            <span>Staged</span>
+            <span class="group-count">2</span>
+          </div>
+          <div class="list-group-body">
+            <div class="entity-row" data-entity="council-speaker">
+              <span class="entity-kind" title="character">☺</span>
+              <span class="entity-name"><span class="name-text">Council Speaker</span></span>
+              <span class="row-status-pill staged">staged</span>
+            </div>
+            <div class="entity-row" data-entity="warden">
+              <span class="entity-kind" title="character">☺</span>
+              <span class="entity-name"><span class="name-text">Warden Vex</span></span>
+              <span class="row-status-pill staged">staged</span>
+            </div>
+          </div>
+        </div>
+        <div class="list-group collapsed" data-group="retired">
+          <div class="list-group-header">
+            <span class="group-collapse">&#9662;</span>
+            <span>Retired</span>
+            <span class="group-count">1</span>
+          </div>
+          <div class="list-group-body">
+            <div class="entity-row" data-entity="mira">
+              <span class="entity-kind" title="character">☺</span>
+              <span class="entity-name"><span class="name-text">Mira</span></span>
+              <span class="row-status-pill retired">retired</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top: 8px; font-size: 10px; color: var(--ink-faint); text-align: center;">&hellip; 6 more &hellip;</div>
+      </div>
+
+      <div class="rail-footer">
+        <span class="vault-import">+ Import from Vault <i>soon</i></span>
+      </div>
+    </div>
+  </aside>
+
+  <div class="peek-overlay" id="peek-overlay">
+    <div class="peek-head">
+      <div>
+        <div class="crumb">Character &middot; active &middot; in scene</div>
+        <div class="name" id="peek-name">Kael</div>
+      </div>
+      <span class="peek-close" id="peek-close" title="Close (Esc)">&times;</span>
+    </div>
+    <div class="peek-body">
+      <div class="peek-field">
+        <div class="label">Description <span class="edit-pencil">&#9998; edit</span></div>
+        <div class="value placeholder">[free-form description &mdash; exact field layout depends on entities.state shape being finalized; see data-model TBD]</div>
+      </div>
+      <div class="peek-field">
+        <div class="label">Kind / status <span class="edit-pencil">&#9998;</span></div>
+        <div class="value">character &middot; active</div>
+      </div>
+      <div class="peek-field">
+        <div class="label">State &mdash; kind-specific fields</div>
+        <div class="value placeholder" style="padding: 8px; border: 1px dashed var(--line-soft); border-radius: 3px; font-size: 12px;">
+          [state JSON shape is TBD per kind. Layout here will depend on the<br>
+          CharacterState / LocationState / ItemState / FactionState discriminated union.]
+        </div>
+      </div>
+      <div class="peek-field">
+        <div class="label">Tags</div>
+        <div class="peek-tags">
+          <span class="peek-tag">bounty-hunter</span>
+          <span class="peek-tag">ally</span>
+          <span class="peek-tag">chapter-2-introduced</span>
+        </div>
+      </div>
+      <div class="peek-field">
+        <div class="label">Recent involvement</div>
+        <div class="value placeholder" style="font-size: 11px;">
+          &rarr; Kael's warning (happening, ch.3)<br>
+          &rarr; The Warden's Mark (thread, active)
+        </div>
+      </div>
+    </div>
+    <div class="peek-foot">
+      <span class="note">Quick edits here; deep work in Panel</span>
+      <span class="link">Open in World panel &rarr;</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="notes">
+  <p style="margin: 0; text-align: center;">
+    Rationale &amp; decisions live in <code>docs/ui/reader-composer.md</code> and <code>docs/ui/principles.md</code>.
+    This file is a visual artifact of the settled shape.
+  </p>
+</div>
+
+<script>
+(function() {
+  // gen state → status pill + streaming entry + composer send/cancel
+  const genStatus = document.getElementById('gen-pill');
+  const genLabel = document.getElementById('gen-label');
+  const streamingEntry = document.getElementById('streaming-entry');
+  const composer = document.getElementById('composer');
+  const sendBtn = document.getElementById('send-btn');
+  const cancelBtn = document.getElementById('cancel-btn');
+
+  const genPhaseLabels = {
+    idle: null,
+    reasoning: 'reasoning…',
+    generating: 'generating narrative…',
+    classifying: 'classifying…',
+    'chapter-close': 'closing chapter…',
+  };
+
+  const streamingBrain = document.getElementById('streaming-brain');
+  const streamingToks = document.getElementById('streaming-toks');
+  const streamingReasoning = document.getElementById('streaming-reasoning-body');
+  const streamingContent = document.getElementById('streaming-content');
+
+  function setGenState(state) {
+    const label = genPhaseLabels[state];
+    if (label) {
+      genStatus.classList.add('visible');
+      genLabel.textContent = label;
+      streamingEntry.classList.add('visible');
+      composer.classList.add('generating');
+      sendBtn.classList.add('hidden');
+      cancelBtn.classList.remove('hidden');
+
+      // streaming-entry internals per phase — reasoning body stays collapsed by default
+      const streamingBubble = document.getElementById('streaming-bubble');
+      streamingBubble.classList.remove('reasoning-open');
+      if (state === 'reasoning') {
+        streamingBrain.classList.add('pulsing');
+        streamingToks.textContent = '— / 0.8k →';
+        streamingContent.textContent = '[reply hasn’t started yet — model still reasoning]';
+      } else if (state === 'generating') {
+        streamingBrain.classList.remove('pulsing');
+        streamingToks.textContent = '0.4k / 3.2k →';
+        streamingContent.textContent = '[partial text appearing token by token…]';
+      } else {
+        // classifying / chapter-close — keep streaming entry hidden
+        streamingEntry.classList.remove('visible');
+      }
+    } else {
+      genStatus.classList.remove('visible');
+      streamingEntry.classList.remove('visible');
+      composer.classList.remove('generating');
+      sendBtn.classList.remove('hidden');
+      cancelBtn.classList.add('hidden');
+    }
+    document.querySelectorAll('[data-gen]').forEach(b => {
+      b.classList.toggle('active', b.dataset.gen === state);
+    });
+  }
+
+  document.querySelectorAll('[data-gen]').forEach(b => {
+    b.addEventListener('click', () => setGenState(b.dataset.gen));
+  });
+  sendBtn.addEventListener('click', () => setGenState('generating'));
+  cancelBtn.addEventListener('click', () => setGenState('idle'));
+
+  // peek drawer
+  const peek = document.getElementById('peek-overlay');
+  const peekName = document.getElementById('peek-name');
+  const peekClose = document.getElementById('peek-close');
+  const railList = document.getElementById('rail-list');
+
+  function setPeek(state, entityName) {
+    if (state === 'open') {
+      peek.classList.add('open');
+      if (entityName) peekName.textContent = entityName;
+      document.querySelectorAll('.entity-row').forEach(r => {
+        r.classList.toggle('selected', r.dataset.entity === (entityName || 'kael').toLowerCase());
+      });
+    } else {
+      peek.classList.remove('open');
+      document.querySelectorAll('.entity-row').forEach(r => r.classList.remove('selected'));
+    }
+    document.querySelectorAll('[data-peek]').forEach(b => {
+      b.classList.toggle('active', b.dataset.peek === state);
+    });
+  }
+
+  document.querySelectorAll('[data-peek]').forEach(b => {
+    b.addEventListener('click', () => setPeek(b.dataset.peek, 'Kael'));
+  });
+  peekClose.addEventListener('click', () => setPeek('closed'));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') setPeek('closed'); });
+
+  railList.querySelectorAll('.entity-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const name = row.querySelector('.entity-name').textContent.trim();
+      setPeek('open', name);
+    });
+  });
+
+  // scope filter chip
+  const scopeChip = document.getElementById('scope-chip');
+  const scopeClear = document.getElementById('scope-clear');
+  function setScope(state) {
+    scopeChip.classList.toggle('visible', state === 'aria');
+    document.querySelectorAll('[data-scope]').forEach(b => {
+      b.classList.toggle('active', b.dataset.scope === state);
+    });
+  }
+  document.querySelectorAll('[data-scope]').forEach(b => {
+    b.addEventListener('click', () => setScope(b.dataset.scope));
+  });
+  scopeClear.addEventListener('click', () => setScope('none'));
+
+  // error entry
+  const errorEntry = document.getElementById('error-entry');
+  const errDismiss = document.getElementById('err-dismiss');
+  function setErr(state) {
+    errorEntry.classList.toggle('visible', state === 'visible');
+    document.querySelectorAll('[data-err]').forEach(b => {
+      b.classList.toggle('active', b.dataset.err === state);
+    });
+  }
+  document.querySelectorAll('[data-err]').forEach(b => {
+    b.addEventListener('click', () => setErr(b.dataset.err));
+  });
+  errDismiss.addEventListener('click', () => setErr('hidden'));
+
+  // progress state (safe / warn / danger) — applies to both top strip and popover bar
+  const topbarProgress = document.querySelector('.topbar-progress');
+  const topbarFill = topbarProgress.querySelector('.fill');
+  const popoverBar = document.querySelector('.chapter-popover-progress .bar');
+  const popoverFill = popoverBar.querySelector('.fill');
+
+  function setProgress(pct) {
+    const p = parseInt(pct, 10);
+    const width = p + '%';
+    topbarFill.style.width = width;
+    popoverFill.style.width = width;
+    const cls = p >= 90 ? 'danger' : p >= 80 ? 'warn' : '';
+    topbarProgress.classList.remove('warn', 'danger');
+    popoverBar.classList.remove('warn', 'danger');
+    if (cls) {
+      topbarProgress.classList.add(cls);
+      popoverBar.classList.add(cls);
+    }
+    // update label tokens (24k = 24000)
+    const tokens = Math.round(240 * p);
+    topbarProgress.setAttribute('data-label', `Chapter 3 · ${tokens.toLocaleString()} / 24,000 tok`);
+    document.querySelector('.chapter-popover-progress .label span:last-child').textContent = `${tokens.toLocaleString()} / 24,000 tok`;
+    document.querySelectorAll('[data-progress]').forEach(b => b.classList.toggle('active', b.dataset.progress === String(p)));
+  }
+  document.querySelectorAll('[data-progress]').forEach(b => b.addEventListener('click', () => setProgress(b.dataset.progress)));
+
+  // browse filter chips (visual only)
+  document.querySelectorAll('#browse-toggles .browse-toggle').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('#browse-toggles .browse-toggle').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+    });
+  });
+
+  // accordion groups toggle
+  document.querySelectorAll('.list-group-header').forEach(h => {
+    h.addEventListener('click', () => h.parentElement.classList.toggle('collapsed'));
+  });
+
+  // next-turn suggestions — content swaps per story mode
+  const suggestionsPanel = document.getElementById('suggestions-panel');
+  const suggestionsCollapse = document.getElementById('suggestions-collapse');
+  const suggestionsRegen = document.getElementById('suggestions-regen');
+  const suggestionsList = document.getElementById('suggestions-list');
+  const leadBadges = document.querySelectorAll('.lead-badge');
+  const scopeChipEl = document.querySelector('.rail-scope-chip span');
+
+  const suggestionSets = {
+    adventure: [
+      { kind: 'action', label: 'Action', text: 'Aria reaches for her blade, testing its balance against the weight of the moment.' },
+      { kind: 'dialogue', label: 'Dialogue', text: '"You were there, weren\'t you? At the Warden\'s fall."' },
+      { kind: 'examine', label: 'Examine', text: 'Aria studies Kael\'s face for tells of deceit, noting the scar along his jaw.' },
+      { kind: 'move', label: 'Move', text: 'Aria steps toward the back door, keeping Kael in her peripheral vision.' },
+    ],
+    creative: [
+      { kind: 'action', label: 'Action', text: 'Aria draws her blade in a single smooth motion, the steel catching the tavern light.' },
+      { kind: 'dialogue', label: 'Dialogue', text: '"I knew you\'d come for me," Kael says, with a weariness that surprises her.' },
+      { kind: 'revelation', label: 'Revelation', text: 'A memory surfaces: Aria recognizes the faint sigil burned into Kael\'s palm — Warden\'s Mark.' },
+      { kind: 'twist', label: 'Twist', text: 'The tavern door bursts open. Boots on wood. The Warden\'s men, here already.' },
+    ],
+  };
+
+  function renderSuggestions(mode) {
+    const set = suggestionSets[mode];
+    suggestionsList.innerHTML = set.map(s =>
+      `<div class="suggestion" data-kind="${s.kind}">` +
+        `<span class="suggestion-kind ${s.kind}">${s.label}</span>` +
+        `<span class="suggestion-text">${s.text}</span>` +
+      `</div>`
+    ).join('');
+    // re-bind click handlers for the newly rendered rows
+    suggestionsList.querySelectorAll('.suggestion').forEach(s => {
+      s.addEventListener('click', () => {
+        const text = s.querySelector('.suggestion-text').textContent.trim();
+        // Fill composer with suggestion text; set mode to Free (suggestion is complete prose, no further wrapping needed).
+        document.querySelector('.composer-input').textContent = text;
+        document.getElementById('mode-label').textContent = 'Free';
+        document.querySelectorAll('.mode-menu-item').forEach(m => m.classList.toggle('active', m.dataset.modeValue === 'Free'));
+      });
+    });
+  }
+  renderSuggestions('adventure');
+
+  // story mode review control — drives lead-badge label + suggestion set + composer mode picker visibility
+  document.querySelectorAll('[data-mode]').forEach(b => {
+    b.addEventListener('click', () => {
+      const mode = b.dataset.mode;
+      leadBadges.forEach(lb => { lb.textContent = mode === 'adventure' ? 'You' : 'Protagonist'; });
+      if (scopeChipEl && scopeChipEl.textContent.startsWith('Filtered')) {
+        scopeChipEl.textContent = mode === 'adventure'
+          ? 'Filtered through Aria\'s awareness'
+          : 'Filtered through Aria\'s perspective';
+      }
+      renderSuggestions(mode);
+      // composer mode picker is adventure-only — hidden in creative (user writes prose directly, no wrapping)
+      document.querySelector('.mode-picker').classList.toggle('hidden', mode !== 'adventure');
+      document.querySelectorAll('[data-mode]').forEach(x => x.classList.toggle('active', x === b));
+    });
+  });
+
+  function setSugg(state) {
+    suggestionsPanel.classList.remove('collapsed', 'hidden', 'error');
+    suggestionsList.querySelectorAll('.suggestion').forEach(s => s.classList.remove('loading-state'));
+    suggestionsRegen.classList.remove('loading');
+    if (state === 'collapsed') suggestionsPanel.classList.add('collapsed');
+    if (state === 'hidden') suggestionsPanel.classList.add('hidden');
+    if (state === 'error') suggestionsPanel.classList.add('error');
+    if (state === 'loading') {
+      suggestionsList.querySelectorAll('.suggestion').forEach(s => s.classList.add('loading-state'));
+      suggestionsRegen.classList.add('loading');
+    }
+    document.querySelectorAll('[data-sugg]').forEach(b => b.classList.toggle('active', b.dataset.sugg === state));
+  }
+  document.querySelectorAll('[data-sugg]').forEach(b => b.addEventListener('click', () => setSugg(b.dataset.sugg)));
+  suggestionsCollapse.addEventListener('click', () => {
+    suggestionsPanel.classList.toggle('collapsed');
+  });
+  suggestionsRegen.addEventListener('click', () => setSugg('loading'));
+
+  // in-world time label (format-agnostic)
+  const crumbTime = document.getElementById('crumb-time');
+  const timeLabel = document.getElementById('time-label');
+  document.querySelectorAll('[data-time]').forEach(b => {
+    b.addEventListener('click', () => {
+      const label = b.dataset.time;
+      timeLabel.textContent = label;
+      crumbTime.setAttribute('title', label);
+      document.querySelectorAll('[data-time]').forEach(x => x.classList.toggle('active', x === b));
+    });
+  });
+
+  // browse category dropdown
+  const browseSelect = document.getElementById('browse-select');
+  const browseMenu = document.getElementById('browse-menu');
+  browseSelect.addEventListener('click', e => {
+    e.stopPropagation();
+    browseMenu.classList.toggle('open');
+  });
+  document.addEventListener('click', () => browseMenu.classList.remove('open'));
+  browseMenu.addEventListener('click', e => e.stopPropagation());
+  document.querySelectorAll('.browse-menu-item').forEach(i => {
+    i.addEventListener('click', () => {
+      document.querySelectorAll('.browse-menu-item').forEach(x => x.classList.remove('active'));
+      i.classList.add('active');
+      browseSelect.querySelector('span').textContent = i.textContent;
+      browseMenu.classList.remove('open');
+    });
+  });
+
+  // composer mode picker dropdown
+  const modePicker = document.getElementById('mode-picker');
+  const modeMenu = document.getElementById('mode-menu');
+  const modeLabel = document.getElementById('mode-label');
+  modePicker.addEventListener('click', e => {
+    e.stopPropagation();
+    modeMenu.classList.toggle('open');
+  });
+  document.addEventListener('click', () => modeMenu.classList.remove('open'));
+  modeMenu.addEventListener('click', e => e.stopPropagation());
+  document.querySelectorAll('.mode-menu-item').forEach(m => {
+    m.addEventListener('click', () => {
+      document.querySelectorAll('.mode-menu-item').forEach(x => x.classList.remove('active'));
+      m.classList.add('active');
+      modeLabel.textContent = m.dataset.modeValue;
+      modeMenu.classList.remove('open');
+    });
+  });
+
+  // chapter popover toggle
+  const chapterCrumb = document.getElementById('chapter-crumb');
+  const chapterPopover = document.getElementById('chapter-popover');
+  chapterCrumb.addEventListener('click', e => {
+    e.stopPropagation();
+    chapterPopover.classList.toggle('open');
+    chapterCrumb.classList.toggle('open');
+  });
+  document.addEventListener('click', () => {
+    chapterPopover.classList.remove('open');
+    chapterCrumb.classList.remove('open');
+  });
+  chapterPopover.addEventListener('click', e => e.stopPropagation());
+
+  // reasoning expansion toggle — brain icon in meta line
+  document.querySelectorAll('[data-reasoning-toggle]').forEach(t => {
+    t.addEventListener('click', e => {
+      e.stopPropagation();
+      const bubble = t.closest('.bubble');
+      bubble.classList.toggle('reasoning-open');
+      t.setAttribute('title', bubble.classList.contains('reasoning-open') ? 'Hide reasoning trace' : 'Show reasoning trace');
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

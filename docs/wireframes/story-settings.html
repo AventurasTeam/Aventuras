@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Story Settings (desktop)</title>
+<style>
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-highlight: #eef;
+    --warn: #c94;
+    --ok: #4a8;
+  }
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+  .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .screen-label strong { color: var(--ink); }
+
+  /* review bar */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; }
+  .review-bar .rb-group > .gl { font-size: 10px; color: #967; margin-right: 4px; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+
+  /* top bar — story context, settings-specific (no chapter/time/progress) */
+  header.topbar { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
+  .logo { width: 28px; height: 28px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--ink-muted); }
+  .crumbs { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .crumb-primary { font-size: 15px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+  .crumb-sep { font-size: 11px; color: var(--ink-faint); }
+  .crumb-here { font-size: 13px; color: var(--ink-muted); }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .icon-btn { width: 30px; height: 30px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 14px; cursor: pointer; }
+
+  /* settings layout: left rail + main pane */
+  .settings-layout { flex: 1; display: grid; grid-template-columns: 240px 1fr; min-height: 0; }
+
+  /* LEFT RAIL */
+  aside.nav { background: var(--bg-region); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: auto; }
+  .nav-section { padding: 10px 0; }
+  .nav-section:first-child { padding-top: 16px; }
+  .nav-section-label { padding: 6px 16px 4px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-faint); font-weight: 600; }
+  .nav-item { padding: 7px 16px; font-size: 13px; color: var(--ink); cursor: pointer; border-left: 3px solid transparent; display: flex; align-items: center; gap: 8px; }
+  .nav-item:hover { background: var(--bg); }
+  .nav-item.active { background: var(--bg-highlight); border-left-color: var(--ink); font-weight: 500; }
+  .nav-item .nav-hint { font-size: 10px; color: var(--ink-faint); }
+  .nav-divider { height: 1px; background: var(--line-soft); margin: 6px 16px; }
+
+  /* MAIN PANE */
+  main.pane { display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+  .pane-header { padding: 18px 28px 10px; background: var(--bg-region); border-bottom: 1px solid var(--line-soft); }
+  .pane-title { font-size: 20px; font-weight: 600; color: var(--ink); }
+  .pane-sub { font-size: 12px; color: var(--ink-muted); margin-top: 4px; }
+  .pane-body { flex: 1; overflow: auto; padding: 20px 28px 40px; max-width: 800px; }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* form fields */
+  .field-row { display: grid; grid-template-columns: 200px 1fr; gap: 16px; align-items: start; margin-bottom: 16px; }
+  .field-label { font-size: 12px; color: var(--ink-muted); padding-top: 7px; font-family: ui-monospace, monospace; }
+  .field-label .hint { display: block; font-size: 10px; color: var(--ink-faint); margin-top: 2px; }
+  .input-text { width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 13px; color: var(--ink); font-family: inherit; }
+  .input-textarea { width: 100%; box-sizing: border-box; min-height: 80px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 13px; color: var(--ink); line-height: 1.55; font-family: inherit; resize: vertical; }
+  .input-select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 13px; color: var(--ink); display: flex; justify-content: space-between; align-items: center; cursor: pointer; max-width: 380px; }
+  .input-select.default-sentinel { color: var(--ink-muted); font-style: italic; background: var(--bg); border-style: dashed; }
+  .input-select.default-sentinel .default-tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); font-style: normal; margin-right: 6px; }
+  .placeholder-text { color: var(--ink-faint); font-style: italic; font-size: 12px; }
+
+  .chip-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .chip-small { font-size: 11px; padding: 3px 9px; border: 1px solid var(--line-soft); border-radius: 999px; color: var(--ink-muted); display: inline-flex; gap: 4px; align-items: center; }
+  .chip-small .x { color: var(--ink-faint); cursor: pointer; }
+  .add-chip { font-size: 11px; color: var(--ink-muted); cursor: pointer; padding: 3px 9px; border: 1px dashed var(--line); border-radius: 999px; }
+
+  .radio-row { display: flex; gap: 16px; padding-top: 6px; }
+  .radio-opt { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+  .radio-dot { width: 12px; height: 12px; border: 1px solid var(--line); border-radius: 50%; display: inline-block; position: relative; }
+  .radio-opt.active .radio-dot { border-color: var(--ink); }
+  .radio-opt.active .radio-dot::after { content: ""; position: absolute; top: 2px; left: 2px; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
+
+  .toggle-row { display: inline-flex; align-items: center; gap: 8px; padding-top: 4px; }
+  .toggle { width: 34px; height: 18px; background: var(--line-soft); border-radius: 9px; position: relative; cursor: pointer; }
+  .toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: #fff; border-radius: 50%; transition: left 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+  .toggle.on { background: var(--ok); }
+  .toggle.on::after { left: 18px; }
+
+  .portrait-slot, .cover-slot { height: 110px; max-width: 380px; border: 1px dashed var(--line); border-radius: 3px; background: var(--bg-region); display: flex; align-items: center; justify-content: center; color: var(--ink-faint); font-size: 12px; font-style: italic; }
+
+  .color-swatch-row { display: flex; gap: 6px; align-items: center; }
+  .color-swatch { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--line-soft); cursor: pointer; }
+  .color-swatch.active { box-shadow: 0 0 0 2px var(--ink); }
+
+  /* warn panels */
+  .warn-box { padding: 10px 12px; background: #fbf3dc; border: 1px solid #e8d890; border-left: 3px solid #c89a20; border-radius: 3px; font-size: 12px; color: #765; line-height: 1.55; margin-bottom: 14px; }
+  .warn-box b { color: #5a4820; }
+
+  /* save bar */
+  .save-bar { display: none; padding: 10px 28px; border-top: 1px solid var(--line); background: #fff7dc; justify-content: space-between; align-items: center; gap: 12px; }
+  .save-bar.dirty { display: flex; }
+  .save-bar .dirty-note { font-size: 12px; color: #765; display: flex; align-items: center; gap: 8px; }
+  .save-bar .dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: #c94; }
+  .save-bar .actions { display: flex; gap: 8px; align-items: center; }
+  .save-bar .discard-btn { padding: 6px 14px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 12px; color: var(--ink); cursor: pointer; }
+  .save-bar .save-btn { padding: 6px 18px; border: 1px solid var(--ink); border-radius: 3px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .save-bar .save-btn .kbd { font-size: 10px; opacity: 0.7; font-family: ui-monospace, monospace; }
+
+  /* section headings within tab */
+  .tab-section { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+  .tab-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); margin-bottom: 10px; font-weight: 600; }
+
+  /* notes */
+  .notes { padding: 14px 20px; background: #fffbe6; border-top: 1px solid var(--line-soft); font-size: 11px; color: #594; line-height: 1.6; }
+  .notes code { background: #fff; padding: 2px 6px; border: 1px solid var(--line-soft); border-radius: 2px; font-size: 10px; }
+</style>
+</head>
+<body>
+
+<div class="screen-label"><strong>Wireframe:</strong> Story Settings &mdash; desktop (&ge; 1024px) &mdash; low-fi, interactive</div>
+
+<div class="review-bar">
+  <span class="rb-label">Review controls</span>
+  <div class="rb-group">
+    <span class="gl">tab:</span>
+    <button class="rb-btn active" data-tab="about">About</button>
+    <button class="rb-btn" data-tab="generation">Generation</button>
+    <button class="rb-btn" data-tab="models">Models</button>
+    <button class="rb-btn" data-tab="memory">Memory</button>
+    <button class="rb-btn" data-tab="translation">Translation</button>
+    <button class="rb-btn" data-tab="pack">Pack</button>
+    <button class="rb-btn" data-tab="advanced">Advanced</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">form:</span>
+    <button class="rb-btn active" data-dirty="clean">clean</button>
+    <button class="rb-btn" data-dirty="dirty">dirty</button>
+  </div>
+  <span class="rb-note">click a left-rail item or a tab chip</span>
+</div>
+
+<header class="topbar">
+  <div class="logo">A</div>
+  <div class="crumbs">
+    <span class="crumb-primary">Aria's Descent</span>
+    <span class="crumb-sep">/</span>
+    <span class="crumb-here">Story Settings</span>
+  </div>
+  <div class="topbar-right">
+    <div class="icon-btn" title="Actions (Cmd/Ctrl-K)">&#9906;</div>
+    <div class="icon-btn" title="Back to reader">&larr;</div>
+  </div>
+</header>
+
+<div class="settings-layout">
+
+  <aside class="nav" id="nav">
+    <div class="nav-section">
+      <div class="nav-section-label">Story</div>
+      <div class="nav-item active" data-nav="about">About</div>
+      <div class="nav-item" data-nav="generation">Generation</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-label">Settings</div>
+      <div class="nav-item" data-nav="models">Models <span class="nav-hint">overrides</span></div>
+      <div class="nav-item" data-nav="memory">Memory</div>
+      <div class="nav-item" data-nav="translation">Translation</div>
+      <div class="nav-item" data-nav="pack">Pack</div>
+      <div class="nav-item" data-nav="advanced">Advanced</div>
+    </div>
+  </aside>
+
+  <main class="pane">
+    <div class="pane-header">
+      <div class="pane-title" id="pane-title">About</div>
+      <div class="pane-sub" id="pane-sub">What the story is — identity and metadata.</div>
+    </div>
+
+    <div class="pane-body" id="pane-body">
+
+      <!-- ABOUT -->
+      <div class="tab-panel active" data-panel="about">
+        <div class="field-row">
+          <div class="field-label">title
+            <span class="hint">stories.title</span>
+          </div>
+          <input class="input-text" value="Aria's Descent">
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">description
+            <span class="hint">stories.description</span>
+          </div>
+          <textarea class="input-textarea">A former royal guard hunts the Warden through the undercities of Ironshore, guided by a secret her lineage refused to speak.</textarea>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">genre
+            <span class="hint">single free-text string</span>
+          </div>
+          <input class="input-text" style="max-width: 380px;" value="Dark Fantasy">
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">tags
+            <span class="hint">search/filter only; not shown on cards</span>
+          </div>
+          <div class="chip-row">
+            <span class="chip-small">intrigue <span class="x">&times;</span></span>
+            <span class="chip-small">revenge <span class="x">&times;</span></span>
+            <span class="chip-small">political <span class="x">&times;</span></span>
+            <span class="add-chip">+ add</span>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">author notes
+            <span class="hint">private; not sent to the LLM</span>
+          </div>
+          <textarea class="input-textarea" placeholder="Private notes only you see." style="min-height: 60px;"></textarea>
+        </div>
+
+        <div class="tab-section">
+          <div class="tab-section-title">Appearance</div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">cover</div>
+          <div class="cover-slot">[drop image, or pick from assets]</div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">accent color
+            <span class="hint">fallback: mode-derived</span>
+          </div>
+          <div class="color-swatch-row">
+            <div class="color-swatch" title="Use mode default" style="background: repeating-linear-gradient(45deg, var(--line-soft), var(--line-soft) 4px, var(--bg-region) 4px, var(--bg-region) 8px);"></div>
+            <div class="color-swatch active" title="Blue (mode: adventure)" style="background: #3d5a7a;"></div>
+            <div class="color-swatch" style="background: #5c4478;"></div>
+            <div class="color-swatch" style="background: #3d6e46;"></div>
+            <div class="color-swatch" style="background: #8a5528;"></div>
+            <div class="color-swatch" style="background: #7a3030;"></div>
+            <div class="color-swatch" style="background: #444;"></div>
+            <div class="add-chip" style="padding: 2px 7px;">+ custom</div>
+          </div>
+        </div>
+
+        <div class="tab-section">
+          <div class="tab-section-title">Library</div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">status</div>
+          <div class="radio-row">
+            <div class="radio-opt active"><span class="radio-dot"></span>Active</div>
+            <div class="radio-opt"><span class="radio-dot"></span>Pinned</div>
+            <div class="radio-opt"><span class="radio-dot"></span>Archived</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- GENERATION -->
+      <div class="tab-panel" data-panel="generation">
+        <div class="warn-box">
+          <b>&#9888; These fields affect how the AI generates.</b> Some (mode, lead, POV) become effectively immutable once narrative exists &mdash; changing them mid-story can break coherence. A confirmation prompt appears on edit if the story has entries.
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">mode
+            <span class="hint">adventure = you play a character<br>creative = you direct the story</span>
+          </div>
+          <div class="radio-row">
+            <div class="radio-opt active"><span class="radio-dot"></span>Adventure</div>
+            <div class="radio-opt"><span class="radio-dot"></span>Creative</div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">lead character
+            <span class="hint">required in adventure<br>optional in creative</span>
+          </div>
+          <div class="input-select">
+            <span>&#9786; Aria <span style="font-size: 10px; color: var(--ink-muted); margin-left: 6px;">(character)</span></span>
+            <span style="color: var(--ink-faint);">&#9662;</span>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">narration
+            <span class="hint">person the AI writes in; shapes composer mode wrapping</span>
+          </div>
+          <div class="radio-row">
+            <div class="radio-opt active"><span class="radio-dot"></span>First-person <span style="font-size: 10px; color: var(--ink-faint); margin-left: 4px;">"I reach&hellip;"</span></div>
+            <div class="radio-opt"><span class="radio-dot"></span>Second-person <span style="font-size: 10px; color: var(--ink-faint); margin-left: 4px;">"You reach&hellip;"</span></div>
+            <div class="radio-opt"><span class="radio-dot"></span>Third-person <span style="font-size: 10px; color: var(--ink-faint); margin-left: 4px;">"Aria reaches&hellip;"</span></div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">tone / style
+            <span class="hint">free-form direction to the narrative model</span>
+          </div>
+          <textarea class="input-textarea" placeholder="e.g. Sparse, weighty prose. Prefer present tense. Characters speak in short fragments when tense.">Sparse, weighty prose. Present tense. Dialogue sparse and clipped.</textarea>
+        </div>
+
+        <div class="tab-section">
+          <div class="tab-section-title">Authoring aids</div>
+          <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 10px;">
+            Per-story opt-in for composer affordances. Always hidden in creative mode regardless.
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">composer modes
+            <span class="hint">Do / Say / Think / Free picker in the composer</span>
+          </div>
+          <div class="toggle-row"><span class="toggle on"></span><span style="font-size: 12px; color: var(--ink-muted);">on</span></div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">wrap POV
+            <span class="hint">person the modes wrap in; independent of narration<br>disabled when modes are off</span>
+          </div>
+          <div class="radio-row">
+            <div class="radio-opt active"><span class="radio-dot"></span>First-person <span style="font-size: 10px; color: var(--ink-faint); margin-left: 4px;">"I reach..."</span></div>
+            <div class="radio-opt"><span class="radio-dot"></span>Third-person <span style="font-size: 10px; color: var(--ink-faint); margin-left: 4px;">"Aria reaches..."</span></div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">suggestions
+            <span class="hint">next-turn suggestion panel below the entries</span>
+          </div>
+          <div class="toggle-row"><span class="toggle on"></span><span style="font-size: 12px; color: var(--ink-muted);">on</span></div>
+        </div>
+      </div>
+
+      <!-- MODELS (override-only) -->
+      <div class="tab-panel" data-panel="models">
+        <div class="warn-box" style="background: #eef5fb; border-color: #b8d0e4; border-left-color: #3d5a7a; color: #3d5a7a;">
+          <b>Overrides only.</b> Fields left at <code>App default</code> use your global App Settings selections. Setting an override here pins the model for this story regardless of global changes.
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">narrative
+            <span class="hint">the main story AI</span>
+          </div>
+          <div class="input-select">
+            <span>claude-sonnet-4 <span style="font-size: 10px; color: var(--ink-muted); margin-left: 6px;">(override)</span></span>
+            <span style="color: var(--ink-faint);">&#9662;</span>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">classifier
+            <span class="hint">scene extraction after each reply</span>
+          </div>
+          <div class="input-select default-sentinel">
+            <span><span class="default-tag">App default:</span>claude-haiku-4.5</span>
+            <span style="color: var(--ink-faint);">&#9662;</span>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">translation
+            <span class="hint">user-facing string translation</span>
+          </div>
+          <div class="input-select default-sentinel">
+            <span><span class="default-tag">App default:</span>gpt-4o-mini</span>
+            <span style="color: var(--ink-faint);">&#9662;</span>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">image generation
+            <span class="hint">portraits, scene illustrations</span>
+          </div>
+          <div class="input-select default-sentinel">
+            <span><span class="default-tag">App default:</span>flux-pro</span>
+            <span style="color: var(--ink-faint);">&#9662;</span>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">suggestions
+            <span class="hint">next-turn suggestion pane</span>
+          </div>
+          <div class="input-select default-sentinel">
+            <span><span class="default-tag">App default:</span>claude-haiku-4.5</span>
+            <span style="color: var(--ink-faint);">&#9662;</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- MEMORY -->
+      <div class="tab-panel" data-panel="memory">
+        <div class="field-row">
+          <div class="field-label">chapter token threshold
+            <span class="hint">auto-close the open region when it exceeds this</span>
+          </div>
+          <div>
+            <div class="chip-row" style="margin-bottom: 8px;">
+              <span class="add-chip" style="padding: 4px 12px;">Short (8k)</span>
+              <span class="add-chip" style="padding: 4px 12px; background: var(--bg-highlight); border-style: solid;">Balanced (24k)</span>
+              <span class="add-chip" style="padding: 4px 12px;">Long (48k)</span>
+              <span class="add-chip" style="padding: 4px 12px;">Custom&hellip;</span>
+            </div>
+            <input class="input-text" style="max-width: 140px;" value="24000">
+            <span style="font-size: 10px; color: var(--ink-faint); margin-left: 8px;">tokens</span>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">auto-close chapters
+            <span class="hint">off &rarr; user closes chapters manually; threshold color-warning still applies</span>
+          </div>
+          <div class="toggle-row"><span class="toggle on"></span><span style="font-size: 12px; color: var(--ink-muted);">on</span></div>
+        </div>
+
+        <div class="tab-section">
+          <div class="tab-section-title">Prompt context</div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">recent buffer
+            <span class="hint">N most-recent entries always injected verbatim; older content reaches prompts via the retrieval agent</span>
+          </div>
+          <div>
+            <input class="input-text" style="max-width: 100px;" value="10">
+            <span style="font-size: 10px; color: var(--ink-faint); margin-left: 8px;">entries</span>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">compaction detail
+            <span class="hint">how aggressively the lore/memory agents summarize at chapter close (specifics TBD)</span>
+          </div>
+          <div class="radio-row">
+            <div class="radio-opt"><span class="radio-dot"></span>Light</div>
+            <div class="radio-opt active"><span class="radio-dot"></span>Balanced</div>
+            <div class="radio-opt"><span class="radio-dot"></span>Aggressive</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TRANSLATION -->
+      <div class="tab-panel" data-panel="translation">
+        <div class="warn-box" style="background: #eef5fb; border-color: #b8d0e4; border-left-color: #3d5a7a; color: #3d5a7a;">
+          <b>Translations are display-only.</b> They're rendered alongside the source in the UI; they do <i>not</i> feed back into prompts or LLM context. The source is canonical.
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">enable translation
+            <span class="hint">master toggle; target + granular toggles disable when off</span>
+          </div>
+          <div class="toggle-row"><span class="toggle on"></span><span style="font-size: 12px; color: var(--ink-muted);">on</span></div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">target language
+            <span class="hint">one at a time; add more via the Translation Wizard to convert existing content</span>
+          </div>
+          <div class="input-select" style="max-width: 280px;">
+            <span>Español</span>
+            <span style="color: var(--ink-faint);">&#9662;</span>
+          </div>
+        </div>
+
+        <div class="tab-section">
+          <div class="tab-section-title">What to translate</div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">narrative content
+            <span class="hint">the AI's reply text</span>
+          </div>
+          <div class="toggle-row"><span class="toggle on"></span></div>
+        </div>
+        <div class="field-row">
+          <div class="field-label">user action text
+            <span class="hint">so the LLM-facing log stays monolingual even when the UI shows your native tongue</span>
+          </div>
+          <div class="toggle-row"><span class="toggle on"></span></div>
+        </div>
+        <div class="field-row">
+          <div class="field-label">entity fields
+            <span class="hint">names, descriptions, kind-specific state fields</span>
+          </div>
+          <div class="toggle-row"><span class="toggle on"></span></div>
+        </div>
+        <div class="field-row">
+          <div class="field-label">lore bodies
+            <span class="hint">title + body of each lore row</span>
+          </div>
+          <div class="toggle-row"><span class="toggle on"></span></div>
+        </div>
+        <div class="field-row">
+          <div class="field-label">threads + happenings
+            <span class="hint">titles and descriptions</span>
+          </div>
+          <div class="toggle-row"><span class="toggle"></span></div>
+        </div>
+        <div class="field-row">
+          <div class="field-label">chapter summaries
+            <span class="hint">title + summary generated at chapter close</span>
+          </div>
+          <div class="toggle-row"><span class="toggle"></span></div>
+        </div>
+      </div>
+
+      <!-- PACK -->
+      <div class="tab-panel" data-panel="pack">
+        <div class="warn-box" style="background: #f4faef; border-color: #cfe0b6; border-left-color: #4a7a4a; color: #3d5a3d;">
+          Packs bundle prompt templates + macros + runtime variables. Changing the pack mid-story is supported but will rewrite the prompt shape on the next turn.
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">active pack
+            <span class="hint">per-story</span>
+          </div>
+          <div class="input-select">
+            <span>Default (ships with app)</span>
+            <span style="color: var(--ink-faint);">&#9662;</span>
+          </div>
+        </div>
+
+        <div class="tab-section">
+          <div class="tab-section-title">Pack variables</div>
+          <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 10px;">
+            Declared by the active pack. Values here drive pack-defined feature toggles. Changing packs may change this list.
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">narrativeStyle
+            <span class="hint">enum &middot; pack var</span>
+          </div>
+          <div class="input-select" style="max-width: 260px;">
+            <span>deliberate</span>
+            <span style="color: var(--ink-faint);">&#9662;</span>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field-label">toneIntensity
+            <span class="hint">number 0-10 &middot; pack var</span>
+          </div>
+          <input class="input-text" style="max-width: 100px;" value="6">
+        </div>
+        <div class="field-row">
+          <div class="field-label">dialogueWeight
+            <span class="hint">enum &middot; pack var</span>
+          </div>
+          <div class="radio-row">
+            <div class="radio-opt"><span class="radio-dot"></span>Minimal</div>
+            <div class="radio-opt active"><span class="radio-dot"></span>Balanced</div>
+            <div class="radio-opt"><span class="radio-dot"></span>Heavy</div>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field-label">allowExplicit
+            <span class="hint">bool &middot; pack var</span>
+          </div>
+          <div class="toggle-row"><span class="toggle"></span></div>
+        </div>
+
+        <div class="field-row" style="margin-top: 8px;">
+          <div class="field-label"></div>
+          <div style="font-size: 12px; color: var(--ink-muted);">
+            Pack authoring UI (CodeMirror + Liquid; also declares the variable schema rendered here) lives in the dedicated Prompt / Pack Editor screen (deferred).
+          </div>
+        </div>
+      </div>
+
+      <!-- ADVANCED -->
+      <div class="tab-panel" data-panel="advanced">
+        <div class="field-row">
+          <div class="field-label">story id</div>
+          <code style="font-size: 11px; color: var(--ink-muted);">01HN7Z3A...</code>
+        </div>
+        <div class="field-row">
+          <div class="field-label">created</div>
+          <span class="placeholder-text">2026-02-14 19:04</span>
+        </div>
+        <div class="field-row">
+          <div class="field-label">current branch</div>
+          <span class="placeholder-text">main &middot; 26 entries &middot; 3 chapters</span>
+        </div>
+        <div class="field-row">
+          <div class="field-label">total branches</div>
+          <span>3</span>
+        </div>
+        <div class="field-row">
+          <div class="field-label">diagnostics</div>
+          <div>
+            <span class="add-chip" style="padding: 4px 10px;">Export story as JSON</span>
+            <span class="add-chip" style="padding: 4px 10px;">View raw settings JSON</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="save-bar" id="save-bar">
+      <div class="dirty-note">
+        <span class="dirty-dot"></span>
+        <span><b>2 unsaved changes</b> &mdash; title, accent color</span>
+      </div>
+      <div class="actions">
+        <span class="discard-btn">Discard</span>
+        <span class="save-btn">Save <span class="kbd">&#8984;S</span></span>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<div class="notes">
+  <p style="margin: 0; text-align: center;">
+    Rationale &amp; decisions live in <code>docs/ui/story-settings.md</code> and <code>docs/ui/principles.md</code>.
+    This file is a visual artifact of the settled shape.
+  </p>
+</div>
+
+<script>
+(function() {
+  const titles = {
+    about: ['About', 'What the story is — identity and metadata.'],
+    generation: ['Generation', 'Definitional behavior: mode, lead, POV, tone.'],
+    models: ['Models', 'Override global model picks for this story.'],
+    memory: ['Memory', 'Chapter closure + compaction.'],
+    translation: ['Translation', 'Multi-language output for LLM-generated text.'],
+    pack: ['Pack', 'Prompt template bundle used for generation.'],
+    advanced: ['Advanced', 'Identifiers, diagnostics, raw exports.'],
+  };
+  function setTab(t) {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.nav === t));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === t));
+    document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+    const [title, sub] = titles[t];
+    document.getElementById('pane-title').textContent = title;
+    document.getElementById('pane-sub').textContent = sub;
+  }
+  document.querySelectorAll('.nav-item').forEach(n => n.addEventListener('click', () => setTab(n.dataset.nav)));
+  document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+
+  const saveBar = document.getElementById('save-bar');
+  function setDirty(s) {
+    saveBar.classList.toggle('dirty', s === 'dirty');
+    document.querySelectorAll('[data-dirty]').forEach(b => b.classList.toggle('active', b.dataset.dirty === s));
+  }
+  document.querySelectorAll('[data-dirty]').forEach(b => b.addEventListener('click', () => setDirty(b.dataset.dirty)));
+})();
+</script>
+
+</body>
+</html>

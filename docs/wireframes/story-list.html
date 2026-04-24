@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Story list (landing) (desktop)</title>
+<style>
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-highlight: #eef;
+    --warn: #c94;
+    --ok: #4a8;
+  }
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+  .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .screen-label strong { color: var(--ink); }
+
+  /* review bar */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; }
+  .review-bar .rb-group > .gl { font-size: 10px; color: #967; margin-right: 4px; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+
+  /* top bar — app-level (lean: no story context) */
+  header.topbar { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
+  .logo { width: 32px; height: 32px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--ink-muted); flex-shrink: 0; }
+  .app-title { font-size: 16px; font-weight: 600; color: var(--ink); }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .icon-btn { width: 32px; height: 32px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 14px; cursor: pointer; }
+
+  /* main content wrapper */
+  .main { flex: 1; padding: 24px 32px 40px; max-width: 1400px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+  .list-header { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; margin-bottom: 16px; }
+  .list-title { font-size: 22px; font-weight: 600; color: var(--ink); }
+  .list-title .count { font-size: 12px; color: var(--ink-faint); font-weight: 400; margin-left: 10px; }
+  .new-story-btn { padding: 8px 18px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: #fff; font-weight: 600; font-size: 13px; cursor: pointer; }
+
+  .toolbar { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+  .search { flex: 1; min-width: 220px; max-width: 360px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); font-size: 12px; color: var(--ink-faint); font-style: italic; }
+  .search::before { content: "⌕  "; font-style: normal; color: var(--ink-faint); }
+  .filter-chips { display: flex; gap: 6px; }
+  .filter-chip { padding: 4px 12px; border: 1px solid var(--line-soft); border-radius: 999px; font-size: 12px; color: var(--ink-muted); cursor: pointer; background: var(--bg-region); }
+  .filter-chip.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .sort-picker { padding: 5px 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 12px; color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+  .sort-picker .kind { font-size: 10px; color: var(--ink-muted); margin-right: 4px; }
+
+  /* stories grid */
+  .stories { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+
+  .story-card { background: var(--bg-region); border: 1px solid var(--line-soft); border-radius: 6px; overflow: hidden; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; position: relative; display: flex; }
+  .story-card:hover { border-color: var(--line); box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+  .story-card.archived { opacity: 0.55; }
+
+  /* thin accent strip on the left edge — mode-derived color or user-set */
+  .story-accent { width: 4px; flex-shrink: 0; background: var(--line); }
+  .story-card.adv .story-accent { background: #3d5a7a; }
+  .story-card.cre .story-accent { background: #5c4478; }
+
+  .story-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+  .story-overline { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .story-card.adv .story-overline { color: #3d5a7a; }
+  .story-card.cre .story-overline { color: #5c4478; }
+
+  .story-title-row { display: flex; align-items: flex-start; gap: 6px; margin-top: 2px; padding-right: 28px; }
+  .story-title { font-size: 15px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; }
+  .story-title .pin-star { font-size: 14px; line-height: 1; flex-shrink: 0; cursor: pointer; padding: 2px; border-radius: 3px; color: var(--ink-faint); opacity: 0.25; transition: opacity 0.15s, color 0.15s; }
+  .story-title .pin-star:hover { opacity: 1; color: var(--ink); background: var(--bg-highlight); }
+  .story-title .pin-star.pinned { color: #c89a20; opacity: 1; }
+  .story-title .pin-star.pinned:hover { color: #a87810; background: #fbf3dc; }
+  .story-title .status-badge { font-size: 9px; color: var(--ink-faint); background: var(--bg); border: 1px solid var(--line-soft); padding: 1px 6px; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; margin-left: 6px; flex-shrink: 0; }
+  .story-title .status-badge.draft { color: #7a6020; background: #fbf3dc; border-color: #e8d890; }
+  /* overflow menu anchored to top-right corner of the card, not in the title row */
+  .story-menu { position: absolute; top: 8px; right: 10px; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; color: var(--ink-faint); font-size: 16px; cursor: pointer; line-height: 1; border-radius: 3px; background: rgba(255,255,255,0.6); }
+  .story-menu:hover { color: var(--ink); background: var(--bg-highlight); }
+
+  .story-meta { font-size: 11px; color: var(--ink-muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+  .story-meta .sep { color: var(--ink-faint); }
+
+  .story-desc { font-size: 12px; color: var(--ink-muted); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 6px; }
+  .story-desc.empty { font-style: italic; color: var(--ink-faint); }
+
+  /* draft card variant — no genre, minimal meta */
+  .story-card.draft .story-overline { color: var(--ink-faint); font-style: italic; }
+
+  /* empty state */
+  .empty-state { display: none; flex-direction: column; align-items: center; text-align: center; padding: 80px 20px; gap: 16px; }
+  .stories-view.empty .stories { display: none; }
+  .stories-view.empty .empty-state { display: flex; }
+  .stories-view.empty .toolbar { display: none; }
+  .stories-view.empty .list-title .count { display: none; }
+  .empty-title { font-size: 22px; font-weight: 600; color: var(--ink); }
+  .empty-sub { font-size: 14px; color: var(--ink-muted); max-width: 480px; line-height: 1.55; }
+  .empty-cta { padding: 12px 24px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 8px; }
+  .empty-visual { width: 140px; height: 140px; border: 1px dashed var(--line); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--ink-faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; background: var(--bg-region); margin-bottom: 12px; }
+
+  /* notes */
+  .notes { padding: 14px 20px; background: #fffbe6; border-top: 1px solid var(--line-soft); font-size: 11px; color: #594; line-height: 1.6; }
+  .notes code { background: #fff; padding: 2px 6px; border: 1px solid var(--line-soft); border-radius: 2px; font-size: 10px; }
+</style>
+</head>
+<body>
+
+<div class="screen-label"><strong>Wireframe:</strong> Story list (landing) &mdash; desktop (&ge; 1024px) &mdash; low-fi, interactive</div>
+
+<div class="review-bar">
+  <span class="rb-label">Review controls</span>
+  <div class="rb-group">
+    <span class="gl">state:</span>
+    <button class="rb-btn active" data-state="populated">populated</button>
+    <button class="rb-btn" data-state="empty">empty (first launch)</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">filter:</span>
+    <button class="rb-btn active" data-filter="all">all</button>
+    <button class="rb-btn" data-filter="pinned">pinned</button>
+    <button class="rb-btn" data-filter="archived">archived</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">sort:</span>
+    <button class="rb-btn active" data-sort="last-opened">last-opened</button>
+    <button class="rb-btn" data-sort="created">created</button>
+    <button class="rb-btn" data-sort="title">title</button>
+  </div>
+  <span class="rb-note">click a card to "open" (no-op in wireframe)</span>
+</div>
+
+<!-- Top bar — app-level chrome (no story context) -->
+<header class="topbar">
+  <div class="logo">A</div>
+  <span class="app-title">Aventuras</span>
+  <div class="topbar-right">
+    <div class="icon-btn" title="Actions (Cmd/Ctrl-K)">&#9906;</div>
+    <div class="icon-btn" title="App settings">&#9881;</div>
+  </div>
+</header>
+
+<div class="main">
+  <div class="list-header">
+    <div class="list-title">
+      Stories
+      <span class="count" id="story-count">6 total</span>
+    </div>
+    <div class="new-story-btn">+ New story</div>
+  </div>
+
+  <div class="toolbar">
+    <div class="search">Search stories&hellip;</div>
+    <div class="filter-chips" id="filter-chips">
+      <span class="filter-chip active" data-chip="all">All</span>
+      <span class="filter-chip" data-chip="pinned">Pinned</span>
+      <span class="filter-chip" data-chip="archived">Archived</span>
+    </div>
+    <div class="sort-picker" id="sort-picker">
+      <span class="kind">sort:</span><span id="sort-label">last-opened</span> &#9662;
+    </div>
+  </div>
+
+  <div class="stories-view" id="stories-view">
+
+    <div class="stories">
+      <!-- Pinned first (Layer 0), then last-opened. Mode-derived left accent; genre as overline. -->
+      <div class="story-card adv" data-pinned>
+        <div class="story-accent"></div>
+        <span class="story-menu" title="More options">&#8943;</span>
+        <div class="story-body">
+          <div class="story-overline">Dark Fantasy</div>
+          <div class="story-title-row">
+            <span class="story-title"><span class="pin-star pinned" title="Unpin">&#9733;</span>Aria's Descent</span>
+          </div>
+          <div class="story-meta">
+            <span>Adventure</span>
+            <span class="sep">&middot;</span>
+            <span>Chapter 3</span>
+            <span class="sep">&middot;</span>
+            <span>2h ago</span>
+          </div>
+          <div class="story-desc">A former royal guard hunts the Warden through the undercities of Ironshore, guided by a secret her lineage refused to speak.</div>
+        </div>
+      </div>
+
+      <div class="story-card cre">
+        <div class="story-accent"></div>
+        <span class="story-menu" title="More options">&#8943;</span>
+        <div class="story-body">
+          <div class="story-overline">Science Fiction</div>
+          <div class="story-title-row">
+            <span class="story-title"><span class="pin-star" title="Pin">&#9734;</span>The Iron Circuit</span>
+          </div>
+          <div class="story-meta">
+            <span>Creative</span>
+            <span class="sep">&middot;</span>
+            <span>Chapter 1</span>
+            <span class="sep">&middot;</span>
+            <span>yesterday</span>
+          </div>
+          <div class="story-desc">An AI-operated megacity learns its core is failing. Its steward must decide which districts to sacrifice and which to save, before the decision is taken from her.</div>
+        </div>
+      </div>
+
+      <div class="story-card adv">
+        <div class="story-accent"></div>
+        <span class="story-menu" title="More options">&#8943;</span>
+        <div class="story-body">
+          <div class="story-overline">Medieval Mystery</div>
+          <div class="story-title-row">
+            <span class="story-title"><span class="pin-star" title="Pin">&#9734;</span>Mornstone Chronicle</span>
+          </div>
+          <div class="story-meta">
+            <span>Adventure</span>
+            <span class="sep">&middot;</span>
+            <span>Chapter 5</span>
+            <span class="sep">&middot;</span>
+            <span>3d ago</span>
+          </div>
+          <div class="story-desc">A village herbalist uncovers a plague that predates the kingdom itself. The crown wants it buried; she doesn't.</div>
+        </div>
+      </div>
+
+      <div class="story-card cre">
+        <div class="story-accent"></div>
+        <span class="story-menu" title="More options">&#8943;</span>
+        <div class="story-body">
+          <div class="story-overline">Folk Horror</div>
+          <div class="story-title-row">
+            <span class="story-title"><span class="pin-star" title="Pin">&#9734;</span>Brine Tale</span>
+          </div>
+          <div class="story-meta">
+            <span>Creative</span>
+            <span class="sep">&middot;</span>
+            <span>Chapter 2</span>
+            <span class="sep">&middot;</span>
+            <span>1w ago</span>
+          </div>
+          <div class="story-desc">A port town whose children are born with seawater in their lungs. Nobody speaks of it; the tide keeps coming in.</div>
+        </div>
+      </div>
+
+      <div class="story-card adv draft">
+        <div class="story-accent"></div>
+        <span class="story-menu" title="More options">&#8943;</span>
+        <div class="story-body">
+          <div class="story-overline">Genre not set</div>
+          <div class="story-title-row">
+            <span class="story-title"><span class="pin-star" title="Pin">&#9734;</span>Untitled draft<span class="status-badge draft">Draft</span></span>
+          </div>
+          <div class="story-meta">
+            <span>Adventure</span>
+            <span class="sep">&middot;</span>
+            <span>2w ago</span>
+          </div>
+          <div class="story-desc empty">(no description yet)</div>
+        </div>
+      </div>
+
+      <div class="story-card adv archived">
+        <div class="story-accent"></div>
+        <span class="story-menu" title="More options">&#8943;</span>
+        <div class="story-body">
+          <div class="story-overline">Philosophical Fantasy</div>
+          <div class="story-title-row">
+            <span class="story-title"><span class="pin-star" title="Pin">&#9734;</span>The Hollow Year<span class="status-badge">Archived</span></span>
+          </div>
+          <div class="story-meta">
+            <span>Adventure</span>
+            <span class="sep">&middot;</span>
+            <span>Chapter 8</span>
+            <span class="sep">&middot;</span>
+            <span>2mo ago</span>
+          </div>
+          <div class="story-desc">A calendar-keeper is asked to remove a month. The consequences of a missing season ripple outward through lives that never knew it existed.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty state (first launch, no stories) -->
+    <div class="empty-state">
+      <div class="empty-visual">illustration slot</div>
+      <div class="empty-title">Welcome to Aventuras</div>
+      <div class="empty-sub">Write interactive stories with an AI collaborator. Your words, your world — nothing leaves your device except to the model you choose.</div>
+      <div class="empty-cta">+ Create your first story</div>
+    </div>
+
+  </div>
+</div>
+
+<div class="notes">
+  <p style="margin: 0; text-align: center;">
+    Rationale &amp; decisions live in <code>docs/ui/story-list.md</code> and <code>docs/ui/principles.md</code>.
+    This file is a visual artifact of the settled shape.
+  </p>
+</div>
+
+<script>
+(function() {
+  const view = document.getElementById('stories-view');
+  const count = document.getElementById('story-count');
+
+  function setState(state) {
+    view.classList.toggle('empty', state === 'empty');
+    document.querySelectorAll('[data-state]').forEach(b => b.classList.toggle('active', b.dataset.state === state));
+  }
+  document.querySelectorAll('[data-state]').forEach(b => b.addEventListener('click', () => setState(b.dataset.state)));
+
+  function setFilter(f) {
+    document.querySelectorAll('.story-card').forEach(c => {
+      const pinned = c.hasAttribute('data-pinned');
+      const archived = c.classList.contains('archived');
+      let show = true;
+      if (f === 'pinned') show = pinned;
+      if (f === 'archived') show = archived;
+      if (f === 'all') show = !archived; // archived hidden in "all" by default
+      c.style.display = show ? '' : 'none';
+    });
+    document.querySelectorAll('#filter-chips .filter-chip').forEach(ch => ch.classList.toggle('active', ch.dataset.chip === f));
+    document.querySelectorAll('[data-filter]').forEach(b => b.classList.toggle('active', b.dataset.filter === f));
+    // update count
+    const visible = document.querySelectorAll('.story-card:not([style*="display: none"])').length;
+    count.textContent = `${visible} of 6`;
+  }
+  document.querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => setFilter(b.dataset.filter)));
+  document.querySelectorAll('#filter-chips .filter-chip').forEach(ch => ch.addEventListener('click', () => setFilter(ch.dataset.chip)));
+
+  function setSort(s) {
+    document.getElementById('sort-label').textContent = s;
+    document.querySelectorAll('[data-sort]').forEach(b => b.classList.toggle('active', b.dataset.sort === s));
+  }
+  document.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', () => setSort(b.dataset.sort)));
+
+  // set initial count with "all" filter applied (archived hidden)
+  setFilter('all');
+
+  // inline pin toggle — clicking the star flips pinned state
+  document.querySelectorAll('.pin-star').forEach(s => {
+    s.addEventListener('click', e => {
+      e.stopPropagation();
+      s.classList.toggle('pinned');
+      s.setAttribute('title', s.classList.contains('pinned') ? 'Unpin' : 'Pin');
+      s.innerHTML = s.classList.contains('pinned') ? '&#9733;' : '&#9734;';
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
