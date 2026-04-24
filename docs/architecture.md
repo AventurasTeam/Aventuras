@@ -31,19 +31,21 @@ class ClassificationPhase {
   async *execute(input: ClassificationInput) { ... }
 }
 
-// V2 (lean)
-async function* classifyReply(input: {
-  narrativeContent: string
-  actionId: string
-  abortSignal?: AbortSignal
-}) {
-  const { story, currentBranch, entities, happenings } = useStoryStore.getState()
+// V2 (lean) — zero parameters; everything read from Zustand
+async function* classifyReply() {
+  const { narrativeResult, abortSignal, actionId } = useGenerationStore.getState()
+  const { entities, happenings } = useStoryStore.getState()
+  if (!narrativeResult || abortSignal?.aborted) return { aborted: true }
   ...
 }
 ```
 
-No constructor, no `deps` bundle, no prop-drilling. Phases import the
-store at module top and read via `getState()` as needed.
+No constructor, no `deps` bundle, no prop-drilling, **no function
+parameters**. Phases read from the generation store (inputs,
+intermediates, abort signal, action_id) and from the story store
+(loaded narrative state) directly. If a phase genuinely needs a
+per-call knob that doesn't belong in global state (e.g. a test
+override), that's the rare exception — the norm is zero params.
 
 ### Zustand is the state access layer, not a prop
 
@@ -145,7 +147,9 @@ context carries relatively raw data, and prompt-specific formatting
 happens inside the Liquid template.** The alternative — pre-formatted
 variants for each consuming template — would bloat the context and
 force every prompt to share identical text shape. Neither is
-acceptable.
+acceptable. And more importantly, this community tinkers — pack
+authors and power users want real control over the prompts they're
+shipping to the LLM. Liquid is the lever they pull.
 
 In practice:
 
@@ -153,20 +157,91 @@ In practice:
   chapter lists, etc.) in close-to-native form
 - Templates iterate, filter, conditionally render, and format using
   Liquid's built-in tags + filters
-- Complex or reused transforms become **custom Liquid filters**
-  (`format_character`, `format_happening`, `token_count`, ...) —
-  still invoked from templates, implemented in code once
-- Pack authors use the same filter surface built-in templates do;
-  nothing privileged
+- **Custom Liquid filters** are the escape hatch for transforms that
+  would be ugly in raw Liquid or get reused across templates; they're
+  implemented in code once and exposed to every template
 
-Benefits: prompt tuning happens in prompt files (no rebuild), pack
-authors have full control over emitted text, context shape stays flat.
+### Custom filters: the author's toolbox
 
-Trade-offs: templates get non-trivial (loops, conditionals, filter
-chains) — the prompt editor's Liquid mode autocomplete + variable
-registry really earn their keep here. LLM output quality becomes tied
-to template quality; debugging shifts to rendered template output
-rather than pre-computed data.
+Built-in filters (shipped with the app) cover the common domain
+transforms so templates stay legible. Roughly three categories:
+
+**Entity / object formatters:**
+
+- `format_character`, `format_location`, `format_item`, `format_faction`
+  — take a single entity, return a formatted block (name + description +
+  status + visible state details, POV-aware)
+- `format_happening` — title, temporal, description, optional source
+  descriptor when rendering from a POV character's memory
+- `format_chapter` — sequence, title, summary, theme, time span
+- `format_lore` — title + body + temporal anchor
+
+**Filters and selectors** (data shaping, not text formatting):
+
+- `by_kind: 'character'` — filter entity array by kind discriminator
+- `active` / `staged` / `retired` — filter entities by status
+- `known_to: pov_character` — filter happenings by the POV character's
+  awareness links, so only facts the character knows appear
+- `recent: n` — last N entries from a list
+- `sorted_by: 'field'` — sort with a named key
+
+**Budget + text utilities:**
+
+- `tokens` — count tokens of a string or array of strings (backed by
+  `js-tiktoken`)
+- `truncate_tokens: n` — truncate to N tokens, smart at sentence
+  boundaries
+- `prose_join` — `["A","B","C"]` → `"A, B, and C"`
+- `json` — stringify for cases where the prompt embeds JSON literally
+- `inject_if: keyword` — emit only when a keyword appears in a source
+  field
+
+These are suggestions; the real list grows as templates demand.
+Implementation: each filter is registered with LiquidJS at app init
+via `engine.registerFilter(name, fn)`. The filter function is
+TypeScript, typed end-to-end.
+
+### Composition via includes
+
+Liquid's `{% include 'partial-id' %}` handles template composition.
+Common blocks (system-prompt header, story-style guidance, formatting
+instructions, output-shape directive) become reusable partials. Old
+app used the `staticContent` group for exactly this — partials with
+no variables of their own, included by other templates. V2 carries
+that pattern over.
+
+This matters for pack authors: rather than having to duplicate a 200-
+line system prompt across every template in their pack, they write
+it once as a partial and include it. Same pattern the built-in pack
+uses.
+
+### Author extensibility — v1 and beyond
+
+**V1 scope:**
+
+- Users edit `.liquid` prompt files via the CodeMirror editor (desktop/web)
+- Editor autocompletes variable names, filter names, and partial IDs
+  from the registry
+- Filters are code-defined and shipped with the app (plus pack-shipped
+  filter registrations if a pack author opts in)
+- Pack authors can define new `.liquid` templates and partials,
+  including composing against existing filters and variables
+
+**Future directions** (not v1, but the architecture shouldn't foreclose
+them):
+
+- **Pack-defined custom filters** — sandboxed JS expressions or a
+  safe DSL, registered per-pack. Lets pack authors add transforms
+  without recompiling the app. Real risk is sandboxing; deferred.
+- **Additional context variables exposed per pack** — pack-scoped
+  variables (runtime variables mentioned in tech stack). Deferred
+  with the pack system generally.
+- **Filter composition** — allowing users to chain filters into named
+  aliases for convenience.
+
+The north star: **a pack author should be able to rebuild the entire
+prompt shape if they want.** Nothing about "how prompts look" is
+buried in code that isn't reachable from a template.
 
 ### Context groups
 
@@ -279,10 +354,7 @@ clean, flat, typed shape for templates to consume.
 ### How phases consume and produce context
 
 ```ts
-async function* classifyReply(input: {
-  narrativeContent: string
-  actionId: string
-}) {
+async function* classifyReply() {
   const ctx = useGenerationStore.getState().promptContext()
   const story = useStoryStore.getState()
 
