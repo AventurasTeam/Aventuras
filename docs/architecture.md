@@ -163,69 +163,86 @@ In practice:
 
 ### Custom filters: the author's toolbox
 
-Built-in filters (shipped with the app) cover the common domain
-transforms so templates stay legible. Roughly three categories:
+Built-in filters are for **data shaping and utility**, not text
+formatting. Text formatting happens in the template directly (via
+variable rendering) or inside a macro (see below). A code-side
+formatter would lock the text shape in code where authors can't
+override it — that violates the north star. Two categories:
 
-**Entity / object formatters:**
-
-- `format_character`, `format_location`, `format_item`, `format_faction`
-  — take a single entity, return a formatted block (name + description +
-  status + visible state details, POV-aware)
-- `format_happening` — title, temporal, description, optional source
-  descriptor when rendering from a POV character's memory
-- `format_chapter` — sequence, title, summary, theme, time span
-- `format_lore` — title + body + temporal anchor
-
-**Filters and selectors** (data shaping, not text formatting):
+**Selectors** (filter or reshape arrays; return arrays):
 
 - `by_kind: 'character'` — filter entity array by kind discriminator
 - `active` / `staged` / `retired` — filter entities by status
 - `known_to: pov_character` — filter happenings by the POV character's
   awareness links, so only facts the character knows appear
-- `recent: n` — last N entries from a list
+- `involving: entity_id` — filter happenings by involvement
+- `recent: n` — last N entries
 - `sorted_by: 'field'` — sort with a named key
 
-**Budget + text utilities:**
+**Utilities** (stateless transforms; return primitives):
 
-- `tokens` — count tokens of a string or array of strings (backed by
+- `tokens` — count tokens of a string or array (backed by
   `js-tiktoken`)
 - `truncate_tokens: n` — truncate to N tokens, smart at sentence
   boundaries
 - `prose_join` — `["A","B","C"]` → `"A, B, and C"`
 - `json` — stringify for cases where the prompt embeds JSON literally
-- `inject_if: keyword` — emit only when a keyword appears in a source
-  field
+- `has_keyword: source_text` — truthy when any of the filter's
+  keywords appear in source_text
 
-These are suggestions; the real list grows as templates demand.
-Implementation: each filter is registered with LiquidJS at app init
-via `engine.registerFilter(name, fn)`. The filter function is
-TypeScript, typed end-to-end.
+Real list grows as templates demand. Implementation: each filter
+registers with LiquidJS at app init via `engine.registerFilter(name,
+fn)`. Filter function is TypeScript, typed end-to-end.
 
-### Composition via includes
+### Macros — reusable Liquid snippets, not code-side formatters
 
-Liquid's `{% include 'partial-id' %}` handles template composition.
-Common blocks (system-prompt header, story-style guidance, formatting
-instructions, output-shape directive) become reusable partials. Old
-app used the `staticContent` group for exactly this — partials with
-no variables of their own, included by other templates. V2 carries
-that pattern over.
+Text formatting — a character block, a happening rendered for memory
+recall, an output-format directive — belongs in **macros**, not
+filters. A macro is a `.liquid` snippet included from other templates
+via `{% include 'macro-id' %}`. The old app had a `staticContent`
+group for this but never really used it; v2 names the concept `macros`
+and leans on it heavily.
 
-This matters for pack authors: rather than having to duplicate a 200-
-line system prompt across every template in their pack, they write
-it once as a partial and include it. Same pattern the built-in pack
-uses.
+Every macro is created with a **context group tag**. The group drives:
+
+1. **Editor awareness** — the Liquid editor's autocomplete shows the
+   group's variables when editing the macro (same registry that powers
+   template autocomplete)
+2. **Include compatibility** — a template in group G can only include
+   macros tagged with G or `staticContent` (the zero-variable fallback
+   for truly group-free macros like output-format directives). The
+   editor flags mismatches at author time; a runtime validator catches
+   them on pack load
+
+Example built-in macros:
+
+- `macros/character_block` (`promptContext`) — a character formatted as
+  a description block
+- `macros/happening_for_memory` (`promptContext`) — a happening
+  formatted as it would appear in a POV character's memory, including
+  the source descriptor
+- `macros/output_format_narrative` (`staticContent`) — the output
+  instruction block for narrative generation
+- `macros/output_format_json` (`staticContent`) — generic JSON output
+  directive
+
+Pack authors can **override any shipped macro** by defining one with
+the same ID in their pack; the pack's version takes precedence. They
+can also define entirely new macros in their own pack. This is how a
+pack rebuilds the prompt shape without touching app code — macros are
+the override surface.
 
 ### Author extensibility — v1 and beyond
 
 **V1 scope:**
 
 - Users edit `.liquid` prompt files via the CodeMirror editor (desktop/web)
-- Editor autocompletes variable names, filter names, and partial IDs
-  from the registry
-- Filters are code-defined and shipped with the app (plus pack-shipped
-  filter registrations if a pack author opts in)
-- Pack authors can define new `.liquid` templates and partials,
-  including composing against existing filters and variables
+- Editor autocompletes variable names, filter names, and includable
+  macro IDs (filtered by the current template's context group)
+- Filters are code-defined and shipped with the app
+- Pack authors can define new `.liquid` templates and macros
+  (group-tagged on creation), and override shipped macros by reusing
+  their IDs
 
 **Future directions** (not v1, but the architecture shouldn't foreclose
 them):
@@ -257,7 +274,7 @@ maps every `templateId` to exactly one group:
 | `import`          | Character-card imports, vault imports, lorebook classifiers                                                                                                                                                             |
 | `portrait`        | Character portrait generation                                                                                                                                                                                           |
 | `translateWizard` | Translation-wizard flow                                                                                                                                                                                                 |
-| `staticContent`   | Partials with no variables (included by other templates)                                                                                                                                                                |
+| `staticContent`   | Variable-free macros (output-format directives, boilerplate blocks) — includable from any group                                                                                                                         |
 
 For v1 ship `promptContext` + `wizard` (likely — wizard lands with the
 first "create a story" flow). The others land with their corresponding
