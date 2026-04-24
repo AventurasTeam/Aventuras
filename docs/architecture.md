@@ -203,18 +203,48 @@ of what it holds:
   it completes (retrieval result, narrative result, classification
   result, translation result, ...). Readable by later phases and
   templates in the same turn.
-- **Derived getters** — read across this store + `useStoryStore` to
-  produce the unified `promptContext` object, plus token counts and
-  other cached computations.
+- **Derived getters** — read across this store + `useStoryStore` +
+  the settings stores to produce the unified `promptContext` object,
+  plus token counts and other cached computations.
 - **Lifecycle**
   - `clearIntermediates()` at turn start (new message, regenerate) —
     wipes inputs + intermediates but keeps loaded context
   - `clear()` on story switch — resets everything
 
 The `promptContext` getter is where the merge happens: it reads static
-story state from `useStoryStore.getState()` and combines it with the
+story state from `useStoryStore.getState()`, LLM-relevant user settings
+from their settings stores (see below), and combines those with the
 generation store's inputs + intermediates into one object that every
 template in the `promptContext` group renders against.
+
+### Settings: strict types, defaults at load
+
+The `promptContext.userSettings` slice exposes the LLM-relevant subset
+of settings: retrieval caps, classifier config, memory config, image-
+generation config, translation settings, visual-prose mode, etc. These
+come from two sources — **app-level settings** (global, persist across
+stories; e.g. classifier truncation, image-gen caps) and **story-level
+settings** (in `stories.settings` JSON; e.g. memory config, POV, tone,
+mode).
+
+**Pattern to avoid (the old app's):** inline `??` fallbacks and hardcoded
+defaults at every read site, scattered across the `promptContext` getter
+— `settings.foo ?? 100`, `story.settings.bar ?? 'baz'`, etc. No single
+place held "the real shape of user settings." Result: silent drift,
+duplicated defaults, weakly-typed access at the consumer.
+
+**V2 pattern:** settings are **zod-parsed on load** — app settings when
+the settings store hydrates, story settings when the story opens — with
+defaults applied at parse time. By the time any code reads them, every
+field is guaranteed to be its declared type, every optional field has
+its default filled in, and no `??` fallback should appear in the
+`promptContext` getter or anywhere else. If a value is missing from the
+persisted JSON, that's the parse's job to fix, not the reader's.
+
+The generation store doesn't own settings storage — it just reads via
+`getState()` on the app-settings store and the loaded story's settings
+slice, and surfaces them through `promptContext.userSettings` as a
+clean, flat, typed shape for templates to consume.
 
 ### How phases consume and produce context
 
