@@ -100,11 +100,27 @@ Multi-language conversion of an existing story's content (per-story
 Settings supports one target at a time; the Wizard batches
 conversions to a new target). Inventory #15, pending.
 
-### Plot panel shape
+### Character-side Awareness tab on World panel
 
-Not yet wireframed. Different pattern from World (dashboard / monitor
-over workshop) — threads + happenings have different interaction
-needs from entities + lore.
+The Plot panel surfaces awareness as a happening-detail tab (who
+knows about this event). The reverse pivot — "what does character X
+know" — should live as a new Awareness tab on the World panel for
+character entities. Same `happening_awareness` data, queried from the
+character end. Pending; add when the character-kind detail tabs get
+their next pass.
+
+### Observability / debug UI
+
+Standalone panel exposing the global `deltas` log for power-user
+debugging — what happened to the data layer, when, by which agent
+(classifier / lore-mgmt / memory-compaction / user_edit). Likely a
+chronological scroll with filters by source, target_table,
+action_id. Distinct from per-entity History tab (World, Plot) which
+already scopes the log to one row's lineage.
+
+No external services. Larger topic touching debugging, logging, and
+observability — own design pass. Surfaced during Plot panel
+brainstorm.
 
 ### Per-kind Overview composition in World panel
 

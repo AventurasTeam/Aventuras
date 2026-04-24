@@ -39,7 +39,7 @@ rationale, and decisions live alongside.
 | --- | --------------------------- | ------------------------------------------ |
 | 6   | World (entities + lore)     | [screens/world/](./screens/world/world.md) |
 | 7   | Branch navigator            | pending                                    |
-| 8   | Plot (threads + happenings) | pending                                    |
+| 8   | Plot (threads + happenings) | [screens/plot/](./screens/plot/plot.md)    |
 | 9   | Chapter timeline            | pending                                    |
 
 ### Power-user / deferred

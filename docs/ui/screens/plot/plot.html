@@ -1,0 +1,1681 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Wireframe — Plot (desktop)</title>
+    <style>
+      :root {
+        --ink: #333;
+        --ink-muted: #888;
+        --ink-faint: #aaa;
+        --line: #bbb;
+        --line-soft: #ddd;
+        --bg: #fafafa;
+        --bg-region: #fff;
+        --bg-highlight: #eef;
+        --warn: #c94;
+        --ok: #4a8;
+        --info: #58a;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        font:
+          13px/1.5 system-ui,
+          -apple-system,
+          Segoe UI,
+          sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+      }
+      body {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .screen-label {
+        padding: 8px 16px;
+        background: #eee;
+        border-bottom: 1px solid var(--line);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--ink-muted);
+      }
+      .screen-label strong {
+        color: var(--ink);
+      }
+
+      .review-bar {
+        padding: 8px 16px;
+        background: #f5f0e6;
+        border-bottom: 1px solid #e3d8c0;
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        align-items: center;
+        font-size: 11px;
+      }
+      .review-bar .rb-label {
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #7a6a40;
+        font-weight: 600;
+        font-size: 10px;
+      }
+      .review-bar .rb-group {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .review-bar .rb-group > .gl {
+        font-size: 10px;
+        color: #967;
+        margin-right: 4px;
+      }
+      .rb-btn {
+        padding: 3px 9px;
+        border: 1px solid #d8c99a;
+        border-radius: 3px;
+        background: #fff;
+        color: #5a4820;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .rb-btn.active {
+        background: #7a6a40;
+        color: #fff;
+        border-color: #7a6a40;
+      }
+      .rb-note {
+        margin-left: auto;
+        font-size: 10px;
+        color: #967;
+        font-style: italic;
+      }
+
+      header.topbar {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--line);
+        background: var(--bg-region);
+      }
+      .logo {
+        width: 28px;
+        height: 28px;
+        border: 1px dashed var(--line);
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        color: var(--ink-muted);
+      }
+      .crumbs {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        min-width: 0;
+      }
+      .crumb-primary {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .crumb-secondary {
+        font-size: 11px;
+        color: var(--ink-muted);
+        white-space: nowrap;
+      }
+      .topbar-right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .icon-btn {
+        position: relative;
+        width: 30px;
+        height: 30px;
+        border: 1px dashed var(--line);
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--ink-muted);
+        font-size: 14px;
+        cursor: pointer;
+      }
+      .icon-btn .count-badge {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        background: var(--ink);
+        color: #fff;
+        font-size: 9px;
+        min-width: 14px;
+        height: 14px;
+        padding: 0 3px;
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+      }
+
+      .sub-head {
+        padding: 10px 20px;
+        border-bottom: 1px solid var(--line-soft);
+        background: var(--bg-region);
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 12px;
+      }
+      .sub-head .path {
+        color: var(--ink-muted);
+      }
+      .sub-head .path .here {
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      .md-layout {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        min-height: 0;
+      }
+
+      /* LIST PANE */
+      .list-pane {
+        background: var(--bg-region);
+        border-right: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .list-controls {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--line-soft);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .segment {
+        display: flex;
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .segment > .seg {
+        flex: 1;
+        text-align: center;
+        padding: 6px 0;
+        font-size: 12px;
+        color: var(--ink-muted);
+        cursor: pointer;
+        background: var(--bg-region);
+      }
+      .segment > .seg.active {
+        background: var(--ink);
+        color: #fff;
+      }
+      .segment > .seg + .seg {
+        border-left: 1px solid var(--line);
+      }
+      .list-search {
+        padding: 5px 10px;
+        border: 1px solid var(--line-soft);
+        border-radius: 3px;
+        font-size: 12px;
+        background: var(--bg-region);
+        color: var(--ink-faint);
+        font-style: italic;
+      }
+      .list-search::before {
+        content: '⌕  ';
+        font-style: normal;
+        color: var(--ink-faint);
+      }
+      .list-toggles {
+        display: flex;
+        gap: 5px;
+        font-size: 11px;
+        color: var(--ink-muted);
+        flex-wrap: wrap;
+      }
+      .list-toggle {
+        padding: 3px 8px;
+        border: 1px solid var(--line-soft);
+        border-radius: 3px;
+        cursor: pointer;
+      }
+      .list-toggle.active {
+        background: var(--ink);
+        color: #fff;
+        border-color: var(--ink);
+      }
+
+      .list-items {
+        flex: 1;
+        overflow: auto;
+        padding: 6px 8px;
+      }
+      .list-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 8px 8px;
+        border-bottom: 1px dotted var(--line-soft);
+        border-radius: 3px;
+        cursor: pointer;
+        border: 1px solid transparent;
+        border-left: 3px solid transparent;
+      }
+      .list-row:hover {
+        background: var(--bg-highlight);
+      }
+      .list-row.selected {
+        background: var(--bg-highlight);
+        border-color: var(--line);
+      }
+      /* recently-classified left-edge accent — fades over turns */
+      .list-row.recent-1 {
+        border-left-color: var(--info);
+        background: linear-gradient(to right, rgba(85, 136, 170, 0.06), transparent 60%);
+      }
+      .list-row.recent-2 {
+        border-left-color: rgba(85, 136, 170, 0.4);
+      }
+      .list-row.recent-1.selected {
+        background: linear-gradient(to right, rgba(85, 136, 170, 0.1), var(--bg-highlight));
+      }
+
+      .list-kind {
+        font-size: 14px;
+        color: var(--ink-muted);
+        line-height: 1;
+        padding: 0;
+        border: 1px solid var(--line-soft);
+        border-radius: 2px;
+        flex-shrink: 0;
+        width: 22px;
+        height: 22px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg);
+      }
+      .list-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .list-name .name-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .list-name .when-marker {
+        font-size: 10px;
+        color: var(--ink-faint);
+        font-family: ui-monospace, monospace;
+        flex-shrink: 0;
+      }
+      .common-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--info);
+        flex-shrink: 0;
+      }
+      .common-dot.placeholder {
+        background: transparent;
+      }
+
+      /* status pill — threads */
+      .row-status-pill {
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 2px 6px;
+        border-radius: 2px;
+        flex-shrink: 0;
+        border: 1px solid var(--line-soft);
+        background: var(--bg);
+        color: var(--ink-faint);
+      }
+      .row-status-pill.active {
+        color: #386;
+        border-color: #cdb;
+        background: #f1faf2;
+      }
+      .row-status-pill.pending {
+        color: var(--ink-faint);
+        border-color: var(--line-soft);
+        background: var(--bg);
+      }
+      .row-status-pill.resolved {
+        color: var(--ink-muted);
+        border-color: var(--line-soft);
+        background: #f4f4f4;
+      }
+      .row-status-pill.failed {
+        color: #963;
+        border-color: #ecb;
+        background: #fef7e8;
+      }
+
+      .list-footer {
+        padding: 10px 12px;
+        border-top: 1px solid var(--line-soft);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+      }
+      .new-entity-btn {
+        padding: 5px 14px;
+        border: 1px dashed var(--line);
+        border-radius: 3px;
+        background: var(--bg);
+        cursor: pointer;
+        color: var(--ink-muted);
+        font-size: 11px;
+      }
+      .new-entity-btn:hover {
+        color: var(--ink);
+      }
+
+      /* DETAIL PANE */
+      .detail-pane {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        background: var(--bg);
+        overflow: hidden;
+      }
+      .detail-head {
+        padding: 14px 20px 10px;
+        background: var(--bg-region);
+        border-bottom: 1px solid var(--line-soft);
+      }
+      .detail-crumb {
+        font-size: 10px;
+        color: var(--ink-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .detail-crumb .kind-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border: 1px solid var(--line-soft);
+        border-radius: 2px;
+        font-size: 12px;
+        background: var(--bg);
+        color: var(--ink-muted);
+      }
+      .detail-name-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .detail-name {
+        font-size: 22px;
+        font-weight: 600;
+        color: var(--ink);
+        border-bottom: 1px dotted var(--line-soft);
+        display: inline-block;
+        padding-bottom: 2px;
+        cursor: text;
+      }
+      .detail-name::after {
+        content: '  ✎';
+        color: var(--ink-faint);
+        font-size: 11px;
+        font-weight: 400;
+      }
+      .overflow-btn {
+        margin-left: auto;
+        width: 30px;
+        height: 30px;
+        border: 1px dashed var(--line);
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--ink-muted);
+        font-size: 16px;
+        cursor: pointer;
+        position: relative;
+      }
+      .overflow-menu {
+        position: absolute;
+        top: calc(100% + 4px);
+        right: 0;
+        background: var(--bg-region);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+        min-width: 200px;
+        z-index: 5;
+        display: none;
+      }
+      .overflow-menu.open {
+        display: block;
+      }
+      .overflow-item {
+        padding: 8px 12px;
+        font-size: 12px;
+        color: var(--ink);
+        cursor: pointer;
+        border-bottom: 1px solid var(--line-soft);
+      }
+      .overflow-item:last-child {
+        border-bottom: none;
+      }
+      .overflow-item:hover {
+        background: var(--bg-highlight);
+      }
+      .overflow-item.danger {
+        color: var(--warn);
+      }
+
+      .tabs {
+        display: flex;
+        gap: 18px;
+        padding: 10px 20px 0;
+        background: var(--bg-region);
+        border-bottom: 1px solid var(--line);
+      }
+      .tab {
+        padding: 8px 2px;
+        font-size: 12px;
+        color: var(--ink-muted);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .tab.active {
+        color: var(--ink);
+        border-bottom-color: var(--ink);
+        font-weight: 600;
+      }
+      .tab-count {
+        font-size: 10px;
+        color: var(--ink-faint);
+        margin-left: 4px;
+      }
+
+      .tab-panel {
+        flex: 1;
+        overflow: auto;
+        padding: 20px 24px;
+        display: none;
+        max-width: 820px;
+      }
+      .tab-panel.active {
+        display: block;
+      }
+
+      /* form fields — typed shape */
+      .field-row {
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        gap: 14px;
+        align-items: start;
+        margin-bottom: 12px;
+      }
+      .field-label {
+        font-size: 11px;
+        color: var(--ink-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding-top: 6px;
+        font-family: ui-monospace, monospace;
+      }
+      .field-label .type-hint {
+        color: var(--ink-faint);
+        font-size: 9px;
+        font-family: ui-monospace, monospace;
+        display: block;
+        margin-top: 2px;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+      .input-text {
+        padding: 7px 10px;
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        background: var(--bg-region);
+        font-size: 13px;
+        color: var(--ink);
+      }
+      .input-textarea {
+        min-height: 90px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        background: var(--bg-region);
+        font-size: 13px;
+        color: var(--ink);
+        line-height: 1.55;
+      }
+      .input-select {
+        padding: 7px 10px;
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        background: var(--bg-region);
+        font-size: 13px;
+        color: var(--ink);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+      }
+      .input-select.read-only {
+        background: var(--bg);
+        color: var(--ink-muted);
+        cursor: default;
+      }
+      .input-picker {
+        padding: 7px 10px;
+        border: 1px dashed var(--line);
+        border-radius: 3px;
+        background: var(--bg);
+        font-size: 13px;
+        color: var(--ink-muted);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+      }
+      .input-picker .picked {
+        color: var(--ink);
+        font-style: normal;
+      }
+      .input-picker.picked-state {
+        border-style: solid;
+        background: var(--bg-region);
+      }
+
+      .toggle-row {
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+        font-size: 12px;
+        color: var(--ink);
+      }
+      .toggle-pill {
+        width: 30px;
+        height: 16px;
+        border-radius: 8px;
+        background: var(--line-soft);
+        position: relative;
+        cursor: pointer;
+      }
+      .toggle-pill::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #fff;
+        transition: transform 0.1s;
+      }
+      .toggle-pill.on {
+        background: var(--ink);
+      }
+      .toggle-pill.on::after {
+        transform: translateX(14px);
+      }
+
+      .placeholder-text {
+        color: var(--ink-faint);
+        font-style: italic;
+      }
+
+      .chip-row {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .chip-small {
+        font-size: 11px;
+        padding: 3px 9px;
+        border: 1px solid var(--line-soft);
+        border-radius: 999px;
+        color: var(--ink-muted);
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .chip-small .x {
+        color: var(--ink-faint);
+        cursor: pointer;
+      }
+      .add-chip {
+        font-size: 11px;
+        color: var(--ink-muted);
+        cursor: pointer;
+        padding: 3px 9px;
+        border: 1px dashed var(--line);
+        border-radius: 999px;
+      }
+
+      /* time-anchor mutual exclusion */
+      .anchor-group {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .anchor-cell {
+        border: 1px solid var(--line-soft);
+        border-radius: 3px;
+        padding: 10px 12px;
+        background: var(--bg-region);
+      }
+      .anchor-cell.disabled {
+        background: var(--bg);
+        opacity: 0.55;
+      }
+      .anchor-cell .anchor-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--ink-muted);
+        margin-bottom: 6px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .anchor-cell .anchor-radio {
+        width: 12px;
+        height: 12px;
+        border: 1px solid var(--line);
+        border-radius: 50%;
+        display: inline-block;
+        position: relative;
+      }
+      .anchor-cell.active .anchor-radio::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--ink);
+      }
+
+      /* tables (involvements / awareness) */
+      .tbl {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      .tbl th,
+      .tbl td {
+        padding: 8px 10px;
+        text-align: left;
+        border-bottom: 1px dotted var(--line-soft);
+      }
+      .tbl th {
+        font-size: 10px;
+        color: var(--ink-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 600;
+        border-bottom: 1px solid var(--line-soft);
+      }
+      .tbl tr:hover {
+        background: var(--bg-highlight);
+      }
+      .tbl .row-actions {
+        text-align: right;
+        color: var(--ink-faint);
+      }
+      .tbl .row-actions .x {
+        cursor: pointer;
+      }
+      .tbl-add {
+        padding: 8px 10px;
+        font-size: 11px;
+        color: var(--ink-muted);
+        cursor: pointer;
+        border: 1px dashed var(--line);
+        border-radius: 3px;
+        margin-top: 8px;
+        text-align: center;
+      }
+
+      /* awareness — common-knowledge notice */
+      .ck-notice {
+        padding: 24px;
+        border: 1px dashed var(--line);
+        border-radius: 4px;
+        background: var(--bg-region);
+        text-align: center;
+        font-size: 12px;
+        color: var(--ink-muted);
+        line-height: 1.6;
+      }
+      .ck-notice b {
+        color: var(--ink);
+      }
+
+      /* history tab */
+      .history-controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 14px;
+        padding: 10px 12px;
+        background: var(--bg-region);
+        border: 1px solid var(--line-soft);
+        border-radius: 4px;
+      }
+      .history-search {
+        flex: 1;
+        padding: 5px 10px;
+        border: 1px solid var(--line-soft);
+        border-radius: 3px;
+        font-size: 12px;
+        background: var(--bg);
+        color: var(--ink-faint);
+        font-style: italic;
+      }
+      .history-search::before {
+        content: '⌕  ';
+        font-style: normal;
+        color: var(--ink-faint);
+      }
+      .history-sort {
+        font-size: 11px;
+        color: var(--ink-muted);
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .history-sort-btn {
+        padding: 4px 9px;
+        border: 1px solid var(--line-soft);
+        border-radius: 3px;
+        background: var(--bg-region);
+        cursor: pointer;
+      }
+      .history-sort-btn.active {
+        background: var(--ink);
+        color: #fff;
+        border-color: var(--ink);
+      }
+      .history-op-filter {
+        font-size: 11px;
+        display: flex;
+        gap: 4px;
+      }
+      .history-row {
+        display: grid;
+        grid-template-columns: 140px 90px 1fr;
+        gap: 12px;
+        padding: 8px 10px;
+        border-bottom: 1px dotted var(--line-soft);
+        font-size: 12px;
+        align-items: center;
+      }
+      .history-row.header {
+        background: var(--bg-region);
+        border-bottom: 1px solid var(--line-soft);
+        font-weight: 600;
+        color: var(--ink);
+      }
+      .history-ts {
+        color: var(--ink-muted);
+        font-family: ui-monospace, monospace;
+        font-size: 11px;
+      }
+      .history-op {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 600;
+      }
+      .history-op.create {
+        color: var(--ok);
+      }
+      .history-op.update {
+        color: var(--ink-muted);
+      }
+      .history-op.delete {
+        color: var(--warn);
+      }
+      .history-foot {
+        text-align: center;
+        margin-top: 12px;
+        padding: 10px;
+        font-size: 11px;
+        color: var(--ink-muted);
+      }
+      .load-older {
+        padding: 6px 16px;
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        background: var(--bg-region);
+        cursor: pointer;
+        color: var(--ink);
+        font-size: 11px;
+      }
+
+      /* save bar */
+      .save-bar {
+        display: none;
+        padding: 10px 20px;
+        border-top: 1px solid var(--line);
+        background: #fff7dc;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+      .save-bar.dirty {
+        display: flex;
+      }
+      .save-bar .dirty-note {
+        font-size: 12px;
+        color: #765;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .save-bar .dirty-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #c94;
+      }
+      .save-bar .actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .save-bar .discard-btn {
+        padding: 6px 14px;
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        background: var(--bg-region);
+        font-size: 12px;
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .save-bar .save-btn {
+        padding: 6px 18px;
+        border: 1px solid var(--ink);
+        border-radius: 3px;
+        background: var(--ink);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .save-bar .save-btn .kbd {
+        font-size: 10px;
+        opacity: 0.7;
+        font-family: ui-monospace, monospace;
+      }
+
+      .notes {
+        padding: 14px 20px;
+        background: #fffbe6;
+        border-top: 1px solid var(--line-soft);
+        font-size: 11px;
+        color: #594;
+        line-height: 1.6;
+      }
+      .notes b {
+        color: #342;
+      }
+      .notes code {
+        background: #fff;
+        padding: 2px 6px;
+        border: 1px solid var(--line-soft);
+        border-radius: 2px;
+        font-size: 10px;
+      }
+
+      /* side-conditional visibility */
+      [data-side='happenings'] .threads-only {
+        display: none;
+      }
+      [data-side='threads'] .happenings-only {
+        display: none;
+      }
+      [data-side='threads'] .tab-panel[data-panel='involvements'],
+      [data-side='threads'] .tab-panel[data-panel='awareness'],
+      [data-side='threads'] .tab[data-tab='involvements'],
+      [data-side='threads'] .tab[data-tab='awareness'],
+      [data-side='threads'] [data-rb-tab='involvements'],
+      [data-side='threads'] [data-rb-tab='awareness'] {
+        display: none;
+      }
+
+      /* common-knowledge mode swap on the awareness tab */
+      [data-ck='on'] .ck-rows {
+        display: none;
+      }
+      [data-ck='off'] .ck-notice {
+        display: none;
+      }
+    </style>
+  </head>
+  <body data-side="threads" data-ck="off">
+    <div class="screen-label">
+      <strong>Wireframe:</strong> Plot &mdash; threads + happenings &mdash; desktop (&ge; 1024px) &mdash; low-fi, interactive
+    </div>
+
+    <div class="review-bar">
+      <span class="rb-label">Review controls</span>
+      <div class="rb-group">
+        <span class="gl">side:</span>
+        <button class="rb-btn active" data-side-btn="threads">Threads</button>
+        <button class="rb-btn" data-side-btn="happenings">Happenings</button>
+      </div>
+      <div class="rb-group">
+        <span class="gl">tab:</span>
+        <button class="rb-btn active" data-rb-tab="overview">Overview</button>
+        <button class="rb-btn happenings-only" data-rb-tab="involvements">Involvements</button>
+        <button class="rb-btn happenings-only" data-rb-tab="awareness">Awareness</button>
+        <button class="rb-btn" data-rb-tab="history">History</button>
+      </div>
+      <div class="rb-group happenings-only">
+        <span class="gl">common knowledge:</span>
+        <button class="rb-btn active" data-ck-btn="off">off</button>
+        <button class="rb-btn" data-ck-btn="on">on</button>
+      </div>
+      <div class="rb-group">
+        <span class="gl">form:</span>
+        <button class="rb-btn active" data-dirty-btn="clean">clean</button>
+        <button class="rb-btn" data-dirty-btn="dirty">dirty (2 changes)</button>
+      </div>
+      <span class="rb-note">click a row · click a tab</span>
+    </div>
+
+    <header class="topbar">
+      <div class="logo">A</div>
+      <div class="crumbs">
+        <span class="crumb-primary">Aria's Descent</span>
+        <span class="crumb-secondary">Chapter 3 &middot; open region</span>
+      </div>
+      <div class="topbar-right">
+        <div class="icon-btn" title="3 branches">&#9901;<span class="count-badge">3</span></div>
+        <div class="icon-btn" title="Actions">&#9906;</div>
+        <div class="icon-btn" title="Story settings">&#9881;</div>
+        <div class="icon-btn" title="Back to reader">&larr;</div>
+      </div>
+    </header>
+
+    <div class="sub-head">
+      <div class="path">
+        Plot
+        <span style="margin: 0 6px">/</span>
+        <span class="threads-only">Threads<span style="margin: 0 6px">/</span><span class="here">Crown's bargain</span></span>
+        <span class="happenings-only">Happenings<span style="margin: 0 6px">/</span><span class="here">Tavern brawl</span></span>
+      </div>
+    </div>
+
+    <div class="md-layout">
+      <aside class="list-pane">
+        <div class="list-controls">
+          <div class="segment" id="side-segment" title="Plot ledgers">
+            <span class="seg active" data-seg="threads">Threads</span>
+            <span class="seg" data-seg="happenings">Happenings</span>
+          </div>
+          <div class="list-search">
+            <span class="threads-only">Search threads&hellip;</span>
+            <span class="happenings-only">Search happenings&hellip;</span>
+          </div>
+
+          <div class="list-toggles threads-only">
+            <span class="list-toggle active">All</span>
+            <span class="list-toggle">Active</span>
+            <span class="list-toggle">Pending</span>
+            <span class="list-toggle">Resolved</span>
+            <span class="list-toggle">Failed</span>
+          </div>
+          <div class="list-toggles happenings-only">
+            <span class="list-toggle active">All</span>
+            <span class="list-toggle">This chapter</span>
+            <span class="list-toggle">Common knowledge</span>
+            <span class="list-toggle">Out-of-narrative</span>
+          </div>
+        </div>
+
+        <!-- THREADS list -->
+        <div class="list-items threads-only">
+          <div class="list-row recent-1 selected">
+            <span class="list-kind" title="thread">◇</span>
+            <span class="list-name">
+              <span class="name-text"><b>Crown's bargain</b></span>
+              <span class="when-marker">arc</span>
+            </span>
+            <span class="row-status-pill active">active</span>
+          </div>
+          <div class="list-row">
+            <span class="list-kind" title="thread">◇</span>
+            <span class="list-name">
+              <span class="name-text">The Warden's pursuit</span>
+              <span class="when-marker">arc</span>
+            </span>
+            <span class="row-status-pill active">active</span>
+          </div>
+          <div class="list-row recent-2">
+            <span class="list-kind" title="thread">◇</span>
+            <span class="list-name">
+              <span class="name-text">The lost heir</span>
+              <span class="when-marker">prophecy</span>
+            </span>
+            <span class="row-status-pill pending">pending</span>
+          </div>
+          <div class="list-row">
+            <span class="list-kind" title="thread">◇</span>
+            <span class="list-name">
+              <span class="name-text">Restore the silver coin</span>
+              <span class="when-marker">quest</span>
+            </span>
+            <span class="row-status-pill resolved">resolved</span>
+          </div>
+          <div class="list-row">
+            <span class="list-kind" title="thread">◇</span>
+            <span class="list-name">
+              <span class="name-text">Council's edict</span>
+              <span class="when-marker">arc</span>
+            </span>
+            <span class="row-status-pill failed">failed</span>
+          </div>
+        </div>
+
+        <!-- HAPPENINGS list -->
+        <div class="list-items happenings-only">
+          <div class="list-row recent-1 selected">
+            <span class="list-kind" title="happening">⚔</span>
+            <span class="list-name">
+              <span class="name-text"><b>Tavern brawl</b></span>
+              <span class="when-marker">e23 &middot; ch3</span>
+            </span>
+            <span class="common-dot placeholder" title="not common knowledge"></span>
+          </div>
+          <div class="list-row recent-1">
+            <span class="list-kind" title="happening">✉</span>
+            <span class="list-name">
+              <span class="name-text">Kael's warning</span>
+              <span class="when-marker">e21 &middot; ch3</span>
+            </span>
+            <span class="common-dot placeholder"></span>
+          </div>
+          <div class="list-row recent-2">
+            <span class="list-kind" title="happening">✦</span>
+            <span class="list-name">
+              <span class="name-text">The Warden's mark discovered</span>
+              <span class="when-marker">e14 &middot; ch2</span>
+            </span>
+            <span class="common-dot" title="common knowledge"></span>
+          </div>
+          <div class="list-row">
+            <span class="list-kind" title="happening">⚜</span>
+            <span class="list-name">
+              <span class="name-text">Coin's first owner</span>
+              <span class="when-marker">e8 &middot; ch1</span>
+            </span>
+            <span class="common-dot placeholder"></span>
+          </div>
+          <div style="font-size: 10px; color: var(--ink-faint); padding: 8px; text-align: center; text-transform: uppercase; letter-spacing: 0.08em">
+            &mdash; out of narrative &mdash;
+          </div>
+          <div class="list-row">
+            <span class="list-kind" title="happening">▣</span>
+            <span class="list-name">
+              <span class="name-text">Council Speaker's edict</span>
+              <span class="when-marker">pre-story</span>
+            </span>
+            <span class="common-dot" title="common knowledge"></span>
+          </div>
+          <div class="list-row">
+            <span class="list-kind" title="happening">▣</span>
+            <span class="list-name">
+              <span class="name-text">Kael's debt</span>
+              <span class="when-marker">pre-story</span>
+            </span>
+            <span class="common-dot placeholder"></span>
+          </div>
+        </div>
+
+        <div class="list-footer">
+          <span class="new-entity-btn threads-only">+ New thread</span>
+          <span class="new-entity-btn happenings-only">+ New happening</span>
+        </div>
+      </aside>
+
+      <section class="detail-pane">
+        <!-- DETAIL HEAD — threads -->
+        <div class="detail-head threads-only">
+          <div class="detail-crumb">
+            <span class="kind-icon" title="thread">◇</span>
+            <span>thread</span>
+          </div>
+          <div class="detail-name-row">
+            <div class="detail-name">Crown's bargain</div>
+            <div class="overflow-btn" title="More options">
+              &#8943;
+              <div class="overflow-menu">
+                <div class="overflow-item">Export thread as JSON</div>
+                <div class="overflow-item">View raw JSON</div>
+                <div class="overflow-item danger">Delete thread&hellip;</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DETAIL HEAD — happenings -->
+        <div class="detail-head happenings-only">
+          <div class="detail-crumb">
+            <span class="kind-icon" title="happening">⚔</span>
+            <span>happening</span>
+          </div>
+          <div class="detail-name-row">
+            <div class="detail-name">Tavern brawl</div>
+            <div class="overflow-btn" title="More options">
+              &#8943;
+              <div class="overflow-menu">
+                <div class="overflow-item">Export happening as JSON</div>
+                <div class="overflow-item">View raw JSON</div>
+                <div class="overflow-item danger">Delete happening&hellip;</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TABS -->
+        <nav class="tabs" id="tabs">
+          <span class="tab active" data-tab="overview">Overview</span>
+          <span class="tab happenings-only" data-tab="involvements">Involvements <span class="tab-count">4</span></span>
+          <span class="tab happenings-only" data-tab="awareness">Awareness <span class="tab-count">4</span></span>
+          <span class="tab" data-tab="history">History</span>
+        </nav>
+
+        <!-- OVERVIEW — THREADS -->
+        <div class="tab-panel threads-only active" data-panel="overview" data-side-panel="threads">
+          <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 14px; padding: 8px 12px; background: #fffbe6; border-left: 3px solid #e3d8c0; border-radius: 2px">
+            Fields shown here are from <code>threads</code>. Threads aren't entity-linked, so there's no Involvements tab on
+            this side.
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              status
+              <span class="type-hint">enum &middot; threads.status</span>
+            </div>
+            <div class="input-select">
+              <span>active</span>
+              <span style="color: var(--ink-faint)">&#9662;</span>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              category
+              <span class="type-hint">text &middot; free-form</span>
+            </div>
+            <div class="input-text" style="color: var(--ink)">arc</div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              icon
+              <span class="type-hint">preset key &middot; threads.icon</span>
+            </div>
+            <div class="input-select">
+              <span>&#9671; arc</span>
+              <span style="color: var(--ink-faint)">&#9662;</span>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              injection_mode
+              <span class="type-hint">enum &middot; threads.injection_mode</span>
+            </div>
+            <div>
+              <div class="input-select" title="How this thread reaches the prompt">
+                <span>keyword_llm <span style="color: var(--ink-faint); font-size: 11px">(default)</span></span>
+                <span style="color: var(--ink-faint)">&#9662;</span>
+              </div>
+              <div style="font-size: 10px; color: var(--ink-muted); margin-top: 4px; line-height: 1.5">
+                <b>always</b>: unconditional &middot; <b>keyword_llm</b>: keyword + LLM &middot;
+                <b>disabled</b>: excluded.
+              </div>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              description
+              <span class="type-hint">text &middot; threads.description</span>
+            </div>
+            <div class="input-textarea placeholder-text">
+              [Aria has cut a deal with the Warden's silent enemy. Holds while the coin is hidden; collapses if Kael
+              speaks. Active since chapter 2.]
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              triggered_at_entry
+              <span class="type-hint">EntryRef &middot; read-only</span>
+            </div>
+            <div class="input-select read-only">
+              <span>entry 18 &middot; ch2</span>
+              <span style="color: var(--ink-faint)">jump &rarr;</span>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              resolved_at_entry
+              <span class="type-hint">EntryRef &middot; only when resolved/failed</span>
+            </div>
+            <div class="input-select read-only" style="opacity: 0.45">
+              <span class="placeholder-text">(disabled &mdash; status is "active")</span>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              tags
+              <span class="type-hint">string[] &middot; threads.tags</span>
+            </div>
+            <div class="chip-row">
+              <span class="chip-small">main <span class="x">&times;</span></span>
+              <span class="chip-small">aria <span class="x">&times;</span></span>
+              <span class="add-chip">+ add tag</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- OVERVIEW — HAPPENINGS -->
+        <div class="tab-panel happenings-only" data-panel="overview" data-side-panel="happenings">
+          <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 14px; padding: 8px 12px; background: #fffbe6; border-left: 3px solid #e3d8c0; border-radius: 2px">
+            Fields shown here are from <code>happenings</code>. Time anchor is mutually exclusive
+            (<code>occurred_at_entry</code> XOR <code>temporal</code>) &mdash; the form enforces one-or-the-other.
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              category
+              <span class="type-hint">text &middot; free-form</span>
+            </div>
+            <div class="input-text" style="color: var(--ink)">encounter</div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              icon
+              <span class="type-hint">preset key &middot; happenings.icon</span>
+            </div>
+            <div class="input-select">
+              <span>&#9876; battle</span>
+              <span style="color: var(--ink-faint)">&#9662;</span>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              common_knowledge
+              <span class="type-hint">bool &middot; awareness skip</span>
+            </div>
+            <div class="toggle-row">
+              <span class="toggle-pill" id="ck-toggle"></span>
+              <span><span data-ck-text="off">off</span><span data-ck-text="on" style="display: none">on &mdash; awareness rows are skipped</span></span>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              time anchor
+              <span class="type-hint">XOR &middot; occurred_at_entry / temporal</span>
+            </div>
+            <div class="anchor-group">
+              <div class="anchor-cell active">
+                <div class="anchor-label">
+                  <span class="anchor-radio"></span>
+                  <span>occurred_at_entry</span>
+                </div>
+                <div class="input-select">
+                  <span>entry 23 &middot; ch3</span>
+                  <span style="color: var(--ink-faint)">jump &rarr;</span>
+                </div>
+              </div>
+              <div class="anchor-cell disabled">
+                <div class="anchor-label">
+                  <span class="anchor-radio"></span>
+                  <span>temporal</span>
+                </div>
+                <div class="input-text placeholder-text">
+                  [free-form &mdash; "ongoing" / "1872 AR" / "next solstice"]
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              description
+              <span class="type-hint">text &middot; happenings.description</span>
+            </div>
+            <div class="input-textarea placeholder-text">
+              [Two of the Warden's men jump Kael at the bar; Aria steps in, breaks a chair on the bigger one. Bartender
+              drags Kael behind the counter. Kael's silver coin slips loose during the scuffle.]
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">
+              tags
+              <span class="type-hint">string[] &middot; happenings.tags</span>
+            </div>
+            <div class="chip-row">
+              <span class="chip-small">combat <span class="x">&times;</span></span>
+              <span class="chip-small">tavern <span class="x">&times;</span></span>
+              <span class="add-chip">+ add tag</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- INVOLVEMENTS — happenings only -->
+        <div class="tab-panel happenings-only" data-panel="involvements">
+          <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 14px">
+            <code>happening_involvements</code> rows. Entity picker is kind-aware
+            (character / location / item / faction); role is free-form. Add or remove via the row controls.
+          </div>
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th style="width: 32px">kind</th>
+                <th>entity</th>
+                <th>role</th>
+                <th class="row-actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="list-kind" style="width: 18px; height: 18px; font-size: 11px" title="character">☺</span></td>
+                <td>Kael</td>
+                <td><span class="placeholder-text">[actor]</span></td>
+                <td class="row-actions"><span class="x">&times;</span></td>
+              </tr>
+              <tr>
+                <td><span class="list-kind" style="width: 18px; height: 18px; font-size: 11px" title="character">☺</span></td>
+                <td>Aria</td>
+                <td><span class="placeholder-text">[actor]</span></td>
+                <td class="row-actions"><span class="x">&times;</span></td>
+              </tr>
+              <tr>
+                <td><span class="list-kind" style="width: 18px; height: 18px; font-size: 11px" title="character">☺</span></td>
+                <td>Bartender</td>
+                <td><span class="placeholder-text">[witness]</span></td>
+                <td class="row-actions"><span class="x">&times;</span></td>
+              </tr>
+              <tr>
+                <td><span class="list-kind" style="width: 18px; height: 18px; font-size: 11px" title="location">⌂</span></td>
+                <td>The Iron Tavern</td>
+                <td><span class="placeholder-text">[site]</span></td>
+                <td class="row-actions"><span class="x">&times;</span></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="tbl-add">+ link entity</div>
+        </div>
+
+        <!-- AWARENESS — happenings only; flips between rows / common-knowledge notice -->
+        <div class="tab-panel happenings-only" data-panel="awareness">
+          <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 14px">
+            <code>happening_awareness</code> rows &mdash; characters who know about this happening. <code>salience</code>
+            is a 0&ndash;1 retrieval rank; <code>source</code> is the LLM-authored descriptor used verbatim in prompts.
+          </div>
+
+          <div class="ck-rows">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>character</th>
+                  <th>learned_at</th>
+                  <th style="width: 60px">salience</th>
+                  <th>source</th>
+                  <th class="row-actions"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Aria</td>
+                  <td>e23 &middot; ch3</td>
+                  <td>1.00</td>
+                  <td><span class="placeholder-text">[witnessed firsthand]</span></td>
+                  <td class="row-actions"><span class="x">&times;</span></td>
+                </tr>
+                <tr>
+                  <td>Kael</td>
+                  <td>e23 &middot; ch3</td>
+                  <td>1.00</td>
+                  <td><span class="placeholder-text">[was there &mdash; took the punches]</span></td>
+                  <td class="row-actions"><span class="x">&times;</span></td>
+                </tr>
+                <tr>
+                  <td>Bartender</td>
+                  <td>e23 &middot; ch3</td>
+                  <td>0.90</td>
+                  <td><span class="placeholder-text">[witnessed firsthand from behind the bar]</span></td>
+                  <td class="row-actions"><span class="x">&times;</span></td>
+                </tr>
+                <tr>
+                  <td>Jorin</td>
+                  <td>e28 &middot; ch3</td>
+                  <td>0.55</td>
+                  <td><span class="placeholder-text">[told by Bartender, second-hand]</span></td>
+                  <td class="row-actions"><span class="x">&times;</span></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="tbl-add">+ link character</div>
+          </div>
+
+          <div class="ck-notice">
+            <div style="font-size: 14px; margin-bottom: 6px">&#10003;</div>
+            <b>Common knowledge.</b> Every character is aware of this happening; per-character awareness rows are skipped
+            per the <code>common_knowledge=1</code> invariant.
+            <br />
+            <br />
+            <span style="color: var(--ink-faint)">Toggle common_knowledge off on the Overview tab to add specific awareness rows again.</span>
+          </div>
+        </div>
+
+        <!-- HISTORY -->
+        <div class="tab-panel" data-panel="history">
+          <div class="history-controls">
+            <div class="history-search">Search field / op&hellip;</div>
+            <div class="history-op-filter">
+              <span class="history-sort-btn active">All ops</span>
+              <span class="history-sort-btn">create</span>
+              <span class="history-sort-btn">update</span>
+              <span class="history-sort-btn">delete</span>
+            </div>
+            <div class="history-sort">
+              sort:
+              <span class="history-sort-btn active">newest first</span>
+              <span class="history-sort-btn">oldest first</span>
+            </div>
+          </div>
+
+          <div class="history-row header">
+            <span class="history-ts">when</span>
+            <span class="history-op">op</span>
+            <span>change</span>
+          </div>
+          <div class="history-row threads-only">
+            <span class="history-ts">2026-04-25 11:02</span>
+            <span class="history-op update">update</span>
+            <span><code>description</code> &mdash; expanded after entry 31 (Aria refused the bargain&apos;s next clause)</span>
+          </div>
+          <div class="history-row threads-only">
+            <span class="history-ts">2026-04-24 16:22</span>
+            <span class="history-op update">update</span>
+            <span><code>tags</code> &mdash; added "aria"</span>
+          </div>
+          <div class="history-row threads-only">
+            <span class="history-ts">2026-04-24 14:21</span>
+            <span class="history-op create">create</span>
+            <span>Created from classifier after entry 18: status=active</span>
+          </div>
+
+          <div class="history-row happenings-only">
+            <span class="history-ts">2026-04-25 11:48</span>
+            <span class="history-op update">update</span>
+            <span><code>awareness</code> &mdash; added Jorin (told by Bartender, salience 0.55)</span>
+          </div>
+          <div class="history-row happenings-only">
+            <span class="history-ts">2026-04-25 11:30</span>
+            <span class="history-op create">create</span>
+            <span>Created from classifier after entry 23 with 4 involvements + 3 awareness rows</span>
+          </div>
+
+          <div class="history-foot">
+            <button class="load-older">Load older changes</button>
+          </div>
+        </div>
+
+        <!-- SAVE BAR -->
+        <div class="save-bar" id="save-bar">
+          <div class="dirty-note">
+            <span class="dirty-dot"></span>
+            <span><b>2 unsaved changes</b> &mdash; description, awareness</span>
+          </div>
+          <div class="actions">
+            <span class="discard-btn">Discard</span>
+            <span class="save-btn">Save <span class="kbd">&#8984;S</span></span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="notes">
+      <p style="margin: 0; text-align: center">
+        Rationale &amp; decisions live in <code>docs/ui/screens/plot/plot.md</code> and <code>docs/ui/principles.md</code>. This file is a visual
+        artifact of the settled shape.
+      </p>
+    </div>
+
+    <script>
+      (function () {
+        const body = document.body;
+
+        function setSide(side) {
+          body.dataset.side = side;
+          document.querySelectorAll('[data-side-btn]').forEach((b) => b.classList.toggle('active', b.dataset.sideBtn === side));
+          document.querySelectorAll('[data-seg]').forEach((s) => s.classList.toggle('active', s.dataset.seg === side));
+          // when switching to threads, force tab to overview if currently on a happenings-only tab
+          const activeTab = document.querySelector('.tab.active');
+          if (side === 'threads' && activeTab && (activeTab.dataset.tab === 'involvements' || activeTab.dataset.tab === 'awareness')) {
+            setTab('overview');
+          }
+        }
+
+        function setTab(tabId) {
+          document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === tabId));
+          document.querySelectorAll('.tab-panel').forEach((p) => {
+            const matchTab = p.dataset.panel === tabId;
+            p.classList.toggle('active', matchTab);
+          });
+          document.querySelectorAll('[data-rb-tab]').forEach((b) => b.classList.toggle('active', b.dataset.rbTab === tabId));
+        }
+
+        function setCk(state) {
+          body.dataset.ck = state;
+          document.querySelectorAll('[data-ck-btn]').forEach((b) => b.classList.toggle('active', b.dataset.ckBtn === state));
+          const pill = document.getElementById('ck-toggle');
+          if (pill) pill.classList.toggle('on', state === 'on');
+          document.querySelectorAll('[data-ck-text]').forEach((el) => {
+            el.style.display = el.dataset.ckText === state ? '' : 'none';
+          });
+        }
+
+        function setDirty(state) {
+          document.getElementById('save-bar').classList.toggle('dirty', state === 'dirty');
+          document.querySelectorAll('[data-dirty-btn]').forEach((b) => b.classList.toggle('active', b.dataset.dirtyBtn === state));
+        }
+
+        // Wire controls
+        document.querySelectorAll('[data-side-btn]').forEach((b) =>
+          b.addEventListener('click', () => setSide(b.dataset.sideBtn)),
+        );
+        document.querySelectorAll('[data-seg]').forEach((s) => s.addEventListener('click', () => setSide(s.dataset.seg)));
+        document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => setTab(t.dataset.tab)));
+        document.querySelectorAll('[data-rb-tab]').forEach((b) =>
+          b.addEventListener('click', () => setTab(b.dataset.rbTab)),
+        );
+        document.querySelectorAll('[data-ck-btn]').forEach((b) =>
+          b.addEventListener('click', () => setCk(b.dataset.ckBtn)),
+        );
+        document.getElementById('ck-toggle')?.addEventListener('click', () => {
+          setCk(body.dataset.ck === 'on' ? 'off' : 'on');
+        });
+        document.querySelectorAll('[data-dirty-btn]').forEach((b) =>
+          b.addEventListener('click', () => setDirty(b.dataset.dirtyBtn)),
+        );
+
+        // overflow menu toggles
+        document.querySelectorAll('.overflow-btn').forEach((btn) => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const menu = btn.querySelector('.overflow-menu');
+            const wasOpen = menu.classList.contains('open');
+            document.querySelectorAll('.overflow-menu.open').forEach((m) => m.classList.remove('open'));
+            if (!wasOpen) menu.classList.add('open');
+          });
+        });
+        document.addEventListener('click', () => {
+          document.querySelectorAll('.overflow-menu.open').forEach((m) => m.classList.remove('open'));
+        });
+
+        // list rows
+        document.querySelectorAll('.list-row').forEach((row) => {
+          row.addEventListener('click', () => {
+            document.querySelectorAll('.list-row').forEach((r) => r.classList.remove('selected'));
+            row.classList.add('selected');
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>
