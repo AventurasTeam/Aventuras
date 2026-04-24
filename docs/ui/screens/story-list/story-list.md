@@ -7,13 +7,14 @@ the home surface between writing sessions. Lists their stories with
 enough at-a-glance info to recognize them, plus entry points for
 creating new and managing the library.
 
-Most of the chrome is governed by cross-cutting principles in
+Cross-cutting principles that govern this screen are in
 [principles.md](../../principles.md). Relevant sections:
 
-- Top-bar design rule (essentials — with `← Return` absent here
-  because this IS the root)
-- Actions menu
-- Settings split (gear opens App Settings here, not Story Settings)
+- [Top-bar design rule](../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
+  (essentials — with `← Return` absent here because this IS the root)
+- [Actions](../../principles.md#actions--platform-agnostic-action-directory) menu
+- [Settings architecture — split by location](../../principles.md#settings-architecture--split-by-location)
+  (gear opens App Settings here, not Story Settings)
 
 ## Layout
 
@@ -64,8 +65,9 @@ landing from anywhere else, but we're already here).
   Single-select. Lean picker on the right.
 
 **Sort invariant:** within any filter, **pinned stories are pinned
-to the top**, matching the Layer 0 rule from the entity-list
-pattern in [principles.md](../../principles.md). Everything else sorts by the chosen key.
+to the top**, matching the Layer 0 rule from the
+[entity-list sort pattern](../../principles.md#entity-list-sort-order--static-four-layer).
+Everything else sorts by the chosen key.
 
 ## Story card — text-first
 
