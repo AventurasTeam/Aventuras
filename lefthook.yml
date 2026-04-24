@@ -12,3 +12,6 @@ pre-commit:
       glob: '*.{js,jsx,ts,tsx}'
       run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
       stage_fixed: true
+    remark:
+      glob: '*.md'
+      run: pnpm exec remark --quiet --frail {staged_files}

@@ -671,9 +671,8 @@ remaining budget.
 Flag for future sessions:
 
 - **Concrete data flow trace** — the exact end-to-end path of one user
-  turn through Pre → Retrieval → Narrative → [Classification ‖
-  Translation] → Post, including Zustand dispatch points and SQLite
-  writes. Next up.
+  turn through `Pre → Retrieval → Narrative → [Classification ‖ Translation] → Post`,
+  including Zustand dispatch points and SQLite writes. Next up.
 - **Module / folder layout** — concrete repo organization (`src/db/`,
   `src/store/`, `src/ai/pipeline/`, etc.)
 - **Platform boundaries** — Electron main vs renderer, filesystem access

@@ -78,7 +78,7 @@ Happenings
 ```
 
 Clicking any category in Browse lists rows in the rail. Clicking a row
-opens a peek drawer. The peek's "Open in [World|Plot] panel →" link
+opens a peek drawer. The peek's `Open in [World|Plot] panel →` link
 routes to the appropriate surface with the row pre-selected.
 
 ---

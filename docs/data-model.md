@@ -303,8 +303,8 @@ be ironed out later). Two concrete decisions captured now:
   Distinct from characters' `current_location_id` / items' `at_location_id`,
   which are positional (where something is right now); `parent_location_id`
   is compositional (this place is part of that place). Prompt rendering
-  walks the parent chain at runtime (e.g. "Aria is in [Shop in Town Square
-  in City]"). Cycle prevention is app-layer — SQLite can't enforce it.
+  walks the parent chain at runtime (e.g. `Aria is in [Shop in Town Square in City]`).
+  Cycle prevention is app-layer — SQLite can't enforce it.
 
 ### Story identity fields
 
