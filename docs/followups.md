@@ -1,11 +1,12 @@
-# UI follow-ups
+# Follow-ups
 
-Data-model, architecture, and UX items the UI work surfaced — stacked
-for later sessions. Separate from wireframes / principles so it stays
-actionable.
+Top-level ledger of outstanding data-model, architecture, and UX
+items deferred from earlier work. Items that have been cashed into
+the relevant topic doc (`data-model.md`, `architecture.md`,
+per-screen UI docs) are removed on resolution.
 
-This file tracks **outstanding** items only. Anything cashed into
-`docs/data-model.md` or `docs/architecture.md` is removed on resolution.
+UI work surfaces most of these today; other domains add sections as
+they accumulate items.
 
 ---
 
@@ -42,8 +43,8 @@ v1 ships Earth-calendar-only (base unit = seconds, formatted via
 calendars — `worldTime` is a bare integer; a different calendar is
 just a different renderer over the same integer. What's missing:
 
-- Where a story's calendar system is declared (likely a wizard step
-  - a `stories.settings.calendarSystem` field).
+- Where a story's calendar system is declared (wizard step plus a
+  `stories.settings.calendarSystem` field, presumably).
 - How calendar systems are authored (built-in presets? pack-declared?
   plugin-shaped?).
 - The renderer contract (what a calendar formatter must implement).
@@ -79,7 +80,7 @@ current reader wireframe — requires a return pass.
 
 ### Bulk operations on entities
 
-See principles.md for open sub-questions. Dedicated design pass.
+See [ui/principles.md](./ui/principles.md) for open sub-questions. Dedicated design pass.
 
 ### Cover display on story list cards
 

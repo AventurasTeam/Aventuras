@@ -1,6 +1,6 @@
 # Reader / Composer
 
-**Wireframe:** [`docs/wireframes/reader-composer.html`](../wireframes/reader-composer.html) — interactive
+**Wireframe:** [`reader-composer.html`](./reader-composer.html) — interactive
 
 The core screen. Entry list + composer + streaming AI reply. Right
 rail for world-state Browse. Chapter navigation + in-world time in
@@ -8,7 +8,7 @@ the top-bar chrome. Next-turn suggestions between entries and
 composer.
 
 Most of the reader's behavior is governed by cross-cutting
-principles in [principles.md](./principles.md). Relevant sections:
+principles in [principles.md](../../principles.md). Relevant sections:
 
 - Top-bar design rule (essentials + discretionary)
 - Chapter navigation (chip + popover + progress strip with color

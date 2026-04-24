@@ -1,6 +1,6 @@
 # World panel
 
-**Wireframe:** [`docs/wireframes/world-panel.html`](../wireframes/world-panel.html) — interactive
+**Wireframe:** [`world.html`](./world.html) — interactive
 
 Dedicated full-screen surface for entities + lore management.
 Master-detail pattern: filterable list on the left, single-row
@@ -8,7 +8,7 @@ detail on the right with tabs. The deep-edit workshop level of
 the three-level entity surfacing (rail → peek → panel).
 
 Most of the panel's behavior is governed by cross-cutting
-principles in [principles.md](./principles.md). Relevant sections:
+principles in [principles.md](../../principles.md). Relevant sections:
 
 - World / Plot split
 - Entity row indicators (three channels)
@@ -65,6 +65,6 @@ principles in [principles.md](./principles.md). Relevant sections:
 ## Open for per-kind composition
 
 Location / item / faction Overview compositions are not drawn —
-pending kind-specific state schema design (see followups.md).
+pending kind-specific state schema design (see [followups.md](../../../followups.md)).
 Lore's composition is separate again (different table, different
 fields — simpler than entities, more text-heavy).

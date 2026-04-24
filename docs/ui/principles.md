@@ -10,7 +10,8 @@ more than one screen.
 ## Wireframe format and interactivity
 
 Wireframes live as **standalone interactive HTML** at
-`docs/wireframes/<screen>.html`. Each is a committed artifact,
+`docs/ui/screens/<screen>/<screen>.html`, colocated with the
+per-screen `.md` doc. Each is a committed artifact,
 no framework, no build, no external deps. Styling is low-fi
 monochrome; state transitions use minimal inline vanilla JS.
 
@@ -23,7 +24,7 @@ monochrome; state transitions use minimal inline vanilla JS.
 
 Iteration uses the Superpowers brainstorming companion (ephemeral
 `.superpowers/brainstorm/`, gitignored). When a wireframe stabilizes,
-its final form lives in `docs/wireframes/`.
+its final form lives in `docs/ui/screens/<screen>/`.
 
 ---
 

@@ -1,6 +1,6 @@
 # Story Settings
 
-**Wireframe:** [`docs/wireframes/story-settings.html`](../wireframes/story-settings.html) — interactive
+**Wireframe:** [`story-settings.html`](./story-settings.html) — interactive
 
 Per-story configuration surface. Reached from the ⚙ icon in the
 reader's top bar. Two domains under one roof: **Story** (what the
@@ -11,7 +11,7 @@ App Settings reuses the same layout pattern with different
 sections/tabs.
 
 Most of the behavior is governed by cross-cutting principles in
-[principles.md](./principles.md). Relevant sections:
+[principles.md](../../principles.md). Relevant sections:
 
 - Settings architecture (split by location — App vs Story)
 - Adventure vs Creative mode, unified lead concept

@@ -1,43 +1,46 @@
 # UI docs
 
-Design documentation for Aventuras' UI. Companion to `docs/data-model.md`
-(what's stored) and `docs/architecture.md` (how code is organized); these
-docs tell you what the app looks like and how its surfaces behave.
+Design documentation for Aventuras' UI. Companion to
+[`docs/data-model.md`](../data-model.md) (what's stored) and
+[`docs/architecture.md`](../architecture.md) (how code is organized);
+these docs tell you what the app looks like and how its surfaces
+behave.
 
-Low-fi wireframes live as interactive static HTML at `docs/wireframes/`.
-Prose, rationale, and decisions live here.
+Low-fi wireframes live as interactive static HTML colocated with each
+screen's `.md` doc under `docs/ui/screens/<screen>/`. Prose,
+rationale, and decisions live alongside.
 
 ## Layout
 
-- **[principles.md](./principles.md)** — cross-cutting decisions that
-  apply across multiple surfaces (top-bar rule, entity row patterns,
-  save model, injection modes, etc.). Read this first.
-- **[followups.md](./followups.md)** — data-model and architecture
-  follow-ups the UI work surfaced, stacked for later sessions.
-- **Per-wireframe docs** — screen-specific notes, link to each
-  interactive HTML artifact.
+- **[principles.md](./principles.md)** — cross-cutting decisions
+  that apply across multiple surfaces (top-bar rule, entity row
+  patterns, save model, injection modes, etc.). Read this first.
+- **[../followups.md](../followups.md)** — top-level ledger of
+  outstanding data-model, architecture, and UX items.
+- **`screens/<screen>/`** — one directory per surface. Holds the
+  per-screen `.md` doc and its interactive `.html` wireframe.
 
 ## Screens
 
 ### Critical (MVP writing loop)
 
-| #   | Screen                         | Doc                                        | Wireframe                                                  |
-| --- | ------------------------------ | ------------------------------------------ | ---------------------------------------------------------- |
-| 1   | Story list (landing)           | [story-list.md](./story-list.md)           | [story-list.html](../wireframes/story-list.html)           |
-| 2   | Story creation wizard          | pending                                    | pending                                                    |
-| 3   | Reader / composer              | [reader-composer.md](./reader-composer.md) | [reader-composer.html](../wireframes/reader-composer.html) |
-| 4   | App Settings                   | pending                                    | pending                                                    |
-| 5   | Onboarding / empty state       | pending                                    | pending                                                    |
-| -   | Story Settings (from reader ⚙) | [story-settings.md](./story-settings.md)   | [story-settings.html](../wireframes/story-settings.html)   |
+| #   | Screen                         | Directory                                                                |
+| --- | ------------------------------ | ------------------------------------------------------------------------ |
+| 1   | Story list (landing)           | [screens/story-list/](./screens/story-list/story-list.md)                |
+| 2   | Story creation wizard          | pending                                                                  |
+| 3   | Reader / composer              | [screens/reader-composer/](./screens/reader-composer/reader-composer.md) |
+| 4   | App Settings                   | pending                                                                  |
+| 5   | Onboarding / empty state       | pending                                                                  |
+| -   | Story Settings (from reader ⚙) | [screens/story-settings/](./screens/story-settings/story-settings.md)    |
 
 ### Supporting (lands with MVP)
 
-| #   | Screen                      | Doc                    | Wireframe                                          |
-| --- | --------------------------- | ---------------------- | -------------------------------------------------- |
-| 6   | World (entities + lore)     | [world.md](./world.md) | [world-panel.html](../wireframes/world-panel.html) |
-| 7   | Branch navigator            | pending                | pending                                            |
-| 8   | Plot (threads + happenings) | pending                | pending                                            |
-| 9   | Chapter timeline            | pending                | pending                                            |
+| #   | Screen                      | Directory                                  |
+| --- | --------------------------- | ------------------------------------------ |
+| 6   | World (entities + lore)     | [screens/world/](./screens/world/world.md) |
+| 7   | Branch navigator            | pending                                    |
+| 8   | Plot (threads + happenings) | pending                                    |
+| 9   | Chapter timeline            | pending                                    |
 
 ### Power-user / deferred
 
@@ -50,7 +53,7 @@ Prose, rationale, and decisions live here.
 ### Cross-cutting states (not standalone screens)
 
 - Streaming / loading / error inside the reader (error surface
-  locked as system entries — see principles.md)
+  locked as system entries — see [principles.md](./principles.md))
 - Empty states for each list
 - Rollback confirmation UX (separate wireframe pass pending)
 - Mobile variants for everything (deferred)
@@ -60,7 +63,8 @@ Prose, rationale, and decisions live here.
 
 - Locked: Reader / composer + World panel, plus all the cross-cutting
   decisions that emerged while wireframing those two (see
-  principles.md).
-- Data-model follow-ups accumulated in `followups.md`.
+  [principles.md](./principles.md)).
+- Data-model follow-ups accumulated in
+  [`../followups.md`](../followups.md).
 - Visual identity, feature components in Storybook, mobile variants,
   and pixel-fidelity mockups deferred to future sessions.

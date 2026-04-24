@@ -1,6 +1,6 @@
 # Story list (landing)
 
-**Wireframe:** [`docs/wireframes/story-list.html`](../wireframes/story-list.html) — interactive
+**Wireframe:** [`story-list.html`](./story-list.html) — interactive
 
 The landing screen. First thing the user sees after onboarding, and
 the home surface between writing sessions. Lists their stories with
@@ -8,7 +8,7 @@ enough at-a-glance info to recognize them, plus entry points for
 creating new and managing the library.
 
 Most of the chrome is governed by cross-cutting principles in
-[principles.md](./principles.md). Relevant sections:
+[principles.md](../../principles.md). Relevant sections:
 
 - Top-bar design rule (essentials — with `← Return` absent here
   because this IS the root)
@@ -65,7 +65,7 @@ landing from anywhere else, but we're already here).
 
 **Sort invariant:** within any filter, **pinned stories are pinned
 to the top**, matching the Layer 0 rule from the entity-list
-pattern in `principles.md`. Everything else sorts by the chosen key.
+pattern in [principles.md](../../principles.md). Everything else sorts by the chosen key.
 
 ## Story card — text-first
 
@@ -199,7 +199,7 @@ the centered CTA carries that role more prominently.
 ## Data-model dependencies
 
 Story cards assume several identity fields that the current
-`stories` schema does NOT yet have. See `followups.md`:
+`stories` schema does NOT yet have. See [followups.md](../../../followups.md):
 
 - `genre: string | null` — free-text single label (shown as overline)
 - `tags: string[]` — exists but NOT shown on cards; for search/filter
