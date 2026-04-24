@@ -360,12 +360,37 @@ template in the `promptContext` group renders against.
 ### Settings: strict types, defaults at load
 
 The `promptContext.userSettings` slice exposes the LLM-relevant subset
-of settings: retrieval caps, classifier config, memory config, image-
-generation config, translation settings, visual-prose mode, etc. These
-come from two sources — **app-level settings** (global, persist across
-stories; e.g. classifier truncation, image-gen caps) and **story-level
-settings** (in `stories.settings` JSON; e.g. memory config, POV, tone,
-mode).
+of settings that prompt templates consume. Three shapes feed into it:
+
+1. **App-level settings** (`useAppSettingsStore`) — global, persist
+   across stories. Holds two distinct roles:
+   - **"Default story settings"** — values that act as defaults for
+     new stories (memory knobs, translation config, composer UX
+     prefs, suggestions toggle, etc.). On story creation, these are
+     copied into the new `stories.settings`; the story owns them
+     thereafter. Changing the global does NOT propagate to existing
+     stories. This is the **copy-at-creation scope pattern**.
+   - **Global model defaults** (`defaultModels.narrative`,
+     `defaultModels.classifier`, ...) — resolved live at render time
+     via the models resolver (see below). This is the
+     **override-at-render scope pattern**.
+   - **App-only settings** — global concerns that never appear
+     per-story (API keys, classifier truncation caps, image-gen
+     global caps, diagnostics toggles).
+2. **Story-level settings** (`stories.settings` JSON on the loaded
+   story) — per-story definitional and operational config. Zod-
+   parsed at story open. Full shape in data-model.md → "Story
+   settings shape."
+3. **Story identity fields** (`stories` columns — title, genre,
+   tone, etc.) — not LLM-consumed directly as "settings," but a
+   handful (`genre`, `tone`) are passed into prompt context as
+   plain string fields.
+
+**Scope policy — two patterns:** See data-model.md → "Story settings
+shape" for the authoritative version. Summary: copy-at-creation for
+operational + UX defaults; override-at-render for models only;
+wizard-authored (no global) for definitional fields (mode,
+leadEntityId, narration, tone); columns-on-stories for identity.
 
 **Pattern to avoid (the old app's):** inline `??` fallbacks and hardcoded
 defaults at every read site, scattered across the `promptContext` getter
@@ -381,7 +406,15 @@ its default filled in, and no `??` fallback should appear in the
 `promptContext` getter or anywhere else. If a value is missing from the
 persisted JSON, that's the parse's job to fix, not the reader's.
 
-The generation store doesn't own settings storage — it just reads via
+**The models resolver is the one deliberate exception** to "no `??` at
+read sites" — because models use override-at-render, `promptContext`
+calls a named `resolveModel(feature)` function that does
+`story.settings.models[feature] ?? appSettings.defaultModels[feature]`.
+Single, typed, named — not ambient `??` scattered everywhere. Every
+other setting read is a direct property access off the parsed story
+settings.
+
+The generation store doesn't own settings storage — it reads via
 `getState()` on the app-settings store and the loaded story's settings
 slice, and surfaces them through `promptContext.userSettings` as a
 clean, flat, typed shape for templates to consume.
@@ -411,16 +444,16 @@ yields an event (orchestrator applies derived deltas to SQLite +
 
 ### v2 shape of `promptContext` — what's carried over, what changes
 
-| Old variable                                   | V2 replacement                                                                                           |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `characters` / `locations` / `items`           | Unified under `entities` discriminated by `kind`                                                         |
-| `storyBeats`                                   | Renamed `threads`                                                                                        |
-| `lorebookEntries`                              | Split: `lore` (timeless reference) + entities with `status='staged'` (pre-introduced actors)             |
-| `relevantWorldState`                           | Same concept; filtered slice of entities/happenings/lore driven by POV character's `happening_awareness` |
-| `timeTracker`                                  | Derived from latest entry's `metadata.elapsedTime`                                                       |
-| `translated_*` columns via `translationResult` | Reads through the `translations` table (polymorphic target) instead of per-column fields                 |
-| Pipeline intermediates (narrativeResult, etc.) | Same — written to generation store, available to later templates                                         |
-| `packVariables.runtimeVariables`               | Same pattern; deferred until pack system lands                                                           |
+| Old variable                                   | V2 replacement                                                                                                               |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `characters` / `locations` / `items`           | Unified under `entities` discriminated by `kind`                                                                             |
+| `storyBeats`                                   | Renamed `threads`                                                                                                            |
+| `lorebookEntries`                              | Split: `lore` (timeless reference) + entities with `status='staged'` (pre-introduced actors)                                 |
+| `relevantWorldState`                           | Same concept; filtered slice of entities/happenings/lore driven by POV character's `happening_awareness`                     |
+| `timeTracker`                                  | Derived from latest entry's `metadata.worldTime` + `settings.worldTimeOrigin` (see data-model.md → "In-world time tracking") |
+| `translated_*` columns via `translationResult` | Reads through the `translations` table (polymorphic target) instead of per-column fields                                     |
+| Pipeline intermediates (narrativeResult, etc.) | Same — written to generation store, available to later templates                                                             |
+| `packVariables.runtimeVariables`               | Same pattern; deferred until pack system lands                                                                               |
 
 ### Why intermediates aren't persisted
 
@@ -449,16 +482,32 @@ wipes everything. The delta log carries the history.
 Three background-ish agents run in this app. Each has a clear cadence
 trigger and clear scope.
 
-| Agent                       | Trigger                              | Scope                                                                       |
-| --------------------------- | ------------------------------------ | --------------------------------------------------------------------------- |
-| **Classifier**              | Every AI reply (in-pipeline)         | Extract world-state changes from narrative → emit deltas                    |
-| **Lore-management agent**   | Chapter close only (out-of-pipeline) | Promote staged entities, update/create lore from chapter events             |
-| **Memory-compaction agent** | Chapter close only (out-of-pipeline) | Consolidate low-salience `happening_awareness` rows into summary happenings |
+| Agent                       | Trigger                              | Scope                                                                                                                                     |
+| --------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **Classifier**              | Every AI reply (in-pipeline)         | Extract world-state changes from narrative → emit deltas for entities, happenings, awareness links, and the new entry's `metadata` fields |
+| **Lore-management agent**   | Chapter close only (out-of-pipeline) | Promote staged entities, update/create lore from chapter events                                                                           |
+| **Memory-compaction agent** | Chapter close only (out-of-pipeline) | Consolidate low-salience `happening_awareness` rows into summary happenings                                                               |
 
 **Classifier** is the only per-reply agent. Old app's "post-generation
 phase with lore-management" ran after every reply but actually gated
 lore-mgr on chapter-create events — we make that explicit in v2 by
 moving lore-mgr out of the main pipeline entirely.
+
+**Classifier contract — `metadata` fields.** Alongside entity/happening/
+awareness deltas, the classifier populates the new entry's metadata:
+
+- `sceneEntities: string[]` — entity IDs (characters + items) present
+  in the scene this entry depicts.
+- `currentLocationId: string | null` — the singleton location entity
+  that IS the current scene.
+- `worldTime: number` — base-unit delta (seconds for Earth calendar)
+  added to the previous entry's `worldTime`. Monotonically
+  non-decreasing. **For detected flashback / memory framing ("she
+  remembered...", "25 years earlier..."), the classifier emits 0** —
+  main-timeline clock doesn't advance during recalled scenes. Users
+  can manually correct drift via metadata edit (delta-logged). v1
+  doesn't model structural non-linear narrative — see data-model.md →
+  "In-world time tracking" for the limitation.
 
 **Chapter-close** is its own sub-pipeline, triggered when the token
 threshold is crossed (per-story setting) or the user explicitly closes.
@@ -511,6 +560,110 @@ render-time lookup. Components that render user-facing text call a
 helper like `t(source, field)` that looks up the current language's
 translation and falls back to source.
 
+**Display-only invariant — translations never feed back into prompts.**
+Translations are strictly one-way: `source → translated_text` for UI
+rendering. The pipeline, classifier, retrieval, and narrative layers
+always operate on the source-language content; the LLM-facing log is
+monolingual regardless of UI language. Narrative is generated in the
+source language; the classifier reads source-language entities;
+retrieval filters source-language text.
+
+Consequences:
+
+- Switching `settings.translation.targetLanguage` does not invalidate
+  narrative coherence — nothing the LLM ever saw changes.
+- Translation of **user action content** (composed in the user's
+  target language) is the exception that proves the rule: that
+  translation runs in the OPPOSITE direction — target → source — so
+  the LLM-facing log stays source-language. Same `translations`
+  table, same phase, different translation direction.
+- Re-translating an already-translated field looks up the existing
+  row before calling the translation model, so translation memory
+  is per-field-per-language and naturally consistent across a story.
+
+**What translation CANNOT do:** change the language the AI writes in.
+If a user wants the narrative generated in Spanish, that's a distinct
+concept — a narrative-language / source-language setting — not
+translation. Not currently modeled; flagged for later if demand
+emerges. Translation is strictly a display-time surface.
+
+---
+
+## Retrieval / injection phase
+
+Fills the prompt's entity / lore / happening / thread slices given
+token budget, injection modes, scene presence, and POV-awareness.
+Detailed design pending (ranking strategy, agent shape, token
+budgeting); the load-bearing contracts this phase must honor are
+locked in.
+
+### Recent buffer — always verbatim
+
+The tail of the narrative is always injected verbatim.
+`stories.settings.recentBuffer` (default 10) specifies how many most-
+recent `story_entries` go in word-for-word before retrieval considers
+anything earlier. Retrieval starts at `entry_count - recentBuffer`;
+everything more recent bypasses selection.
+
+Why the separate knob: the last few entries are almost never
+retrieval candidates (they're "now"). Scoring them by relevance
+wastes agent work and risks the retrieval agent omitting something
+the narrative just referenced. Hardcoding a buffer keeps retrieval
+free to focus on earlier content where selection genuinely matters.
+
+### Active + in-scene invariant — structural override of `injection_mode`
+
+**Entities with `status='active'` AND presence in the current entry's
+`metadata.sceneEntities` are ALWAYS injected, regardless of
+`entities.injection_mode`.** The mode check is short-circuited.
+
+`always` / `keyword_llm` / `disabled` only apply to entities that are
+NOT structurally required — staged, retired, or active-but-off-scene.
+
+Rationale: an active in-scene entity IS what the current narrative
+revolves around. Excluding one on a user-set `disabled` flag
+produces broken prompts ("who is this person the narrator keeps
+addressing?"). The mode setting is respected everywhere the entity
+isn't structurally necessary.
+
+`metadata.currentLocationId` gets the same treatment — the scene's
+current location always injects as an active entity.
+
+### Injection mode semantics (non-structural cases)
+
+After the structural override applies, remaining candidate rows
+(lore, non-scene entities, threads) are filtered by
+`injection_mode`:
+
+- `always` — unconditional include.
+- `keyword_llm` — included if either (a) a keyword heuristic
+  matches recent narrative (cheap, deterministic) OR (b) the
+  retrieval agent's LLM pass selects it (richer, token-budgeted).
+  Default for new rows.
+- `disabled` — skip entirely unless structurally required (which
+  `disabled` cannot suppress).
+
+### POV-awareness filtering (adventure mode only)
+
+For stories with `mode='adventure'` and a set `leadEntityId`,
+retrieval filters `happenings` by the lead character's awareness
+links — the prompt surfaces only what the character knows.
+Creative-mode skips this filter (director POV has no
+"character awareness"). Wired via a Liquid filter like
+`happenings | known_to: leadEntity` (see "Custom filters: Selectors").
+
+Happenings don't carry `injection_mode` at all — the awareness graph
+(`happening_awareness`) IS the injection rule. Common-knowledge
+happenings (`happenings.common_knowledge=1`) bypass awareness
+filtering entirely.
+
+### Token budgeting
+
+TBD. Old app used coarse priority + truncation; v2 revisits once the
+retrieval agent's shape is pinned. Floor is set by recent buffer
+plus structurally-required injections; everything else competes for
+remaining budget.
+
 ---
 
 ## What this doc does not yet cover
@@ -526,9 +679,11 @@ Flag for future sessions:
 - **Platform boundaries** — Electron main vs renderer, filesystem access
   patterns, IPC, what's RN-native-only, asset directory resolution per
   platform
-- **Retrieval** — how the prompt-context builder selects entities, lore,
-  happenings, threads to include; token budgeting; POV-awareness via
-  `happening_awareness`
+- **Retrieval — ranking + agent shape** — the scaffold is in place
+  (recent buffer, active+in-scene invariant, injection modes, POV
+  filtering); what's still TBD is the ranking strategy, the LLM-
+  powered retrieval agent's prompt + parse shape, and concrete
+  token-budgeting policy
 - **Streaming resilience** — mid-stream failure handling, partial-content
   persistence, retry strategy
 - **Error handling** — recoverable vs fatal at each layer; user-facing

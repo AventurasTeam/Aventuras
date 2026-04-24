@@ -35,8 +35,15 @@ erDiagram
         text id PK
         text title
         text description
-        json settings "model / POV / tone / etc."
-        integer chapter_token_threshold "per-story; default 24k"
+        text genre "single free-text label; card overline"
+        json tags "string[]; search/filter only, not shown on cards"
+        text cover_asset_id FK "optional; references assets"
+        text accent_color "optional hex/HSL; falls back to mode-derived"
+        text status "draft | active | archived (lifecycle; mutually exclusive)"
+        integer pinned "0 | 1; orthogonal to status"
+        text author_notes "private; distinct from description"
+        integer last_opened_at "distinct from updated_at; drives last-opened sort"
+        json settings "see 'Story settings shape' decision below"
         integer created_at
         integer updated_at
         text current_branch_id FK
@@ -58,7 +65,7 @@ erDiagram
         text kind "user_action | ai_reply | system"
         text content
         text chapter_id FK "null while in open region; set at chapter-create time"
-        json metadata "tokens, model, generation timing, and in-world time elapsed since story start (cumulative, not wall clock)"
+        json metadata "worldTime + sceneEntities + currentLocationId + generation provenance; see 'Entry metadata shape' decision below"
         integer created_at
     }
 
@@ -70,6 +77,7 @@ erDiagram
         text description
         text status "staged | active | retired"
         text retired_reason "free-form; only meaningful when status=retired (e.g. 'killed by Kael', 'wandered off', 'temple destroyed in quake', 'faction disbanded after coup')"
+        text injection_mode "always | keyword_llm | disabled; short-circuited by active+in-scene invariant"
         json state "typed per kind"
         json tags
         integer created_at
@@ -83,7 +91,7 @@ erDiagram
         text body
         text category "free-form user label — e.g. magic-system / religion / cosmology"
         json tags
-        text injection_mode "always | keyword | manual"
+        text injection_mode "always | keyword_llm | disabled"
         integer priority
         integer created_at
         integer updated_at
@@ -97,6 +105,7 @@ erDiagram
         text category "free-form user label — e.g. quest / arc / prophecy"
         text icon "string key from preset icon catalog"
         text status "pending | active | resolved | failed"
+        text injection_mode "always | keyword_llm | disabled"
         integer triggered_at_entry
         integer resolved_at_entry
         integer created_at
@@ -111,7 +120,7 @@ erDiagram
         text category "free-form — e.g. battle / encounter / discovery / scheduled"
         text icon "string key from preset icon catalog"
         text temporal "in-world time anchor for happenings WITHOUT a narrative position; free-form (e.g. '1872 AR', 'future', 'ongoing', 'next solstice')"
-        integer occurred_at_entry "narrative log position; null = outside narrative (use temporal instead). When set, in-world time derives from the entry's time-tracker metadata."
+        integer occurred_at_entry "narrative log position; null = outside narrative (use temporal instead). When set, in-world time derives from the entry's metadata.worldTime."
         integer common_knowledge "1 = everyone knows; skip awareness links"
         integer created_at
         integer updated_at
@@ -141,7 +150,6 @@ erDiagram
         json keywords "for retrieval / injection"
         text start_entry_id FK
         text end_entry_id FK "always set — only closed chapters exist as rows"
-        text world_time_snapshot "in-world time at chapter end"
         integer token_count "accumulated across chapter entries"
         integer closed_at
         integer created_at
@@ -298,6 +306,253 @@ be ironed out later). Two concrete decisions captured now:
   walks the parent chain at runtime (e.g. "Aria is in [Shop in Town Square
   in City]"). Cycle prevention is app-layer — SQLite can't enforce it.
 
+### Story identity fields
+
+**Decided:** `stories` gains identity metadata as columns (not inside
+`settings` JSON). Columns where the library needs filter/sort/search
+access; JSON reserved for settings where direct SQL queries aren't
+needed.
+
+- `genre text` — single free-text label ("Dark Fantasy", "Medieval
+  Mystery"). Not an enum; users type what reads right to them.
+  Rendered verbatim as the library card's overline. If multi-genre
+  demand emerges, promote to `json genres` later.
+- `tags json` — `string[]`. Indexable via `json_each` for
+  search/filter. Not shown on library cards (tag phrases are longer
+  than chip format tolerates).
+- `cover_asset_id text FK → assets.id` — optional. Cards are
+  text-first; covers are a power-user enhancement, rendered in a
+  future visual-identity pass.
+- `accent_color text` — optional hex/HSL. Falls back to mode-derived
+  default (Adventure blue, Creative purple) when null.
+- `status text` — lifecycle enum `draft | active | archived`,
+  mutually exclusive.
+  - `draft` is only reachable via wizard save; transitions to
+    `active` on wizard completion and is not user-togglable from the
+    library afterward.
+  - `active ↔ archived` toggle via overflow menu.
+  - Drafts cannot be archived (archive action is gated on
+    `status='active'`); they can only be completed or deleted.
+- `pinned integer` — 0 or 1. Orthogonal to `status` — any status can
+  be pinned. Inline star toggle on the library card.
+- `author_notes text` — private per-story note slot, distinct from
+  `description` (public one-liner). Nullable.
+- `last_opened_at integer` — distinct from `updated_at` (which
+  reflects any write). Touched when the user navigates into the
+  story; drives the default `last-opened` sort on the library.
+
+**Library sort invariant:** `pinned DESC, <chosen_sort_key>` — pinned
+stories always float to the top within any filter. Mirrors the Layer
+0 rule for lead-character sort on entity lists.
+
+### Story settings shape
+
+**Decided:** `stories.settings` is a zod-parsed JSON blob, with
+defaults applied at load time (parse mechanics in architecture.md →
+"Settings: strict types, defaults at load"). Full shape:
+
+```ts
+stories.settings: {
+  // Definitional — wizard-authored, no global default
+  mode: 'adventure' | 'creative'
+  leadEntityId: string | null       // required when mode=adventure; must reference an entity with kind=character
+  narration: 'first' | 'second' | 'third'
+  tone: string                      // free-form style/tone note injected into prompts
+
+  // Operational — defaults copied from App Settings → Default story settings at creation
+  chapterTokenThreshold: number     // moved out of top-level column
+  recentBuffer: number              // entries always injected verbatim before retrieval; default 10
+  compactionDetail: string          // one-line focus directive for memory-compaction agent
+
+  composerModesEnabled: boolean     // adventure-only; creative ignores
+  composerWrapPov: 'first' | 'third' // how composer modes wrap user input (NOT narration)
+  suggestionsEnabled: boolean       // gates next-turn suggestion pane
+
+  translation: {
+    enabled: boolean
+    targetLanguage: string | null   // ISO 639-1
+    granularToggles: {
+      narrative: boolean
+      entityNames: boolean
+      entityDescriptions: boolean
+      lore: boolean
+      threads: boolean
+      happenings: boolean
+      chapterMeta: boolean
+    }
+  }
+
+  // World time
+  worldTimeOrigin: string           // ISO 8601 Earth datetime; render anchor for metadata.worldTime
+
+  // Models — override-at-render pattern
+  models: {
+    narrative?: string              // absent = use current global app-settings default at render time
+    classifier?: string
+    translation?: string
+    imageGen?: string
+    suggestion?: string
+  }
+
+  // Pack
+  activePackId: string | null
+  packVariables: Record<string, unknown>  // values keyed by variable name; zod-validated per active pack's declared schema
+}
+```
+
+**Scope policy — two patterns for global vs story.**
+
+1. **Copy-at-creation** (operational + UX prefs). App Settings exposes
+   a **"Default story settings"** section holding the same field
+   shape; on story creation the current globals are copied into the
+   new story. After creation, the story owns its values; changing the
+   global default does NOT propagate to existing stories.
+2. **Override-at-render** (`settings.models` only). Fields are
+   optional; absent means "use the global app-settings default at
+   render time." Changing the global propagates to every
+   un-overridden story. The UX difference (Models' dashed-italic "App
+   default: X" sentinel vs copy-at-creation fields showing a concrete
+   value) derives directly from this pattern split.
+
+Definitional settings (mode, leadEntityId, narration, tone) and
+identity fields (genre, tags, cover, etc.) follow neither pattern —
+they're wizard-authored per story, no global default exists.
+
+**Narration vs composer wrap POV — orthogonal axes, often confused.**
+`narration` governs how the AI writes prose (`first | second | third`
+person). `composerWrapPov` governs how the composer's lazy-input modes
+(Do/Say/Think) wrap user text into sendable form. These are distinct:
+second-person narration doesn't imply wrapping user input as "You
+reach for..." — that would produce nonsense. Composer wrap POV is
+restricted to `first | third` (second not offered); narration has all
+three.
+
+### Entry metadata shape
+
+**Decided:** `story_entries.metadata` is the per-entry JSON blob for
+structured classifier/pipeline output alongside the raw `content`.
+Distinct from `content` because it's structured, typed, and
+delta-logged. Shape:
+
+```ts
+story_entries.metadata: {
+  // Generation provenance (AI entries only)
+  tokens?: { prompt: number, completion: number, reasoning?: number }
+  model?: string
+  generationTimingMs?: number
+
+  // Scene presence — classifier-authored
+  sceneEntities: string[]           // entity IDs present in this entry's scene (characters + items)
+  currentLocationId: string | null  // location entity that IS the current scene; singleton
+
+  // In-world time — classifier-authored, user-editable
+  worldTime: number                 // base time units since story start; monotonically non-decreasing within a branch
+}
+```
+
+**Scene presence is kind-aware.** `sceneEntities` carries characters
+and items — the things that come and go. `currentLocationId` is the
+singleton "we are here" pointer. Factions are not scene-tagged; a
+faction isn't in a scene the way a person is.
+
+**Metadata edits are delta-logged.** Unlike `content` (the single
+per-column side-channel exemption, see "Entry mutability & rollback"),
+metadata mutations write a delta. Consequence: a user correcting
+`worldTime` on an entry after the classifier over-advanced during a
+flashback produces a reversible delta, reachable via CTRL-Z or
+rollback. Same for `sceneEntities` / `currentLocationId` user-edits.
+
+### In-world time tracking
+
+**Decided:** time is modeled as a single monotonically non-decreasing
+integer `worldTime` on each entry's metadata, measured in **base time
+units since story start**. A separate `stories.settings.worldTimeOrigin`
+setting anchors those elapsed units to a display calendar. v1 ships
+with the Earth calendar (base unit = seconds); fictional calendar
+systems are a future-deferred replacement formatter over the same
+integer.
+
+**Why integer-based.** Free-form "time label" strings ("Day 3,
+evening") can't be math'd. Future features (character ageing,
+scheduled happenings firing on time, freshness-based retrieval decay)
+all want arithmetic. A raw elapsed counter gives us that; the calendar
+formatter produces the human-readable string on render.
+
+**Why story-relative, not absolute unix.** Story-relative keeps the
+classifier's job tractable — "how many seconds elapsed this turn" is
+the question it can actually answer. Absolute unix would require the
+classifier to know the setting's calendar from turn 1, and would be
+incoherent for fictional worlds against an implicit 1970 epoch.
+
+**Classifier contract.** Each AI reply's classification pass estimates
+elapsed base-units and emits a delta for the new entry's
+`metadata.worldTime`. For detected flashback/memory framing ("she
+remembered...", "25 years earlier..."), the classifier should emit
+`0` — main-timeline clock doesn't advance during recalled scenes.
+Estimation errors are unavoidable; users can manually edit
+`metadata.worldTime` (delta-logged like any metadata mutation) to
+correct drift.
+
+**v1 limitation — non-linear narrative.** Single-`worldTime` cleanly
+models linear narrative plus short flashbacks (main clock just
+doesn't advance during memory). It does NOT model structural non-
+linear narratives (alternating timelines, time travel, parallel
+chronologies). In those stories, happenings classified during an
+"alternate timeline" chunk inherit the entry's `worldTime` which
+reflects render-order rather than in-world order; the knowledge
+graph gets fuzzy in those regions. Chapter titles and prose carry
+the disambiguation.
+
+Future exit, if demand emerges: add optional `sceneTime: number | null`
+to `story_entries.metadata` — null = "same as worldTime," non-null =
+"this entry depicts a scene at this historical time." Awareness and
+happening logic would consult `sceneTime` when present. Since
+metadata is a JSON blob, adding the field later is zero
+schema-migration cost; no reason to reserve it now.
+
+**`happenings.temporal` stays free-form.** Out-of-narrative events
+("ongoing", "next solstice", "1872 AR") don't math cleanly and exist
+as display annotations, not clock values. The burden of matching
+temporal strings to the story's calendar rests with the user.
+
+### Injection modes — unified enum + structural invariant
+
+**Decided:** `lore`, `entities`, and `threads` all carry an
+`injection_mode` column with the same enum:
+`always | keyword_llm | disabled`.
+
+- `always` — include in every prompt render unconditionally.
+- `keyword_llm` — include when either (a) a keyword heuristic matches
+  recent text or (b) the retrieval agent's LLM-powered selection
+  picks it up. **Default** for new rows.
+- `disabled` — never include automatically; only surfaces if
+  explicitly referenced.
+
+**Breaking rename on `lore.injection_mode`.** Previously
+`always | keyword | manual`. "Manual" was ambiguous — old-app
+semantics meant "LLM-agent-selected retrieval," which reads far
+better as `keyword_llm`. `disabled` replaces the dropped "manual"
+with a clearer name.
+
+**`happenings` deliberately do not carry `injection_mode`.** The
+awareness graph (`happening_awareness`) is the injection rule —
+structural, not user-toggled. A happening is injected because a POV
+character knows about it (per the awareness link + salience), not
+because the user set a mode.
+
+**Structural invariant — active + in-scene entities always
+injected.** Regardless of an entity's `injection_mode` setting,
+entities with `status='active'` AND presence in the current entry's
+`sceneEntities` are ALWAYS injected. The retrieval phase
+short-circuits the mode check for this case. Rationale: an active
+in-scene entity IS what the current narrative is about; excluding
+it on a user-set `disabled` flag would produce broken prompts. The
+mode setting is consulted only for entities that are NOT
+structurally required — staged, retired, or active-but-off-scene.
+Same invariant applies structurally-required lore/threads when
+applicable (TBD as retrieval design lands); pipeline details in
+architecture.md → "Retrieval / injection phase."
+
 ### Entry mutability & rollback
 
 **Decided:** everything is an event in the append-only `deltas` log,
@@ -436,17 +691,16 @@ have an enum kind anymore).
 is the narrative log position — present for happenings that occurred
 during play, used for rollback ordering and scene-based retrieval. The
 actual in-world time for a narrative happening is **derived** from the
-referenced entry's `metadata` (see `story_entries.metadata`), which
-carries the in-world time elapsed since the story began as a cumulative
-counter advanced by the classifier on each reply. No duplication on
-`happenings`. `temporal` is only populated when there is no narrative
-entry to derive from (pre-story history, scheduled future, ambient
-backdrop) — its free-form text is the anchor because out-of-narrative
-happenings have no cumulative counter to reference. In practice
-`occurred_at_entry` and `temporal` are mutually exclusive per row.
-`threads` don't carry `temporal` because threads only exist during
-narrative and always resolve via entry positions (same
-metadata-elapsed-time story as happenings).
+referenced entry's `metadata.worldTime` (see "Entry metadata shape" and
+"In-world time tracking" below). No duplication on `happenings`.
+`temporal` is only populated when there is no narrative entry to
+derive from (pre-story history, scheduled future, ambient backdrop) —
+its free-form text is the anchor because out-of-narrative happenings
+have no cumulative counter to reference. In practice `occurred_at_entry`
+and `temporal` are mutually exclusive per row. `threads` don't carry
+`temporal` because threads only exist during narrative and always
+resolve via entry positions (same worldTime-derivation story as
+happenings).
 
 **Context-bloat note:** for long-running stories, character awareness lists
 grow unbounded. This is handled at injection time (retrieve top-K by
@@ -508,12 +762,13 @@ cadence trigger for all expensive background work.
 chapter's end) simply have `chapter_id IS NULL` until a chapter is created
 that includes them.
 
-**Boundary trigger.** Per-story token threshold (`stories.chapter_token_threshold`,
-default 24k, user-configurable). When the open region's accumulated token
-count crosses the threshold, an agent runs to pick a natural ending point
-within the range and chapter-create is triggered across `start → selected
-end`. User can also manually trigger chapter-create at any time, choosing
-the ending entry explicitly.
+**Boundary trigger.** Per-story token threshold
+(`stories.settings.chapterTokenThreshold`, default 24k, user-
+configurable). When the open region's accumulated token count crosses
+the threshold, an agent runs to pick a natural ending point within
+the range and chapter-create is triggered across `start → selected
+end`. User can also manually trigger chapter-create at any time,
+choosing the ending entry explicitly.
 
 **Chapter-create is the single cadence trigger** for three operations,
 each logged as deltas so the whole thing is reversible via rollback:
