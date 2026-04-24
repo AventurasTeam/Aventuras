@@ -47,6 +47,44 @@ shadcn-style theme CSS vars. React 19, RN 0.83. Storybook
 pnpm 10. Vitest. Full details in
 [`docs/tech-stack.md`](./docs/tech-stack.md).
 
+## MCP tools
+
+Two project MCP servers are configured in
+[`.mcp.json`](./.mcp.json):
+
+### electron-mcp-server
+
+Inspects and controls the Electron window during development. Useful
+for debugging desktop-specific behavior, capturing screenshots of the
+running app, and reading main-process logs.
+
+Available tools:
+
+- `get_electron_window_info` — window state, dimensions, URL
+- `read_electron_logs` — main-process console output
+- `send_command_to_electron` — invoke commands in the renderer
+- `take_screenshot` — capture the running window
+
+Spawns automatically via `npx` on tool invocation. Requires the
+desktop app to be running (`pnpm desktop`); otherwise window-targeted
+tools have nothing to attach to.
+
+### storybook-mcp
+
+Component-aware MCP for the Storybook design system, exposed at
+`http://localhost:6006/mcp` by `@storybook/addon-mcp`.
+
+**The Storybook dev server MUST be running first.** Without it, every
+MCP tool call fails with a connection error. Start it in a separate
+terminal before using any storybook-mcp tool:
+
+```sh
+pnpm storybook
+```
+
+If a tool call returns a connection / fetch error, the most likely
+cause is the server isn't running yet — start it and retry.
+
 ## Workflow rules
 
 - **Pre-commit hooks (`lefthook.yml`)** run prettier, eslint, and
