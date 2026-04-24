@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   check:
-    name: Lint, format, typecheck
+    name: Lint, format, typecheck, docs
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -35,6 +35,9 @@ jobs:
 
       - name: Format check
         run: pnpm format:check
+
+      - name: Lint docs (remark)
+        run: pnpm lint:docs
 
       - name: Typecheck
         run: pnpm typecheck
