@@ -159,64 +159,62 @@ first "create a story" flow). The others land with their corresponding
 features. The group system itself is day-one infrastructure; without it
 the prompt editor can't provide autocomplete or validate references.
 
-### Variable registry
+### Variable registry (for the prompt editor)
 
-A single file (`src/ai/prompts/templateContextMap.ts` in v2) is the
-source of truth:
+A registry file (`src/ai/prompts/templateContextMap.ts` in v2) exists
+**specifically to give the prompt editor shape awareness** — autocomplete,
+inline variable docs, display-group organization in the sidebar. It is
+**not** the runtime source of truth for what gets injected into a
+template; that's the actual `promptContext` object computed by code.
 
-- **Variable definitions per group**: `name`, type (`text | number |
-array | object | enum`), `category` (system / user / runtime),
+What the registry contains:
+
+- **Variable definitions per group**: `name`, type, `category`,
   `description`, optional `infoFields` documenting nested structure,
-  optional `enumValues`, `required` flag
-- **Template → group map**: every `.liquid` template ID mapped;
-  unmapped IDs log a warning at load time
+  optional `enumValues`, `required` flag — consumed by CodeMirror's
+  Liquid mode for autocomplete and hover docs
+- **Template → group map**: every `.liquid` template ID mapped to
+  exactly one group so the editor knows which variable set to show
 - **Display groups**: UI-level semantic grouping (Story Config, Entities,
   World State, Generation Results, Time, ...) — powers sidebar/autocomplete
   organization in the prompt editor
 - **Integrity validator**: test-accessible function that reports
   unmapped template IDs and display-group variables that don't match
-  any definition. Catches drift as templates and shapes evolve.
+  any defined variable. Catches obvious drift but does not enforce that
+  the registry and the runtime shape agree — that discipline sits with
+  the authors of both sides.
 
-CodeMirror 6 + Liquid mode sources autocomplete from this registry.
+The runtime shape of `promptContext` is whatever the computed getter
+returns; TypeScript types on the runtime side are the real safety net.
+The registry mirrors that surface for authoring ergonomics.
 
 ### The generation store
 
-Pipeline inputs + intermediates live in `useGenerationStore`, a sibling
-to `useStoryStore` (which holds the loaded story bundle). Rough shape:
+Pipeline inputs + intermediates live in a Zustand store —
+`useGenerationStore` — sibling to `useStoryStore`. Exact field shape
+is for v2 to design clean; what matters is the conceptual separation
+of what it holds:
 
-```
-GenerationState {
-  // Inputs (set at turn start)
-  userAction: { entryId, content, rawInput } | null
-  abortSignal, actionType, rawInput, wasRawActionChoice
-  narrationEntryId, styleReview
+- **Inputs** — the parameters of the current turn (user action,
+  action type, abort signal, raw input). Set at turn start.
+- **Loaded context** — data computed on story open and reused across
+  turns (pack variables, style prompt). Persists until story switch.
+- **Pipeline intermediates** — results written back by each phase as
+  it completes (retrieval result, narrative result, classification
+  result, translation result, ...). Readable by later phases and
+  templates in the same turn.
+- **Derived getters** — read across this store + `useStoryStore` to
+  produce the unified `promptContext` object, plus token counts and
+  other cached computations.
+- **Lifecycle**
+  - `clearIntermediates()` at turn start (new message, regenerate) —
+    wipes inputs + intermediates but keeps loaded context
+  - `clear()` on story switch — resets everything
 
-  // Loaded context (computed on story open, persists across turns)
-  packVariables?, stylePrompt
-
-  // Pipeline intermediates (written by phases during a turn, wiped between turns)
-  retrievalResult, narrativeResult, classificationResult,
-  translationResult, postGenerationResult, ...
-
-  // Translation payloads (written by post-narrative phases)
-  suggestionsToTranslate?, actionChoicesToTranslate?, uiElementsToTranslate?
-
-  // Derived getters (read across both stores)
-  promptContext(): PromptContext
-  tokensSinceLastChapter(): number
-  tokensOutsideBuffer(): number
-  wordCount(): number
-
-  // Lifecycle
-  clearIntermediates()    // at start of each turn (new message / regenerate)
-  clear()                 // on story switch
-}
-```
-
-The `promptContext()` getter is where the merge happens — it reads
-static story state from `useStoryStore.getState()` and combines it with
-the generation store's inputs + intermediates into a single object
-matching the registry's `promptContext` group definition.
+The `promptContext` getter is where the merge happens: it reads static
+story state from `useStoryStore.getState()` and combines it with the
+generation store's inputs + intermediates into one object that every
+template in the `promptContext` group renders against.
 
 ### How phases consume and produce context
 
