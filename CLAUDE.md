@@ -14,8 +14,8 @@ vars, no BaaS.
 - [`docs/tech-stack.md`](./docs/tech-stack.md) — full stack +
   rationale.
 - [`docs/data-model.md`](./docs/data-model.md) — schema + decisions.
-- [`docs/architecture.md`](./docs/architecture.md) — pipeline + state
-  - retrieval + translation.
+- [`docs/architecture.md`](./docs/architecture.md) — pipeline,
+  state, retrieval, translation.
 - [`docs/ui/`](./docs/ui/README.md) — UI design (principles +
   per-screen wireframes & docs).
 - [`docs/followups.md`](./docs/followups.md) — outstanding
