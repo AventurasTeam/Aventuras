@@ -1,8 +1,7 @@
 # Aventuras — tech stack
 
 Living inventory of what's installed, what's decided, and what's parked.
-Update entries as choices change; move items
-between sections as state shifts.
+Update entries as choices change; move items between sections as state shifts.
 
 ---
 
@@ -38,50 +37,45 @@ Local-first. All user config and data lives in SQLite. No env vars, no BaaS.
 
 **Schema designed in full at [`docs/data-model.md`](./data-model.md).** Thirteen tables covering the narrative spine (stories, branches, story_entries, chapters), world-state (entities, lore, threads), the happenings fact-graph (happenings + involvements + awareness links), media (assets + entry_assets), and the append-only deltas log that powers rollback, branching, and CTRL-Z.
 
-### 2. TanStack Query (React Query v5)
+### 2. Zustand
 
-Wraps drizzle query functions with:
+In-memory domain + UI state. The loaded-story bundle (story + branches + current branch's entries / entities / lore / threads / happenings + links / chapters / entry_assets) lives here, mirrored from SQLite on load. SQLite remains the source of truth; Zustand is the in-memory view components read from.
 
-- Shared cache across components
-- Automatic refetch/invalidation after mutations
-- Loading/error states without boilerplate
-- Optimistic updates when we need snappy UX
+**Loading:** `loadStory(storyId, branchId)` pulls everything in one drizzle query (a single SQLite transaction), hydrates the store. Fast on local disk.
 
-Pair pattern: a thin `db/*.ts` module exports typed data-access functions; `hooks/use-*.ts` wraps them with `useQuery` / `useMutation`. Components only touch the hooks.
+**Mutations flow uniformly through store actions.** Each narrative-state change is a Zustand action that (a) writes the row to SQLite + appends its delta, (b) updates the in-memory tree. Both channels stay in sync because there's one path. The delta log is the reconciliation primitive — if drift ever happens, deltas are how we detect and repair.
 
-**Alternative considered:** drizzle's own `useLiveQuery` hook — simpler mental model, but loses optimistic updates + cross-cutting cache invalidation. Revisit if React Query proves heavyweight for our access patterns.
+**Store layout:**
 
-### 3. Zustand
+- `useStoryStore` — the loaded story bundle + mutation actions
+- Small per-feature stores for UI-only state (`useEditor`, `useNavigation`, `useToasts`, ...) — dirty flags, selection, drag gestures, toast queue
+- No monolithic global store
 
-For **UI / client state only** — which screen is open, editor dirty flags, drag gesture state, toast queue, etc. Domain data stays in React Query's cache (which is backed by SQLite). Don't duplicate SQLite rows into Zustand stores.
+**Middleware:** `persist` for UI preferences (last-open-tab, theme), `immer` for nested updates, `devtools` for time-travel debugging, `useShallow` selector to avoid re-render cascades when components pick multiple fields.
 
-Plan to use:
+**Non-React access:** `useStoryStore.getState()` makes loaded data available to utility functions and delta handlers outside the React tree — no `queryClient.getQueryData()` dance.
 
-- Multiple small stores per feature area (`useEditor`, `usePlayback`, ...) rather than a single monolithic store
-- Middleware: `persist` (for UI preferences like last-open-tab), `immer` (when state nests), `devtools` (for browser-extension time-travel)
-- `useShallow` selector helper to avoid re-render cascades when components pick multiple fields
-
-### 4. react-hook-form
+### 3. react-hook-form
 
 Standard form library:
 
 - Uncontrolled inputs → minimal re-renders
-- Paired with Zod (item 5) via `@hookform/resolvers/zod` for validation
+- Paired with Zod (item 4) via `@hookform/resolvers/zod` for validation
 
 Defer until the first real form exists; no reason to install speculatively.
 
-### 5. Zod
+### 4. Zod
 
 Schema library; single source of truth for every data shape that crosses a boundary:
 
-- **Form validation** — paired with react-hook-form (item 4); Zod schemas double as runtime validation AND TypeScript types (one definition, both uses)
-- **LLM structured outputs** — same schemas flow into Vercel AI SDK's `generateObject` (item 6), translated to JSON Schema internally, then validate the parsed result on the way back
+- **Form validation** — paired with react-hook-form (item 3); Zod schemas double as runtime validation AND TypeScript types (one definition, both uses)
+- **LLM structured outputs** — same schemas flow into Vercel AI SDK's `generateObject` (item 5), translated to JSON Schema internally, then validate the parsed result on the way back
 - **Runtime validation at system boundaries** — SQLite row parsing, user-imported JSON (story export/import), external API responses
 - Types flow automatically to TypeScript via `z.infer<typeof schema>` — one schema, every use
 
 The virtue is that the classifier's output shape lives in exactly one file and drives prompting, parsing, validation, and typing.
 
-### 6. Vercel AI SDK
+### 5. Vercel AI SDK
 
 Provider-agnostic LLM layer. Same shape as the old app — proven choice.
 
@@ -90,7 +84,7 @@ Provider-agnostic LLM layer. Same shape as the old app — proven choice.
 - `streamText` / `streamObject` for incremental rendering during AI replies
 - Provider + model + API key are per-story settings (`stories.settings` in the data model), with keys persisted in SQLite per the local-first strategy
 
-### 7. js-tiktoken
+### 6. js-tiktoken
 
 Token counting for the chapter-close threshold (default 24k per-story, configurable) and general context-budget accounting.
 
@@ -99,7 +93,7 @@ Token counting for the chapter-close threshold (default 24k per-story, configura
 - Load encoding tables on demand to keep base bundle size modest
 - Accepted drift: the 24k threshold is a heuristic, so a few percent variance between OpenAI and Claude/Gemini tokenizers is irrelevant
 
-### 8. jsonrepair
+### 7. jsonrepair
 
 Fallback JSON parsing for LLM outputs that don't quite validate.
 
@@ -107,7 +101,7 @@ Fallback JSON parsing for LLM outputs that don't quite validate.
 - Handles common LLM mistakes — trailing commas, missing/extra quotes, unclosed strings, Python-style `True`/`None`
 - Tiny, MIT, actively maintained
 
-### 9. Prompt templates + editor (LiquidJS + CodeMirror 6)
+### 8. Prompt templates + editor (LiquidJS + CodeMirror 6)
 
 **Templating engine:** LiquidJS. Safe-by-default (no eval), readable syntax, familiar to anyone who's touched Shopify/Jekyll. Same reasoning as many AI platform template systems.
 
@@ -120,7 +114,7 @@ Mobile/touch UX doesn't serve prompt authoring well; tablets would benefit but d
 
 **Packs** themselves (the set of templates + metadata + runtime variable definitions bundled into a campaign/system kit) are a separate concern — deferred until the first classifier/agent actually needs templates. The editor above is the UI layer; packs are the data layer it edits.
 
-### 10. Markdown rendering + HTML sanitization
+### 9. Markdown rendering + HTML sanitization
 
 LLM replies arrive as markdown with inline HTML. Unified pipeline, platform-specific render tails.
 
@@ -139,7 +133,7 @@ markdown + inline HTML string
 
 **Streaming rendering:** port the `htmlStreaming` pattern from the old app (`src/lib/utils/htmlStreaming.ts` / `htmlSanitize.ts`). Buffer mid-stream chunks until tag boundaries, sanitize the completed fragment, then append — prevents half-tags reaching either renderer.
 
-### 11. Spellcheck + grammar (Harper, tiered)
+### 10. Spellcheck + grammar (Harper, tiered)
 
 Tiered assistance: heavy where authoring happens, free native elsewhere.
 
@@ -149,13 +143,35 @@ Tiered assistance: heavy where authoring happens, free native elsewhere.
 
 Same surface scope as the old app (narrative composer was the only place it showed) — we explored expanding it but Harper's UI weight doesn't justify painting every multiline input with underlines and suggestion popovers. Native spellcheck is the right dose outside the composer.
 
-**Status:** deferred install until the narrative composer is built. No speculative dependencies.
+**Install:** when the narrative composer is built. No speculative dependencies.
 
 ---
 
 ## Deferred
 
-Not pursued yet; revisit when the surrounding feature lands or a specific need arises.
+Items considered and parked. Revisit when a specific need arises.
+
+### TanStack Query (React Query)
+
+Considered and not adopted. For this app's access patterns, RQ's value doesn't land:
+
+- No network cache to manage — SQLite reads are local and fast, nothing to go stale
+- External calls (LLM, image generation, TTS) are one-shot operations that persist artifacts, not cacheable reads — and Vercel AI SDK's own hooks handle streaming state
+- Zustand covers the "loaded data" role (see item 2)
+
+Reconsider if cross-device sync lands (below) — polling a remote source for deltas is one genuine RQ-shaped use case. Even then, install locally within the sync module rather than app-wide.
+
+### Cross-device sync via Google Drive
+
+Optional feature: sync a user's stories + assets to their own Google Drive via the Drive REST API (BYO-OAuth, no server we operate). Matches the local-first ethos — user owns their data on their own cloud storage.
+
+**Architectural fit is good:** the delta log is inherently sync-friendly. Deltas are UUID-identified, append-only, and already represent any narrative state change. Assets are content-addressed by sha256, so binary sync can dedupe naturally.
+
+**Conflict handling hook:** if two devices both write after the last sync, the divergence maps cleanly to our branching mechanic — treat each device's post-sync work as a branch from the last common point, let the user merge or keep both.
+
+Status: unexplored. Revisit post-MVP once the core writing loop is solid.
+
+### Pre-launch polish
 
 - App icon + splash screen (replace Expo placeholders)
 - Custom fonts via `expo-font`
