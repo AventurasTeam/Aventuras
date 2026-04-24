@@ -226,11 +226,29 @@ Example built-in macros:
 - `macros/output_format_json` (`staticContent`) — generic JSON output
   directive
 
-Pack authors can **override any shipped macro** by defining one with
-the same ID in their pack; the pack's version takes precedence. They
-can also define entirely new macros in their own pack. This is how a
-pack rebuilds the prompt shape without touching app code — macros are
-the override surface.
+### The pack model: full replacement, not override
+
+A **pack is a complete, self-contained bundle** of prompts + macros.
+It contains the full required surface — every template the app
+invokes, every macro the app's templates include — not a patch layer
+on top of a default.
+
+**Creation flow:** a user creating a custom pack starts with a **full
+copy of the default pack**. Every prompt and macro is already there;
+they edit whichever ones they want within their pack. Unchanged
+prompts stay identical to default by virtue of being copied, not by
+inheriting anything at runtime.
+
+**Runtime model:** the active pack's version of any prompt/macro IS
+what runs. There's no fallback chain, no "if missing, look in default"
+cascade. This keeps the runtime simple and gives pack authors
+unambiguous ownership of their pack's shape.
+
+**Consequence to flag:** when an app update introduces a new required
+prompt or macro, existing custom packs won't have it and will fail
+that template's render. Pack migration tooling ("import new prompts
+from default into your pack") becomes necessary once packs are a
+real feature. Deferred with the pack system generally.
 
 ### Author extensibility — v1 and beyond
 
@@ -240,9 +258,9 @@ the override surface.
 - Editor autocompletes variable names, filter names, and includable
   macro IDs (filtered by the current template's context group)
 - Filters are code-defined and shipped with the app
-- Pack authors can define new `.liquid` templates and macros
-  (group-tagged on creation), and override shipped macros by reusing
-  their IDs
+- Pack authors work inside a full copy of the default pack, editing
+  any prompt or macro within their pack. New macros are group-tagged
+  on creation.
 
 **Future directions** (not v1, but the architecture shouldn't foreclose
 them):
