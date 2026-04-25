@@ -85,38 +85,87 @@ Empty by default after install (until Onboarding seeds one). Each
 configured provider renders as a collapsible row:
 
 ```
-[+ Add provider ▾]                    ← type picker
+[+ Add provider ▾]              ← type picker
 
-▾ Anthropic                ⭐ default        [⋯]
-  display name:  [Anthropic                  ]
-  api key:       [••••••••••••a3f] [Edit] [Test]
-  endpoint:      (default) /messages           [override…]
-  custom headers: (none)                       [add…]
-  models cached: 12 · [Refresh ↻]
-  ────
-  ▸ Advanced
+▾ Anthropic   [Anthropic]   ⭐ default            [⋯]
+  display name:   [Anthropic]
+  api key:        [•••••a3f]  [Edit] [Test]
+  ▸ Endpoint override
+  ▸ Custom headers
+  ─────
+  Models   12 cached · last 2h ago · ⟳
+  ★ claude-sonnet-4-7    🧠 ⚙              [×]
+  ☆ claude-haiku-4.5     ⚙                 [×]
+  ★ claude-opus-4-7      🧠 ⚙              [×]
+  …
+  + Add custom model id
 
-▸ Anthropic (personal)                  [⋯]
-▸ OpenRouter (work)                     [⋯]
+▸ Anthropic (personal)   [Anthropic]              [⋯]
+▸ OpenRouter (work)      [OpenRouter]             [⋯]
+▾ Ollama (local)         [OpenAI-compatible]      [⋯]
+  endpoint:       http://localhost:11434/v1   ← required, not collapsed
+  api key:        (empty — optional)
+  …
 ```
 
 Each provider carries:
 
 - **Display name** — user-chosen, shown in dropdowns and assignments.
-  Defaults to the provider type with a `(N)` suffix when multiple of
-  the same type exist.
-- **Type** — picked at creation, immutable thereafter (changing type
-  effectively means making a new provider).
+  Defaults to the type name with a `(N)` suffix when multiple of the
+  same type exist (`Anthropic`, `Anthropic (2)`, etc.).
+- **Type badge** — small chip in the card header next to the display
+  name. Shows the underlying provider type so the user always knows
+  what each instance is regardless of its display name.
 - **API key** — masked. Edit / remove actions inline. Optional
-  "Test" button hits the provider's `/models` or auth endpoint to
+  `Test` button hits the provider's `/models` or auth endpoint to
   verify connectivity.
-- **Endpoint** — defaults to the type's standard endpoint. Editable
-  for users routing through proxies, regional endpoints, or
-  OpenAI-compatible custom URLs.
+- **Endpoint override** — collapsed by default; users don't need to
+  think about endpoints for native types (Anthropic, OpenAI, Google,
+  OpenRouter, NanoGPT). Expand only to override (proxy, regional
+  endpoint, etc.). **Exception**: OpenAI-compatible type renders the
+  endpoint inline (not collapsed) since it's required — there's no
+  default URL for "any compatible endpoint."
 - **Custom headers** — optional key/value pairs for proxy auth or
-  custom routing. Collapsed under "Advanced" by default.
-- **Model cache state** — `N cached · [Refresh ↻]`. Hits the
-  provider's `/models` endpoint, caches results.
+  custom routing. Collapsed by default.
+- **Models** — list of cached models with per-row actions:
+  - **Pin star** (☆ / ★) — pinned models float to the top of every
+    model picker (profile config, story-level override, etc.).
+  - **Capability badges** (🧠 reasoning, ⚙ structured output) per
+    model where capability data is available.
+  - **Remove from cache** (×) — drops the model from the list (handy
+    for hiding models you'll never use; a refresh restores it from
+    the provider's catalog).
+- **Add custom model id** — for fine-tunes / local models / anything
+  the provider's `/models` endpoint doesn't list. Especially relevant
+  for OpenAI-compatible where auto-discovery may be limited or
+  unreliable; locally-hosted models often have no catalog endpoint.
+
+### OpenAI-compatible — variations
+
+The OpenAI-compatible type differs from the others:
+
+- **Endpoint required** — surfaced inline (not collapsed). User must
+  fill it (`http://localhost:11434/v1` for Ollama, custom URL for
+  any other compatible endpoint).
+- **API key optional** — local servers typically don't authenticate.
+  Empty key allowed; field shows `(empty — not required)`.
+- **Capability data unavailable** — no provider-level capability
+  flags. `auto` for structured output resolves to `force-off`
+  (conservative); reasoning slider visible but with the
+  `capability data unavailable` info text. User can flip per profile
+  if they know the model supports it.
+- **Custom model id is more prominent** — auto-discovery may return
+  no models or partial lists; manual entry is the primary path.
+
+### Model fetching strategy
+
+- **Refresh on app launch** — automatic on startup, **staggered**
+  across configured providers to avoid hammering the network with
+  parallel calls.
+- **Manual refresh** per provider via the `↻` button on the model
+  list head.
+- **Cached results persisted** in SQLite alongside provider config;
+  survive restarts even when offline.
 
 ### Provider menu (⋯)
 

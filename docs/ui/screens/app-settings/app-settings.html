@@ -129,6 +129,26 @@
       .profile-overflow { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; color: var(--ink-muted); cursor: pointer; }
       .profile-body { padding: 6px 14px 16px; border-top: 1px solid var(--line-soft); }
 
+      /* type badge — provider card header */
+      .type-badge { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; padding: 2px 7px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line-soft); color: var(--ink-muted); flex-shrink: 0; }
+
+      /* model list inside a provider card */
+      .model-list-head { font-size: 11px; color: var(--ink-muted); margin: 14px 0 6px; padding-top: 12px; border-top: 1px solid var(--line-soft); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .model-list-head h4 { margin: 0; font-size: 12px; font-weight: 600; color: var(--ink); }
+      .model-list-head .meta { color: var(--ink-faint); font-size: 11px; }
+      .model-list-head .refresh { padding: 2px 8px; border: 1px solid var(--line-soft); border-radius: 3px; background: var(--bg); cursor: pointer; font-size: 10px; }
+      .model-list { margin: 0; }
+      .model-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-bottom: 1px dotted var(--line-soft); font-size: 12px; }
+      .model-row:last-child { border-bottom: none; }
+      .model-row .pin { cursor: pointer; color: var(--ink-faint); font-size: 13px; user-select: none; }
+      .model-row .pin.on { color: #d8b04a; }
+      .model-row .m-name { flex: 1; font-family: ui-monospace, monospace; color: var(--ink); }
+      .model-row .m-caps { display: inline-flex; gap: 6px; }
+      .model-row .remove { cursor: pointer; color: var(--ink-faint); opacity: 0.5; font-size: 14px; padding: 0 4px; }
+      .model-row .remove:hover { opacity: 1; }
+      .add-custom-model { padding: 6px 12px; font-size: 11px; color: var(--ink-muted); border: 1px dashed var(--line); border-radius: 3px; cursor: pointer; display: inline-block; margin-top: 8px; }
+      .add-custom-model:hover { color: var(--ink); }
+
       .narrative-card { border: 2px solid var(--line); border-radius: 4px; padding: 14px 18px; background: var(--bg-region); margin-bottom: 28px; }
       .narrative-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
       .narrative-title { font-size: 16px; font-weight: 600; color: var(--ink); }
@@ -262,8 +282,9 @@
             <div class="profile-head">
               <span class="chevron">&#9662;</span>
               <span class="profile-name">Anthropic</span>
+              <span class="type-badge">Anthropic</span>
               <span class="prov-default" style="margin-left: 8px;">default &#9733;</span>
-              <span class="profile-desc" style="margin-left: 12px;"><code>/messages</code> &middot; native</span>
+              <span class="profile-desc" style="margin-left: 12px; flex: 1;"></span>
               <span class="profile-overflow">&#8943;</span>
             </div>
             <div class="profile-body">
@@ -281,39 +302,78 @@
                   </span>
                 </div>
               </div>
-              <div class="field-row">
-                <div class="field-label">endpoint
-                  <span class="hint">override default</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                  <span style="font-size: 12px; color: var(--ink-muted);">(default) <code>/messages</code></span>
-                  <span class="prov-actions" style="display: inline-flex;"><span class="a">Override&hellip;</span></span>
-                </div>
-              </div>
-              <div class="field-row">
-                <div class="field-label">model fetch</div>
-                <div style="font-size: 12px; color: var(--ink-muted); display: flex; align-items: center; gap: 10px;">
-                  12 models cached
-                  <span class="prov-actions" style="display: inline-flex;"><span class="a">&#8635; Refresh</span></span>
-                  <span style="color: var(--ink-faint); font-size: 11px;">last fetched 2h ago</span>
-                </div>
-              </div>
+
               <details class="advanced">
-                <summary>Advanced &mdash; custom headers</summary>
+                <summary>Endpoint override</summary>
+                <div class="body">
+                  <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 6px;">Default endpoint applies. Override only if routing through a proxy or regional endpoint.</div>
+                  <input class="input-text" style="width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 11px;" placeholder="(default)" />
+                </div>
+              </details>
+              <details class="advanced">
+                <summary>Custom headers</summary>
                 <div class="body">
                   <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 6px;">Optional key/value pairs for proxy auth or custom routing.</div>
                   <textarea class="input-textarea" style="width: 100%; box-sizing: border-box;" placeholder='{ "X-Org": "team-foo" }'></textarea>
                 </div>
               </details>
+
+              <!-- MODEL LIST -->
+              <div class="model-list-head">
+                <h4>Models</h4>
+                <span class="meta">12 cached &middot; last fetched 2h ago</span>
+                <span class="refresh">&#8635; Refresh</span>
+              </div>
+              <div class="model-list">
+                <div class="model-row">
+                  <span class="pin on" title="pinned &mdash; floats to top of pickers">&#9733;</span>
+                  <span class="m-name">claude-sonnet-4-7</span>
+                  <span class="m-caps">
+                    <span class="cap-badge on" title="reasoning">&#129504;</span>
+                    <span class="cap-badge on" title="structured output">&#9881;</span>
+                  </span>
+                  <span class="remove" title="remove from cache">&times;</span>
+                </div>
+                <div class="model-row">
+                  <span class="pin" title="pin">&#9734;</span>
+                  <span class="m-name">claude-haiku-4.5</span>
+                  <span class="m-caps">
+                    <span class="cap-badge" title="reasoning not supported">&#129504;</span>
+                    <span class="cap-badge on" title="structured output">&#9881;</span>
+                  </span>
+                  <span class="remove" title="remove from cache">&times;</span>
+                </div>
+                <div class="model-row">
+                  <span class="pin on" title="pinned">&#9733;</span>
+                  <span class="m-name">claude-opus-4-7</span>
+                  <span class="m-caps">
+                    <span class="cap-badge on" title="reasoning">&#129504;</span>
+                    <span class="cap-badge on" title="structured output">&#9881;</span>
+                  </span>
+                  <span class="remove" title="remove from cache">&times;</span>
+                </div>
+                <div class="model-row">
+                  <span class="pin" title="pin">&#9734;</span>
+                  <span class="m-name">claude-3-5-haiku</span>
+                  <span class="m-caps">
+                    <span class="cap-badge" title="reasoning not supported">&#129504;</span>
+                    <span class="cap-badge on" title="structured output">&#9881;</span>
+                  </span>
+                  <span class="remove" title="remove from cache">&times;</span>
+                </div>
+                <div style="font-size: 10px; color: var(--ink-faint); padding: 4px 8px;">&hellip; 8 more &hellip;</div>
+              </div>
+              <span class="add-custom-model">+ Add custom model id</span>
             </div>
           </div>
 
-          <!-- Anthropic (personal) — collapsed -->
+          <!-- Anthropic (personal) — collapsed, second instance of same type -->
           <div class="profile-card collapsed">
             <div class="profile-head">
               <span class="chevron">&#9662;</span>
               <span class="profile-name">Anthropic (personal)</span>
-              <span class="profile-desc" style="margin-left: 12px;">second instance of same type &middot; different key</span>
+              <span class="type-badge">Anthropic</span>
+              <span class="profile-desc" style="margin-left: 12px; flex: 1;">second instance of the same type</span>
               <span class="profile-overflow">&#8943;</span>
             </div>
           </div>
@@ -323,23 +383,103 @@
             <div class="profile-head">
               <span class="chevron">&#9662;</span>
               <span class="profile-name">OpenRouter (work)</span>
-              <span class="profile-desc" style="margin-left: 12px;">multi-provider gateway &middot; capability flags</span>
+              <span class="type-badge">OpenRouter</span>
+              <span class="profile-desc" style="margin-left: 12px; flex: 1;">capability flags exposed</span>
               <span class="profile-overflow">&#8943;</span>
             </div>
           </div>
 
-          <!-- OpenAI-compatible (Ollama-local) — collapsed -->
-          <div class="profile-card collapsed">
+          <!-- Ollama (local) — expanded to demonstrate OpenAI-compatible variation -->
+          <div class="profile-card">
             <div class="profile-head">
               <span class="chevron">&#9662;</span>
               <span class="profile-name">Ollama (local)</span>
-              <span class="profile-desc" style="margin-left: 12px;">OpenAI-compatible &middot; <code>http://localhost:11434/v1</code></span>
+              <span class="type-badge">OpenAI-compatible</span>
+              <span class="profile-desc" style="margin-left: 12px; flex: 1;"></span>
               <span class="profile-overflow">&#8943;</span>
+            </div>
+            <div class="profile-body">
+              <div class="panel-note" style="margin-bottom: 14px;">
+                <b>OpenAI-compatible variation.</b> Endpoint is required (no default). API key is optional &mdash; local servers (Ollama, LM Studio) typically don't authenticate.
+              </div>
+
+              <div class="field-row">
+                <div class="field-label">display name</div>
+                <input class="input-text" style="max-width: 280px;" value="Ollama (local)" />
+              </div>
+              <div class="field-row">
+                <div class="field-label">endpoint
+                  <span class="hint" style="color: var(--warn);">required</span>
+                </div>
+                <input class="input-text" style="width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 12px;" value="http://localhost:11434/v1" />
+              </div>
+              <div class="field-row">
+                <div class="field-label">api key
+                  <span class="hint">optional &mdash; local servers</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-style: italic; color: var(--ink-faint); font-size: 12px;">(empty &mdash; not required)</span>
+                  <span class="prov-actions" style="display: inline-flex;">
+                    <span class="a">Add key</span>
+                    <span class="a">Test</span>
+                  </span>
+                </div>
+              </div>
+
+              <details class="advanced">
+                <summary>Custom headers</summary>
+                <div class="body">
+                  <textarea class="input-textarea" style="width: 100%; box-sizing: border-box;" placeholder='{ "Authorization": "Basic ..." }'></textarea>
+                </div>
+              </details>
+
+              <!-- MODEL LIST — manual entry emphasized -->
+              <div class="model-list-head">
+                <h4>Models</h4>
+                <span class="meta">3 cached &middot; auto-discovery limited &mdash; add custom ids as needed</span>
+                <span class="refresh">&#8635; Refresh</span>
+              </div>
+              <div class="model-list">
+                <div class="model-row">
+                  <span class="pin on">&#9733;</span>
+                  <span class="m-name">llama3.1:70b</span>
+                  <span class="m-caps">
+                    <span class="cap-badge" title="capability data unavailable">&#129504;</span>
+                    <span class="cap-badge" title="capability data unavailable">&#9881;</span>
+                  </span>
+                  <span class="remove">&times;</span>
+                </div>
+                <div class="model-row">
+                  <span class="pin">&#9734;</span>
+                  <span class="m-name">qwen2.5-coder:32b</span>
+                  <span class="m-caps">
+                    <span class="cap-badge">&#129504;</span>
+                    <span class="cap-badge">&#9881;</span>
+                  </span>
+                  <span class="remove">&times;</span>
+                </div>
+                <div class="model-row">
+                  <span class="pin">&#9734;</span>
+                  <span class="m-name">my-custom-finetune <span style="font-size: 10px; color: var(--ink-faint);">(custom id)</span></span>
+                  <span class="m-caps">
+                    <span class="cap-badge">&#129504;</span>
+                    <span class="cap-badge">&#9881;</span>
+                  </span>
+                  <span class="remove">&times;</span>
+                </div>
+              </div>
+              <span class="add-custom-model">+ Add custom model id</span>
+              <div style="font-size: 10px; color: var(--ink-faint); margin-top: 6px; font-style: italic;">
+                Capability data unavailable for OpenAI-compatible &mdash; auto resolves to force-off; flip per-profile if your model supports it.
+              </div>
             </div>
           </div>
 
           <div style="margin-top: 16px; padding: 12px; background: var(--bg-region); border: 1px dashed var(--line-soft); border-radius: 4px; font-size: 11px; color: var(--ink-muted);">
-            <b>⋯ menu per provider:</b> Rename &middot; Set as default &middot; Remove. Removing a provider doesn't auto-delete profiles using it; those surface broken-config errors.
+            <b>Per-provider ⋯ menu:</b> Rename &middot; Set as default &middot; Remove. Removing a provider doesn't auto-delete profiles using it; those surface broken-config errors.
+            <br>
+            <br>
+            <b>Model fetch refreshes on app launch</b> (staggered across providers to avoid hammering the network). Manual refresh button per provider for on-demand updates.
           </div>
         </div>
 
