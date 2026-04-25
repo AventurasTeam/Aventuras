@@ -225,7 +225,7 @@
 
     <!-- Sidebar (Right aligned) -->
     {#if ui.sidebarOpen && story.currentStory}
-      <div class="sidebar-container relative flex h-full">
+      <div class="sidebar-container relative flex">
         <!-- Resizer Handle (Desktop only) -->
         <button
           type="button"
@@ -288,26 +288,24 @@
 
 <style>
   /*
-   * Safe Area Handling
-   *
-   * Uses native CSS env() for safe area insets.
-   * Requires viewport-fit=cover in app.html meta tag.
+   * Safe Area Handling — see :root rule in app.css for the --safe-* definitions.
    */
 
-  /* App shell - add safe area padding for mobile status bar and navigation */
   .app-shell {
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+    padding-left: var(--safe-left);
+    padding-right: var(--safe-right);
   }
 
-  /* Safe area background filler - matches header color (bg-surface-800) */
+  /* Top safe area background filler - matches header color (bg-surface-800) */
   .app-shell::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    height: env(safe-area-inset-top, 0px);
+    height: var(--safe-top);
     background-color: var(--color-surface-800);
     z-index: 0;
   }
@@ -319,22 +317,10 @@
     bottom: 0;
     left: 0;
     right: 0;
-    height: env(safe-area-inset-bottom, 0px);
+    height: var(--safe-bottom);
     background-color: var(--color-surface-900);
     z-index: 9999;
     pointer-events: none;
-  }
-
-  /* Desktop: no safe area padding needed */
-  @media (min-width: 769px) {
-    .app-shell {
-      padding-top: 0;
-      padding-bottom: 0;
-    }
-    .app-shell::before,
-    .app-shell::after {
-      display: none;
-    }
   }
 
   /* Mobile sidebar overlay - visible only on touch devices */
@@ -394,20 +380,20 @@
   @media (max-width: 768px) {
     .mobile-sidebar-overlay {
       display: block;
-      top: max(env(safe-area-inset-top, 0px), 28px);
+      top: max(var(--safe-top), 28px);
     }
 
     .sidebar-container {
       position: fixed;
       right: 0;
-      top: max(env(safe-area-inset-top, 0px), 28px);
-      height: calc(100% - max(env(safe-area-inset-top, 0px), 28px));
+      top: max(var(--safe-top), 28px);
+      bottom: var(--safe-bottom);
       animation: slide-in 0.2s ease-out;
     }
 
     .swipe-edge-zone {
       width: 30px;
-      top: max(env(safe-area-inset-top, 0px), 28px);
+      top: max(var(--safe-top), 28px);
     }
   }
 

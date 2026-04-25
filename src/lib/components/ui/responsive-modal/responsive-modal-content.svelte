@@ -20,6 +20,6 @@
 
 <style>
   :global(.safe-area-bottom) {
-    margin-bottom: env(safe-area-inset-bottom, 0px);
+    margin-bottom: var(--safe-bottom);
   }
 </style>

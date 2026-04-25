@@ -123,6 +123,8 @@ DerivedData/
 .project
 .classpath
 .settings/
+.devcontainer/
+.devcontainer
 
 # JetBrains
 *.iws
@@ -239,6 +241,7 @@ CLAUDE.md
 .claude/
 scripts/ralph/
 tasks/
+docs/superpowers/
 
 # -----------------------------------------------------------------------------
 # Antigravity
@@ -267,3 +270,4 @@ aventura-release.keystore.old
 key.properties
 nul
 test_data/
+debug_screenshot/
