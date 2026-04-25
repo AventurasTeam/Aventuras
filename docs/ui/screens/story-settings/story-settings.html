@@ -358,56 +358,60 @@
       <!-- MODELS (override-only) -->
       <div class="tab-panel" data-panel="models">
         <div class="warn-box" style="background: #eef5fb; border-color: #b8d0e4; border-left-color: #3d5a7a; color: #3d5a7a;">
-          <b>Overrides only.</b> Fields left at <code>App default</code> use your global App Settings selections. Setting an override here pins the model for this story regardless of global changes.
+          <b>Per-feature model overrides.</b> Story-level override is a model id &mdash; bypasses the App Settings profile chain for that feature. Empty agents fall back to <code>App default</code>, which resolves the chain at render time.
         </div>
 
+        <!-- NARRATIVE: always visible -->
+        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); margin: 4px 0 8px;">Narrative</div>
         <div class="field-row">
           <div class="field-label">narrative
-            <span class="hint">the main story AI</span>
+            <span class="hint">the storyteller</span>
           </div>
-          <div class="input-select">
-            <span>claude-sonnet-4 <span style="font-size: 10px; color: var(--ink-muted); margin-left: 6px;">(override)</span></span>
-            <span style="color: var(--ink-faint);">&#9662;</span>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <div class="input-select" style="flex: 1;">
+              <span>claude-sonnet-4 <span style="font-size: 10px; color: var(--ink-muted); margin-left: 6px;">(override)</span></span>
+              <span style="color: var(--ink-faint);">&#9662;</span>
+            </div>
+            <span title="Remove override &mdash; revert to App default" style="color: var(--ink-faint); cursor: pointer; font-size: 14px; padding: 0 4px;">&times;</span>
           </div>
         </div>
 
+        <!-- AGENT OVERRIDES: empty by default + Add -->
+        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); margin: 22px 0 8px; display: flex; align-items: center; gap: 10px;">
+          <span>Agent overrides</span>
+          <span style="font-size: 10px; color: var(--ink-faint); text-transform: none; letter-spacing: 0;">(empty by default &mdash; add as needed)</span>
+        </div>
+
+        <!-- example: one agent override has been added -->
         <div class="field-row">
           <div class="field-label">classifier
             <span class="hint">scene extraction after each reply</span>
           </div>
-          <div class="input-select default-sentinel">
-            <span><span class="default-tag">App default:</span>claude-haiku-4.5</span>
-            <span style="color: var(--ink-faint);">&#9662;</span>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <div class="input-select" style="flex: 1;">
+              <span>gpt-4o <span style="font-size: 10px; color: var(--ink-muted); margin-left: 6px;">(override)</span></span>
+              <span style="color: var(--ink-faint);">&#9662;</span>
+            </div>
+            <span title="Remove override" style="color: var(--ink-faint); cursor: pointer; font-size: 14px; padding: 0 4px;">&times;</span>
           </div>
         </div>
 
-        <div class="field-row">
-          <div class="field-label">translation
-            <span class="hint">user-facing string translation</span>
-          </div>
-          <div class="input-select default-sentinel">
-            <span><span class="default-tag">App default:</span>gpt-4o-mini</span>
-            <span style="color: var(--ink-faint);">&#9662;</span>
-          </div>
-        </div>
-
-        <div class="field-row">
-          <div class="field-label">image generation
-            <span class="hint">portraits, scene illustrations</span>
-          </div>
-          <div class="input-select default-sentinel">
-            <span><span class="default-tag">App default:</span>flux-pro</span>
-            <span style="color: var(--ink-faint);">&#9662;</span>
-          </div>
-        </div>
-
-        <div class="field-row">
-          <div class="field-label">suggestions
-            <span class="hint">next-turn suggestion pane</span>
-          </div>
-          <div class="input-select default-sentinel">
-            <span><span class="default-tag">App default:</span>claude-haiku-4.5</span>
-            <span style="color: var(--ink-faint);">&#9662;</span>
+        <div style="margin-top: 6px;">
+          <span style="display: inline-block; padding: 6px 14px; border: 1px dashed var(--line); border-radius: 3px; background: var(--bg); cursor: pointer; color: var(--ink-muted); font-size: 11px;">+ Add override</span>
+          <div style="font-size: 10px; color: var(--ink-faint); margin-top: 6px; line-height: 1.6;">
+            click to pick an agent &mdash; shows agents with their currently-resolved chain:
+            <br>
+            <code style="font-size: 10px;">translation</code> &middot; Fast tasks &rarr; gpt-4o-mini
+            &nbsp;
+            <code style="font-size: 10px;">suggestion</code> &middot; Fast tasks &rarr; gpt-4o-mini
+            &nbsp;
+            <code style="font-size: 10px;">imageGen</code> &middot; ImageGen config &rarr; dall-e-3
+            &nbsp;
+            <code style="font-size: 10px;">lore-mgmt</code> &middot; Heavy reasoning &rarr; claude-opus-4
+            &nbsp;
+            <code style="font-size: 10px;">memory-compaction</code> &middot; Heavy reasoning &rarr; claude-opus-4
+            &nbsp;
+            <code style="font-size: 10px;">retrieval</code> &middot; <span style="font-style: italic;">when designed</span>
           </div>
         </div>
       </div>

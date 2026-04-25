@@ -114,6 +114,43 @@ its own design pass — needs careful UX around partial-edit failures
 "this is the only way to fix some shapes" power-user case vs the
 "don't let users break their data" common case.
 
+### Model profiles data shape
+
+Define the zod schema for `ModelProfile`, `imageGenConfig`,
+`agentAssignments`, default-provider field, and onboarding seed
+defaults. Lives in `app_settings` JSON field per the data strategy
+(simpler than separate tables for v1; schema can normalize later if
+needed). Includes the broken-config detection rules (model removed
+from provider catalog, key missing, profile orphan after key
+removal).
+
+### Encryption at rest for provider keys
+
+Provider API keys live in SQLite (per data strategy). Encryption
+mechanism deferred — not blocking v1 since this is a local-first app
+with no network exposure of the DB. Lean: explore once a real
+threat model surfaces (export-leak, multi-user shared machine, etc.).
+
+### Cross-provider model invalidation UX
+
+When a profile's selected model is no longer in the provider's fetched
+catalog (deprecation, account changes), surface as: per-profile inline
+error + global broken-config banner aggregating across profiles. The
+banner has a deep-link button that lands on App Settings · Profiles
+with the first broken profile scrolled into view. Spec'd in
+`app-settings.md` and partially demonstrated in the wireframe (toggle
+`errors: 2 broken` in review controls). Implementation finalizes
+when the model-fetching pipeline lands.
+
+### Granular per-story model controls
+
+v1 story-level override is **model id only** (no per-story
+temperature, max-output, custom JSON, etc.). When a real demand
+surfaces (e.g., "this story needs a different temperature for the
+narrative model only"), extend `stories.settings.models` to hold
+either inline param overrides or a story-specific profile id. Lean
+toward inline param overrides as the simpler extension.
+
 ### Storybook design-rules pattern setup
 
 When component implementation begins, set up Storybook's tree as

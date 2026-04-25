@@ -1,0 +1,901 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Wireframe — App Settings (desktop)</title>
+    <style>
+      :root {
+        --ink: #333;
+        --ink-muted: #888;
+        --ink-faint: #aaa;
+        --line: #bbb;
+        --line-soft: #ddd;
+        --bg: #fafafa;
+        --bg-region: #fff;
+        --bg-highlight: #eef;
+        --warn: #c94;
+        --warn-soft: #fef0d8;
+        --ok: #4a8;
+        --info: #58a;
+      }
+      html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+      body { min-height: 100vh; display: flex; flex-direction: column; }
+      .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+      .screen-label strong { color: var(--ink); }
+
+      .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+      .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+      .review-bar .rb-group { display: flex; gap: 4px; align-items: center; }
+      .review-bar .rb-group > .gl { font-size: 10px; color: #967; margin-right: 4px; }
+      .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+      .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+      .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+
+      /* GLOBAL ERROR BANNER — above the topbar */
+      .err-banner { display: none; padding: 10px 16px; background: var(--warn-soft); border-bottom: 1px solid var(--warn); color: #6a4; align-items: center; gap: 12px; font-size: 12px; color: #6c4a1d; }
+      .err-banner.visible { display: flex; }
+      .err-banner .err-icon { font-size: 14px; color: var(--warn); }
+      .err-banner .err-action { margin-left: auto; padding: 4px 12px; border: 1px solid var(--warn); border-radius: 3px; background: #fff; color: #6c4a1d; cursor: pointer; font-size: 11px; }
+
+      header.topbar { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
+      .logo { width: 28px; height: 28px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--ink-muted); }
+      .crumbs { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+      .crumb-primary { font-size: 15px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+      .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+      .icon-btn { position: relative; width: 30px; height: 30px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 14px; cursor: pointer; }
+
+      .md-layout { flex: 1; display: grid; grid-template-columns: 240px 1fr; min-height: 0; }
+
+      /* SETTINGS RAIL */
+      .settings-rail { background: var(--bg-region); border-right: 1px solid var(--line); padding: 14px 0; overflow: auto; }
+      .rail-section { margin-bottom: 22px; }
+      .rail-section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-muted); padding: 0 18px 6px; }
+      .nav-item { padding: 7px 18px 7px 24px; font-size: 12.5px; color: var(--ink-muted); cursor: pointer; border-left: 3px solid transparent; }
+      .nav-item:hover { background: var(--bg-highlight); color: var(--ink); }
+      .nav-item.active { color: var(--ink); border-left-color: var(--ink); font-weight: 600; background: var(--bg-highlight); }
+      .nav-item .nav-hint { font-size: 10px; color: var(--ink-faint); font-weight: 400; margin-left: 4px; }
+      .nav-item.has-error::after { content: " ⚠"; color: var(--warn); font-size: 10px; }
+
+      /* SETTINGS PANE */
+      .settings-pane { display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+      .tab-panel { flex: 1; overflow: auto; padding: 22px 28px 28px; display: none; max-width: 920px; }
+      .tab-panel.active { display: block; }
+      .tab-title { font-size: 18px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+      .tab-subtitle { font-size: 12px; color: var(--ink-muted); margin-bottom: 22px; }
+
+      .panel-note { padding: 10px 12px; background: #fffbe6; border-left: 3px solid #e3d8c0; border-radius: 2px; font-size: 11px; color: var(--ink-muted); margin-bottom: 18px; line-height: 1.55; }
+      .panel-note b { color: var(--ink); }
+      .panel-note code { background: #fff; padding: 1px 5px; border: 1px solid var(--line-soft); border-radius: 2px; font-size: 10px; }
+
+      /* form fields */
+      .field-row { display: grid; grid-template-columns: 200px 1fr; gap: 14px; align-items: start; margin-bottom: 14px; }
+      .field-label { font-size: 11px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; padding-top: 7px; font-family: ui-monospace, monospace; }
+      .field-label .hint { color: var(--ink-faint); font-size: 9px; font-family: ui-monospace, monospace; display: block; margin-top: 2px; text-transform: none; letter-spacing: 0; }
+
+      .input-text, .input-textarea, .input-select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 13px; color: var(--ink); }
+      .input-textarea { min-height: 72px; line-height: 1.5; font-family: ui-monospace, monospace; font-size: 12px; }
+      .input-select { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+      .input-text.readonly { background: var(--bg); color: var(--ink-muted); cursor: default; }
+
+      /* slider */
+      .slider-row { display: flex; align-items: center; gap: 10px; }
+      .slider { flex: 1; height: 4px; background: var(--line-soft); border-radius: 2px; position: relative; }
+      .slider-thumb { position: absolute; top: -5px; width: 14px; height: 14px; border-radius: 50%; background: var(--ink); }
+      .slider-value { font-size: 12px; color: var(--ink); font-family: ui-monospace, monospace; min-width: 56px; }
+      .slider-custom { padding: 4px 9px; border: 1px dashed var(--line); border-radius: 3px; background: var(--bg); cursor: pointer; font-size: 10px; color: var(--ink-muted); }
+
+      /* segment selector */
+      .segment { display: inline-flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+      .segment > .seg { padding: 6px 14px; font-size: 12px; color: var(--ink-muted); cursor: pointer; background: var(--bg-region); }
+      .segment > .seg.active { background: var(--ink); color: #fff; }
+      .segment > .seg + .seg { border-left: 1px solid var(--line); }
+
+      /* model select with capability badges */
+      .model-select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 13px; color: var(--ink); display: flex; align-items: center; gap: 8px; cursor: pointer; }
+      .cap-badge { font-size: 11px; color: var(--ink-faint); }
+      .cap-badge.on { color: var(--ink); }
+      .ctx-info { font-size: 10px; color: var(--ink-faint); margin-top: 4px; line-height: 1.5; }
+      .ctx-info b { color: var(--ink-muted); }
+
+      /* provider rows on Keys tab */
+      .prov-row { display: flex; align-items: flex-start; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line-soft); }
+      .prov-row:last-child { border-bottom: none; }
+      .prov-status { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; color: var(--ink-faint); flex-shrink: 0; margin-top: 2px; }
+      .prov-status.set { background: var(--ok); color: #fff; border-color: var(--ok); }
+      .prov-body { flex: 1; min-width: 0; }
+      .prov-name { font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+      .prov-default { font-size: 9px; color: #b08020; padding: 1px 7px; border: 1px solid #d8b04a; background: #fff8e6; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.08em; }
+      .prov-meta { font-size: 11px; color: var(--ink-muted); margin-top: 2px; }
+      .prov-key { font-family: ui-monospace, monospace; font-size: 12px; color: var(--ink); margin-top: 8px; display: flex; align-items: center; gap: 10px; }
+      .prov-key .placeholder { color: var(--ink-faint); font-style: italic; font-family: inherit; }
+      .prov-actions { display: flex; gap: 6px; }
+      .prov-actions .a { padding: 3px 9px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); cursor: pointer; font-size: 11px; color: var(--ink); }
+      .prov-actions .a.danger { color: var(--warn); border-color: #e0bd9c; }
+      .prov-fetch { font-size: 11px; color: var(--ink-muted); margin-top: 6px; display: flex; align-items: center; gap: 8px; }
+      .prov-fetch .refresh { padding: 2px 7px; border: 1px solid var(--line-soft); border-radius: 3px; background: var(--bg); cursor: pointer; font-size: 10px; }
+
+      /* profile cards */
+      .profile-card { border: 1px solid var(--line-soft); border-radius: 4px; background: var(--bg-region); margin-bottom: 14px; overflow: hidden; }
+      .profile-card.error { border-color: var(--warn); }
+      .profile-card.error .profile-head { background: var(--warn-soft); }
+      .profile-head { padding: 10px 14px; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+      .profile-head .chevron { width: 12px; color: var(--ink-faint); transition: transform 0.1s; }
+      .profile-card.collapsed .chevron { transform: rotate(-90deg); }
+      .profile-card.collapsed .profile-body { display: none; }
+      .profile-name { font-size: 14px; font-weight: 600; color: var(--ink); }
+      .profile-desc { font-size: 11px; color: var(--ink-muted); margin-left: 12px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .profile-err { font-size: 11px; color: var(--warn); display: flex; align-items: center; gap: 4px; margin-right: 8px; }
+      .profile-overflow { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; color: var(--ink-muted); cursor: pointer; }
+      .profile-body { padding: 6px 14px 16px; border-top: 1px solid var(--line-soft); }
+
+      .narrative-card { border: 2px solid var(--line); border-radius: 4px; padding: 14px 18px; background: var(--bg-region); margin-bottom: 28px; }
+      .narrative-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+      .narrative-title { font-size: 16px; font-weight: 600; color: var(--ink); }
+      .narrative-sub { font-size: 11px; color: var(--ink-muted); }
+
+      .advanced { margin-top: 14px; border-top: 1px dashed var(--line-soft); padding-top: 10px; }
+      .advanced summary { cursor: pointer; font-size: 11px; color: var(--ink-muted); list-style: none; }
+      .advanced summary::before { content: "▸ "; color: var(--ink-faint); }
+      .advanced[open] summary::before { content: "▾ "; }
+      .advanced summary:hover { color: var(--ink); }
+      .advanced .body { margin-top: 10px; }
+      .advanced .body .cta { font-size: 10px; color: var(--ink-faint); margin-top: 6px; font-style: italic; }
+
+      .agent-toolbar { display: flex; align-items: center; gap: 10px; margin: 22px 0 12px; }
+      .agent-toolbar h3 { margin: 0; font-size: 14px; font-weight: 600; color: var(--ink); }
+      .agent-toolbar .cta { margin-left: auto; padding: 5px 13px; border: 1px dashed var(--line); border-radius: 3px; background: var(--bg); cursor: pointer; color: var(--ink-muted); font-size: 11px; }
+      .agent-toolbar .cta:hover { color: var(--ink); }
+
+      .assignments-block { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line-soft); }
+      .assignments-block h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--ink); }
+      .assignments-row { display: grid; grid-template-columns: 200px 1fr; gap: 14px; align-items: center; padding: 8px 0; border-bottom: 1px dotted var(--line-soft); }
+      .assignments-row:last-child { border-bottom: none; }
+      .assignments-row .a-name { font-family: ui-monospace, monospace; font-size: 12px; color: var(--ink); }
+
+      /* save bar */
+      .save-bar { display: none; padding: 10px 20px; border-top: 1px solid var(--line); background: #fff7dc; justify-content: space-between; align-items: center; gap: 12px; }
+      .save-bar.dirty { display: flex; }
+      .save-bar .dirty-note { font-size: 12px; color: #765; display: flex; align-items: center; gap: 8px; }
+      .save-bar .dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: #c94; }
+      .save-bar .actions { display: flex; gap: 8px; align-items: center; }
+      .save-bar .discard-btn { padding: 6px 14px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 12px; color: var(--ink); cursor: pointer; }
+      .save-bar .save-btn { padding: 6px 18px; border: 1px solid var(--ink); border-radius: 3px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+
+      .notes { padding: 14px 20px; background: #fffbe6; border-top: 1px solid var(--line-soft); font-size: 11px; color: #594; line-height: 1.6; }
+      .notes code { background: #fff; padding: 2px 6px; border: 1px solid var(--line-soft); border-radius: 2px; font-size: 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="screen-label">
+      <strong>Wireframe:</strong> App Settings &mdash; desktop (&ge; 1024px) &mdash; low-fi, interactive
+    </div>
+
+    <div class="review-bar">
+      <span class="rb-label">Review controls</span>
+      <div class="rb-group">
+        <span class="gl">tab:</span>
+        <button class="rb-btn" data-tab="keys">Keys</button>
+        <button class="rb-btn active" data-tab="profiles">Profiles</button>
+        <button class="rb-btn" data-tab="imagegen">ImageGen</button>
+        <button class="rb-btn" data-tab="memory">Memory</button>
+        <button class="rb-btn" data-tab="translation">Translation</button>
+        <button class="rb-btn" data-tab="composer">Composer</button>
+        <button class="rb-btn" data-tab="appearance">Appearance</button>
+        <button class="rb-btn" data-tab="language">Language</button>
+        <button class="rb-btn" data-tab="data">Data</button>
+        <button class="rb-btn" data-tab="about">About</button>
+        <button class="rb-btn" data-tab="diagnostics">Diagnostics</button>
+      </div>
+      <div class="rb-group">
+        <span class="gl">errors:</span>
+        <button class="rb-btn active" data-err="clean">clean</button>
+        <button class="rb-btn" data-err="broken">2 broken</button>
+      </div>
+      <div class="rb-group">
+        <span class="gl">form:</span>
+        <button class="rb-btn active" data-dirty="clean">clean</button>
+        <button class="rb-btn" data-dirty="dirty">dirty (1 change)</button>
+      </div>
+      <span class="rb-note">click rail nav · expand profiles</span>
+    </div>
+
+    <!-- GLOBAL ERROR BANNER -->
+    <div class="err-banner" id="err-banner">
+      <span class="err-icon">&#9888;</span>
+      <span><b>2 profiles have configuration errors.</b> Heavy reasoning &mdash; model removed; Vision tasks &mdash; provider key missing.</span>
+      <span class="err-action">Open settings &rarr;</span>
+    </div>
+
+    <header class="topbar">
+      <div class="logo">A</div>
+      <div class="crumbs">
+        <span class="crumb-primary">App Settings</span>
+      </div>
+      <div class="topbar-right">
+        <div class="icon-btn" title="Actions">&#9906;</div>
+        <div class="icon-btn" title="Back to story list">&larr;</div>
+      </div>
+    </header>
+
+    <div class="md-layout">
+      <aside class="settings-rail">
+        <div class="rail-section">
+          <div class="rail-section-title">Providers</div>
+          <div class="nav-item" data-nav="keys">Keys <span class="nav-hint">api keys + default</span></div>
+          <div class="nav-item active" data-nav="profiles">Profiles <span class="nav-hint">narrative + agents</span></div>
+          <div class="nav-item" data-nav="imagegen">Image generation</div>
+        </div>
+
+        <div class="rail-section">
+          <div class="rail-section-title">Story defaults</div>
+          <div class="nav-item" data-nav="memory">Memory</div>
+          <div class="nav-item" data-nav="translation">Translation</div>
+          <div class="nav-item" data-nav="composer">Composer prefs</div>
+        </div>
+
+        <div class="rail-section">
+          <div class="rail-section-title">App</div>
+          <div class="nav-item" data-nav="appearance">Appearance</div>
+          <div class="nav-item" data-nav="language">Language</div>
+          <div class="nav-item" data-nav="data">Data</div>
+          <div class="nav-item" data-nav="about">About</div>
+          <div class="nav-item" data-nav="diagnostics">Diagnostics</div>
+        </div>
+      </aside>
+
+      <section class="settings-pane">
+        <!-- KEYS -->
+        <div class="tab-panel" data-panel="keys">
+          <div class="tab-title">Keys</div>
+          <div class="tab-subtitle">Provider API keys. One provider can be marked default — seeds Narrative profile and reset-to-default actions.</div>
+
+          <div class="panel-note">
+            Keys are stored locally in SQLite. Encryption at rest is a tracked followup; not yet specified.
+          </div>
+
+          <div class="prov-row">
+            <span class="prov-status set">&#10003;</span>
+            <div class="prov-body">
+              <div class="prov-name">
+                Anthropic
+                <span class="prov-default">default</span>
+              </div>
+              <div class="prov-meta"><code>/messages</code> &middot; native</div>
+              <div class="prov-key">
+                <span>API key:</span>
+                <span>&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;a3f</span>
+                <div class="prov-actions">
+                  <span class="a">Edit</span>
+                  <span class="a danger">Remove</span>
+                </div>
+              </div>
+              <div class="prov-fetch">12 models cached &middot; <span class="refresh">&#8635; refresh</span> &middot; <span style="color: var(--ink-faint);">last fetched 2h ago</span></div>
+            </div>
+          </div>
+
+          <div class="prov-row">
+            <span class="prov-status set">&#10003;</span>
+            <div class="prov-body">
+              <div class="prov-name">
+                OpenAI
+                <span style="font-size: 10px; color: var(--ink-faint); font-weight: 400;">[set as default]</span>
+              </div>
+              <div class="prov-meta"><code>/chat/completions</code> + <code>/responses</code> &middot; native</div>
+              <div class="prov-key">
+                <span>API key:</span>
+                <span>&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;f1c</span>
+                <div class="prov-actions">
+                  <span class="a">Edit</span>
+                  <span class="a danger">Remove</span>
+                </div>
+              </div>
+              <div class="prov-fetch">8 models cached &middot; <span class="refresh">&#8635; refresh</span></div>
+            </div>
+          </div>
+
+          <div class="prov-row">
+            <span class="prov-status">&middot;</span>
+            <div class="prov-body">
+              <div class="prov-name">Google</div>
+              <div class="prov-meta">Gemini &middot; native</div>
+              <div class="prov-key">
+                <span>API key:</span>
+                <span class="placeholder">(not set)</span>
+                <div class="prov-actions">
+                  <span class="a">Add key</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="prov-row">
+            <span class="prov-status set">&#10003;</span>
+            <div class="prov-body">
+              <div class="prov-name">OpenRouter</div>
+              <div class="prov-meta">multi-provider gateway &middot; <b>capability flags</b> (reasoning, structured output)</div>
+              <div class="prov-key">
+                <span>API key:</span>
+                <span>&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;7d2</span>
+                <div class="prov-actions">
+                  <span class="a">Edit</span>
+                  <span class="a danger">Remove</span>
+                </div>
+              </div>
+              <div class="prov-fetch">340 models cached &middot; <span class="refresh">&#8635; refresh</span></div>
+            </div>
+          </div>
+
+          <div class="prov-row">
+            <span class="prov-status">&middot;</span>
+            <div class="prov-body">
+              <div class="prov-name">NanoGPT</div>
+              <div class="prov-meta">multi-provider gateway &middot; <b>capability flags</b></div>
+              <div class="prov-key">
+                <span>API key:</span>
+                <span class="placeholder">(not set)</span>
+                <div class="prov-actions">
+                  <span class="a">Add key</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="prov-row">
+            <span class="prov-status">&middot;</span>
+            <div class="prov-body">
+              <div class="prov-name">OpenAI-compatible</div>
+              <div class="prov-meta">catch-all for Ollama / LM Studio / custom endpoints &middot; <span style="color: var(--ink-faint);">capability data unavailable</span></div>
+              <div class="prov-key">
+                <span>endpoint:</span>
+                <span class="placeholder">(not configured)</span>
+                <div class="prov-actions">
+                  <span class="a">Configure&hellip;</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PROFILES -->
+        <div class="tab-panel active" data-panel="profiles">
+          <div class="tab-title">Profiles</div>
+          <div class="tab-subtitle">One Narrative profile (the storyteller, big, always present) and any number of Agent profiles. Agents pick a profile via Assignments at the bottom.</div>
+
+          <!-- NARRATIVE -->
+          <div class="narrative-card">
+            <div class="narrative-head">
+              <div class="narrative-title">Narrative profile</div>
+              <div class="narrative-sub">always present &middot; cannot be deleted</div>
+            </div>
+
+            <div class="field-row">
+              <div class="field-label">model
+                <span class="hint">provider/model &middot; capability badges inline</span>
+              </div>
+              <div>
+                <div class="model-select">
+                  <span>Anthropic / claude-sonnet-4-7</span>
+                  <span class="cap-badge on" title="reasoning supported">&#129504;</span>
+                  <span class="cap-badge on" title="structured output supported">&#9881;</span>
+                  <span style="margin-left: auto; color: var(--ink-faint);">&#9662;</span>
+                </div>
+                <div class="ctx-info">
+                  <b>Reasoning:</b> supported &middot; <b>Structured output:</b> supported
+                </div>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field-label">temperature
+                <span class="hint">0&ndash;1 &middot; sampling spread</span>
+              </div>
+              <div class="slider-row">
+                <div class="slider"><span class="slider-thumb" style="left: 80%;"></span></div>
+                <span class="slider-value">0.8</span>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field-label">max output
+                <span class="hint">tokens &middot; per-request cap</span>
+              </div>
+              <div class="slider-row">
+                <div class="slider"><span class="slider-thumb" style="left: 50%;"></span></div>
+                <span class="slider-value">4096</span>
+                <span class="slider-custom">&#9998; custom</span>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field-label">thinking
+                <span class="hint">conditional &middot; if model supports</span>
+              </div>
+              <div class="slider-row">
+                <div class="slider"><span class="slider-thumb" style="left: 30%;"></span></div>
+                <span class="slider-value">low</span>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field-label">timeout
+                <span class="hint">5&ndash;300s &middot; first-token + total</span>
+              </div>
+              <div class="slider-row">
+                <div class="slider"><span class="slider-thumb" style="left: 20%;"></span></div>
+                <span class="slider-value">60s</span>
+                <span class="slider-custom">&#9998; custom</span>
+              </div>
+            </div>
+
+            <details class="advanced">
+              <summary>Advanced &mdash; custom JSON payload</summary>
+              <div class="body">
+                <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 8px;">
+                  Per-field override merged on top of the constructed request payload. Use for parameters not surfaced in UI (<code>top_k</code>, <code>seed</code>, <code>repetition_penalty</code>, etc.). JSON-validated; provider may reject invalid keys.
+                </div>
+                <textarea class="input-textarea" style="width: 100%; box-sizing: border-box;">{
+  "top_k": 40,
+  "seed": 12345
+}</textarea>
+                <div class="cta">&#9888; Use with caution.</div>
+              </div>
+            </details>
+          </div>
+
+          <!-- AGENT PROFILES -->
+          <div class="agent-toolbar">
+            <h3>Agent profiles</h3>
+            <span style="font-size: 11px; color: var(--ink-faint);">3 configured</span>
+            <span class="cta">+ New profile</span>
+          </div>
+
+          <div class="profile-card">
+            <div class="profile-head">
+              <span class="chevron">&#9662;</span>
+              <span class="profile-name">Fast tasks</span>
+              <span class="profile-desc">cheap, quick &mdash; routine agent tasks</span>
+              <span class="profile-overflow">&#8943;</span>
+            </div>
+            <div class="profile-body">
+              <div class="field-row">
+                <div class="field-label">model</div>
+                <div>
+                  <div class="model-select">
+                    <span>OpenAI / gpt-4o-mini</span>
+                    <span class="cap-badge" title="reasoning not supported">&#129504;</span>
+                    <span class="cap-badge on" title="structured output supported">&#9881;</span>
+                    <span style="margin-left: auto; color: var(--ink-faint);">&#9662;</span>
+                  </div>
+                  <div class="ctx-info">
+                    <b>Reasoning:</b> not supported &middot; <b>Structured output:</b> supported
+                  </div>
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field-label">temperature</div>
+                <div class="slider-row">
+                  <div class="slider"><span class="slider-thumb" style="left: 20%;"></span></div>
+                  <span class="slider-value">0.2</span>
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field-label">max output</div>
+                <div class="slider-row">
+                  <div class="slider"><span class="slider-thumb" style="left: 12%;"></span></div>
+                  <span class="slider-value">1024</span>
+                  <span class="slider-custom">&#9998; custom</span>
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field-label">thinking</div>
+                <div style="font-size: 12px; color: var(--ink-faint); padding-top: 7px; font-style: italic;">not supported by this model</div>
+              </div>
+              <div class="field-row">
+                <div class="field-label">timeout</div>
+                <div class="slider-row">
+                  <div class="slider"><span class="slider-thumb" style="left: 6%;"></span></div>
+                  <span class="slider-value">15s</span>
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field-label">structured output
+                  <span class="hint">enum &middot; auto / on / off</span>
+                </div>
+                <div>
+                  <div class="segment">
+                    <span class="seg active">auto</span>
+                    <span class="seg">force on</span>
+                    <span class="seg">force off</span>
+                  </div>
+                  <div class="ctx-info"><b>auto</b> resolves to <b>force-on</b> for this model (capability supported).</div>
+                </div>
+              </div>
+              <details class="advanced">
+                <summary>Advanced &mdash; custom JSON payload</summary>
+                <div class="body">
+                  <textarea class="input-textarea" style="width: 100%; box-sizing: border-box;" placeholder='{ "top_k": ... }'></textarea>
+                </div>
+              </details>
+            </div>
+          </div>
+
+          <div class="profile-card collapsed error">
+            <div class="profile-head">
+              <span class="chevron">&#9662;</span>
+              <span class="profile-name">Heavy reasoning</span>
+              <span class="profile-desc">chapter-close lore-mgmt + memory-compaction</span>
+              <span class="profile-err">&#9888; model removed from provider catalog</span>
+              <span class="profile-overflow">&#8943;</span>
+            </div>
+          </div>
+
+          <div class="profile-card collapsed error">
+            <div class="profile-head">
+              <span class="chevron">&#9662;</span>
+              <span class="profile-name">Vision tasks</span>
+              <span class="profile-desc">(legacy &mdash; image-gen now lives on its own tab)</span>
+              <span class="profile-err">&#9888; provider key missing</span>
+              <span class="profile-overflow">&#8943;</span>
+            </div>
+          </div>
+
+          <!-- ASSIGNMENTS -->
+          <div class="assignments-block">
+            <h3>Assignments</h3>
+            <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 12px;">Each agent picks a profile. Default seeded by Onboarding; editable here.</div>
+
+            <div class="assignments-row">
+              <span class="a-name">classifier</span>
+              <div class="input-select" style="max-width: 260px;"><span>Fast tasks</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+            </div>
+            <div class="assignments-row">
+              <span class="a-name">translation</span>
+              <div class="input-select" style="max-width: 260px;"><span>Fast tasks</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+            </div>
+            <div class="assignments-row">
+              <span class="a-name">suggestion</span>
+              <div class="input-select" style="max-width: 260px;"><span>Fast tasks</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+            </div>
+            <div class="assignments-row">
+              <span class="a-name">lore-mgmt</span>
+              <div class="input-select" style="max-width: 260px; border-color: var(--warn);"><span>Heavy reasoning <span style="font-size: 10px; color: var(--warn);">&#9888;</span></span><span style="color: var(--ink-faint);">&#9662;</span></div>
+            </div>
+            <div class="assignments-row">
+              <span class="a-name">memory-compaction</span>
+              <div class="input-select" style="max-width: 260px; border-color: var(--warn);"><span>Heavy reasoning <span style="font-size: 10px; color: var(--warn);">&#9888;</span></span><span style="color: var(--ink-faint);">&#9662;</span></div>
+            </div>
+            <div class="assignments-row">
+              <span class="a-name">retrieval</span>
+              <div class="input-select" style="max-width: 260px;"><span style="color: var(--ink-faint); font-style: italic;">when designed</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- IMAGEGEN -->
+        <div class="tab-panel" data-panel="imagegen">
+          <div class="tab-title">Image generation</div>
+          <div class="tab-subtitle">Single configuration — image-gen parameters don't share shape with text profiles.</div>
+
+          <div class="field-row">
+            <div class="field-label">model</div>
+            <div class="model-select">
+              <span>OpenAI / dall-e-3</span>
+              <span style="margin-left: auto; color: var(--ink-faint);">&#9662;</span>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">size</div>
+            <div class="input-select" style="max-width: 220px;"><span>1024 &times; 1024</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">quality</div>
+            <div class="segment"><span class="seg">standard</span><span class="seg active">hd</span></div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">style</div>
+            <div class="segment"><span class="seg active">vivid</span><span class="seg">natural</span></div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">prompt prefix
+              <span class="hint">prepended to all generated prompts</span>
+            </div>
+            <textarea class="input-textarea" style="font-family: inherit;" placeholder="(optional &mdash; e.g. 'cinematic, painterly, 4k')"></textarea>
+          </div>
+          <div class="field-row">
+            <div class="field-label">timeout</div>
+            <div class="slider-row">
+              <div class="slider"><span class="slider-thumb" style="left: 30%;"></span></div>
+              <span class="slider-value">90s</span>
+              <span class="slider-custom">&#9998; custom</span>
+            </div>
+          </div>
+
+          <details class="advanced">
+            <summary>Advanced &mdash; custom JSON payload</summary>
+            <div class="body">
+              <textarea class="input-textarea" style="width: 100%; box-sizing: border-box;" placeholder='{ "background": "transparent", ... }'></textarea>
+            </div>
+          </details>
+        </div>
+
+        <!-- MEMORY -->
+        <div class="tab-panel" data-panel="memory">
+          <div class="tab-title">Memory <span style="font-size: 12px; color: var(--ink-muted); font-weight: 400;">&middot; story default</span></div>
+          <div class="tab-subtitle">Defaults copied into new stories at creation. Editing here doesn't propagate to existing stories.</div>
+
+          <div class="panel-note">
+            Same form component as Story Settings &middot; Memory. Differs only in data binding (<code>app_settings.defaultStorySettings.memory</code> vs <code>stories.settings.memory</code>).
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">chapter token threshold
+              <span class="hint">presets + numeric</span>
+            </div>
+            <div>
+              <div class="segment" style="margin-bottom: 8px;">
+                <span class="seg">Short (8k)</span>
+                <span class="seg active">Balanced (24k)</span>
+                <span class="seg">Long (48k)</span>
+                <span class="seg">Custom</span>
+              </div>
+              <input class="input-text" style="max-width: 120px;" value="24000" />
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">recent buffer
+              <span class="hint">entries injected verbatim</span>
+            </div>
+            <input class="input-text" style="max-width: 100px;" value="10" />
+          </div>
+          <div class="field-row">
+            <div class="field-label">compaction detail
+              <span class="hint">single-line directive</span>
+            </div>
+            <input class="input-text" style="width: 100%; box-sizing: border-box;" placeholder="(empty &mdash; agent uses built-in defaults)" />
+          </div>
+        </div>
+
+        <!-- TRANSLATION -->
+        <div class="tab-panel" data-panel="translation">
+          <div class="tab-title">Translation <span style="font-size: 12px; color: var(--ink-muted); font-weight: 400;">&middot; story default</span></div>
+          <div class="tab-subtitle">Defaults copied into new stories. Display-only invariant: translations never feed back into prompts.</div>
+
+          <div class="field-row">
+            <div class="field-label">enabled
+              <span class="hint">master toggle</span>
+            </div>
+            <div class="segment"><span class="seg active">off</span><span class="seg">on</span></div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">target language
+              <span class="hint">ISO 639-1</span>
+            </div>
+            <div class="input-select" style="max-width: 220px; opacity: 0.5;"><span style="color: var(--ink-faint);">(disabled &mdash; enable first)</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">granular toggles
+              <span class="hint">per content type</span>
+            </div>
+            <div style="font-size: 11px; color: var(--ink-muted); line-height: 1.7;">
+              narrative &middot; user actions &middot; entity fields &middot; lore &middot; threads + happenings &middot; chapter summaries
+              <div style="font-size: 10px; color: var(--ink-faint); margin-top: 4px;">(individual toggles render here when enabled)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- COMPOSER PREFS -->
+        <div class="tab-panel" data-panel="composer">
+          <div class="tab-title">Composer prefs <span style="font-size: 12px; color: var(--ink-muted); font-weight: 400;">&middot; story default</span></div>
+          <div class="tab-subtitle">Defaults for new stories. Mirrors Story Settings · Generation · Authoring aids.</div>
+
+          <div class="field-row">
+            <div class="field-label">composer modes</div>
+            <div class="segment"><span class="seg">off</span><span class="seg active">on</span></div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">wrap POV
+              <span class="hint">how composer modes wrap user input</span>
+            </div>
+            <div class="segment"><span class="seg active">first-person</span><span class="seg">third-person</span></div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">suggestions
+              <span class="hint">next-turn pane</span>
+            </div>
+            <div class="segment"><span class="seg">off</span><span class="seg active">on</span></div>
+          </div>
+        </div>
+
+        <!-- APPEARANCE -->
+        <div class="tab-panel" data-panel="appearance">
+          <div class="tab-title">Appearance</div>
+          <div class="tab-subtitle">Visual identity finalizes with the visual identity session.</div>
+
+          <div class="field-row">
+            <div class="field-label">theme</div>
+            <div class="segment"><span class="seg">light</span><span class="seg">dark</span><span class="seg active">system</span></div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">density</div>
+            <div class="segment"><span class="seg active">comfortable</span><span class="seg">compact</span></div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">accent preference</div>
+            <div style="font-size: 11px; color: var(--ink-faint); padding-top: 7px;">(swatch picker &mdash; v1 placeholder)</div>
+          </div>
+        </div>
+
+        <!-- LANGUAGE -->
+        <div class="tab-panel" data-panel="language">
+          <div class="tab-title">Language</div>
+          <div class="tab-subtitle">UI language. Distinct from per-story content translation.</div>
+
+          <div class="field-row">
+            <div class="field-label">interface language
+              <span class="hint">i18next &middot; ISO 639-1</span>
+            </div>
+            <div class="input-select" style="max-width: 260px;"><span>English (en)</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+          </div>
+          <div class="panel-note">
+            App-UI translation only (menus, buttons, settings labels). Content translation (narrative, entities, lore) lives on Story Settings &middot; Translation.
+          </div>
+        </div>
+
+        <!-- DATA -->
+        <div class="tab-panel" data-panel="data">
+          <div class="tab-title">Data</div>
+          <div class="tab-subtitle">Backups, restores, imports, exports. Each operation has a confirmation step.</div>
+
+          <div class="field-row">
+            <div class="field-label">full backup
+              <span class="hint">VACUUM INTO + assets</span>
+            </div>
+            <div>
+              <span class="prov-actions" style="display: inline-flex;"><span class="a">Create backup&hellip;</span></span>
+              <div class="ctx-info">Latest: 2026-04-24 23:14 &middot; 4.2 MB</div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">restore
+              <span class="hint">replaces current DB</span>
+            </div>
+            <div>
+              <span class="prov-actions" style="display: inline-flex;"><span class="a danger">Restore from backup&hellip;</span></span>
+              <div class="ctx-info">&#9888; Confirmation modal lists what'll be overwritten.</div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">import story
+              <span class="hint">.avts &middot; legacy .avt</span>
+            </div>
+            <div>
+              <span class="prov-actions" style="display: inline-flex;"><span class="a">Import story&hellip;</span></span>
+              <div class="ctx-info">Legacy <code>.avt</code> files routed through migration import.</div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">export all stories
+              <span class="hint">bulk per-story export</span>
+            </div>
+            <div>
+              <span class="prov-actions" style="display: inline-flex;"><span class="a">Export all&hellip;</span></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ABOUT -->
+        <div class="tab-panel" data-panel="about">
+          <div class="tab-title">About</div>
+          <div class="tab-subtitle">Version + system info + project links.</div>
+
+          <div class="field-row">
+            <div class="field-label">version</div>
+            <div class="input-text readonly" style="max-width: 200px;">2.0.0-alpha</div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">platform</div>
+            <div class="input-text readonly" style="max-width: 360px;">Linux x86_64 &middot; Electron 41 &middot; Node 24</div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">license</div>
+            <div style="font-size: 12px;"><a href="#" style="color: var(--info);">View license</a> &middot; <a href="#" style="color: var(--info);">Open-source credits</a></div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">project</div>
+            <div style="font-size: 12px;"><a href="#" style="color: var(--info);">github.com/AventurasTeam</a></div>
+          </div>
+        </div>
+
+        <!-- DIAGNOSTICS -->
+        <div class="tab-panel" data-panel="diagnostics">
+          <div class="tab-title">Diagnostics</div>
+          <div class="tab-subtitle">Power-user / debug surface.</div>
+
+          <div class="panel-note">
+            Heavier observability tooling (global delta-log browser with filters by source / target_table / action_id) is planned as its own panel — see <code>followups.md</code>.
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">debug logging
+              <span class="hint">verbose pipeline events</span>
+            </div>
+            <div class="segment"><span class="seg active">off</span><span class="seg">on</span></div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">view logs</div>
+            <div><span class="prov-actions" style="display: inline-flex;"><span class="a">Open logs&hellip;</span></span></div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">export raw settings</div>
+            <div><span class="prov-actions" style="display: inline-flex;"><span class="a">Export JSON&hellip;</span></span></div>
+          </div>
+          <div class="field-row">
+            <div class="field-label">performance</div>
+            <div style="font-size: 11px; color: var(--ink-muted); line-height: 1.6;">
+              avg request: 1.4s &middot; cache hits: 84% &middot; SQLite size: 12.3 MB
+            </div>
+          </div>
+        </div>
+
+        <!-- SAVE BAR -->
+        <div class="save-bar" id="save-bar">
+          <div class="dirty-note">
+            <span class="dirty-dot"></span>
+            <span><b>1 unsaved change</b> &mdash; Fast tasks profile temperature</span>
+          </div>
+          <div class="actions">
+            <span class="discard-btn">Discard</span>
+            <span class="save-btn">Save</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="notes">
+      <p style="margin: 0; text-align: center;">
+        Rationale &amp; decisions live in <code>docs/ui/screens/app-settings/app-settings.md</code> and <code>docs/ui/principles.md</code>.
+        This file is a visual artifact of the settled shape.
+      </p>
+    </div>
+
+    <script>
+      (function () {
+        function setTab(tabId) {
+          document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.dataset.panel === tabId));
+          document.querySelectorAll('.nav-item').forEach((n) => n.classList.toggle('active', n.dataset.nav === tabId));
+          document.querySelectorAll('[data-tab].rb-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tabId));
+        }
+        document.querySelectorAll('.nav-item').forEach((n) => n.addEventListener('click', () => setTab(n.dataset.nav)));
+        document.querySelectorAll('[data-tab].rb-btn').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
+
+        // profile expand/collapse
+        document.querySelectorAll('.profile-head').forEach((h) => {
+          h.addEventListener('click', (e) => {
+            if (e.target.classList.contains('profile-overflow')) return;
+            h.parentElement.classList.toggle('collapsed');
+          });
+        });
+
+        // dirty toggle
+        const saveBar = document.getElementById('save-bar');
+        document.querySelectorAll('[data-dirty]').forEach((b) =>
+          b.addEventListener('click', () => {
+            const state = b.dataset.dirty;
+            saveBar.classList.toggle('dirty', state === 'dirty');
+            document.querySelectorAll('[data-dirty]').forEach((x) => x.classList.toggle('active', x.dataset.dirty === state));
+          })
+        );
+
+        // error banner toggle
+        const banner = document.getElementById('err-banner');
+        document.querySelectorAll('[data-err]').forEach((b) =>
+          b.addEventListener('click', () => {
+            const state = b.dataset.err;
+            banner.classList.toggle('visible', state === 'broken');
+            document.querySelectorAll('[data-err]').forEach((x) => x.classList.toggle('active', x.dataset.err === state));
+          })
+        );
+      })();
+    </script>
+  </body>
+</html>

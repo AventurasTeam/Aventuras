@@ -29,7 +29,7 @@ rationale, and decisions live alongside.
 | 1   | Story list (landing)           | [screens/story-list/](./screens/story-list/story-list.md)                |
 | 2   | Story creation wizard          | pending                                                                  |
 | 3   | Reader / composer              | [screens/reader-composer/](./screens/reader-composer/reader-composer.md) |
-| 4   | App Settings                   | pending                                                                  |
+| 4   | App Settings                   | [screens/app-settings/](./screens/app-settings/app-settings.md)          |
 | 5   | Onboarding / empty state       | pending                                                                  |
 | -   | Story Settings (from reader ⚙) | [screens/story-settings/](./screens/story-settings/story-settings.md)    |
 

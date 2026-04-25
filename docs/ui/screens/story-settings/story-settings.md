@@ -104,24 +104,72 @@ card `⋯ → Edit info` routes to `About` directly.
 
 ## Models tab — overrides only
 
-Every field is optional. Absent = use the global App Settings pick at
-render time.
+Story-level overrides are direct **model id** overrides. App-level
+profile architecture (App Settings · Profiles) provides the resolution
+chain; this tab lets the story bypass the chain for specific features.
 
-- Empty state shows as a dashed/italic `App default: <model>`
-  sentinel so the user always sees what's currently in effect.
-- Choosing a model in the dropdown pins an override for this story.
-- Pinning means the story is insulated from future changes to the
-  global default.
+### Narrative (always visible)
 
-**Per-feature overrides:**
+Top of the tab — narrative is the storyteller, central enough that
+its slot is always rendered:
 
-- `narrative` — the main story AI
-- `classifier` — scene extraction after each reply
-- `translation` — user-facing string translation
-- `imageGen` — portraits / scene illustrations
-- `suggestion` — next-turn suggestion pane
+- **App default sentinel** resolves the chain and shows what's
+  currently in effect:
+  `App default: claude-sonnet-4-7 (Narrative profile)`.
+- Picking a model pins that model id for this story regardless of
+  changes to App Settings · Profiles · Narrative.
+- `×` on the row removes the override; reverts to the App default
+  sentinel.
 
-**Data model:**
+### Agent overrides (empty by default)
+
+`+ Add override` button. Click opens a picker showing all agents with
+their currently-resolved chain:
+
+- `classifier` — Fast tasks → gpt-4o-mini
+- `translation` — Fast tasks → gpt-4o-mini
+- `suggestion` — Fast tasks → gpt-4o-mini
+- `imageGen` — ImageGen config → dall-e-3
+- `lore-mgmt` — Heavy reasoning → claude-opus-4
+- `memory-compaction` — Heavy reasoning → claude-opus-4
+- `retrieval` — Fast tasks → gpt-4o-mini (when designed)
+
+User picks an agent; the override row materializes with a model
+picker. `×` on the row removes the override; agent reverts to App
+default.
+
+Most stories override 0-1 agents — empty default keeps noise
+proportional to actual overrides.
+
+### Insulation from profile changes
+
+Story-level overrides are model ids, not profile ids — they bypass
+the profile chain entirely:
+
+- Profile renamed / model changed / temperature changed → stories
+  with override unaffected.
+- Profile deleted → blocked at App Settings while agents are
+  assigned; story-level overrides survive (they don't reference the
+  profile id).
+- Model removed from provider catalog → triggers the global
+  broken-config banner (rendered at the top of every screen — see
+  [App Settings](../app-settings/app-settings.md) for the surface
+  that lets the user fix it). Story override stays valid only as
+  long as the model id resolves.
+
+### What story override **doesn't** include in v1
+
+- Per-story full-profile override (creating a story-specific
+  profile, etc.).
+- Per-story custom JSON payload override.
+- Per-story image-gen advanced parameters (size, style, quality —
+  only the model id can be overridden).
+
+Tracked as granular per-story controls in
+[followups.md](../../../followups.md) — extension when demand
+emerges.
+
+### Data model
 
 ```ts
 stories.settings.models: {
@@ -130,11 +178,14 @@ stories.settings.models: {
   translation?: string;
   imageGen?: string;
   suggestion?: string;
+  loreMgmt?: string;
+  memoryCompaction?: string;
+  retrieval?: string;
 }
 ```
 
-All fields optional; absent = use the global App Settings value at
-render time. See
+All fields optional; absent = resolve through the App Settings
+profile chain at render time. See
 [principles.md → Models are override-only](../../principles.md#models-are-override-only-per-story)
 for the cross-cutting pattern.
 
