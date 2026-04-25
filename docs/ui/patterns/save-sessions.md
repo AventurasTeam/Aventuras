@@ -56,28 +56,44 @@ variants.
 
 ## Navigate-away guard — global intercept
 
-Whenever the user tries to leave a dirty surface — clicking another
-list row, switching branch, navigating out of the panel, navigating
-between top-level routes, **closing the window** — a confirmation
-modal intercepts:
+A dirty session is protected against **any user action that would
+silently discard it**, not just navigation events. Whenever the
+user does something whose completion would lose the unsaved
+changes, a confirmation modal intercepts:
 
 > **Unsaved changes**
 >
-> Save / Discard / Cancel navigation
+> Save / Discard / Cancel
 
 Three actions, no implicit default:
 
-- **Save** — commit the session, then proceed with the navigation.
+- **Save** — commit the session, then proceed with the action.
 - **Discard** — throw the session away, then proceed with the
-  navigation.
-- **Cancel navigation** — keep the session and stay on the current
-  surface.
+  action.
+- **Cancel** — keep the session and stay on the current surface.
 
-The guard is **global**: every surface that uses this pattern wires
-the same modal, same copy, same actions. The intercept covers
-in-app navigation (router events) AND window-close events
-(electron's `close` / web's `beforeunload`). No surface gets to
-override the intercept; any intent to leave passes through it.
+**Intercept categories** (the "intent to leave" can be any of):
+
+- **Selection change within the surface** — picking another row in
+  a master-detail list (World, Plot), opening a different entity
+  via the Browse rail or peek drawer, switching the active branch
+  in the reader. Not a navigation event; just a state change that
+  would replace the dirty surface's content.
+- **In-app navigation** — clicking a navigation link, ← Return,
+  Actions-menu route jumps, anything that fires a router event
+  leaving the surface.
+- **Window-close intent** — electron window-close or the web
+  `beforeunload` event on page close / refresh.
+- **Any other state transition that implicitly drops the dirty
+  state** — closing a containing drawer/modal, sign-out actions,
+  etc.
+
+The guard is **global**: same modal, same copy, same actions
+across every surface that uses the save-session pattern. The
+intercept hooks are per-surface (a master-detail list wires the
+row-click intent; a settings surface wires route changes; both
+wire the window-close intent), but the user-visible UX is
+identical. No surface gets to skip the guard while dirty.
 
 ---
 
