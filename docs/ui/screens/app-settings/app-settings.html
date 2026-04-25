@@ -146,13 +146,16 @@
       .model-row .m-caps { display: inline-flex; gap: 6px; }
       .model-row .remove { cursor: pointer; color: var(--ink-faint); opacity: 0.5; font-size: 14px; padding: 0 4px; }
       .model-row .remove:hover { opacity: 1; }
-      .add-custom-model { padding: 6px 12px; font-size: 11px; color: var(--ink-muted); border: 1px dashed var(--line); border-radius: 3px; cursor: pointer; display: inline-block; margin-top: 8px; }
+      .add-custom-model { padding: 6px 12px; font-size: 11px; color: var(--ink-muted); border: 1px dashed var(--line); border-radius: 3px; cursor: pointer; display: inline-block; }
       .add-custom-model:hover { color: var(--ink); }
 
+      /* model-actions wrapper — view-all CTA + expanded section + add-custom always stack vertically */
+      .model-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 8px; }
+
       /* "view all" expanded picker: search + filter chips + scrollable list */
-      .view-all-cta { font-size: 11px; color: var(--ink-muted); cursor: pointer; padding: 6px 0; display: inline-block; margin-top: 4px; }
+      .view-all-cta { font-size: 11px; color: var(--ink-muted); cursor: pointer; padding: 4px 0; display: inline-block; }
       .view-all-cta:hover { color: var(--ink); }
-      .view-all-section { display: none; margin-top: 10px; padding: 10px; border: 1px solid var(--line-soft); border-radius: 4px; background: var(--bg); }
+      .view-all-section { display: none; padding: 10px; border: 1px solid var(--line-soft); border-radius: 4px; background: var(--bg); align-self: stretch; }
       .view-all-section.open { display: block; }
       .models-search-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
       .models-search-bar .search-input { flex: 1; min-width: 200px; padding: 5px 10px; border: 1px solid var(--line-soft); border-radius: 3px; font-size: 12px; background: var(--bg-region); color: var(--ink-faint); font-style: italic; }
@@ -361,10 +364,11 @@
                 </div>
               </div>
 
-              <!-- view-all toggle + expanded section -->
-              <span class="view-all-cta" data-toggle-models="anthropic">View all 12 models &rarr;</span>
+              <!-- view-all toggle + expanded section + add-custom — stacked vertically -->
+              <div class="model-actions">
+                <span class="view-all-cta" data-toggle-models="anthropic">View all 12 models &rarr;</span>
 
-              <div class="view-all-section open" data-models-section="anthropic">
+                <div class="view-all-section open" data-models-section="anthropic">
                 <div class="models-search-bar">
                   <span class="search-input">Search models&hellip;</span>
                   <span class="cap-filter">&#129504; reasoning</span>
@@ -416,7 +420,8 @@
                 </div>
               </div>
 
-              <span class="add-custom-model">+ Add custom model id</span>
+                <span class="add-custom-model">+ Add custom model id</span>
+              </div>
             </div>
           </div>
 
