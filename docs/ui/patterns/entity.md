@@ -3,8 +3,9 @@
 Row-shaped UI patterns shared across the reader's Browse rail, the
 World panel's list pane, and (for the recently-classified accent
 specifically) the Plot panel's list panes. Sister patterns to
-[`forms.md`](./forms.md), [`lists.md`](./lists.md), and
-[`data.md`](./data.md).
+[`save-sessions.md`](./save-sessions.md) (the edit-commit pattern
+entity forms ride), [`forms.md`](./forms.md),
+[`lists.md`](./lists.md), and [`data.md`](./data.md).
 
 Anchors here are the canonical URL for these patterns — per-screen
 docs link in.
@@ -158,40 +159,14 @@ has a direct UI consequence:
 
 ---
 
-## Entity editing — explicit save, session-based
+## Entity editing — uses the save-session pattern
 
-Pattern used by the World panel and reused by Story Settings.
-Autosave-on-blur was rejected: it would (a) let a single careless
-keystroke write a destructive change without friction, and (b)
-produce delta noise (one `action_id` per field) that makes CTRL-Z too
-granular.
-
-Session semantics:
-
-- **Session starts** on the first field edit (form becomes dirty).
-- **Form-local state** is held by react-hook-form (already in stack);
-  nothing writes to the Zustand store or SQLite until Save.
-- **Tab switching is within session** — editing across multiple tabs
-  is one session.
-- **Save commits** all session changes as deltas under a single
-  shared `action_id`. CTRL-Z reverses the entire session as one step.
-- **Discard** throws the session away without any writes.
-- **Navigate-away guard** — clicking another list row, switching
-  branch, navigating out of the panel, closing the window — all
-  trigger a confirmation modal while dirty: "Unsaved changes: Save /
-  Discard / Cancel navigation."
-
-UI surface:
-
-- **Save bar** appears as a footer on the detail pane ONLY when the
-  session is dirty. Shows unsaved-change count + summary of which
-  fields are dirty. Action buttons: Discard + Save (keyboard shortcut:
-  `Cmd/Ctrl-S`).
-- **Clean state** has no save bar — no chrome when reading.
-- **Peek drawer** (reader) keeps its direct-manipulation pencil edits
-  for single-field quick tweaks; these commit immediately as
-  one-field sessions. Deep edits route to World panel where the
-  explicit-save pattern applies.
+World-panel entity forms commit through the cross-cutting
+[save-session pattern](./save-sessions.md). One session per detail
+row; tab switching stays within session; Save commits all changes
+as deltas under one `action_id`; Discard throws away; the
+navigate-away guard intercepts dirty navigation. The peek drawer's
+pencil edits are the documented quick-edit exception.
 
 ---
 

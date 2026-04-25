@@ -16,7 +16,7 @@ Cross-cutting principles that govern this surface are in
 - [Models are override-only (per-story)](../../principles.md#models-are-override-only-per-story)
   (this surface is the source side; Story Settings is the override side)
 - [Form controls — Select primitive](../../patterns/forms.md#select-primitive)
-- [Entity editing — explicit save, session-based](../../patterns/entity.md#entity-editing--explicit-save-session-based)
+- [Save-session pattern](../../patterns/save-sessions.md)
 
 ## Layout
 
@@ -372,7 +372,7 @@ followups.
 ## Save session
 
 Same explicit-save pattern as Story Settings — see
-[principles → Entity editing](../../patterns/entity.md#entity-editing--explicit-save-session-based).
+[patterns → Save sessions](../../patterns/save-sessions.md).
 First field edit opens a session; tab switching is within session;
 Save commits all changes under one `action_id`; Discard throws away;
 navigate-away guard when dirty.

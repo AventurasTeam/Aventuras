@@ -14,7 +14,7 @@ Cross-cutting principles that govern this panel are in
 - [World / Plot split](../../principles.md#world--plot-split--unified-panels-by-purpose)
 - [Top-bar design rule](../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
 - [Entity form UI generated from typed schema](../../patterns/entity.md#entity-form-ui-is-generated-from-the-typed-schema)
-- [Entity editing — explicit save, session-based](../../patterns/entity.md#entity-editing--explicit-save-session-based)
+- [Save-session pattern](../../patterns/save-sessions.md)
 - [Bulk operations — deferred](../../principles.md#bulk-operations--deferred)
 - [Injection / retrieval rules](../../principles.md#injection--retrieval-rules-for-prompt-context)
   (`injection_mode` on threads)
@@ -243,7 +243,7 @@ Cross-cutting spec in
 ## Save session
 
 Same explicit-save pattern as World — see
-[principles → Entity editing](../../patterns/entity.md#entity-editing--explicit-save-session-based).
+[patterns → Save sessions](../../patterns/save-sessions.md).
 First field edit opens a session; tab switching is within session;
 Save commits all changes under one `action_id`; Discard throws away;
 navigate-away guard when dirty.

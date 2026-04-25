@@ -17,7 +17,7 @@ Cross-cutting principles that govern this panel are in
 - [Browse filter chips + accordion grouping](../../patterns/entity.md#browse-filter-chips)
 - [Entity surfacing — three levels](../../patterns/entity.md#entity-surfacing--three-levels-same-data)
 - [Entity form UI generated from typed schema](../../patterns/entity.md#entity-form-ui-is-generated-from-the-typed-schema)
-- [Entity editing — explicit save, session-based](../../patterns/entity.md#entity-editing--explicit-save-session-based)
+- [Save-session pattern](../../patterns/save-sessions.md)
 - [Bulk operations — deferred](../../principles.md#bulk-operations--deferred)
 - [Injection / retrieval rules](../../principles.md#injection--retrieval-rules-for-prompt-context)
   (`injection_mode` field surfacing)

@@ -20,7 +20,10 @@ cites them, doesn't duplicate.
 
 - [`entity.md`](./entity.md) — entity rows: indicators, kind icons,
   sort order, filter chips, three surfacing levels, schema-driven
-  forms, save sessions, recently-classified accent.
+  forms, recently-classified accent.
+- [`save-sessions.md`](./save-sessions.md) — explicit-save session
+  pattern (save bar + global navigate-away guard) used by every
+  detail-pane edit surface.
 - [`lists.md`](./lists.md) — large-list rendering rules
   (virtualization vs load-older), search bar scope.
 - [`forms.md`](./forms.md) — Select primitive (segment / dropdown /

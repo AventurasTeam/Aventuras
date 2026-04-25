@@ -20,7 +20,7 @@ Cross-cutting principles that govern this screen are in
 - [Form controls — Select primitive](../../patterns/forms.md#select-primitive)
   (segment / dropdown / radio render-mode rule applies to every
   picker on this surface)
-- [Entity editing — explicit save, session-based](../../patterns/entity.md#entity-editing--explicit-save-session-based)
+- [Save-session pattern](../../patterns/save-sessions.md)
   (the same pattern applies here)
 - [Naming convention — World / Plot](../../principles.md#naming-convention--world--plot-and-their-panel-descriptor)
 
@@ -334,7 +334,7 @@ Same pattern as the World panel: **explicit save**, session-based.
 First field edit opens a session; all changes across all tabs share
 one `action_id`; Save commits as one unit; Discard throws it away;
 navigate-away guard when dirty. See
-[principles.md → Entity editing](../../patterns/entity.md#entity-editing--explicit-save-session-based)
+[patterns → Save sessions](../../patterns/save-sessions.md)
 for the full pattern.
 
 ## Top-bar
