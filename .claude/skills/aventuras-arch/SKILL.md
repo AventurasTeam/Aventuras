@@ -33,7 +33,7 @@ Run reads in parallel where they're independent.
 3. **User scratchpad.** Read if it exists:
    - `docs/user-notes.local.md` — gitignored personal scratchpad.
      May be absent or empty. Whatever's there is a hint about what's
-     on the user's mind for this session.
+     on the user's mind.
 
 4. **Git state.** Run in parallel:
    - `git log --oneline -10` — recent commits, especially
