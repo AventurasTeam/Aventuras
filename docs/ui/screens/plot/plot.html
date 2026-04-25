@@ -333,15 +333,22 @@
         font-family: ui-monospace, monospace;
         flex-shrink: 0;
       }
-      .common-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--info);
+      .ck-icon {
+        font-size: 13px;
+        line-height: 1;
+        color: var(--ink-muted);
+        width: 14px;
+        height: 14px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         flex-shrink: 0;
       }
-      .common-dot.placeholder {
-        background: transparent;
+      .ck-icon.on {
+        color: var(--ink);
+      }
+      .ck-icon.placeholder {
+        visibility: hidden;
       }
 
       /* status pill — threads */
@@ -494,6 +501,23 @@
         color: var(--ink-faint);
         font-size: 11px;
         font-weight: 400;
+      }
+      .recent-badge {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--info);
+        padding: 3px 8px;
+        border: 1px solid var(--info);
+        border-left-width: 3px;
+        border-radius: 2px;
+        background: rgba(85, 136, 170, 0.06);
+        flex-shrink: 0;
+        margin-left: 4px;
+      }
+      .recent-badge.faded {
+        color: rgba(85, 136, 170, 0.65);
+        border-color: rgba(85, 136, 170, 0.5);
       }
       .overflow-btn {
         margin-left: auto;
@@ -1210,7 +1234,7 @@
                   <span class="name-text"><b>Tavern brawl</b></span>
                   <span class="when-marker">e23 &middot; ch3</span>
                 </span>
-                <span class="common-dot placeholder" title="not common knowledge"></span>
+                <span class="ck-icon placeholder" title="not common knowledge">⊙</span>
               </div>
               <div class="list-row recent-1">
                 <span class="list-kind" title="happening">✉</span>
@@ -1218,7 +1242,7 @@
                   <span class="name-text">Kael's warning</span>
                   <span class="when-marker">e21 &middot; ch3</span>
                 </span>
-                <span class="common-dot placeholder"></span>
+                <span class="ck-icon placeholder">⊙</span>
               </div>
             </div>
           </div>
@@ -1235,7 +1259,7 @@
                   <span class="name-text">The Warden's mark discovered</span>
                   <span class="when-marker">e14 &middot; ch2</span>
                 </span>
-                <span class="common-dot" title="common knowledge"></span>
+                <span class="ck-icon on" title="common knowledge">⊙</span>
               </div>
               <div class="list-row">
                 <span class="list-kind" title="happening">⚜</span>
@@ -1243,7 +1267,7 @@
                   <span class="name-text">Coin's first owner</span>
                   <span class="when-marker">e8 &middot; ch1</span>
                 </span>
-                <span class="common-dot placeholder"></span>
+                <span class="ck-icon placeholder">⊙</span>
               </div>
             </div>
           </div>
@@ -1260,7 +1284,7 @@
                   <span class="name-text">Council Speaker's edict</span>
                   <span class="when-marker">pre-story</span>
                 </span>
-                <span class="common-dot" title="common knowledge"></span>
+                <span class="ck-icon on" title="common knowledge">⊙</span>
               </div>
               <div class="list-row">
                 <span class="list-kind" title="happening">▣</span>
@@ -1268,7 +1292,7 @@
                   <span class="name-text">Kael's debt</span>
                   <span class="when-marker">pre-story</span>
                 </span>
-                <span class="common-dot placeholder"></span>
+                <span class="ck-icon placeholder">⊙</span>
               </div>
             </div>
           </div>
@@ -1289,6 +1313,7 @@
           </div>
           <div class="detail-name-row">
             <div class="detail-name">Crown's bargain</div>
+            <span class="recent-badge" title="Touched by classifier this turn">Recently classified</span>
             <div class="overflow-btn" title="More options">
               &#8943;
               <div class="overflow-menu">
@@ -1308,6 +1333,7 @@
           </div>
           <div class="detail-name-row">
             <div class="detail-name">Tavern brawl</div>
+            <span class="recent-badge" title="Touched by classifier this turn">Recently classified</span>
             <div class="overflow-btn" title="More options">
               &#8943;
               <div class="overflow-menu">
@@ -1458,6 +1484,7 @@
               <span class="type-hint">bool &middot; awareness skip</span>
             </div>
             <div class="toggle-row">
+              <span class="ck-icon" id="ck-icon-detail" title="common knowledge">⊙</span>
               <span class="toggle-pill" id="ck-toggle"></span>
               <span><span data-ck-text="off">off</span><span data-ck-text="on" style="display: none">on &mdash; awareness rows are skipped</span></span>
             </div>
@@ -1726,6 +1753,8 @@
           document.querySelectorAll('[data-ck-btn]').forEach((b) => b.classList.toggle('active', b.dataset.ckBtn === state));
           const pill = document.getElementById('ck-toggle');
           if (pill) pill.classList.toggle('on', state === 'on');
+          const detailIcon = document.getElementById('ck-icon-detail');
+          if (detailIcon) detailIcon.classList.toggle('on', state === 'on');
           document.querySelectorAll('[data-ck-text]').forEach((el) => {
             el.style.display = el.dataset.ckText === state ? '' : 'none';
           });

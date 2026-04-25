@@ -114,7 +114,9 @@ ambient backdrop. Awareness links connect to characters who know
 about each happening.
 
 **Row composition.** kind glyph + title + when-marker (entry chip OR
-`temporal` string) + category label + common-knowledge dot (if set).
+`temporal` string) + category label + common-knowledge icon (⊙ when
+set; placeholder slot kept when unset so the row layout stays
+identical).
 
 **Sort.** Chronological — `occurred_at_entry` DESC first;
 `temporal`-only rows pinned at the bottom in their own block.
@@ -159,15 +161,38 @@ happenings skip awareness rows.
 Toggling common-knowledge off re-enables the Awareness tab as a
 normal editor; existing awareness rows (if any survived) reappear.
 
-## Recently-classified visual touch
+## Row indicators
 
-Rows touched by the classifier in the last 1-2 turns get a subtle
-left-edge accent (similar pattern to the in-scene accent on World
-rows; distinct color — TBD with visual identity). Fades over a few
-turns. Computed runtime from the delta log; no schema change.
+Three signals on each row, each with a dedicated channel:
+
+- **Left-edge accent — recently classified.** Info-blue, fading over
+  1-2 turns. Single signal with two visual states (full-color vs
+  faded) representing decay. Applies to both threads and happenings.
+  Runtime-derived from the delta log; no schema change.
+- **Right-side common-knowledge icon (happenings only) — ⊙.** Same
+  glyph as the toggle in the detail Overview tab; on/off state
+  mirrors the toggle. Placeholder slot kept on rows where CK is off
+  so layout stays identical row-to-row.
+- **Right-side status pill (threads only).** Lifecycle status with
+  per-tier coloring — Active / Pending / Resolved / Failed.
+
+### Self-documenting via the detail pane
+
+Each indicator is mirrored in the detail pane so users learn the
+mapping by clicking around, not by reading docs:
+
+- **Recently-classified accent on the row → "Recently classified"
+  badge in the detail head**, matching color (info-blue, faded for
+  older state). Open the row, see the same signal echoed in text.
+- **Common-knowledge ⊙ on the row → ⊙ icon next to the toggle on
+  Overview**. Same glyph, same on/off behavior. Toggling the detail
+  flips the row icon at the same time.
+- **Status pill on the row → status field on Overview**. Already the
+  same wording.
 
 Gives the Plot panel an "audit" feel without adding a full debug
-surface — at-a-glance the user sees what the classifier just wrote.
+surface — at-a-glance the user sees what the classifier just wrote,
+and clicking through teaches them what each marker means.
 
 The deeper observability surface (global delta log browser, filters
 by source / target_table / action_id) is its own panel; see
