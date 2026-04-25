@@ -575,3 +575,120 @@ stored** on the entry — the final wrapped content is canonical.
   mode chip, no meta.
 - Editing an entry edits the final wrapped text directly.
 - Rewrapping with a different mode post-send is not a v1 feature.
+
+---
+
+## Search bar scope
+
+Every search input in the app **must declare what it searches**.
+"Search…" with no scope is ambiguous and quietly inconsistent across
+surfaces. Per-screen docs name the scope inline; this section is the
+cross-cutting summary plus the UX rule.
+
+**UX rule:**
+
+- **Placeholder text shows 1-2 most obvious fields**, truncation-safe
+  under ~25 characters: `Search title, description…`. The full scope
+  is rarely visible in placeholder real estate.
+- **Tooltip on focus / hover** lists the full set of searched fields.
+- **A small ⓘ help icon next to the input** opens the same scope
+  list as a popover — discoverable on touch where hover doesn't fire.
+  Belt + suspenders for cross-platform.
+
+**SQLite mechanics.** SQLite ships JSON1 (built into expo-sqlite).
+Search queries combine `LIKE` against typed text columns with
+`json_extract` / `json_each` for JSON-stored fields (`tags`,
+`entities.state` per-kind, `metadata`, `undo_payload`). For larger
+stories, **FTS5** is the upgrade path (mirror searchable text into
+an FTS virtual table, triggers keep it in sync). v1 stays on
+LIKE + JSON-extract; revisit when a real story hits the wall.
+
+**Per-surface scope** — each surface's per-screen doc carries the
+authoritative version; this is the cross-cutting summary:
+
+| Surface                 | Searches                                                                                                                          |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Story list              | `title`, `description`, `genre`, `tags`, `author_notes`                                                                           |
+| Reader Browse rail      | category-aware (entity: `name`/`description`/`tags`; lore: `title`/`body`/`tags`; thread/happening: `title`/`description`/`tags`) |
+| World panel list        | category-aware (same as Browse rail equivalents)                                                                                  |
+| Plot panel — threads    | `title`, `description`, `category`, `tags`                                                                                        |
+| Plot panel — happenings | `title`, `description`, `category`, `tags`                                                                                        |
+| History tab (any panel) | structurally different — field-path strings, op (`create`/`update`/`delete`), rendered change-summary text                        |
+
+---
+
+## Raw JSON viewer — shared modal pattern
+
+Every "View raw JSON" affordance (World ⋯, Plot ⋯, story-list ⋯,
+future surfaces) opens **the same right-anchored drawer**. One
+component reused everywhere; no per-surface variants.
+
+**Shape:**
+
+- Right-anchored drawer, ~440px wide (matches reader peek drawer
+  dimensions for visual consistency).
+- Header: `Raw JSON · <row name>` + close `×`.
+- Body: pretty-printed JSON of the row + nested fields merged
+  (e.g. entity row + `state` JSON; happening row + involvements +
+  awareness summary). Monospace, indented, low-fi syntax tone in v1
+  (real syntax highlighting with visual identity).
+- Top-right: **Copy** button.
+- Footer hint: `Edit raw — coming later` (disabled placeholder).
+
+**Read-only in v1.** Edit-mode (raw-edit + zod-validate on save) is
+deferred to a follow-up.
+
+Esc / × closes the drawer.
+
+---
+
+## Import counterparts — file-based + Vault
+
+Every export affordance has (or will have) a file-based import
+counterpart. Two parallel paths into the app: **file imports**
+(JSON / `.avts`) and **Vault** (in-app library, deferred). Both
+target the same "add to story" actions; they're parallel, not
+exclusive.
+
+**Story file format:** `.avts` extension (Aventuras-fresh; chosen
+distinct from the old app's `.avt` because the v2 schema is a hard
+break, not a migration). Contents are JSON with a mandatory version
+header so future migrations have a clean signal:
+
+```json
+{
+  "format": "aventuras-story",
+  "formatVersion": "1.0",
+  "exportedAt": "2026-04-25T...",
+  "story": { ... },
+  "branches": [...],
+  "entities": [...],
+  ...
+}
+```
+
+Import validates `formatVersion` and either accepts or rejects with
+a clear "this file is from a newer/older version" message. Format
+specifics deferred; versioning is the load-bearing decision.
+
+**Legacy `.avt` import** (from the old app) is supported for
+migration. The import flow needs its own design pass — see
+[`followups.md`](../followups.md#legacy-avt-migration-import).
+
+**Per-row import (entity / thread / happening / lore).** Each list
+pane's `+ New X` affordance becomes a small menu offering:
+
+- `Blank` — opens the form in create mode, empty.
+- `From JSON file…` — file picker, paste-supported. Validates against
+  the kind's zod schema before creating; mismatch fails with a
+  friendly error rather than a partial save.
+- `From Vault…` — disabled placeholder until Vault lands. Belongs
+  here so future-Vault has its slot.
+
+**Validation contract:** all imports (story-level or row-level) pass
+through the same zod schema that protects writes. JSON that doesn't
+parse cleanly fails with field-level errors; no "merge what works,
+ignore what doesn't" path.
+
+**Full backup restore** lives in App Settings · Data tab; pending
+its wireframe.

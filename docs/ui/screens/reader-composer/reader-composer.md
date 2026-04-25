@@ -225,6 +225,21 @@ type. Different axes.
   (`stories.settings.suggestionsEnabled = false`); panel never
   appears
 
+## Browse rail — search scope
+
+The rail's search input is **category-aware** — scope changes with
+the active category in the dropdown:
+
+- **Characters / locations / items / factions** (entity rows):
+  `name`, `description`, `tags`
+- **Lore**: `title`, `body`, `tags`
+- **Threads**: `title`, `description`, `tags`
+- **Happenings**: `title`, `description`, `tags`
+
+Placeholder text reflects the active category (`Search characters…` /
+`Search lore…` / etc.). Tooltip + ⓘ help icon list the full scope per
+[principles → Search bar scope](../../principles.md#search-bar-scope).
+
 ## Screen-specific notes
 
 - Title max-width capped at 320px with ellipsis + tooltip; keeps long

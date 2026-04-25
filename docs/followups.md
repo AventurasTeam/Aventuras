@@ -94,6 +94,35 @@ thin strip). Asymmetric cards but clearly signals "this story has a
 cover" vs "accent-only". Alternatives: subtle background image behind
 text, or small corner thumbnail. Decide with visual identity pass.
 
+### Legacy `.avt` migration import
+
+Old-app `.avt` files have a fundamentally different schema from the
+v2 `.avts` format — not a clean format-version bump, a real
+migration. Import path needs its own design pass: schema mapping
+(old `characters` / `locations` / `lorebookEntries` → unified
+`entities`), checkpoint translation (old per-checkpoint state → v2
+delta log + branches), and surfaces (validation failures, partial
+imports, conflict resolution). Defer the design until v2's import
+flow is in place; piggyback on the file-import flow when ready.
+
+### JSON viewer — edit mode
+
+The shared raw-JSON drawer (per principles) ships read-only in v1.
+Edit mode would be raw JSON edit + zod-validate on save. Pending
+its own design pass — needs careful UX around partial-edit failures
+(field-level validation errors mapped back into the JSON) and the
+"this is the only way to fix some shapes" power-user case vs the
+"don't let users break their data" common case.
+
+### FTS5 upgrade for search
+
+Search currently uses `LIKE` + `json_extract` / `json_each` against
+SQLite. Fast enough for thousands of rows; large stories (tens of
+thousands of entries + their delta log) eventually need FTS5
+(SQLite's full-text-search virtual tables) to stay snappy.
+Mirror searchable text into an FTS index, triggers keep it in
+sync. Pending — revisit when a real story hits the wall.
+
 ### Translation Wizard
 
 Multi-language conversion of an existing story's content (per-story

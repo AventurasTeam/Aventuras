@@ -56,8 +56,12 @@ landing from anywhere else, but we're already here).
 
 ## Toolbar
 
-- **Search** — single input, filters across title / description /
-  tags. Left-anchored, takes available width up to ~360px.
+- **Search** — single input, left-anchored, takes available width up
+  to ~360px. **Searches**: `title`, `description`, `genre`, `tags`,
+  `author_notes`. Placeholder shows truncation-safe hint
+  (`Search title, description…`); full scope via tooltip + ⓘ help
+  icon — see
+  [principles → Search bar scope](../../principles.md#search-bar-scope).
 - **Filter chips** — single-select: `All` / `Pinned` / `Archived`.
   `All` hides archived by default (they only appear when the
   `Archived` filter is active). `Pinned` shows only pinned.
@@ -181,6 +185,22 @@ user.
   a chosen mode).
 - Visible in the default `All` filter (they're active work-in-progress,
   should be discoverable).
+
+## Story import
+
+`.avts` files are imported via an **Import story** affordance in the
+header next to `+ New story`. File picker opens; selected file's
+`formatVersion` is validated, then the story (including branches,
+entities, lore, threads, happenings, chapters, deltas, entry-asset
+references) is materialized into the library as a new row.
+
+Legacy `.avt` files (old-app format) are accepted but route through
+a migration pass — see
+[`followups.md → Legacy .avt migration import`](../../../followups.md#legacy-avt-migration-import).
+
+See [principles → Import counterparts](../../principles.md#import-counterparts--file-based--vault)
+for the cross-cutting pattern (versioning, zod validation, Vault
+parallelism).
 
 ## Empty state (first launch)
 

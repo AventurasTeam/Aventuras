@@ -83,13 +83,49 @@ power-user/debug territory. One consistent pattern: ⋯ menus are where
 - **History** — delta log filtered to this entity. See History tab
   detail below.
 
+## List pane — search scope
+
+The list pane's search input is **category-aware** — scope changes
+with the active category dropdown:
+
+- **Characters / locations / items / factions** (entity rows):
+  `name`, `description`, `tags`
+- **Lore**: `title`, `body`, `category`, `tags`
+
+SQLite-side: `LIKE` against typed columns + `json_each` over the
+JSON `tags` array. Placeholder + tooltip + ⓘ help icon per
+[principles → Search bar scope](../../principles.md#search-bar-scope).
+
+## Detail pane — raw JSON viewer
+
+The `⋯ → View raw JSON` action opens the shared right-anchored
+drawer (read-only in v1, copy-button, edit-mode deferred). Same
+pattern as Plot panel and story-list. Cross-cutting spec in
+[principles → Raw JSON viewer](../../principles.md#raw-json-viewer--shared-modal-pattern).
+
+## Per-row import
+
+The list-pane footer's `+ New entity` opens a small menu:
+
+- **Blank** — empty form, create mode (current behavior).
+- **From JSON file…** — file picker; pasted/picked JSON validated
+  against the kind's zod schema before creating. Mismatch fails with
+  a friendly error.
+- **From Vault…** — disabled placeholder until Vault lands.
+
+See [principles → Import counterparts](../../principles.md#import-counterparts--file-based--vault).
+
 ## History tab
 
 History is the delta log filtered to this entity: every change
 (`op=create / update / delete`) that touched this `entity_id`. Never
 editable — rollback happens in the reader.
 
-- **Search** — against field names or change descriptions
+- **Search** — structured: `field-path strings`, `op`, and the
+  rendered change-summary text. Backed by `LIKE` on
+  `target_table` + `op` columns and `json_extract` over the
+  `undo_payload` JSON. SQLite filters server-side; lazy-loaded
+  delta log doesn't need to be fully in memory.
 - **Op filter** — all / create / update / delete
 - **Sort** — newest-first (default) or oldest-first
 - **Load-older chunking** — no page numbers, log-shaped data

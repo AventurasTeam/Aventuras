@@ -92,7 +92,9 @@ different grouping key. Groups: Active (default expanded), Pending,
 Resolved, Failed (all collapsed by default). Picking a non-All filter
 flattens to that single tier.
 
-**Search.** Across title + description.
+**Search.** `title`, `description`, `category`, `tags`. Placeholder
+shows truncation-safe hint; full scope via tooltip + ⓘ help icon —
+see [principles → Search bar scope](../../principles.md#search-bar-scope).
 
 **Detail tabs:**
 
@@ -100,8 +102,10 @@ flattens to that single tier.
   `injection_mode` dropdown, `triggered_at_entry` (read-only entry
   ref), `resolved_at_entry` (read-only entry ref, only when status is
   resolved/failed), tags.
-- **History** — delta log filtered to this thread; same shape as
-  World's History tab.
+- **History** — delta log filtered to this thread; structured search
+  over field-path / op / change-summary text per
+  [principles → Search bar scope](../../principles.md#search-bar-scope).
+  Same shape as World's History tab.
 
 No Involvements tab — threads aren't directly entity-linked in the
 schema.
@@ -135,7 +139,9 @@ pattern as World, different grouping key. Buckets:
 within for v1), **Out of narrative** (collapsed; rows with `temporal`
 set). Picking a non-All filter flattens to just the matching subset.
 
-**Search.** Across title + description.
+**Search.** `title`, `description`, `category`, `tags`. Placeholder
+shows truncation-safe hint; full scope via tooltip + ⓘ help icon —
+see [principles → Search bar scope](../../principles.md#search-bar-scope).
 
 **Detail tabs:**
 
@@ -198,18 +204,40 @@ The deeper observability surface (global delta log browser, filters
 by source / target_table / action_id) is its own panel; see
 [`followups.md`](../../../followups.md).
 
-## Manual creation
+## Manual creation + per-row import
 
 `+ New thread` and `+ New happening` affordances live at the
-list-pane footer. **Visually de-emphasized** (smaller text, lower
+list-pane footer, **visually de-emphasized** (smaller text, lower
 contrast) — manual creation is uncommon since most rows are
 classifier-authored, but it's a real use case (user authoring a
 backstory thread, manually marking an off-screen happening).
 
+Each opens a small menu offering:
+
+- **Blank** — empty form, create mode.
+- **From JSON file…** — file picker; pasted/picked JSON validated
+  against the kind's zod schema before creating.
+- **From Vault…** — disabled placeholder until Vault lands.
+
 Zod schema constraints prevent incoherent rows — no happening with
 both `occurred_at_entry` and `temporal` set, no thread without status,
 etc. The form surfaces these as inline validation rather than letting
-the user save broken state.
+the user save broken state. Same validation gates JSON imports —
+mismatched JSON fails with a friendly error rather than a partial
+save.
+
+Cross-cutting pattern in
+[principles → Import counterparts](../../principles.md#import-counterparts--file-based--vault).
+
+## Detail pane — raw JSON viewer
+
+The `⋯ → View raw JSON` action on either threads or happenings opens
+the shared right-anchored drawer (read-only in v1, copy button,
+edit-mode deferred). Same component as World panel and story-list.
+For happenings, the drawer's JSON includes the row + its
+involvements + awareness summary inline. For threads, just the row.
+Cross-cutting spec in
+[principles → Raw JSON viewer](../../principles.md#raw-json-viewer--shared-modal-pattern).
 
 ## Save session
 
