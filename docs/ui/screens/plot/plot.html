@@ -1032,6 +1032,197 @@
         font-size: 10px;
       }
 
+      /* search row with help icon */
+      .search-row {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .search-row .list-search {
+        flex: 1;
+      }
+      .help-icon {
+        width: 18px;
+        height: 18px;
+        border: 1px solid var(--line-soft);
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        color: var(--ink-muted);
+        cursor: help;
+        background: var(--bg-region);
+        flex-shrink: 0;
+        position: relative;
+      }
+      .help-popover {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        background: var(--bg-region);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+        padding: 10px 12px;
+        font-size: 11px;
+        color: var(--ink);
+        line-height: 1.5;
+        min-width: 200px;
+        z-index: 6;
+        display: none;
+        text-align: left;
+      }
+      .help-popover.open {
+        display: block;
+      }
+      .help-popover h5 {
+        margin: 0 0 4px;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--ink-muted);
+      }
+      .help-popover code {
+        background: var(--bg);
+        padding: 1px 5px;
+        border-radius: 2px;
+        border: 1px solid var(--line-soft);
+        font-size: 10px;
+      }
+
+      /* new-X menu (popover above the footer button) */
+      .new-menu-wrapper {
+        position: relative;
+      }
+      .new-menu {
+        position: absolute;
+        bottom: calc(100% + 6px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--bg-region);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.08);
+        min-width: 180px;
+        z-index: 5;
+        display: none;
+      }
+      .new-menu.open {
+        display: block;
+      }
+      .new-menu-item {
+        padding: 8px 12px;
+        font-size: 12px;
+        color: var(--ink);
+        cursor: pointer;
+        border-bottom: 1px solid var(--line-soft);
+      }
+      .new-menu-item:last-child {
+        border-bottom: none;
+      }
+      .new-menu-item:hover {
+        background: var(--bg-highlight);
+      }
+      .new-menu-item.disabled {
+        color: var(--ink-faint);
+        cursor: not-allowed;
+        font-style: italic;
+      }
+      .new-menu-item.disabled:hover {
+        background: transparent;
+      }
+
+      /* JSON viewer drawer — right-anchored overlay */
+      .json-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.18);
+        display: none;
+        z-index: 20;
+      }
+      .json-overlay.open {
+        display: block;
+      }
+      .json-drawer {
+        position: absolute;
+        top: 0;
+        right: 0;
+        height: 100%;
+        width: 440px;
+        background: var(--bg-region);
+        border-left: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        box-shadow: -4px 0 16px rgba(0, 0, 0, 0.08);
+      }
+      .json-drawer-head {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--line-soft);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .json-drawer-head .title {
+        flex: 1;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+      .json-drawer-head .copy-btn {
+        padding: 4px 10px;
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        background: var(--bg-region);
+        font-size: 11px;
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .json-drawer-head .close-btn {
+        width: 24px;
+        height: 24px;
+        border: 1px dashed var(--line);
+        border-radius: 3px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--ink-muted);
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .json-drawer-body {
+        flex: 1;
+        overflow: auto;
+        padding: 14px 16px;
+        font-family: ui-monospace, monospace;
+        font-size: 11px;
+        line-height: 1.6;
+        white-space: pre;
+        color: var(--ink);
+        background: var(--bg);
+      }
+      .json-drawer-body .k {
+        color: var(--ink);
+      }
+      .json-drawer-body .s {
+        color: var(--ink-muted);
+      }
+      .json-drawer-body .n {
+        color: var(--ink-muted);
+      }
+      .json-drawer-body .p {
+        color: var(--ink-faint);
+      }
+      .json-drawer-foot {
+        padding: 10px 16px;
+        border-top: 1px solid var(--line-soft);
+        background: var(--bg);
+        font-size: 10px;
+        color: var(--ink-faint);
+        font-style: italic;
+        text-align: center;
+      }
+
       /* side-conditional visibility */
       [data-side='happenings'] .threads-only {
         display: none;
@@ -1086,7 +1277,12 @@
         <button class="rb-btn active" data-dirty-btn="clean">clean</button>
         <button class="rb-btn" data-dirty-btn="dirty">dirty (2 changes)</button>
       </div>
-      <span class="rb-note">click a row · click a tab</span>
+      <div class="rb-group">
+        <span class="gl">json drawer:</span>
+        <button class="rb-btn active" data-json-btn="closed">closed</button>
+        <button class="rb-btn" data-json-btn="open">open</button>
+      </div>
+      <span class="rb-note">click a row · tab · ⓘ help · + new menu</span>
     </div>
 
     <header class="topbar">
@@ -1119,9 +1315,22 @@
             <span class="seg active" data-seg="threads">Threads</span>
             <span class="seg" data-seg="happenings">Happenings</span>
           </div>
-          <div class="list-search">
-            <span class="threads-only">Search threads&hellip;</span>
-            <span class="happenings-only">Search happenings&hellip;</span>
+          <div class="search-row">
+            <div class="list-search">
+              <span class="threads-only">Search title, description&hellip;</span>
+              <span class="happenings-only">Search title, description&hellip;</span>
+            </div>
+            <span class="help-icon" id="search-help-icon" title="What does the search look at?">&#9432;
+              <div class="help-popover" id="search-help-popover">
+                <h5>This search looks at</h5>
+                <span class="threads-only">
+                  <code>title</code> &middot; <code>description</code> &middot; <code>category</code> &middot; <code>tags</code>
+                </span>
+                <span class="happenings-only">
+                  <code>title</code> &middot; <code>description</code> &middot; <code>category</code> &middot; <code>tags</code>
+                </span>
+              </div>
+            </span>
           </div>
 
           <div class="list-toggles threads-only">
@@ -1299,8 +1508,15 @@
         </div>
 
         <div class="list-footer">
-          <span class="new-entity-btn threads-only">+ New thread</span>
-          <span class="new-entity-btn happenings-only">+ New happening</span>
+          <div class="new-menu-wrapper">
+            <span class="new-entity-btn threads-only" id="new-trigger-threads">+ New thread &#9662;</span>
+            <span class="new-entity-btn happenings-only" id="new-trigger-happenings">+ New happening &#9662;</span>
+            <div class="new-menu" id="new-menu">
+              <div class="new-menu-item">Blank</div>
+              <div class="new-menu-item">From JSON file&hellip;</div>
+              <div class="new-menu-item disabled" title="Vault not yet implemented">From Vault&hellip;</div>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -1717,6 +1933,43 @@
       </section>
     </div>
 
+    <!-- JSON viewer drawer overlay — cross-cutting affordance per principles -->
+    <div class="json-overlay" id="json-overlay">
+      <div class="json-drawer">
+        <div class="json-drawer-head">
+          <div class="title">Raw JSON &middot; <span id="json-title">Tavern brawl</span></div>
+          <span class="copy-btn">Copy</span>
+          <span class="close-btn" id="json-close" title="Close">&times;</span>
+        </div>
+        <div class="json-drawer-body" id="json-body"><span class="p">{</span>
+  <span class="k">"id"</span><span class="p">:</span> <span class="s">"h-tavern-brawl"</span><span class="p">,</span>
+  <span class="k">"branch_id"</span><span class="p">:</span> <span class="s">"br-main"</span><span class="p">,</span>
+  <span class="k">"title"</span><span class="p">:</span> <span class="s">"Tavern brawl"</span><span class="p">,</span>
+  <span class="k">"description"</span><span class="p">:</span> <span class="s">"Two of the Warden's men jump Kael at the bar; Aria steps in&hellip;"</span><span class="p">,</span>
+  <span class="k">"category"</span><span class="p">:</span> <span class="s">"encounter"</span><span class="p">,</span>
+  <span class="k">"icon"</span><span class="p">:</span> <span class="s">"battle"</span><span class="p">,</span>
+  <span class="k">"temporal"</span><span class="p">:</span> <span class="n">null</span><span class="p">,</span>
+  <span class="k">"occurred_at_entry"</span><span class="p">:</span> <span class="s">"e-23"</span><span class="p">,</span>
+  <span class="k">"common_knowledge"</span><span class="p">:</span> <span class="n">0</span><span class="p">,</span>
+  <span class="k">"tags"</span><span class="p">:</span> <span class="p">[</span><span class="s">"combat"</span><span class="p">,</span> <span class="s">"tavern"</span><span class="p">],</span>
+  <span class="k">"involvements"</span><span class="p">:</span> <span class="p">[</span>
+    <span class="p">{</span> <span class="k">"entity_id"</span><span class="p">:</span> <span class="s">"e-kael"</span><span class="p">,</span> <span class="k">"role"</span><span class="p">:</span> <span class="s">"actor"</span> <span class="p">},</span>
+    <span class="p">{</span> <span class="k">"entity_id"</span><span class="p">:</span> <span class="s">"e-aria"</span><span class="p">,</span> <span class="k">"role"</span><span class="p">:</span> <span class="s">"actor"</span> <span class="p">},</span>
+    <span class="p">{</span> <span class="k">"entity_id"</span><span class="p">:</span> <span class="s">"e-bartender"</span><span class="p">,</span> <span class="k">"role"</span><span class="p">:</span> <span class="s">"witness"</span> <span class="p">},</span>
+    <span class="p">{</span> <span class="k">"entity_id"</span><span class="p">:</span> <span class="s">"l-iron-tavern"</span><span class="p">,</span> <span class="k">"role"</span><span class="p">:</span> <span class="s">"site"</span> <span class="p">}</span>
+  <span class="p">],</span>
+  <span class="k">"awareness"</span><span class="p">:</span> <span class="p">[</span>
+    <span class="p">{</span> <span class="k">"character_id"</span><span class="p">:</span> <span class="s">"e-aria"</span><span class="p">,</span> <span class="k">"learned_at_entry"</span><span class="p">:</span> <span class="s">"e-23"</span><span class="p">,</span> <span class="k">"salience"</span><span class="p">:</span> <span class="n">1.0</span><span class="p">,</span> <span class="k">"source"</span><span class="p">:</span> <span class="s">"witnessed firsthand"</span> <span class="p">},</span>
+    <span class="p">{</span> <span class="k">"character_id"</span><span class="p">:</span> <span class="s">"e-kael"</span><span class="p">,</span> <span class="k">"learned_at_entry"</span><span class="p">:</span> <span class="s">"e-23"</span><span class="p">,</span> <span class="k">"salience"</span><span class="p">:</span> <span class="n">1.0</span><span class="p">,</span> <span class="k">"source"</span><span class="p">:</span> <span class="s">"was there &mdash; took the punches"</span> <span class="p">}</span>
+    <span class="p">&hellip;</span>
+  <span class="p">],</span>
+  <span class="k">"created_at"</span><span class="p">:</span> <span class="n">1745580234</span><span class="p">,</span>
+  <span class="k">"updated_at"</span><span class="p">:</span> <span class="n">1745581234</span>
+<span class="p">}</span></div>
+        <div class="json-drawer-foot">Edit raw &mdash; coming later</div>
+      </div>
+    </div>
+
     <div class="notes">
       <p style="margin: 0; text-align: center">
         Rationale &amp; decisions live in <code>docs/ui/screens/plot/plot.md</code> and <code>docs/ui/principles.md</code>. This file is a visual
@@ -1811,6 +2064,53 @@
           h.addEventListener('click', () => {
             h.parentElement.classList.toggle('collapsed');
           });
+        });
+
+        // search help popover
+        const helpIcon = document.getElementById('search-help-icon');
+        const helpPop = document.getElementById('search-help-popover');
+        if (helpIcon && helpPop) {
+          helpIcon.addEventListener('click', (e) => {
+            e.stopPropagation();
+            helpPop.classList.toggle('open');
+          });
+        }
+
+        // new-X menu toggle
+        const newMenu = document.getElementById('new-menu');
+        ['new-trigger-threads', 'new-trigger-happenings'].forEach((id) => {
+          const t = document.getElementById(id);
+          if (!t) return;
+          t.addEventListener('click', (e) => {
+            e.stopPropagation();
+            newMenu.classList.toggle('open');
+          });
+        });
+
+        // JSON drawer
+        const jsonOverlay = document.getElementById('json-overlay');
+        function setJson(state) {
+          jsonOverlay.classList.toggle('open', state === 'open');
+          document.querySelectorAll('[data-json-btn]').forEach((b) => b.classList.toggle('active', b.dataset.jsonBtn === state));
+        }
+        document.querySelectorAll('[data-json-btn]').forEach((b) =>
+          b.addEventListener('click', () => setJson(b.dataset.jsonBtn)),
+        );
+        document.getElementById('json-close')?.addEventListener('click', () => setJson('closed'));
+        jsonOverlay?.addEventListener('click', (e) => {
+          if (e.target === jsonOverlay) setJson('closed');
+        });
+        // wire 'View raw JSON' overflow items
+        document.querySelectorAll('.overflow-item').forEach((item) => {
+          if (item.textContent.includes('View raw JSON')) {
+            item.addEventListener('click', () => setJson('open'));
+          }
+        });
+
+        // close transient popovers on outside click
+        document.addEventListener('click', () => {
+          helpPop?.classList.remove('open');
+          newMenu?.classList.remove('open');
         });
       })();
     </script>
