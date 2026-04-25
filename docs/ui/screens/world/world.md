@@ -22,6 +22,8 @@ Cross-cutting principles that govern this panel are in
 - [Injection / retrieval rules](../../principles.md#injection--retrieval-rules-for-prompt-context)
   (`injection_mode` field surfacing)
 - [Scene presence is runtime-derived, not status](../../principles.md#scene-presence-is-runtime-derived-not-status)
+- [Recently-classified row accent](../../principles.md#recently-classified-row-accent)
+  (entities and lore on this panel; classifier writes both)
 
 ## Layout
 

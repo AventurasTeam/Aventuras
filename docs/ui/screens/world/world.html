@@ -15,6 +15,7 @@
     --bg-highlight: #eef;
     --warn: #c94;
     --ok: #4a8;
+    --info: #58a;
   }
   html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
   body { min-height: 100vh; display: flex; flex-direction: column; }
@@ -70,6 +71,12 @@
   .list-row { border-left: 3px solid transparent; }
   .list-row.in-scene { border-left-color: var(--ok); background: linear-gradient(to right, rgba(74,168,136,0.05), transparent 60%); }
   .list-row.in-scene.selected { background: linear-gradient(to right, rgba(74,168,136,0.08), var(--bg-highlight)); }
+  /* recently-classified — cross-cutting accent (info-blue, fading over 1-2 turns) */
+  .list-row.recent-1 { border-left-color: var(--info); background: linear-gradient(to right, rgba(85,136,170,0.06), transparent 60%); }
+  .list-row.recent-2 { border-left-color: rgba(85,136,170,0.4); }
+  .list-row.recent-1.selected { background: linear-gradient(to right, rgba(85,136,170,0.10), var(--bg-highlight)); }
+  /* in-scene + recent: scene takes precedence on the border (current scene matters more for retrieval) */
+  .list-row.in-scene.recent-1, .list-row.in-scene.recent-2 { border-left-color: var(--ok); }
   .lead-badge { font-size: 9px; color: #000; background: #ffe68a; padding: 2px 5px; border-radius: 2px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0; }
 
   /* accordion groups (All filter) */
@@ -94,6 +101,8 @@
   .detail-name-row { display: flex; align-items: center; gap: 10px; }
   .detail-name { font-size: 22px; font-weight: 600; color: var(--ink); border-bottom: 1px dotted var(--line-soft); display: inline-block; padding-bottom: 2px; cursor: text; }
   .detail-name::after { content: "  ✎"; color: var(--ink-faint); font-size: 11px; font-weight: 400; }
+  .recent-badge { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--info); padding: 3px 8px; border: 1px solid var(--info); border-left-width: 3px; border-radius: 2px; background: rgba(85,136,170,0.06); flex-shrink: 0; margin-left: 4px; }
+  .recent-badge.faded { color: rgba(85,136,170,0.65); border-color: rgba(85,136,170,0.5); }
   .overflow-btn { margin-left: auto; width: 30px; height: 30px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 16px; cursor: pointer; position: relative; }
   .overflow-menu { position: absolute; top: calc(100% + 4px); right: 0; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); min-width: 200px; z-index: 5; display: none; }
   .overflow-menu.open { display: block; }
@@ -322,12 +331,12 @@
             <span class="list-name"><span class="name-text">Bartender</span></span>
             <span class="row-status-pill active">active</span>
           </div>
-          <div class="list-row selected in-scene" data-entity="kael">
+          <div class="list-row selected in-scene recent-1" data-entity="kael">
             <span class="list-kind" title="character">☺</span>
             <span class="list-name"><span class="name-text">Kael</span></span>
             <span class="row-status-pill active">active</span>
           </div>
-          <div class="list-row" data-entity="jorin">
+          <div class="list-row recent-2" data-entity="jorin">
             <span class="list-kind" title="character">☺</span>
             <span class="list-name"><span class="name-text">Jorin</span></span>
             <span class="row-status-pill active">active</span>
@@ -391,6 +400,7 @@
       </div>
       <div class="detail-name-row">
         <div class="detail-name">Kael</div>
+        <span class="recent-badge" title="Touched by classifier this turn">Recently classified</span>
         <div class="overflow-btn" id="overflow-btn" title="More options">&#8943;
           <div class="overflow-menu" id="overflow-menu">
             <div class="overflow-item">Set as lead (You / Protagonist)</div>

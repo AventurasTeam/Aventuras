@@ -171,10 +171,10 @@ normal editor; existing awareness rows (if any survived) reappear.
 
 Three signals on each row, each with a dedicated channel:
 
-- **Left-edge accent — recently classified.** Info-blue, fading over
-  1-2 turns. Single signal with two visual states (full-color vs
-  faded) representing decay. Applies to both threads and happenings.
-  Runtime-derived from the delta log; no schema change.
+- **Left-edge accent — recently classified.** Cross-cutting pattern;
+  see [principles → Recently-classified row accent](../../principles.md#recently-classified-row-accent).
+  Applies to threads and happenings here, also to entities and lore on
+  the World panel.
 - **Right-side common-knowledge icon (happenings only) — ⊙.** Same
   glyph as the toggle in the detail Overview tab; on/off state
   mirrors the toggle. Placeholder slot kept on rows where CK is off
@@ -188,8 +188,7 @@ Each indicator is mirrored in the detail pane so users learn the
 mapping by clicking around, not by reading docs:
 
 - **Recently-classified accent on the row → "Recently classified"
-  badge in the detail head**, matching color (info-blue, faded for
-  older state). Open the row, see the same signal echoed in text.
+  badge in the detail head** (cross-cutting; see principles).
 - **Common-knowledge ⊙ on the row → ⊙ icon next to the toggle on
   Overview**. Same glyph, same on/off behavior. Toggling the detail
   flips the row icon at the same time.

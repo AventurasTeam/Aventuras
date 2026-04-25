@@ -512,6 +512,39 @@ in-scene-bypass) live in
 
 ---
 
+## Recently-classified row accent
+
+Cross-cutting visual signal: rows whose underlying data was written
+by the classifier (or any agent) in the last 1-2 turns get a subtle
+**left-edge accent** plus a faint background tint. Single signal
+with two visual states representing decay:
+
+- **`recent-1`** (full-color info-blue): touched in the last turn
+- **`recent-2`** (faded info-blue): touched 1-2 turns ago
+- After that the accent is gone.
+
+**Where it applies:** any list-pane row whose source data the
+classifier writes — entities and lore (World panel + Browse rail),
+threads and happenings (Plot panel). Same accent, same color, same
+decay rule across all panels.
+
+**Detail-pane mirroring.** The accent is echoed in the detail head
+as a "Recently classified" badge in the same color (faded variant
+for the older state). Self-documenting via visual repetition — open
+a row, see the same signal echoed in text. No copy needed beyond
+the badge label.
+
+**Implementation.** Computed runtime from the delta log; no schema
+change. Decay rule is hardcoded for v1 (1-2 turns); revisit if users
+want configurability.
+
+Distinct from the World panel's **scene presence** accent (green;
+"in this scene right now") and from any future per-panel signals.
+Color separation is load-bearing — info-blue is reserved for
+"recently written," other signals get their own treatments.
+
+---
+
 ## Composer mode — send-time transform, narration-aware
 
 Composer mode is a **send-time text wrapping** driven by pack
