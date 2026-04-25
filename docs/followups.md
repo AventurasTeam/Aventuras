@@ -55,6 +55,118 @@ High design-space breadth; picking a shape too early risks boxing
 out common user needs. Defer until we have 2–3 concrete fictional
 calendars we want to support and can design against them.
 
+### Manual worldTime correction — cascade vs. jump + downstream blast radius
+
+Per [In-world time tracking](./data-model.md#in-world-time-tracking)
+users can manually edit `metadata.worldTime` on a single entry to
+correct classifier drift. The edit is delta-logged like any metadata
+mutation. What's NOT specified: what happens to subsequent entries
+and to anything that derives time from them. Two options, both with
+real costs:
+
+- **Cascade correction** — shift every entry after N by the
+  correction delta. Preserves the monotonically non-decreasing
+  invariant. Costs: one user edit produces N writes; either each
+  gets its own delta (loud log) or they batch under a single
+  `action_id` (cleaner, but a larger atomic operation). Also racy
+  if a classifier pass is mid-stream on a new entry.
+- **Jump (leave subsequent alone)** — only entry N changes;
+  entries > N retain their original worldTimes. Breaks the
+  "monotonically non-decreasing" promise between N and N+1.
+  Downstream consumers reading worldTime arithmetic (character
+  ageing, scheduled-happening firing checks, freshness-based
+  retrieval decay) misbehave in subtle ways.
+
+Secondary concerns the design needs to answer:
+
+- **Derived happening times.** A happening with
+  `occurred_at_entry = E` derives its in-world time from entry E's
+  worldTime (per the [`happenings` decision](./data-model.md#happenings--character-knowledge)).
+  Editing entry E's worldTime semantically shifts every such
+  happening's time. The shift is audit-visible via the delta log,
+  but the UX needs to surface "this edit changes N derived times"
+  before the user commits.
+- **Flashback / non-linear corrections.** The classifier emits `0`
+  for detected flashbacks, but a user might manually set a
+  worldTime on a flashback entry to mean "this scene depicts 1872
+  AR." That collides with the "metadata.worldTime is always
+  main-timeline elapsed" contract. The future `sceneTime` exit
+  (already in [Non-linear narrative](#non-linear-narrative-v1-limitation--future-exit))
+  is the cleaner home for this — manual worldTime edits on
+  flashback entries should probably be blocked with guidance
+  pointing at sceneTime once it lands.
+- **Non-linear narratives** generalize the flashback case.
+  Single-`worldTime` was already flagged a v1 limitation; manual
+  correction makes the limitation more user-visible, since users
+  in those genres will reach for the edit affordance.
+
+Decisions needed:
+
+- Cascade vs. jump (or a third option — interactive confirmation
+  showing the affected entries + happenings and letting the user
+  pick).
+- UX for blast-radius preview before commit.
+- Guardrails (if any) blocking edits that would break
+  monotonicity or shift derived times the user didn't intend.
+- How `sceneTime` (when it lands) co-exists with manual
+  `worldTime` edits.
+
+### Top-K-by-salience retrieval — long-term memory implications
+
+Per [Happenings & character knowledge](./data-model.md#happenings--character-knowledge):
+"character awareness lists grow unbounded. This is handled at
+injection time (retrieve top-K by salience + scene relevance, not
+full history) and by periodic compaction at chapter close." Top-K
+is fine as a default for short or medium stories. For genuinely
+long-running stories (year-of-narrative spans, dozens of chapters)
+the model has known failure modes worth ironing out before a real
+user hits them.
+
+- **Single-axis salience conflates orthogonal relevance.** "Aria's
+  mother died in chapter 2" is high-salience for emotional /
+  family-drama scenes, near-zero for chapter-50 combat. One
+  salience number can't be both. Top-K drops the wrong things in
+  the wrong scene.
+- **Decay-then-drop loses load-bearing facts.** Compaction decays
+  salience over time and may consolidate low-salience rows into
+  summary happenings (per the
+  [Chapters / memory system](./data-model.md#chapters--memory-system)
+  decision — exact behavior TBD). A pivotal chapter-1 plot point
+  can decay by chapter 20, get summarized (losing detail), and
+  drop out of top-K entirely by chapter 40. Reversible via
+  rollback, but on a long story rollback is impractical.
+- **K is a hard cutoff.** No soft middle ground for
+  medium-relevance background. Two happenings tied at salience
+  with K-1 slots above them — one gets in, one doesn't, no signal
+  which.
+- **Compaction summaries carry their own provenance.** When the
+  classifier writes a new happening referring back to an earlier
+  event, does it reach the original happening or the summary?
+  Reference fields (`occurred_at_entry`, awareness
+  `learned_at_entry`) point at originals — but if compaction
+  deleted the original in favor of a summary, those references
+  go stale.
+
+Decisions needed:
+
+- Salience model — single number vs. multi-axis (per-thread /
+  per-entity / per-tone)?
+- Compaction philosophy — does the original happening survive
+  with low salience, occasionally retrieved? Or is it deleted in
+  favor of the summary?
+- "Pinned forever" override — a way for users (or the
+  lore-management agent) to mark a happening_awareness row as
+  load-bearing and exempt it from decay. Today,
+  `injection_mode = always` exists on `lore` / `entities` /
+  `threads` but NOT on `happening_awareness` rows; worth
+  considering whether it should.
+- Retrieval shape beyond hard top-K — tiered (must-include +
+  top-K + sampled-from-rest), salience-weighted sampling rather
+  than cutoff, etc.
+- "Memory probe" affordance for users to inspect what the model
+  is actually seeing on a given turn — debug tool to surface the
+  dropped happenings.
+
 ---
 
 ## UX
