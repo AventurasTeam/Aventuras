@@ -256,7 +256,7 @@ class DatabaseService {
     const db = await this.getDb()
     // Chunked to stay below SQLite's SQLITE_LIMIT_VARIABLE_NUMBER (default 999):
     // 8 params/row × 50 rows = 400 params per statement.
-    const BATCH_SIZE = 50
+    const BATCH_SIZE = 1000
 
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       const chunk = rows.slice(i, i + BATCH_SIZE)
