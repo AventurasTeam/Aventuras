@@ -1846,16 +1846,17 @@ class SettingsStore {
       ...updates,
     })
 
-    // If ping was disabled, clear the health cache before saving.
-    // Also purge when the apiKey or providerType changes: cached rows keyed
-    // by the old hash/provider would otherwise become orphans in SQLite
-    // (evictForeign only prunes in-memory, not the DB).
+    // Clear the cache when anything that changes the effective endpoint or auth
+    // credentials changes: rows are keyed by (providerType, baseUrl) so stale
+    // entries would survive undetected otherwise. evictForeign only prunes
+    // in-memory; this deletes the SQLite rows.
     const pingDisabled = oldProfile.pingEnabled && updates.pingEnabled === false
     const apiKeyChanged =
       updates.apiKey !== undefined && updates.apiKey !== oldProfile.apiKey && !!oldProfile.apiKey
     const providerChanged =
       updates.providerType !== undefined && updates.providerType !== oldProfile.providerType
-    if (pingDisabled || apiKeyChanged || providerChanged) {
+    const baseUrlChanged = updates.baseUrl !== undefined && updates.baseUrl !== oldProfile.baseUrl
+    if (pingDisabled || apiKeyChanged || providerChanged || baseUrlChanged) {
       await clearProfileHealth(oldProfile).catch((err) =>
         console.warn('[Settings] Failed to clear health cache:', err),
       )

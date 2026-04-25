@@ -19,9 +19,9 @@ export function isFresh(checkedAt: number, ttlMs = PING_TTL_DEFAULT_MS): boolean
 
 export async function getAllForKey(
   providerId: string,
-  apiKeyHash: string,
+  baseUrl: string,
 ): Promise<Map<string, CachedHealth>> {
-  const rows = await database.getModelHealthForKey(providerId, apiKeyHash)
+  const rows = await database.getModelHealthForKey(providerId, baseUrl)
   const out = new Map<string, CachedHealth>()
   for (const r of rows) {
     out.set(r.model_id, {
@@ -38,7 +38,7 @@ export async function getAllForKey(
 export interface UpsertRow {
   providerId: string
   modelId: string
-  apiKeyHash: string
+  baseUrl: string
   result: PingResult
   checkedAt: number
 }
@@ -49,7 +49,7 @@ export async function upsertBatch(rows: UpsertRow[]): Promise<void> {
     rows.map((r) => ({
       providerId: r.providerId,
       modelId: r.modelId,
-      apiKeyHash: r.apiKeyHash,
+      baseUrl: r.baseUrl,
       status: r.result.status,
       httpCode: r.result.httpCode,
       latencyMs: r.result.latencyMs,
@@ -59,9 +59,6 @@ export async function upsertBatch(rows: UpsertRow[]): Promise<void> {
   )
 }
 
-export async function deleteModelHealthForKey(
-  providerId: string,
-  apiKeyHash: string,
-): Promise<void> {
-  await database.deleteModelHealthForKey(providerId, apiKeyHash)
+export async function deleteModelHealthForKey(providerId: string, baseUrl: string): Promise<void> {
+  await database.deleteModelHealthForKey(providerId, baseUrl)
 }

@@ -221,7 +221,7 @@ class DatabaseService {
   // Model health cache operations
   async getModelHealthForKey(
     providerId: string,
-    apiKeyHash: string,
+    baseUrl: string,
   ): Promise<
     Array<{
       model_id: string
@@ -235,8 +235,8 @@ class DatabaseService {
     const db = await this.getDb()
     return db.select(
       `SELECT model_id, status, http_code, latency_ms, quota_percent, checked_at
-       FROM model_health_cache WHERE provider_id = ? AND api_key_hash = ?`,
-      [providerId, apiKeyHash],
+       FROM model_health_cache WHERE provider_id = ? AND base_url = ?`,
+      [providerId, baseUrl],
     )
   }
 
@@ -244,7 +244,7 @@ class DatabaseService {
     rows: Array<{
       providerId: string
       modelId: string
-      apiKeyHash: string
+      baseUrl: string
       status: string
       httpCode: number | null
       latencyMs: number | null
@@ -254,8 +254,8 @@ class DatabaseService {
   ): Promise<void> {
     if (rows.length === 0) return
     const db = await this.getDb()
-    // Chunked to stay below SQLite's SQLITE_LIMIT_VARIABLE_NUMBER (default 999):
-    // 8 params/row × 50 rows = 400 params per statement.
+    // Chunked to stay below SQLite's SQLITE_LIMIT_VARIABLE_NUMBER.
+    // Modern SQLite supports 32766; 1000 rows × 8 params = 8000 — well within limits.
     const BATCH_SIZE = 1000
 
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
@@ -267,7 +267,7 @@ class DatabaseService {
         values.push(
           r.providerId,
           r.modelId,
-          r.apiKeyHash,
+          r.baseUrl,
           r.status,
           r.httpCode,
           r.latencyMs,
@@ -278,9 +278,9 @@ class DatabaseService {
 
       await db.execute(
         `INSERT INTO model_health_cache
-          (provider_id, model_id, api_key_hash, status, http_code, latency_ms, quota_percent, checked_at)
+          (provider_id, model_id, base_url, status, http_code, latency_ms, quota_percent, checked_at)
          VALUES ${placeholders}
-         ON CONFLICT(provider_id, model_id, api_key_hash)
+         ON CONFLICT(provider_id, model_id, base_url)
          DO UPDATE SET
            status        = excluded.status,
            http_code     = excluded.http_code,
@@ -292,11 +292,11 @@ class DatabaseService {
     }
   }
 
-  async deleteModelHealthForKey(providerId: string, apiKeyHash: string): Promise<void> {
+  async deleteModelHealthForKey(providerId: string, baseUrl: string): Promise<void> {
     const db = await this.getDb()
-    await db.execute('DELETE FROM model_health_cache WHERE provider_id = ? AND api_key_hash = ?', [
+    await db.execute('DELETE FROM model_health_cache WHERE provider_id = ? AND base_url = ?', [
       providerId,
-      apiKeyHash,
+      baseUrl,
     ])
   }
 

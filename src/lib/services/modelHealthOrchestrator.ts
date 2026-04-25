@@ -76,9 +76,9 @@ function pLimit(n: number) {
 const activePingBatches = new Set<string>()
 
 export async function clearProfileHealth(profile: APIProfile): Promise<void> {
-  const apiKeyHash = await modelHealth.ensureHash(profile)
-  await deleteModelHealthForKey(profile.providerType, apiKeyHash)
-  modelHealth.clearForProfile(profile.providerType, apiKeyHash)
+  const baseUrl = getEffectiveBaseUrl(profile)
+  await deleteModelHealthForKey(profile.providerType, baseUrl)
+  modelHealth.clearForProfile(profile.providerType, baseUrl)
 }
 
 export async function pingProfileModels(
@@ -99,8 +99,7 @@ export async function pingProfileModels(
     const baseUrl = getEffectiveBaseUrl(profile)
     if (!baseUrl) return
 
-    const apiKeyHash = await modelHealth.ensureHash(profile)
-    await modelHealth.hydrateFromDb(profile.providerType, apiKeyHash)
+    await modelHealth.hydrateFromDb(profile.providerType, baseUrl)
 
     const ttlMap = trigger === 'manual' ? PING_TTL_MANUAL_MS : PING_TTL_AUTO_MS
     const ttlMs = ttlMap[profile.providerType] ?? PING_TTL_DEFAULT_MS
@@ -108,7 +107,7 @@ export async function pingProfileModels(
     const allModels = pickModels(profile)
     const eligible = modelsFilter ? allModels.filter((id) => modelsFilter.has(id)) : allModels
     const toPing = eligible.filter((modelId) => {
-      const cached = modelHealth.get(profile.providerType, modelId, apiKeyHash)
+      const cached = modelHealth.get(profile.providerType, modelId, baseUrl)
       return !cached || !isFresh(cached.checkedAt, ttlMs)
     })
     if (toPing.length === 0) return
@@ -132,7 +131,7 @@ export async function pingProfileModels(
     const rows: UpsertRow[] = [...results].map(([modelId, result]) => ({
       providerId: profile.providerType,
       modelId,
-      apiKeyHash,
+      baseUrl,
       result,
       checkedAt,
     }))
@@ -147,7 +146,7 @@ export async function pingProfileModels(
 /**
  * Warm up the cache at app start. Pings only the models currently configured
  * in main narrative and generation presets (not every model in the profile).
- * De-duplicates on (providerType, normalizedBaseUrl, apiKeyHash).
+ * De-duplicates on (providerType, normalizedBaseUrl).
  */
 export async function warmupAllProfiles(): Promise<void> {
   const mainProfileId = settings.apiSettings.mainNarrativeProfileId
@@ -177,9 +176,8 @@ export async function warmupAllProfiles(): Promise<void> {
 
       const baseUrl = getEffectiveBaseUrl(profile)
       if (!baseUrl) return
-      const apiKeyHash = await modelHealth.ensureHash(profile)
-      activeKeys.add(`${profile.providerType}|${apiKeyHash}`)
-      const dedupKey = `${profile.providerType}|${baseUrl}|${apiKeyHash}`
+      activeKeys.add(`${profile.providerType}|${baseUrl}`)
+      const dedupKey = `${profile.providerType}|${baseUrl}`
       if (!seen.has(dedupKey)) {
         seen.set(dedupKey, { profile, filter: new Set(filter) })
       } else {

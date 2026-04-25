@@ -8,6 +8,7 @@
   import { cn } from '$lib/utils/cn'
   import { modelHealth } from '$lib/stores/modelHealth.svelte'
   import { isPingEligible, shouldShowHealthFor } from '$lib/services/modelHealthOrchestrator'
+  import { getEffectiveBaseUrl } from '$lib/services/ai/sdk/providers/modelPing'
   import HealthIndicator from './HealthIndicator.svelte'
 
   interface Props {
@@ -78,29 +79,21 @@
     effectiveProfileId ? settings.getProfile(effectiveProfileId) : undefined,
   )
   let healthEligible = $derived(isPingEligible(resolvedProfile))
-  let apiKeyHash = $state<string | null>(null)
+  let baseUrl = $derived(
+    healthEligible && resolvedProfile ? getEffectiveBaseUrl(resolvedProfile) : null,
+  )
 
   $effect(() => {
-    if (!resolvedProfile || !healthEligible) {
-      apiKeyHash = null
-      return
-    }
-    let cancelled = false
-    const profile = resolvedProfile
-    void modelHealth.ensureHash(profile).then((h) => {
-      if (cancelled) return
-      apiKeyHash = h
-      void modelHealth.hydrateFromDb(profile.providerType, h)
-    })
-    return () => {
-      cancelled = true
-    }
+    if (!resolvedProfile || !baseUrl) return
+    const providerType = resolvedProfile.providerType
+    const url = baseUrl
+    void modelHealth.hydrateFromDb(providerType, url)
   })
 
   function getHealthFor(modelId: string) {
-    if (!resolvedProfile || !apiKeyHash) return undefined
+    if (!resolvedProfile || !baseUrl) return undefined
     if (!shouldShowHealthFor(resolvedProfile, modelId)) return undefined
-    return modelHealth.get(resolvedProfile.providerType, modelId, apiKeyHash)
+    return modelHealth.get(resolvedProfile.providerType, modelId, baseUrl)
   }
 
   function checkModelReasoningCapability(modelId: string): boolean {

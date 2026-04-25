@@ -1,10 +1,8 @@
 import type { LanguageModelV3Middleware } from '@ai-sdk/provider'
+import { settings } from '$lib/stores/settings.svelte'
 
 const RETRY_DELAYS_MS = [10_000, 20_000, 30_000]
 const JITTER_FACTOR = 0.1
-// If the provider's Retry-After tells us to wait longer than this, fail fast
-// instead of blocking the user for minutes/hours of useless retries.
-const MAX_RETRY_AFTER_MS = 60_000
 
 function withJitter(ms: number): number {
   return ms * (1 + (Math.random() * 2 - 1) * JITTER_FACTOR)
@@ -54,10 +52,16 @@ function parseRetryAfterMs(error: unknown): number | null {
   if (!raw) return null
 
   const seconds = Number(raw)
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000)
+  if (Number.isFinite(seconds)) {
+    const ms = seconds * 1000
+    return ms > 0 ? ms : null
+  }
 
   const dateMs = Date.parse(raw)
-  if (Number.isFinite(dateMs)) return Math.max(0, dateMs - Date.now())
+  if (Number.isFinite(dateMs)) {
+    const ms = dateMs - Date.now()
+    return ms > 0 ? ms : null
+  }
 
   return null
 }
@@ -77,9 +81,10 @@ async function withRetry<T>(fn: () => PromiseLike<T>, signal?: AbortSignal): Pro
       }
 
       const retryAfterMs = parseRetryAfterMs(error)
-      if (retryAfterMs !== null && retryAfterMs > MAX_RETRY_AFTER_MS) {
+      const maxRetryAfterMs = settings.apiSettings.llmTimeoutMs
+      if (retryAfterMs !== null && retryAfterMs > maxRetryAfterMs) {
         console.warn(
-          `[retryMiddleware] 429 with Retry-After=${Math.round(retryAfterMs / 1000)}s exceeds cap (${MAX_RETRY_AFTER_MS / 1000}s), failing fast`,
+          `[retryMiddleware] 429 with Retry-After=${Math.round(retryAfterMs / 1000)}s exceeds timeout cap (${maxRetryAfterMs / 1000}s), failing fast`,
         )
         throw error
       }
