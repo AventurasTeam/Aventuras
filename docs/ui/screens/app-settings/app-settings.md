@@ -127,18 +127,29 @@ Each provider carries:
   default URL for "any compatible endpoint."
 - **Custom headers** — optional key/value pairs for proxy auth or
   custom routing. Collapsed by default.
-- **Models** — list of cached models with per-row actions:
-  - **Pin star** (☆ / ★) — pinned models float to the top of every
-    model picker (profile config, story-level override, etc.).
-  - **Capability badges** (🧠 reasoning, ⚙ structured output) per
-    model where capability data is available.
-  - **Remove from cache** (×) — drops the model from the list (handy
-    for hiding models you'll never use; a refresh restores it from
-    the provider's catalog).
-- **Add custom model id** — for fine-tunes / local models / anything
-  the provider's `/models` endpoint doesn't list. Especially relevant
-  for OpenAI-compatible where auto-discovery may be limited or
-  unreliable; locally-hosted models often have no catalog endpoint.
+- **Models** — visible list defaults to **pinned only** (a curated
+  short-list of the user's working set). Below it: a `View all N
+models →` toggle that expands to a search + filter view of the
+  full catalog. Necessary for gateway providers like OpenRouter
+  where 300+ models would be unusable as a flat list.
+  - **Pinned section** — always visible. Short by design; this is
+    the user's quick-access set.
+  - **View all expanded** — search input (filter by name) + capability
+    filter chips (`🧠 reasoning`, `⚙ structured`, `★ pinned only`) +
+    scrollable list (windowed for large catalogs). Pinned models float
+    to the top of the unified list.
+  - **Per-row actions** — pin star (☆ / ★), capability badges
+    (🧠 reasoning, ⚙ structured output where capability data is
+    available), remove-from-cache (×).
+  - **Threshold for showing "View all"** — providers with very few
+    models (e.g., a local Ollama instance with 3 models) skip the
+    pinned/all distinction and just show the full list inline. The
+    smart pattern only earns its weight when the catalog is
+    non-trivial.
+- **Add custom model id** — always available below the model list.
+  For fine-tunes / local models / anything the provider's `/models`
+  endpoint doesn't list. Especially relevant for OpenAI-compatible
+  where auto-discovery may be limited or unreliable.
 
 ### OpenAI-compatible — variations
 

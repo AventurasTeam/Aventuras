@@ -149,6 +149,19 @@
       .add-custom-model { padding: 6px 12px; font-size: 11px; color: var(--ink-muted); border: 1px dashed var(--line); border-radius: 3px; cursor: pointer; display: inline-block; margin-top: 8px; }
       .add-custom-model:hover { color: var(--ink); }
 
+      /* "view all" expanded picker: search + filter chips + scrollable list */
+      .view-all-cta { font-size: 11px; color: var(--ink-muted); cursor: pointer; padding: 6px 0; display: inline-block; margin-top: 4px; }
+      .view-all-cta:hover { color: var(--ink); }
+      .view-all-section { display: none; margin-top: 10px; padding: 10px; border: 1px solid var(--line-soft); border-radius: 4px; background: var(--bg); }
+      .view-all-section.open { display: block; }
+      .models-search-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+      .models-search-bar .search-input { flex: 1; min-width: 200px; padding: 5px 10px; border: 1px solid var(--line-soft); border-radius: 3px; font-size: 12px; background: var(--bg-region); color: var(--ink-faint); font-style: italic; }
+      .models-search-bar .search-input::before { content: '⌕  '; font-style: normal; color: var(--ink-faint); }
+      .cap-filter { padding: 3px 8px; font-size: 10px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--bg-region); cursor: pointer; color: var(--ink-muted); display: inline-flex; gap: 4px; align-items: center; }
+      .cap-filter.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+      .all-models-list { max-height: 280px; overflow: auto; border-top: 1px solid var(--line-soft); }
+      .all-models-foot { padding-top: 8px; font-size: 11px; color: var(--ink-faint); display: flex; justify-content: space-between; align-items: center; }
+
       .narrative-card { border: 2px solid var(--line); border-radius: 4px; padding: 14px 18px; background: var(--bg-region); margin-bottom: 28px; }
       .narrative-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
       .narrative-title { font-size: 16px; font-weight: 600; color: var(--ink); }
@@ -318,27 +331,21 @@
                 </div>
               </details>
 
-              <!-- MODEL LIST -->
+              <!-- MODELS — pinned-only by default; "View all" expands to search + full list -->
               <div class="model-list-head">
                 <h4>Models</h4>
                 <span class="meta">12 cached &middot; last fetched 2h ago</span>
                 <span class="refresh">&#8635; Refresh</span>
               </div>
+
+              <!-- pinned section: always visible, short -->
+              <div style="font-size: 10px; color: var(--ink-faint); margin: 4px 0;">PINNED &middot; quick access in pickers</div>
               <div class="model-list">
                 <div class="model-row">
                   <span class="pin on" title="pinned &mdash; floats to top of pickers">&#9733;</span>
                   <span class="m-name">claude-sonnet-4-7</span>
                   <span class="m-caps">
                     <span class="cap-badge on" title="reasoning">&#129504;</span>
-                    <span class="cap-badge on" title="structured output">&#9881;</span>
-                  </span>
-                  <span class="remove" title="remove from cache">&times;</span>
-                </div>
-                <div class="model-row">
-                  <span class="pin" title="pin">&#9734;</span>
-                  <span class="m-name">claude-haiku-4.5</span>
-                  <span class="m-caps">
-                    <span class="cap-badge" title="reasoning not supported">&#129504;</span>
                     <span class="cap-badge on" title="structured output">&#9881;</span>
                   </span>
                   <span class="remove" title="remove from cache">&times;</span>
@@ -352,17 +359,63 @@
                   </span>
                   <span class="remove" title="remove from cache">&times;</span>
                 </div>
-                <div class="model-row">
-                  <span class="pin" title="pin">&#9734;</span>
-                  <span class="m-name">claude-3-5-haiku</span>
-                  <span class="m-caps">
-                    <span class="cap-badge" title="reasoning not supported">&#129504;</span>
-                    <span class="cap-badge on" title="structured output">&#9881;</span>
-                  </span>
-                  <span class="remove" title="remove from cache">&times;</span>
-                </div>
-                <div style="font-size: 10px; color: var(--ink-faint); padding: 4px 8px;">&hellip; 8 more &hellip;</div>
               </div>
+
+              <!-- view-all toggle + expanded section -->
+              <span class="view-all-cta" data-toggle-models="anthropic">View all 12 models &rarr;</span>
+
+              <div class="view-all-section open" data-models-section="anthropic">
+                <div class="models-search-bar">
+                  <span class="search-input">Search models&hellip;</span>
+                  <span class="cap-filter">&#129504; reasoning</span>
+                  <span class="cap-filter">&#9881; structured</span>
+                  <span class="cap-filter">&#9733; pinned only</span>
+                </div>
+                <div class="all-models-list">
+                  <div class="model-row">
+                    <span class="pin on">&#9733;</span>
+                    <span class="m-name">claude-sonnet-4-7</span>
+                    <span class="m-caps"><span class="cap-badge on">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                    <span class="remove">&times;</span>
+                  </div>
+                  <div class="model-row">
+                    <span class="pin on">&#9733;</span>
+                    <span class="m-name">claude-opus-4-7</span>
+                    <span class="m-caps"><span class="cap-badge on">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                    <span class="remove">&times;</span>
+                  </div>
+                  <div class="model-row">
+                    <span class="pin">&#9734;</span>
+                    <span class="m-name">claude-haiku-4.5</span>
+                    <span class="m-caps"><span class="cap-badge">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                    <span class="remove">&times;</span>
+                  </div>
+                  <div class="model-row">
+                    <span class="pin">&#9734;</span>
+                    <span class="m-name">claude-3-5-haiku</span>
+                    <span class="m-caps"><span class="cap-badge">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                    <span class="remove">&times;</span>
+                  </div>
+                  <div class="model-row">
+                    <span class="pin">&#9734;</span>
+                    <span class="m-name">claude-3-5-sonnet</span>
+                    <span class="m-caps"><span class="cap-badge">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                    <span class="remove">&times;</span>
+                  </div>
+                  <div class="model-row">
+                    <span class="pin">&#9734;</span>
+                    <span class="m-name">claude-3-opus</span>
+                    <span class="m-caps"><span class="cap-badge">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                    <span class="remove">&times;</span>
+                  </div>
+                  <div style="font-size: 10px; color: var(--ink-faint); padding: 6px 8px; text-align: center;">&hellip; 6 more &hellip;</div>
+                </div>
+                <div class="all-models-foot">
+                  <span>showing 6 of 12 &middot; pinned float to top across all pickers</span>
+                  <span class="view-all-cta" style="padding: 0;" data-toggle-models="anthropic">&uarr; Collapse</span>
+                </div>
+              </div>
+
               <span class="add-custom-model">+ Add custom model id</span>
             </div>
           </div>
@@ -960,6 +1013,15 @@
             document.querySelectorAll('[data-err]').forEach((x) => x.classList.toggle('active', x.dataset.err === state));
           })
         );
+
+        // 'View all models' toggle per provider
+        document.querySelectorAll('[data-toggle-models]').forEach((t) => {
+          t.addEventListener('click', () => {
+            const target = t.dataset.toggleModels;
+            const section = document.querySelector('[data-models-section="' + target + '"]');
+            if (section) section.classList.toggle('open');
+          });
+        });
       })();
     </script>
   </body>
