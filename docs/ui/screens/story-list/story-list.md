@@ -61,7 +61,7 @@ landing from anywhere else, but we're already here).
   `author_notes`. Placeholder shows truncation-safe hint
   (`Search title, description…`); full scope via tooltip + ⓘ help
   icon — see
-  [principles → Search bar scope](../../principles.md#search-bar-scope).
+  [principles → Search bar scope](../../patterns/lists.md#search-bar-scope).
 - **Filter chips** — single-select: `All` / `Pinned` / `Archived`.
   `All` hides archived by default (they only appear when the
   `Archived` filter is active). `Pinned` shows only pinned.
@@ -70,7 +70,7 @@ landing from anywhere else, but we're already here).
 
 **Sort invariant:** within any filter, **pinned stories are pinned
 to the top**, matching the Layer 0 rule from the
-[entity-list sort pattern](../../principles.md#entity-list-sort-order--static-four-layer).
+[entity-list sort pattern](../../patterns/entity.md#entity-list-sort-order--static-four-layer).
 Everything else sorts by the chosen key.
 
 ## Story card — text-first
@@ -198,7 +198,7 @@ Legacy `.avt` files (old-app format) are accepted but route through
 a migration pass — see
 [`followups.md → Legacy .avt migration import`](../../../followups.md#legacy-avt-migration-import).
 
-See [principles → Import counterparts](../../principles.md#import-counterparts--file-based--vault)
+See [principles → Import counterparts](../../patterns/data.md#import-counterparts--file-based--vault)
 for the cross-cutting pattern (versioning, zod validation, Vault
 parallelism).
 

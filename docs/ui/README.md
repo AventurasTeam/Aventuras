@@ -13,8 +13,14 @@ rationale, and decisions live alongside.
 ## Layout
 
 - **[principles.md](./principles.md)** — cross-cutting decisions
-  that apply across multiple surfaces (top-bar rule, entity row
-  patterns, save model, injection modes, etc.). Read this first.
+  that apply across multiple surfaces. Philosophy + architecture-
+  shaped rules (top-bar rule, settings architecture, mode/lead/
+  narration, injection rules, etc.). Read this first.
+- **[patterns/](./patterns/README.md)** — sibling to principles.
+  Component-shaped reusable primitives that the principles imply
+  (entity rows, list rendering, Select primitive, JSON viewer,
+  imports). Cross-cutting like principles, but visual-spec rather
+  than philosophy.
 - **[../followups.md](../followups.md)** — top-level ledger of
   outstanding data-model, architecture, and UX items.
 - **`screens/<screen>/`** — one directory per surface. Holds the

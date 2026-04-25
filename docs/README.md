@@ -78,11 +78,24 @@ per-screen doc.
 When unsure: lean cross-cutting. Demoting later is easier than
 promoting under duress.
 
-### Principles docs only when a domain fans out
+### Principles + patterns when a domain fans out
 
 Domains with one file (currently `architecture.md`, `data-model.md`)
 interleave principles + reference content in that file. Domains with
 multiple files (currently `ui/`) get a dedicated `principles.md`.
+
+When the cross-cutting material itself fans out — and especially
+when component-spec content starts crowding the philosophy — split
+into a sibling `patterns/` subdirectory. `principles.md` keeps the
+"why" (philosophy + architecture-shaped rules); `patterns/` holds
+the "how" of reusable visual / interaction primitives. The current
+`ui/` domain uses both: [`ui/principles.md`](./ui/principles.md)
+and [`ui/patterns/`](./ui/patterns/README.md).
+
+The split heuristic: a section reads as **conceptual / philosophy**
+(e.g. "settings architecture", "naming convention") → principles. A
+section reads as **component spec** (visual treatment, interaction
+primitive, layout shell — used by 2+ surfaces) → patterns.
 
 ### README.md is index only
 

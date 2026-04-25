@@ -15,8 +15,8 @@ Cross-cutting principles that govern this surface are in
 - [Settings architecture — split by location](../../principles.md#settings-architecture--split-by-location)
 - [Models are override-only (per-story)](../../principles.md#models-are-override-only-per-story)
   (this surface is the source side; Story Settings is the override side)
-- [Form controls — Select primitive](../../principles.md#form-controls--select-primitive)
-- [Entity editing — explicit save, session-based](../../principles.md#entity-editing--explicit-save-session-based)
+- [Form controls — Select primitive](../../patterns/forms.md#select-primitive)
+- [Entity editing — explicit save, session-based](../../patterns/entity.md#entity-editing--explicit-save-session-based)
 
 ## Layout
 
@@ -137,7 +137,7 @@ models →` toggle that expands to a search + filter view of the
   - **View all expanded** — search input (filter by name) + capability
     filter chips (`🧠 reasoning`, `⚙ structured`, `★ pinned only`) +
     scrollable list. Virtualized for large catalogs per
-    [principles → Large lists](../../principles.md#large-lists--virtualization-rule)
+    [principles → Large lists](../../patterns/lists.md#large-lists--virtualization-rule)
     (OpenRouter ships 340+ models). Pinned float to the top of the
     unified list.
   - **Per-row actions** — pin star (☆ / ★), capability badges
@@ -372,7 +372,7 @@ followups.
 ## Save session
 
 Same explicit-save pattern as Story Settings — see
-[principles → Entity editing](../../principles.md#entity-editing--explicit-save-session-based).
+[principles → Entity editing](../../patterns/entity.md#entity-editing--explicit-save-session-based).
 First field edit opens a session; tab switching is within session;
 Save commits all changes under one `action_id`; Discard throws away;
 navigate-away guard when dirty.

@@ -1,10 +1,16 @@
 # UI principles
 
-Cross-cutting design decisions — things that apply across multiple
-surfaces. Each per-screen doc references these. Adding to this file
-should happen when a decision has (or will have) impact on more than
-one screen. Single-surface design lives in the per-screen doc, not
-here.
+Cross-cutting design decisions — the philosophy and
+architecture-shaped rules that apply across multiple surfaces. Each
+per-screen doc references these. Adding to this file should happen
+when a decision has (or will have) impact on more than one screen
+and is conceptual rather than visual-spec.
+
+Component-shaped patterns — entity rows, large-list rendering, the
+Select primitive, the raw JSON viewer, import affordances — live in
+[`patterns/`](./patterns/README.md). The split keeps this file
+focused on the "why" behind the decisions; patterns hold the "how"
+of reusable primitives.
 
 ---
 
@@ -59,8 +65,7 @@ pattern:
 - **Plot** — threads + happenings. Narrative progression — things
   that _happen_. Different pattern (dashboard / monitor / audit
   rather than workshop), reflecting that these rows are predominantly
-  classifier-written and user-audited, not user-authored. Not yet
-  wireframed.
+  classifier-written and user-audited, not user-authored.
 
 The reader's right-rail Browse dropdown lists all 7 categories grouped
 by panel:
@@ -162,7 +167,7 @@ Definitional fields (mode, lead, narration, tone) and identity fields
 in the wizard or per-story, with no global default.
 
 Full schema and rationale in
-[`data-model.md → Story settings shape`](../data-model.md).
+[`data-model.md → Story settings shape`](../data-model.md#story-settings-shape).
 
 Per-screen detail in
 [`screens/story-settings/`](./screens/story-settings/story-settings.md).
@@ -171,26 +176,23 @@ Per-screen detail in
 
 ## Models are override-only (per-story)
 
-`stories.settings.models` fields are **all optional**. An absent field
-means "use the global App Settings pick at render time." Presence of a
-value pins an override for this story, insulating it from future
-changes to the global default.
+`stories.settings.models` is the override-at-render half of the
+[settings scope policy](#settings-architecture--split-by-location).
+All fields optional — an absent field resolves to the global App
+Settings default at render time; a present field pins this story
+against future changes to the global.
 
-UI surface (Story Settings · Models tab):
+Applies to every agent in the assignments registry. The agent set
+is the single source of truth (centralized; per
+[`data-model.md → App settings storage`](../data-model.md#app-settings-storage));
+the override pattern is identical regardless of which agents exist.
+Image generation is deferred past v1; see
+[followups.md → Image generation](../followups.md#image-generation).
 
-- Dashed-italic `App default: <model>` sentinel (no override set)
-- Solid dropdown with `<model> (override)` label (override pinned)
-
-Applies to every agent in the assignments registry — currently
-`narrative` / `classifier` / `translation` / `suggestion` /
-`loreMgmt` / `memoryCompaction` / `retrieval`. The registry evolves
-as agents are added or removed; the override pattern is identical
-regardless of which agents exist. Image generation is deferred past
-v1; see [followups.md → Image generation](../followups.md#image-generation).
-
-The global defaults live in App Settings · Models (pending wireframe).
-App Settings uses the same left-rail settings pattern; its fields
-there are primary (not override sentinels).
+UI surface lives in
+[Story Settings · Models tab](./screens/story-settings/story-settings.md#models-tab--overrides-only)
+(per-story pickers + dashed-italic `App default` sentinel + override
+dropdown). App Settings · Profiles covers the source side.
 
 ---
 
@@ -285,283 +287,10 @@ must render independently.
 - **faction** — not applicable
 
 Storage and derivation live in
-[`data-model.md → Entry metadata shape`](../data-model.md). UI
-consumes `metadata.sceneEntities` (characters + items) and
+[`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape).
+UI consumes `metadata.sceneEntities` (characters + items) and
 `metadata.currentLocationId` (singleton location) from the latest
 entry on the current branch.
-
----
-
-## Entity row indicators — four orthogonal channels
-
-An entity row carries four orthogonal signals that share no visual
-primitives — each owns its own channel so any combination renders
-correctly, and every row has identical structure (no value-dependent
-absence that makes "nothing shown" ambiguous):
-
-- **Lead badge** (gold pill, text mode-dependent): inline immediately
-  after the name. Only present for the story's lead character. Label
-  is `You` in adventure mode, `Protagonist` in creative mode.
-- **Status pill** (always shown, muted when active): on the far
-  right. Every row carries one of `active` / `staged` / `retired`.
-  Active renders with muted styling (faint gray); staged = soft
-  green; retired = soft amber.
-- **Scene presence** (left-edge stripe): an in-scene row gets a
-  3px green accent stripe along the left edge. Steady-state signal —
-  "which rows matter right now."
-- **Recently-classified** (background tint): rows whose source data
-  the classifier wrote in the last 1-2 turns get a faint info-blue
-  background tint that decays. Transient signal — see
-  [Recently-classified row accent](#recently-classified-row-accent)
-  for the full rule.
-
-**Edge vs tint — load-bearing decoupling.** Scene-presence owns the
-left-edge stripe; recently-classified owns the background tint. Both
-can fire on the same row simultaneously (an in-scene character whose
-state was just classifier-written) — `green left edge + info-blue
-body tint` reads as both signals together with no contention. Future
-row-level signals must claim a different primitive (right-edge,
-inline badge, etc.) — these two are spoken for.
-
-Applies to the reader's Browse rail AND the World panel's list pane.
-CSS class convention: `.lead-badge`.
-
----
-
-## Entity kind indicators — icons, not text
-
-Entity kind renders as a **square glyph icon** (22×22 box), not text.
-Saves horizontal room in narrow rails; still categorical at a glance.
-
-Wireframe placeholder glyphs (real icons land with visual identity):
-
-| Kind      | Glyph |
-| --------- | ----- |
-| character | ☺     |
-| location  | ⌂     |
-| item      | ◆     |
-| faction   | ⚑     |
-
----
-
-## Entity list sort order — static, four-layer
-
-No user sort controls — list sort is rule-driven and stable:
-
-1. **Layer 0 (lead pin, chars only):** when the current category is
-   `characters`, the lead (if set) is pinned to the very top.
-   Absolute override of all subsequent layers. Applies only to
-   characters — other kinds have no lead concept.
-2. **Layer 1 (status tier):** Active → Staged → Retired
-   _(current → future → past, by narrative relevance)_
-3. **Layer 2 (within Active only):** in-scene first, then
-   not-in-scene
-4. **Layer 3 (within each tier):** alphabetical by name
-
-Applies to Browse rail and World panel list pane. Filter chips narrow
-the set but sort still applies within the filtered subset. The lead
-stays pinned unless the filter excludes them entirely.
-
----
-
-## Browse filter chips
-
-Mutually exclusive (single-select):
-`All` / `In scene` / `Active` / `Staged` / `Retired`.
-
-- `All` is the default and shows the full list with accordion
-  grouping (see below).
-- `In scene` is orthogonal to status.
-- `Active` / `Staged` / `Retired` filter to one status tier.
-
-Combining filters (e.g. "in-scene AND staged") is not supported in
-v1; single-select keeps the UI simple.
-
-### Accordion grouping on "All" view
-
-When `All` is active, rows group under status-tier accordion headers
-(`Active` / `Staged` / `Retired`) with click-to-collapse. Each header
-shows name + count + chevron.
-
-**Default expansion:**
-
-- `Active` — expanded (the working set)
-- `Staged` — collapsed (reference)
-- `Retired` — collapsed (reference)
-
-Session-scoped (not persisted). When a non-All filter is active, the
-list renders flat (single implicit group, no accordion chrome).
-
----
-
-## Entity surfacing — three levels, same data
-
-Same entity, three depths of UI:
-
-1. **Browse rail** (reader right rail, ~300px) — list only, filter
-   chips, scene indicator. Fast glance + row click.
-2. **Peek drawer** (reader overlay, ~440px) — summary + quick edits
-   (pencil icons on text fields). Opens on row click; Esc or × closes.
-3. **World panel** (dedicated full-screen surface) — master-detail
-   workshop. Left pane = filterable list. Right pane = single-entity
-   detail with **five tabs**: Overview / Relationships / Assets /
-   Involvements / History.
-
-Peek drawer's footer link "Open in World panel →" routes to the panel.
-
----
-
-## Entity form UI is generated from the typed schema
-
-`entities.state` is a typed discriminated union (CharacterState /
-LocationState / ItemState / FactionState) — not a dynamic bag. This
-has a direct UI consequence:
-
-- **No generic key/value editor.** Form fields are generated from the
-  Zod schema (already in the stack). One schema drives form controls,
-  validation, types — all from the same source.
-- **No "+ add field" UI.** You can't add fields to a typed shape.
-- **Fields distribute deterministically by shape:**
-  - **Scalar / enum / primitive fields** → **Overview tab** as typed
-    controls (dropdown, text, chips, etc.).
-  - **Entity-to-entity ID fields** → **Relationships tab** as
-    picker-backed inputs. Grouped by semantic label (Positional /
-    Possession / Affiliation for character; different groups for
-    other kinds).
-- **Overview composition is per-kind.** Character / Location / Item /
-  Faction each define their own Overview section driven by their
-  typed state. Some shared fields (description, tags, retired_reason,
-  portrait) anchor the pattern.
-- **`retired_reason` is conditional** — disabled when
-  `status !== 'retired'`, enabled when it is.
-- **Raw JSON view** remains as a small power-user/debug affordance
-  (overflow menu next to entity name), for export and troubleshooting.
-
----
-
-## Entity editing — explicit save, session-based
-
-Pattern used by the World panel and reused by Story Settings.
-Autosave-on-blur was rejected: it would (a) let a single careless
-keystroke write a destructive change without friction, and (b)
-produce delta noise (one `action_id` per field) that makes CTRL-Z too
-granular.
-
-Session semantics:
-
-- **Session starts** on the first field edit (form becomes dirty).
-- **Form-local state** is held by react-hook-form (already in stack);
-  nothing writes to the Zustand store or SQLite until Save.
-- **Tab switching is within session** — editing across multiple tabs
-  is one session.
-- **Save commits** all session changes as deltas under a single
-  shared `action_id`. CTRL-Z reverses the entire session as one step.
-- **Discard** throws the session away without any writes.
-- **Navigate-away guard** — clicking another list row, switching
-  branch, navigating out of the panel, closing the window — all
-  trigger a confirmation modal while dirty: "Unsaved changes: Save /
-  Discard / Cancel navigation."
-
-UI surface:
-
-- **Save bar** appears as a footer on the detail pane ONLY when the
-  session is dirty. Shows unsaved-change count + summary of which
-  fields are dirty. Action buttons: Discard + Save (keyboard shortcut:
-  `Cmd/Ctrl-S`).
-- **Clean state** has no save bar — no chrome when reading.
-- **Peek drawer** (reader) keeps its direct-manipulation pencil edits
-  for single-field quick tweaks; these commit immediately as
-  one-field sessions. Deep edits route to World panel where the
-  explicit-save pattern applies.
-
----
-
-## Bulk operations — deferred
-
-Bulk ops (multi-select, batch status change, batch tag, batch retire,
-batch export) are deferred pending their own design pass. Open
-sub-questions:
-
-- How do batch ops group under `action_id` for single-press undo?
-- Confirmation patterns — when, how loud, what counts shown?
-- Cross-kind selection — does "retire all" make sense across mixed
-  kinds?
-- Selection persistence across tab switches, filter changes,
-  navigation?
-- Visual design of the selection bar — persistent vs contextual?
-
-World panel does NOT include checkboxes or a bulk action bar
-currently.
-
----
-
-## Injection / retrieval rules for prompt context
-
-`lore`, `entities`, and `threads` carry an `injection_mode` field
-that the UI exposes as a dropdown:
-
-| Mode          | Meaning                                                 |
-| ------------- | ------------------------------------------------------- |
-| `always`      | Unconditional injection (the explicit override)         |
-| `keyword_llm` | Keyword match + LLM relevance check (the smart default) |
-| `disabled`    | Exists in data, never reaches the prompt                |
-
-**Default: `keyword_llm`.** `happenings` deliberately don't expose
-this — the `happening_awareness` graph IS their structural injection
-rule.
-
-**Where the dropdown surfaces:**
-
-- World panel · Overview tab — for entities and lore
-- Plot panel · Overview tab — for threads (not happenings)
-
-**Structural invariant** (UI implication): active + in-scene entities
-are ALWAYS injected regardless of the mode dropdown. The dropdown
-only governs off-scene/inactive rows. The UI may surface a
-"structurally pinned" indicator for active+in-scene entities so users
-know the mode is moot for those rows — TBD with World panel · Overview
-detail design.
-
-Mechanics (how `keyword_llm` retrieval works, token budgets, the
-in-scene-bypass) live in
-[`architecture.md → Retrieval / injection phase`](../architecture.md).
-
----
-
-## Recently-classified row accent
-
-Cross-cutting visual signal: rows whose underlying data was written
-by the classifier (or any agent) in the last 1-2 turns get a faint
-**info-blue background tint** that decays. Single signal with two
-visual states:
-
-- **`recent-1`** (full-color info-blue): touched in the last turn
-- **`recent-2`** (faded info-blue): touched 1-2 turns ago
-- After that the tint is gone.
-
-**Where it applies:** any list-pane row whose source data the
-classifier writes — entities and lore (World panel + Browse rail),
-threads and happenings (Plot panel). Same tint, same color, same
-decay rule across all panels.
-
-**Channel separation.** Recently-classified owns the row background
-tint; scene-presence owns the left-edge stripe (per
-[Entity row indicators](#entity-row-indicators--four-orthogonal-channels)).
-Both fire simultaneously on common cases (in-scene character just
-classified) without contention — different primitives, different
-signals. Color separation is also load-bearing: info-blue is
-reserved for "recently written," other signals get their own
-treatments.
-
-**Detail-pane mirroring.** The tint is echoed in the detail head as
-a "Recently classified" badge in the same color (faded variant for
-the older state). Self-documenting via visual repetition — open a
-row, see the same signal echoed in text. No copy needed beyond the
-badge label.
-
-**Implementation.** Computed runtime from the delta log; no schema
-change. Decay rule is hardcoded for v1 (1-2 turns); revisit if users
-want configurability.
 
 ---
 
@@ -631,247 +360,52 @@ stored** on the entry — the final wrapped content is canonical.
 
 ---
 
-## Form controls — Select primitive
+## Injection / retrieval rules for prompt context
 
-One primitive, three render modes. Component used everywhere a
-"pick one of N values to commit" interaction surfaces in the app.
+`lore`, `entities`, and `threads` carry an `injection_mode` field
+that the UI exposes as a dropdown:
 
-**Render modes:**
+| Mode          | Meaning                                                 |
+| ------------- | ------------------------------------------------------- |
+| `always`      | Unconditional injection (the explicit override)         |
+| `keyword_llm` | Keyword match + LLM relevance check (the smart default) |
+| `disabled`    | Exists in data, never reaches the prompt                |
 
-- **`segment`** — horizontal bordered button group. Best for ≤3
-  options, label-only.
-- **`dropdown`** — collapsed picker. Best for ≥4 options, or any
-  cardinality where horizontal space is scarce (chrome carve-out
-  below).
-- **`radio`** — vertical list with explanatory copy per option.
-  Triggered by content shape, not cardinality — when each option
-  carries a `description` the segment/dropdown can't surface.
+**Default: `keyword_llm`.** `happenings` deliberately don't expose
+this — the `happening_awareness` graph IS their structural injection
+rule.
 
-**Auto-derivation cascade:**
+**Where the dropdown surfaces:**
 
-```
-1. Explicit `mode` prop → use as-is.
-2. Any option has a description field → radio.
-3. Else if option count ≤ 3 (≤ 2 on mobile, deferred) → segment.
-4. Else → dropdown.
-```
+- World panel · Overview tab — for entities and lore
+- Plot panel · Overview tab — for threads (not happenings)
 
-Trigger for radio is **content shape**; trigger for segment vs
-dropdown is **cardinality**. Independent axes.
+**Structural invariant** (UI implication): active + in-scene entities
+are ALWAYS injected regardless of the mode dropdown. The dropdown
+only governs off-scene/inactive rows. The UI may surface a
+"structurally pinned" indicator for active+in-scene entities so users
+know the mode is moot for those rows — TBD with World panel · Overview
+detail design.
 
-**Cardinality threshold of 3** is the default for desktop; **bumps
-to 2 on mobile** where horizontal real estate is tighter. Mobile
-threshold finalizes with the responsive pass.
-
-### Chrome carve-out
-
-The cardinality rule applies in the **content area** — list panes,
-detail panes, settings tabs, dialogs, drawers, form fields.
-
-**In chrome** — top bars, sub-headers, toolbars, breadcrumbs —
-**dropdown is allowed regardless of cardinality**, because
-horizontal space is genuinely scarce.
-
-The boundary is concrete: top of screen vs body. Story-list's sort
-dropdown sits in the toolbar above the grid (chrome → dropdown OK
-even at 3 options). Plot's segment toggle sits in the list-pane
-controls (body → cardinality rule applies).
-
-For genuinely ambiguous cases, **default to the primary cardinality
-rule**; the carve-out is for clear chrome cases (top-bar, breadcrumb-
-line dropdowns), not "anywhere wide-ish."
-
-### What stays separate
-
-- **Autocomplete / Picker** — own primitive (typeahead, async
-  loading, large datasets, "create new" tail action). Used for
-  entity-link pickers (`current_location_id`, `equipped_items`,
-  etc.) and tag inputs. Same conceptual family as Select but
-  different surface area.
-- **Filter chips** — own primitive (rounded, wrap-capable layout,
-  often paired with `All` accordion behavior). Filtering-centric
-  concern, not "pick a value to commit." Folding into Select as a
-  `chips` render mode is a possible future move; deferred until
-  enough chip-using surfaces converge.
-
-### Storybook
-
-Live demos of each render mode + the auto-derivation rule belong in
-a `Patterns/Form controls/Select primitive` MDX page when component
-implementation begins. The page cites this principle as canonical
-and embeds component stories — no prose duplication. See
-[`followups.md → Storybook design-rules pattern setup`](../followups.md#storybook-design-rules-pattern-setup).
+Mechanics (how `keyword_llm` retrieval works, token budgets, the
+in-scene-bypass) live in
+[`architecture.md → Retrieval / injection phase`](../architecture.md).
 
 ---
 
-## Large lists — virtualization rule
+## Bulk operations — deferred
 
-Two patterns for rendering long lists, applied by shape. **No
-traditional pagination** in either case — page-number navigation
-doesn't fit interactive workspaces.
+Bulk ops (multi-select, batch status change, batch tag, batch retire,
+batch export) are deferred pending their own design pass. Open
+sub-questions:
 
-### Virtual list (windowing) — bounded-but-large catalogs
+- How do batch ops group under `action_id` for single-press undo?
+- Confirmation patterns — when, how loud, what counts shown?
+- Cross-kind selection — does "retire all" make sense across mixed
+  kinds?
+- Selection persistence across tab switches, filter changes,
+  navigation?
+- Visual design of the selection bar — persistent vs contextual?
 
-Render only visible rows + small overscan; swap rows in/out on
-scroll. Smooth scrolling at any position; total count surfaces in
-the footer.
-
-Use when: total count is known, item shape is uniform (or per-row
-height computable), user benefits from continuous scroll over the
-full set, list size is the bottleneck.
-
-Where it applies in v1:
-
-- [App Settings · Profiles · "View all" model list](./screens/app-settings/app-settings.md#generation--providers)
-  — OpenRouter 340+ entries
-- Model picker dropdowns app-wide — popover-rendered, virtualized
-  in flight
-- Future Vault catalogs
-
-### Load-older — log-shaped, unbounded lists
-
-Append behavior. Recent items render first; **`Load older` button**
-pulls the next chunk on explicit click. Never auto-loads on
-scroll-to-bottom — looking at recent context shouldn't trigger
-surprise loads of older content.
-
-Use when: shape is log-like (event stream, history, deltas), no
-meaningful total count, user reads recent and occasionally walks
-back.
-
-Where it applies in v1:
-
-- [World panel · History tab](./screens/world/world.md#history-tab)
-  — per-entity delta log
-- Plot panel · History tab — per-thread / per-happening delta log
-- Future global delta-log observability panel
-
-### Threshold
-
-Virtualization earns its weight at **>100 rows**. Below that, plain
-rendering is simpler, accessibility-friendlier, and indistinguishable
-to users. Lean toward not virtualizing until measurements warrant it.
-
-### Library choice
-
-Deferred to component implementation — `react-window` and
-`@tanstack/react-virtual` are both mature options; React Native Web
-compatibility needs verification. Tracked in
-[`followups.md`](../followups.md#virtual-list-library-choice).
-
----
-
-## Search bar scope
-
-Every search input in the app **must declare what it searches**.
-"Search…" with no scope is ambiguous and quietly inconsistent across
-surfaces. Per-screen docs name the scope inline; this section is the
-cross-cutting summary plus the UX rule.
-
-**UX rule:**
-
-- **Placeholder text shows 1-2 most obvious fields**, truncation-safe
-  under ~25 characters: `Search title, description…`. The full scope
-  is rarely visible in placeholder real estate.
-- **Tooltip on focus / hover** lists the full set of searched fields.
-- **A small ⓘ help icon next to the input** opens the same scope
-  list as a popover — discoverable on touch where hover doesn't fire.
-  Belt + suspenders for cross-platform.
-
-**SQLite mechanics.** SQLite ships JSON1 (built into expo-sqlite).
-Search queries combine `LIKE` against typed text columns with
-`json_extract` / `json_each` for JSON-stored fields (`tags`,
-`entities.state` per-kind, `metadata`, `undo_payload`). For larger
-stories, **FTS5** is the upgrade path (mirror searchable text into
-an FTS virtual table, triggers keep it in sync). v1 stays on
-LIKE + JSON-extract; revisit when a real story hits the wall.
-
-**Per-surface scope** — each surface's per-screen doc carries the
-authoritative version; this is the cross-cutting summary:
-
-| Surface                 | Searches                                                                                                                                                |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Story list              | `title`, `description`, `genre`, `tags`, `author_notes`                                                                                                 |
-| Reader Browse rail      | category-aware (entity: `name`/`description`/`tags`; lore: `title`/`body`/`category`/`tags`; thread/happening: `title`/`description`/`category`/`tags`) |
-| World panel list        | category-aware (same as Browse rail equivalents)                                                                                                        |
-| Plot panel — threads    | `title`, `description`, `category`, `tags`                                                                                                              |
-| Plot panel — happenings | `title`, `description`, `category`, `tags`                                                                                                              |
-| History tab (any panel) | structurally different — field-path strings, op (`create`/`update`/`delete`), rendered change-summary text                                              |
-
----
-
-## Raw JSON viewer — shared modal pattern
-
-Every "View raw JSON" affordance (World ⋯, Plot ⋯, story-list ⋯,
-future surfaces) opens **the same right-anchored drawer**. One
-component reused everywhere; no per-surface variants.
-
-**Shape:**
-
-- Right-anchored drawer, ~440px wide (matches reader peek drawer
-  dimensions for visual consistency).
-- Header: `Raw JSON · <row name>` + close `×`.
-- Body: pretty-printed JSON of the row + nested fields merged
-  (e.g. entity row + `state` JSON; happening row + involvements +
-  awareness summary). Monospace, indented, low-fi syntax tone in v1
-  (real syntax highlighting with visual identity).
-- Top-right: **Copy** button.
-- Footer hint: `Edit raw — coming later` (disabled placeholder).
-
-**Read-only in v1.** Edit-mode (raw-edit + zod-validate on save) is
-deferred to a follow-up.
-
-Esc / × closes the drawer.
-
----
-
-## Import counterparts — file-based + Vault
-
-Every export affordance has (or will have) a file-based import
-counterpart. Two parallel paths into the app: **file imports**
-(JSON / `.avts`) and **Vault** (in-app library, deferred). Both
-target the same "add to story" actions; they're parallel, not
-exclusive.
-
-**Story file format:** `.avts` extension (Aventuras-fresh; chosen
-distinct from the old app's `.avt` because the v2 schema is a hard
-break, not a migration). Contents are JSON with a mandatory version
-header so future migrations have a clean signal:
-
-```json
-{
-  "format": "aventuras-story",
-  "formatVersion": "1.0",
-  "exportedAt": "2026-04-25T...",
-  "story": { ... },
-  "branches": [...],
-  "entities": [...],
-  ...
-}
-```
-
-Import validates `formatVersion` and either accepts or rejects with
-a clear "this file is from a newer/older version" message. Format
-specifics deferred; versioning is the load-bearing decision.
-
-**Legacy `.avt` import** (from the old app) is supported for
-migration. The import flow needs its own design pass — see
-[`followups.md`](../followups.md#legacy-avt-migration-import).
-
-**Per-row import (entity / thread / happening / lore).** Each list
-pane's `+ New X` affordance becomes a small menu offering:
-
-- `Blank` — opens the form in create mode, empty.
-- `From JSON file…` — file picker, paste-supported. Validates against
-  the kind's zod schema before creating; mismatch fails with a
-  friendly error rather than a partial save.
-- `From Vault…` — disabled placeholder until Vault lands. Belongs
-  here so future-Vault has its slot.
-
-**Validation contract:** all imports (story-level or row-level) pass
-through the same zod schema that protects writes. JSON that doesn't
-parse cleanly fails with field-level errors; no "merge what works,
-ignore what doesn't" path.
-
-**Full backup restore** lives in App Settings · Data tab; pending
-its wireframe.
+World panel does NOT include checkboxes or a bulk action bar
+currently.

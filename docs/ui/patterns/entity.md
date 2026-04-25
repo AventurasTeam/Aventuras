@@ -1,0 +1,231 @@
+# Entity row patterns
+
+Row-shaped UI patterns shared across the reader's Browse rail, the
+World panel's list pane, and (for the recently-classified accent
+specifically) the Plot panel's list panes. Sister patterns to
+[`forms.md`](./forms.md), [`lists.md`](./lists.md), and
+[`data.md`](./data.md).
+
+Anchors here are the canonical URL for these patterns — per-screen
+docs link in.
+
+---
+
+## Entity surfacing — three levels, same data
+
+Same entity, three depths of UI:
+
+1. **Browse rail** (reader right rail, ~300px) — list only, filter
+   chips, scene indicator. Fast glance + row click.
+2. **Peek drawer** (reader overlay, ~440px) — summary + quick edits
+   (pencil icons on text fields). Opens on row click; Esc or × closes.
+3. **World panel** (dedicated full-screen surface) — master-detail
+   workshop. Left pane = filterable list. Right pane = single-entity
+   detail with **five tabs**: Overview / Relationships / Assets /
+   Involvements / History.
+
+Peek drawer's footer link "Open in World panel →" routes to the panel.
+
+---
+
+## Entity kind indicators — icons, not text
+
+Entity kind renders as a **square glyph icon** (22×22 box), not text.
+Saves horizontal room in narrow rails; still categorical at a glance.
+
+Wireframe placeholder glyphs (real icons land with visual identity):
+
+| Kind      | Glyph |
+| --------- | ----- |
+| character | ☺     |
+| location  | ⌂     |
+| item      | ◆     |
+| faction   | ⚑     |
+
+---
+
+## Entity row indicators — four orthogonal channels
+
+An entity row carries four orthogonal signals that share no visual
+primitives — each owns its own channel so any combination renders
+correctly, and every row has identical structure (no value-dependent
+absence that makes "nothing shown" ambiguous):
+
+- **Lead badge** (gold pill, text mode-dependent): inline immediately
+  after the name. Only present for the story's lead character. Label
+  is `You` in adventure mode, `Protagonist` in creative mode.
+- **Status pill** (always shown, muted when active): on the far
+  right. Every row carries one of `active` / `staged` / `retired`.
+  Active renders with muted styling (faint gray); staged = soft
+  green; retired = soft amber.
+- **Scene presence** (left-edge stripe): an in-scene row gets a
+  3px green accent stripe along the left edge. Steady-state signal —
+  "which rows matter right now."
+- **Recently-classified** (background tint): rows whose source data
+  the classifier wrote in the last 1-2 turns get a faint info-blue
+  background tint that decays. Transient signal — see
+  [Recently-classified row accent](#recently-classified-row-accent)
+  for the full rule.
+
+**Edge vs tint — load-bearing decoupling.** Scene-presence owns the
+left-edge stripe; recently-classified owns the background tint. Both
+can fire on the same row simultaneously (an in-scene character whose
+state was just classifier-written) — `green left edge + info-blue
+body tint` reads as both signals together with no contention. Future
+row-level signals must claim a different primitive (right-edge,
+inline badge, etc.) — these two are spoken for.
+
+Applies to the reader's Browse rail AND the World panel's list pane.
+CSS class convention: `.lead-badge`.
+
+---
+
+## Entity list sort order — static, four-layer
+
+No user sort controls — list sort is rule-driven and stable:
+
+1. **Layer 0 (lead pin, chars only):** when the current category is
+   `characters`, the lead (if set) is pinned to the very top.
+   Absolute override of all subsequent layers. Applies only to
+   characters — other kinds have no lead concept.
+2. **Layer 1 (status tier):** Active → Staged → Retired
+   _(current → future → past, by narrative relevance)_
+3. **Layer 2 (within Active only):** in-scene first, then
+   not-in-scene
+4. **Layer 3 (within each tier):** alphabetical by name
+
+Applies to Browse rail and World panel list pane. Filter chips narrow
+the set but sort still applies within the filtered subset. The lead
+stays pinned unless the filter excludes them entirely.
+
+---
+
+## Browse filter chips
+
+Mutually exclusive (single-select):
+`All` / `In scene` / `Active` / `Staged` / `Retired`.
+
+- `All` is the default and shows the full list with accordion
+  grouping (see below).
+- `In scene` is orthogonal to status.
+- `Active` / `Staged` / `Retired` filter to one status tier.
+
+Combining filters (e.g. "in-scene AND staged") is not supported in
+v1; single-select keeps the UI simple.
+
+### Accordion grouping on "All" view
+
+When `All` is active, rows group under status-tier accordion headers
+(`Active` / `Staged` / `Retired`) with click-to-collapse. Each header
+shows name + count + chevron.
+
+**Default expansion:**
+
+- `Active` — expanded (the working set)
+- `Staged` — collapsed (reference)
+- `Retired` — collapsed (reference)
+
+Session-scoped (not persisted). When a non-All filter is active, the
+list renders flat (single implicit group, no accordion chrome).
+
+---
+
+## Entity form UI is generated from the typed schema
+
+`entities.state` is a typed discriminated union (CharacterState /
+LocationState / ItemState / FactionState) — not a dynamic bag. This
+has a direct UI consequence:
+
+- **No generic key/value editor.** Form fields are generated from the
+  Zod schema (already in the stack). One schema drives form controls,
+  validation, types — all from the same source.
+- **No "+ add field" UI.** You can't add fields to a typed shape.
+- **Fields distribute deterministically by shape:**
+  - **Scalar / enum / primitive fields** → **Overview tab** as typed
+    controls (dropdown, text, chips, etc.).
+  - **Entity-to-entity ID fields** → **Relationships tab** as
+    picker-backed inputs. Grouped by semantic label (Positional /
+    Possession / Affiliation for character; different groups for
+    other kinds).
+- **Overview composition is per-kind.** Character / Location / Item /
+  Faction each define their own Overview section driven by their
+  typed state. Some shared fields (description, tags, retired_reason,
+  portrait) anchor the pattern.
+- **`retired_reason` is conditional** — disabled when
+  `status !== 'retired'`, enabled when it is.
+- **Raw JSON view** remains as a small power-user/debug affordance
+  (overflow menu next to entity name), for export and troubleshooting.
+
+---
+
+## Entity editing — explicit save, session-based
+
+Pattern used by the World panel and reused by Story Settings.
+Autosave-on-blur was rejected: it would (a) let a single careless
+keystroke write a destructive change without friction, and (b)
+produce delta noise (one `action_id` per field) that makes CTRL-Z too
+granular.
+
+Session semantics:
+
+- **Session starts** on the first field edit (form becomes dirty).
+- **Form-local state** is held by react-hook-form (already in stack);
+  nothing writes to the Zustand store or SQLite until Save.
+- **Tab switching is within session** — editing across multiple tabs
+  is one session.
+- **Save commits** all session changes as deltas under a single
+  shared `action_id`. CTRL-Z reverses the entire session as one step.
+- **Discard** throws the session away without any writes.
+- **Navigate-away guard** — clicking another list row, switching
+  branch, navigating out of the panel, closing the window — all
+  trigger a confirmation modal while dirty: "Unsaved changes: Save /
+  Discard / Cancel navigation."
+
+UI surface:
+
+- **Save bar** appears as a footer on the detail pane ONLY when the
+  session is dirty. Shows unsaved-change count + summary of which
+  fields are dirty. Action buttons: Discard + Save (keyboard shortcut:
+  `Cmd/Ctrl-S`).
+- **Clean state** has no save bar — no chrome when reading.
+- **Peek drawer** (reader) keeps its direct-manipulation pencil edits
+  for single-field quick tweaks; these commit immediately as
+  one-field sessions. Deep edits route to World panel where the
+  explicit-save pattern applies.
+
+---
+
+## Recently-classified row accent
+
+Cross-cutting visual signal: rows whose underlying data was written
+by the classifier (or any agent) in the last 1-2 turns get a faint
+**info-blue background tint** that decays. Single signal with two
+visual states:
+
+- **`recent-1`** (full-color info-blue): touched in the last turn
+- **`recent-2`** (faded info-blue): touched 1-2 turns ago
+- After that the tint is gone.
+
+**Where it applies:** any list-pane row whose source data the
+classifier writes — entities and lore (World panel + Browse rail),
+threads and happenings (Plot panel). Same tint, same color, same
+decay rule across all panels.
+
+**Channel separation.** Recently-classified owns the row background
+tint; scene-presence owns the left-edge stripe (per
+[Entity row indicators](#entity-row-indicators--four-orthogonal-channels)).
+Both fire simultaneously on common cases (in-scene character just
+classified) without contention — different primitives, different
+signals. Color separation is also load-bearing: info-blue is
+reserved for "recently written," other signals get their own
+treatments.
+
+**Detail-pane mirroring.** The tint is echoed in the detail head as
+a "Recently classified" badge in the same color (faded variant for
+the older state). Self-documenting via visual repetition — open a
+row, see the same signal echoed in text. No copy needed beyond the
+badge label.
+
+**Implementation.** Computed runtime from the delta log; no schema
+change. Decay rule is hardcoded for v1 (1-2 turns); revisit if users
+want configurability.

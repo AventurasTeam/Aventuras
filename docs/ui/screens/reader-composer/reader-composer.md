@@ -12,10 +12,10 @@ Cross-cutting principles that govern this screen are in
 
 - [Top-bar design rule](../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
 - [Composer mode — send-time transform](../../principles.md#composer-mode--send-time-transform-narration-aware)
-- [Entity surfacing — three levels, same data](../../principles.md#entity-surfacing--three-levels-same-data)
+- [Entity surfacing — three levels, same data](../../patterns/entity.md#entity-surfacing--three-levels-same-data)
   (Reader provides level 1 — Browse rail — and level 2 — peek drawer)
-- [Entity row indicators — four channels](../../principles.md#entity-row-indicators--four-orthogonal-channels)
-- [Browse filter chips + accordion grouping](../../principles.md#browse-filter-chips)
+- [Entity row indicators — four channels](../../patterns/entity.md#entity-row-indicators--four-orthogonal-channels)
+- [Browse filter chips + accordion grouping](../../patterns/entity.md#browse-filter-chips)
 
 ## Layout
 
@@ -238,7 +238,7 @@ the active category in the dropdown:
 
 Placeholder text reflects the active category (`Search characters…` /
 `Search lore…` / etc.). Tooltip + ⓘ help icon list the full scope per
-[principles → Search bar scope](../../principles.md#search-bar-scope).
+[principles → Search bar scope](../../patterns/lists.md#search-bar-scope).
 
 ## Screen-specific notes
 

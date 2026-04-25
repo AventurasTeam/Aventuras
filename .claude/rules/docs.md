@@ -18,6 +18,15 @@ When adding to or editing docs:
 
 - Follow the structure rules in `docs/README.md`. They're pinned for
   a reason.
+- **Three-tier UI hierarchy**: per-screen docs at
+  `docs/ui/screens/<screen>/<screen>.md` carry single-surface
+  detail; cross-cutting **patterns** (component-shaped reusable
+  primitives — entity rows, lists, forms, JSON viewer, imports)
+  live in `docs/ui/patterns/<topic>.md`; cross-cutting
+  **principles** (philosophy / architecture-shaped rules) live in
+  `docs/ui/principles.md`. New cross-cutting material chooses
+  between principles and patterns based on whether it's
+  conceptual or component-spec.
 - **Use anchor links** for all cross-references between docs:
   `[label](./file.md#anchor-slug)`. Pre-commit (remark-validate-links)
   fails commits with broken anchors. No prose-style references like

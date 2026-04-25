@@ -11,18 +11,18 @@ Cross-cutting principles that govern this panel are in
 [principles.md](../../principles.md). Relevant sections:
 
 - [World / Plot split](../../principles.md#world--plot-split--unified-panels-by-purpose)
-- [Entity row indicators — four channels](../../principles.md#entity-row-indicators--four-orthogonal-channels)
-- [Entity kind indicators — icons](../../principles.md#entity-kind-indicators--icons-not-text)
-- [Entity list sort order — four-layer, lead pinned](../../principles.md#entity-list-sort-order--static-four-layer)
-- [Browse filter chips + accordion grouping](../../principles.md#browse-filter-chips)
-- [Entity surfacing — three levels](../../principles.md#entity-surfacing--three-levels-same-data)
-- [Entity form UI generated from typed schema](../../principles.md#entity-form-ui-is-generated-from-the-typed-schema)
-- [Entity editing — explicit save, session-based](../../principles.md#entity-editing--explicit-save-session-based)
+- [Entity row indicators — four channels](../../patterns/entity.md#entity-row-indicators--four-orthogonal-channels)
+- [Entity kind indicators — icons](../../patterns/entity.md#entity-kind-indicators--icons-not-text)
+- [Entity list sort order — four-layer, lead pinned](../../patterns/entity.md#entity-list-sort-order--static-four-layer)
+- [Browse filter chips + accordion grouping](../../patterns/entity.md#browse-filter-chips)
+- [Entity surfacing — three levels](../../patterns/entity.md#entity-surfacing--three-levels-same-data)
+- [Entity form UI generated from typed schema](../../patterns/entity.md#entity-form-ui-is-generated-from-the-typed-schema)
+- [Entity editing — explicit save, session-based](../../patterns/entity.md#entity-editing--explicit-save-session-based)
 - [Bulk operations — deferred](../../principles.md#bulk-operations--deferred)
 - [Injection / retrieval rules](../../principles.md#injection--retrieval-rules-for-prompt-context)
   (`injection_mode` field surfacing)
 - [Scene presence is runtime-derived, not status](../../principles.md#scene-presence-is-runtime-derived-not-status)
-- [Recently-classified row accent](../../principles.md#recently-classified-row-accent)
+- [Recently-classified row accent](../../patterns/entity.md#recently-classified-row-accent)
   (entities and lore on this panel; classifier writes both)
 
 ## Layout
@@ -96,14 +96,14 @@ with the active category dropdown:
 
 SQLite-side: `LIKE` against typed columns + `json_each` over the
 JSON `tags` array. Placeholder + tooltip + ⓘ help icon per
-[principles → Search bar scope](../../principles.md#search-bar-scope).
+[principles → Search bar scope](../../patterns/lists.md#search-bar-scope).
 
 ## Detail pane — raw JSON viewer
 
 The `⋯ → View raw JSON` action opens the shared right-anchored
 drawer (read-only in v1, copy-button, edit-mode deferred). Same
 pattern as Plot panel and story-list. Cross-cutting spec in
-[principles → Raw JSON viewer](../../principles.md#raw-json-viewer--shared-modal-pattern).
+[principles → Raw JSON viewer](../../patterns/data.md#raw-json-viewer--shared-modal-pattern).
 
 ## Per-row import
 
@@ -115,7 +115,7 @@ The list-pane footer's `+ New entity` opens a small menu:
   a friendly error.
 - **From Vault…** — disabled placeholder until Vault lands.
 
-See [principles → Import counterparts](../../principles.md#import-counterparts--file-based--vault).
+See [principles → Import counterparts](../../patterns/data.md#import-counterparts--file-based--vault).
 
 ## History tab
 
@@ -131,7 +131,7 @@ editable — rollback happens in the reader.
 - **Op filter** — all / create / update / delete
 - **Sort** — newest-first (default) or oldest-first
 - **Load-older chunking** — no page numbers, log-shaped data. Per
-  [principles → Large lists](../../principles.md#large-lists--virtualization-rule),
+  [principles → Large lists](../../patterns/lists.md#large-lists--virtualization-rule),
   history uses the load-older pattern (explicit button) rather than
   virtualization, since the user's working context is "recent" and
   surprise auto-loads of older content would be jarring.

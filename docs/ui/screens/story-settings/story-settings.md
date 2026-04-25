@@ -17,10 +17,10 @@ Cross-cutting principles that govern this screen are in
 - [Mode, lead, and narration](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts)
 - [Composer mode — send-time transform](../../principles.md#composer-mode--send-time-transform-narration-aware)
 - [Models are override-only (per-story)](../../principles.md#models-are-override-only-per-story)
-- [Form controls — Select primitive](../../principles.md#form-controls--select-primitive)
+- [Form controls — Select primitive](../../patterns/forms.md#select-primitive)
   (segment / dropdown / radio render-mode rule applies to every
   picker on this surface)
-- [Entity editing — explicit save, session-based](../../principles.md#entity-editing--explicit-save-session-based)
+- [Entity editing — explicit save, session-based](../../patterns/entity.md#entity-editing--explicit-save-session-based)
   (the same pattern applies here)
 - [Naming convention — World / Plot](../../principles.md#naming-convention--world--plot-and-their-panel-descriptor)
 
@@ -82,7 +82,7 @@ card `⋯ → Edit info` routes to `About` directly.
 - **About** — title, description, genre, tags, author notes
   (private), cover, accent color, library status (`active` /
   `archived` — segment per
-  [Select primitive rule](../../principles.md#form-controls--select-primitive)),
+  [Select primitive rule](../../patterns/forms.md#select-primitive)),
   pin (orthogonal star toggle; matches the inline-pin pattern on
   story-list cards).
 - **Generation** — mode (adventure/creative), lead character,
@@ -334,7 +334,7 @@ Same pattern as the World panel: **explicit save**, session-based.
 First field edit opens a session; all changes across all tabs share
 one `action_id`; Save commits as one unit; Discard throws it away;
 navigate-away guard when dirty. See
-[principles.md → Entity editing](../../principles.md#entity-editing--explicit-save-session-based)
+[principles.md → Entity editing](../../patterns/entity.md#entity-editing--explicit-save-session-based)
 for the full pattern.
 
 ## Top-bar
