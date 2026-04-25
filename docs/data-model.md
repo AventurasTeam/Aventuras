@@ -320,6 +320,15 @@ be ironed out later). Two concrete decisions captured now:
   is compositional (this place is part of that place). Prompt rendering
   walks the parent chain at runtime (e.g. `Aria is in [Shop in Town Square in City]`).
   Cycle prevention is app-layer — SQLite can't enforce it.
+- `CharacterState` carries `lastSeenAt`:
+  `{ entryId: string; locationId: string | null; worldTime: number } | null`.
+  Cached snapshot of the character's most recent narrative appearance —
+  updated by the classifier whenever the character is present in
+  `metadata.sceneEntities` of a new entry (or is the location's anchor
+  via `metadata.currentLocationId`). `null` until first appearance.
+  Drives "last seen 3 days ago in The Tavern" UX on the World panel
+  and Browse rail; without caching, surfacing this would require
+  walking entry history per row on every render.
 
 ### Story identity fields
 
@@ -399,7 +408,7 @@ stories.settings: {
   }
 
   // World time
-  worldTimeOrigin: string           // ISO 8601 Earth datetime; render anchor for metadata.worldTime
+  worldTimeOrigin: string           // anchor consumed by the active calendar formatter; v1 (Earth calendar) parses as ISO 8601 datetime
 
   // Models — override-at-render pattern. Keys are agent ids drawn from the
   // assignments registry (single source of truth, evolves over time);
@@ -597,10 +606,17 @@ rollback. Same for `sceneEntities` / `currentLocationId` user-edits.
 **Decided:** time is modeled as a single monotonically non-decreasing
 integer `worldTime` on each entry's metadata, measured in **base time
 units since story start**. A separate `stories.settings.worldTimeOrigin`
-setting anchors those elapsed units to a display calendar. v1 ships
-with the Earth calendar (base unit = seconds); fictional calendar
-systems are a future-deferred replacement formatter over the same
-integer.
+setting anchors those elapsed units to a display calendar.
+
+`worldTimeOrigin` is **opaque to the schema** — typed as `string`,
+interpreted by the active calendar formatter. The v1 Earth-calendar
+formatter parses it as ISO 8601 datetime (e.g.
+`"2024-03-15T08:00:00Z"`); a fictional-calendar formatter would
+parse it per its own anchor convention. The base unit for elapsed
+`worldTime` is also calendar-specific — seconds for Earth, whatever
+unit the calendar's formatter declares for fictional calendars. v1
+ships Earth-calendar only; fictional calendars are deferred per
+[`followups.md → Fictional calendar systems`](./followups.md#fictional-calendar-systems).
 
 **Why integer-based.** Free-form "time label" strings ("Day 3,
 evening") can't be math'd. Future features (character ageing,

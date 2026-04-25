@@ -169,13 +169,14 @@ the model picker dropdown or App Settings · Profiles model list).
 When component implementation begins, set up Storybook's tree as
 **Foundations / Patterns / Components / Screens**. Patterns pages
 are MDX with prose + live component demos. Rule is **dual-source**:
-`docs/ui/principles.md` stays authoritative (greppable, versionable,
-IDE-readable); Storybook Patterns pages cite it as canonical and add
-the visual / interactive layer (live render-mode demos for Select,
-side-by-side comparisons, accessibility checks).
+`docs/ui/patterns/` stays authoritative (greppable, versionable,
+IDE-readable); Storybook Patterns pages cite the corresponding
+pattern file as canonical and add the visual / interactive layer
+(live render-mode demos for Select, side-by-side comparisons,
+accessibility checks).
 
-No duplication of prose — Storybook pages prose-cite principles.md
-and embed component stories. Drift prevention by construction.
+No duplication of prose — Storybook pages prose-cite the patterns
+file and embed component stories. Drift prevention by construction.
 
 Lands when we start building shared components (Select first,
 probably). Premature to scaffold before components exist; the live
@@ -224,6 +225,75 @@ Only character-kind Overview is wireframed. Location / item / faction
 need their own composition driven by their typed state. Lore's
 Overview is separate again (different table, different fields). All
 pending — blocks on `entities.state` shape.
+
+### Asset gallery
+
+A per-story gallery of all images attached to entries
+(`entry_assets` + `assets`) — browsable view, pick-from-asset
+affordance for portrait fields and entity attachments, removal
+flow. Decoupled from the deferred image-generation feature;
+user-uploaded images are in v1 scope, only auto-generation is
+deferred (see [Image generation](#image-generation)).
+
+Surfaces TBD. Likely accessible from World panel · Assets tab
+("Pick from gallery" button on entity attachments) and a Story
+Settings → Assets sub-tab (browse + manage).
+
+**Maybe-future:** a **global** gallery aggregating assets across
+all stories (deduped naturally by `content_hash`). Useful when a
+user wants to reuse an image they uploaded elsewhere without
+re-uploading. Defer until per-story lands and demand is real.
+
+### Story tags on library cards
+
+Story-list cards currently omit tags entirely (per
+[story-list.md → Story card](./ui/screens/story-list/story-list.md#story-card--text-first):
+"tags still exist in data for search/filter; they're not primary
+card content"). Reconsider: surface a small inline tag row with
+overflow handling.
+
+Sketch:
+
+- Show 2-3 tags inline below description.
+- Long tag text → ellipsis at chip width cap.
+- Hidden tags collapse into a `+N` badge at the end.
+
+Decisions to make: chip width cap, max visible count, what `+N`
+expands to (tooltip listing? popover? inert?), interaction model
+(do tag clicks filter the library?), behavior on empty (hide row
+entirely vs show "no tags" placeholder).
+
+Defer until visual identity lands or sooner if real demand
+surfaces.
+
+### Story definition baseline
+
+What's the minimum set of inputs that defines a story? The wizard
+needs to prompt for the load-bearing fields without inflating the
+flow with optional extras. Today's `stories.settings` shape mixes
+definitional (mode, leadEntityId, narration, tone) with operational
+(memory knobs, translation, models, pack) — all set somehow at
+creation but only the definitional fields are wizard-required.
+
+Discussion needed:
+
+- Which fields are **required** at story creation (cannot be left
+  empty, no sensible default)?
+- Which are **prompted but skippable** (defaults work; user can
+  refine later)?
+- Which are **deferred to post-creation** entirely (user gets to
+  them in Story Settings if/when needed)?
+- What's the minimum-viable "blank slate" — start writing
+  immediately vs. fill in setting first?
+
+Sister concern: `entities.state` discriminated-union shape — the
+same "what's required vs deferred" question for character /
+location / item / faction state. Tracked separately in
+[`entities.state` kind-specific shape](#entitiesstate-kind-specific-shape).
+
+Both feed into the wizard design (Story Creation wizard, inventory
+#2, pending) and the entity-creation form (per-kind, blocked on
+state shape).
 
 ---
 
