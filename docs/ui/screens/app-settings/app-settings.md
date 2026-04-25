@@ -230,9 +230,14 @@ modes enabled, wrap POV (first / third), suggestions enabled.
 
 ## APP · Appearance
 
-Theme picker (light / dark / system), density (comfortable /
-compact), accent color preference. Final styling lands with visual
-identity.
+Theme picker, density (comfortable / compact), accent color
+preference. Final styling lands with visual identity.
+
+**Theme is a dropdown**, not a segment — built-in `light / dark /
+system` will be joined by user-installable / user-authored custom
+themes later, so cardinality grows past the segment threshold.
+Defaulting to dropdown now avoids reshaping the control when
+themes ship.
 
 ## APP · Language
 
@@ -252,9 +257,13 @@ each has a confirmation step:
   directory. Per data-model.
 - **Restore** — file picker; confirmation modal warning that the
   current DB will be replaced. Lists what'll be overwritten.
-- **Import story** — `.avts` file picker (also accepts legacy `.avt`
-  via migration import — see followups).
 - **Export all stories** — bulk per-story export.
+
+**Per-story import is intentionally NOT here** — it lives on the
+story list alongside `+ New story` (see
+[story-list](../story-list/story-list.md)). One affordance per
+action, no duplication. Legacy `.avt` migration runs through that
+same picker.
 
 ## APP · About
 

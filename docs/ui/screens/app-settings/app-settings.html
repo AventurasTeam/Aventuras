@@ -77,21 +77,22 @@
       .input-select { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
       .input-text.readonly { background: var(--bg); color: var(--ink-muted); cursor: default; }
 
-      /* slider */
+      /* slider — value is an editable input so 'custom' is implicit (type any number); slider width stays consistent across all instances */
       .slider-row { display: flex; align-items: center; gap: 10px; }
       .slider { flex: 1; height: 4px; background: var(--line-soft); border-radius: 2px; position: relative; }
       .slider-thumb { position: absolute; top: -5px; width: 14px; height: 14px; border-radius: 50%; background: var(--ink); }
-      .slider-value { font-size: 12px; color: var(--ink); font-family: ui-monospace, monospace; min-width: 56px; }
-      .slider-custom { padding: 4px 9px; border: 1px dashed var(--line); border-radius: 3px; background: var(--bg); cursor: pointer; font-size: 10px; color: var(--ink-muted); }
+      .slider-value-input { width: 80px; padding: 4px 8px; border: 1px solid var(--line-soft); border-radius: 3px; background: var(--bg-region); font-size: 12px; font-family: ui-monospace, monospace; text-align: right; color: var(--ink); flex-shrink: 0; }
 
-      /* segment selector */
-      .segment { display: inline-flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+      /* segment selector — justify-self: start ensures it hugs content even inside grid cells (grid items default to justify-self: stretch) */
+      .segment { display: inline-flex; justify-self: start; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
       .segment > .seg { padding: 6px 14px; font-size: 12px; color: var(--ink-muted); cursor: pointer; background: var(--bg-region); }
       .segment > .seg.active { background: var(--ink); color: #fff; }
       .segment > .seg + .seg { border-left: 1px solid var(--line); }
 
-      /* model select with capability badges */
+      /* model select with capability badges (badges right-aligned) */
       .model-select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 13px; color: var(--ink); display: flex; align-items: center; gap: 8px; cursor: pointer; }
+      .model-select .caps { margin-left: auto; display: inline-flex; gap: 4px; }
+      .model-select .dropdown-arrow { color: var(--ink-faint); }
       .cap-badge { font-size: 11px; color: var(--ink-faint); }
       .cap-badge.on { color: var(--ink); }
       .ctx-info { font-size: 10px; color: var(--ink-faint); margin-top: 4px; line-height: 1.5; }
@@ -375,9 +376,11 @@
               <div>
                 <div class="model-select">
                   <span>Anthropic / claude-sonnet-4-7</span>
-                  <span class="cap-badge on" title="reasoning supported">&#129504;</span>
-                  <span class="cap-badge on" title="structured output supported">&#9881;</span>
-                  <span style="margin-left: auto; color: var(--ink-faint);">&#9662;</span>
+                  <span class="caps">
+                    <span class="cap-badge on" title="reasoning supported">&#129504;</span>
+                    <span class="cap-badge on" title="structured output supported">&#9881;</span>
+                  </span>
+                  <span class="dropdown-arrow">&#9662;</span>
                 </div>
                 <div class="ctx-info">
                   <b>Reasoning:</b> supported &middot; <b>Structured output:</b> supported
@@ -391,7 +394,7 @@
               </div>
               <div class="slider-row">
                 <div class="slider"><span class="slider-thumb" style="left: 80%;"></span></div>
-                <span class="slider-value">0.8</span>
+                <input class="slider-value-input" value="0.8" />
               </div>
             </div>
 
@@ -401,8 +404,7 @@
               </div>
               <div class="slider-row">
                 <div class="slider"><span class="slider-thumb" style="left: 50%;"></span></div>
-                <span class="slider-value">4096</span>
-                <span class="slider-custom">&#9998; custom</span>
+                <input class="slider-value-input" value="4096" />
               </div>
             </div>
 
@@ -412,7 +414,7 @@
               </div>
               <div class="slider-row">
                 <div class="slider"><span class="slider-thumb" style="left: 30%;"></span></div>
-                <span class="slider-value">low</span>
+                <input class="slider-value-input" value="low" />
               </div>
             </div>
 
@@ -422,8 +424,7 @@
               </div>
               <div class="slider-row">
                 <div class="slider"><span class="slider-thumb" style="left: 20%;"></span></div>
-                <span class="slider-value">60s</span>
-                <span class="slider-custom">&#9998; custom</span>
+                <input class="slider-value-input" value="60s" />
               </div>
             </div>
 
@@ -462,9 +463,11 @@
                 <div>
                   <div class="model-select">
                     <span>OpenAI / gpt-4o-mini</span>
-                    <span class="cap-badge" title="reasoning not supported">&#129504;</span>
-                    <span class="cap-badge on" title="structured output supported">&#9881;</span>
-                    <span style="margin-left: auto; color: var(--ink-faint);">&#9662;</span>
+                    <span class="caps">
+                      <span class="cap-badge" title="reasoning not supported">&#129504;</span>
+                      <span class="cap-badge on" title="structured output supported">&#9881;</span>
+                    </span>
+                    <span class="dropdown-arrow">&#9662;</span>
                   </div>
                   <div class="ctx-info">
                     <b>Reasoning:</b> not supported &middot; <b>Structured output:</b> supported
@@ -475,15 +478,14 @@
                 <div class="field-label">temperature</div>
                 <div class="slider-row">
                   <div class="slider"><span class="slider-thumb" style="left: 20%;"></span></div>
-                  <span class="slider-value">0.2</span>
+                  <input class="slider-value-input" value="0.2" />
                 </div>
               </div>
               <div class="field-row">
                 <div class="field-label">max output</div>
                 <div class="slider-row">
                   <div class="slider"><span class="slider-thumb" style="left: 12%;"></span></div>
-                  <span class="slider-value">1024</span>
-                  <span class="slider-custom">&#9998; custom</span>
+                  <input class="slider-value-input" value="1024" />
                 </div>
               </div>
               <div class="field-row">
@@ -494,7 +496,7 @@
                 <div class="field-label">timeout</div>
                 <div class="slider-row">
                   <div class="slider"><span class="slider-thumb" style="left: 6%;"></span></div>
-                  <span class="slider-value">15s</span>
+                  <input class="slider-value-input" value="15s" />
                 </div>
               </div>
               <div class="field-row">
@@ -605,8 +607,7 @@
             <div class="field-label">timeout</div>
             <div class="slider-row">
               <div class="slider"><span class="slider-thumb" style="left: 30%;"></span></div>
-              <span class="slider-value">90s</span>
-              <span class="slider-custom">&#9998; custom</span>
+              <input class="slider-value-input" value="90s" />
             </div>
           </div>
 
@@ -712,8 +713,10 @@
           <div class="tab-subtitle">Visual identity finalizes with the visual identity session.</div>
 
           <div class="field-row">
-            <div class="field-label">theme</div>
-            <div class="segment"><span class="seg">light</span><span class="seg">dark</span><span class="seg active">system</span></div>
+            <div class="field-label">theme
+              <span class="hint">dropdown &mdash; custom themes will land later</span>
+            </div>
+            <div class="input-select" style="max-width: 260px;"><span>System (auto)</span><span style="color: var(--ink-faint);">&#9662;</span></div>
           </div>
           <div class="field-row">
             <div class="field-label">density</div>
@@ -765,20 +768,12 @@
             </div>
           </div>
           <div class="field-row">
-            <div class="field-label">import story
-              <span class="hint">.avts &middot; legacy .avt</span>
-            </div>
-            <div>
-              <span class="prov-actions" style="display: inline-flex;"><span class="a">Import story&hellip;</span></span>
-              <div class="ctx-info">Legacy <code>.avt</code> files routed through migration import.</div>
-            </div>
-          </div>
-          <div class="field-row">
             <div class="field-label">export all stories
               <span class="hint">bulk per-story export</span>
             </div>
             <div>
               <span class="prov-actions" style="display: inline-flex;"><span class="a">Export all&hellip;</span></span>
+              <div class="ctx-info">Per-story import lives on the story list (alongside <code>+ New story</code>), not duplicated here.</div>
             </div>
           </div>
         </div>
