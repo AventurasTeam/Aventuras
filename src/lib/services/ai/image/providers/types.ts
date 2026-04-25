@@ -12,6 +12,23 @@ export type ComfySamplerInfo = {
   schedulers: string[]
 }
 
+/** A user-uploaded ComfyUI API-format workflow with auto-detected field paths. */
+export interface ComfyCustomWorkflow {
+  /** The raw API-format workflow JSON (node IDs as keys). */
+  workflow: Record<
+    string,
+    { inputs: Record<string, unknown>; class_type: string; _meta?: { title?: string } }
+  >
+  /** Dot-path to the positive CLIPTextEncode text input, e.g. "57:27.inputs.text" */
+  positivePromptPath: string
+  /** Dot-path to the seed input on the KSampler node, e.g. "57:3.inputs.seed" */
+  seedPath: string
+  /** Node ID of the SaveImage output node, e.g. "9" */
+  outputNodeId: string
+  /** Dot-path to the negative CLIPTextEncode text input, if detected — null otherwise. */
+  negativePromptPath: string | null
+}
+
 export interface ImageGenerateOptions {
   model: string
   prompt: string
