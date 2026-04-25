@@ -105,7 +105,9 @@ see [principles → Search bar scope](../../principles.md#search-bar-scope).
 - **History** — delta log filtered to this thread; structured search
   over field-path / op / change-summary text per
   [principles → Search bar scope](../../principles.md#search-bar-scope).
-  Same shape as World's History tab.
+  Same shape as World's History tab; uses the
+  [load-older](../../principles.md#large-lists--virtualization-rule)
+  pattern, not virtualization.
 
 No Involvements tab — threads aren't directly entity-linked in the
 schema.

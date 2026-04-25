@@ -192,6 +192,20 @@ narrative model only"), extend `stories.settings.models` to hold
 either inline param overrides or a story-specific profile id. Lean
 toward inline param overrides as the simpler extension.
 
+### Virtual-list library choice
+
+`react-window` vs `@tanstack/react-virtual` — both mature, both
+solve the same problem. Decision blocked on:
+
+- React Native Web compatibility verification (we render to RN-Web
+  for desktop via Electron; library must work there).
+- Per-row height handling: uniform vs computed-per-row vs measured.
+  Model rows are uniform; history rows might vary slightly.
+- Bundle size and tree-shaking story.
+
+Lands when the first virtualized component is implemented (likely
+the model picker dropdown or App Settings · Profiles model list).
+
 ### Storybook design-rules pattern setup
 
 When component implementation begins, set up Storybook's tree as

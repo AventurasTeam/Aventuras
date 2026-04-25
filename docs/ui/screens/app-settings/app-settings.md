@@ -136,8 +136,10 @@ models →` toggle that expands to a search + filter view of the
     the user's quick-access set.
   - **View all expanded** — search input (filter by name) + capability
     filter chips (`🧠 reasoning`, `⚙ structured`, `★ pinned only`) +
-    scrollable list (windowed for large catalogs). Pinned models float
-    to the top of the unified list.
+    scrollable list. Virtualized for large catalogs per
+    [principles → Large lists](../../principles.md#large-lists--virtualization-rule)
+    (OpenRouter ships 340+ models). Pinned float to the top of the
+    unified list.
   - **Per-row actions** — pin star (☆ / ★), capability badges
     (🧠 reasoning, ⚙ structured output where capability data is
     available), remove-from-cache (×).
