@@ -17,6 +17,9 @@ Cross-cutting principles that govern this screen are in
 - [Mode, lead, and narration](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts)
 - [Composer mode — send-time transform](../../principles.md#composer-mode--send-time-transform-narration-aware)
 - [Models are override-only (per-story)](../../principles.md#models-are-override-only-per-story)
+- [Form controls — Select primitive](../../principles.md#form-controls--select-primitive)
+  (segment / dropdown / radio render-mode rule applies to every
+  picker on this surface)
 - [Entity editing — explicit save, session-based](../../principles.md#entity-editing--explicit-save-session-based)
   (the same pattern applies here)
 - [Naming convention — World / Plot](../../principles.md#naming-convention--world--plot-and-their-panel-descriptor)
@@ -38,7 +41,7 @@ Cross-cutting principles that govern this screen are in
 │ · Pack        │ ─ Appearance                                │
 │ · Advanced    │ cover, accent color                         │
 │               │ ─ Library                                   │
-│               │ status: ●Active ○Pinned ○Archived          │
+│               │ status: [Active|Archived] · ★ pinned        │
 │               │                                             │
 │               ├────────────────────────────────────────────┤
 │               │ save bar (when dirty)                       │
@@ -77,8 +80,11 @@ card `⋯ → Edit info` routes to `About` directly.
 **Story section** (definitional — set during wizard, editable after):
 
 - **About** — title, description, genre, tags, author notes
-  (private), cover, accent color, library status (active / pinned /
-  archived).
+  (private), cover, accent color, library status (`active` /
+  `archived` — segment per
+  [Select primitive rule](../../principles.md#form-controls--select-primitive)),
+  pin (orthogonal star toggle; matches the inline-pin pattern on
+  story-list cards).
 - **Generation** — mode (adventure/creative), lead character,
   narration (first/second/third-person), tone/style, plus
   **Authoring aids** sub-section: composer modes toggle + wrap POV

@@ -114,6 +114,23 @@ its own design pass — needs careful UX around partial-edit failures
 "this is the only way to fix some shapes" power-user case vs the
 "don't let users break their data" common case.
 
+### Storybook design-rules pattern setup
+
+When component implementation begins, set up Storybook's tree as
+**Foundations / Patterns / Components / Screens**. Patterns pages
+are MDX with prose + live component demos. Rule is **dual-source**:
+`docs/ui/principles.md` stays authoritative (greppable, versionable,
+IDE-readable); Storybook Patterns pages cite it as canonical and add
+the visual / interactive layer (live render-mode demos for Select,
+side-by-side comparisons, accessibility checks).
+
+No duplication of prose — Storybook pages prose-cite principles.md
+and embed component stories. Drift prevention by construction.
+
+Lands when we start building shared components (Select first,
+probably). Premature to scaffold before components exist; the live
+embedding is the whole point.
+
 ### FTS5 upgrade for search
 
 Search currently uses `LIKE` + `json_extract` / `json_each` against

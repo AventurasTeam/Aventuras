@@ -80,7 +80,14 @@
   .chip-small .x { color: var(--ink-faint); cursor: pointer; }
   .add-chip { font-size: 11px; color: var(--ink-muted); cursor: pointer; padding: 3px 9px; border: 1px dashed var(--line); border-radius: 999px; }
 
-  .radio-row { display: flex; gap: 16px; padding-top: 6px; }
+  .segment { display: inline-flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+  .segment > .seg { padding: 6px 14px; font-size: 12px; color: var(--ink-muted); cursor: pointer; background: var(--bg-region); }
+  .segment > .seg.active { background: var(--ink); color: #fff; }
+  .segment > .seg + .seg { border-left: 1px solid var(--line); }
+  .pin-toggle-row { display: inline-flex; align-items: center; gap: 8px; margin-left: 16px; font-size: 12px; color: var(--ink-muted); }
+  .pin-star { font-size: 16px; color: var(--ink-faint); cursor: pointer; }
+  .pin-star.on { color: #d8b04a; }
+  .radio-row { display: flex; gap: 16px; padding-top: 6px; flex-wrap: wrap; }
   .radio-opt { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
   .radio-dot { width: 12px; height: 12px; border: 1px solid var(--line); border-radius: 50%; display: inline-block; position: relative; }
   .radio-opt.active .radio-dot { border-color: var(--ink); }
@@ -256,11 +263,18 @@
         </div>
 
         <div class="field-row">
-          <div class="field-label">status</div>
-          <div class="radio-row">
-            <div class="radio-opt active"><span class="radio-dot"></span>Active</div>
-            <div class="radio-opt"><span class="radio-dot"></span>Pinned</div>
-            <div class="radio-opt"><span class="radio-dot"></span>Archived</div>
+          <div class="field-label">status
+            <span class="hint">lifecycle &mdash; mutually exclusive</span>
+          </div>
+          <div>
+            <div class="segment" title="2 options &middot; segment per the Select primitive rule">
+              <span class="seg active">Active</span>
+              <span class="seg">Archived</span>
+            </div>
+            <div class="pin-toggle-row" title="Pin is orthogonal to status &mdash; any status can be pinned">
+              <span class="pin-star on">&#9733;</span>
+              <span>pinned</span>
+            </div>
           </div>
         </div>
       </div>
@@ -276,8 +290,8 @@
             <span class="hint">adventure = you play a character<br>creative = you direct the story</span>
           </div>
           <div class="radio-row">
-            <div class="radio-opt active"><span class="radio-dot"></span>Adventure</div>
-            <div class="radio-opt"><span class="radio-dot"></span>Creative</div>
+            <div class="radio-opt active"><span class="radio-dot"></span>Adventure <span style="font-size: 10px; color: var(--ink-faint); margin-left: 4px;">you play a character; AI narrates around your actions</span></div>
+            <div class="radio-opt"><span class="radio-dot"></span>Creative <span style="font-size: 10px; color: var(--ink-faint); margin-left: 4px;">you direct the story; AI fills the prose</span></div>
           </div>
         </div>
 
@@ -441,10 +455,10 @@
           <div class="field-label">compaction detail
             <span class="hint">how aggressively the lore/memory agents summarize at chapter close (specifics TBD)</span>
           </div>
-          <div class="radio-row">
-            <div class="radio-opt"><span class="radio-dot"></span>Light</div>
-            <div class="radio-opt active"><span class="radio-dot"></span>Balanced</div>
-            <div class="radio-opt"><span class="radio-dot"></span>Aggressive</div>
+          <div class="segment" title="3 options, no per-option descriptions &rarr; segment">
+            <span class="seg">Light</span>
+            <span class="seg active">Balanced</span>
+            <span class="seg">Aggressive</span>
           </div>
         </div>
       </div>
@@ -556,10 +570,10 @@
           <div class="field-label">dialogueWeight
             <span class="hint">enum &middot; pack var</span>
           </div>
-          <div class="radio-row">
-            <div class="radio-opt"><span class="radio-dot"></span>Minimal</div>
-            <div class="radio-opt active"><span class="radio-dot"></span>Balanced</div>
-            <div class="radio-opt"><span class="radio-dot"></span>Heavy</div>
+          <div class="segment" title="3 options, no per-option descriptions &rarr; segment">
+            <span class="seg">Minimal</span>
+            <span class="seg active">Balanced</span>
+            <span class="seg">Heavy</span>
           </div>
         </div>
         <div class="field-row">
