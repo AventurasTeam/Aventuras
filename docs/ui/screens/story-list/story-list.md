@@ -220,21 +220,11 @@ the centered CTA carries that role more prominently.
 
 ## Data-model dependencies
 
-Story cards assume several identity fields that the current
-`stories` schema does NOT yet have. See [followups.md](../../../followups.md):
-
-- `genre: string | null` — free-text single label (shown as overline)
-- `tags: string[]` — exists but NOT shown on cards; for search/filter
-- `coverAssetId: string | null` — FK to `assets`, optional,
-  power-user feature
-- `accentColor: string | null` — optional user-set color for the
-  left strip; fallback to mode-derived
-- Pin/archive status — likely a `status` enum like entities
-  (`active` / `pinned` / `archived`) or separate booleans
-- `lastOpenedAt: integer` — distinct from `updated_at`
-
-Until the schema pass lands, the wireframe assumes these fields
-exist.
+Card identity fields (`genre`, `tags`, `cover_asset_id`,
+`accent_color`, `status`, `pinned`, `author_notes`,
+`last_opened_at`) live as columns on the `stories` table. Schema
+authority and rationale in
+[`data-model.md → Story identity fields`](../../../data-model.md#story-identity-fields).
 
 ## Screen-specific open questions
 

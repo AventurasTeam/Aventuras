@@ -114,16 +114,6 @@ its own design pass — needs careful UX around partial-edit failures
 "this is the only way to fix some shapes" power-user case vs the
 "don't let users break their data" common case.
 
-### Model profiles data shape
-
-Define the zod schema for `ModelProfile`, `imageGenConfig`,
-`agentAssignments`, default-provider field, and onboarding seed
-defaults. Lives in `app_settings` JSON field per the data strategy
-(simpler than separate tables for v1; schema can normalize later if
-needed). Includes the broken-config detection rules (model removed
-from provider catalog, key missing, profile orphan after key
-removal).
-
 ### Image generation
 
 Auto-generated images via an LLM-driven agent (portraits / scene
@@ -144,44 +134,12 @@ Asset gallery (uploaded images) and `entry_assets` table are in
 scope; only the auto-generation pipeline is deferred. Decoupled
 domains.
 
-### Provider data shape — multi-instance
-
-Provider configurations are user-managed instances (multiple of the
-same type allowed). Schema implication:
-
-```ts
-app_settings.providers: Array<{
-  id: string;
-  type: 'anthropic' | 'openai' | 'google' | 'openrouter' | 'nanogpt' | 'openai-compatible';
-  displayName: string;
-  apiKey: string;
-  endpoint?: string;        // override default
-  customHeaders?: Record<string, string>;
-}>;
-app_settings.defaultProviderId: string;
-```
-
-`ModelProfile.modelId` becomes `{ providerId: string; modelId: string }`
-to disambiguate when multiple providers expose the same model id.
-Lands with the schema pass.
-
 ### Encryption at rest for provider keys
 
 Provider API keys live in SQLite (per data strategy). Encryption
 mechanism deferred — not blocking v1 since this is a local-first app
 with no network exposure of the DB. Lean: explore once a real
 threat model surfaces (export-leak, multi-user shared machine, etc.).
-
-### Cross-provider model invalidation UX
-
-When a profile's selected model is no longer in the provider's fetched
-catalog (deprecation, account changes), surface as: per-profile inline
-error + global broken-config banner aggregating across profiles. The
-banner has a deep-link button that lands on App Settings · Profiles
-with the first broken profile scrolled into view. Spec'd in
-`app-settings.md` and partially demonstrated in the wireframe (toggle
-`errors: 2 broken` in review controls). Implementation finalizes
-when the model-fetching pipeline lands.
 
 ### Granular per-story model controls
 
@@ -266,14 +224,6 @@ Only character-kind Overview is wireframed. Location / item / faction
 need their own composition driven by their typed state. Lore's
 Overview is separate again (different table, different fields). All
 pending — blocks on `entities.state` shape.
-
-### App Settings — "Default story settings" section
-
-The settings-scope policy resolved during this pass introduced an App
-Settings section holding defaults-for-new-stories (memory knobs,
-translation config, composer UX prefs, suggestions toggle). App
-Settings hasn't been wireframed yet; this section's UX (mirror of the
-Story Settings panes it defaults) lands when App Settings does.
 
 ---
 

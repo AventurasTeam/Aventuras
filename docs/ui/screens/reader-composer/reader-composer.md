@@ -14,7 +14,7 @@ Cross-cutting principles that govern this screen are in
 - [Composer mode — send-time transform](../../principles.md#composer-mode--send-time-transform-narration-aware)
 - [Entity surfacing — three levels, same data](../../principles.md#entity-surfacing--three-levels-same-data)
   (Reader provides level 1 — Browse rail — and level 2 — peek drawer)
-- [Entity row indicators — three channels](../../principles.md#entity-row-indicators--three-distinct-channels)
+- [Entity row indicators — four channels](../../principles.md#entity-row-indicators--four-orthogonal-channels)
 - [Browse filter chips + accordion grouping](../../principles.md#browse-filter-chips)
 
 ## Layout
@@ -232,9 +232,9 @@ the active category in the dropdown:
 
 - **Characters / locations / items / factions** (entity rows):
   `name`, `description`, `tags`
-- **Lore**: `title`, `body`, `tags`
-- **Threads**: `title`, `description`, `tags`
-- **Happenings**: `title`, `description`, `tags`
+- **Lore**: `title`, `body`, `category`, `tags`
+- **Threads**: `title`, `description`, `category`, `tags`
+- **Happenings**: `title`, `description`, `category`, `tags`
 
 Placeholder text reflects the active category (`Search characters…` /
 `Search lore…` / etc.). Tooltip + ⓘ help icon list the full scope per

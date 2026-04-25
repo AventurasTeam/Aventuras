@@ -375,8 +375,8 @@ of settings that prompt templates consume. Three shapes feed into it:
      via the models resolver (see below). This is the
      **override-at-render scope pattern**.
    - **App-only settings** — global concerns that never appear
-     per-story (API keys, classifier truncation caps, image-gen
-     global caps, diagnostics toggles).
+     per-story (API keys, classifier truncation caps, diagnostics
+     toggles).
 2. **Story-level settings** (`stories.settings` JSON on the loaded
    story) — per-story definitional and operational config. Zod-
    parsed at story open. Full shape in data-model.md → "Story

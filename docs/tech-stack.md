@@ -18,6 +18,7 @@ Foundation layer:
 - **Components:** react-native-reusables in `components/ui/` — button, card, input, alert, dialog, text, icon
 - **Storybook:** `@storybook/react-native-web-vite` framework + Vitest + Playwright story tests (20/20 passing)
 - **Tooling:** ESLint 9 (flat) + Prettier + EditorConfig + lefthook pre-commit + `.nvmrc`
+- **Docs lint:** remark + `remark-validate-links` + `remark-preset-lint-recommended` + `remark-lint-no-duplicate-headings` (run by lefthook on `docs/**`; manual via `pnpm lint:docs`)
 - **CI:** GitHub Actions workflow (lint, format:check, typecheck, electron:compile, story tests)
 - **MCP:** electron-mcp-server + storybook-mcp wired in `.mcp.json`
 

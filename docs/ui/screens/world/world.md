@@ -11,7 +11,7 @@ Cross-cutting principles that govern this panel are in
 [principles.md](../../principles.md). Relevant sections:
 
 - [World / Plot split](../../principles.md#world--plot-split--unified-panels-by-purpose)
-- [Entity row indicators — three channels](../../principles.md#entity-row-indicators--three-distinct-channels)
+- [Entity row indicators — four channels](../../principles.md#entity-row-indicators--four-orthogonal-channels)
 - [Entity kind indicators — icons](../../principles.md#entity-kind-indicators--icons-not-text)
 - [Entity list sort order — four-layer, lead pinned](../../principles.md#entity-list-sort-order--static-four-layer)
 - [Browse filter chips + accordion grouping](../../principles.md#browse-filter-chips)

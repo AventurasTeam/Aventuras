@@ -198,6 +198,21 @@ erDiagram
         json undo_payload "op=create: null; op=update: partial diff of changed fields with their PRE-change values; op=delete: full row to re-insert"
         integer created_at
     }
+
+    app_settings {
+        text id PK "constant 'singleton' — global, single-row config table"
+        json providers "Array<ProviderInstance>; user-managed multi-instance, includes API keys"
+        json profiles "Array<ModelProfile>; narrative + agent profiles for LLM call params"
+        json assignments "Record<agentId, profileId>; which profile each agent uses by default"
+        text default_provider_id "FK into providers[].id; seeds Narrative + 'Reset to defaults'"
+        json default_models "Record<agentId, { providerId, modelId }>; resolver fallback for un-overridden story.settings.models"
+        json default_story_settings "see 'Story settings shape' — copy-at-creation source for new stories"
+        json appearance "theme, density, accent preference"
+        text ui_language "ISO 639-1; defaults to OS locale on first launch"
+        json diagnostics "debug toggles, retry counts, view-logs prefs"
+        integer created_at
+        integer updated_at
+    }
 ```
 
 ---
@@ -361,6 +376,7 @@ stories.settings: {
 
   // Operational — defaults copied from App Settings → Default story settings at creation
   chapterTokenThreshold: number     // moved out of top-level column
+  chapterAutoClose: boolean         // auto-close at threshold; off = threshold is guidance only, user wraps manually; default true
   recentBuffer: number              // entries always injected verbatim before retrieval; default 10
   compactionDetail: string          // one-line focus directive for memory-compaction agent
 
@@ -385,13 +401,18 @@ stories.settings: {
   // World time
   worldTimeOrigin: string           // ISO 8601 Earth datetime; render anchor for metadata.worldTime
 
-  // Models — override-at-render pattern
+  // Models — override-at-render pattern. Keys are agent ids drawn from the
+  // assignments registry (single source of truth, evolves over time);
+  // narrative is the always-present storyteller slot. Image generation is
+  // deferred past v1 — `imageGen` returns when the feature lands.
   models: {
     narrative?: string              // absent = use current global app-settings default at render time
     classifier?: string
     translation?: string
-    imageGen?: string
     suggestion?: string
+    loreMgmt?: string
+    memoryCompaction?: string
+    retrieval?: string
   }
 
   // Pack
@@ -426,6 +447,115 @@ second-person narration doesn't imply wrapping user input as "You
 reach for..." — that would produce nonsense. Composer wrap POV is
 restricted to `first | third` (second not offered); narration has all
 three.
+
+### App settings storage
+
+**Decided:** global app config lives in a single-row `app_settings`
+table keyed on `id = 'singleton'`. Heavy use of JSON columns;
+schema can normalize into per-domain tables later if a real reason
+emerges. For v1 the JSON-blob approach trades schema rigour for
+fewer migrations during the rapid-iteration period.
+
+**Provider instances — multi-instance, user-managed.**
+
+```ts
+app_settings.providers: Array<{
+  id: string                                 // stable UUID per instance
+  type: 'anthropic' | 'openai' | 'google' | 'openrouter' | 'nanogpt' | 'openai-compatible'
+  displayName: string                        // user-chosen; e.g. 'Anthropic (work)'
+  apiKey: string                             // see encryption note below
+  endpoint?: string                          // override default; required for openai-compatible
+  customHeaders?: Record<string, string>     // proxy auth, custom routing
+  pinnedModelIds: string[]                   // user's working set; floats to top of selectors
+  cachedModels?: Array<{                     // result of /models fetch; survives offline restarts
+    id: string
+    capabilities?: { reasoning?: boolean; structuredOutput?: boolean }
+  }>
+  cachedAt?: number                          // last successful /models fetch timestamp
+}>
+```
+
+`app_settings.default_provider_id` references one of the above; the
+default seeds Narrative profile creation and "Reset to defaults"
+actions across the rest of the app.
+
+**Model profiles — narrative + agents.**
+
+```ts
+app_settings.profiles: Array<{
+  id: string                                 // stable UUID
+  kind: 'narrative' | 'agent'                // narrative is special-cased (always present, undeletable)
+  name: string                               // 'Narrative' / 'Fast tasks' / 'Heavy reasoning' / etc.
+  description?: string                       // user-authored, agent profiles only
+  modelRef: { providerId: string; modelId: string }  // composite — disambiguates same modelId across providers
+  temperature?: number                       // 0-1
+  maxOutput?: number
+  thinking?: number                          // reasoning slider; conditional on model capability
+  timeout?: number                           // seconds; default 60
+  structuredOutput?: 'auto' | 'force-on' | 'force-off'  // agent profiles only
+  customJson?: Record<string, unknown>       // advanced — per-field merge over constructed payload
+}>
+```
+
+`modelRef` is a composite `{ providerId, modelId }` rather than a
+bare model id string — the same model id can exist on multiple
+provider instances (e.g. two Anthropic keys, two OpenAI-compatible
+endpoints). The composite resolves unambiguously.
+
+**Assignments — which profile each agent uses.**
+
+```ts
+app_settings.assignments: Record<AgentId, string>  // agentId → profile.id
+```
+
+The `AgentId` registry is the single source of truth for which
+agents exist. v1 ships:
+`classifier | translation | suggestion | loreMgmt | memoryCompaction | retrieval`.
+Narrative is not an agent — it's the storyteller, always wired to
+the `kind: 'narrative'` profile, no assignment slot needed.
+
+**Default models — render-time resolver fallback.**
+
+```ts
+app_settings.default_models: Record<AgentId, { providerId: string; modelId: string }>
+```
+
+This is the **override-at-render** target referenced by
+`stories.settings.models[agentId]`. When a story doesn't override
+an agent's model, the resolver returns the corresponding entry
+here. Changing a default propagates to every un-overridden story
+on next render. Distinct from `assignments` (which controls the
+LLM-call parameter envelope via profile lookup) — defaults are
+about model selection, profiles are about call configuration.
+
+**Default story settings — copy-at-creation source.**
+
+```ts
+app_settings.default_story_settings: Partial<StorySettings>
+```
+
+Mirrors the **operational** subset of
+[`stories.settings`](#story-settings-shape) — chapter threshold,
+auto-close, recent buffer, compaction detail, translation block,
+composer prefs, suggestions toggle. On story creation these copy
+into the new `stories.settings`; the story owns its values
+thereafter. Definitional fields (`mode`, `leadEntityId`,
+`narration`, `tone`) are absent — those are wizard-authored per
+story with no global default.
+
+**Why one table, not several.** Providers, profiles, and
+assignments form one tightly-coupled config envelope — they're
+edited together, deleted together (uninstall = drop the row), and
+queried together at app open. Splitting into per-domain tables
+would mean three INSERTs / three loads / three sync points for
+zero query benefit (no JOIN ever runs against this data — it's
+loaded once into Zustand at boot).
+
+**Encryption at rest — deferred.** API keys live unencrypted in
+the `providers[].apiKey` JSON. v1 is local-first with no network
+exposure of the DB; the threat model that justifies encryption
+hasn't materialized. Tracked in
+[followups.md](./followups.md#encryption-at-rest-for-provider-keys).
 
 ### Entry metadata shape
 

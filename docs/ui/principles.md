@@ -23,9 +23,9 @@ transitions use minimal inline vanilla JS.
 - Stylings stay monochrome intentionally; pixel-fidelity decisions
   (palette, typography) land in the visual identity session.
 
-Iteration uses the Superpowers brainstorming companion (ephemeral
-`.superpowers/brainstorm/`, gitignored). When a wireframe stabilizes,
-its final form lives in `docs/ui/screens/<screen>/`.
+When a wireframe stabilizes, its final form lives in
+`docs/ui/screens/<screen>/`. Iteration scratch lives wherever the
+author keeps it (gitignored), not in the repo.
 
 ---
 
@@ -181,8 +181,12 @@ UI surface (Story Settings · Models tab):
 - Dashed-italic `App default: <model>` sentinel (no override set)
 - Solid dropdown with `<model> (override)` label (override pinned)
 
-Applies to: `narrative` / `classifier` / `translation` / `imageGen` /
-`suggestion`.
+Applies to every agent in the assignments registry — currently
+`narrative` / `classifier` / `translation` / `suggestion` /
+`loreMgmt` / `memoryCompaction` / `retrieval`. The registry evolves
+as agents are added or removed; the override pattern is identical
+regardless of which agents exist. Image generation is deferred past
+v1; see [followups.md → Image generation](../followups.md#image-generation).
 
 The global defaults live in App Settings · Models (pending wireframe).
 App Settings uses the same left-rail settings pattern; its fields
@@ -288,24 +292,36 @@ entry on the current branch.
 
 ---
 
-## Entity row indicators — three distinct channels
+## Entity row indicators — four orthogonal channels
 
-An entity row carries three orthogonal signals that don't compete for
-one slot — each has a dedicated channel so any combination renders
+An entity row carries four orthogonal signals that share no visual
+primitives — each owns its own channel so any combination renders
 correctly, and every row has identical structure (no value-dependent
 absence that makes "nothing shown" ambiguous):
 
 - **Lead badge** (gold pill, text mode-dependent): inline immediately
   after the name. Only present for the story's lead character. Label
   is `You` in adventure mode, `Protagonist` in creative mode.
-- **Scene presence** (row-level accent): an in-scene row gets a
-  left-edge 3px green accent stripe plus a faint green background
-  tint. NOT a right-side indicator — scene presence is about "which
-  rows matter right now" which fits row-level chrome.
 - **Status pill** (always shown, muted when active): on the far
   right. Every row carries one of `active` / `staged` / `retired`.
   Active renders with muted styling (faint gray); staged = soft
   green; retired = soft amber.
+- **Scene presence** (left-edge stripe): an in-scene row gets a
+  3px green accent stripe along the left edge. Steady-state signal —
+  "which rows matter right now."
+- **Recently-classified** (background tint): rows whose source data
+  the classifier wrote in the last 1-2 turns get a faint info-blue
+  background tint that decays. Transient signal — see
+  [Recently-classified row accent](#recently-classified-row-accent)
+  for the full rule.
+
+**Edge vs tint — load-bearing decoupling.** Scene-presence owns the
+left-edge stripe; recently-classified owns the background tint. Both
+can fire on the same row simultaneously (an in-scene character whose
+state was just classifier-written) — `green left edge + info-blue
+body tint` reads as both signals together with no contention. Future
+row-level signals must claim a different primitive (right-edge,
+inline badge, etc.) — these two are spoken for.
 
 Applies to the reader's Browse rail AND the World panel's list pane.
 CSS class convention: `.lead-badge`.
@@ -515,33 +531,37 @@ in-scene-bypass) live in
 ## Recently-classified row accent
 
 Cross-cutting visual signal: rows whose underlying data was written
-by the classifier (or any agent) in the last 1-2 turns get a subtle
-**left-edge accent** plus a faint background tint. Single signal
-with two visual states representing decay:
+by the classifier (or any agent) in the last 1-2 turns get a faint
+**info-blue background tint** that decays. Single signal with two
+visual states:
 
 - **`recent-1`** (full-color info-blue): touched in the last turn
 - **`recent-2`** (faded info-blue): touched 1-2 turns ago
-- After that the accent is gone.
+- After that the tint is gone.
 
 **Where it applies:** any list-pane row whose source data the
 classifier writes — entities and lore (World panel + Browse rail),
-threads and happenings (Plot panel). Same accent, same color, same
+threads and happenings (Plot panel). Same tint, same color, same
 decay rule across all panels.
 
-**Detail-pane mirroring.** The accent is echoed in the detail head
-as a "Recently classified" badge in the same color (faded variant
-for the older state). Self-documenting via visual repetition — open
-a row, see the same signal echoed in text. No copy needed beyond
-the badge label.
+**Channel separation.** Recently-classified owns the row background
+tint; scene-presence owns the left-edge stripe (per
+[Entity row indicators](#entity-row-indicators--four-orthogonal-channels)).
+Both fire simultaneously on common cases (in-scene character just
+classified) without contention — different primitives, different
+signals. Color separation is also load-bearing: info-blue is
+reserved for "recently written," other signals get their own
+treatments.
+
+**Detail-pane mirroring.** The tint is echoed in the detail head as
+a "Recently classified" badge in the same color (faded variant for
+the older state). Self-documenting via visual repetition — open a
+row, see the same signal echoed in text. No copy needed beyond the
+badge label.
 
 **Implementation.** Computed runtime from the delta log; no schema
 change. Decay rule is hardcoded for v1 (1-2 turns); revisit if users
 want configurability.
-
-Distinct from the World panel's **scene presence** accent (green;
-"in this scene right now") and from any future per-panel signals.
-Color separation is load-bearing — info-blue is reserved for
-"recently written," other signals get their own treatments.
 
 ---
 
@@ -769,14 +789,14 @@ LIKE + JSON-extract; revisit when a real story hits the wall.
 **Per-surface scope** — each surface's per-screen doc carries the
 authoritative version; this is the cross-cutting summary:
 
-| Surface                 | Searches                                                                                                                          |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Story list              | `title`, `description`, `genre`, `tags`, `author_notes`                                                                           |
-| Reader Browse rail      | category-aware (entity: `name`/`description`/`tags`; lore: `title`/`body`/`tags`; thread/happening: `title`/`description`/`tags`) |
-| World panel list        | category-aware (same as Browse rail equivalents)                                                                                  |
-| Plot panel — threads    | `title`, `description`, `category`, `tags`                                                                                        |
-| Plot panel — happenings | `title`, `description`, `category`, `tags`                                                                                        |
-| History tab (any panel) | structurally different — field-path strings, op (`create`/`update`/`delete`), rendered change-summary text                        |
+| Surface                 | Searches                                                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Story list              | `title`, `description`, `genre`, `tags`, `author_notes`                                                                                                 |
+| Reader Browse rail      | category-aware (entity: `name`/`description`/`tags`; lore: `title`/`body`/`category`/`tags`; thread/happening: `title`/`description`/`category`/`tags`) |
+| World panel list        | category-aware (same as Browse rail equivalents)                                                                                                        |
+| Plot panel — threads    | `title`, `description`, `category`, `tags`                                                                                                              |
+| Plot panel — happenings | `title`, `description`, `category`, `tags`                                                                                                              |
+| History tab (any panel) | structurally different — field-path strings, op (`create`/`update`/`delete`), rendered change-summary text                                              |
 
 ---
 
