@@ -9,3 +9,6 @@ pnpm-lock.yaml
 *.png
 *.jpg
 *.svg
+
+# Hand-authored low-fi wireframes — intentionally not prettier-formatted
+docs/**/*.html
