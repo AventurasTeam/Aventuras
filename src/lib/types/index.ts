@@ -695,6 +695,7 @@ export interface APIProfile {
   fetchedModels: TextModel[] // Auto-fetched from /models endpoint
   hiddenModels: string[] // Models hidden from selection lists
   favoriteModels: string[] // Models shown at the top of selection lists
+  pingEnabled?: boolean // Opt-in: enable pings to show model availability status (OR free / NIM only)
   createdAt: number // Timestamp
 }
 

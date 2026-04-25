@@ -24,6 +24,12 @@ import { SvelteSet, SvelteMap } from 'svelte/reactivity'
 import { dedupeTextModels } from '$lib/utils/dedupeTextModels'
 import type { ImageGenerationServiceSettings, TimelineFillSettings } from '$lib/services/ai'
 import { debug } from './debug.svelte'
+import { modelHealth } from './modelHealth.svelte'
+import {
+  isPingEligible,
+  pingProfileModels,
+  clearProfileHealth,
+} from '$lib/services/modelHealthOrchestrator'
 
 // Provider preset type (used by WelcomeScreen)
 export type ProviderPreset = 'openrouter' | 'nanogpt' | 'openai-compatible'
@@ -1810,10 +1816,14 @@ class SettingsStore {
   }
 
   async addProfile(profile: Omit<APIProfile, 'id' | 'createdAt'>) {
+    const providerConfig = PROVIDERS[profile.providerType]
+    const defaultHidden = providerConfig?.defaultHiddenModels ?? []
+
     const newProfile = normalizeProfile({
       ...profile,
       id: crypto.randomUUID(),
       createdAt: Date.now(),
+      hiddenModels: [...new Set([...(profile.hiddenModels ?? []), ...defaultHidden])],
     })
     this.apiSettings.profiles = [...this.apiSettings.profiles, newProfile]
     await this.saveProfiles()
@@ -1830,15 +1840,48 @@ class SettingsStore {
     const index = this.apiSettings.profiles.findIndex((p) => p.id === id)
     if (index === -1) return
 
-    this.apiSettings.profiles[index] = normalizeProfile({
-      ...this.apiSettings.profiles[index],
+    const oldProfile = this.apiSettings.profiles[index]
+    const newProfile = normalizeProfile({
+      ...oldProfile,
       ...updates,
     })
+
+    // Clear the cache when anything that changes the effective endpoint or auth
+    // credentials changes: rows are keyed by (providerType, baseUrl) so stale
+    // entries would survive undetected otherwise. evictForeign only prunes
+    // in-memory; this deletes the SQLite rows.
+    const pingDisabled = oldProfile.pingEnabled && updates.pingEnabled === false
+    const apiKeyChanged =
+      updates.apiKey !== undefined && updates.apiKey !== oldProfile.apiKey && !!oldProfile.apiKey
+    const providerChanged =
+      updates.providerType !== undefined && updates.providerType !== oldProfile.providerType
+    const baseUrlChanged = updates.baseUrl !== undefined && updates.baseUrl !== oldProfile.baseUrl
+    if (pingDisabled || apiKeyChanged || providerChanged || baseUrlChanged) {
+      await clearProfileHealth(oldProfile).catch((err) =>
+        console.warn('[Settings] Failed to clear health cache:', err),
+      )
+    }
+
+    this.apiSettings.profiles[index] = newProfile
     this.apiSettings.profiles = [...this.apiSettings.profiles]
     await this.saveProfiles()
+
+    // If models were updated and ping is enabled, trigger a ping batch
+    if (updates.fetchedModels && newProfile.pingEnabled && isPingEligible(newProfile)) {
+      void pingProfileModels(newProfile).catch((err) =>
+        console.warn('[Settings] Auto-ping failed:', err),
+      )
+    }
   }
 
   async deleteProfile(id: string) {
+    const profile = this.getProfile(id)
+    if (profile) {
+      await clearProfileHealth(profile).catch((err) =>
+        console.warn('[Settings] Failed to clear health cache on delete:', err),
+      )
+    }
+
     // Reset main narrative profile to default if the deleted profile is currently set as main narrative
     if (id === this.apiSettings.mainNarrativeProfileId) {
       this.setMainNarrativeProfile(this.getDefaultProfileIdForProvider())
@@ -2952,6 +2995,7 @@ class SettingsStore {
     // Create a unique profile ID
     const defaultProfileId = `default-${provider}-profile`
     const defaultApiURL = defaults.baseUrl || PROVIDERS.openrouter.baseUrl
+    const defaultHidden = defaults.defaultHiddenModels ?? []
 
     const defaultProfile: APIProfile = {
       id: defaultProfileId,
@@ -2961,7 +3005,7 @@ class SettingsStore {
       apiKey: apiKey,
       customModels: [],
       fetchedModels: [],
-      hiddenModels: [],
+      hiddenModels: defaultHidden,
       favoriteModels: [],
       createdAt: Date.now(),
     }
@@ -3250,7 +3294,20 @@ class SettingsStore {
       if (!preset.model) return true
     }
 
+    // 5. Main Narrative model is unreachable or auth-failed per health cache
+    if (this.modelHealthBlockReason) return true
+
     return false
+  }
+
+  get modelHealthBlockReason(): 'down' | 'auth' | null {
+    const mainProfile = this.getProfile(this.apiSettings.mainNarrativeProfileId)
+    if (mainProfile && isPingEligible(mainProfile)) {
+      const cached = modelHealth.getByProfile(mainProfile, this.apiSettings.defaultModel)
+      if (cached?.status === 'down') return 'down'
+      if (cached?.status === 'auth') return 'auth'
+    }
+    return null
   }
 
   /**

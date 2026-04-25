@@ -61,6 +61,8 @@ export interface ProviderConfig {
   capabilities: ProviderCapabilities
   imageDefaults?: ImageDefaults
   fallbackModels: string[]
+  /** Models to hide by default when a new profile of this type is created. */
+  defaultHiddenModels?: string[]
   /** Service model defaults. Only some providers (openrouter, nanogpt) have preconfigured defaults. */
   services?: ProviderServices
 }
@@ -330,6 +332,32 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       'meta/llama-3.1-70b-instruct',
       'meta/llama-3.1-8b-instruct',
       'nvidia/llama-3.1-nemotron-70b-instruct',
+    ],
+    // Models excluded here cannot be identified by the keyword or size patterns in
+    // modelFetcher.ts (NIM_EXCLUDE_PATTERNS / nimLargestSizeB) but are not useful
+    // for interactive fiction: legacy, deprecated, or narrow-domain models ≥ 24B.
+    defaultHiddenModels: [
+      '01-ai/yi-large',
+      'abacusai/dracarys-llama-3.1-70b-instruct',
+      'ai21labs/jamba-1.5-large-instruct',
+      'ai21labs/jamba-1.5-mini-instruct',
+      'databricks/dbrx-instruct',
+      'deepseek-ai/deepseek-r1-distill-qwen-32b',
+      'institute-of-science-tokyo/llama-3.1-swallow-70b-instruct-v0.1',
+      'meta/llama-3.1-70b-instruct',
+      'meta/llama-3.1-405b-instruct',
+      'meta/llama-3.3-70b-instruct',
+      'meta/llama2-70b',
+      'microsoft/phi-3.5-moe-instruct',
+      'microsoft/phi-4-mini-instruct',
+      'mistralai/mistral-large',
+      'nvidia/llama-3.1-nemotron-51b-instruct',
+      'nvidia/llama-3.1-nemotron-70b-instruct',
+      'nvidia/llama-3.3-nemotron-super-49b-v1',
+      'nvidia/nemotron-4-340b-instruct',
+      'sarvamai/sarvam-m',
+      'stockmark/stockmark-2-100b-instruct',
+      'writer/palmyra-creative-122b',
     ],
     // No service defaults - user must configure models in Generation Settings
   },

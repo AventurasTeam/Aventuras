@@ -5,19 +5,33 @@
   import { Button } from '$lib/components/ui/button'
 
   let hasIssues = $derived(settings.hasGenerationConfigIssues)
+  let healthReason = $derived(settings.modelHealthBlockReason)
 
   // If profiles are structurally invalid → send to API tab to fix profiles.
   // Otherwise (valid profiles, but missing model) → send to Generation tab.
   let isProfileInvalid = $derived(settings.hasInvalidProfiles())
-  let ctaLabel = $derived(isProfileInvalid ? 'Fix API Profiles' : 'Configure Models')
+
+  let ctaLabel = $derived(
+    healthReason
+      ? healthReason === 'auth'
+        ? 'Fix API Key'
+        : 'Change Model'
+      : isProfileInvalid
+        ? 'Fix API Profiles'
+        : 'Configure Models',
+  )
   let message = $derived(
-    isProfileInvalid
-      ? 'Some API profiles need to be reconfigured before you can use AI features.'
-      : 'Some AI services are missing a model. Story generation is blocked until all are configured.',
+    healthReason === 'auth'
+      ? 'Authentication failed — use a valid API key or select another model.'
+      : healthReason === 'down'
+        ? 'Selected model is unreachable — change model or wait for recovery.'
+        : isProfileInvalid
+          ? 'Some API profiles need to be reconfigured before you can use AI features.'
+          : 'Some AI services are missing a model. Story generation is blocked until all are configured.',
   )
 
   function handleFix() {
-    if (isProfileInvalid) {
+    if (healthReason || isProfileInvalid) {
       ui.openSettingsToApiTab()
     } else {
       ui.openSettingsToGenerationTab()
