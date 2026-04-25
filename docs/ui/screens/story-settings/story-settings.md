@@ -129,10 +129,12 @@ their currently-resolved chain:
 - `classifier` — Fast tasks → gpt-4o-mini
 - `translation` — Fast tasks → gpt-4o-mini
 - `suggestion` — Fast tasks → gpt-4o-mini
-- `imageGen` — ImageGen config → dall-e-3
 - `lore-mgmt` — Heavy reasoning → claude-opus-4
 - `memory-compaction` — Heavy reasoning → claude-opus-4
 - `retrieval` — Fast tasks → gpt-4o-mini (when designed)
+
+(Image generation is deferred — see
+[followups.md](../../../followups.md#image-generation).)
 
 User picks an agent; the override row materializes with a model
 picker. `×` on the row removes the override; agent reverts to App
@@ -176,13 +178,15 @@ stories.settings.models: {
   narrative?: string;
   classifier?: string;
   translation?: string;
-  imageGen?: string;
   suggestion?: string;
   loreMgmt?: string;
   memoryCompaction?: string;
   retrieval?: string;
 }
 ```
+
+(Image generation deferred — `imageGen` field added when the
+feature lands.)
 
 All fields optional; absent = resolve through the App Settings
 profile chain at render time. See

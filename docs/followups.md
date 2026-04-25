@@ -124,6 +124,47 @@ needed). Includes the broken-config detection rules (model removed
 from provider catalog, key missing, profile orphan after key
 removal).
 
+### Image generation
+
+Auto-generated images via an LLM-driven agent (portraits / scene
+illustrations / etc.) — entire feature deferred. Implies:
+
+- New agent (`imageGen`) joining the assignments list when the
+  feature lands. Image-gen models have a different parameter shape
+  from text profiles (size / quality / style / aspect ratio); they
+  don't fit the `ModelProfile` shape and likely warrant their own
+  dedicated configuration tab in App Settings.
+- `stories.settings.models.imageGen?` field returns to the override
+  list at that point.
+- Per-story granular image-gen parameter override (size / style /
+  quality) joins the existing "granular per-story controls"
+  followup.
+
+Asset gallery (uploaded images) and `entry_assets` table are in
+scope; only the auto-generation pipeline is deferred. Decoupled
+domains.
+
+### Provider data shape — multi-instance
+
+Provider configurations are user-managed instances (multiple of the
+same type allowed). Schema implication:
+
+```ts
+app_settings.providers: Array<{
+  id: string;
+  type: 'anthropic' | 'openai' | 'google' | 'openrouter' | 'nanogpt' | 'openai-compatible';
+  displayName: string;
+  apiKey: string;
+  endpoint?: string;        // override default
+  customHeaders?: Record<string, string>;
+}>;
+app_settings.defaultProviderId: string;
+```
+
+`ModelProfile.modelId` becomes `{ providerId: string; modelId: string }`
+to disambiguate when multiple providers expose the same model id.
+Lands with the schema pass.
+
 ### Encryption at rest for provider keys
 
 Provider API keys live in SQLite (per data strategy). Encryption

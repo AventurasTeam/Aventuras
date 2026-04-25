@@ -175,9 +175,8 @@
       <span class="rb-label">Review controls</span>
       <div class="rb-group">
         <span class="gl">tab:</span>
-        <button class="rb-btn" data-tab="keys">Keys</button>
+        <button class="rb-btn" data-tab="providers">Providers</button>
         <button class="rb-btn active" data-tab="profiles">Profiles</button>
-        <button class="rb-btn" data-tab="imagegen">ImageGen</button>
         <button class="rb-btn" data-tab="memory">Memory</button>
         <button class="rb-btn" data-tab="translation">Translation</button>
         <button class="rb-btn" data-tab="composer">Composer</button>
@@ -203,7 +202,7 @@
     <!-- GLOBAL ERROR BANNER -->
     <div class="err-banner" id="err-banner">
       <span class="err-icon">&#9888;</span>
-      <span><b>2 profiles have configuration errors.</b> Heavy reasoning &mdash; model removed; Vision tasks &mdash; provider key missing.</span>
+      <span><b>1 profile has configuration errors.</b> Heavy reasoning &mdash; model removed from provider's catalog.</span>
       <span class="err-action">Open settings &rarr;</span>
     </div>
 
@@ -221,10 +220,9 @@
     <div class="md-layout">
       <aside class="settings-rail">
         <div class="rail-section">
-          <div class="rail-section-title">Providers</div>
-          <div class="nav-item" data-nav="keys">Keys <span class="nav-hint">api keys + default</span></div>
+          <div class="rail-section-title">Generation</div>
+          <div class="nav-item" data-nav="providers">Providers <span class="nav-hint">instances</span></div>
           <div class="nav-item active" data-nav="profiles">Profiles <span class="nav-hint">narrative + agents</span></div>
-          <div class="nav-item" data-nav="imagegen">Image generation</div>
         </div>
 
         <div class="rail-section">
@@ -245,115 +243,103 @@
       </aside>
 
       <section class="settings-pane">
-        <!-- KEYS -->
-        <div class="tab-panel" data-panel="keys">
-          <div class="tab-title">Keys</div>
-          <div class="tab-subtitle">Provider API keys. One provider can be marked default — seeds Narrative profile and reset-to-default actions.</div>
+        <!-- PROVIDERS -->
+        <div class="tab-panel" data-panel="providers">
+          <div class="tab-title">Providers</div>
+          <div class="tab-subtitle">User-managed instances. Add as many as you want — multiple instances of the same type are fine (e.g., separate work + personal Anthropic keys, or two OpenAI-compatible endpoints).</div>
 
           <div class="panel-note">
-            Keys are stored locally in SQLite. Encryption at rest is a tracked followup; not yet specified.
+            Configurations stored locally in SQLite. Encryption at rest is a tracked followup; not yet specified.
           </div>
 
-          <div class="prov-row">
-            <span class="prov-status set">&#10003;</span>
-            <div class="prov-body">
-              <div class="prov-name">
-                Anthropic
-                <span class="prov-default">default</span>
+          <div style="margin-bottom: 16px;">
+            <span style="display: inline-flex; padding: 6px 14px; border: 1px dashed var(--line); border-radius: 3px; background: var(--bg); cursor: pointer; color: var(--ink-muted); font-size: 12px;">+ Add provider &#9662;</span>
+            <span style="font-size: 10px; color: var(--ink-faint); margin-left: 8px;">type picker: Anthropic / OpenAI / Google / OpenRouter / NanoGPT / OpenAI-compatible</span>
+          </div>
+
+          <!-- Anthropic (default) — expanded -->
+          <div class="profile-card">
+            <div class="profile-head">
+              <span class="chevron">&#9662;</span>
+              <span class="profile-name">Anthropic</span>
+              <span class="prov-default" style="margin-left: 8px;">default &#9733;</span>
+              <span class="profile-desc" style="margin-left: 12px;"><code>/messages</code> &middot; native</span>
+              <span class="profile-overflow">&#8943;</span>
+            </div>
+            <div class="profile-body">
+              <div class="field-row">
+                <div class="field-label">display name</div>
+                <input class="input-text" style="max-width: 280px;" value="Anthropic" />
               </div>
-              <div class="prov-meta"><code>/messages</code> &middot; native</div>
-              <div class="prov-key">
-                <span>API key:</span>
-                <span>&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;a3f</span>
-                <div class="prov-actions">
-                  <span class="a">Edit</span>
-                  <span class="a danger">Remove</span>
+              <div class="field-row">
+                <div class="field-label">api key</div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-family: ui-monospace, monospace; font-size: 12px;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;a3f</span>
+                  <span class="prov-actions" style="display: inline-flex;">
+                    <span class="a">Edit</span>
+                    <span class="a">Test</span>
+                  </span>
                 </div>
               </div>
-              <div class="prov-fetch">12 models cached &middot; <span class="refresh">&#8635; refresh</span> &middot; <span style="color: var(--ink-faint);">last fetched 2h ago</span></div>
+              <div class="field-row">
+                <div class="field-label">endpoint
+                  <span class="hint">override default</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 12px; color: var(--ink-muted);">(default) <code>/messages</code></span>
+                  <span class="prov-actions" style="display: inline-flex;"><span class="a">Override&hellip;</span></span>
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field-label">model fetch</div>
+                <div style="font-size: 12px; color: var(--ink-muted); display: flex; align-items: center; gap: 10px;">
+                  12 models cached
+                  <span class="prov-actions" style="display: inline-flex;"><span class="a">&#8635; Refresh</span></span>
+                  <span style="color: var(--ink-faint); font-size: 11px;">last fetched 2h ago</span>
+                </div>
+              </div>
+              <details class="advanced">
+                <summary>Advanced &mdash; custom headers</summary>
+                <div class="body">
+                  <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 6px;">Optional key/value pairs for proxy auth or custom routing.</div>
+                  <textarea class="input-textarea" style="width: 100%; box-sizing: border-box;" placeholder='{ "X-Org": "team-foo" }'></textarea>
+                </div>
+              </details>
             </div>
           </div>
 
-          <div class="prov-row">
-            <span class="prov-status set">&#10003;</span>
-            <div class="prov-body">
-              <div class="prov-name">
-                OpenAI
-                <span style="font-size: 10px; color: var(--ink-faint); font-weight: 400;">[set as default]</span>
-              </div>
-              <div class="prov-meta"><code>/chat/completions</code> + <code>/responses</code> &middot; native</div>
-              <div class="prov-key">
-                <span>API key:</span>
-                <span>&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;f1c</span>
-                <div class="prov-actions">
-                  <span class="a">Edit</span>
-                  <span class="a danger">Remove</span>
-                </div>
-              </div>
-              <div class="prov-fetch">8 models cached &middot; <span class="refresh">&#8635; refresh</span></div>
+          <!-- Anthropic (personal) — collapsed -->
+          <div class="profile-card collapsed">
+            <div class="profile-head">
+              <span class="chevron">&#9662;</span>
+              <span class="profile-name">Anthropic (personal)</span>
+              <span class="profile-desc" style="margin-left: 12px;">second instance of same type &middot; different key</span>
+              <span class="profile-overflow">&#8943;</span>
             </div>
           </div>
 
-          <div class="prov-row">
-            <span class="prov-status">&middot;</span>
-            <div class="prov-body">
-              <div class="prov-name">Google</div>
-              <div class="prov-meta">Gemini &middot; native</div>
-              <div class="prov-key">
-                <span>API key:</span>
-                <span class="placeholder">(not set)</span>
-                <div class="prov-actions">
-                  <span class="a">Add key</span>
-                </div>
-              </div>
+          <!-- OpenRouter (work) — collapsed -->
+          <div class="profile-card collapsed">
+            <div class="profile-head">
+              <span class="chevron">&#9662;</span>
+              <span class="profile-name">OpenRouter (work)</span>
+              <span class="profile-desc" style="margin-left: 12px;">multi-provider gateway &middot; capability flags</span>
+              <span class="profile-overflow">&#8943;</span>
             </div>
           </div>
 
-          <div class="prov-row">
-            <span class="prov-status set">&#10003;</span>
-            <div class="prov-body">
-              <div class="prov-name">OpenRouter</div>
-              <div class="prov-meta">multi-provider gateway &middot; <b>capability flags</b> (reasoning, structured output)</div>
-              <div class="prov-key">
-                <span>API key:</span>
-                <span>&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;7d2</span>
-                <div class="prov-actions">
-                  <span class="a">Edit</span>
-                  <span class="a danger">Remove</span>
-                </div>
-              </div>
-              <div class="prov-fetch">340 models cached &middot; <span class="refresh">&#8635; refresh</span></div>
+          <!-- OpenAI-compatible (Ollama-local) — collapsed -->
+          <div class="profile-card collapsed">
+            <div class="profile-head">
+              <span class="chevron">&#9662;</span>
+              <span class="profile-name">Ollama (local)</span>
+              <span class="profile-desc" style="margin-left: 12px;">OpenAI-compatible &middot; <code>http://localhost:11434/v1</code></span>
+              <span class="profile-overflow">&#8943;</span>
             </div>
           </div>
 
-          <div class="prov-row">
-            <span class="prov-status">&middot;</span>
-            <div class="prov-body">
-              <div class="prov-name">NanoGPT</div>
-              <div class="prov-meta">multi-provider gateway &middot; <b>capability flags</b></div>
-              <div class="prov-key">
-                <span>API key:</span>
-                <span class="placeholder">(not set)</span>
-                <div class="prov-actions">
-                  <span class="a">Add key</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="prov-row">
-            <span class="prov-status">&middot;</span>
-            <div class="prov-body">
-              <div class="prov-name">OpenAI-compatible</div>
-              <div class="prov-meta">catch-all for Ollama / LM Studio / custom endpoints &middot; <span style="color: var(--ink-faint);">capability data unavailable</span></div>
-              <div class="prov-key">
-                <span>endpoint:</span>
-                <span class="placeholder">(not configured)</span>
-                <div class="prov-actions">
-                  <span class="a">Configure&hellip;</span>
-                </div>
-              </div>
-            </div>
+          <div style="margin-top: 16px; padding: 12px; background: var(--bg-region); border: 1px dashed var(--line-soft); border-radius: 4px; font-size: 11px; color: var(--ink-muted);">
+            <b>⋯ menu per provider:</b> Rename &middot; Set as default &middot; Remove. Removing a provider doesn't auto-delete profiles using it; those surface broken-config errors.
           </div>
         </div>
 
@@ -531,16 +517,6 @@
             </div>
           </div>
 
-          <div class="profile-card collapsed error">
-            <div class="profile-head">
-              <span class="chevron">&#9662;</span>
-              <span class="profile-name">Vision tasks</span>
-              <span class="profile-desc">(legacy &mdash; image-gen now lives on its own tab)</span>
-              <span class="profile-err">&#9888; provider key missing</span>
-              <span class="profile-overflow">&#8943;</span>
-            </div>
-          </div>
-
           <!-- ASSIGNMENTS -->
           <div class="assignments-block">
             <h3>Assignments</h3>
@@ -571,52 +547,6 @@
               <div class="input-select" style="max-width: 260px;"><span style="color: var(--ink-faint); font-style: italic;">when designed</span><span style="color: var(--ink-faint);">&#9662;</span></div>
             </div>
           </div>
-        </div>
-
-        <!-- IMAGEGEN -->
-        <div class="tab-panel" data-panel="imagegen">
-          <div class="tab-title">Image generation</div>
-          <div class="tab-subtitle">Single configuration — image-gen parameters don't share shape with text profiles.</div>
-
-          <div class="field-row">
-            <div class="field-label">model</div>
-            <div class="model-select">
-              <span>OpenAI / dall-e-3</span>
-              <span style="margin-left: auto; color: var(--ink-faint);">&#9662;</span>
-            </div>
-          </div>
-          <div class="field-row">
-            <div class="field-label">size</div>
-            <div class="input-select" style="max-width: 220px;"><span>1024 &times; 1024</span><span style="color: var(--ink-faint);">&#9662;</span></div>
-          </div>
-          <div class="field-row">
-            <div class="field-label">quality</div>
-            <div class="segment"><span class="seg">standard</span><span class="seg active">hd</span></div>
-          </div>
-          <div class="field-row">
-            <div class="field-label">style</div>
-            <div class="segment"><span class="seg active">vivid</span><span class="seg">natural</span></div>
-          </div>
-          <div class="field-row">
-            <div class="field-label">prompt prefix
-              <span class="hint">prepended to all generated prompts</span>
-            </div>
-            <textarea class="input-textarea" style="font-family: inherit;" placeholder="(optional &mdash; e.g. 'cinematic, painterly, 4k')"></textarea>
-          </div>
-          <div class="field-row">
-            <div class="field-label">timeout</div>
-            <div class="slider-row">
-              <div class="slider"><span class="slider-thumb" style="left: 30%;"></span></div>
-              <input class="slider-value-input" value="90s" />
-            </div>
-          </div>
-
-          <details class="advanced">
-            <summary>Advanced &mdash; custom JSON payload</summary>
-            <div class="body">
-              <textarea class="input-textarea" style="width: 100%; box-sizing: border-box;" placeholder='{ "background": "transparent", ... }'></textarea>
-            </div>
-          </details>
         </div>
 
         <!-- MEMORY -->

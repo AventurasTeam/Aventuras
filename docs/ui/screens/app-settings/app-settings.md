@@ -17,8 +17,6 @@ Cross-cutting principles that govern this surface are in
   (this surface is the source side; Story Settings is the override side)
 - [Form controls — Select primitive](../../principles.md#form-controls--select-primitive)
 - [Entity editing — explicit save, session-based](../../principles.md#entity-editing--explicit-save-session-based)
-- [Search bar scope](../../principles.md#search-bar-scope)
-  (Profiles tab gets a search input over the agent profile list)
 
 ## Layout
 
@@ -28,16 +26,15 @@ Cross-cutting principles that govern this surface are in
 ├────────────────────────────────────────────────────────────┤
 │ [logo] App Settings                       [⎇] [←]          │ ← top bar
 ├───────────────┬────────────────────────────────────────────┤
-│ PROVIDERS     │ Profiles                                    │ ← pane header
-│ · Keys        │ ─────                                       │
+│ GENERATION    │ Profiles                                    │ ← pane header
+│ · Providers   │ ─────                                       │
 │ · Profiles    │ Narrative profile                           │
-│ · ImageGen    │ [model] [temp] [max] [think] [timeout]      │
-│               │ ▸ Advanced — custom JSON                    │
-│ STORY DEFAULTS│                                             │
-│ · Memory      │ Agent profiles      [+ New profile]         │
-│ · Translation │ ▾ Fast tasks                                │
-│ · Composer    │   …                                         │
-│               │ ▸ Vision tasks                              │
+│               │ [model] [temp] [max] [think] [timeout]      │
+│ STORY DEFAULTS│ ▸ Advanced — custom JSON                    │
+│ · Memory      │                                             │
+│ · Translation │ Agent profiles       [+ New profile]        │
+│ · Composer    │ ▾ Fast tasks                                │
+│               │ ▸ Heavy reasoning                           │
 │ APP           │                                             │
 │ · Appearance  │ Assignments                                 │
 │ · Language    │ classifier:  [Fast tasks ▾]                 │
@@ -49,21 +46,29 @@ Cross-cutting principles that govern this surface are in
 └───────────────┴────────────────────────────────────────────┘
 ```
 
-11 tabs across 3 sections.
+10 tabs across 3 sections.
 
 ## Section split
 
-**PROVIDERS** — LLM provider configuration (keys, profiles for text
-models, image-gen config).
+**GENERATION** — LLM generation configuration (provider instances +
+profiles for text models). Image generation is **deferred** —
+tracked as its own followup. The agent assignment list reflects this
+(no `imageGen` entry).
 **STORY DEFAULTS** — values copied into new stories at creation time
 (per the
 [settings scope policy](../../principles.md#settings-architecture--split-by-location)).
 **APP** — general app behavior (theme, language, data ops, about,
 diagnostics).
 
-## PROVIDERS · Keys
+## GENERATION · Providers
 
-API key entry per provider. Six providers in v1:
+**Providers are user-managed instances**, not a fixed list of slots.
+The user adds providers as they want, can configure multiple
+instances of the same type (e.g., separate work + personal Anthropic
+keys, or two OpenAI-compatible endpoints pointing at different
+local Ollama installs).
+
+Six provider **types** available in v1:
 
 - **Anthropic** — `/messages`
 - **OpenAI** — chat + new `/responses`
@@ -71,27 +76,70 @@ API key entry per provider. Six providers in v1:
 - **OpenRouter** — has model capability flags (reasoning, structured
   output)
 - **NanoGPT** — has model capability flags
-- **OpenAI-compatible** — catch-all for Ollama / LM Studio / custom
-  endpoints (user supplies endpoint URL + key)
+- **OpenAI-compatible** — catch-all for Ollama / LM Studio / any
+  endpoint speaking OpenAI's chat shape (user supplies endpoint URL)
 
-Each provider row shows:
+### Provider list
 
-- Status (✓ configured / ○ not set)
-- API key (masked: `••••••••••••a3f`); edit / remove actions
-- Model fetch state — `12 cached · [refresh ↻]`. The fetch hits the
-  provider's `/models` endpoint and caches the result; manual refresh
-  re-fetches.
-- "Default" badge ⭐ on the user's chosen default provider (one star
-  total across all providers).
+Empty by default after install (until Onboarding seeds one). Each
+configured provider renders as a collapsible row:
 
-**Default provider** — set during onboarding, editable here. The
-default provider seeds the Narrative profile and "reset to defaults"
-actions across the rest of the app.
+```
+[+ Add provider ▾]                    ← type picker
 
-**Storage.** API keys live in SQLite per the data strategy. Encryption
-at rest is a tracked followup; surfacing it here would be premature.
+▾ Anthropic                ⭐ default        [⋯]
+  display name:  [Anthropic                  ]
+  api key:       [••••••••••••a3f] [Edit] [Test]
+  endpoint:      (default) /messages           [override…]
+  custom headers: (none)                       [add…]
+  models cached: 12 · [Refresh ↻]
+  ────
+  ▸ Advanced
 
-## PROVIDERS · Profiles
+▸ Anthropic (personal)                  [⋯]
+▸ OpenRouter (work)                     [⋯]
+```
+
+Each provider carries:
+
+- **Display name** — user-chosen, shown in dropdowns and assignments.
+  Defaults to the provider type with a `(N)` suffix when multiple of
+  the same type exist.
+- **Type** — picked at creation, immutable thereafter (changing type
+  effectively means making a new provider).
+- **API key** — masked. Edit / remove actions inline. Optional
+  "Test" button hits the provider's `/models` or auth endpoint to
+  verify connectivity.
+- **Endpoint** — defaults to the type's standard endpoint. Editable
+  for users routing through proxies, regional endpoints, or
+  OpenAI-compatible custom URLs.
+- **Custom headers** — optional key/value pairs for proxy auth or
+  custom routing. Collapsed under "Advanced" by default.
+- **Model cache state** — `N cached · [Refresh ↻]`. Hits the
+  provider's `/models` endpoint, caches results.
+
+### Provider menu (⋯)
+
+- **Rename** — change display name.
+- **Set as default** — moves the ⭐ to this provider; replaces the
+  current default (one default total). Triggers update of any
+  "App default" sentinel resolutions.
+- **Remove** — confirmation prompt; profiles using this provider's
+  models surface broken-config errors after removal (not auto-deleted).
+
+### Default provider
+
+One configured provider can be marked default (⭐ badge on the row).
+Set during Onboarding, editable here. The default provider seeds the
+Narrative profile model and "Reset to defaults" actions across the
+rest of the app.
+
+### Storage
+
+API keys live in SQLite per the data strategy. Encryption at rest is
+a tracked followup; surfacing it in the wireframe would be premature.
+
+## GENERATION · Profiles
 
 The complex tab. Three vertical zones; narrative dominates the
 viewport top, agent profiles are a manageable accordion below,
@@ -138,10 +186,8 @@ when agents are still assigned — the user is prompted to reassign
 first).
 
 **Default agent profiles seeded by Onboarding:** `Fast tasks` (cheap
-routine agents), `Vision tasks` (image gen — actually moved to its
-own tab; see ImageGen below), `Heavy reasoning` (lore-mgmt +
-memory-compaction at chapter close). User can rename / delete /
-extend.
+routine agents) and `Heavy reasoning` (lore-mgmt + memory-compaction
+at chapter close). User can rename / delete / extend.
 
 ### Assignments
 
@@ -156,6 +202,10 @@ Each agent dropdown picks a profile. Agents currently in the system:
 
 Default assignment seeded by Onboarding (typically all → `Fast tasks`
 except the chapter-close pair → `Heavy reasoning`).
+
+Image generation is **deferred** as a feature; no `imageGen` agent
+entry until the feature lands. Tracked in
+[`followups.md`](../../../followups.md#image-generation).
 
 ### Per-profile error states + global banner
 
@@ -183,25 +233,6 @@ Power-user features that earn their v1 weight:
   Pinned models float to the top of the list across all selectors.
 - **Refresh fetch** — `↻` button on the provider row in Keys,
   per-dropdown manual refresh on the model picker.
-
-## PROVIDERS · ImageGen
-
-Different shape from text profiles — image-gen parameters don't
-overlap with temperature/max-output/thinking. Single configuration
-(no profile system; image-gen is one job, one model):
-
-- **provider/model** — dropdown filtered to image-gen capable models.
-- **size** — preset dropdown (256, 512, 1024, custom).
-- **quality** — preset (standard / hd / etc., per provider).
-- **style** — preset (vivid / natural / etc., per provider).
-- **custom prompt prefix** — optional text prepended to all generated
-  prompts (style direction).
-- **timeout** — same 5–300s pattern.
-- **Advanced — custom JSON payload** — same per-field override
-  affordance.
-
-Story Settings · Models can override the imageGen model id (and
-nothing else for v1; deep per-story image-gen params is a followup).
 
 ## STORY DEFAULTS
 
