@@ -142,31 +142,32 @@
   .modal-section { margin-bottom: 14px; }
   .modal-section-label { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
 
-  /* shared entry-display anatomy: number + snippet + time + optional context tag */
-  .entry-display { padding: 10px 12px; background: var(--bg); border: 1px solid var(--line-soft); border-radius: 3px; }
-  .entry-display-head, .picker-item .item-head, .end-picker .picker-content-head { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; flex-wrap: wrap; }
-  .entry-num { font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-muted); font-weight: 600; }
-  .entry-tag { font-size: 10px; color: var(--ink-muted); font-style: italic; padding: 1px 7px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--bg-region); }
-  .entry-snippet { font-size: 12px; color: var(--ink); line-height: 1.45; font-style: italic; margin: 2px 0 3px; }
-  .entry-time { font-size: 10px; color: var(--ink-faint); }
-
-  /* end-entry picker — closed state */
-  .picker-wrap { position: relative; }
-  .end-picker { display: flex; align-items: flex-start; gap: 10px; width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); cursor: pointer; font-family: inherit; text-align: left; }
-  .end-picker:hover { border-color: var(--ink-muted); }
-  .end-picker .picker-content { flex: 1; min-width: 0; }
-  .end-picker .picker-arrow { color: var(--ink-faint); font-size: 11px; padding-top: 4px; transition: transform 0.12s; flex-shrink: 0; }
-  body[data-picker="open"] .end-picker { border-color: var(--ink); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-  body[data-picker="open"] .end-picker .picker-arrow { transform: rotate(180deg); }
+  /* single-line entry rows — used for start-of-chapter row + picker trigger */
+  .entry-row { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid var(--line-soft); border-radius: 3px; background: var(--bg); }
+  .entry-row.trigger { background: var(--bg-region); border-color: var(--line); cursor: pointer; width: 100%; box-sizing: border-box; font-family: inherit; text-align: left; }
+  .entry-row.trigger:hover { border-color: var(--ink-muted); }
+  body[data-picker="open"] .entry-row.trigger { border-color: var(--ink); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  .entry-num { font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-muted); font-weight: 600; flex-shrink: 0; }
+  .entry-tag { font-size: 10px; color: var(--ink-muted); font-style: italic; padding: 1px 7px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--bg-region); flex-shrink: 0; }
+  .entry-row .entry-snippet { font-size: 12px; color: var(--ink); font-style: italic; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .entry-time { font-size: 11px; color: var(--ink-faint); flex-shrink: 0; }
+  .picker-arrow { color: var(--ink-faint); font-size: 11px; flex-shrink: 0; transition: transform 0.12s; }
+  body[data-picker="open"] .entry-row.trigger .picker-arrow { transform: rotate(180deg); }
 
   /* end-entry picker — open dropdown panel */
-  .picker-panel { display: none; border: 1px solid var(--ink); border-top: none; max-height: 280px; overflow-y: auto; background: var(--bg-region); border-bottom-left-radius: 3px; border-bottom-right-radius: 3px; }
+  .picker-wrap { position: relative; }
+  .picker-panel { display: none; border: 1px solid var(--ink); border-top: none; max-height: 320px; overflow-y: auto; background: var(--bg-region); border-bottom-left-radius: 3px; border-bottom-right-radius: 3px; }
   body[data-picker="open"] .picker-panel { display: block; }
+
+  /* dropdown item — head row + 2-line snippet */
   .picker-item { padding: 10px 12px; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
   .picker-item:hover { background: var(--bg-highlight); }
   .picker-item.selected { background: #f0f4ff; }
-  .picker-item .check { display: none; color: var(--ok); font-weight: 700; }
-  .picker-item.selected .check { display: inline; }
+  .picker-item-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .picker-item-head .check { color: var(--ok); font-weight: 700; flex-shrink: 0; visibility: hidden; }
+  .picker-item.selected .picker-item-head .check { visibility: visible; }
+  .picker-item-head .entry-time { margin-left: auto; }
+  .picker-item-snippet { font-size: 12px; color: var(--ink); line-height: 1.45; font-style: italic; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .picker-item-tail { padding: 10px 12px; font-size: 11px; color: var(--ink-faint); font-style: italic; text-align: center; border-top: 1px dashed var(--line-soft); background: var(--bg); }
 
   .modal-tokens { margin-top: 8px; font-size: 12px; color: var(--ink-muted); }
@@ -372,71 +373,65 @@
 
       <div class="modal-section">
         <div class="modal-section-label">Start of chapter</div>
-        <div class="entry-display">
-          <div class="entry-display-head">
-            <span class="entry-num">entry 89</span>
-            <span class="entry-tag">Chapter 4 ended here</span>
-          </div>
-          <div class="entry-snippet">&ldquo;Aria sets out at first light, Kael trailing two paces behind.&rdquo;</div>
-          <div class="entry-time">Day 7 &middot; 06:42</div>
+        <div class="entry-row">
+          <span class="entry-num">entry 89</span>
+          <span class="entry-tag">Chapter 4 ended here</span>
+          <span class="entry-snippet">&ldquo;Aria sets out at first light, Kael trailing two paces behind. The city walls lean inward, soaked in the dawn's grey light.&rdquo;</span>
+          <span class="entry-time">Day 7 &middot; 06:42</span>
         </div>
       </div>
 
       <div class="modal-section">
         <div class="modal-section-label">End of chapter</div>
         <div class="picker-wrap">
-          <button class="end-picker" id="end-picker" type="button">
-            <span class="picker-content">
-              <span class="picker-content-head">
-                <span class="entry-num" id="picker-num">entry 102</span>
-                <span class="entry-tag" id="picker-tag">latest</span>
-              </span>
-              <span class="entry-snippet" id="picker-snippet">&ldquo;...the bouncer signals to silence.&rdquo;</span>
-              <span class="entry-time" id="picker-time">Day 9 &middot; 22:18</span>
-            </span>
+          <button class="entry-row trigger" id="end-picker" type="button">
+            <span class="entry-num" id="picker-num">entry 102</span>
+            <span class="entry-tag" id="picker-tag">latest</span>
+            <span class="entry-snippet" id="picker-snippet">&ldquo;She stops at the threshold and listens. The room beyond is quieter than it should be.&rdquo;</span>
+            <span class="entry-time" id="picker-time">Day 9 &middot; 22:18</span>
             <span class="picker-arrow">&#9662;</span>
           </button>
           <div class="picker-panel" id="picker-panel">
-            <div class="picker-item selected" data-entry="102" data-tag="latest" data-snippet="&ldquo;...the bouncer signals to silence.&rdquo;" data-time="Day 9 &middot; 22:18">
-              <div class="item-head">
+            <div class="picker-item selected" data-entry="102" data-tag="latest" data-snippet="&ldquo;She stops at the threshold and listens. The room beyond is quieter than it should be. Lantern light catches on the bouncer's shoulder near the back door.&rdquo;" data-time="Day 9 &middot; 22:18">
+              <div class="picker-item-head">
                 <span class="check">&check;</span>
                 <span class="entry-num">entry 102</span>
                 <span class="entry-tag">latest</span>
+                <span class="entry-time">Day 9 &middot; 22:18</span>
               </div>
-              <div class="entry-snippet">&ldquo;...the bouncer signals to silence.&rdquo;</div>
-              <div class="entry-time">Day 9 &middot; 22:18</div>
+              <div class="picker-item-snippet">&ldquo;She stops at the threshold and listens. The room beyond is quieter than it should be. Lantern light catches on the bouncer's shoulder near the back door.&rdquo;</div>
             </div>
-            <div class="picker-item" data-entry="101" data-tag="" data-snippet="&ldquo;She pauses at the threshold, listening for footsteps.&rdquo;" data-time="Day 9 &middot; 22:14">
-              <div class="item-head">
+            <div class="picker-item" data-entry="101" data-tag="" data-snippet="&ldquo;Kael waves her forward, palm open. 'It's clear,' he murmurs, and steps through the doorway into the lamp-lit corridor.&rdquo;" data-time="Day 9 &middot; 22:14">
+              <div class="picker-item-head">
                 <span class="check">&check;</span>
                 <span class="entry-num">entry 101</span>
+                <span class="entry-time">Day 9 &middot; 22:14</span>
               </div>
-              <div class="entry-snippet">&ldquo;She pauses at the threshold, listening for footsteps.&rdquo;</div>
-              <div class="entry-time">Day 9 &middot; 22:14</div>
+              <div class="picker-item-snippet">&ldquo;Kael waves her forward, palm open. 'It's clear,' he murmurs, and steps through the doorway into the lamp-lit corridor.&rdquo;</div>
             </div>
-            <div class="picker-item" data-entry="100" data-tag="" data-snippet="&ldquo;...crates piled against the rear door, recent and deliberate.&rdquo;" data-time="Day 9 &middot; 21:50">
-              <div class="item-head">
+            <div class="picker-item" data-entry="100" data-tag="" data-snippet="&ldquo;They reach the back hall, narrow and dim. Crates have been piled against the rear door &mdash; recent and deliberate, the wood still pale where it was dragged.&rdquo;" data-time="Day 9 &middot; 21:50">
+              <div class="picker-item-head">
                 <span class="check">&check;</span>
                 <span class="entry-num">entry 100</span>
+                <span class="entry-time">Day 9 &middot; 21:50</span>
               </div>
-              <div class="entry-snippet">&ldquo;...crates piled against the rear door, recent and deliberate.&rdquo;</div>
-              <div class="entry-time">Day 9 &middot; 21:50</div>
+              <div class="picker-item-snippet">&ldquo;They reach the back hall, narrow and dim. Crates have been piled against the rear door &mdash; recent and deliberate, the wood still pale where it was dragged.&rdquo;</div>
             </div>
-            <div class="picker-item" data-entry="99" data-tag="" data-snippet="&ldquo;Two bouncers stand near the side door, watching the room.&rdquo;" data-time="Day 9 &middot; 21:38">
-              <div class="item-head">
+            <div class="picker-item" data-entry="99" data-tag="" data-snippet="&ldquo;Two bouncers stand by the side door, watching the room with practiced disinterest. The taller one's hand rests inside his coat. He looks tired.&rdquo;" data-time="Day 9 &middot; 21:38">
+              <div class="picker-item-head">
                 <span class="check">&check;</span>
                 <span class="entry-num">entry 99</span>
+                <span class="entry-time">Day 9 &middot; 21:38</span>
               </div>
-              <div class="entry-snippet">&ldquo;Two bouncers stand near the side door, watching the room.&rdquo;</div>
-              <div class="entry-time">Day 9 &middot; 21:38</div>
+              <div class="picker-item-snippet">&ldquo;Two bouncers stand by the side door, watching the room with practiced disinterest. The taller one's hand rests inside his coat. He looks tired.&rdquo;</div>
             </div>
-            <div class="picker-item" data-entry="98" data-tag="" data-snippet="&ldquo;The narrow hallway smells of damp brick and old smoke.&rdquo;" data-time="Day 9 &middot; 21:25">
-              <div class="item-head">
+            <div class="picker-item" data-entry="98" data-tag="" data-snippet="&ldquo;The room's volume drops a notch. Eyes flick toward the door, then back to drinks &mdash; nobody wants to look interested in whoever just walked in.&rdquo;" data-time="Day 9 &middot; 21:25">
+              <div class="picker-item-head">
                 <span class="check">&check;</span>
                 <span class="entry-num">entry 98</span>
+                <span class="entry-time">Day 9 &middot; 21:25</span>
               </div>
-              <div class="entry-snippet">&ldquo;The narrow hallway smells of damp brick and old smoke.&rdquo;</div>
-              <div class="entry-time">Day 9 &middot; 21:25</div>
+              <div class="picker-item-snippet">&ldquo;The room's volume drops a notch. Eyes flick toward the door, then back to drinks &mdash; nobody wants to look interested in whoever just walked in.&rdquo;</div>
             </div>
             <div class="picker-item-tail">
               + 9 more entries (scrollable back to entry 89)

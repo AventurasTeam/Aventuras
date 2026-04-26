@@ -184,94 +184,119 @@ Triggered from two places: this screen's `Close chapter…` button
 button. Same modal, same shape — uniform UX.
 
 ```
-┌──── Close current chapter? ──────────────── × ─┐
-│                                                  │
-│  Closes the open chapter from entry 89 through   │
-│  your chosen end entry. The AI generates title,  │
-│  summary, theme, and keywords; lore management   │
-│  and memory compaction run as part of the close. │
-│                                                  │
-│  ── Start of chapter ──                          │
-│  ┌─────────────────────────────────────────┐    │
-│  │ entry 89   [Chapter 4 ended here]       │    │
-│  │ "Aria sets out at first light, Kael…"   │    │
-│  │ Day 7 · 06:42                            │    │
-│  └─────────────────────────────────────────┘    │
-│                                                  │
-│  ── End of chapter ──                            │
-│  ┌─────────────────────────────────────┬─┐      │
-│  │ entry 102   [latest]                │▾│      │
-│  │ "...the bouncer signals to silence" │ │      │
-│  │ Day 9 · 22:18                       │ │      │
-│  └─────────────────────────────────────┴─┘      │
-│                                                  │
-│  14,200 tokens in range                          │
-│                                                  │
-│              [ Cancel ]  [ Close chapter ]       │
-└──────────────────────────────────────────────────┘
+┌──── Close current chapter? ──────────────────── × ─┐
+│                                                      │
+│  Closes the open chapter from entry 89 through       │
+│  your chosen end entry. The AI generates title,      │
+│  summary, theme, and keywords; lore management       │
+│  and memory compaction run as part of the close.     │
+│                                                      │
+│  ── Start of chapter ──                              │
+│  ┌────────────────────────────────────────────────┐ │
+│  │ entry 89 [Chapter 4 ended here] "Aria sets…"   │ │
+│  │                                Day 7 · 06:42   │ │
+│  └────────────────────────────────────────────────┘ │
+│                                                      │
+│  ── End of chapter ── (picker trigger, click to open)│
+│  ┌────────────────────────────────────────────────┐ │
+│  │ entry 102 [latest] "She stops at the threshol…"│ │
+│  │                              Day 9 · 22:18  ▾  │ │
+│  └────────────────────────────────────────────────┘ │
+│                                                      │
+│  14,200 tokens in range                              │
+│                                                      │
+│                [ Cancel ]  [ Close chapter ]         │
+└──────────────────────────────────────────────────────┘
 ```
 
 - **Width** ~480px. Centered. Backdrop dim.
 - **Title** — `Close current chapter?` Entry-agnostic on purpose:
   the user picks the end entry inside the modal, so naming a
   specific entry up front would be presumptuous of the default.
-- **Body** — one-sentence framing + start-entry display + end-entry
+- **Body** — one-sentence framing + start-entry row + end-entry
   picker + live token count.
 - **Foot** — `Cancel` (secondary) + `Close chapter` (primary, ink —
   this is constructive, not destructive). Esc and click-outside
   cancel.
 
-### Entry display anatomy
+### Entry-row anatomy (start row + picker trigger)
 
-Both the start-of-chapter card and every end-picker row use the
-same three fields. Bare entry numbers carry no semantic load —
-"entry 102" looks identical to "entry 47" without context — so the
-display always pairs the number with a snippet and a time:
+Both the start-of-chapter row and the **picker trigger** (the
+always-visible button representing the current end pick) use the
+same single-line shape:
+
+```
+[entry-num] [optional tag] [snippet — truncates with …]    [time]  [▾]
+```
+
+Fields, left-to-right:
 
 - **Number** — `entry <N>` in muted monospace.
-- **Snippet** — first ~80 characters of the entry's content,
-  italicized. Trailing ellipsis when truncated; opening ellipsis
-  when the snippet starts mid-sentence (e.g. an AI reply
-  continuing from the previous beat).
-- **Time** — formatted via the active calendar formatter (the same
-  formatter the reader's time chip uses).
+- **Optional tag** — small chip-style label when applicable
+  (`Chapter <N> ended here` on the start row; `latest` on the
+  picker trigger when the latest entry is selected).
+- **Snippet** — first ~80 chars of `story_entries.content`,
+  italicized. Single line; trailing ellipsis when truncated.
+- **Time** — right-aligned. Formatted via the active calendar
+  formatter (same formatter the reader's time chip uses).
+- **Chevron** — picker trigger only. Rotates 180° when the panel
+  is open.
 
-Optional **context tag** — small chip-style label appended to the
-number row when applicable:
+Both rows render with the same border + padding so the start row
+and picker trigger read as visually paired cards (start above,
+end below).
 
-- Start row carries `Chapter <N> ended here` to anchor where the
-  open region began.
-- End-picker's currently-latest entry carries `latest`.
-
-### End-entry picker
+### End-entry picker — dropdown panel
 
 Default selection: the latest entry in the open region.
 
-**Closed state** — the picker renders as a single button with the
-same entry-display anatomy as the start row (number + tag +
-snippet + time), with a chevron on the right. Visually consistent
-with the start-of-chapter card directly above.
+Clicking the picker trigger opens a dropdown panel **in-flow**
+below it (the modal grows vertically; panel is scrollable when
+more entries exist than fit in ~320px). Entries are listed
+newest-first, back to the start of the open region.
 
-**Open state** — clicking the closed picker opens a dropdown panel
-in-flow below the picker (modal grows vertically to accommodate;
-the panel is scrollable when more entries exist than fit in
-~280px). Entries are listed newest-first, back to the start of the
-open region. Each row uses the same anatomy; the currently
-selected row carries a `✓` glyph in its head.
+Each dropdown item is a **two-line layout** (richer preview than
+the single-line trigger):
 
-Picking an entry updates the closed-state button's number / tag /
-snippet / time and the modal's `tokens in range` line, then
-collapses the panel.
+```
+[✓] entry-num [optional tag]                            [time]
+"snippet wrapping to two lines via line-clamp; longer than the
+trigger's single-line truncation; …"
+```
 
-Why an explicit picker (vs `close at latest` button): manual
+- **Head row** — `✓` glyph (visible only on the selected row),
+  entry-num, optional tag, time right-aligned.
+- **Snippet row** — same first ~80 chars of entry content, but
+  rendered with `line-clamp: 2` so up to two visual lines show
+  before truncation. Gives the user a real read of each option,
+  not a single-line tease.
+
+Picking an entry:
+
+1. Updates the trigger's snippet / number / tag / time.
+2. Updates the modal's `tokens in range` line (live count for
+   the new range).
+3. Collapses the panel.
+
+Why an explicit picker (vs a `close at latest` button): manual
 chapter close is exactly the place users want to choose a natural
 ending point (per
 [data-model → Chapters / memory system](../../../data-model.md#chapters--memory-system):
 "User can also manually trigger chapter-create at any time,
 choosing the ending entry explicitly"). Latest-by-default covers
-the common case; the picker covers the rest, and the snippet +
-time are what make picking actually meaningful instead of
+the common case; the picker covers the rest, and the
+snippet + time are what make picking meaningful instead of
 guesswork on bare numbers.
+
+### Snippet origin
+
+Snippet is the **first ~80 chars of `story_entries.content`** in
+all surfaces (start row, picker trigger, dropdown items). One rule
+across the modal — no end-of-entry / mid-entry variants. Same rule
+also applies to the
+[rollback-confirm modal's affected-entries display](../reader-composer/rollback-confirm/rollback-confirm.md).
+The reader has the full text if a user wants more context; the
+modals are scanning surfaces, not reading surfaces.
 
 ### Why a single shared modal
 
