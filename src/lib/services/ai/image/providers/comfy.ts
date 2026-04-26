@@ -44,14 +44,28 @@ const unetModelNames = new Map<string, Promise<Set<string>>>()
 const autoClipCache = new Map<string, string>()
 const autoVaeCache = new Map<string, string>()
 
-async function fetchModelList(baseUrl: string, type: string): Promise<string[]> {
+export async function fetchModelList(
+  baseUrl: string,
+  type: string,
+  timeoutMs?: number,
+): Promise<string[]> {
+  const controller = new AbortController()
+  const timerId = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null
   try {
-    const resp = await fetch(`${baseUrl}/models/${type}`)
+    const resp = await fetch(`${baseUrl}/models/${type}`, { signal: controller.signal })
     if (!resp.ok) return []
     return (await resp.json()) as string[]
   } catch {
     return []
+  } finally {
+    if (timerId !== null) clearTimeout(timerId)
   }
+}
+
+export function clearComfyCacheForUrl(baseUrl: string): void {
+  unetModelNames.delete(baseUrl)
+  autoClipCache.delete(baseUrl)
+  autoVaeCache.delete(baseUrl)
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +292,9 @@ function buildOnFailedHandler(
     if (nodeErrors && Object.keys(nodeErrors).length > 0) {
       const details = Object.entries(nodeErrors)
         .map(([node, err]: [string, any]) => {
-          const nodeMsgs = err.errors.map((e: any) => e.message).join(', ')
+          const nodeMsgs = Array.isArray(err.errors)
+            ? err.errors.map((e: any) => e.message).join(', ')
+            : (err.message ?? JSON.stringify(err))
           return `Node ${node} (${err.class_type}): ${nodeMsgs}`
         })
         .join('; ')
@@ -294,6 +310,9 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL
 
   const api = new ComfyApi(baseUrl).init()
+
+  // Binds baseUrl + optional timeout so internal callers don't repeat them.
+  const fetchModels = (type: string) => fetchModelList(baseUrl, type, config.timeoutMs)
 
   return {
     id: 'comfyui',
@@ -374,10 +393,13 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       // Auto-detect mode: explicit override wins, then lora presence, then unet set, then basic.
       // Store a Promise in the map so concurrent calls share the same fetch instead of racing.
       if (!unetModelNames.has(baseUrl)) {
-        unetModelNames.set(
-          baseUrl,
-          fetchModelList(baseUrl, 'diffusion_models').then((m) => new Set(m)),
-        )
+        const p = fetchModels('diffusion_models')
+          .then((m) => new Set(m))
+          .catch((err) => {
+            unetModelNames.delete(baseUrl)
+            throw err
+          })
+        unetModelNames.set(baseUrl, p)
       }
       const unetNames = await unetModelNames.get(baseUrl)!
 
@@ -403,14 +425,14 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
 
         let clipName = (providerOptions?.clipName as string) || autoClipCache.get(baseUrl) || ''
         if (!clipName) {
-          const clips = await fetchModelList(baseUrl, 'text_encoders')
+          const clips = await fetchModels('text_encoders')
           clipName = clips[0] || ''
           if (clipName) autoClipCache.set(baseUrl, clipName)
         }
 
         let vaeName = (providerOptions?.vaeName as string) || autoVaeCache.get(baseUrl) || ''
         if (!vaeName) {
-          const vaes = await fetchModelList(baseUrl, 'vae')
+          const vaes = await fetchModels('vae')
           vaeName = vaes[0] || ''
           if (vaeName) autoVaeCache.set(baseUrl, vaeName)
         }
@@ -557,9 +579,9 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       try {
         const [checkpoints, diffusionModels, textEncoders, vaeModels] = await Promise.all([
           api.getCheckpoints().catch(() => [] as string[]),
-          fetchModelList(baseUrl, 'diffusion_models'),
-          fetchModelList(baseUrl, 'text_encoders'),
-          fetchModelList(baseUrl, 'vae'),
+          fetchModels('diffusion_models'),
+          fetchModels('text_encoders'),
+          fetchModels('vae'),
         ])
 
         // Cache auto-detected clip/vae for this baseUrl

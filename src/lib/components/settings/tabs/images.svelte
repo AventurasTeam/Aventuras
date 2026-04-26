@@ -18,7 +18,12 @@
     ComfyMode,
     type ImageModelInfo,
   } from '$lib/services/ai/image'
-  import { validateApiWorkflow, detectWorkflowFields } from '$lib/services/ai/image/providers/comfy'
+  import {
+    validateApiWorkflow,
+    detectWorkflowFields,
+    fetchModelList,
+    clearComfyCacheForUrl,
+  } from '$lib/services/ai/image/providers/comfy'
   import type { ComfyCustomWorkflow } from '$lib/services/ai/image/providers/types'
   import ImageModelSelect from '$lib/components/settings/ImageModelSelect.svelte'
   import type { ImageProfile, ImageProviderType, APIProfile } from '$lib/types'
@@ -186,6 +191,10 @@
   let workflowPickerSelection = $state<string>('')
   let workflowError = $state<string | null>(null)
   let workflowFileName = $state<string | null>(null)
+
+  // Tracks the baseUrl active when the last cache population happened; used to
+  // detect URL changes and evict stale cache entries in comfy.ts.
+  let prevComfyBaseUrl: string | null = null
 
   // UNet mode specific state
   let profileClipName = $state('')
@@ -488,6 +497,7 @@
     profileSteps = 6
     profilePositivePrompt = ''
     profileNegativePrompt = ''
+    prevComfyBaseUrl = null
     profileCustomWorkflow = null
     pendingWorkflowData = null
     workflowAmbiguousNodes = []
@@ -515,6 +525,7 @@
     profileName = profile.name
     profileProviderType = profile.providerType
     profileApiKey = profile.apiKey
+    prevComfyBaseUrl = null
     profileBaseUrl = profile.baseUrl || ''
     profileModel = profile.model || ''
     profileModels = []
@@ -711,12 +722,8 @@
     isLoadingUnetModels = true
     try {
       const [clips, vaes] = await Promise.all([
-        fetch(`${baseUrl}/models/text_encoders`)
-          .then((r) => (r.ok ? (r.json() as Promise<string[]>) : []))
-          .catch(() => [] as string[]),
-        fetch(`${baseUrl}/models/vae`)
-          .then((r) => (r.ok ? (r.json() as Promise<string[]>) : []))
-          .catch(() => [] as string[]),
+        fetchModelList(baseUrl, 'text_encoders', settings.apiSettings.llmTimeoutMs),
+        fetchModelList(baseUrl, 'vae', settings.apiSettings.llmTimeoutMs),
       ])
       availableClips = clips
       availableVaes = vaes
@@ -729,6 +736,20 @@
   $effect(() => {
     if (profileMode === ComfyMode.UnetTxt2Img && availableClips.length === 0) {
       void loadUnetModels()
+    }
+  })
+
+  // Evict comfy.ts caches when the user changes the ComfyUI base URL so that
+  // the next generate/listModels call fetches fresh model lists.
+  $effect(() => {
+    if (profileProviderType === 'comfyui') {
+      const currentUrl = profileBaseUrl.trim() || 'http://localhost:8188'
+      if (prevComfyBaseUrl !== null && prevComfyBaseUrl !== currentUrl) {
+        clearComfyCacheForUrl(prevComfyBaseUrl)
+      }
+      prevComfyBaseUrl = currentUrl
+    } else {
+      prevComfyBaseUrl = null
     }
   })
 </script>

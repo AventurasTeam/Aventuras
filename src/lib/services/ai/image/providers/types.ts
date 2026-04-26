@@ -70,4 +70,5 @@ export interface ImageProviderConfig {
   apiKey: string
   baseUrl?: string
   providerOptions?: Record<string, unknown>
+  timeoutMs?: number
 }

@@ -111,6 +111,7 @@ export async function generateImage(options: {
     apiKey: profile.apiKey,
     baseUrl: profile.baseUrl,
     providerOptions: profile.providerOptions,
+    timeoutMs: settings.apiSettings.llmTimeoutMs,
   }
 
   const provider = PROVIDER_FACTORIES[profile.providerType](config)
@@ -147,6 +148,7 @@ export async function listImageModels(profileId: string): Promise<ImageModelInfo
     const config: ImageProviderConfig = {
       apiKey: profile.apiKey,
       baseUrl: profile.baseUrl,
+      timeoutMs: settings.apiSettings.llmTimeoutMs,
     }
     const provider = PROVIDER_FACTORIES[profile.providerType](config)
     const models = await provider.listModels(profile.apiKey)
@@ -194,7 +196,7 @@ export async function getComfySamplerInfo(
   baseUrl?: string,
 ): Promise<{ samplers: string[]; schedulers: string[] }> {
   try {
-    const config: ImageProviderConfig = { apiKey: '', baseUrl }
+    const config: ImageProviderConfig = { apiKey: '', baseUrl, timeoutMs: settings.apiSettings.llmTimeoutMs }
     const provider = createComfyProvider(config)
     if (provider.getSamplerInfo) {
       return await provider.getSamplerInfo()
@@ -211,7 +213,7 @@ export async function getComfySamplerInfo(
  */
 export async function listLoras(baseUrl?: string): Promise<string[]> {
   try {
-    const config: ImageProviderConfig = { apiKey: '', baseUrl }
+    const config: ImageProviderConfig = { apiKey: '', baseUrl, timeoutMs: settings.apiSettings.llmTimeoutMs }
     const provider = createComfyProvider(config)
     if (provider.listLoras) {
       return await provider.listLoras()
