@@ -334,24 +334,27 @@
   const loraItems = $derived(availableLoras.map((l) => ({ value: l, label: l })))
 
   // Load models for the profile form when provider/apiKey change
+  let profileModelsReqId = 0
+
   async function loadProfileFormModels(
     providerType: ImageProviderType,
     apiKey: string,
     forceReload: boolean,
   ) {
     const baseUrl = profileBaseUrl || undefined
+    const reqId = ++profileModelsReqId
     isLoadingProfileModels = true
     profileModelsError = null
     try {
       const models = await listImageModelsByProvider(providerType, apiKey, forceReload, baseUrl)
-      // Discard stale results if provider/url changed while the request was in flight.
-      if (profileProviderType !== providerType || (profileBaseUrl || undefined) !== baseUrl) return
+      // Discard stale results if a newer request has already started.
+      if (reqId !== profileModelsReqId) return
       profileModels = models
     } catch (error) {
-      if (profileProviderType !== providerType || (profileBaseUrl || undefined) !== baseUrl) return
+      if (reqId !== profileModelsReqId) return
       profileModelsError = error instanceof Error ? error.message : 'Failed to load models'
     } finally {
-      isLoadingProfileModels = false
+      if (reqId === profileModelsReqId) isLoadingProfileModels = false
     }
   }
 
@@ -446,7 +449,7 @@
 
   // Save current profile edits (called when collapsible closes)
   async function autoSaveProfile() {
-    if (isNewProfile || !editingProfileId || !profileName.trim()) return
+    if (isNewProfile || !editingProfileId || !canSaveProfile) return
 
     await settings.updateImageProfile(editingProfileId, {
       name: profileName.trim(),
@@ -735,21 +738,23 @@
   // UNet model loading
   // ---------------------------------------------------------------------------
 
+  let unetModelsReqId = 0
+
   async function loadUnetModels() {
     if (profileProviderType !== 'comfyui') return
     const baseUrl = profileBaseUrl?.trim() || 'http://localhost:8188'
+    const reqId = ++unetModelsReqId
     isLoadingUnetModels = true
     try {
       const [clips, vaes] = await Promise.all([
         fetchModelList(baseUrl, 'text_encoders', settings.apiSettings.llmTimeoutMs),
         fetchModelList(baseUrl, 'vae', settings.apiSettings.llmTimeoutMs),
       ])
-      // Discard stale results if the URL changed while the request was in flight.
-      if ((profileBaseUrl?.trim() || 'http://localhost:8188') !== baseUrl) return
+      if (reqId !== unetModelsReqId) return
       availableClips = clips
       availableVaes = vaes
     } finally {
-      isLoadingUnetModels = false
+      if (reqId === unetModelsReqId) isLoadingUnetModels = false
     }
   }
 
@@ -773,7 +778,12 @@
       }
       prevComfyBaseUrl = currentUrl
     } else {
+      if (prevComfyBaseUrl !== null) {
+        clearComfyCacheForUrl(prevComfyBaseUrl)
+      }
       prevComfyBaseUrl = null
+      availableClips = []
+      availableVaes = []
     }
   })
 </script>

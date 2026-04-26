@@ -336,11 +336,13 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         crypto.getRandomValues(new BigUint64Array(1))[0] % BigInt(Number.MAX_SAFE_INTEGER),
       )
 
+      const explicitMode = providerOptions?.mode as ComfyMode | undefined
+
       // -----------------------------------------------------------------------
-      // Custom workflow path — takes priority over all hardcoded workflows.
+      // Custom workflow path — only when mode is explicitly CustomWorkflow.
       // -----------------------------------------------------------------------
       const rawCustomWorkflow = providerOptions?.customWorkflow as ComfyCustomWorkflow | undefined
-      if (rawCustomWorkflow) {
+      if (rawCustomWorkflow && explicitMode === ComfyMode.CustomWorkflow) {
         // PromptBuilder uses structuredClone() internally. Svelte $state wraps objects
         // in Proxy, which structuredClone() cannot clone (DataCloneError). A JSON
         // round-trip produces a plain, cloneable copy before passing to the SDK.
@@ -397,7 +399,6 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         | { name: string; strengthModel?: number; strengthClip?: number }
         | undefined
 
-      const explicitMode = providerOptions?.mode as ComfyMode | undefined
       // Explicit mode always wins. Auto-detection only runs when no mode is set.
       const hasExplicitOverride = !!explicitMode
       const isLoraMode =
