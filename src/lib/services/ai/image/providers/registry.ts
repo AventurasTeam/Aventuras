@@ -196,7 +196,11 @@ export async function getComfySamplerInfo(
   baseUrl?: string,
 ): Promise<{ samplers: string[]; schedulers: string[] }> {
   try {
-    const config: ImageProviderConfig = { apiKey: '', baseUrl, timeoutMs: settings.apiSettings.llmTimeoutMs }
+    const config: ImageProviderConfig = {
+      apiKey: '',
+      baseUrl,
+      timeoutMs: settings.apiSettings.llmTimeoutMs,
+    }
     const provider = createComfyProvider(config)
     if (provider.getSamplerInfo) {
       return await provider.getSamplerInfo()
@@ -213,7 +217,11 @@ export async function getComfySamplerInfo(
  */
 export async function listLoras(baseUrl?: string): Promise<string[]> {
   try {
-    const config: ImageProviderConfig = { apiKey: '', baseUrl, timeoutMs: settings.apiSettings.llmTimeoutMs }
+    const config: ImageProviderConfig = {
+      apiKey: '',
+      baseUrl,
+      timeoutMs: settings.apiSettings.llmTimeoutMs,
+    }
     const provider = createComfyProvider(config)
     if (provider.listLoras) {
       return await provider.listLoras()
