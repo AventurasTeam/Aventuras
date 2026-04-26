@@ -47,7 +47,7 @@ rationale, and decisions live alongside.
 | 7   | Branch navigator            | [screens/reader-composer/branch-navigator/](./screens/reader-composer/branch-navigator/branch-navigator.md) |
 | 8   | Rollback confirmation       | [screens/reader-composer/rollback-confirm/](./screens/reader-composer/rollback-confirm/rollback-confirm.md) |
 | 9   | Plot (threads + happenings) | [screens/plot/](./screens/plot/plot.md)                                                                     |
-| 10  | Chapter timeline            | pending                                                                                                     |
+| 10  | Chapter Timeline            | [screens/chapter-timeline/](./screens/chapter-timeline/chapter-timeline.md)                                 |
 
 ### Power-user / deferred
 

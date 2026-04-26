@@ -66,10 +66,15 @@ signal to close.
 - **Chapter list** — closed chapters + the current one (labeled
   `in progress`, highlighted). Closed chapters click to jump.
 - **Progress bar + label** — `chapter progress · 8,420 / 24,000 tok`
-- **Close chapter manually** — primary action; triggers chapter-close
-  sub-pipeline.
-- **Manage chapters →** — link to the dedicated Chapter Timeline
-  screen (inventory #9) for deeper chapter management.
+- **Close chapter manually** — primary action; opens the
+  [chapter-close modal](../chapter-timeline/chapter-timeline.md#chapter-close-modal)
+  to confirm the range and trigger the close sub-pipeline. Same
+  modal is reachable from the
+  [Chapter Timeline](../chapter-timeline/chapter-timeline.md) screen.
+- **Manage chapters →** — link to the
+  [Chapter Timeline](../chapter-timeline/chapter-timeline.md) screen
+  for deeper chapter management (edit metadata, delete, regenerate
+  summary, close with explicit end-entry pick).
 
 Chapter closing is reachable from both the popover AND the Actions
 menu.

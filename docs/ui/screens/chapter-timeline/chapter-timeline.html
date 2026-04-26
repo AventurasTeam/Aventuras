@@ -1,0 +1,442 @@
+<!-- prettier-ignore -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Chapter Timeline</title>
+<style>
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-highlight: #eef;
+    --bg-dim: rgba(0,0,0,0.32);
+    --warn: #c94;
+    --warn-bg: #fdf3e3;
+    --ok: #4a8;
+    --progress-safe: #6c8;
+    --progress-warn: #ddb060;
+    --progress-danger: #c66;
+  }
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+
+  .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .screen-label strong { color: var(--ink); }
+
+  /* review bar */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; }
+  .review-bar .rb-group > .gl { font-size: 10px; color: #967; margin-right: 4px; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+
+  /* simplified top-bar */
+  .topbar { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
+  .logo { width: 28px; height: 28px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--ink-faint); flex-shrink: 0; }
+  .crumbs { font-size: 13px; color: var(--ink); display: flex; gap: 8px; align-items: center; }
+  .crumbs .crumb-primary { font-weight: 500; }
+  .crumbs .crumb-sep { color: var(--ink-faint); }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .icon-btn { width: 30px; height: 30px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 14px; cursor: pointer; }
+  .icon-btn:hover { background: var(--bg-highlight); color: var(--ink); }
+
+  /* timeline stage */
+  .timeline-stage { flex: 1; padding: 24px 0; overflow-y: auto; }
+  .timeline-col { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+
+  /* chapter summary row */
+  .chapter-summary { font-size: 12px; color: var(--ink-muted); margin-bottom: 14px; padding: 0 4px; }
+
+  /* chapter card */
+  .chapter-card { background: var(--bg-region); border: 1px solid var(--line-soft); border-radius: 6px; margin-bottom: 10px; overflow: hidden; transition: border-color 0.12s; }
+  .chapter-card:hover { border-color: var(--line); }
+  .chapter-card.expanded { border-color: var(--line); box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+
+  .card-head { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; cursor: pointer; }
+  .card-head:hover { background: var(--bg-highlight); }
+  .chapter-card.expanded .card-head:hover { background: var(--bg-region); }
+  .card-head .num { font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-faint); width: 60px; flex-shrink: 0; padding-top: 1px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .card-head .head-body { flex: 1; min-width: 0; }
+  .card-head .title-row { display: flex; align-items: center; gap: 8px; }
+  .card-head .title { font-size: 14px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-head .meta { font-size: 11px; color: var(--ink-muted); margin-top: 3px; }
+  .card-head .disclosure { color: var(--ink-faint); font-size: 12px; flex-shrink: 0; padding-top: 2px; transition: transform 0.12s; }
+  .chapter-card.expanded .disclosure { transform: rotate(90deg); color: var(--ink); }
+
+  /* expanded body */
+  .card-body { display: none; padding: 0 16px 14px; border-top: 1px solid var(--line-soft); }
+  .chapter-card.expanded .card-body { display: block; }
+
+  .card-readonly { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; padding: 12px 0 14px; font-size: 11px; color: var(--ink-muted); border-bottom: 1px dashed var(--line-soft); margin-bottom: 14px; }
+  .card-readonly .ro-row { display: flex; gap: 6px; }
+  .card-readonly .ro-label { color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; }
+  .card-readonly .ro-value { color: var(--ink); }
+
+  .field { margin-bottom: 12px; }
+  .field-label { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .field-input { width: 100%; box-sizing: border-box; padding: 6px 9px; border: 1px solid var(--line); border-radius: 3px; font-size: 13px; color: var(--ink); font-family: inherit; background: var(--bg-region); }
+  .field-input:focus { outline: none; border-color: var(--ink); }
+  .field-textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+
+  /* chip editor */
+  .chip-editor { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); }
+  .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 4px 2px 8px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--bg); color: var(--ink); }
+  .chip .chip-x { color: var(--ink-faint); cursor: pointer; padding: 0 4px; font-size: 11px; }
+  .chip .chip-x:hover { color: var(--warn); }
+  .chip-input { flex: 1; min-width: 80px; border: none; background: transparent; padding: 2px 4px; font-size: 12px; outline: none; color: var(--ink); }
+
+  /* per-card actions */
+  .card-actions { display: flex; gap: 8px; align-items: center; padding-top: 6px; border-top: 1px dashed var(--line-soft); margin-top: 14px; }
+  .card-action { padding: 5px 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); color: var(--ink); font-size: 12px; cursor: pointer; font-family: inherit; }
+  .card-action:hover { background: var(--bg); border-color: var(--ink-muted); }
+  .card-action.danger { color: var(--warn); border-color: var(--line-soft); margin-left: auto; }
+  .card-action.danger:hover { background: var(--warn-bg); border-color: var(--warn); }
+
+  /* in-card save bar */
+  .card-save-bar { display: none; margin-top: 12px; padding: 10px 12px; background: #fff7dc; border: 1px solid #e3d29a; border-radius: 4px; align-items: center; justify-content: space-between; gap: 12px; }
+  .chapter-card.dirty .card-save-bar { display: flex; }
+  .card-save-bar .dirty-note { font-size: 12px; color: #765; display: flex; align-items: center; gap: 8px; }
+  .card-save-bar .dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: #c94; }
+  .card-save-bar .actions { display: flex; gap: 8px; align-items: center; }
+  .card-save-bar .discard-btn { padding: 5px 14px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 12px; color: var(--ink); cursor: pointer; }
+  .card-save-bar .save-btn { padding: 5px 16px; border: 1px solid var(--ink); border-radius: 3px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .card-save-bar .save-btn .kbd { font-size: 10px; opacity: 0.7; font-family: ui-monospace, monospace; }
+
+  /* in-progress card variant */
+  .chapter-card.in-progress { border-style: dashed; background: #fafbfc; }
+  .chapter-card.in-progress .card-head { cursor: default; }
+  .chapter-card.in-progress .card-head:hover { background: transparent; }
+  .chapter-card.in-progress .num { color: var(--ink-muted); font-style: italic; }
+  .chapter-card.in-progress .title { color: var(--ink-muted); font-style: italic; font-weight: 500; }
+  .chapter-card.in-progress .disclosure { display: none; }
+  .progress-row { padding: 4px 16px 14px 76px; }
+  .progress-bar-track { height: 4px; background: var(--line-soft); border-radius: 2px; overflow: hidden; margin: 6px 0 4px; }
+  .progress-bar-fill { height: 100%; width: 59%; background: var(--progress-safe); border-radius: 2px; transition: background 0.12s; }
+  body[data-progress="warn"] .progress-bar-fill { background: var(--progress-warn); width: 84%; }
+  body[data-progress="danger"] .progress-bar-fill { background: var(--progress-danger); width: 95%; }
+  .progress-meta { font-size: 11px; color: var(--ink-muted); display: flex; justify-content: space-between; }
+  .progress-summary-placeholder { padding: 0 16px 12px 76px; font-size: 12px; color: var(--ink-faint); font-style: italic; }
+  .in-progress-actions { padding: 4px 16px 14px 76px; }
+  .close-chapter-btn { padding: 7px 18px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+
+  /* empty-state hide closed cards */
+  body[data-empty="yes"] .chapter-card:not(.in-progress) { display: none; }
+
+  /* modal */
+  .modal-backdrop { position: fixed; inset: 0; background: var(--bg-dim); z-index: 6; display: none; align-items: center; justify-content: center; }
+  body[data-modal="close"] .modal-backdrop { display: flex; }
+  .modal { width: 480px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); overflow: hidden; }
+  .modal-head { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; }
+  .modal-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+  .modal-close { margin-left: auto; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; color: var(--ink-faint); font-size: 14px; cursor: pointer; border-radius: 3px; }
+  .modal-close:hover { background: var(--bg-highlight); color: var(--ink); }
+  .modal-body { padding: 16px 20px; }
+  .modal-context { font-size: 13px; color: var(--ink); margin: 0 0 14px; line-height: 1.55; }
+  .modal-range { display: grid; grid-template-columns: 60px 1fr; gap: 8px 12px; align-items: center; font-size: 13px; }
+  .modal-range .range-label { color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; }
+  .modal-range .range-value { color: var(--ink); }
+  .modal-range .end-picker { padding: 4px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); cursor: pointer; }
+  .modal-range .end-picker .picker-arrow { color: var(--ink-faint); font-size: 10px; }
+  .modal-tokens { margin-top: 12px; font-size: 12px; color: var(--ink-muted); }
+  .modal-tokens b { color: var(--ink); font-weight: 600; }
+  .modal-foot { padding: 14px 24px; border-top: 1px solid var(--line-soft); display: flex; justify-content: flex-end; gap: 10px; background: #fcfcfc; }
+  .modal-foot .btn { padding: 7px 18px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 13px; cursor: pointer; font-family: inherit; }
+  .modal-foot .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body data-card-state="expanded" data-empty="no" data-modal="hidden" data-progress="safe">
+
+<div class="screen-label"><strong>Wireframe:</strong> Chapter Timeline &mdash; desktop, low-fi, interactive</div>
+
+<div class="review-bar">
+  <span class="rb-label">Review controls</span>
+  <div class="rb-group">
+    <span class="gl">card 2 state:</span>
+    <button class="rb-btn" data-card-state="collapsed">collapsed</button>
+    <button class="rb-btn active" data-card-state="expanded">expanded</button>
+    <button class="rb-btn" data-card-state="dirty">dirty + save bar</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">empty state:</span>
+    <button class="rb-btn active" data-empty="no">has chapters</button>
+    <button class="rb-btn" data-empty="yes">empty (only in-progress)</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">close modal:</span>
+    <button class="rb-btn active" data-modal="hidden">hidden</button>
+    <button class="rb-btn" data-modal="close">visible</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">in-progress:</span>
+    <button class="rb-btn active" data-progress="safe">59% (safe)</button>
+    <button class="rb-btn" data-progress="warn">84% (warn)</button>
+    <button class="rb-btn" data-progress="danger">95% (danger)</button>
+  </div>
+  <span class="rb-note">flip controls to inspect each state</span>
+</div>
+
+<header class="topbar">
+  <div class="logo">A</div>
+  <div class="crumbs">
+    <span class="crumb-primary">Aria's Descent</span>
+    <span class="crumb-sep">/</span>
+    <span>Chapters</span>
+  </div>
+  <div class="topbar-right">
+    <div class="icon-btn" title="Actions">&#9906;</div>
+    <div class="icon-btn" title="Back to reader">&larr;</div>
+  </div>
+</header>
+
+<div class="timeline-stage">
+  <div class="timeline-col">
+
+    <div class="chapter-summary"><span id="summary-text">Chapters &middot; 4 closed + 1 in progress</span></div>
+
+    <!-- Chapter 1 -->
+    <div class="chapter-card" data-card="1">
+      <div class="card-head">
+        <span class="num">Ch 1</span>
+        <div class="head-body">
+          <div class="title-row">
+            <span class="title">The Tavern Encounter</span>
+          </div>
+          <div class="meta">Day 1 &middot; 8.4k tok &middot; arrival, mystery</div>
+        </div>
+        <span class="disclosure">&#9656;</span>
+      </div>
+    </div>
+
+    <!-- Chapter 2 — the demo target for expanded / dirty states -->
+    <div class="chapter-card" data-card="2" id="card-2">
+      <div class="card-head">
+        <span class="num">Ch 2</span>
+        <div class="head-body">
+          <div class="title-row">
+            <span class="title">The Trail North</span>
+          </div>
+          <div class="meta">Day 2&ndash;3 &middot; 12.1k tok &middot; travel, conflict</div>
+        </div>
+        <span class="disclosure">&#9656;</span>
+      </div>
+      <div class="card-body">
+
+        <div class="card-readonly">
+          <div class="ro-row"><span class="ro-label">Time range</span> <span class="ro-value">Day 2 &mdash; Day 3</span></div>
+          <div class="ro-row"><span class="ro-label">Tokens</span> <span class="ro-value">12,140</span></div>
+          <div class="ro-row"><span class="ro-label">Entries</span> <span class="ro-value">23&ndash;58</span></div>
+          <div class="ro-row"><span class="ro-label">Closed</span> <span class="ro-value">2026-04-22 14:18</span></div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">Title</div>
+          <input class="field-input" type="text" value="The Trail North">
+        </div>
+        <div class="field">
+          <div class="field-label">Theme</div>
+          <input class="field-input" type="text" value="travel, conflict">
+        </div>
+        <div class="field">
+          <div class="field-label">Summary</div>
+          <textarea class="field-input field-textarea">Aria and Kael leave the city before dawn, taking the smuggler's path along the river. A scout band intercepts them near the old waystone &mdash; brief skirmish, one captive taken. By dusk they reach the ridge above Tolfden, where the warden's banners are already flying.</textarea>
+        </div>
+        <div class="field">
+          <div class="field-label">Keywords</div>
+          <div class="chip-editor">
+            <span class="chip">smugglers <span class="chip-x">&times;</span></span>
+            <span class="chip">scouts <span class="chip-x">&times;</span></span>
+            <span class="chip">warden <span class="chip-x">&times;</span></span>
+            <span class="chip">tolfden <span class="chip-x">&times;</span></span>
+            <input class="chip-input" placeholder="add keyword&hellip;">
+          </div>
+        </div>
+
+        <div class="card-actions">
+          <button class="card-action">Jump to chapter &rarr;</button>
+          <button class="card-action">Regenerate summary</button>
+          <button class="card-action danger">Delete&hellip;</button>
+        </div>
+
+        <div class="card-save-bar">
+          <span class="dirty-note"><span class="dirty-dot"></span>2 unsaved changes</span>
+          <span class="actions">
+            <button class="discard-btn">Discard</button>
+            <button class="save-btn">Save <span class="kbd">⌘S</span></button>
+          </span>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Chapter 3 -->
+    <div class="chapter-card" data-card="3">
+      <div class="card-head">
+        <span class="num">Ch 3</span>
+        <div class="head-body">
+          <div class="title-row">
+            <span class="title">The Warden's Bargain</span>
+          </div>
+          <div class="meta">Day 4&ndash;6 &middot; 16.0k tok &middot; betrayal, oath</div>
+        </div>
+        <span class="disclosure">&#9656;</span>
+      </div>
+    </div>
+
+    <!-- Chapter 4 -->
+    <div class="chapter-card" data-card="4">
+      <div class="card-head">
+        <span class="num">Ch 4</span>
+        <div class="head-body">
+          <div class="title-row">
+            <span class="title">Across the Pass</span>
+          </div>
+          <div class="meta">Day 7&ndash;8 &middot; 11.2k tok &middot; escape, refuge</div>
+        </div>
+        <span class="disclosure">&#9656;</span>
+      </div>
+    </div>
+
+    <!-- In-progress card -->
+    <div class="chapter-card in-progress">
+      <div class="card-head">
+        <span class="num">In progress</span>
+        <div class="head-body">
+          <div class="title-row">
+            <span class="title">&lt;title generates on close&gt;</span>
+          </div>
+          <div class="meta">since Day 9</div>
+        </div>
+      </div>
+      <div class="progress-row">
+        <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-fill"></div></div>
+        <div class="progress-meta">
+          <span id="progress-tok">14,200 / 24,000 tok</span>
+          <span id="progress-pct">59%</span>
+        </div>
+      </div>
+      <div class="progress-summary-placeholder">Summary, theme, and keywords generate on close.</div>
+      <div class="in-progress-actions">
+        <button class="close-chapter-btn" id="close-chapter-btn">Close chapter&hellip;</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- chapter-close modal -->
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title">Close chapter at entry <span id="modal-end-num">102</span>?</span>
+      <span class="modal-close" id="modal-close">&times;</span>
+    </div>
+    <div class="modal-body">
+      <p class="modal-context">This closes the current chapter from entry 89 to the selected end. The AI generates title, summary, theme, and keywords; lore management and memory compaction run as part of the close.</p>
+      <div class="modal-range">
+        <span class="range-label">Start</span>
+        <span class="range-value">entry 89 <span style="color: var(--ink-faint); font-size: 11px;">(Chapter 4 ended here)</span></span>
+        <span class="range-label">End</span>
+        <span class="end-picker" id="end-picker">entry <span id="end-picker-num">102</span> <span class="picker-arrow">&#9662;</span></span>
+      </div>
+      <div class="modal-tokens"><b>14,200 tokens</b> in range</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="modal-cancel">Cancel</button>
+      <button class="btn primary" id="modal-confirm">Close chapter</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const body = document.body;
+  const card2 = document.getElementById('card-2');
+  const summaryText = document.getElementById('summary-text');
+  const progressFill = document.getElementById('progress-fill');
+  const progressTok = document.getElementById('progress-tok');
+  const progressPct = document.getElementById('progress-pct');
+
+  // card 2 state — collapsed / expanded / dirty
+  function setCardState(state) {
+    body.dataset.cardState = state;
+    card2.classList.toggle('expanded', state !== 'collapsed');
+    card2.classList.toggle('dirty', state === 'dirty');
+    document.querySelectorAll('.rb-btn[data-card-state]').forEach(b => {
+      b.classList.toggle('active', b.dataset.cardState === state);
+    });
+  }
+  document.querySelectorAll('.rb-btn[data-card-state]').forEach(b => {
+    b.addEventListener('click', () => setCardState(b.dataset.cardState));
+  });
+
+  // empty state
+  function setEmpty(state) {
+    body.dataset.empty = state;
+    summaryText.textContent = state === 'yes'
+      ? 'Chapters · 0 closed + 1 in progress'
+      : 'Chapters · 4 closed + 1 in progress';
+    document.querySelectorAll('.rb-btn[data-empty]').forEach(b => {
+      b.classList.toggle('active', b.dataset.empty === state);
+    });
+  }
+  document.querySelectorAll('.rb-btn[data-empty]').forEach(b => {
+    b.addEventListener('click', () => setEmpty(b.dataset.empty));
+  });
+
+  // close modal
+  function setModal(state) {
+    body.dataset.modal = state;
+    document.querySelectorAll('.rb-btn[data-modal]').forEach(b => {
+      b.classList.toggle('active', b.dataset.modal === state);
+    });
+  }
+  document.querySelectorAll('.rb-btn[data-modal]').forEach(b => {
+    b.addEventListener('click', () => setModal(b.dataset.modal));
+  });
+
+  // in-progress chapter token progress (color thresholds)
+  function setProgress(state) {
+    body.dataset.progress = state;
+    if (state === 'warn') { progressTok.textContent = '20,200 / 24,000 tok'; progressPct.textContent = '84%'; }
+    else if (state === 'danger') { progressTok.textContent = '22,800 / 24,000 tok'; progressPct.textContent = '95%'; }
+    else { progressTok.textContent = '14,200 / 24,000 tok'; progressPct.textContent = '59%'; }
+    document.querySelectorAll('.rb-btn[data-progress]').forEach(b => {
+      b.classList.toggle('active', b.dataset.progress === state);
+    });
+  }
+  document.querySelectorAll('.rb-btn[data-progress]').forEach(b => {
+    b.addEventListener('click', () => setProgress(b.dataset.progress));
+  });
+
+  // card head clicks toggle expand/collapse on cards 1, 3, 4
+  document.querySelectorAll('.chapter-card:not(.in-progress) .card-head').forEach(head => {
+    const card = head.parentElement;
+    if (card.id === 'card-2') return; // card 2 is review-control driven
+    head.addEventListener('click', () => {
+      card.classList.toggle('expanded');
+    });
+  });
+
+  // close-chapter button opens the modal
+  document.getElementById('close-chapter-btn').addEventListener('click', () => setModal('close'));
+
+  // modal dismissal
+  document.getElementById('modal-close').addEventListener('click', () => setModal('hidden'));
+  document.getElementById('modal-cancel').addEventListener('click', () => setModal('hidden'));
+  document.getElementById('modal-confirm').addEventListener('click', () => setModal('hidden'));
+  document.getElementById('modal-backdrop').addEventListener('click', (e) => {
+    if (e.target.id === 'modal-backdrop') setModal('hidden');
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && body.dataset.modal === 'close') setModal('hidden');
+  });
+</script>
+
+</body>
+</html>
