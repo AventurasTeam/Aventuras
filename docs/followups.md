@@ -171,12 +171,6 @@ Decisions needed:
 
 ## UX
 
-### "Immutable once started" story settings
-
-Which story settings are soft-warn vs hard-lock once narrative
-exists, and the confirmation wording. Needs a pass before Story
-Settings ships.
-
 ### Rollback confirmation
 
 Deleting an entry is rollback semantics (drops target + everything

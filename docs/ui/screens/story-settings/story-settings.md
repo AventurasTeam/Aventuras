@@ -200,14 +200,19 @@ Houses the three orthogonal concepts (mode / lead / narration — see
 the tone/style note, and an **Authoring aids** sub-section toggling
 composer modes / wrap POV / suggestions per-story.
 
-**Some Generation fields are effectively immutable once narrative
-exists.** Mode, lead, and narration can't meaningfully change
-mid-story without breaking coherence. The tab surfaces a soft
-warn-box at the top once `chapter 1 + entry 1` has been written.
-Individual dangerous fields trigger a confirmation prompt on edit
-(specifics — which fields are soft-warn vs hard-lock and the
-confirmation copy — deferred per
-[followups.md](../../../followups.md)).
+**Some Generation fields trigger a confirmation modal at save**
+once narrative exists. Mode and narration can't meaningfully change
+mid-story without risking coherence breaks; composer wrap POV
+(Authoring aids) shifts how new user input renders. The tab
+surfaces a soft warn-box at the top once any entry has been
+written; the actual confirmation lives at the save-session commit
+step, not at field-edit time. See
+[Definitional-change confirmations](#definitional-change-confirmations)
+below for the flagged-field list, copy, and modal shape.
+
+Lead is **not** flagged — lead-switching is a first-class action
+per
+[principles → Mode, lead, narration](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts).
 
 ## Memory tab — chapter threshold + recent buffer + compaction
 
@@ -328,6 +333,82 @@ orphaned but accessible. Decide before pack switching ships.
 Pack authoring (editing the templates + declaring variables) lives on
 the dedicated Prompt / Pack Editor screen (inventory #12).
 
+## Definitional-change confirmations
+
+A small set of fields trigger a confirmation modal at **save** when
+the dirty session changes them and the story has at least one entry.
+The modal sits between the user clicking `Save` and the session
+committing — `Cancel` returns to the dirty editor, `Save anyway`
+commits per the normal
+[save-session pattern](../../patterns/save-sessions.md).
+
+Modal pattern follows the
+[branch creation modal](../branch-navigator/branch-navigator.md#branch-creation--modal):
+modal head + body + foot with `[Cancel]` + `[Save anyway]`. Body
+lists each flagged field that's dirty plus a single-sentence
+consequence for that field. No "type the story name to confirm"
+friction — local-first, single-user, low stakes; the modal exists
+to inform, not to gatekeep.
+
+### Flagged fields
+
+| Tab        | Field             | Why flagged                                                                                             |
+| ---------- | ----------------- | ------------------------------------------------------------------------------------------------------- |
+| Generation | `mode`            | Switching adventure ↔ creative reframes the user's relationship to the story going forward.             |
+| Generation | `narration`       | Changing first/second/third-person mid-story reads as a voice break unless intentional.                 |
+| Generation | `composerWrapPov` | Changes how new user input in `Do` / `Say` / `Think` modes is rendered. Existing entries stay as-saved. |
+| Pack       | `activePackId`    | Rewrites the prompt shape on the next turn. Story content unaffected; generation patterns shift.        |
+
+Not flagged, deliberately:
+
+- `leadEntityId` — first-class action; see
+  [principles → Mode, lead, narration](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts).
+- `worldTimeOrigin` — display-only shift. Stored worldTimes are
+  unchanged; only the calendar formatter renders them differently.
+- All operational tuning (memory, translation, models, pack
+  variables) — the save bar itself is the commit affordance; no
+  extra modal needed.
+
+### Confirmation copy
+
+Each flagged field has a single-sentence consequence string used in
+the modal body. Wording stays informational (not "are you sure?") —
+the user is committing on purpose; the modal exists to surface what
+changes downstream:
+
+- **`mode`** — "Reframes the user's relationship to the story going
+  forward. Existing entries stay; new generation will treat you as
+  a `[character|director]`."
+- **`narration`** — "Changes the AI's prose voice from the next
+  turn forward. Existing entries are unchanged."
+- **`composerWrapPov`** — "Affects how new user input in `Do` /
+  `Say` / `Think` modes is rendered. Existing entries stay
+  as-saved."
+- **`activePackId`** — "Switches the active pack — the prompt shape
+  rewrites on the next turn. Story content stays; generation
+  patterns change."
+
+When multiple flagged fields are dirty in one session, the modal
+stacks one bullet per field.
+
+### Tab-level warn-box vs save-time modal
+
+Two layers, different audiences:
+
+- The **tab-level warn-box** (already in the
+  [Generation tab](#generation-tab--definitional-fields--authoring-aids)
+  and the [Pack tab](#pack-tab--active-pack--variables)) catches a
+  user about to start editing a flagged field.
+- The **save-time modal** catches a user who has edited and is
+  about to commit. The warn-box is informational; the modal is
+  consent.
+
+### When the story is empty
+
+No entries yet (story just created from the wizard) → no modal. The
+flagged fields can be freely retuned; first turn locks them in
+operationally.
+
 ## Save session
 
 Same pattern as the World panel: **explicit save**, session-based.
@@ -357,12 +438,6 @@ already in it.
   Actual picker UI deferred.
 - **Cover upload**: drag-drop + pick-from-assets. Detailed UX (crop,
   aspect enforcement) deferred.
-- **Immutability confirmation wording**: which fields are soft-warn
-  vs hard-lock, and the dialog copy. Deferred per
-  [followups.md](../../../followups.md).
-- **Pack switching mid-story**: supported but "rewrites the prompt
-  shape on the next turn." User should be warned (current wireframe
-  has a subtle info box, but a confirmation might be warranted).
 - **Advanced tab depth**: currently shows identifiers + an export
   action + raw-settings view. Likely grows over time (debug flags,
   retry counts, cache stats).
