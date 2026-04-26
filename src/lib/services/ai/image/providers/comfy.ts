@@ -36,8 +36,9 @@ export const ComfyModes: Record<ComfyMode, any> = {
   [ComfyMode.UnetTxt2Img]: UnetTxt2ImgWorkflow,
 }
 
-// Tracks which model names came from diffusion_models/, keyed by baseUrl
-const unetModelNames = new Map<string, Set<string>>()
+// Tracks which model names came from diffusion_models/, keyed by baseUrl.
+// Values are Promises to prevent parallel fetches for the same baseUrl.
+const unetModelNames = new Map<string, Promise<Set<string>>>()
 
 // Cached auto-detected clip/vae names per baseUrl, populated in listModels()
 const autoClipCache = new Map<string, string>()
@@ -371,11 +372,14 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         | undefined
 
       // Auto-detect mode: explicit override wins, then lora presence, then unet set, then basic.
-      // If the unet set for this baseUrl isn't cached yet, fetch it now.
+      // Store a Promise in the map so concurrent calls share the same fetch instead of racing.
       if (!unetModelNames.has(baseUrl)) {
-        const diffusionModels = await fetchModelList(baseUrl, 'diffusion_models')
-        unetModelNames.set(baseUrl, new Set(diffusionModels))
+        unetModelNames.set(
+          baseUrl,
+          fetchModelList(baseUrl, 'diffusion_models').then((m) => new Set(m)),
+        )
       }
+      const unetNames = await unetModelNames.get(baseUrl)!
 
       const explicitMode = providerOptions?.mode as ComfyMode | undefined
       // Explicit mode always wins. Auto-detection only runs when no mode is set.
@@ -384,7 +388,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         explicitMode === ComfyMode.LoraTxt2Img || (!hasExplicitOverride && !!loraOptions)
       const isUnetMode =
         explicitMode === ComfyMode.UnetTxt2Img ||
-        (!hasExplicitOverride && !isLoraMode && (unetModelNames.get(baseUrl)?.has(model) ?? false))
+        (!hasExplicitOverride && !isLoraMode && unetNames.has(model))
 
       let workflow: any
 
@@ -397,16 +401,19 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         const clipType = (providerOptions?.clipType as string) || 'lumina2'
         const weightDtype = (providerOptions?.weightDtype as string) || 'default'
 
-        const clipName =
-          (providerOptions?.clipName as string) ||
-          autoClipCache.get(baseUrl) ||
-          (await fetchModelList(baseUrl, 'text_encoders'))[0] ||
-          ''
-        const vaeName =
-          (providerOptions?.vaeName as string) ||
-          autoVaeCache.get(baseUrl) ||
-          (await fetchModelList(baseUrl, 'vae'))[0] ||
-          ''
+        let clipName = (providerOptions?.clipName as string) || autoClipCache.get(baseUrl) || ''
+        if (!clipName) {
+          const clips = await fetchModelList(baseUrl, 'text_encoders')
+          clipName = clips[0] || ''
+          if (clipName) autoClipCache.set(baseUrl, clipName)
+        }
+
+        let vaeName = (providerOptions?.vaeName as string) || autoVaeCache.get(baseUrl) || ''
+        if (!vaeName) {
+          const vaes = await fetchModelList(baseUrl, 'vae')
+          vaeName = vaes[0] || ''
+          if (vaeName) autoVaeCache.set(baseUrl, vaeName)
+        }
 
         if (!clipName) throw new Error('No CLIP/text encoder model found in ComfyUI.')
         if (!vaeName) throw new Error('No VAE model found in ComfyUI.')
@@ -559,8 +566,8 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         if (textEncoders[0]) autoClipCache.set(baseUrl, textEncoders[0])
         if (vaeModels[0]) autoVaeCache.set(baseUrl, vaeModels[0])
 
-        // Track which models require the unet workflow (keyed per baseUrl)
-        unetModelNames.set(baseUrl, new Set(diffusionModels))
+        // Track which models require the unet workflow (keyed per baseUrl, resolved Promise)
+        unetModelNames.set(baseUrl, Promise.resolve(new Set(diffusionModels)))
 
         const toInfo = (m: string): ImageModelInfo => ({
           id: m,

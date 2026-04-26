@@ -1360,8 +1360,6 @@
           <div class="col-span-2 space-y-2">
             {@render modelSelectContent()}
           </div>
-        {/if}
-        {#if profileMode !== ComfyMode.CustomWorkflow}
           <div class="space-y-2">
             <Label>Sampler</Label>
             <Autocomplete
