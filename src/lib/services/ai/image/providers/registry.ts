@@ -59,7 +59,7 @@ const modelCaches = new Map<string, ModelCache>()
 
 function getCacheKey(providerType: ImageProviderType, apiKey?: string, baseUrl?: string): string {
   const keyHash = apiKey ? apiKey.slice(-8) : 'nokey'
-  const urlKey = baseUrl ? baseUrl.trim().replace(/\/+$/, '').slice(-24) : 'nourl'
+  const urlKey = baseUrl ? baseUrl.trim().replace(/\/+$/, '') : 'nourl'
   return `${providerType}:${keyHash}:${urlKey}`
 }
 

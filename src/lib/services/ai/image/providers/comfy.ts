@@ -63,9 +63,10 @@ export async function fetchModelList(
 }
 
 export function clearComfyCacheForUrl(baseUrl: string): void {
-  unetModelNames.delete(baseUrl)
-  autoClipCache.delete(baseUrl)
-  autoVaeCache.delete(baseUrl)
+  const key = baseUrl.trim()
+  unetModelNames.delete(key)
+  autoClipCache.delete(key)
+  autoVaeCache.delete(key)
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +308,7 @@ function buildOnFailedHandler(
 }
 
 export function createComfyProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = config.baseUrl || DEFAULT_BASE_URL
+  const baseUrl = (config.baseUrl || DEFAULT_BASE_URL).trim()
 
   const api = new ComfyApi(baseUrl).init()
 
@@ -396,24 +397,29 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         | { name: string; strengthModel?: number; strengthClip?: number }
         | undefined
 
-      // Auto-detect mode: explicit override wins, then lora presence, then unet set, then basic.
-      // Store a Promise in the map so concurrent calls share the same fetch instead of racing.
-      if (!unetModelNames.has(baseUrl)) {
-        const p = fetchModels('diffusion_models')
-          .then((m) => new Set(m))
-          .catch((err) => {
-            unetModelNames.delete(baseUrl)
-            throw err
-          })
-        unetModelNames.set(baseUrl, p)
-      }
-      const unetNames = await unetModelNames.get(baseUrl)!
-
       const explicitMode = providerOptions?.mode as ComfyMode | undefined
       // Explicit mode always wins. Auto-detection only runs when no mode is set.
       const hasExplicitOverride = !!explicitMode
       const isLoraMode =
         explicitMode === ComfyMode.LoraTxt2Img || (!hasExplicitOverride && !!loraOptions)
+
+      // Only fetch diffusion_models when auto-detection is needed; explicit basic/lora
+      // overrides skip it entirely to avoid an unnecessary network round-trip.
+      const needsUnetDetection = !hasExplicitOverride || explicitMode === ComfyMode.UnetTxt2Img
+      let unetNames = new Set<string>()
+      if (needsUnetDetection) {
+        if (!unetModelNames.has(baseUrl)) {
+          const p = fetchModels('diffusion_models')
+            .then((m) => new Set(m))
+            .catch((err) => {
+              unetModelNames.delete(baseUrl)
+              throw err
+            })
+          unetModelNames.set(baseUrl, p)
+        }
+        unetNames = await unetModelNames.get(baseUrl)!
+      }
+
       const isUnetMode =
         explicitMode === ComfyMode.UnetTxt2Img ||
         (!hasExplicitOverride && !isLoraMode && unetNames.has(model))
@@ -463,7 +469,9 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
           'height',
         ]
 
-        workflow = new PromptBuilder(UnetTxt2ImgWorkflow, inputKeys, ['images'])
+        workflow = new PromptBuilder(JSON.parse(JSON.stringify(UnetTxt2ImgWorkflow)), inputKeys, [
+          'images',
+        ])
           .setInputNode('unet_name', '1.inputs.unet_name')
           .setInputNode('weight_dtype', '1.inputs.weight_dtype')
           .setInputNode('clip_name', '3.inputs.clip_name')
@@ -518,9 +526,14 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
           inputKeys.push('lora_name', 'lora_strength_model', 'lora_strength_clip')
         }
 
-        const workflowBase = isLoraMode ? LoraTxt2ImgWorkflow : BasicTxt2ImgWorkflow
+        // JSON round-trip ensures PromptBuilder receives a plain, unshared object.
+        // The imported JSON modules are singletons — if the SDK mutates the object
+        // before or after cloning, it would corrupt all subsequent calls.
+        const workflowBase = JSON.parse(
+          JSON.stringify(isLoraMode ? LoraTxt2ImgWorkflow : BasicTxt2ImgWorkflow),
+        )
 
-        let builder = new PromptBuilder(workflowBase as any, inputKeys, ['images'])
+        let builder = new PromptBuilder(workflowBase, inputKeys, ['images'])
           .setInputNode('checkpoint', '4.inputs.ckpt_name')
           .setInputNode('seed', '3.inputs.seed')
           .setInputNode('batch', '5.inputs.batch_size')
@@ -598,17 +611,20 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         unetModelNames.set(baseUrl, Promise.resolve(new Set(diffusionModels)))
 
         const toInfo =
-          (prefix: string) =>
+          (prefix: string, description: string) =>
           (m: string): ImageModelInfo => ({
             id: `${prefix}:${m}`,
             name: m,
-            description: '',
+            description,
             supportsSizes: [],
             supportsImg2Img: false,
             costPerImage: 0,
           })
 
-        return [...checkpoints.map(toInfo('checkpoint')), ...diffusionModels.map(toInfo('unet'))]
+        return [
+          ...checkpoints.map(toInfo('checkpoint', 'Checkpoint')),
+          ...diffusionModels.map(toInfo('unet', 'Diffusion Model')),
+        ]
       } catch {
         return []
       }

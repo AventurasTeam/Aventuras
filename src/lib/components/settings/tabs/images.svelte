@@ -168,7 +168,6 @@
   let profileLoraStrengthClip = $state(1.0)
   let availableLoras = $state<string[]>([])
   const { trigger: triggerAutoSave, flush: flushAutoSave } = createDebouncedSave(autoSaveProfile)
-  let loadingInEffect = false
 
   // Custom workflow state
   let profileCustomWorkflow = $state<ComfyCustomWorkflow | null>(null)
@@ -206,6 +205,13 @@
   let isLoadingUnetModels = $state(false)
   const clipItems = $derived(availableClips.map((c) => ({ value: c, label: c })))
   const vaeItems = $derived(availableVaes.map((v) => ({ value: v, label: v })))
+
+  const needsWorkflow = $derived(
+    profileProviderType === 'comfyui' &&
+      profileMode === ComfyMode.CustomWorkflow &&
+      !profileCustomWorkflow,
+  )
+  const canSaveProfile = $derived(!!profileName.trim() && !needsWorkflow)
 
   onDestroy(() => flushAutoSave())
 
@@ -310,6 +316,13 @@
   let testImageResult = $state<string | null>(null)
   let testError = $state<string | null>(null)
 
+  $effect(() => {
+    // Clear stale test result when the profile changes
+    void testProfileId
+    testImageResult = null
+    testError = null
+  })
+
   // Derived supported sizes — computed once per reactive change, not twice per Autocomplete render
   const standardSizes = $derived(getSupportedSizes('standard'))
   const referenceSizes = $derived(getSupportedSizes('reference'))
@@ -326,51 +339,52 @@
     apiKey: string,
     forceReload: boolean,
   ) {
-    if (isLoadingProfileModels) return
+    const baseUrl = profileBaseUrl || undefined
     isLoadingProfileModels = true
     profileModelsError = null
     try {
-      profileModels = await listImageModelsByProvider(
-        providerType,
-        apiKey,
-        forceReload,
-        profileBaseUrl || undefined,
-      )
+      const models = await listImageModelsByProvider(providerType, apiKey, forceReload, baseUrl)
+      // Discard stale results if provider/url changed while the request was in flight.
+      if (profileProviderType !== providerType || (profileBaseUrl || undefined) !== baseUrl) return
+      profileModels = models
     } catch (error) {
+      if (profileProviderType !== providerType || (profileBaseUrl || undefined) !== baseUrl) return
       profileModelsError = error instanceof Error ? error.message : 'Failed to load models'
     } finally {
       isLoadingProfileModels = false
     }
   }
 
-  // Reactively load models when provider or apiKey changes in profile form
+  // Reactively load models when provider, apiKey, or (for ComfyUI) baseUrl changes in profile form.
+  // No loadingInEffect guard — stale-result checks inside each loader discard superseded results;
+  // the registry cache deduplicates concurrent requests for the same endpoint.
   $effect(() => {
     if (editingProfileId && profileProviderType) {
-      if (loadingInEffect) return
-      loadingInEffect = true
-
-      loadProfileFormModels(profileProviderType, profileApiKey, false).finally(() => {
-        loadingInEffect = false
-      })
+      // Touch profileBaseUrl so Svelte tracks it; ComfyUI models depend on the endpoint.
+      void profileBaseUrl
+      loadProfileFormModels(profileProviderType, profileApiKey, false)
       if (profileProviderType === 'comfyui') {
-        loadSamplerInfo(profileBaseUrl)
-        loadLoras(profileBaseUrl)
+        loadSamplerInfo(profileBaseUrl || undefined)
+        loadLoras(profileBaseUrl || undefined)
       }
     }
   })
 
   async function loadSamplerInfo(baseUrl?: string) {
     const info = await getComfySamplerInfo(baseUrl)
+    if ((profileBaseUrl || undefined) !== baseUrl) return
     profileSamplers = info.samplers.map((s) => ({ value: s, label: s }))
     profileSchedulers = info.schedulers.map((s) => ({ value: s, label: s }))
   }
 
   async function loadLoras(baseUrl?: string) {
-    availableLoras = await listLoras(baseUrl)
+    const loras = await listLoras(baseUrl)
+    if ((profileBaseUrl || undefined) !== baseUrl) return
+    availableLoras = loras
   }
 
   async function handleTestGenerate() {
-    if (!testProfileId || !testPrompt.trim()) return
+    if (isGeneratingTestImage || !testProfileId || !testPrompt.trim()) return
 
     const profile = settings.getImageProfile(testProfileId)
     if (!profile) return
@@ -497,7 +511,7 @@
     profileModels = []
     profileSampler = 'dpmpp_2m_sde_gpu'
     profileScheduler = 'sgm_uniform'
-    profileMode = ComfyMode.CustomWorkflow
+    profileMode = ComfyMode.BasicTxt2Img
     profileCfg = 1
     profileSteps = 6
     profilePositivePrompt = ''
@@ -580,7 +594,7 @@
   }
 
   async function handleSaveProfile() {
-    if (!profileName.trim()) return
+    if (!canSaveProfile) return
 
     await settings.addImageProfile({
       name: profileName.trim(),
@@ -801,9 +815,14 @@
           <Card class="border-primary/50 bg-primary/5">
             <CardContent>
               {@render profileForm()}
-              <div class="flex gap-2 pt-4">
+              {#if needsWorkflow}
+                <p class="text-destructive pt-2 text-xs">
+                  Upload and confirm a workflow before saving.
+                </p>
+              {/if}
+              <div class="flex gap-2 pt-2">
                 <Button variant="outline" onclick={resetEditState} class="flex-1">Cancel</Button>
-                <Button onclick={handleSaveProfile} disabled={!profileName.trim()} class="flex-1">
+                <Button onclick={handleSaveProfile} disabled={!canSaveProfile} class="flex-1">
                   <Check class="h-4 w-4" />
                   Create Profile
                 </Button>
@@ -1349,7 +1368,7 @@
         filterFunc={undefined}
         showCost={true}
         showImg2ImgIndicator={true}
-        showDescription={false}
+        showDescription={profileProviderType === 'comfyui'}
         isLoading={isLoadingProfileModels}
         errorMessage={profileModelsError}
         showRefreshButton={true}
