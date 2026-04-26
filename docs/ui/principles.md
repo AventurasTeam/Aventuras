@@ -111,7 +111,7 @@ routes to the appropriate surface with the row pre-selected.
 - Reader: branch icon with count badge, **shown only when > 1 branch
   exists** (single-branch stories omit it). Tooltip reveals branch
   name; click opens the
-  [Branch navigator](./screens/branch-navigator/branch-navigator.md#navigator--popover-desktop).
+  [Branch navigator](./screens/reader-composer/branch-navigator/branch-navigator.md#navigator--popover-desktop).
 
 Any action beyond these lives in the Actions menu or the
 screen-specific chrome. The top bar must never grow unbounded.

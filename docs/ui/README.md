@@ -41,12 +41,12 @@ rationale, and decisions live alongside.
 
 ### Supporting (lands with MVP)
 
-| #   | Screen                      | Directory                                                                   |
-| --- | --------------------------- | --------------------------------------------------------------------------- |
-| 6   | World (entities + lore)     | [screens/world/](./screens/world/world.md)                                  |
-| 7   | Branch navigator            | [screens/branch-navigator/](./screens/branch-navigator/branch-navigator.md) |
-| 8   | Plot (threads + happenings) | [screens/plot/](./screens/plot/plot.md)                                     |
-| 9   | Chapter timeline            | pending                                                                     |
+| #   | Screen                      | Directory                                                                                                   |
+| --- | --------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 6   | World (entities + lore)     | [screens/world/](./screens/world/world.md)                                                                  |
+| 7   | Branch navigator            | [screens/reader-composer/branch-navigator/](./screens/reader-composer/branch-navigator/branch-navigator.md) |
+| 8   | Plot (threads + happenings) | [screens/plot/](./screens/plot/plot.md)                                                                     |
+| 9   | Chapter timeline            | pending                                                                                                     |
 
 ### Power-user / deferred
 

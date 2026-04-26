@@ -32,6 +32,11 @@ Pinned conventions — how we keep the docs navigable as they grow.
 - **One screen = one directory** under `docs/ui/screens/<screen>/`.
   The directory holds the per-screen `.md` doc and its interactive
   `.html` wireframe.
+- **Sub-screens** — surfaces triggered exclusively from a parent
+  screen (popovers, modals, drawers — e.g. `branch-navigator/`,
+  `rollback-confirm/`) — nest inside the parent's directory:
+  `docs/ui/screens/<parent>/<sub>/<sub>.md` + `<sub>.html`. Same
+  one-doc-one-wireframe rule, just one level deeper.
 
 ### Naming
 

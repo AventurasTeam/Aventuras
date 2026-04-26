@@ -9,7 +9,7 @@ Used by:
 
 - [Reader per-entry actions](../screens/reader-composer/reader-composer.md#per-entry-actions)
   (edit / regen / branch / delete on each story entry)
-- [Branch navigator row actions](../screens/branch-navigator/branch-navigator.md#row-actions--inline-icons)
+- [Branch navigator row actions](../screens/reader-composer/branch-navigator/branch-navigator.md#row-actions--inline-icons)
   (rename / delete on each branch row)
 
 Future row-shaped surfaces with per-row actions follow the same
@@ -67,7 +67,7 @@ different defaults:
   preferred when the affordance is **temporarily unavailable**
   (e.g. per-entry `branch` action while a generation is
   in flight — see
-  [branch-navigator → during generation](../screens/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)).
+  [branch-navigator → during generation](../screens/reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)).
   Tells the user "this normally works, just not right now."
 
 ## When NOT to use this pattern

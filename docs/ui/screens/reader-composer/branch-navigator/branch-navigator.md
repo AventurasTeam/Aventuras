@@ -2,7 +2,7 @@
 
 **Wireframe:** [`branch-navigator.html`](./branch-navigator.html) — interactive
 
-Two related surfaces for the [branch model](../../../data-model.md#branch-model):
+Two related surfaces for the [branch model](../../../../data-model.md#branch-model):
 
 - The **navigator** itself — an anchored popover (desktop) or
   bottom drawer (mobile) for switching between existing branches
@@ -15,9 +15,9 @@ lifecycle UI). The reader is where both are triggered; this doc is
 where the surfaces are specified.
 
 Cross-cutting principles that govern these surfaces are in
-[principles.md](../../principles.md). Relevant sections:
+[principles.md](../../../principles.md). Relevant sections:
 
-- [Top-bar design rule](../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
+- [Top-bar design rule](../../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
   (the reader's branch chip is the desktop entry point)
 
 ## Layout
@@ -58,7 +58,7 @@ Two zones per row:
   followed by the branch name.
 - **Right**: two inline action icons — `✎` (rename) and `×`
   (delete) — following the
-  [icon-actions pattern](../../patterns/icon-actions.md)
+  [icon-actions pattern](../../../patterns/icon-actions.md)
   (always-visible-but-muted, brighten on row hover/focus, same
   affordance on desktop and mobile).
 
@@ -83,7 +83,7 @@ single click:
   on this row. **Hidden** on the root branch (the one with
   `parent_branch_id = null`) and on the **current** branch (you
   can't delete out from under your own active session). Per the
-  [hidden-vs-disabled rule](../../patterns/icon-actions.md#disabled-vs-hidden):
+  [hidden-vs-disabled rule](../../../patterns/icon-actions.md#disabled-vs-hidden):
   these are structural unavailabilities (not temporary), so they
   hide rather than grey out.
 
@@ -102,14 +102,14 @@ Branches sort by `created_at` ascending — root first, then
 siblings in fork order. Stable, intuitive ("main, then the
 order I forked them in"), no extra state to remember. The
 **current** branch always renders first regardless of position
-(matches the [story list pinned-to-top sort layer](./../story-list/story-list.md#story-card--text-first))
+(matches the [story list pinned-to-top sort layer](../../story-list/story-list.md#story-card--text-first))
 — because "where am I?" is the navigator's most-asked question
 and putting the answer first costs nothing.
 
 ### During generation — switch / delete / create blocked
 
 While the
-[generation-status pill](../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
+[generation-status pill](../../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
 is active (any pipeline phase: reasoning, generating, classifying,
 chapter-closing), branch lifecycle operations are **paused**:
 
@@ -121,7 +121,7 @@ chapter-closing), branch lifecycle operations are **paused**:
 - **Delete** — `×` icon hidden across all rows during generation
   (same hide rule used for root + current).
 - **Create** — the per-entry
-  [`⎇ Branch from this entry` action](../reader-composer/reader-composer.md#per-entry-actions)
+  [`⎇ Branch from this entry` action](../reader-composer.md#per-entry-actions)
   is disabled in the reader, so the
   [creation modal](#branch-creation--modal) can't open. Per-entry
   icons follow the same muted-then-brighten pattern; disabled
@@ -179,7 +179,7 @@ stays open. The chip's count badge in the reader top bar updates
 when the popover closes.
 
 Deletion is a single SQL cascade per the
-[composite-PK design](../../../data-model.md#branch-model) —
+[composite-PK design](../../../../data-model.md#branch-model) —
 every branch-scoped row with that `branch_id` goes (entries,
 entities, lore, threads, happenings, chapters, deltas, etc.).
 Assets are reference-counted via `entry_assets`; orphaned assets
@@ -198,7 +198,7 @@ The navigator is for **selecting from existing branches** plus
 light management. **Creating** a branch requires a fork point —
 which is necessarily a specific entry — and the canonical way to
 specify "this entry" is the per-entry
-[`⎇ Branch from this entry` action](../reader-composer/reader-composer.md#per-entry-actions)
+[`⎇ Branch from this entry` action](../reader-composer.md#per-entry-actions)
 in the reader.
 
 A footer button like `+ New branch from current entry` would
@@ -240,7 +240,7 @@ modal centered over the reader:
 1. New `branches` row written with `parent_branch_id = <current>`,
    `fork_entry_id = <triggering entry id>`, `name = <input>`.
 2. Branch-scoped rows materialized per the
-   [hard-fork copy procedure](../../../data-model.md#branch-model).
+   [hard-fork copy procedure](../../../../data-model.md#branch-model).
 3. `stories.current_branch_id` updates to the new branch.
 4. Reader reloads on the new branch (content is byte-identical up
    to the fork point). The chip's count badge increments and now
@@ -264,11 +264,11 @@ flows; names are purely display labels.
 When `stories.current_branch_id` is the only branch in the story:
 
 - The reader's top-bar chip is **hidden** (per the
-  [top-bar discretionary rule](../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
+  [top-bar discretionary rule](../../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
   — chip shown only when >1 branch).
 - The navigator is therefore **not reachable from the chip**.
 - It IS reachable from the
-  [Actions](../../principles.md#actions--platform-agnostic-action-directory)
+  [Actions](../../../principles.md#actions--platform-agnostic-action-directory)
   menu (`Browse branches`). Opening it on a single-branch story
   shows one row with `Rename` available but `Delete` disabled
   (root + current = both deletion blocks apply). The header reads
@@ -307,7 +307,7 @@ zero rows.
 
 No new schema. This pass uses:
 
-- [`branches`](../../../data-model.md#branch-model) — `id`,
+- [`branches`](../../../../data-model.md#branch-model) — `id`,
   `story_id`, `parent_branch_id`, `fork_entry_id`, `name`,
   `created_at`. Composite PKs on branch-scoped tables guarantee
   fork copies and deletions are simple cascades.

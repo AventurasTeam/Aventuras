@@ -343,7 +343,7 @@ commits per the normal
 [save-session pattern](../../patterns/save-sessions.md).
 
 Modal pattern follows the
-[branch creation modal](../branch-navigator/branch-navigator.md#branch-creation--modal):
+[branch creation modal](../reader-composer/branch-navigator/branch-navigator.md#branch-creation--modal):
 modal head + body + foot with `[Cancel]` + `[Save anyway]`. Body
 lists each flagged field that's dirty plus a single-sentence
 consequence for that field. No "type the story name to confirm"

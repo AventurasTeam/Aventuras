@@ -121,12 +121,12 @@ Icon set (placeholder glyphs per the
 [shared glyph vocabulary](../../patterns/icon-actions.md#glyph-vocabulary);
 finalize with visual identity):
 
-| Action | Glyph | Meaning                                                                                                             |
-| ------ | ----- | ------------------------------------------------------------------------------------------------------------------- |
-| edit   | ✎     | Edit entry content                                                                                                  |
-| regen  | ↻     | Regenerate this AI reply                                                                                            |
-| branch | ⎇     | Branch from this entry — opens the [creation modal](../branch-navigator/branch-navigator.md#branch-creation--modal) |
-| delete | ×     | Delete this entry (rollback semantics)                                                                              |
+| Action | Glyph | Meaning                                                                                                            |
+| ------ | ----- | ------------------------------------------------------------------------------------------------------------------ |
+| edit   | ✎     | Edit entry content                                                                                                 |
+| regen  | ↻     | Regenerate this AI reply                                                                                           |
+| branch | ⎇     | Branch from this entry — opens the [creation modal](./branch-navigator/branch-navigator.md#branch-creation--modal) |
+| delete | ×     | Delete this entry (rollback semantics)                                                                             |
 
 Per-entry action sets:
 
@@ -268,7 +268,7 @@ No confirmation modal. Lead-switching is a first-class action per
 the reader's narration and `You` anchor immediately re-anchor to the
 new lead, which IS the feedback (consistent with the no-toast
 precedent in the
-[branch creation flow](../branch-navigator/branch-navigator.md#after-confirm)).
+[branch creation flow](./branch-navigator/branch-navigator.md#after-confirm)).
 
 ## Screen-specific notes
 
