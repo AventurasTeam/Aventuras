@@ -259,17 +259,22 @@ Each dropdown item is a **two-line layout** (richer preview than
 the single-line trigger):
 
 ```
-[✓] entry-num [optional tag]                            [time]
+entry-num [optional tag]                                [time]
 "snippet wrapping to two lines via line-clamp; longer than the
 trigger's single-line truncation; …"
 ```
 
-- **Head row** — `✓` glyph (visible only on the selected row),
-  entry-num, optional tag, time right-aligned.
-- **Snippet row** — same first ~80 chars of entry content, but
+- **Head row** — entry-num, optional tag, time right-aligned.
+- **Snippet row** — same first ~80 chars of entry content,
   rendered with `line-clamp: 2` so up to two visual lines show
   before truncation. Gives the user a real read of each option,
   not a single-line tease.
+
+The currently-selected row carries a subtle background tint (matches
+the established selected-row styling elsewhere in the app); no
+explicit `✓` glyph is needed because the picker trigger directly
+above the panel already shows the current selection in full — the
+dropdown is for _changing_ the selection, not re-confirming it.
 
 Picking an entry:
 
