@@ -57,9 +57,10 @@ interface ModelCache {
 const CACHE_TTL = 15 * 60 * 1000 // 15 minutes
 const modelCaches = new Map<string, ModelCache>()
 
-function getCacheKey(providerType: ImageProviderType, apiKey?: string): string {
+function getCacheKey(providerType: ImageProviderType, apiKey?: string, baseUrl?: string): string {
   const keyHash = apiKey ? apiKey.slice(-8) : 'nokey'
-  return `${providerType}:${keyHash}`
+  const urlKey = baseUrl ? baseUrl.trim().replace(/\/+$/, '') : 'nourl'
+  return `${providerType}:${keyHash}:${urlKey}`
 }
 
 export function clearModelsCache(): void {
@@ -111,6 +112,7 @@ export async function generateImage(options: {
     apiKey: profile.apiKey,
     baseUrl: profile.baseUrl,
     providerOptions: profile.providerOptions,
+    timeoutMs: settings.apiSettings.llmTimeoutMs,
   }
 
   const provider = PROVIDER_FACTORIES[profile.providerType](config)
@@ -137,7 +139,7 @@ export async function listImageModels(profileId: string): Promise<ImageModelInfo
   const profile = settings.getImageProfile(profileId)
   if (!profile) return []
 
-  const cacheKey = getCacheKey(profile.providerType, profile.apiKey)
+  const cacheKey = getCacheKey(profile.providerType, profile.apiKey, profile.baseUrl)
   const cached = modelCaches.get(cacheKey)
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.models
@@ -147,10 +149,11 @@ export async function listImageModels(profileId: string): Promise<ImageModelInfo
     const config: ImageProviderConfig = {
       apiKey: profile.apiKey,
       baseUrl: profile.baseUrl,
+      timeoutMs: settings.apiSettings.llmTimeoutMs,
     }
     const provider = PROVIDER_FACTORIES[profile.providerType](config)
     const models = await provider.listModels(profile.apiKey)
-    modelCaches.set(cacheKey, { models, timestamp: Date.now() })
+    if (models.length > 0) modelCaches.set(cacheKey, { models, timestamp: Date.now() })
     return models
   } catch (error) {
     log('Error listing models', { providerType: profile.providerType, error })
@@ -166,8 +169,9 @@ export async function listImageModelsByProvider(
   providerType: ImageProviderType,
   apiKey: string,
   forceReload: boolean,
+  baseUrl?: string,
 ): Promise<ImageModelInfo[]> {
-  const cacheKey = getCacheKey(providerType, apiKey)
+  const cacheKey = getCacheKey(providerType, apiKey, baseUrl)
   if (!forceReload) {
     const cached = modelCaches.get(cacheKey)
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -176,10 +180,14 @@ export async function listImageModelsByProvider(
   }
 
   try {
-    const config: ImageProviderConfig = { apiKey: apiKey ?? '' }
+    const config: ImageProviderConfig = {
+      apiKey: apiKey ?? '',
+      baseUrl,
+      timeoutMs: settings.apiSettings.llmTimeoutMs,
+    }
     const provider = PROVIDER_FACTORIES[providerType](config)
     const models = await provider.listModels(apiKey)
-    modelCaches.set(cacheKey, { models, timestamp: Date.now() })
+    if (models.length > 0) modelCaches.set(cacheKey, { models, timestamp: Date.now() })
     return models
   } catch (error) {
     log('Error listing models by provider', { providerType, error })
@@ -194,7 +202,11 @@ export async function getComfySamplerInfo(
   baseUrl?: string,
 ): Promise<{ samplers: string[]; schedulers: string[] }> {
   try {
-    const config: ImageProviderConfig = { apiKey: '', baseUrl }
+    const config: ImageProviderConfig = {
+      apiKey: '',
+      baseUrl,
+      timeoutMs: settings.apiSettings.llmTimeoutMs,
+    }
     const provider = createComfyProvider(config)
     if (provider.getSamplerInfo) {
       return await provider.getSamplerInfo()
@@ -211,7 +223,11 @@ export async function getComfySamplerInfo(
  */
 export async function listLoras(baseUrl?: string): Promise<string[]> {
   try {
-    const config: ImageProviderConfig = { apiKey: '', baseUrl }
+    const config: ImageProviderConfig = {
+      apiKey: '',
+      baseUrl,
+      timeoutMs: settings.apiSettings.llmTimeoutMs,
+    }
     const provider = createComfyProvider(config)
     if (provider.listLoras) {
       return await provider.listLoras()
