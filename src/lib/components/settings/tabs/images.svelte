@@ -330,7 +330,12 @@
     isLoadingProfileModels = true
     profileModelsError = null
     try {
-      profileModels = await listImageModelsByProvider(providerType, apiKey, forceReload)
+      profileModels = await listImageModelsByProvider(
+        providerType,
+        apiKey,
+        forceReload,
+        profileBaseUrl || undefined,
+      )
     } catch (error) {
       profileModelsError = error instanceof Error ? error.message : 'Failed to load models'
     } finally {
@@ -725,6 +730,8 @@
         fetchModelList(baseUrl, 'text_encoders', settings.apiSettings.llmTimeoutMs),
         fetchModelList(baseUrl, 'vae', settings.apiSettings.llmTimeoutMs),
       ])
+      // Discard stale results if the URL changed while the request was in flight.
+      if ((profileBaseUrl?.trim() || 'http://localhost:8188') !== baseUrl) return
       availableClips = clips
       availableVaes = vaes
     } finally {
@@ -741,11 +748,14 @@
 
   // Evict comfy.ts caches when the user changes the ComfyUI base URL so that
   // the next generate/listModels call fetches fresh model lists.
+  // Also clear availableClips/Vaes so the auto-load effect can trigger a fresh fetch.
   $effect(() => {
     if (profileProviderType === 'comfyui') {
       const currentUrl = profileBaseUrl.trim() || 'http://localhost:8188'
       if (prevComfyBaseUrl !== null && prevComfyBaseUrl !== currentUrl) {
         clearComfyCacheForUrl(prevComfyBaseUrl)
+        availableClips = []
+        availableVaes = []
       }
       prevComfyBaseUrl = currentUrl
     } else {

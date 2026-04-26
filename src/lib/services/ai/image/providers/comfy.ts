@@ -319,7 +319,13 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
     name: 'Comfy UI',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, size, providerOptions } = options
+      const { prompt, size, providerOptions } = options
+      // Strip the source-namespace prefix added by listModels() to deduplicate entries
+      // (e.g. "checkpoint:model.safetensors" → "model.safetensors"). Handles both
+      // prefixed IDs (new) and bare filenames (profiles saved before this change).
+      const model = /^(?:checkpoint|unet):/.test(options.model)
+        ? options.model.replace(/^(?:checkpoint|unet):/, '')
+        : options.model
 
       const positiveTags = (providerOptions?.positivePrompt as string) || ''
       const negativeTags = (providerOptions?.negativePrompt as string) || ''
@@ -591,16 +597,18 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         // Track which models require the unet workflow (keyed per baseUrl, resolved Promise)
         unetModelNames.set(baseUrl, Promise.resolve(new Set(diffusionModels)))
 
-        const toInfo = (m: string): ImageModelInfo => ({
-          id: m,
-          name: m,
-          description: '',
-          supportsSizes: [],
-          supportsImg2Img: false,
-          costPerImage: 0,
-        })
+        const toInfo =
+          (prefix: string) =>
+          (m: string): ImageModelInfo => ({
+            id: `${prefix}:${m}`,
+            name: m,
+            description: '',
+            supportsSizes: [],
+            supportsImg2Img: false,
+            costPerImage: 0,
+          })
 
-        return [...checkpoints.map(toInfo), ...diffusionModels.map(toInfo)]
+        return [...checkpoints.map(toInfo('checkpoint')), ...diffusionModels.map(toInfo('unet'))]
       } catch {
         return []
       }
