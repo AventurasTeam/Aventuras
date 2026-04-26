@@ -126,10 +126,6 @@
   .modal-foot .btn { padding: 6px 16px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 13px; cursor: pointer; font-family: inherit; }
   .modal-foot .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
   .modal-foot .btn.primary:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  /* notes */
-  .notes { padding: 14px 20px; background: #fffbe6; border-top: 1px solid var(--line-soft); font-size: 11px; color: #594; line-height: 1.6; }
-  .notes code { background: #fff; padding: 2px 6px; border: 1px solid var(--line-soft); border-radius: 2px; font-size: 10px; }
 </style>
 </head>
 <body>
@@ -233,17 +229,6 @@
     </div>
   </div>
 
-</div>
-
-<div class="notes">
-  <strong>Wireframe notes.</strong>
-  Navigator anchors to the reader's branch chip on desktop (popover with arrow) or slides up as a bottom drawer on mobile.
-  <br>
-  Per row: marker + name + two inline icons (<code>✎</code> rename, <code>×</code> delete; delete hidden on root + current). Icons are <strong>always visible at muted opacity</strong>; they brighten on row hover/focus (desktop). Mobile sits at the muted default since touch has no hover state &mdash; taps still trigger normally. Click row body switches; click an icon performs that action directly &mdash; no overflow menu.
-  <br>
-  Inline rename and inline delete-confirm both render in-place inside the row &mdash; no popover-within-popover. The confirm row is the "adversarial flag" item from <code>branch-navigator.md</code>; if the visual jump feels jarring, fall back to a small modal.
-  <br>
-  Creation modal opens from the reader's per-entry <code>⎇ Branch from this entry</code> action. Name is required; <code>Create</code> is disabled until non-empty. Confirm switches to the new branch and reloads the reader.
 </div>
 
 <script>

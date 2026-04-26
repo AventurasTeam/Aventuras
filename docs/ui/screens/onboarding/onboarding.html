@@ -106,10 +106,6 @@
   .btn.primary:disabled { opacity: 0.4; cursor: not-allowed; }
   .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  /* notes */
-  .notes { padding: 14px 20px; background: #fffbe6; border-top: 1px solid var(--line-soft); font-size: 11px; color: #594; line-height: 1.6; }
-  .notes code { background: #fff; padding: 2px 6px; border: 1px solid var(--line-soft); border-radius: 2px; font-size: 10px; }
-
   /* step visibility */
   .step { display: none; }
   .step.active { display: block; }
@@ -292,17 +288,6 @@
       <button class="btn primary" id="next-btn">Next &rarr;</button>
     </div>
   </div>
-</div>
-
-<div class="notes">
-  <strong>Wireframe notes.</strong>
-  Wizard sits on a dim backdrop simulating the &ldquo;wizard-as-root&rdquo; first-launch state &mdash; no top bar, no Actions, no Settings gear, no Return.
-  <br>
-  <code>Skip for now</code> is final &mdash; <code>onboarding_completed_at</code> gets set on Skip and on Finish; the wizard never re-opens. A skipped user lands on Story list with the no-providers banner (see <code>onboarding.md &rarr; Story list integration</code>).
-  <br>
-  Step 3 morphs by Step 2 selection. Native (OpenRouter / NanoGPT / NIM) shows the API-key form + provider helper link. OAI-compat shows endpoint URL + optional key + a routing warning (Finish lands them in Settings &middot; Profiles or Settings &middot; Providers depending on auto-fetch outcome).
-  <br>
-  Profile/agent assignments seeded on Finish are intentionally invisible &mdash; user discovers them only by visiting Settings &middot; Profiles deliberately. See <code>onboarding.md &rarr; What gets seeded silently</code>.
 </div>
 
 <script>

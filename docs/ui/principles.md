@@ -26,6 +26,9 @@ transitions use minimal inline vanilla JS.
   lets reviewers flip states directly (like tiny Storybook controls).
 - Natural interactions also work (click a row, press Esc, etc.).
 - No fake data, no real logic — purely visual state-swapping.
+- **No footer or notes block.** The colocated `.md` is the spec;
+  wireframes are pure visual artifact. Don't re-narrate the doc
+  inside the HTML.
 - Stylings stay monochrome intentionally; pixel-fidelity decisions
   (palette, typography) land in the visual identity session.
 
