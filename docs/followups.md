@@ -171,13 +171,6 @@ Decisions needed:
 
 ## UX
 
-### Rollback confirmation
-
-Deleting an entry is rollback semantics (drops target + everything
-after). Needs its own wireframe: hover-preview of affected range,
-confirmation modal with counts ("removes N entries, M chapters, K
-entity updates"), cross-chapter warning.
-
 ### Bulk operations on entities
 
 See [ui/principles.md](./ui/principles.md) for open sub-questions. Dedicated design pass.

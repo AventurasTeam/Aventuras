@@ -1,0 +1,255 @@
+<!-- prettier-ignore -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Rollback confirmation</title>
+<style>
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-highlight: #eef;
+    --bg-dim: rgba(0,0,0,0.32);
+    --warn: #c94;
+    --warn-bg: #fdf3e3;
+    --warn-soft: rgba(204, 153, 68, 0.10);
+  }
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+
+  .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .screen-label strong { color: var(--ink); }
+
+  /* review bar */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; }
+  .review-bar .rb-group > .gl { font-size: 10px; color: #967; margin-right: 4px; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+
+  /* simulated reader stage */
+  .reader-stage { flex: 1; background: var(--bg); position: relative; padding: 24px 0; overflow: hidden; }
+  .entries-col { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+
+  /* faux entries */
+  .entry { position: relative; display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; margin-bottom: 6px; background: var(--bg-region); border: 1px solid var(--line-soft); border-left: 3px solid transparent; border-radius: 4px; }
+  .entry .entry-num { font-family: ui-monospace, monospace; font-size: 10px; color: var(--ink-faint); width: 28px; flex-shrink: 0; padding-top: 2px; }
+  .entry .entry-kind { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; padding-top: 2px; flex-shrink: 0; }
+  .entry .entry-text { flex: 1; font-size: 12px; color: var(--ink); line-height: 1.5; }
+  .entry-actions { display: flex; gap: 3px; opacity: 0.45; transition: opacity 0.12s; flex-shrink: 0; }
+  .entry:hover .entry-actions { opacity: 1; }
+  .entry-action { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 12px; cursor: pointer; border-radius: 3px; }
+  .entry-action:hover { background: var(--bg); color: var(--ink); }
+  .entry-action.danger:hover { background: var(--warn-bg); color: var(--warn); }
+
+  /* chapter break */
+  .chapter-break { display: none; align-items: center; gap: 10px; margin: 14px 0; padding: 0 14px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-faint); }
+  .chapter-break::before, .chapter-break::after { content: ''; flex: 1; height: 1px; background: var(--line-soft); }
+  body[data-cross="crosses"] .chapter-break { display: flex; }
+
+  /* hover-preview state — affected entries */
+  body[data-state="hover-preview"] .entry.affected { border-left-color: var(--warn); background: var(--warn-soft); }
+  body[data-state="hover-preview"] .entry.affected .entry-num { color: var(--warn); font-weight: 600; }
+  body[data-state="hover-preview"] .entry.affected .entry-kind { color: var(--warn); }
+  body[data-state="hover-preview"] .entries-tail.affected { color: var(--warn); border-left: 3px solid var(--warn); padding-left: 10px; background: var(--warn-soft); }
+
+  /* tail summary */
+  .entries-tail { font-size: 11px; color: var(--ink-faint); font-style: italic; padding: 6px 14px; margin-bottom: 6px; border-left: 3px solid transparent; }
+
+  /* trigger emphasis (only in hover-preview) */
+  body[data-state="hover-preview"] .entry.trigger { box-shadow: 0 0 0 1px var(--warn); }
+
+  /* modal */
+  .modal-backdrop { position: absolute; inset: 0; background: var(--bg-dim); z-index: 6; display: none; align-items: center; justify-content: center; }
+  body[data-state="confirm-modal"] .modal-backdrop { display: flex; }
+  .modal { width: 440px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); overflow: hidden; }
+  .modal-head { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; }
+  .modal-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+  .modal-close { margin-left: auto; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; color: var(--ink-faint); font-size: 14px; cursor: pointer; border-radius: 3px; }
+  .modal-close:hover { background: var(--bg-highlight); color: var(--ink); }
+  .modal-body { padding: 16px 20px; }
+  .modal-context { font-size: 13px; color: var(--ink); margin: 0 0 12px; }
+  .modal-impact-list { margin: 0; padding-left: 20px; font-size: 13px; color: var(--ink); line-height: 1.7; }
+  .modal-impact-list b { color: var(--ink); font-weight: 600; }
+  .modal-impact-list li.cross-row { display: none; }
+  body[data-cross="crosses"] .modal-impact-list li.cross-row { display: list-item; }
+  .modal-foot { padding: 14px 24px; border-top: 1px solid var(--line-soft); display: flex; justify-content: flex-end; gap: 10px; background: #fcfcfc; }
+  .modal-foot .btn { padding: 7px 18px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 13px; cursor: pointer; font-family: inherit; }
+  .modal-foot .btn.danger { background: var(--warn); color: #fff; border-color: var(--warn); font-weight: 600; }
+</style>
+</head>
+<body data-state="idle" data-cross="single">
+
+<div class="screen-label"><strong>Wireframe:</strong> Rollback confirmation &mdash; sub-screen of reader-composer, low-fi, interactive</div>
+
+<div class="review-bar">
+  <span class="rb-label">Review controls</span>
+  <div class="rb-group">
+    <span class="gl">state:</span>
+    <button class="rb-btn active" data-state="idle">idle</button>
+    <button class="rb-btn" data-state="hover-preview">hover preview</button>
+    <button class="rb-btn" data-state="confirm-modal">confirm modal</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">cross-chapter:</span>
+    <button class="rb-btn active" data-cross="single">single chapter</button>
+    <button class="rb-btn" data-cross="crosses">crosses chapters</button>
+  </div>
+  <span class="rb-note">flip controls to inspect each state</span>
+</div>
+
+<div class="reader-stage">
+  <div class="entries-col">
+
+    <div class="entry">
+      <span class="entry-num">45</span>
+      <span class="entry-kind">user</span>
+      <div class="entry-text">reach for the blade and step closer to the bar.</div>
+      <div class="entry-actions">
+        <span class="entry-action" title="Edit">&#9998;</span>
+        <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
+      </div>
+    </div>
+
+    <div class="entry">
+      <span class="entry-num">46</span>
+      <span class="entry-kind">ai</span>
+      <div class="entry-text">The bartender's eyes narrow as he sets the glass down. Behind him, a figure shifts in the shadowed corner.</div>
+      <div class="entry-actions">
+        <span class="entry-action" title="Edit">&#9998;</span>
+        <span class="entry-action" title="Regenerate">&#8635;</span>
+        <span class="entry-action" title="Branch from this entry">&#9095;</span>
+        <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
+      </div>
+    </div>
+
+    <!-- trigger entry (47) — × on this row is the rollback trigger we're demoing -->
+    <div class="entry trigger affected">
+      <span class="entry-num">47</span>
+      <span class="entry-kind">user</span>
+      <div class="entry-text">step closer to the corner table.</div>
+      <div class="entry-actions">
+        <span class="entry-action" title="Edit">&#9998;</span>
+        <span class="entry-action danger" id="trigger-x" title="Delete (rollback to before this entry)">&times;</span>
+      </div>
+    </div>
+
+    <div class="entry affected">
+      <span class="entry-num">48</span>
+      <span class="entry-kind">ai</span>
+      <div class="entry-text">A figure rises from the corner and signals the bouncer near the door. The room's volume drops a notch.</div>
+      <div class="entry-actions">
+        <span class="entry-action" title="Edit">&#9998;</span>
+        <span class="entry-action" title="Regenerate">&#8635;</span>
+        <span class="entry-action" title="Branch from this entry">&#9095;</span>
+        <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
+      </div>
+    </div>
+
+    <!-- chapter break — only renders in cross-chapter case (between affected entries 49 and 50, simulating chapter 5 having opened mid-range) -->
+    <div class="chapter-break">Chapter 5 &mdash; opened mid-range &middot; would re-open on rollback</div>
+
+    <div class="entry affected">
+      <span class="entry-num">49</span>
+      <span class="entry-kind">user</span>
+      <div class="entry-text">check the back exit.</div>
+      <div class="entry-actions">
+        <span class="entry-action" title="Edit">&#9998;</span>
+        <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
+      </div>
+    </div>
+
+    <div class="entry affected">
+      <span class="entry-num">50</span>
+      <span class="entry-kind">ai</span>
+      <div class="entry-text">The narrow hallway smells of damp brick. Two crates block the rear door &mdash; recent, deliberate.</div>
+      <div class="entry-actions">
+        <span class="entry-action" title="Edit">&#9998;</span>
+        <span class="entry-action" title="Regenerate">&#8635;</span>
+        <span class="entry-action" title="Branch from this entry">&#9095;</span>
+        <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
+      </div>
+    </div>
+
+    <div class="entries-tail affected">+ 8 more entries below (cut for brevity)</div>
+
+  </div>
+
+  <!-- modal -->
+  <div class="modal-backdrop" id="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head">
+        <span class="modal-title">Delete from entry 47?</span>
+        <span class="modal-close" id="modal-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p class="modal-context">This rolls the story back to before entry 47. The following are removed:</p>
+        <ul class="modal-impact-list">
+          <li><b>12 entries</b> (47&ndash;58)</li>
+          <li class="cross-row"><b>1 chapter re-opened</b> &mdash; chapter 5 will return to in-progress</li>
+          <li><b>23 world-state changes</b></li>
+        </ul>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="modal-cancel">Cancel</button>
+        <button class="btn danger" id="modal-confirm">Delete entries</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const body = document.body;
+
+  function setState(state) {
+    body.dataset.state = state;
+    document.querySelectorAll('.rb-btn[data-state]').forEach(b => {
+      b.classList.toggle('active', b.dataset.state === state);
+    });
+  }
+
+  function setCross(cross) {
+    body.dataset.cross = cross;
+    document.querySelectorAll('.rb-btn[data-cross]').forEach(b => {
+      b.classList.toggle('active', b.dataset.cross === cross);
+    });
+  }
+
+  // review controls
+  document.querySelectorAll('.rb-btn[data-state]').forEach(b => {
+    b.addEventListener('click', () => setState(b.dataset.state));
+  });
+  document.querySelectorAll('.rb-btn[data-cross]').forEach(b => {
+    b.addEventListener('click', () => setCross(b.dataset.cross));
+  });
+
+  // trigger × → open modal (the canonical user flow)
+  document.getElementById('trigger-x').addEventListener('click', (e) => {
+    e.stopPropagation();
+    setState('confirm-modal');
+  });
+
+  // modal dismissal
+  document.getElementById('modal-close').addEventListener('click', () => setState('idle'));
+  document.getElementById('modal-cancel').addEventListener('click', () => setState('idle'));
+  document.getElementById('modal-backdrop').addEventListener('click', (e) => {
+    if (e.target.id === 'modal-backdrop') setState('idle');
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && body.dataset.state === 'confirm-modal') setState('idle');
+  });
+
+  // confirm — for the wireframe demo, just cycles back to idle (no real delete)
+  document.getElementById('modal-confirm').addEventListener('click', () => setState('idle'));
+</script>
+
+</body>
+</html>

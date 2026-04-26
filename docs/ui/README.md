@@ -45,8 +45,9 @@ rationale, and decisions live alongside.
 | --- | --------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | 6   | World (entities + lore)     | [screens/world/](./screens/world/world.md)                                                                  |
 | 7   | Branch navigator            | [screens/reader-composer/branch-navigator/](./screens/reader-composer/branch-navigator/branch-navigator.md) |
-| 8   | Plot (threads + happenings) | [screens/plot/](./screens/plot/plot.md)                                                                     |
-| 9   | Chapter timeline            | pending                                                                                                     |
+| 8   | Rollback confirmation       | [screens/reader-composer/rollback-confirm/](./screens/reader-composer/rollback-confirm/rollback-confirm.md) |
+| 9   | Plot (threads + happenings) | [screens/plot/](./screens/plot/plot.md)                                                                     |
+| 10  | Chapter timeline            | pending                                                                                                     |
 
 ### Power-user / deferred
 
@@ -61,9 +62,7 @@ rationale, and decisions live alongside.
 - Streaming / loading / error inside the reader (error surface
   locked as system entries — see [principles.md](./principles.md))
 - Empty states for each list
-- Rollback confirmation UX (separate wireframe pass pending)
 - Mobile variants for everything (deferred)
-- "Some settings become immutable" UX (deferred)
 
 ## Scope of the initial session (2026-04-24)
 
