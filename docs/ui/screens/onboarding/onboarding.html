@@ -1,0 +1,397 @@
+<!-- prettier-ignore -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Onboarding (first launch)</title>
+<style>
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-highlight: #eef;
+    --bg-dim: #ececec;
+    --warn: #c94;
+    --warn-bg: #fdf3e3;
+    --ok: #4a8;
+  }
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+
+  .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .screen-label strong { color: var(--ink); }
+
+  /* review bar */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; }
+  .review-bar .rb-group > .gl { font-size: 10px; color: #967; margin-right: 4px; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+
+  /* dim backdrop simulating "wizard-as-root" first-launch state */
+  .stage { flex: 1; background: var(--bg-dim); display: flex; align-items: center; justify-content: center; padding: 40px 20px; }
+
+  /* wizard card */
+  .wizard { width: 100%; max-width: 560px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); display: flex; flex-direction: column; overflow: hidden; }
+  .wizard-head { padding: 28px 36px 12px; text-align: center; border-bottom: 1px solid var(--line-soft); }
+  .wizard-title { font-size: 20px; font-weight: 600; color: var(--ink); margin: 0 0 10px; }
+  .wizard-progress { display: flex; gap: 8px; align-items: center; justify-content: center; font-size: 11px; color: var(--ink-muted); }
+  .wizard-progress .dots { display: flex; gap: 6px; }
+  .wizard-progress .dot { width: 10px; height: 10px; display: inline-block; box-sizing: border-box; border-radius: 50%; background: transparent; border: 1.5px solid var(--line); }
+  .wizard-progress .dot.active { background: var(--ink); border-color: var(--ink); }
+  .wizard-progress .dot.done { background: var(--ink-muted); border-color: var(--ink-muted); }
+  .wizard-progress .step-label { color: var(--ink-faint); }
+
+  .wizard-body { padding: 28px 36px; min-height: 260px; }
+  .step-title { font-size: 15px; font-weight: 600; color: var(--ink); margin: 0 0 4px; }
+  .step-rule { height: 1px; background: var(--line-soft); margin: 0 0 12px; }
+  .step-intro { font-size: 12px; color: var(--ink-muted); margin: 0 0 20px; line-height: 1.55; }
+
+  /* step 1 — settings rows */
+  .form-row { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 16px; margin-bottom: 14px; }
+  .form-row .label { font-size: 12px; color: var(--ink); }
+  .form-row .control { display: flex; align-items: center; gap: 8px; }
+  .select { padding: 6px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); font-size: 12px; color: var(--ink); cursor: pointer; min-width: 180px; display: inline-flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .select::after { content: "▾"; font-size: 10px; color: var(--ink-muted); }
+  .segment { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .segment .seg { padding: 5px 14px; font-size: 12px; color: var(--ink-muted); background: var(--bg-region); cursor: pointer; border-right: 1px solid var(--line-soft); }
+  .segment .seg:last-child { border-right: none; }
+  .segment .seg.active { background: var(--ink); color: #fff; }
+
+  /* step 2 — provider cards */
+  .provider-list { display: flex; flex-direction: column; gap: 10px; }
+  .provider-card { display: flex; gap: 12px; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 6px; background: var(--bg-region); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+  .provider-card:hover { border-color: var(--line); background: #fcfcfc; }
+  .provider-card.selected { border-color: var(--ink); background: var(--bg-highlight); }
+  .provider-card .radio { width: 16px; height: 16px; border: 1.5px solid var(--ink-muted); border-radius: 50%; flex-shrink: 0; margin-top: 2px; position: relative; }
+  .provider-card.selected .radio { border-color: var(--ink); }
+  .provider-card.selected .radio::after { content: ""; position: absolute; top: 3px; left: 3px; width: 7px; height: 7px; background: var(--ink); border-radius: 50%; }
+  .provider-meta .name { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .provider-meta .desc { font-size: 11px; color: var(--ink-muted); margin-top: 2px; line-height: 1.4; }
+  .provider-meta .extra-warn { font-size: 11px; color: var(--warn); margin-top: 4px; }
+  .other-providers { margin-top: 16px; text-align: center; font-size: 11px; }
+  .other-providers a { color: var(--ink-muted); text-decoration: none; border-bottom: 1px dashed var(--line); padding-bottom: 1px; }
+  .other-providers a:hover { color: var(--ink); }
+
+  /* step 3 — config form */
+  .field-group { margin-bottom: 16px; }
+  .field-label { font-size: 12px; color: var(--ink); margin-bottom: 4px; display: flex; gap: 6px; align-items: baseline; }
+  .field-label .req { color: var(--warn); font-size: 11px; }
+  .field-label .opt { color: var(--ink-faint); font-size: 11px; font-style: italic; }
+  .field-control { display: flex; gap: 6px; }
+  .field-control input { flex: 1; padding: 7px 10px; border: 1px solid var(--line); border-radius: 4px; font-size: 12px; color: var(--ink); background: var(--bg-region); font-family: inherit; }
+  .field-control input::placeholder { color: var(--ink-faint); font-style: italic; }
+  .field-control .test-btn { padding: 6px 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 12px; cursor: pointer; flex-shrink: 0; }
+  .test-status { font-size: 11px; margin-top: 6px; display: none; }
+  .test-status.ok { color: var(--ok); display: block; }
+  .test-status.fail { color: var(--warn); display: block; }
+  .helper-link { font-size: 11px; color: var(--ink-muted); margin-top: 6px; }
+  .helper-link a { color: var(--ink-muted); border-bottom: 1px dashed var(--line); text-decoration: none; padding-bottom: 1px; }
+  .helper-link a:hover { color: var(--ink); }
+  .config-warn { padding: 10px 12px; background: var(--warn-bg); border-left: 3px solid var(--warn); font-size: 11px; color: #7a5820; line-height: 1.5; margin-top: 16px; border-radius: 0 4px 4px 0; }
+
+  /* footer */
+  .wizard-foot { padding: 14px 24px; border-top: 1px solid var(--line-soft); display: flex; align-items: center; gap: 10px; background: #fcfcfc; }
+  .skip-link { font-size: 12px; color: var(--ink-muted); border-bottom: 1px dashed var(--line); padding-bottom: 1px; cursor: pointer; text-decoration: none; }
+  .skip-link:hover { color: var(--ink); }
+  .foot-spacer { flex: 1; }
+  .btn { padding: 7px 18px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 13px; cursor: pointer; font-family: inherit; }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
+  .btn.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* notes */
+  .notes { padding: 14px 20px; background: #fffbe6; border-top: 1px solid var(--line-soft); font-size: 11px; color: #594; line-height: 1.6; }
+  .notes code { background: #fff; padding: 2px 6px; border: 1px solid var(--line-soft); border-radius: 2px; font-size: 10px; }
+
+  /* step visibility */
+  .step { display: none; }
+  .step.active { display: block; }
+
+  /* step 3 variant visibility */
+  .variant { display: none; }
+  .variant.active { display: block; }
+</style>
+</head>
+<body>
+
+<div class="screen-label"><strong>Wireframe:</strong> Onboarding (first launch) &mdash; desktop &mdash; low-fi, interactive</div>
+
+<div class="review-bar">
+  <span class="rb-label">Review controls</span>
+  <div class="rb-group">
+    <span class="gl">step:</span>
+    <button class="rb-btn active" data-step="1">1 — Basics</button>
+    <button class="rb-btn" data-step="2">2 — Provider</button>
+    <button class="rb-btn" data-step="3">3 — Configure</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">step 2 pick:</span>
+    <button class="rb-btn active" data-provider="openrouter">OpenRouter</button>
+    <button class="rb-btn" data-provider="nanogpt">NanoGPT</button>
+    <button class="rb-btn" data-provider="nim">NIM</button>
+    <button class="rb-btn" data-provider="oaicompat">OAI-compat</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">test result:</span>
+    <button class="rb-btn active" data-test="idle">idle</button>
+    <button class="rb-btn" data-test="ok">ok</button>
+    <button class="rb-btn" data-test="fail">fail</button>
+  </div>
+  <span class="rb-note">flip controls to inspect each state</span>
+</div>
+
+<div class="stage">
+  <div class="wizard">
+    <div class="wizard-head">
+      <h2 class="wizard-title">Welcome to Aventuras</h2>
+      <div class="wizard-progress">
+        <div class="dots">
+          <span class="dot active" data-dot="1"></span>
+          <span class="dot" data-dot="2"></span>
+          <span class="dot" data-dot="3"></span>
+        </div>
+        <span class="step-label" id="step-label">step 1 of 3</span>
+      </div>
+    </div>
+
+    <div class="wizard-body">
+
+      <!-- Step 1 -->
+      <div class="step active" data-step-body="1">
+        <h3 class="step-title">App basics</h3>
+        <div class="step-rule"></div>
+        <p class="step-intro">A few preferences before we get started. All of these are editable later in App Settings.</p>
+
+        <div class="form-row">
+          <div class="label">Language</div>
+          <div class="control">
+            <div class="select">System (English)</div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="label">Theme</div>
+          <div class="control">
+            <div class="select">System</div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="label">Density</div>
+          <div class="control">
+            <div class="segment">
+              <div class="seg active">Comfortable</div>
+              <div class="seg">Compact</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="step" data-step-body="2">
+        <h3 class="step-title">Pick your provider</h3>
+        <div class="step-rule"></div>
+
+        <div class="provider-list">
+          <div class="provider-card selected" data-provider-card="openrouter">
+            <div class="radio"></div>
+            <div class="provider-meta">
+              <div class="name">OpenRouter</div>
+              <div class="desc">Pay-as-you-go gateway across 300+ models</div>
+            </div>
+          </div>
+          <div class="provider-card" data-provider-card="nanogpt">
+            <div class="radio"></div>
+            <div class="provider-meta">
+              <div class="name">NanoGPT</div>
+              <div class="desc">Subscription-based access</div>
+            </div>
+          </div>
+          <div class="provider-card" data-provider-card="nim">
+            <div class="radio"></div>
+            <div class="provider-meta">
+              <div class="name">NVIDIA NIM</div>
+              <div class="desc">Free tier, hosted by NVIDIA</div>
+            </div>
+          </div>
+          <div class="provider-card" data-provider-card="oaicompat">
+            <div class="radio"></div>
+            <div class="provider-meta">
+              <div class="name">OpenAI-compatible</div>
+              <div class="desc">Ollama, LM Studio, custom endpoints</div>
+              <div class="extra-warn">&#9888; Requires extra setup</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="other-providers">
+          <a href="#">Other providers (Anthropic, OpenAI, Google) available in Settings &rarr;</a>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="step" data-step-body="3">
+
+        <!-- Native variant (OpenRouter / NanoGPT / NIM) -->
+        <div class="variant active" data-variant="native">
+          <h3 class="step-title">Connect to <span id="native-provider-name">OpenRouter</span></h3>
+          <div class="step-rule"></div>
+
+          <div class="field-group">
+            <div class="field-label">API key</div>
+            <div class="field-control">
+              <input type="password" placeholder="sk-or-v1-...">
+              <button class="test-btn">Test</button>
+            </div>
+            <div class="test-status ok" data-test-status="ok">&#10003; Connected</div>
+            <div class="test-status fail" data-test-status="fail">&#9888; Couldn't reach <span id="fail-provider-name">OpenRouter</span>. Check the key, or finish setup and fix later in Settings.</div>
+            <div class="helper-link">Don't have one? <a href="#">Get an API key from <span id="helper-provider-name">OpenRouter</span> &rarr;</a></div>
+          </div>
+        </div>
+
+        <!-- OAI-compat variant -->
+        <div class="variant" data-variant="oaicompat">
+          <h3 class="step-title">Connect to a custom endpoint</h3>
+          <div class="step-rule"></div>
+
+          <div class="field-group">
+            <div class="field-label">Endpoint URL <span class="req">*required</span></div>
+            <div class="field-control">
+              <input type="text" value="http://localhost:11434/v1">
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-label">API key <span class="opt">optional &mdash; many local servers don't require one</span></div>
+            <div class="field-control">
+              <input type="password" placeholder="(leave empty if not required)">
+              <button class="test-btn">Test</button>
+            </div>
+            <div class="test-status ok" data-test-status="ok">&#10003; Endpoint reachable</div>
+            <div class="test-status fail" data-test-status="fail">&#9888; Couldn't reach this endpoint. Check the URL, or finish setup and fix later in Settings.</div>
+          </div>
+
+          <div class="config-warn">
+            &#9888; You'll need to pick a model in Settings before generation works. We'll take you there after Finish.
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <div class="wizard-foot">
+      <a class="skip-link" id="skip-link" href="#">Skip for now</a>
+      <div class="foot-spacer"></div>
+      <button class="btn" id="back-btn" disabled>&larr; Back</button>
+      <button class="btn primary" id="next-btn">Next &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <strong>Wireframe notes.</strong>
+  Wizard sits on a dim backdrop simulating the &ldquo;wizard-as-root&rdquo; first-launch state &mdash; no top bar, no Actions, no Settings gear, no Return.
+  <br>
+  <code>Skip for now</code> is final &mdash; <code>onboarding_completed_at</code> gets set on Skip and on Finish; the wizard never re-opens. A skipped user lands on Story list with the no-providers banner (see <code>onboarding.md &rarr; Story list integration</code>).
+  <br>
+  Step 3 morphs by Step 2 selection. Native (OpenRouter / NanoGPT / NIM) shows the API-key form + provider helper link. OAI-compat shows endpoint URL + optional key + a routing warning (Finish lands them in Settings &middot; Profiles or Settings &middot; Providers depending on auto-fetch outcome).
+  <br>
+  Profile/agent assignments seeded on Finish are intentionally invisible &mdash; user discovers them only by visiting Settings &middot; Profiles deliberately. See <code>onboarding.md &rarr; What gets seeded silently</code>.
+</div>
+
+<script>
+  // --- step navigation ---
+  const steps = document.querySelectorAll('.step');
+  const dots = document.querySelectorAll('.dot');
+  const stepLabel = document.getElementById('step-label');
+  const backBtn = document.getElementById('back-btn');
+  const nextBtn = document.getElementById('next-btn');
+  const stepBtns = document.querySelectorAll('.rb-btn[data-step]');
+
+  let currentStep = 1;
+
+  function setStep(n) {
+    currentStep = n;
+    steps.forEach(s => s.classList.toggle('active', +s.dataset.stepBody === n));
+    dots.forEach((d, i) => {
+      d.classList.toggle('active', i + 1 === n);
+      d.classList.toggle('done', i + 1 < n);
+    });
+    stepLabel.textContent = `step ${n} of 3`;
+    backBtn.disabled = (n === 1);
+    nextBtn.textContent = (n === 3) ? 'Finish' : 'Next →';
+    stepBtns.forEach(b => b.classList.toggle('active', +b.dataset.step === n));
+  }
+
+  stepBtns.forEach(b => b.addEventListener('click', () => setStep(+b.dataset.step)));
+  backBtn.addEventListener('click', () => { if (currentStep > 1) setStep(currentStep - 1); });
+  nextBtn.addEventListener('click', () => { if (currentStep < 3) setStep(currentStep + 1); });
+
+  // --- provider selection (step 2) drives step 3 morph ---
+  const providerCards = document.querySelectorAll('.provider-card');
+  const providerBtns = document.querySelectorAll('.rb-btn[data-provider]');
+  const variants = document.querySelectorAll('.variant');
+  const providerNames = {
+    openrouter: 'OpenRouter',
+    nanogpt: 'NanoGPT',
+    nim: 'NVIDIA NIM',
+    oaicompat: 'OpenAI-compatible',
+  };
+  let currentProvider = 'openrouter';
+
+  function setProvider(p) {
+    currentProvider = p;
+    providerCards.forEach(c => c.classList.toggle('selected', c.dataset.providerCard === p));
+    providerBtns.forEach(b => b.classList.toggle('active', b.dataset.provider === p));
+
+    const variant = (p === 'oaicompat') ? 'oaicompat' : 'native';
+    variants.forEach(v => v.classList.toggle('active', v.dataset.variant === variant));
+
+    const name = providerNames[p];
+    document.getElementById('native-provider-name').textContent = name;
+    document.getElementById('fail-provider-name').textContent = name;
+    document.getElementById('helper-provider-name').textContent = name;
+  }
+
+  providerCards.forEach(c => c.addEventListener('click', () => setProvider(c.dataset.providerCard)));
+  providerBtns.forEach(b => b.addEventListener('click', () => setProvider(b.dataset.provider)));
+
+  // --- test result state (step 3) ---
+  const testBtns = document.querySelectorAll('.rb-btn[data-test]');
+  const testStatuses = document.querySelectorAll('.test-status');
+
+  function setTestState(t) {
+    testBtns.forEach(b => b.classList.toggle('active', b.dataset.test === t));
+    testStatuses.forEach(s => {
+      s.style.display = (t !== 'idle' && s.dataset.testStatus === t) ? 'block' : 'none';
+    });
+  }
+  testBtns.forEach(b => b.addEventListener('click', () => setTestState(b.dataset.test)));
+
+  // --- step 1 segment toggle ---
+  document.querySelectorAll('.segment').forEach(seg => {
+    seg.querySelectorAll('.seg').forEach(s => {
+      s.addEventListener('click', () => {
+        seg.querySelectorAll('.seg').forEach(x => x.classList.remove('active'));
+        s.classList.add('active');
+      });
+    });
+  });
+
+  // skip link is illustrative — do nothing
+  document.getElementById('skip-link').addEventListener('click', e => e.preventDefault());
+
+  // init
+  setStep(1);
+  setProvider('openrouter');
+  setTestState('idle');
+</script>
+
+</body>
+</html>

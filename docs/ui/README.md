@@ -36,7 +36,7 @@ rationale, and decisions live alongside.
 | 2   | Story creation wizard          | pending                                                                  |
 | 3   | Reader / composer              | [screens/reader-composer/](./screens/reader-composer/reader-composer.md) |
 | 4   | App Settings                   | [screens/app-settings/](./screens/app-settings/app-settings.md)          |
-| 5   | Onboarding / empty state       | pending                                                                  |
+| 5   | Onboarding (first launch)      | [screens/onboarding/](./screens/onboarding/onboarding.md)                |
 | -   | Story Settings (from reader ⚙) | [screens/story-settings/](./screens/story-settings/story-settings.md)    |
 
 ### Supporting (lands with MVP)
