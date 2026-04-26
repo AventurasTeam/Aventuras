@@ -39,21 +39,16 @@ demands it.
 ### Fictional calendar systems
 
 v1 ships Earth-calendar-only (base unit = seconds, formatted via
-`worldTimeOrigin` ISO anchor). The schema already supports fictional
-calendars — `worldTime` is a bare integer; a different calendar is
-just a different renderer over the same integer. What's missing:
+`worldTimeOrigin` ISO anchor). Design for fictional calendars is
+spec'd in [`calendar-systems.md`](./calendar-systems.md): a tiered
+counter primitive with sub-divisions for week-style cycles and
+manually-flipped eras hoisted out of the rollover chain, all
+rendered through a Liquid display template. Schema and pipeline
+fit the design without a refactor; v1 ships only the Earth preset.
 
-- Where a story's calendar system is declared (wizard step plus a
-  `stories.settings.calendarSystem` field, presumably).
-- How calendar systems are authored (built-in presets? pack-declared?
-  plugin-shaped?).
-- The renderer contract (what a calendar formatter must implement).
-- Classifier awareness — does it need to know the calendar to emit
-  sensible elapsed-unit deltas, or is "base units" abstract enough?
-
-High design-space breadth; picking a shape too early risks boxing
-out common user needs. Defer until we have 2–3 concrete fictional
-calendars we want to support and can design against them.
+Implementation deferred until 2–3 concrete fictional calendars
+surface to validate the design against. Adding a preset is a data
+commit per `calendar-systems.md → Presets to ship`.
 
 ### Manual worldTime correction — cascade vs. jump + downstream blast radius
 
