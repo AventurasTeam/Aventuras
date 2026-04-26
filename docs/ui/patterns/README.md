@@ -21,6 +21,9 @@ cites them, doesn't duplicate.
 - [`entity.md`](./entity.md) — entity rows: indicators, kind icons,
   sort order, filter chips, three surfacing levels, schema-driven
   forms, recently-classified accent.
+- [`icon-actions.md`](./icon-actions.md) — inline action icons on
+  row-shaped surfaces: always-visible-muted + hover-brighten,
+  shared glyph vocabulary, hidden vs disabled rules.
 - [`save-sessions.md`](./save-sessions.md) — explicit-save session
   pattern (save bar + global navigate-away guard) used by every
   detail-pane edit surface.

@@ -1,0 +1,384 @@
+<!-- prettier-ignore -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Branch navigator</title>
+<style>
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-highlight: #eef;
+    --bg-dim: rgba(0,0,0,0.32);
+    --warn: #c94;
+    --warn-bg: #fdf3e3;
+    --ok: #4a8;
+  }
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+
+  .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .screen-label strong { color: var(--ink); }
+
+  /* review bar */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; }
+  .review-bar .rb-group > .gl { font-size: 10px; color: #967; margin-right: 4px; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+
+  /* simulated reader chrome (for context) */
+  .reader-stage { flex: 1; background: var(--bg); position: relative; padding: 0; overflow: hidden; }
+  .topbar { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--bg-region); position: relative; z-index: 1; }
+  .logo { width: 28px; height: 28px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--ink-faint); flex-shrink: 0; }
+  .crumb { font-size: 13px; color: var(--ink); display: inline-flex; gap: 8px; align-items: center; }
+  .crumb .sep { color: var(--ink-faint); }
+  .crumb .muted { color: var(--ink-muted); }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .status-pill { padding: 3px 10px; border: 1px solid var(--line-soft); border-radius: 999px; font-size: 11px; color: var(--ink-muted); background: var(--bg); }
+  .branch-chip { padding: 4px 10px; border: 1px solid var(--ink); border-radius: 4px; font-size: 12px; color: var(--ink); background: var(--bg-region); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+  .branch-chip .count { background: var(--ink); color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 999px; font-weight: 600; }
+  .branch-chip:hover { background: var(--bg-highlight); }
+  .icon-btn { width: 30px; height: 30px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 14px; cursor: pointer; }
+
+  .reader-faux { padding: 24px 32px; opacity: 0.5; }
+  .reader-faux .fauxline { height: 12px; background: var(--line-soft); border-radius: 3px; margin-bottom: 8px; }
+  .reader-faux .fauxline.short { width: 60%; }
+  .reader-faux .fauxline.mid { width: 80%; }
+
+  /* navigator popover (desktop) */
+  .popover-wrap { position: absolute; z-index: 5; top: 56px; right: 96px; }
+  .popover-arrow { position: absolute; top: -7px; right: 60px; width: 12px; height: 12px; background: var(--bg-region); border-left: 1px solid var(--line); border-top: 1px solid var(--line); transform: rotate(45deg); }
+  .popover { width: 360px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.10); overflow: hidden; }
+  .popover-head { padding: 12px 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line-soft); }
+  .popover-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .popover-count { font-size: 11px; color: var(--ink-faint); margin-left: 4px; }
+  .popover-close { margin-left: auto; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; color: var(--ink-faint); font-size: 14px; cursor: pointer; border-radius: 3px; }
+  .popover-close:hover { background: var(--bg-highlight); color: var(--ink); }
+  .popover-body { padding: 6px 0; max-height: 360px; overflow-y: auto; }
+
+  /* branch row */
+  .branch-row { display: flex; align-items: center; gap: 10px; padding: 8px 16px; cursor: pointer; transition: background 0.1s; position: relative; }
+  .branch-row:hover { background: var(--bg-highlight); }
+  .branch-row .marker { width: 14px; flex-shrink: 0; text-align: center; font-size: 12px; color: var(--ink-faint); }
+  .branch-row.current .marker { color: var(--ink); }
+  .branch-row .name { flex: 1; font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .branch-row.current .name { font-weight: 600; }
+  /* always-visible-but-muted: icons render at low opacity; row hover brightens. */
+  /* Same affordance on desktop and mobile (touch has no hover state, so mobile sits at the muted default — taps still trigger normally). */
+  .branch-row .row-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; opacity: 0.35; transition: opacity 0.12s ease-out; }
+  .branch-row:hover .row-actions, .branch-row:focus-within .row-actions { opacity: 1; }
+  .branch-row .row-icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 13px; cursor: pointer; border-radius: 3px; transition: background 0.1s, color 0.1s; }
+  .branch-row .row-icon:hover { background: var(--bg); color: var(--ink); }
+  .branch-row .row-icon.delete:hover { background: var(--warn-bg); color: var(--warn); }
+
+  /* inline rename state */
+  .branch-row.renaming { background: var(--bg); cursor: default; }
+  .branch-row.renaming:hover { background: var(--bg); }
+  .branch-row.renaming .row-actions { display: none; }
+  .branch-row.renaming .name { display: none; }
+  .branch-row.renaming .rename-input { flex: 1; padding: 4px 8px; border: 1px solid var(--line); border-radius: 3px; font-size: 13px; color: var(--ink); font-family: inherit; outline: none; }
+  .branch-row.renaming .rename-input:focus { border-color: var(--ink); }
+  .branch-row .rename-input { display: none; }
+
+  /* inline delete confirm state */
+  .branch-row.confirming { background: var(--warn-bg); cursor: default; flex-direction: column; align-items: stretch; padding: 10px 16px; gap: 6px; }
+  .branch-row.confirming:hover { background: var(--warn-bg); }
+  .branch-row.confirming .marker, .branch-row.confirming .row-actions { display: none; }
+  .branch-row.confirming .name { font-size: 13px; color: var(--ink); }
+  .branch-row .confirm-ctrls { display: none; align-items: center; gap: 8px; }
+  .branch-row.confirming .confirm-ctrls { display: flex; }
+  .confirm-ctrls .confirm-msg { font-size: 12px; color: #7a5820; flex: 1; }
+  .confirm-ctrls .btn { padding: 4px 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); color: var(--ink); font-size: 12px; cursor: pointer; font-family: inherit; }
+  .confirm-ctrls .btn.danger { background: var(--warn); color: #fff; border-color: var(--warn); font-weight: 600; }
+
+  /* drawer (mobile) */
+  .drawer-backdrop { position: absolute; inset: 0; background: var(--bg-dim); z-index: 4; display: none; }
+  .drawer-backdrop.show { display: block; }
+  .drawer { position: absolute; left: 0; right: 0; bottom: 0; max-width: 480px; margin: 0 auto; background: var(--bg-region); border-top-left-radius: 12px; border-top-right-radius: 12px; box-shadow: 0 -6px 24px rgba(0,0,0,0.12); z-index: 5; display: none; }
+  .drawer.show { display: block; }
+  .drawer .grab { width: 36px; height: 4px; background: var(--line-soft); border-radius: 2px; margin: 8px auto; }
+  .drawer .popover-head { padding: 4px 18px 12px; }
+  .drawer .popover-body { padding-bottom: 18px; }
+
+  /* creation modal */
+  .modal-backdrop { position: absolute; inset: 0; background: var(--bg-dim); z-index: 6; display: none; align-items: center; justify-content: center; }
+  .modal-backdrop.show { display: flex; }
+  .modal { width: 360px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); overflow: hidden; }
+  .modal-head { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; }
+  .modal-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+  .modal-close { margin-left: auto; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; color: var(--ink-faint); font-size: 14px; cursor: pointer; border-radius: 3px; }
+  .modal-close:hover { background: var(--bg-highlight); color: var(--ink); }
+  .modal-body { padding: 16px 18px; }
+  .modal-context { font-size: 12px; color: var(--ink-muted); margin-bottom: 14px; }
+  .modal-field-label { font-size: 12px; color: var(--ink); margin-bottom: 4px; display: flex; gap: 6px; align-items: baseline; }
+  .modal-field-label .req { color: var(--warn); font-size: 11px; }
+  .modal-input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; font-size: 13px; color: var(--ink); font-family: inherit; }
+  .modal-input:focus { outline: none; border-color: var(--ink); }
+  .modal-foot { padding: 12px 18px; border-top: 1px solid var(--line-soft); display: flex; justify-content: flex-end; gap: 8px; background: #fcfcfc; }
+  .modal-foot .btn { padding: 6px 16px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 13px; cursor: pointer; font-family: inherit; }
+  .modal-foot .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
+  .modal-foot .btn.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* notes */
+  .notes { padding: 14px 20px; background: #fffbe6; border-top: 1px solid var(--line-soft); font-size: 11px; color: #594; line-height: 1.6; }
+  .notes code { background: #fff; padding: 2px 6px; border: 1px solid var(--line-soft); border-radius: 2px; font-size: 10px; }
+</style>
+</head>
+<body>
+
+<div class="screen-label"><strong>Wireframe:</strong> Branch navigator + creation modal &mdash; desktop / mobile, low-fi, interactive</div>
+
+<div class="review-bar">
+  <span class="rb-label">Review controls</span>
+  <div class="rb-group">
+    <span class="gl">surface:</span>
+    <button class="rb-btn active" data-surface="popover">Navigator (popover)</button>
+    <button class="rb-btn" data-surface="drawer">Navigator (drawer)</button>
+    <button class="rb-btn" data-surface="modal">Creation modal</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">row state:</span>
+    <button class="rb-btn active" data-row-state="default">default (muted)</button>
+    <button class="rb-btn" data-row-state="hover">row hover (icons brightened)</button>
+    <button class="rb-btn" data-row-state="renaming">renaming</button>
+    <button class="rb-btn" data-row-state="confirming">delete confirm</button>
+  </div>
+  <span class="rb-note">flip controls to inspect each state</span>
+</div>
+
+<div class="reader-stage">
+
+  <!-- simulated reader chrome to anchor the popover -->
+  <header class="topbar">
+    <div class="logo">A</div>
+    <div class="crumb">
+      <span>Aria's Descent</span>
+      <span class="sep">·</span>
+      <span class="muted">Ch 5</span>
+      <span class="sep">·</span>
+      <span class="muted">🕒 22nd of Frostmoon</span>
+    </div>
+    <div class="topbar-right">
+      <div class="status-pill">idle</div>
+      <div class="branch-chip" id="chip">⎇ <span class="count" id="chip-count">3</span></div>
+      <div class="icon-btn">⎇</div>
+      <div class="icon-btn">⚙</div>
+      <div class="icon-btn">←</div>
+    </div>
+  </header>
+
+  <div class="reader-faux">
+    <div class="fauxline mid"></div>
+    <div class="fauxline"></div>
+    <div class="fauxline short"></div>
+    <div class="fauxline mid"></div>
+    <div class="fauxline"></div>
+    <div class="fauxline short"></div>
+    <div class="fauxline mid"></div>
+    <div class="fauxline short"></div>
+  </div>
+
+  <!-- navigator popover (desktop) -->
+  <div class="popover-wrap" id="popover-wrap">
+    <div class="popover-arrow"></div>
+    <div class="popover">
+      <div class="popover-head">
+        <span class="popover-title">Branches</span>
+        <span class="popover-count">· 3</span>
+        <span class="popover-close">×</span>
+      </div>
+      <div class="popover-body" id="popover-body-desktop">
+        <!-- rows injected by script for state simulation -->
+      </div>
+    </div>
+  </div>
+
+  <!-- drawer (mobile) -->
+  <div class="drawer-backdrop" id="drawer-backdrop"></div>
+  <div class="drawer mobile-mode" id="drawer">
+    <div class="grab"></div>
+    <div class="popover-head">
+      <span class="popover-title">Branches</span>
+      <span class="popover-count">· 3</span>
+    </div>
+    <div class="popover-body" id="popover-body-mobile">
+      <!-- rows injected by script for state simulation -->
+    </div>
+  </div>
+
+  <!-- creation modal -->
+  <div class="modal-backdrop" id="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head">
+        <span class="modal-title">New branch</span>
+        <span class="modal-close">×</span>
+      </div>
+      <div class="modal-body">
+        <div class="modal-context">Branching from entry 47.</div>
+        <div class="modal-field-label">Name <span class="req">*required</span></div>
+        <input class="modal-input" id="modal-name-input" type="text" placeholder="e.g. alt-ending-2">
+      </div>
+      <div class="modal-foot">
+        <button class="btn">Cancel</button>
+        <button class="btn primary" id="modal-create-btn" disabled>Create</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="notes">
+  <strong>Wireframe notes.</strong>
+  Navigator anchors to the reader's branch chip on desktop (popover with arrow) or slides up as a bottom drawer on mobile.
+  <br>
+  Per row: marker + name + two inline icons (<code>✎</code> rename, <code>×</code> delete; delete hidden on root + current). Icons are <strong>always visible at muted opacity</strong>; they brighten on row hover/focus (desktop). Mobile sits at the muted default since touch has no hover state &mdash; taps still trigger normally. Click row body switches; click an icon performs that action directly &mdash; no overflow menu.
+  <br>
+  Inline rename and inline delete-confirm both render in-place inside the row &mdash; no popover-within-popover. The confirm row is the "adversarial flag" item from <code>branch-navigator.md</code>; if the visual jump feels jarring, fall back to a small modal.
+  <br>
+  Creation modal opens from the reader's per-entry <code>⎇ Branch from this entry</code> action. Name is required; <code>Create</code> is disabled until non-empty. Confirm switches to the new branch and reloads the reader.
+</div>
+
+<script>
+  // --- branch data for state simulation ---
+  const branches = [
+    { id: 'b1', name: 'main', current: true, isRoot: true },
+    { id: 'b2', name: 'alt-ending-2', current: false, isRoot: false },
+    { id: 'b3', name: 'the-trap', current: false, isRoot: false },
+  ];
+
+  let currentSurface = 'popover';      // 'popover' | 'drawer' | 'modal'
+  let rowState = 'default';            // 'default' | 'menu' | 'renaming' | 'confirming'
+  let stateRowId = 'b2';               // which row carries the current rowState (for non-default)
+
+  function renderRows(targetEl) {
+    targetEl.innerHTML = '';
+    branches.forEach(b => {
+      const row = document.createElement('div');
+      row.className = 'branch-row';
+      if (b.current) row.classList.add('current');
+      if (b.id === stateRowId && rowState !== 'default' && rowState !== 'menu') {
+        if (rowState === 'renaming') row.classList.add('renaming');
+        if (rowState === 'confirming') row.classList.add('confirming');
+      }
+
+      const marker = document.createElement('span');
+      marker.className = 'marker';
+      marker.textContent = b.current ? '✓' : '○';
+      row.appendChild(marker);
+
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = b.name;
+      row.appendChild(name);
+
+      const renameInput = document.createElement('input');
+      renameInput.className = 'rename-input';
+      renameInput.type = 'text';
+      renameInput.value = b.name;
+      row.appendChild(renameInput);
+
+      // inline action icons (rename + delete; delete hidden on root + current)
+      const actions = document.createElement('div');
+      actions.className = 'row-actions';
+      const renameIcon = document.createElement('span');
+      renameIcon.className = 'row-icon rename';
+      renameIcon.textContent = '✎';
+      renameIcon.title = 'Rename';
+      actions.appendChild(renameIcon);
+      if (!b.isRoot && !b.current) {
+        const deleteIcon = document.createElement('span');
+        deleteIcon.className = 'row-icon delete';
+        deleteIcon.textContent = '×';
+        deleteIcon.title = 'Delete';
+        actions.appendChild(deleteIcon);
+      }
+      row.appendChild(actions);
+
+      // confirm controls (used in confirming state)
+      const confirmCtrls = document.createElement('div');
+      confirmCtrls.className = 'confirm-ctrls';
+      const msg = document.createElement('span');
+      msg.className = 'confirm-msg';
+      msg.textContent = 'Delete this branch?';
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn';
+      cancelBtn.textContent = 'Cancel';
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn danger';
+      deleteBtn.textContent = 'Delete';
+      confirmCtrls.appendChild(msg);
+      confirmCtrls.appendChild(cancelBtn);
+      confirmCtrls.appendChild(deleteBtn);
+      row.appendChild(confirmCtrls);
+
+      // 'hover' review state — force-brighten icons on this row (and mark row as hovered visually)
+      if (b.id === stateRowId && rowState === 'hover') {
+        actions.style.opacity = '1';
+        row.style.background = 'var(--bg-highlight)';
+      }
+
+      targetEl.appendChild(row);
+    });
+  }
+
+  function applySurface() {
+    const popover = document.getElementById('popover-wrap');
+    const drawerBackdrop = document.getElementById('drawer-backdrop');
+    const drawer = document.getElementById('drawer');
+    const modalBackdrop = document.getElementById('modal-backdrop');
+    popover.style.display = (currentSurface === 'popover') ? 'block' : 'none';
+    drawerBackdrop.classList.toggle('show', currentSurface === 'drawer');
+    drawer.classList.toggle('show', currentSurface === 'drawer');
+    modalBackdrop.classList.toggle('show', currentSurface === 'modal');
+
+    // pick the right row state — "menu" only makes sense on a non-default row,
+    // and "renaming"/"confirming" target b2 by default for the demo
+    const desktopBody = document.getElementById('popover-body-desktop');
+    const mobileBody = document.getElementById('popover-body-mobile');
+    renderRows(desktopBody);
+    renderRows(mobileBody);
+  }
+
+  // --- review controls ---
+  document.querySelectorAll('.rb-btn[data-surface]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.rb-btn[data-surface]').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    currentSurface = b.dataset.surface;
+    applySurface();
+  }));
+
+  document.querySelectorAll('.rb-btn[data-row-state]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.rb-btn[data-row-state]').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    rowState = b.dataset.rowState;
+    applySurface();
+  }));
+
+  // chip click toggles popover (illustrative)
+  document.getElementById('chip').addEventListener('click', () => {
+    currentSurface = 'popover';
+    document.querySelectorAll('.rb-btn[data-surface]').forEach(x => x.classList.toggle('active', x.dataset.surface === 'popover'));
+    applySurface();
+  });
+
+  // modal name input enables Create
+  const nameInput = document.getElementById('modal-name-input');
+  const createBtn = document.getElementById('modal-create-btn');
+  nameInput.addEventListener('input', () => {
+    createBtn.disabled = nameInput.value.trim().length === 0;
+  });
+
+  // init
+  applySurface();
+</script>
+
+</body>
+</html>

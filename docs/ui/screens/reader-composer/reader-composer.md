@@ -112,18 +112,21 @@ Storage / classifier contract: see
 ## Per-entry actions
 
 Actions on an individual entry (edit, regenerate, branch, delete)
-render as **icon buttons** (not text labels), **always visible** (not
-hover-to-reveal), with a muted default opacity that brightens on
-hover/focus. Same affordance on desktop and mobile.
+follow the
+[icon-actions pattern](../../patterns/icon-actions.md) — icon
+buttons, always-visible-but-muted, brighten on row hover/focus,
+same affordance on desktop and mobile.
 
-Icon set (placeholder glyphs; finalize with visual identity):
+Icon set (placeholder glyphs per the
+[shared glyph vocabulary](../../patterns/icon-actions.md#glyph-vocabulary);
+finalize with visual identity):
 
-| Action | Glyph | Meaning                                |
-| ------ | ----- | -------------------------------------- |
-| edit   | ✎     | Edit entry content                     |
-| regen  | ↻     | Regenerate this AI reply               |
-| branch | ⎇     | Branch from this entry                 |
-| delete | ×     | Delete this entry (rollback semantics) |
+| Action | Glyph | Meaning                                                                                                             |
+| ------ | ----- | ------------------------------------------------------------------------------------------------------------------- |
+| edit   | ✎     | Edit entry content                                                                                                  |
+| regen  | ↻     | Regenerate this AI reply                                                                                            |
+| branch | ⎇     | Branch from this entry — opens the [creation modal](../branch-navigator/branch-navigator.md#branch-creation--modal) |
+| delete | ×     | Delete this entry (rollback semantics)                                                                              |
 
 Per-entry action sets:
 
