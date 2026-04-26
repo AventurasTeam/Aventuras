@@ -202,6 +202,24 @@ See [principles → Import counterparts](../../patterns/data.md#import-counterpa
 for the cross-cutting pattern (versioning, zod validation, Vault
 parallelism).
 
+## Banner — AI configuration
+
+When `app_settings.providers` is empty (user skipped
+[Onboarding](../onboarding/onboarding.md#skip-behavior), or
+deleted the last provider after the fact), a persistent warning bar
+sits at the top of the screen:
+
+```
+⚠ AI generation not configured. [Set up a provider →]
+```
+
+The CTA opens
+[App Settings · Providers](../app-settings/app-settings.md#generation--providers).
+Always opens Settings — never re-opens the wizard. See
+[Onboarding → Story list integration](../onboarding/onboarding.md#story-list-integration--banner)
+for the full contract (priority vs. the existing profile-error
+banner, why no "Resume setup" route, etc.).
+
 ## Empty state (first launch)
 
 When the user has zero stories (first launch, or after deleting

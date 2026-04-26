@@ -209,6 +209,7 @@ erDiagram
         json default_story_settings "see 'Story settings shape' — copy-at-creation source for new stories"
         json appearance "theme, density, accent preference"
         text ui_language "ISO 639-1; defaults to OS locale on first launch"
+        integer onboarding_completed_at "set on first dismissal of the onboarding wizard (Finish, Skip, or Step 2 footer-link exit); null = wizard renders as root on next boot"
         json diagnostics "debug toggles, retry counts, view-logs prefs"
         integer created_at
         integer updated_at
@@ -470,7 +471,7 @@ fewer migrations during the rapid-iteration period.
 ```ts
 app_settings.providers: Array<{
   id: string                                 // stable UUID per instance
-  type: 'anthropic' | 'openai' | 'google' | 'openrouter' | 'nanogpt' | 'openai-compatible'
+  type: 'anthropic' | 'openai' | 'google' | 'openrouter' | 'nanogpt' | 'nvidia-nim' | 'openai-compatible'
   displayName: string                        // user-chosen; e.g. 'Anthropic (work)'
   apiKey: string                             // see encryption note below
   endpoint?: string                          // override default; required for openai-compatible

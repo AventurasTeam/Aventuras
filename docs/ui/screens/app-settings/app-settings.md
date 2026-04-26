@@ -68,20 +68,25 @@ instances of the same type (e.g., separate work + personal Anthropic
 keys, or two OpenAI-compatible endpoints pointing at different
 local Ollama installs).
 
-Six provider **types** available in v1:
+Seven provider **types** available in v1:
 
 - **Anthropic** — `/messages`
 - **OpenAI** — chat + new `/responses`
 - **Google** — Gemini
 - **OpenRouter** — has model capability flags (reasoning, structured
-  output)
-- **NanoGPT** — has model capability flags
+  output). Surfaced in [Onboarding](../onboarding/onboarding.md#step-2--pick-your-provider).
+- **NanoGPT** — has model capability flags. Surfaced in
+  [Onboarding](../onboarding/onboarding.md#step-2--pick-your-provider).
+- **NVIDIA NIM** — free-tier hosted inference. Surfaced in
+  [Onboarding](../onboarding/onboarding.md#step-2--pick-your-provider).
 - **OpenAI-compatible** — catch-all for Ollama / LM Studio / any
   endpoint speaking OpenAI's chat shape (user supplies endpoint URL)
 
 ### Provider list
 
-Empty by default after install (until Onboarding seeds one). Each
+Empty by default after install (until
+[Onboarding](../onboarding/onboarding.md#step-3--configure-provider)
+seeds one, or the user skips and adds one here directly). Each
 configured provider renders as a collapsible row:
 
 ```
@@ -192,9 +197,9 @@ The OpenAI-compatible type differs from the others:
 ### Default provider
 
 One configured provider can be marked default (⭐ badge on the row).
-Set during Onboarding, editable here. The default provider seeds the
-Narrative profile model and "Reset to defaults" actions across the
-rest of the app.
+Set during [Onboarding](../onboarding/onboarding.md#what-gets-seeded-silently),
+editable here. The default provider seeds the Narrative profile
+model and "Reset to defaults" actions across the rest of the app.
 
 ### Storage
 
@@ -247,9 +252,13 @@ Profile `⋯` menu offers rename, duplicate, delete (delete is blocked
 when agents are still assigned — the user is prompted to reassign
 first).
 
-**Default agent profiles seeded by Onboarding:** `Fast tasks` (cheap
-routine agents) and `Heavy reasoning` (lore-mgmt + memory-compaction
-at chapter close). User can rename / delete / extend.
+**Default agent profiles seeded by
+[Onboarding](../onboarding/onboarding.md#what-gets-seeded-silently):**
+`Fast tasks` (cheap routine agents) and `Heavy reasoning` (lore-mgmt
+
+- memory-compaction at chapter close). The names and exact
+  assignment matrix are placeholder shapes; final templates land with
+  implementation. User can rename / delete / extend.
 
 ### Assignments
 
@@ -262,8 +271,11 @@ Each agent dropdown picks a profile. Agents currently in the system:
 - `memory-compaction` — chapter close
 - `retrieval` — retrieval phase (when designed)
 
-Default assignment seeded by Onboarding (typically all → `Fast tasks`
-except the chapter-close pair → `Heavy reasoning`).
+Default assignment seeded by
+[Onboarding](../onboarding/onboarding.md#what-gets-seeded-silently)
+(typically all → `Fast tasks` except the chapter-close pair →
+`Heavy reasoning`). Placeholder split — finalized with
+implementation.
 
 Image generation is **deferred** as a feature; no `imageGen` agent
 entry until the feature lands. Tracked in
@@ -390,14 +402,21 @@ a loaded story). Top bar carries:
 ## Onboarding adjacency
 
 First-launch UX (no provider keys, no profiles configured) lives in
-the dedicated Onboarding wireframe (separate inventory item). App
-Settings is the edit surface for users who already know what they
-want; Onboarding is the hand-hold for first-time setup. They share
-form components; Onboarding's chrome is different (linear flow vs
-random-access tabs).
+the dedicated [Onboarding](../onboarding/onboarding.md) wireframe.
+App Settings is the edit surface for users who already know what
+they want; Onboarding is the hand-hold for first-time setup. They
+share form components (Theme / Language / Density widgets in Step 1
+are literally the same controls as the App / Appearance + Language
+tabs); Onboarding's chrome is different (linear flow vs random-
+access tabs).
 
-The profile and provider chosen during Onboarding seed the initial
-Narrative profile and the default provider.
+The provider chosen during Onboarding seeds the initial default
+provider, the Narrative profile model, and the two default agent
+profiles. See
+[Onboarding → What gets seeded silently](../onboarding/onboarding.md#what-gets-seeded-silently).
+Skipped Onboarding is permanent — there's no "resume the wizard"
+affordance from here; users who skipped configure the same way as
+anyone else.
 
 ## Screen-specific open questions
 
