@@ -184,12 +184,6 @@ after). Needs its own wireframe: hover-preview of affected range,
 confirmation modal with counts ("removes N entries, M chapters, K
 entity updates"), cross-chapter warning.
 
-### Lead switch on reader peek drawer
-
-Add a "Set as lead" action to the peek drawer for characters. Matches
-the World panel · Overview affordance but inline. Not drawn in the
-current reader wireframe — requires a return pass.
-
 ### Bulk operations on entities
 
 See [ui/principles.md](./ui/principles.md) for open sub-questions. Dedicated design pass.

@@ -264,8 +264,10 @@ plain characters. Entry points:
 
 - **World Panel · Overview** — "Set as lead" action on any character
   entity, alongside status.
-- **Reader peek drawer** — quick switch without navigating out.
-  Pending — return pass on the reader wireframe.
+- **Reader peek drawer** — character peek-head shows a `Set as lead`
+  inline text-action when not lead, or a `You` / `Protagonist` badge
+  when current. Quick switch without navigating out. See
+  [reader-composer → Peek drawer lead affordance](./screens/reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters).
 - **Actions menu** — "Set lead character → pick" searchable command.
 - **Story Settings · About** — alongside the mode selector.
 

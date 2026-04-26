@@ -102,6 +102,9 @@
   .peek-foot { padding: 10px 16px; border-top: 1px solid var(--line-soft); background: var(--bg); display: flex; justify-content: space-between; align-items: center; }
   .peek-foot .link { font-size: 12px; color: var(--ink); font-weight: 500; cursor: pointer; }
   .peek-foot .note { font-size: 10px; color: var(--ink-faint); font-style: italic; }
+  .peek-head .name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .peek-head .lead-action { font-size: 11px; color: var(--ink); font-weight: 500; cursor: pointer; border-bottom: 1px dashed var(--line); padding-bottom: 1px; }
+  .peek-head .lead-action:hover { border-bottom-color: var(--ink); }
 
   /* right rail */
   aside.right { background: var(--bg-region); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
@@ -285,6 +288,12 @@
     <span class="gl">peek:</span>
     <button class="rb-btn active" data-peek="closed">closed</button>
     <button class="rb-btn" data-peek="open">open — Kael</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">peek lead state:</span>
+    <button class="rb-btn active" data-lead="not-lead">not lead</button>
+    <button class="rb-btn" data-lead="is-lead">already lead</button>
   </div>
 
   <div class="rb-group">
@@ -640,7 +649,11 @@
     <div class="peek-head">
       <div>
         <div class="crumb">Character &middot; active &middot; in scene</div>
-        <div class="name" id="peek-name">Kael</div>
+        <div class="name-row">
+          <div class="name" id="peek-name">Kael</div>
+          <span class="lead-badge" id="peek-lead-badge" style="display: none;">You</span>
+          <span class="lead-action" id="peek-lead-action">Set as lead</span>
+        </div>
       </div>
       <span class="peek-close" id="peek-close" title="Close (Esc)">&times;</span>
     </div>
@@ -784,6 +797,26 @@
       setPeek('open', name);
     });
   });
+
+  // peek lead state — toggles "Set as lead" action vs "You/Protagonist" badge in peek-head
+  const peekLeadBadge = document.getElementById('peek-lead-badge');
+  const peekLeadAction = document.getElementById('peek-lead-action');
+  function setPeekLead(state) {
+    if (state === 'is-lead') {
+      peekLeadBadge.style.display = '';
+      peekLeadAction.style.display = 'none';
+    } else {
+      peekLeadBadge.style.display = 'none';
+      peekLeadAction.style.display = '';
+    }
+    document.querySelectorAll('[data-lead]').forEach(b => {
+      b.classList.toggle('active', b.dataset.lead === state);
+    });
+  }
+  document.querySelectorAll('[data-lead]').forEach(b => {
+    b.addEventListener('click', () => setPeekLead(b.dataset.lead));
+  });
+  peekLeadAction.addEventListener('click', () => setPeekLead('is-lead'));
 
   // scope filter chip
   const scopeChip = document.getElementById('scope-chip');

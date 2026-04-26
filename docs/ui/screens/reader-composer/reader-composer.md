@@ -243,6 +243,33 @@ Placeholder text reflects the active category (`Search characters…` /
 `Search lore…` / etc.). Tooltip + ⓘ help icon list the full scope per
 [principles → Search bar scope](../../patterns/lists.md#search-bar-scope).
 
+## Peek drawer — lead affordance for characters
+
+The peek-head exposes the lead-character mutation inline (no overflow
+menu — peek is intentionally lightweight; deep work routes to the
+World panel via the existing `Open in World panel →` foot link).
+
+For a character peek:
+
+- **Currently lead** — small badge after the name reading `You`
+  (adventure mode) / `Protagonist` (creative). Same `lead-badge`
+  styling used in the Browse rail row, so the indicator is uniform
+  wherever a character is surfaced.
+- **Not lead** — small inline `Set as lead` text-action after the
+  name. Click sets `stories.settings.leadEntityId` to this entity;
+  the peek transitions to the badge state in place.
+
+For non-character kinds (location / item / faction / lore / threads /
+happenings) the peek-head is unchanged — the affordance does not
+apply.
+
+No confirmation modal. Lead-switching is a first-class action per
+[principles → Mode, lead, and narration](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts);
+the reader's narration and `You` anchor immediately re-anchor to the
+new lead, which IS the feedback (consistent with the no-toast
+precedent in the
+[branch creation flow](../branch-navigator/branch-navigator.md#after-confirm)).
+
 ## Screen-specific notes
 
 - Title max-width capped at 320px with ellipsis + tooltip; keeps long
