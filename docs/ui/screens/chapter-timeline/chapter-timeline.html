@@ -139,19 +139,44 @@
   .modal-close:hover { background: var(--bg-highlight); color: var(--ink); }
   .modal-body { padding: 16px 20px; }
   .modal-context { font-size: 13px; color: var(--ink); margin: 0 0 14px; line-height: 1.55; }
-  .modal-range { display: grid; grid-template-columns: 60px 1fr; gap: 8px 12px; align-items: center; font-size: 13px; }
-  .modal-range .range-label { color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; }
-  .modal-range .range-value { color: var(--ink); }
-  .modal-range .end-picker { padding: 4px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); cursor: pointer; }
-  .modal-range .end-picker .picker-arrow { color: var(--ink-faint); font-size: 10px; }
-  .modal-tokens { margin-top: 12px; font-size: 12px; color: var(--ink-muted); }
+  .modal-section { margin-bottom: 14px; }
+  .modal-section-label { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+
+  /* shared entry-display anatomy: number + snippet + time + optional context tag */
+  .entry-display { padding: 10px 12px; background: var(--bg); border: 1px solid var(--line-soft); border-radius: 3px; }
+  .entry-display-head, .picker-item .item-head, .end-picker .picker-content-head { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; flex-wrap: wrap; }
+  .entry-num { font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-muted); font-weight: 600; }
+  .entry-tag { font-size: 10px; color: var(--ink-muted); font-style: italic; padding: 1px 7px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--bg-region); }
+  .entry-snippet { font-size: 12px; color: var(--ink); line-height: 1.45; font-style: italic; margin: 2px 0 3px; }
+  .entry-time { font-size: 10px; color: var(--ink-faint); }
+
+  /* end-entry picker — closed state */
+  .picker-wrap { position: relative; }
+  .end-picker { display: flex; align-items: flex-start; gap: 10px; width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); cursor: pointer; font-family: inherit; text-align: left; }
+  .end-picker:hover { border-color: var(--ink-muted); }
+  .end-picker .picker-content { flex: 1; min-width: 0; }
+  .end-picker .picker-arrow { color: var(--ink-faint); font-size: 11px; padding-top: 4px; transition: transform 0.12s; flex-shrink: 0; }
+  body[data-picker="open"] .end-picker { border-color: var(--ink); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  body[data-picker="open"] .end-picker .picker-arrow { transform: rotate(180deg); }
+
+  /* end-entry picker — open dropdown panel */
+  .picker-panel { display: none; border: 1px solid var(--ink); border-top: none; max-height: 280px; overflow-y: auto; background: var(--bg-region); border-bottom-left-radius: 3px; border-bottom-right-radius: 3px; }
+  body[data-picker="open"] .picker-panel { display: block; }
+  .picker-item { padding: 10px 12px; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
+  .picker-item:hover { background: var(--bg-highlight); }
+  .picker-item.selected { background: #f0f4ff; }
+  .picker-item .check { display: none; color: var(--ok); font-weight: 700; }
+  .picker-item.selected .check { display: inline; }
+  .picker-item-tail { padding: 10px 12px; font-size: 11px; color: var(--ink-faint); font-style: italic; text-align: center; border-top: 1px dashed var(--line-soft); background: var(--bg); }
+
+  .modal-tokens { margin-top: 8px; font-size: 12px; color: var(--ink-muted); }
   .modal-tokens b { color: var(--ink); font-weight: 600; }
   .modal-foot { padding: 14px 24px; border-top: 1px solid var(--line-soft); display: flex; justify-content: flex-end; gap: 10px; background: #fcfcfc; }
   .modal-foot .btn { padding: 7px 18px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 13px; cursor: pointer; font-family: inherit; }
   .modal-foot .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
 </style>
 </head>
-<body data-card-state="expanded" data-empty="no" data-modal="hidden" data-progress="safe">
+<body data-card-state="expanded" data-empty="no" data-modal="hidden" data-progress="safe" data-picker="closed">
 
 <div class="screen-label"><strong>Wireframe:</strong> Chapter Timeline &mdash; desktop, low-fi, interactive</div>
 
@@ -172,6 +197,11 @@
     <span class="gl">close modal:</span>
     <button class="rb-btn active" data-modal="hidden">hidden</button>
     <button class="rb-btn" data-modal="close">visible</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">end picker:</span>
+    <button class="rb-btn active" data-picker="closed">closed</button>
+    <button class="rb-btn" data-picker="open">open</button>
   </div>
   <div class="rb-group">
     <span class="gl">in-progress:</span>
@@ -334,18 +364,88 @@
 <div class="modal-backdrop" id="modal-backdrop">
   <div class="modal">
     <div class="modal-head">
-      <span class="modal-title">Close chapter at entry <span id="modal-end-num">102</span>?</span>
+      <span class="modal-title">Close current chapter?</span>
       <span class="modal-close" id="modal-close">&times;</span>
     </div>
     <div class="modal-body">
-      <p class="modal-context">This closes the current chapter from entry 89 to the selected end. The AI generates title, summary, theme, and keywords; lore management and memory compaction run as part of the close.</p>
-      <div class="modal-range">
-        <span class="range-label">Start</span>
-        <span class="range-value">entry 89 <span style="color: var(--ink-faint); font-size: 11px;">(Chapter 4 ended here)</span></span>
-        <span class="range-label">End</span>
-        <span class="end-picker" id="end-picker">entry <span id="end-picker-num">102</span> <span class="picker-arrow">&#9662;</span></span>
+      <p class="modal-context">Closes the open chapter from entry 89 through your chosen end entry. The AI generates title, summary, theme, and keywords; lore management and memory compaction run as part of the close.</p>
+
+      <div class="modal-section">
+        <div class="modal-section-label">Start of chapter</div>
+        <div class="entry-display">
+          <div class="entry-display-head">
+            <span class="entry-num">entry 89</span>
+            <span class="entry-tag">Chapter 4 ended here</span>
+          </div>
+          <div class="entry-snippet">&ldquo;Aria sets out at first light, Kael trailing two paces behind.&rdquo;</div>
+          <div class="entry-time">Day 7 &middot; 06:42</div>
+        </div>
       </div>
-      <div class="modal-tokens"><b>14,200 tokens</b> in range</div>
+
+      <div class="modal-section">
+        <div class="modal-section-label">End of chapter</div>
+        <div class="picker-wrap">
+          <button class="end-picker" id="end-picker" type="button">
+            <span class="picker-content">
+              <span class="picker-content-head">
+                <span class="entry-num" id="picker-num">entry 102</span>
+                <span class="entry-tag" id="picker-tag">latest</span>
+              </span>
+              <span class="entry-snippet" id="picker-snippet">&ldquo;...the bouncer signals to silence.&rdquo;</span>
+              <span class="entry-time" id="picker-time">Day 9 &middot; 22:18</span>
+            </span>
+            <span class="picker-arrow">&#9662;</span>
+          </button>
+          <div class="picker-panel" id="picker-panel">
+            <div class="picker-item selected" data-entry="102" data-tag="latest" data-snippet="&ldquo;...the bouncer signals to silence.&rdquo;" data-time="Day 9 &middot; 22:18">
+              <div class="item-head">
+                <span class="check">&check;</span>
+                <span class="entry-num">entry 102</span>
+                <span class="entry-tag">latest</span>
+              </div>
+              <div class="entry-snippet">&ldquo;...the bouncer signals to silence.&rdquo;</div>
+              <div class="entry-time">Day 9 &middot; 22:18</div>
+            </div>
+            <div class="picker-item" data-entry="101" data-tag="" data-snippet="&ldquo;She pauses at the threshold, listening for footsteps.&rdquo;" data-time="Day 9 &middot; 22:14">
+              <div class="item-head">
+                <span class="check">&check;</span>
+                <span class="entry-num">entry 101</span>
+              </div>
+              <div class="entry-snippet">&ldquo;She pauses at the threshold, listening for footsteps.&rdquo;</div>
+              <div class="entry-time">Day 9 &middot; 22:14</div>
+            </div>
+            <div class="picker-item" data-entry="100" data-tag="" data-snippet="&ldquo;...crates piled against the rear door, recent and deliberate.&rdquo;" data-time="Day 9 &middot; 21:50">
+              <div class="item-head">
+                <span class="check">&check;</span>
+                <span class="entry-num">entry 100</span>
+              </div>
+              <div class="entry-snippet">&ldquo;...crates piled against the rear door, recent and deliberate.&rdquo;</div>
+              <div class="entry-time">Day 9 &middot; 21:50</div>
+            </div>
+            <div class="picker-item" data-entry="99" data-tag="" data-snippet="&ldquo;Two bouncers stand near the side door, watching the room.&rdquo;" data-time="Day 9 &middot; 21:38">
+              <div class="item-head">
+                <span class="check">&check;</span>
+                <span class="entry-num">entry 99</span>
+              </div>
+              <div class="entry-snippet">&ldquo;Two bouncers stand near the side door, watching the room.&rdquo;</div>
+              <div class="entry-time">Day 9 &middot; 21:38</div>
+            </div>
+            <div class="picker-item" data-entry="98" data-tag="" data-snippet="&ldquo;The narrow hallway smells of damp brick and old smoke.&rdquo;" data-time="Day 9 &middot; 21:25">
+              <div class="item-head">
+                <span class="check">&check;</span>
+                <span class="entry-num">entry 98</span>
+              </div>
+              <div class="entry-snippet">&ldquo;The narrow hallway smells of damp brick and old smoke.&rdquo;</div>
+              <div class="entry-time">Day 9 &middot; 21:25</div>
+            </div>
+            <div class="picker-item-tail">
+              + 9 more entries (scrollable back to entry 89)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-tokens"><b id="modal-token-count">14,200 tokens</b> in range</div>
     </div>
     <div class="modal-foot">
       <button class="btn" id="modal-cancel">Cancel</button>
@@ -425,6 +525,37 @@
 
   // close-chapter button opens the modal
   document.getElementById('close-chapter-btn').addEventListener('click', () => setModal('close'));
+
+  // end-entry picker — open/closed state via review control + click on picker button
+  function setPicker(state) {
+    body.dataset.picker = state;
+    document.querySelectorAll('.rb-btn[data-picker]').forEach(b => {
+      b.classList.toggle('active', b.dataset.picker === state);
+    });
+  }
+  document.querySelectorAll('.rb-btn[data-picker]').forEach(b => {
+    b.addEventListener('click', () => setPicker(b.dataset.picker));
+  });
+  document.getElementById('end-picker').addEventListener('click', () => {
+    setPicker(body.dataset.picker === 'open' ? 'closed' : 'open');
+  });
+  // pick an entry from the panel — updates the closed-state display + collapses panel
+  document.querySelectorAll('.picker-item[data-entry]').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.picker-item').forEach(i => i.classList.remove('selected'));
+      item.classList.add('selected');
+      const num = item.dataset.entry;
+      const tag = item.dataset.tag;
+      document.getElementById('picker-num').textContent = 'entry ' + num;
+      const tagEl = document.getElementById('picker-tag');
+      tagEl.textContent = tag;
+      tagEl.style.display = tag ? '' : 'none';
+      document.getElementById('picker-snippet').innerHTML = item.dataset.snippet;
+      document.getElementById('picker-time').innerHTML = item.dataset.time;
+      setPicker('closed');
+    });
+  });
 
   // modal dismissal
   document.getElementById('modal-close').addEventListener('click', () => setModal('hidden'));

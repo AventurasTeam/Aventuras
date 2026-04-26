@@ -184,46 +184,94 @@ Triggered from two places: this screen's `Close chapter…` button
 button. Same modal, same shape — uniform UX.
 
 ```
-┌──── Close chapter at entry N? ───────────── × ─┐
+┌──── Close current chapter? ──────────────── × ─┐
 │                                                  │
-│  This closes the current chapter from entry      │
-│  <start> to the selected end. The AI generates   │
-│  title, summary, theme, and keywords; lore       │
-│  management and memory compaction run as part    │
-│  of the close.                                   │
+│  Closes the open chapter from entry 89 through   │
+│  your chosen end entry. The AI generates title,  │
+│  summary, theme, and keywords; lore management   │
+│  and memory compaction run as part of the close. │
 │                                                  │
-│  Range:                                          │
-│    Start: entry 89 (Chapter 4 ended here)        │
-│    End:   [entry 102 ▾]   ← picker               │
+│  ── Start of chapter ──                          │
+│  ┌─────────────────────────────────────────┐    │
+│  │ entry 89   [Chapter 4 ended here]       │    │
+│  │ "Aria sets out at first light, Kael…"   │    │
+│  │ Day 7 · 06:42                            │    │
+│  └─────────────────────────────────────────┘    │
 │                                                  │
-│    14,200 tokens                                 │
+│  ── End of chapter ──                            │
+│  ┌─────────────────────────────────────┬─┐      │
+│  │ entry 102   [latest]                │▾│      │
+│  │ "...the bouncer signals to silence" │ │      │
+│  │ Day 9 · 22:18                       │ │      │
+│  └─────────────────────────────────────┴─┘      │
+│                                                  │
+│  14,200 tokens in range                          │
 │                                                  │
 │              [ Cancel ]  [ Close chapter ]       │
 └──────────────────────────────────────────────────┘
 ```
 
 - **Width** ~480px. Centered. Backdrop dim.
-- **Title** — `Close chapter at entry <N>?` — names the selected end
-  entry; updates as the picker changes.
-- **Body** — one-sentence framing + start/end picker + live token
-  count.
+- **Title** — `Close current chapter?` Entry-agnostic on purpose:
+  the user picks the end entry inside the modal, so naming a
+  specific entry up front would be presumptuous of the default.
+- **Body** — one-sentence framing + start-entry display + end-entry
+  picker + live token count.
 - **Foot** — `Cancel` (secondary) + `Close chapter` (primary, ink —
   this is constructive, not destructive). Esc and click-outside
   cancel.
 
+### Entry display anatomy
+
+Both the start-of-chapter card and every end-picker row use the
+same three fields. Bare entry numbers carry no semantic load —
+"entry 102" looks identical to "entry 47" without context — so the
+display always pairs the number with a snippet and a time:
+
+- **Number** — `entry <N>` in muted monospace.
+- **Snippet** — first ~80 characters of the entry's content,
+  italicized. Trailing ellipsis when truncated; opening ellipsis
+  when the snippet starts mid-sentence (e.g. an AI reply
+  continuing from the previous beat).
+- **Time** — formatted via the active calendar formatter (the same
+  formatter the reader's time chip uses).
+
+Optional **context tag** — small chip-style label appended to the
+number row when applicable:
+
+- Start row carries `Chapter <N> ended here` to anchor where the
+  open region began.
+- End-picker's currently-latest entry carries `latest`.
+
 ### End-entry picker
 
-Default selected: the latest entry in the open region. Picker
-opens to a list of recent entries (most recent at top, scrollable
-back to the start of the open region). Entry rows show entry
-number + abbreviated text + relative time. Clicking selects;
-modal title + token count update live.
+Default selection: the latest entry in the open region.
 
-Why an explicit picker (vs "close at latest"): manual chapter close
-is exactly the place users want to choose a natural ending point
-(per data-model: "User can also manually trigger chapter-create at
-any time, choosing the ending entry explicitly"). Defaulting to
-latest covers the common case; the picker covers the rest.
+**Closed state** — the picker renders as a single button with the
+same entry-display anatomy as the start row (number + tag +
+snippet + time), with a chevron on the right. Visually consistent
+with the start-of-chapter card directly above.
+
+**Open state** — clicking the closed picker opens a dropdown panel
+in-flow below the picker (modal grows vertically to accommodate;
+the panel is scrollable when more entries exist than fit in
+~280px). Entries are listed newest-first, back to the start of the
+open region. Each row uses the same anatomy; the currently
+selected row carries a `✓` glyph in its head.
+
+Picking an entry updates the closed-state button's number / tag /
+snippet / time and the modal's `tokens in range` line, then
+collapses the panel.
+
+Why an explicit picker (vs `close at latest` button): manual
+chapter close is exactly the place users want to choose a natural
+ending point (per
+[data-model → Chapters / memory system](../../../data-model.md#chapters--memory-system):
+"User can also manually trigger chapter-create at any time,
+choosing the ending entry explicitly"). Latest-by-default covers
+the common case; the picker covers the rest, and the snippet +
+time are what make picking actually meaningful instead of
+guesswork on bare numbers.
 
 ### Why a single shared modal
 
