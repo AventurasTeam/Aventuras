@@ -409,7 +409,7 @@
     <h3>Definition</h3>
     <div class="row"><span class="lbl">Base unit:</span><span class="val">second <em style="color:var(--ink-faint);font-style:normal;">(1 second per unit)</em></span></div>
     <div class="row"><span class="lbl">Tiers:</span><span class="val mono">year → month → day → hour → minute → second</span></div>
-    <div class="row"><span class="lbl">Sub-divisions:</span><span class="val mono">weekday <em style="color:var(--ink-faint);font-style:normal;">(7-cycle, offset 4)</em></span></div>
+    <div class="row"><span class="lbl">Sub-divisions:</span><span class="val mono">weekday <em style="color:var(--ink-faint);font-style:normal;">on day · 7-cycle, offset 4</em></span></div>
     <div class="row"><span class="lbl">Era support:</span><span class="val">yes <em style="color:var(--ink-faint);font-style:normal;">— display-label</em></span></div>
     <div class="deferred-action">[ Edit structure (deferred · L3) ]</div>
   </div>
@@ -437,7 +437,7 @@
     </div>
 
     <div class="labels-block">
-      <div class="lh">Weekdays <span class="sub">(7) · sub-division</span></div>
+      <div class="lh">Weekdays <span class="sub">(7) · sub-division of day</span></div>
       <div class="labels-grid">
         <input class="label-input" value="Sunday">
         <input class="label-input" value="Monday">
@@ -452,10 +452,6 @@
     <div class="labels-block era-block">
       <div class="lh">Era preset names</div>
       <div class="era-row">
-        <span class="lbl">Default start:</span>
-        <input class="label-input" value="AD" style="max-width: 200px;">
-      </div>
-      <div class="era-row">
         <span class="lbl">Presets:</span>
         <div class="era-presets">
           <span class="preset-row">
@@ -468,6 +464,14 @@
           </span>
           <button class="add-preset">+ Add preset</button>
         </div>
+      </div>
+      <div class="era-row">
+        <span class="lbl">Default start:</span>
+        <select class="label-input" style="max-width: 200px;">
+          <option value="AD" selected>AD</option>
+          <option value="BC">BC</option>
+        </select>
+        <span style="font-size: 11px; color: var(--ink-faint); font-style: italic;">era at worldTime=0 before any flip</span>
       </div>
     </div>
   </div>

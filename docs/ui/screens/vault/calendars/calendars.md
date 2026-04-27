@@ -206,7 +206,10 @@ Surfaces:
 - Base unit + `secondsPerBaseUnit` (e.g., `second (1 second per
 unit)`).
 - Tier rollover chain (compact glyph chain).
-- Sub-divisions list (weekday or others).
+- Sub-divisions list. Each entry names the sub-division and its
+  parent tier — e.g., `weekday on day · 7-cycle, offset 4`. The
+  parent tier disambiguates which tier owns the sub-division for
+  calendars that attach sub-divisions to non-day tiers.
 - Era support flags (`yes — display-label` / `no`).
 
 ### Labels section (the L2 editing surface)
@@ -218,11 +221,23 @@ applicable:
   block. Earth: months. Shire: months. Mayan Long Count: none
   (block omitted; section renders an empty-state line if no labels
   exist anywhere).
-- **Per-sub-division labels** — separate block per sub-division;
-  weekday is the standard case.
-- **Era preset names** — `defaultStartName` text input + dynamic
-  list of `presetNames[]` with `[+ Add preset]` and `[×]` per row.
-  Only renders when `eras !== null`.
+- **Per-sub-division labels** — separate block per sub-division.
+  Block heading names the sub-division and its parent tier
+  (e.g., "Weekdays (7) · sub-division of day"). Weekday is the
+  standard case.
+- **Era preset names** — only renders when `eras !== null`.
+  - **Presets** — dynamic list of `presetNames[]` with
+    `[+ Add preset]` and `[×]` per row. Edit-rename of an existing
+    name + add/remove for the canonical sequence.
+  - **Default start** — dropdown sourced from `presetNames`
+    (Select primitive in dropdown render mode at ≥4 entries; segment
+    at ≤3, per the [Select-primitive cardinality rule](../../../patterns/forms.md#select-primitive)).
+    The selected value writes to `defaultStartName`. Constrains
+    `defaultStartName` to be one of `presetNames`; if a preset is
+    removed and was the default, the default falls back to the
+    first remaining preset. Empty `presetNames` blocks default
+    selection — UI prompts "Add at least one preset to set the
+    default start."
 
 Label inputs are plain text fields, validated:
 
