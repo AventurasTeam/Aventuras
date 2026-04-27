@@ -190,28 +190,80 @@
     <pre style="font: 11px/1.4 ui-monospace, monospace; background: var(--bg-code); padding: 8px 12px; border-radius: 3px; margin: 4px 0; color: var(--ink-muted); white-space: pre-wrap;" id="template-display"></pre>
 
     <div class="notes">
-      <h3>Stress-test prompts</h3>
+      <h3>What this is</h3>
+      <p style="margin: 4px 0;">A calendar is an ordered stack of integer counters (<em>tiers</em>) plus optional non-counter decorations (<em>sub-divisions</em>, <em>eras</em>). One integer — <code>worldTime</code>, in base units of the bottom tier — is the spine; the active calendar's tier rules convert it bidirectionally to a tuple of values, then a Liquid template renders that tuple to a display string. Sequential time (stardates) is the one-tier degenerate case of the same primitive.</p>
+
+      <h3 style="margin-top:12px;">Demo guide — what each preset uniquely shows</h3>
       <ul>
-        <li>Advance 100 years on Earth and verify Feb 29 lands only in expected leap years.</li>
-        <li>Switch from Earth to Stardate at non-zero worldTime — same integer reinterpreted.</li>
-        <li>On Imperial Japan, click each era's <code>→</code> button. Watch <code>eraYear</code> reset to 1 and month/day continue from the underlying Gregorian.</li>
-        <li>On Warhammer, scrub the slider past the M41 / M42 flips at year=1000 / 2000. Year display should reset to 0 each time, even though the absolute year tier (in the breakdown table) keeps climbing.</li>
-        <li>Compare the two era styles: switch between Imperial Japan and Warhammer at similar worldTimes and watch the difference between <code>'display-label'</code> (year continues, eraYear is just a label) and <code>'elapsed-from-flip'</code> (year tier <em>itself</em> is recomputed from the flip).</li>
-        <li>Edit the Calendar JSON to break a leap-rule condition and watch the JSON-save error path.</li>
-        <li>Try a worldTime far in the past (negative). Sequential should handle it; structured may not.</li>
-        <li>Edit the displayFormat template to render only <code>weekday</code> — verify the sub-division pipeline works.</li>
+        <li><strong>Earth (Gregorian)</strong> — six-tier structured calendar. <code>'rule'</code> rollover on year encodes Gregorian leap (every 4, except 100, except 400). <code>leapDayPosition</code> declares where the extra day lands (month 1 = Feb).</li>
+        <li><strong>Imperial Japan (年号)</strong> — same Gregorian structure, but eras are the centerpiece. <code>flipMode: 'display-label'</code> means each era flip just relabels the year (Reiwa 8 instead of 2026); month/day continue from the underlying clock. Click any era's <code>→</code> button to see eraYear reset to 1.</li>
+        <li><strong>Warhammer 40K Imperial</strong> — two tiers (year + 1/1000-year fraction). <code>flipMode: 'elapsed-from-flip'</code> means M41 → M42 <em>structurally</em> resets the year tier (display goes 999 → 000) while the absolute counter (in the breakdown table) keeps climbing. The same calendar moment displays differently from Imperial Japan because of the flipMode discriminator.</li>
+        <li><strong>Tolkien Shire Reckoning</strong> — 15-cell month table mixing 1-day intercalary holidays (2 Yule, 1 Yule) with a 3-day Lithedays block and twelve 30-day months. <code>subdivisions[].skipWhen</code> takes Mid-year's Day <em>out</em> of the weekday cycle, so 365 − 1 = 364 = 52×7 and weekdays lock year-to-year (Tolkien's perpetual-calendar design). Leap years still drift by 1 day because conditional skipping (Overlithe) is deferred.</li>
+        <li><strong>Mayan Long Count</strong> — five-tier vigesimal counter with no months, no weeks, no eras. Demonstrates pure mixed-base structural counting: <code>baktun → katun (20) → tun (20) → winal (<strong>18</strong>) → kin (20)</code>. The 18 in the middle is the famous quirk that makes a tun ≈ 360 days rather than aligning to a solar year. Proves the schema isn't Earth-shaped — no labeled tiers, no sub-divisions, just a number stack.</li>
+        <li><strong>Stardate (sequential)</strong> — single tier, no rollover. Display via Liquid filters: <code>{{ count | divide: 1000 | round: 1 }}</code>. Demonstrates the schema isn't year/month/day-locked.</li>
+        <li><strong>Custom (build your own)</strong> — minimal valid skeleton (<code>year + day</code>, no months, no week). Picking it auto-opens the JSON editor. Use the schema reference below to build out tiers / sub-divisions / eras from scratch, or copy the structure from one of the demo presets.</li>
       </ul>
-      <h3 style="margin-top:10px;">Known spec gaps surfaced by this PoC</h3>
-      <ul>
-        <li><strong>Leap day position is not in the spec's schema.</strong> Earth's Feb-gets-+1 needs the calendar to declare <em>where</em> the year's extra day lands. This PoC adds <code>leapDayPosition: { tier, indexedBy, index, leapAgainst }</code> as a proposed extension. Without it, the strict spec can't express Gregorian.</li>
-        <li><strong>Bottom tier needs an explicit rollover.</strong> Spec wording says rollover is "when this tier resets and ticks its parent" — but the bottom tier (e.g., second) <em>also</em> needs a declared rollover, because its <em>parent's</em> recursion reads it (60 seconds per minute). Without it, conversion loops forever.</li>
-        <li><strong>Memoization needs context-free tier detection.</strong> Spec mentions "per-year cumulative cache" as the optimization. In practice, you also need to detect "constant chains" — tiers whose size doesn't depend on partial state (Earth's hour/minute/second). Caching purely by partial fills the cache with millions of redundant entries on a long story.</li>
-        <li><strong>Pre-declared historical era flips.</strong> Stories carry era flips as state; calendars don't. But for shareable presets like Imperial Japan and Warhammer, baking the historical accession dates into the calendar is convenient. This PoC adds <code>eras.initialFlips: Array&lt;{ atTuple, name }&gt;</code> as a non-spec convenience.</li>
-        <li><strong>"Default to today" / fixed default UX.</strong> Calendars whose origin is far in the past (Imperial Japan from 1868) are dead at worldTime=0. PoC adds <code>defaultToToday</code> and <code>defaultWorldTime</code> flags. Spec doesn't address either.</li>
-        <li><strong>Era arithmetic with a missing year tier.</strong> Sequential calendars have no <code>year</code> tier; the spec says eras should be disabled but doesn't enforce it. PoC validates at JSON save.</li>
-        <li><strong>Resolved (folded into spec):</strong> <code>flipMode: 'display-label' | 'elapsed-from-flip' | 'calendar-aligned'</code> — disambiguates what <code>resetsOnFlip</code> actually does. Imperial Japan uses <code>'display-label'</code>; Warhammer uses <code>'elapsed-from-flip'</code>. See <code>spec.md → Era flip semantics</code>.</li>
-        <li><strong>Resolved (folded into spec):</strong> <code>Subdivision.skipWhen: Array&lt;Record&lt;string, number&gt;&gt;</code> — declare days that don't participate in the cycle. Lets Shire's Mid-year's Day sit outside the week so the 364-cycling-day year locks weekdays. <strong>Conditional skipping deferred:</strong> Shire's Overlithe (skipped only in leap years) requires predicate-based skip; out of v1. Consequence: leap-year Shire dates drift weekday by 1 — flagged for users.</li>
-      </ul>
+
+      <details style="margin-top:14px;">
+        <summary><strong>Schema reference</strong> — full type shape</summary>
+        <pre style="font: 11px/1.45 ui-monospace, monospace; background: rgba(0,0,0,0.04); padding: 10px 12px; border-radius: 3px; margin: 8px 0; white-space: pre-wrap; color: var(--ink);">type CalendarSystem = {
+  id: string                       // stable id; e.g. 'earth-gregorian'
+  name: string                     // human-readable label
+  baseUnit: string                 // bottom tier's name in vocabulary terms
+  tiers: Tier[]                    // ordered top-down; bottom tier = base unit
+  displayFormat: string            // Liquid template; tier-tuple in scope
+  eras: EraDeclaration | null      // null = no era support
+  leapDayPosition?: {              // PoC extension — see spec gaps
+    tier: string                   //   which tier gets the leap day
+    indexedBy: string              //   which tier indexes into tier
+    index: number                  //   value at which leap is added
+    leapAgainst: string            //   which tier's 'rule' rollover defines leap
+  }
+  defaultOrigin: TierTuple         // worldTime=0 anchor for the demo
+  defaultToToday?: boolean         // PoC: jump to wallclock now on load
+  defaultWorldTime?: number        // PoC: alternative fixed default
+}
+
+type Tier = {
+  name: string                     // 'year' | 'month' | 'day' | …
+  startValue: number               // typical 0 or 1
+  rollover: TierRollover | null    // null only for sequential top tier
+  labels?: string[]                // tier-value to label (month names)
+  subdivisions?: Subdivision[]     // cycling overlays
+}
+
+type TierRollover =
+  | { kind: 'constant'; value: number }
+  | { kind: 'table'; indexedBy: string; values: number[] }
+  | { kind: 'rule'; against: string; base: number; conditions: LeapCondition[] }
+
+type LeapCondition = {
+  every: number                    // matches when (target % every) === 0
+  offset?: number                  // shift the cycle (default 0)
+  exclude?: boolean                // negate the previous match
+}
+
+type Subdivision = {
+  name: string                     // 'weekday'
+  length: number                   // cycle length (7 for week)
+  offset: number                   // value at calendar's epoch
+  labels: string[]                 // length === Subdivision.length
+  skipWhen?: Array<Record&lt;string, number&gt;>  // partial tuples that opt out of cycle
+}
+
+type EraDeclaration = {
+  flipMode: 'display-label' | 'elapsed-from-flip' | 'calendar-aligned'
+  resetsOnFlip: string[]           // tier names; semantics depend on flipMode
+  defaultStartName: string         // era at worldTime=0
+  presetNames?: string[]           // canonical sequence (Meiji, Taishō, …)
+  initialFlips?: Array<{           // PoC convenience — pre-loaded flips
+    atTuple: TierTuple
+    name: string
+  }>
+}
+
+type TierTuple = Record&lt;string, number&gt;</pre>
+      </details>
     </div>
   </main>
 </div>
@@ -694,6 +746,72 @@ const PRESETS = {
     defaultOrigin: { year: 0, fraction: 0 },
     // Default to mid-M41, year 124 ish — the iconic "current" 40K setting.
     defaultWorldTime: 1124 * 1000 + 500,
+  },
+
+  // Tolkien Shire Reckoning. 15-cell month table mixing single-day
+  // intercalary holidays (2 Yule, 1 Yule) with a 3-day Lithedays block
+  // and twelve 30-day months. Showcases skipWhen — Mid-year's Day
+  // (month 7, day 2) sits outside the weekday cycle, so the 364
+  // cycling-day year locks weekdays year-to-year (the way Tolkien
+  // designed the Shire calendar to be perpetual). Overlithe leap day
+  // via leapDayPosition; conditional non-cycling of Overlithe is
+  // deferred per spec — leap years drift weekday by 1.
+  'tolkien-shire': {
+    id: 'tolkien-shire',
+    name: 'Tolkien Shire Reckoning',
+    baseUnit: 'day',
+    tiers: [
+      {
+        name: 'year', startValue: 1,
+        rollover: {
+          kind: 'rule', against: 'year', base: 365,
+          conditions: [{ every: 4 }, { every: 100, exclude: true }],
+        },
+      },
+      {
+        name: 'month', startValue: 0,
+        rollover: { kind: 'constant', value: 15 },
+        labels: ['2 Yule', 'Afteryule', 'Solmath', 'Rethe', 'Astron', 'Thrimidge', 'Forelithe', 'Lithedays', 'Afterlithe', 'Wedmath', 'Halimath', 'Winterfilth', 'Blotmath', 'Foreyule', '1 Yule'],
+      },
+      {
+        name: 'day', startValue: 1,
+        rollover: {
+          kind: 'table', indexedBy: 'month',
+          values: [1, 30, 30, 30, 30, 30, 30, 3, 30, 30, 30, 30, 30, 30, 1],
+        },
+        subdivisions: [
+          {
+            name: 'weekday', length: 7, offset: 0,
+            labels: ['Sterday', 'Sunday', 'Monday', 'Trewsday', 'Hevensday', 'Mersday', 'Highday'],
+            skipWhen: [{ month: 7, day: 2 }],
+          },
+        ],
+      },
+    ],
+    leapDayPosition: { tier: 'day', indexedBy: 'month', index: 7, leapAgainst: 'year' },
+    displayFormat: '{{ day }} {{ monthName }}, SR {{ year }} ({{ weekdayName }})',
+    eras: null,
+    defaultOrigin: { year: 1, month: 0, day: 1 },
+  },
+
+  // Mayan Long Count. Five-tier vigesimal counting with the famous
+  // mixed base — winal rolls at 18 kins, not 20. No months, no weeks,
+  // no eras: pure structural counter. Default origin 13.0.0.0.0
+  // matches the classical Mayan creation reference (Aug 11, 3114 BCE).
+  'mayan-long-count': {
+    id: 'mayan-long-count',
+    name: 'Mayan Long Count',
+    baseUnit: 'kin',
+    tiers: [
+      { name: 'baktun', startValue: 0, rollover: null },
+      { name: 'katun', startValue: 0, rollover: { kind: 'constant', value: 20 } },
+      { name: 'tun', startValue: 0, rollover: { kind: 'constant', value: 20 } },
+      { name: 'winal', startValue: 0, rollover: { kind: 'constant', value: 18 } },
+      { name: 'kin', startValue: 0, rollover: { kind: 'constant', value: 20 } },
+    ],
+    displayFormat: '{{ baktun }}.{{ katun }}.{{ tun }}.{{ winal }}.{{ kin }}',
+    eras: null,
+    defaultOrigin: { baktun: 13, katun: 0, tun: 0, winal: 0, kin: 0 },
   },
 
   // Stardate — sequential single-tier. Showcases: degenerate case;
@@ -1297,6 +1415,36 @@ init();
   console.assert(skips === 1, 'skipWhen counts 1 skip in first year', skips);
   const cyclingDays = days365 - skips;
   console.assert(cyclingDays % 7 === 0, 'skipWhen: 364 cycling days = 52×7, weekday locked', cyclingDays);
+
+  // Mayan Long Count — verify mixed-base rollover. 1 baktun = 144,000 kins
+  // (20×20×18×20). +144000 from 13.0.0.0.0 should land at 14.0.0.0.0.
+  const my = PRESETS['mayan-long-count'];
+  const myEnd = worldTimeToTuple(144000, my, my.defaultOrigin);
+  console.assert(myEnd.baktun === 14 && myEnd.katun === 0 && myEnd.tun === 0 && myEnd.winal === 0 && myEnd.kin === 0, 'Mayan +144000 kins = +1 baktun', myEnd);
+  // The 18 in winal — verify by advancing exactly 360 kins (1 tun) from origin.
+  const oneTun = worldTimeToTuple(360, my, my.defaultOrigin);
+  console.assert(oneTun.tun === 1 && oneTun.winal === 0 && oneTun.kin === 0, 'Mayan +360 kins = +1 tun (winal mixed-base)', oneTun);
+
+  // Tolkien Shire — verify weekday lock across a non-leap year boundary
+  // and the documented 1-day drift across a leap year.
+  const sh = PRESETS['tolkien-shire'];
+  const shOrigin = sh.defaultOrigin;
+  // SR 1 day 1 (2 Yule). Find the absolute worldTime for "1 Afteryule, SR 1"
+  // (= year 1, month 1, day 1) and "1 Afteryule, SR 2".
+  const af1 = tupleToAbsolute({ year: 1, month: 1, day: 1 }, sh) - tupleToAbsolute(shOrigin, sh);
+  const af2 = tupleToAbsolute({ year: 2, month: 1, day: 1 }, sh) - tupleToAbsolute(shOrigin, sh);
+  // Year 1 is non-leap (1 % 4 != 0), so 365 - 1 (Mid-year skip) = 364 cycling = 52*7.
+  // Weekday for af1 and af2 should match.
+  const wd1 = subdivisionLabel(af1, sh.tiers[2].subdivisions[0], { year: 1, month: 1, day: 1 }, shOrigin, sh);
+  const wd2 = subdivisionLabel(af2, sh.tiers[2].subdivisions[0], { year: 2, month: 1, day: 1 }, shOrigin, sh);
+  console.assert(wd1.value === wd2.value, 'Shire weekday locks year-to-year (non-leap)', wd1, wd2);
+  // SR 4 → SR 5: year 4 is leap (4 % 4 === 0, 4 % 100 !== 0). Overlithe
+  // is conditional and we deferred it, so the leap year drifts weekday by 1.
+  const af4 = tupleToAbsolute({ year: 4, month: 1, day: 1 }, sh) - tupleToAbsolute(shOrigin, sh);
+  const af5 = tupleToAbsolute({ year: 5, month: 1, day: 1 }, sh) - tupleToAbsolute(shOrigin, sh);
+  const wd4 = subdivisionLabel(af4, sh.tiers[2].subdivisions[0], { year: 4, month: 1, day: 1 }, shOrigin, sh);
+  const wd5 = subdivisionLabel(af5, sh.tiers[2].subdivisions[0], { year: 5, month: 1, day: 1 }, shOrigin, sh);
+  console.assert(wd4.value !== wd5.value, 'Shire weekday drifts across a leap year (Overlithe deferred)', wd4, wd5);
 
   // Warhammer 40K — verify elapsed-from-flip arithmetic.
   // At year=1500 fraction=500 absolute, with M41 flip at year=1000,
