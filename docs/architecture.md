@@ -111,6 +111,150 @@ propagates to the LLM call, the retrieval query, the image request, etc.
 Aborted runs produce a well-defined result with `aborted: true` — not
 thrown exceptions.
 
+### Generation transactions and edit gating
+
+A pipeline run is a **transaction** on the live store. From
+begin-transaction to commit (or abort), the orchestrator owns
+writes; user-origin writes are blocked. The user-facing contract
+(scope, affordance loci, tooltip copy) lives in
+[`ui/principles.md → Edit restrictions during in-flight generation`](./ui/principles.md#edit-restrictions-during-in-flight-generation);
+this section is the implementation contract.
+
+**Transaction state lives in the generation store.**
+
+```ts
+type TransactionState =
+  | { phase: 'idle' }
+  | {
+      phase: 'in-progress'
+      kind: 'per-turn' | 'chapter-close'
+      actionId: string
+      abortController: AbortController
+    }
+```
+
+Only the orchestrator transitions `phase`. User-origin actions
+never set `in-progress` as a side effect of their own work.
+
+**Lifecycle.**
+
+1. **Begin.** Orchestrator calls
+   `useGenerationStore.beginTransaction({ kind })`. State
+   transitions `idle → in-progress`. A fresh `actionId` is generated;
+   an `AbortController` is created and stored. Pipeline phases begin.
+2. **Phase writes.** Each phase emits events; the orchestrator
+   translates events to Zustand actions dispatched with
+   `source: 'pipeline'`. Every dispatched action carries the
+   transaction's `actionId`, which propagates to the delta log
+   (per [Entry mutability & rollback](./data-model.md#entry-mutability--rollback)).
+   The action layer admits these (gate bypassed for
+   `source: 'pipeline'`).
+3. **Commit.** Orchestrator calls
+   `useGenerationStore.commitTransaction()` when the final phase
+   completes. State transitions `in-progress → idle`. The
+   `actionId`'s deltas are now permanent (subject to user CTRL-Z
+   via the normal undo path).
+4. **Abort.** Triggered by user cancel, navigation away from the
+   story, or pipeline-level fatal error. Orchestrator calls
+   `abortController.abort()` (every phase's `abortSignal.aborted`
+   becomes true; LLM calls cancel; running generators return
+   `{ aborted: true }`), then reverse-replays the `actionId`'s
+   deltas against SQLite + the live store using the same `undo_payload`
+   the delta log records for user CTRL-Z. Abort is conceptually
+   identical to user CTRL-Z — just unrolled by the orchestrator
+   on cancel/error instead of by the user on input. Then
+   `useGenerationStore.abortTransaction()`. State transitions
+   `in-progress → idle`. UI gate releases.
+
+**Required-source action signature.**
+
+Every mutation action takes a required `source: MutationSource`
+field. No default; forgetting it is a TypeScript error.
+
+```ts
+type MutationSource = 'user' | 'pipeline'
+
+const createEntity = (args: { data: EntityCreate; source: MutationSource }): MutationResult => {
+  if (args.source === 'user' && useGenerationStore.getState().txState.phase === 'in-progress') {
+    return { status: 'rejected', reason: 'pipeline-in-flight' }
+  }
+  // ... append delta with current actionId, write SQLite, update store
+}
+```
+
+Required-source is the structural enforcement: drift is a
+compile-time error, not a code-review concern. Tests bypass the
+action layer via `setState` for setup; tests that exercise the
+action layer pass `source: 'pipeline'` to act as the orchestrator.
+The UI gate (disabled controls + tooltips, see principles.md) is
+the user-facing path. The action-layer rejection is defense in
+depth — catches programmatic edits, IPC actions, future MCP
+exposure, mistakes in feature work. Never expected to fire in a
+working UI flow.
+
+**Streaming partial entries on abort.**
+
+The narrative phase streams content into the AI entry's row as a
+side-channel write (see
+[Why intermediates aren't persisted](#why-intermediates-arent-persisted));
+the `op=create` delta only commits at stream completion. On abort
+mid-stream, no `op=create` delta exists yet — the live-store row
+is dropped, SQLite never wrote it, no delta to reverse for the
+entry itself. Classifier deltas (if any have already fired during
+the same transaction) are reverse-replayed normally.
+
+**Atomic chained transactions.**
+
+When a per-turn commit triggers chapter-close (token-threshold
+cross), the orchestrator chains the two transactions without
+yielding to user input. The gate's UI state continues seamlessly:
+per-turn pill transitions to chapter-close pill+banner. No window
+for the user to slip an edit in between.
+
+**Single-writer invariant.**
+
+At most one pipeline transaction is in flight at a time. Chapter-
+close is triggered only between turns, so concurrent transactions
+don't arise in v1. Future relaxation (concurrent pipelines, or
+background agents running alongside per-turn) requires the
+coordination story below.
+
+**Background-agent declaration interface.**
+
+Future background agents (style-review, future standalone
+memory-compaction, etc.) declare their gate behavior at their own
+design pass. The principle here owns the declaration shape; the
+agent's design pass picks values.
+
+| Field            | Values                                                         |
+| ---------------- | -------------------------------------------------------------- |
+| `writeSet`       | Code-side enumeration of action types the agent dispatches.    |
+| `gateBehavior`   | `'hard-gate'` \| `'scoped-gate'` \| `'no-gate'`                |
+| `conflictPolicy` | `'abort-self'` \| `'block-pipeline'` \| `'concurrent-allowed'` |
+| `affordance`     | `'invisible'` \| `'pill-only'` \| `'pill-and-banner'`          |
+
+`'hard-gate'` triggers the same gate per-turn / chapter-close use
+(banner content describes the agent). `'scoped-gate'` will gate
+only the agent's `writeSet` (machinery lands when the first agent
+uses it). `'no-gate'` runs without restricting user editing —
+appropriate when `writeSet` is genuinely disjoint from anything
+user-editable (style-review writing to its own output store).
+`conflictPolicy` defines what happens when a per-turn or
+chapter-close pipeline starts while this agent is mid-run; no
+default — wrong choice either burns provider budget
+(`'abort-self'` on a long agent every turn) or blocks the user
+(`'block-pipeline'` on a slow agent).
+
+**`readSet` is intentionally absent.** Per
+[The single-context principle](#the-single-context-principle),
+every agent in a context group receives the full `promptContext`;
+the Liquid template selects what it actually uses. Read-set is
+template-determined, pack-editable, and dynamic — not
+code-declarable. Future scoped-gate design must address read
+consistency separately (Liquid AST analysis at template load is
+one candidate; hard-gate fallback for unbound templates is
+another).
+
 ---
 
 ## Generation context and prompt templates

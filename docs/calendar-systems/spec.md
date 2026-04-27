@@ -527,8 +527,8 @@ Things that could go wrong, flagged for implementation:
   tier shape + `secondsPerBaseUnit`. Era flips on the current branch
   are kept as orphaned data if the new calendar has `eras: null`
   (re-surface if eras are re-enabled). Warn in the swap affordance.
-  Mid-generation swap is prohibited per the broader "no settings
-  edits during in-flight generation" pattern.
+  Mid-generation swap is prohibited per
+  [`ui/principles.md → Edit restrictions during in-flight generation`](../ui/principles.md#edit-restrictions-during-in-flight-generation).
 - **`secondsPerBaseUnit` validation** — must be a positive integer.
   Zero divides; non-integer values produce fractional bottom-tier
   values that don't round-trip. Strict zod parse on JSON save.

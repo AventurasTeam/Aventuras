@@ -15,6 +15,9 @@ Cross-cutting principles that govern this panel are in
 - [Top-bar design rule](../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
 - [Entity form UI generated from typed schema](../../patterns/entity.md#entity-form-ui-is-generated-from-the-typed-schema)
 - [Save-session pattern](../../patterns/save-sessions.md)
+- [Edit restrictions during in-flight generation](../../principles.md#edit-restrictions-during-in-flight-generation)
+  (thread / happening detail-pane edits and save bars disable while
+  a generation pipeline is in flight)
 - [Bulk operations — deferred](../../principles.md#bulk-operations--deferred)
 - [Injection / retrieval rules](../../principles.md#injection--retrieval-rules-for-prompt-context)
   (`injection_mode` on threads)

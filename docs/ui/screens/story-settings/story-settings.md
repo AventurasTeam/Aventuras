@@ -14,6 +14,9 @@ Cross-cutting principles that govern this screen are in
 [principles.md](../../principles.md). Relevant sections:
 
 - [Settings architecture — split by location](../../principles.md#settings-architecture--split-by-location)
+- [Edit restrictions during in-flight generation](../../principles.md#edit-restrictions-during-in-flight-generation)
+  (every editable field on this surface disables when a generation
+  pipeline is in flight; save buttons too)
 - [Mode, lead, and narration](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts)
 - [Composer mode — send-time transform](../../principles.md#composer-mode--send-time-transform-narration-aware)
 - [Models are override-only (per-story)](../../principles.md#models-are-override-only-per-story)

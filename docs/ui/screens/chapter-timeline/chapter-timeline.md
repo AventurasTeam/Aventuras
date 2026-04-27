@@ -19,6 +19,10 @@ Cross-cutting principles that govern this screen are in
   card with unsaved changes.
 - [Icon-actions pattern](../../patterns/icon-actions.md) — for
   per-row edit affordances.
+- [Edit restrictions during in-flight generation](../../principles.md#edit-restrictions-during-in-flight-generation) —
+  card edits and the `Close chapter…` action disable while a
+  generation pipeline is in flight; the chapter-close pipeline
+  itself surfaces the banner affordance specified in the principle.
 
 ## Layout
 

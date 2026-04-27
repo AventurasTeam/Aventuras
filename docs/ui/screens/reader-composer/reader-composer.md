@@ -11,6 +11,9 @@ Cross-cutting principles that govern this screen are in
 [principles.md](../../principles.md). Relevant sections:
 
 - [Top-bar design rule](../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
+- [Edit restrictions during in-flight generation](../../principles.md#edit-restrictions-during-in-flight-generation)
+  (composer's send/cancel duality, status-pill click-to-cancel,
+  disabled controls during a turn)
 - [Composer mode — send-time transform](../../principles.md#composer-mode--send-time-transform-narration-aware)
 - [Entity surfacing — three levels, same data](../../patterns/entity.md#entity-surfacing--three-levels-same-data)
   (Reader provides level 1 — Browse rail — and level 2 — peek drawer)

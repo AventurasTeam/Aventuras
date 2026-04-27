@@ -19,6 +19,10 @@ Cross-cutting principles:
 
 - [Icon-actions pattern](../../../patterns/icon-actions.md) — `×` is
   a row-action icon; danger styling on hover.
+- [Edit restrictions during in-flight generation](../../../principles.md#edit-restrictions-during-in-flight-generation) —
+  rollback initiation (the per-entry `×`) disables while a
+  generation pipeline is in flight; user cancels the pipeline first
+  via the status pill or composer cancel.
 
 ## Two visible states
 

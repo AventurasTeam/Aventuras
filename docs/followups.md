@@ -505,16 +505,123 @@ Settings → Data tab (alongside Full backup / Restore / Export all
 stories), and possibly the global Actions menu. Pending its own
 design pass.
 
-### Edit restrictions during in-flight generation
+### Crash recovery for in-flight transactions
 
-Cross-cutting UX pattern: which mutations are blocked while
-generation is in progress? Calendar swap is one instance (prohibited
-mid-generation per
-[`calendar-systems/spec.md → Adversarial check`](./calendar-systems/spec.md#adversarial-check)).
-Story-settings edits during generation are likely another.
-Definitional changes (mode, narration) probably want the same gate.
-Settle on a uniform pattern — lean toward "no settings edits while
-generation in-progress" — and document where the gate applies.
+A crash mid-transaction leaves a partially-applied `action_id` in
+the delta log: some deltas committed, the transaction never reached
+commit-tx. On next app boot, recovery must detect the in-flight
+`action_id` and replay-in-reverse to restore pre-transaction state
+— the same reverse-replay an orchestrator-driven abort uses, just
+triggered by recovery on startup rather than at runtime.
+
+[`ui/principles.md → Edit restrictions during in-flight generation`](./ui/principles.md#edit-restrictions-during-in-flight-generation)
+assumes this hook exists; it doesn't ship it. Belongs alongside
+startup / migration flow design (per
+[`architecture.md → What this doc does not yet cover`](./architecture.md#what-this-doc-does-not-yet-cover)).
+
+Open sub-questions:
+
+- How is "in-flight" detected — a flag on a `transactions` table, a
+  sentinel column on the latest delta, or scanning for an `action_id`
+  whose deltas form an unfinished transaction?
+- User-facing surface — silent recovery, or a "your last action was
+  reverted on restart" toast?
+- Interaction with chained transactions (per-turn → chapter-close):
+  does recovery treat them as one unit or two?
+
+### Background-agent gate declarations
+
+[`ui/principles.md → Edit restrictions during in-flight generation`](./ui/principles.md#edit-restrictions-during-in-flight-generation)
+defines a four-field declaration shape (`writeSet`, `gateBehavior`,
+`conflictPolicy`, `affordance`) every future background agent picks
+values for at its own design pass. Style-review is the motivating
+example; any standalone memory-compaction agent that splits out of
+the chapter-close pipeline is another candidate. Each agent's
+design pass picks values with reasoning; the principle doesn't
+prescribe defaults.
+
+### Scoped-gate UI design
+
+[`ui/principles.md → Edit restrictions during in-flight generation`](./ui/principles.md#edit-restrictions-during-in-flight-generation)
+names `'scoped-gate'` as one of three valid `gateBehavior` values —
+gating only the agent's `writeSet` rather than the entire user
+surface. Surface-level affordance for the partial-gate case
+(which controls disable, what tooltip copy says, how the user
+disambiguates "this control is gated by agent X" from "this
+control is gated by per-turn pipeline") is unspec'd.
+
+Lands when the first agent declares `gateBehavior: 'scoped-gate'`.
+Style-review's motivating use is `'no-gate'`, so this followup
+isn't blocking style-review.
+
+### Scoped-gate read-tracking strategy
+
+`readSet` is intentionally absent from the background-agent
+declaration shape because read-set is template-determined,
+pack-editable, and dynamic — not code-declarable
+(per [`architecture.md → The single-context principle`](./architecture.md#the-single-context-principle)).
+A `'scoped-gate'` agent therefore prevents user mutations to its
+`writeSet` but not to its (unbound) read-set; user edits during
+the agent's run could create torn reads.
+
+Two candidate strategies for when scoped-gate's design pass
+addresses this:
+
+- **Liquid AST analysis at template load.** Walk the parsed
+  template, extract top-level variable references, take that as a
+  conservative read-set superset. Re-runs whenever the template
+  changes (pack edit, app update). Adds infra cost; doesn't catch
+  filter-internal slicing but bounds the read surface usefully.
+- **Hard-gate fallback for unbound templates.** Only allow
+  `'scoped-gate'` when the agent's template + context group are
+  simple enough to bound; everything else uses `'hard-gate'`.
+
+Decision lands at scoped-gate's own design pass.
+
+### Concurrent pipeline / agent coordination
+
+[`ui/principles.md → Edit restrictions during in-flight generation`](./ui/principles.md#edit-restrictions-during-in-flight-generation)
+holds a single-writer invariant: at most one pipeline transaction
+in flight at a time. v1 satisfies this by construction
+(chapter-close runs only between turns; no overlap surface). When
+background agents enter the picture (style-review or future
+standalone memory-compaction), overlap becomes possible:
+
+- Background agent + per-turn pipeline simultaneously — abort the
+  agent, block the pipeline, or run side-by-side (only safe if
+  write sets are disjoint)?
+- Two background agents simultaneously — same questions, with the
+  agents' `conflictPolicy` declarations creating cascading
+  decisions.
+
+Owned by the first design pass that introduces a concurrent agent.
+Worth flagging that aborting an expensive agent on every per-turn
+start can starve agents whose work spans many turns and burns
+provider quota; abort-self isn't a safe default for everything.
+
+### Backup / export consistency
+
+A backup run reads the entire story state. Per
+[`ui/principles.md → Edit restrictions during in-flight generation`](./ui/principles.md#edit-restrictions-during-in-flight-generation),
+backup / export reachable from inside the story (Actions menu,
+Story Settings) is gated and disabled during a transaction. Backup
+from app-level surfaces (App Settings → Data tab) requires leaving
+the story, which routes through the abort-confirm modal — also
+safe.
+
+What's not yet specified: backup behavior when initiated from a
+path that doesn't trigger either gate (a future programmatic
+export, MCP exposure, scheduled backup). Such a path can capture
+inconsistent state mid-pipeline. Two clean options for the backup
+design pass to choose between:
+
+- Block backup initiation while any transaction is in flight
+  (uniform with other mutating actions).
+- Snapshot story state at backup-start; backup operates on the
+  snapshot regardless of in-flight pipeline.
+
+Belongs to the backup design pass; this followup ensures the
+question is asked before such a path lands.
 
 ---
 

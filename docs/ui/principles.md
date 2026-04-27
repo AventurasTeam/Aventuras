@@ -118,6 +118,130 @@ screen-specific chrome. The top bar must never grow unbounded.
 
 ---
 
+## Edit restrictions during in-flight generation
+
+A generation pipeline owns the live store from begin-transaction to
+commit (or abort). User-origin writes to story state and
+pipeline-relevant settings are blocked while a transaction is in
+flight. Cancel reverts the transaction and is always available.
+
+The constraint isn't UX — it's a coherence requirement between two
+writers (user, pipeline) racing on the same Zustand store.
+Implementation contract is in
+[`architecture.md → Generation transactions and edit gating`](../architecture.md#generation-transactions-and-edit-gating).
+
+### Two pipelines covered
+
+- **Per-turn pipeline** — Pre → Retrieval → Narrative →
+  `[Classification ‖ Translation]` → Post. Triggered by user send /
+  regenerate. User is actively waiting; the existing reader-chrome
+  status pill plus the streaming narrative are sufficient
+  affordance.
+- **Chapter-close pipeline** — Boundary → Chapter metadata → Lore
+  management → Memory compaction. Triggered by token-threshold
+  cross at turn-commit time, or by explicit user close. Decided
+  as a **blocking pipeline**: the user is gated for its full
+  duration with a banner affordance (no streaming surface to
+  anchor attention).
+
+Both transactions are atomic per their `action_id` (see
+[`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback))
+— a single CTRL-Z reverses an entire turn or chapter-close, and
+the orchestrator uses the same reverse-replay machinery to abort
+mid-flight.
+
+### What's gated
+
+User-origin mutations to: story entries, entities (fields, status,
+state, `injection_mode`), happenings, awareness links, lore,
+threads, branch operations (rollback, switch, branch creation),
+translations, story settings, app settings that feed
+`promptContext`, calendar swap, lead switch, mode switch, narration
+switch, manual `worldTime` correction, backup / export when
+reachable from inside the story.
+
+### What's not gated
+
+- **Read-only browsing** — peek drawer, panel navigation, chapter
+  timeline reads, branch navigator reads, the streaming narrative
+  itself. Reads of the live store during pipeline writes are
+  accepted; the user sees state in motion as the pipeline
+  progresses.
+- **Cancel** — always available, reverts the transaction via
+  reverse-replay of the `action_id`'s deltas. Universal escape
+  hatch.
+- **In-story navigation** — moving between reader, World, Plot,
+  Story Settings, Chapter Timeline, Branch Navigator inside the
+  active story. The transaction continues; affordances follow the
+  user.
+
+### Affordance loci
+
+**Status pill (chrome — universal).** The pill specified in
+[Top-bar design rule](#top-bar-design-rule--essentials-vs-discretionary)
+gains click-to-cancel: clicking the active pill opens a small
+popover with `Cancel generation` (or `Cancel chapter close`) as
+its single action; one click triggers abort. Pill dimensions stay
+stable (no inline X chevron) so layout doesn't flicker on
+transaction start / end.
+
+**Banner (below chrome — chapter-close only).** A sticky banner
+appears below the top bar for the duration of a chapter-close
+transaction; dismissed on commit / abort:
+
+```
+Closing chapter: 2 of 4 — generating chapter metadata… [Cancel]
+```
+
+Per-turn pipelines do not use the banner — the streaming narrative
+is the ambient progress indicator and the composer's send/cancel
+button is the eye-line action surface. Adding a banner per turn
+would shift layout every reply.
+
+**Disabled controls + tooltips (across all screens).** Every
+editable control disables when a transaction is in flight,
+including form save buttons (so the user doesn't draft an edit
+they can't submit). Hover/focus reveals a uniform tooltip:
+
+| Pipeline      | Tooltip copy                                 |
+| ------------- | -------------------------------------------- |
+| Per-turn      | `Generation is in flight. Cancel to edit.`   |
+| Chapter-close | `Chapter close in progress. Cancel to edit.` |
+
+Tooltip copy is principle-owned. Per-screen docs cite, don't
+reinvent.
+
+**Story-leave abort-confirm modal.** Navigation that takes the
+user **out of the active story** (story list, app settings, vault,
+another story) while a transaction is in flight prompts a
+confirmation:
+
+```
+Generation in flight
+
+Leaving will cancel the in-flight generation and revert any
+changes.
+
+                              [Stay]    [Cancel & leave]
+```
+
+`Stay` dismisses the modal; user remains, transaction continues.
+`Cancel & leave` triggers abort + revert, then proceeds with
+navigation. Pack edits (vault is out-of-story) and global-settings
+access naturally route through this modal — no per-feature gate
+needed.
+
+### Background agents
+
+Future background agents (style-review and any agent that splits
+out of chapter-close) declare their gate behavior at their own
+design pass. Declaration interface lives with the implementation
+contract in
+[`architecture.md → Generation transactions and edit gating`](../architecture.md#generation-transactions-and-edit-gating);
+this principle defers all per-agent choices to those passes.
+
+---
+
 ## Actions — platform-agnostic action directory
 
 What a "command palette" normally does, reframed to work on both

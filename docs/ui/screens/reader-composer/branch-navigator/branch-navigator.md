@@ -19,6 +19,10 @@ Cross-cutting principles that govern these surfaces are in
 
 - [Top-bar design rule](../../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
   (the reader's branch chip is the desktop entry point)
+- [Edit restrictions during in-flight generation](../../../principles.md#edit-restrictions-during-in-flight-generation)
+  (branch switch / create / delete disable while a generation
+  pipeline is in flight; navigation that crosses the story boundary
+  routes through the principle's abort-confirm modal)
 
 ## Layout
 
