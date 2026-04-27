@@ -1103,16 +1103,93 @@ Branch model above. Chapters are user-visible structure, not gatekeepers.
    Also copies the assets directory since media lives on disk, not in
    SQLite.
 
-2. **Per-story export** — produces a single self-contained JSON file for
-   one story: all its branches, entries, entities, lore, threads,
-   happenings + links, chapters, deltas, and entry→asset references.
-   Binary assets are embedded as base64 or sidecar files (TBD). Version-
-   tagged header so imports can migrate across schema changes. Intended
-   for sharing / archiving / migration.1
+2. **Per-story export** — produces a single self-contained `.avts`
+   file for one story: all its branches, entries, entities, lore,
+   threads, happenings + links, chapters, deltas, and entry→asset
+   references. Binary assets are embedded as base64 or sidecar files
+   (TBD). Wrapped in the standard
+   [Aventuras file envelope](#aventuras-file-format-avts) for
+   version-tagged imports. Intended for sharing / archiving /
+   migration.
 
 The two have genuinely different purposes and the old app's conflation
 into a single zip produced friction — users invoking "backup" got a
 story export they didn't want, and vice versa. Split avoids that.
+
+### Aventuras file format (`.avts`)
+
+**Decided:** `.avts` is the canonical extension for all
+Aventuras-flavored import/export content. Every supported content
+type — stories, calendars, future packs / scenarios / templates —
+serializes as a JSON envelope with a stable header. Same extension
+across all kinds; the `format` field inside identifies what the file
+contains.
+
+**Envelope shape:**
+
+```json
+{
+  "format": "aventuras-<kind>",
+  "formatVersion": "<major>.<minor>",
+  "exportedAt": "<ISO 8601 timestamp>",
+  "<kind>": {
+    /* the content payload */
+  }
+}
+```
+
+The content key matches the kind (`story` for `aventuras-story`,
+`calendar` for `aventuras-calendar`, etc.) — readable both
+machine-side and to a human inspecting the JSON.
+
+**Kinds shipped in v1:**
+
+| `format`             | Content                                  | Defined by                                             |
+| -------------------- | ---------------------------------------- | ------------------------------------------------------ |
+| `aventuras-story`    | Single story (branches, entries, world…) | [Per-story export](#backup--export-format)             |
+| `aventuras-calendar` | Single CalendarSystem definition         | [calendar-systems/spec.md](./calendar-systems/spec.md) |
+
+Future kinds (`aventuras-pack`, `aventuras-scenario`, etc.) follow
+the same envelope as those features ship.
+
+**Version handling.** `formatVersion` is the load-bearing
+compatibility signal. Major bumps signal a hard break; minor bumps
+are additive. Importers compare against currently supported versions
+and fail clearly:
+
+- File's major < importer-supported → "This file is from an older
+  version of Aventuras."
+- File's major > importer-supported → "This file is from a newer
+  version. Update Aventuras to import."
+- Minor mismatches accepted as long as major matches; minor-newer
+  fields validated against the schema and ignored if zod doesn't
+  recognize them (forward-compatible by zod's default).
+
+**Two import surfaces:**
+
+1. **Per-UI gated** (default in v1). Each surface accepts only its
+   matching kind — the Vault calendar editor's `From JSON file…`
+   rejects anything that isn't `aventuras-calendar`; story-list's
+   `+ Import story` rejects anything that isn't `aventuras-story`.
+   Contextual safety: you can't accidentally import a calendar into
+   a story slot.
+2. **Universal import** (deferred — see
+   [followups.md](./followups.md#universal-import-surface)). One
+   dispatcher accepts any `.avts`, reads the `format` field, and
+   routes to the matching creation flow. Useful for "I have this
+   file, just import it." Not blocking v1; per-UI gated covers the
+   common cases.
+
+**Legacy `.avt` import** (from the old app) is a separate migration
+path with its own format handling, tracked in
+[`followups.md`](./followups.md#legacy-avt-migration-import). Not
+part of this convention.
+
+**Extension policy.** `.avts` is canonical; UI file pickers
+default-filter to it. `.json` is also accepted as input (same
+envelope content, different extension) for users who hand-author or
+import files from non-Aventuras sources. Output writes always
+produce `.avts`.
 
 ### Assets (images & future media)
 

@@ -462,6 +462,22 @@ needs to embed user-authored calendar definitions as a sidecar (or
 prompt for substitution on import). Built-in references resolve
 fine since built-ins ship with every install.
 
+### Universal import surface
+
+The [Aventuras file format](./data-model.md#aventuras-file-format-avts)
+envelope identifies its content via the `format` field. A
+universal-import affordance — one file picker that accepts any
+`.avts`, reads the format, and dispatches to the matching creation
+flow — would be a convenience for the "I have this file, just
+import it wherever it goes" case.
+
+v1 ships only per-UI gated imports (each surface accepts only its
+matching kind). Universal import is non-blocking since the per-UI
+flows cover the common cases. Likely surface when designed: App
+Settings → Data tab (alongside Full backup / Restore / Export all
+stories), and possibly the global Actions menu. Pending its own
+design pass.
+
 ### Edit restrictions during in-flight generation
 
 Cross-cutting UX pattern: which mutations are blocked while

@@ -39,26 +39,14 @@ counterpart. Two parallel paths into the app: **file imports**
 target the same "add to story" actions; they're parallel, not
 exclusive.
 
-**Story file format:** `.avts` extension (Aventuras-fresh; chosen
-distinct from the old app's `.avt` because the v2 schema is a hard
-break, not a migration). Contents are JSON with a mandatory version
-header so future migrations have a clean signal:
-
-```json
-{
-  "format": "aventuras-story",
-  "formatVersion": "1.0",
-  "exportedAt": "2026-04-25T...",
-  "story": { ... },
-  "branches": [...],
-  "entities": [...],
-  ...
-}
-```
-
-Import validates `formatVersion` and either accepts or rejects with
-a clear "this file is from a newer/older version" message. Format
-specifics deferred; versioning is the load-bearing decision.
+**Aventuras file format:** `.avts` is the canonical extension across
+all import/export content (stories, calendars, future packs /
+scenarios / templates) — same envelope, kind-tagged via the
+`format` field. Full convention spec lives at
+[`data-model.md → Aventuras file format`](../../data-model.md#aventuras-file-format-avts).
+This pattern doc covers the UX side (file picker affordance, paste
+support, validation behavior); the envelope shape and version
+handling are canonical there.
 
 **Legacy `.avt` import** (from the old app) is supported for
 migration. The import flow needs its own design pass — see
