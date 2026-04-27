@@ -109,10 +109,9 @@
   .detail-head .kind-strip { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
   .detail-head .kind-icon { font-size: 14px; }
   .detail-head .name-row { display: flex; align-items: center; gap: 8px; }
-  .detail-head .cal-display-name { font-size: 20px; font-weight: 600; color: var(--ink); }
-  .detail-head .pencil { color: var(--ink-faint); cursor: pointer; }
-  .detail-head .pencil:hover { color: var(--ink); }
-  .detail-head .name-readonly .pencil { display: none; }
+  .detail-head .cal-display-name { font-size: 20px; font-weight: 600; color: var(--ink); display: inline-block; padding-bottom: 2px; }
+  .detail-head .name-row.editable .cal-display-name { border-bottom: 1px dotted var(--line-soft); cursor: text; }
+  .detail-head .name-row.editable .cal-display-name::after { content: "  ✎"; color: var(--ink-faint); font-size: 11px; font-weight: 400; }
   .detail-head .more-btn { width: 28px; height: 28px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 16px; cursor: pointer; flex-shrink: 0; }
   .detail-head .badge-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   .detail-head .b { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 2px; }
@@ -163,8 +162,8 @@
   .tier-breakdown { font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-muted); padding: 6px 0; line-height: 1.7; }
   .tier-breakdown .v { color: var(--ink); }
 
-  /* save bar — matches established pattern (World, Story Settings, App Settings) */
-  .save-bar { display: none; padding: 10px 20px; border-top: 1px solid var(--line); background: #fff7dc; justify-content: space-between; align-items: center; gap: 12px; margin: 16px -32px 0; }
+  /* save bar — established pattern (World, Story Settings, App Settings); width matches section cards above */
+  .save-bar { display: none; padding: 10px 20px; border-top: 1px solid var(--line); background: #fff7dc; justify-content: space-between; align-items: center; gap: 12px; margin: 16px 0 0; }
   .save-bar.dirty { display: flex; }
   .save-bar .dirty-note { font-size: 12px; color: #765; display: flex; align-items: center; gap: 8px; }
   .save-bar .dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: #c94; flex-shrink: 0; }
@@ -357,9 +356,8 @@
     <div class="head-top">
       <div>
         <div class="kind-strip"><span class="kind-icon">📅</span><span>Calendar</span></div>
-        <div class="name-row name-readonly">
+        <div class="name-row">
           <span class="cal-display-name">Earth (Gregorian)</span>
-          <span class="pencil">✎</span>
         </div>
         <div class="badge-row">
           <span class="b type">built-in</span>
@@ -386,9 +384,8 @@
     <div class="head-top">
       <div>
         <div class="kind-strip"><span class="kind-icon">📅</span><span>Calendar</span></div>
-        <div class="name-row">
-          <input class="cal-display-name" style="border: 1px solid transparent; background: transparent; font: inherit; font-size: 20px; font-weight: 600; color: var(--ink); padding: 2px 6px; border-radius: 3px;" value="Imperial Japan">
-          <span class="pencil">✎</span>
+        <div class="name-row editable">
+          <span class="cal-display-name">Imperial Japan</span>
         </div>
         <div class="badge-row">
           <span class="b type">custom</span>
@@ -614,8 +611,8 @@
       headCustom.classList.add('hidden');
       saveBar.classList.remove('dirty');
       // built-ins make label inputs read-only
-      document.querySelectorAll('#layer-detail .label-input, #layer-detail .cal-display-name input').forEach(el => {
-        if (el.tagName === 'INPUT') { el.classList.add('ro'); el.readOnly = true; }
+      document.querySelectorAll('#layer-detail .label-input').forEach(el => {
+        el.classList.add('ro'); el.readOnly = true;
       });
     } else {
       headBuiltin.classList.add('hidden');
