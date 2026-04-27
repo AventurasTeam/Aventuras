@@ -62,10 +62,42 @@ unit is the bottom tier.
 | Stardate (sequential)   | `count` (one tier, no rollover)                           |
 
 [`worldTime`](../data-model.md#in-world-time-tracking) — a single
-integer in **base time units** — is the spine. The conversion
-`worldTime ↔ tier-tuple` is one bidirectional walk. The data model
-already pre-supposes this: the integer is calendar-agnostic; the
-calendar is a renderer + arithmetic engine over the integer.
+integer in **physical seconds since story start** — is the spine.
+Universal across calendars: the integer's unit is identical
+regardless of which calendar a story uses. The conversion
+`worldTime ↔ tier-tuple` is one bidirectional walk: divide by the
+calendar's `secondsPerBaseUnit` to get the bottom-tier count, then
+walk the rollover stack. The data model already pre-supposes this:
+the integer is genuinely calendar-agnostic; the calendar is a
+renderer + arithmetic engine over a universal-seconds integer.
+
+### Universal seconds, calendar-declared base unit
+
+The integer `worldTime` is **always physical seconds**, regardless
+of calendar. Calendars declare a `secondsPerBaseUnit: number` saying
+how many seconds equal one of the bottom tier's units — Earth = 1,
+Shire = 86400, Mayan kin = 86400, Stardate = 86400 (one stardate ≈
+one day in TNG convention).
+
+This means:
+
+- **Calendar swap on an existing story preserves the integer.**
+  Display reinterprets through the new calendar's tiers +
+  `secondsPerBaseUnit`; arithmetic doesn't change. Era-flip moments,
+  manual worldTime corrections, scheduled-happening fire times —
+  all keep their meaning.
+- **The classifier always emits second-deltas.** The active
+  calendar's vocabulary (tier names, weekday labels, era names)
+  ships into prompt context so the classifier can convert prose like
+  "two days later" — but its arithmetic output is always seconds.
+  See [Classifier integration](#classifier-integration).
+- **`baseUnit` on the calendar is a display label**, not semantics
+  — renamed below to `baseUnitName` to make this explicit.
+
+Precision floor is one second (int64 holds ~290 billion years). No
+realistic narrative-time fiction needs sub-second resolution; if one
+ever does, the escape hatch is bumping physical base to milliseconds
+— still int64-safe for ~290M years.
 
 ### Sequential is the same shape with one tier
 
@@ -133,10 +165,12 @@ out keeps the tier chain purely arithmetic.
 
 The calendar declares **era support** (enabled? which lower tiers
 reset on flip? default first-era name? optional preset name list?).
-The story holds **era flip events** (the `at`-worldTime + name
-pairs). Flips are user-triggered — explicit "Flip era" affordance
-— and delta-logged like any narrative-state mutation (the deltas
-table is documented in [data-model.md → World-state storage](../data-model.md#world-state-storage)).
+**Era flip events live in [`branch_era_flips`](../data-model.md#era-flips)**
+— a branch-scoped table; flips fork with branches like every other
+narrative state. Each row carries `at_worldtime` (in physical
+seconds) + `era_name`. Flips are user-triggered (explicit "Flip era"
+affordance) and delta-logged via the standard per-row delta
+machinery.
 
 A calendar with predictable eras (rare — fixed-length 1000-year
 ages with no narrative branch) is unsupported by design. Users
@@ -208,8 +242,13 @@ behavior — no structural rewrite, just annotation.
 type CalendarSystem = {
   id: string // stable across saves; e.g. 'earth-gregorian'
   name: string // human-readable
-  baseUnit: string // bottom tier's name in vocabulary terms
-  //   — 'second', 'day', 'cycle', 'tick'
+  baseUnitName: string // renamed from `baseUnit`. Display label only —
+  //   bottom tier's name in vocabulary terms ('second',
+  //   'day', 'cycle', 'tick'). Feeds the classifier prompt
+  //   and UI labels; NOT semantic.
+  secondsPerBaseUnit: number // physical seconds per one bottom-tier unit.
+  //   Positive integer (validated at JSON save).
+  //   Earth = 1; Shire = 86400; Stardate = 86400; Mayan kin = 86400.
   tiers: Tier[] // ordered top-down; bottom tier is the base unit
   displayFormat: string // Liquid template; full state in scope
   eras: EraDeclaration | null // null = this calendar doesn't support eras
@@ -269,34 +308,31 @@ conditions are evaluated against the tier-tuple at conversion time.
 
 ### Per-story state
 
-Two pieces of state, separated by mutability:
+Two pieces of state, separated by mutability and scope:
 
 ```ts
-// Stable definitional reference (settings — copy semantics see below)
+// Story-level — copy-at-creation, references the calendar registry
 stories.settings.calendarSystemId: string   // e.g. 'earth-gregorian'
 
-// Mutable narrative state (new column on stories table)
-stories.calendar_state: {
-  eraFlips: Array<{
-    at: number       // worldTime of the flip
-    eraName: string  // new era's display name
-  }>
-}
+// Branch-level — narrative state, forks with the branch
+branch_era_flips                            // see data-model.md → Era flips
+//   composite (branch_id, id) PK
+//   at_worldtime: number       (physical seconds since story start; ≥ 0)
+//   era_name: string
 ```
 
 [`stories.settings.worldTimeOrigin`](../data-model.md#story-settings-shape)
-holds the per-story anchor — the tier-tuple corresponding to
-`worldTime = 0`. Different stories using the same calendar can have
-different origins (one Earth story starts in 2024, another in 1942).
+holds the per-story anchor — a `TierTuple` (`Record<tierName, number>`)
+corresponding to `worldTime = 0`. Different stories using the same
+calendar can have different origins (one Earth story starts in 2024,
+another in 1942).
 
-This **amends** data-model.md's current `worldTimeOrigin: string`
-shape. v1 (Earth-only) keeps the string form because all consumers
-agree on ISO 8601. When fictional calendars implement, the field
-becomes `TierTuple` (a structured object keyed by tier name) and
-the wizard's input becomes a calendar-specific date-picker rather
-than a free-form string. The string form falls out of the
-calendar's `displayFormat` template applied to the tuple, available
-anywhere a string is needed.
+Earth's origin tuple is `{ year, month, day, hour, minute, second }`;
+Shire's is `{ year, month, day }`; Stardate's is `{ count }`.
+Calendar-uniform from v1 — no string-to-tuple migration. The
+wizard's input is a calendar-specific date-picker that produces a
+tuple directly. Anywhere a string-formatted creation date is needed,
+render the tuple through the calendar's `displayFormat` template.
 
 ### Where calendar definitions live
 
@@ -379,23 +415,28 @@ The classifier (described under
 [architecture.md → Agent orchestration](../architecture.md#agent-orchestration))
 reads narrative and emits worldTime deltas. It needs the calendar's
 vocabulary to convert prose like "two days later" or "next Tuesday"
-into elapsed-base-unit integers.
+into **elapsed-second integers**.
 
 Inject a `calendar` block into the classifier prompt context:
 
-- `calendar.baseUnit` — name of the base unit.
+- `calendar.baseUnitName` — display label for the bottom tier
+  ('second', 'day', 'cycle'). Tells the classifier "the user thinks
+  in 'days' here" — vocabulary, not contract.
+- `calendar.secondsPerBaseUnit` — conversion factor. The classifier
+  multiplies natural-language durations by this to get seconds (e.g.,
+  "two days later" under Shire → `2 × 86400 = 172800`).
 - `calendar.tiers` — ordered tier names with rollover descriptions
   ("year ≈ 365 days", "month ≈ 28-31 days", "day = 24 hours").
 - `calendar.weekday` — sub-division labels, so the classifier
   recognizes "Tuesday".
 - `calendar.eraNames` — current era + preset list if defined.
 
-The classifier still emits a single integer delta in base units —
-**no contract change**. The pack's classifier prompt template
-renders the calendar block as part of its prompt. For non-uniform
-tiers (Earth's months), the classifier's "27 days" → integer base
-units math is stable because base units are uniform; display
-handles the variable-length rendering separately.
+**The classifier always emits a single integer delta in physical
+seconds — universal contract across all calendars.** The LLM
+understands seconds natively; the calendar block above is purely
+vocabulary support. For variable-length tiers (Earth's months),
+"27 days" → `27 × 86400 = 2,332,800` seconds is direct; display
+handles variable-length rendering separately.
 
 ## Authoring (UI)
 
@@ -448,10 +489,16 @@ Things that could go wrong, flagged for implementation:
 - **Variable-length tier conversion is O(year-span).** Bounded by
   per-year cumulative cache; small entries; fine for any realistic
   story. Don't call uncached on every keystroke in interactive UI.
-- **Calendar swap on existing story** — every entry's worldTime
-  reinterprets under the new tier shape. Display changes, integer
-  arithmetic doesn't. Document as intentional; warn in the swap
-  affordance.
+- **Calendar swap on existing story** — the integer `worldTime` (in
+  physical seconds) is preserved; display reinterprets under the new
+  tier shape + `secondsPerBaseUnit`. Era flips on the current branch
+  are kept as orphaned data if the new calendar has `eras: null`
+  (re-surface if eras are re-enabled). Warn in the swap affordance.
+  Mid-generation swap is prohibited per the broader "no settings
+  edits during in-flight generation" pattern.
+- **`secondsPerBaseUnit` validation** — must be a positive integer.
+  Zero divides; non-integer values produce fractional bottom-tier
+  values that don't round-trip. Strict zod parse on JSON save.
 - **Era flip is reversible** (delta-logged). Implementation must
   cover: flip era → undo → state matches pre-flip.
 - **Origin validation** — `worldTimeOrigin` (a `TierTuple`) must
@@ -501,8 +548,9 @@ The four sub-questions in
 are answered above:
 
 - **Where declared:** `stories.settings.calendarSystemId` references
-  an entry in `app_settings.calendars`; `stories.calendar_state`
-  holds runtime era-flip log.
+  an entry in the calendar registry (built-ins in code +
+  `app_settings.calendars`); `branch_era_flips` table holds runtime
+  era-flip log.
 - **How authored:** declarative tiered schema + Liquid display
   template. v1 ships preset catalog + label-tweak (L1/L2);
   full from-scratch authoring (L3) deferred.

@@ -500,7 +500,7 @@ awareness deltas, the classifier populates the new entry's metadata:
   in the scene this entry depicts.
 - `currentLocationId: string | null` — the singleton location entity
   that IS the current scene.
-- `worldTime: number` — base-unit delta (seconds for Earth calendar)
+- `worldTime: number` — seconds delta (universal across calendars)
   added to the previous entry's `worldTime`. Monotonically
   non-decreasing. **For detected flashback / memory framing ("she
   remembered...", "25 years earlier..."), the classifier emits 0** —

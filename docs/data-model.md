@@ -20,6 +20,7 @@ erDiagram
     branches ||--o{ threads : "tracks"
     branches ||--o{ happenings : "records"
     branches ||--o{ chapters : "segments into"
+    branches ||--o{ branch_era_flips : "tracks era flips"
     branches ||--o{ translations : "owns snapshot of"
     branches ||--o{ deltas : "logs changes in"
     story_entries ||--o{ deltas : "triggers"
@@ -156,6 +157,14 @@ erDiagram
         integer updated_at
     }
 
+    branch_era_flips {
+        text id PK
+        text branch_id FK "composite PK with id; per-branch narrative state"
+        integer at_worldtime "physical seconds since story start; the moment the era flips. at_worldtime ≥ 0; flip at 0 overrides the calendar's defaultStartName"
+        text era_name "user-chosen / preset name for the new era; free-form text"
+        integer created_at
+    }
+
     assets {
         text id PK "UUID"
         text kind "image | audio | file"
@@ -192,7 +201,7 @@ erDiagram
         text action_id "groups deltas into one user-visible action (used for CTRL-Z batching)"
         integer log_position "append-only ordering within branch"
         text source "ai_classifier | user_edit | lore_agent | memory_compaction | chapter_close"
-        text target_table "story_entries | entities | lore | threads | happenings | happening_involvements | happening_awareness | chapters | entry_assets | translations"
+        text target_table "story_entries | entities | lore | threads | happenings | happening_involvements | happening_awareness | chapters | entry_assets | translations | branch_era_flips"
         text target_id "id in target_table"
         text op "create | update | delete"
         json undo_payload "op=create: null; op=update: partial diff of changed fields with their PRE-change values; op=delete: full row to re-insert"
@@ -207,6 +216,8 @@ erDiagram
         text default_provider_id "FK into providers[].id; seeds Narrative + 'Reset to defaults'"
         json default_models "Record<agentId, { providerId, modelId }>; resolver fallback for un-overridden story.settings.models"
         json default_story_settings "see 'Story settings shape' — copy-at-creation source for new stories"
+        json calendars "Array<CalendarSystem>; user-authored only (clones + L3 from-scratch). Built-ins live in code/repo JSON, loaded at boot and merged into the in-memory registry"
+        text default_calendar_id "id into the merged calendar registry (built-ins + calendars[]); seeds new stories' calendarSystemId"
         json appearance "theme, density, accent preference"
         text ui_language "ISO 639-1; defaults to OS locale on first launch"
         integer onboarding_completed_at "set on first dismissal of the onboarding wizard (Finish, Skip, or Step 2 footer-link exit); null = wizard renders as root on next boot"
@@ -245,8 +256,8 @@ the latest entry):
 
 1. Copy parent's CURRENT rows for every branch-scoped table (entities,
    lore, threads, happenings, happening_involvements, happening_awareness,
-   chapters, story_entries 1..N, entry_assets tied to those entries) into
-   the new branch.
+   chapters, branch_era_flips, story_entries 1..N, entry_assets tied to
+   those entries) into the new branch.
 2. Copy parent's deltas with `log_position < L` into the new branch — so
    the new branch carries the complete history up to the fork point and
    rollback on the new branch can reach any entry 1..N.
@@ -408,8 +419,14 @@ stories.settings: {
     }
   }
 
-  // World time
-  worldTimeOrigin: string           // anchor consumed by the active calendar formatter; v1 (Earth calendar) parses as ISO 8601 datetime
+  // World time — see calendar-systems/spec.md for the primitive
+  calendarSystemId: string          // references CalendarSystem.id in the calendar registry
+                                    //   (built-ins in code + user-authored in app_settings.calendars);
+                                    //   seeded from app_settings.default_calendar_id at creation
+  worldTimeOrigin: TierTuple        // Record<tierName, number> matching the active calendar's tier shape
+                                    //   Earth: { year, month, day, hour, minute, second }
+                                    //   Shire: { year, month, day }
+                                    //   Stardate: { count }
 
   // Models — override-at-render pattern. Keys are agent ids drawn from the
   // assignments registry (single source of truth, evolves over time);
@@ -444,6 +461,12 @@ stories.settings: {
    un-overridden story. The UX difference (Models' dashed-italic "App
    default: X" sentinel vs copy-at-creation fields showing a concrete
    value) derives directly from this pattern split.
+
+Most operational fields seed from `app_settings.default_story_settings`;
+a few — `default_provider_id`, `default_calendar_id` — sit as
+top-level sibling fields on `app_settings` because they're single-id
+pointers into a registry rather than full state copies. Same
+copy-at-creation semantics; just a different source path.
 
 Definitional settings (mode, leadEntityId, narration, tone) and
 identity fields (genre, tags, cover, etc.) follow neither pattern —
@@ -553,6 +576,32 @@ thereafter. Definitional fields (`mode`, `leadEntityId`,
 `narration`, `tone`) are absent — those are wizard-authored per
 story with no global default.
 
+**Calendars — user-authored only.**
+
+```ts
+app_settings.calendars: CalendarSystem[]      // see calendar-systems/spec.md for shape
+app_settings.default_calendar_id: string      // seeds new stories' calendarSystemId
+```
+
+Built-in calendars live in code (or repo JSON loaded at boot); only
+user-authored calendars (clones of built-ins or from-scratch entries)
+persist in `app_settings.calendars`. App init merges built-ins with
+the JSON list into one in-memory `Map<id, CalendarSystem>`. Stories
+reference by id; resolver does direct lookup against the merged
+registry. Built-in ids (`'earth-gregorian'`) are stable strings;
+clone ids are UUIDs — disjoint by construction, no precedence rule
+needed.
+
+**Cloning a built-in** copies its definition to a new entry in
+`calendars` with a new UUID and the original name + " (custom)"
+suffix. The original built-in is never mutated; the clone is fully
+independent from creation onward.
+
+**Calendar deletion** is blocked when any story references the
+calendar id; otherwise allowed. (Provider/profile deletion semantics
+— currently softer — revisited separately per
+[`followups.md`](./followups.md).)
+
 **Why one table, not several.** Providers, profiles, and
 assignments form one tightly-coupled config envelope — they're
 edited together, deleted together (uninstall = drop the row), and
@@ -605,19 +654,31 @@ rollback. Same for `sceneEntities` / `currentLocationId` user-edits.
 ### In-world time tracking
 
 **Decided:** time is modeled as a single monotonically non-decreasing
-integer `worldTime` on each entry's metadata, measured in **base time
-units since story start**. A separate `stories.settings.worldTimeOrigin`
-setting anchors those elapsed units to a display calendar.
+integer `worldTime` on each entry's metadata, in **physical seconds
+since story start**. The base unit is universal — every calendar uses
+the same physical-seconds integer. The calendar's role is to map that
+integer to its tier-tuple via a `secondsPerBaseUnit` anchor (1 for
+Earth, 86400 for Shire's day-grain, 86400 for Mayan kin) plus its
+tier rollover stack. See [`calendar-systems/spec.md`](./calendar-systems/spec.md)
+for the calendar primitive.
 
-`worldTimeOrigin` is **opaque to the schema** — typed as `string`,
-interpreted by the active calendar formatter. The v1 Earth-calendar
-formatter parses it as ISO 8601 datetime (e.g.
-`"2024-03-15T08:00:00Z"`); a fictional-calendar formatter would
-parse it per its own anchor convention. The base unit for elapsed
-`worldTime` is also calendar-specific — seconds for Earth, whatever
-unit the calendar's formatter declares for fictional calendars. v1
-ships Earth-calendar only; fictional calendars are deferred per
-[`followups.md → Fictional calendar systems`](./followups.md#fictional-calendar-systems).
+`stories.settings.worldTimeOrigin: TierTuple` — a `Record<string,
+number>` keyed by the active calendar's tier names — anchors
+`worldTime = 0` to a display moment. Earth's origin is `{ year,
+month, day, hour, minute, second }`; Shire's is `{ year, month,
+day }`; Stardate's is `{ count }`. Calendar-uniform from v1; no
+string-to-tuple migration ever needs to run. Any "creation date
+string" UI need is met by rendering the tuple through the calendar's
+`displayFormat` template.
+
+**Why universal seconds.** Calendar-specific base units would force
+the integer to reinterpret on calendar swap (Earth-86400 = 1 day;
+Shire-86400 = 86400 days) and would force per-calendar
+classifier-prompt math. Universal seconds keeps the integer
+genuinely calendar-agnostic — preserved across swap, classifier
+always emits second-deltas, all worldTime arithmetic uniform across
+calendars. The precision floor is one second (sub-second narrative
+isn't a thing for fiction); int64 holds ~290 billion years.
 
 **Why integer-based.** Free-form "time label" strings ("Day 3,
 evening") can't be math'd. Future features (character ageing,
@@ -632,13 +693,16 @@ classifier to know the setting's calendar from turn 1, and would be
 incoherent for fictional worlds against an implicit 1970 epoch.
 
 **Classifier contract.** Each AI reply's classification pass estimates
-elapsed base-units and emits a delta for the new entry's
-`metadata.worldTime`. For detected flashback/memory framing ("she
-remembered...", "25 years earlier..."), the classifier should emit
-`0` — main-timeline clock doesn't advance during recalled scenes.
-Estimation errors are unavoidable; users can manually edit
-`metadata.worldTime` (delta-logged like any metadata mutation) to
-correct drift.
+elapsed seconds and emits a delta for the new entry's
+`metadata.worldTime`. The active calendar's vocabulary (tier names,
+weekday labels, era names) ships into the classifier's prompt context
+so it can convert prose like "two days later" or "next Tuesday" — but
+its arithmetic output is always in seconds, regardless of calendar.
+For detected flashback/memory framing ("she remembered...", "25 years
+earlier..."), the classifier emits `0` — main-timeline clock doesn't
+advance during recalled scenes. Estimation errors are unavoidable;
+users can manually edit `metadata.worldTime` (delta-logged like any
+metadata mutation) to correct drift.
 
 **v1 limitation — non-linear narrative.** Single-`worldTime` cleanly
 models linear narrative plus short flashbacks (main clock just
@@ -661,6 +725,55 @@ schema-migration cost; no reason to reserve it now.
 ("ongoing", "next solstice", "1872 AR") don't math cleanly and exist
 as display annotations, not clock values. The burden of matching
 temporal strings to the story's calendar rests with the user.
+
+### Era flips
+
+**Decided:** era flips (per [calendar-systems/spec.md → Eras](./calendar-systems/spec.md#eras-hoisted-out-manually-triggered))
+live in a dedicated branch-scoped table `branch_era_flips`. Each row
+is one user-triggered "Flip era" action: `at_worldtime` (in physical
+seconds, taken from the entry's `metadata.worldTime` at trigger time)
+
+- `era_name` (user-chosen or picked from
+  `EraDeclaration.presetNames`).
+
+**Why a table, not JSON on `branches`.** Era flips fork with
+branches like every other narrative state. Storing them as a JSON
+column on `branches` would force adding `branches` to
+`deltas.target_table` (currently never delta-logged), break the
+"branches is config-shaped, narrative state in dedicated tables"
+pattern, and turn per-flip mutations into whole-row JSON updates
+with awkward delta payloads. The dedicated table inherits the
+standard composite-PK + snapshot-on-fork + per-row delta machinery;
+CTRL-Z on a flip reverses one tiny `op=create` delta.
+
+**Why not piggy-back on `happenings`.** Era flips are calendar
+configuration events, not narrative events. They don't have
+involvements or awareness; the conflation would muddy both domains.
+
+**Constraints:**
+
+- `at_worldtime ≥ 0` — no pre-story flips. Pre-story history belongs
+  in `happenings.temporal`. Time is increment-only.
+- Unique `(branch_id, at_worldtime)` — no two flips at the same
+  moment on the same branch. UI-level invariant; the user has no
+  normal flow to construct conflicting writes.
+- A flip at `at_worldtime = 0` overrides the calendar's
+  `EraDeclaration.defaultStartName`. The wizard's initial-era picker
+  creates a flip at 0 if the user picks something other than the
+  default; otherwise the default applies until the first
+  user-triggered flip.
+
+**Resolver convention.** "Active era at worldTime N" = the row with
+the largest `at_worldtime ≤ N` for the current branch. Before any
+flip (and the calendar isn't constrained to have one at 0), the
+active era is the calendar's `EraDeclaration.defaultStartName`.
+Indexable on `(branch_id, at_worldtime)` for O(log n) lookup.
+
+**Calendar swap.** Flips are preserved as-is (`at_worldtime` is in
+seconds, calendar-agnostic). If the new calendar has `eras: null`,
+the flips become orphaned data — display ignores them, but they're
+not deleted; re-enabling era support later re-surfaces them. The
+swap UX warns about this case.
 
 ### Injection modes — unified enum + structural invariant
 

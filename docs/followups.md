@@ -402,6 +402,53 @@ Both feed into the wizard design (Story Creation wizard, inventory
 #2, pending) and the entity-creation form (per-kind, blocked on
 state shape).
 
+### Provider / profile / model-profile deletion semantics
+
+No spec'd behavior for deleting a provider, profile, or model
+profile that's referenced by stories or assignments. Calendar
+deletion (designed in
+[`calendar-systems/spec.md`](./calendar-systems/spec.md), folded
+into [data-model.md → App settings storage](./data-model.md#app-settings-storage))
+sets the stricter precedent — block when references exist.
+Provider/profile probably want the same shape but worth a dedicated
+pass: orphan handling on import, soft-warn vs hard-block tradeoffs,
+what happens to `default_provider_id` if the referenced provider is
+deleted, etc.
+
+### App Settings → Calendars surface
+
+Per [calendar-systems/spec.md → Authoring (UI)](./calendar-systems/spec.md#authoring-ui),
+the L2 calendar editor lives at App Settings → Calendars (sibling to
+Profiles, Providers). Wireframe and surface design pending — App
+Settings doc currently has no calendar-related elements.
+
+### Story Settings calendar-picker surface
+
+Per [calendar-systems/spec.md → Authoring (UI)](./calendar-systems/spec.md#authoring-ui),
+Story Settings exposes the active calendar picker plus a read-only
+summary of the selected calendar's shape. Wireframe element pending
+— the existing Story Settings wireframe references `worldTimeOrigin`
+but doesn't surface a picker yet.
+
+### Backup / story export with user-authored calendars
+
+A story export references `calendarSystemId`. If the calendar is a
+user-authored clone, the importing system doesn't have it. Export
+needs to embed user-authored calendar definitions as a sidecar (or
+prompt for substitution on import). Built-in references resolve
+fine since built-ins ship with every install.
+
+### Edit restrictions during in-flight generation
+
+Cross-cutting UX pattern: which mutations are blocked while
+generation is in progress? Calendar swap is one instance (prohibited
+mid-generation per
+[`calendar-systems/spec.md → Adversarial check`](./calendar-systems/spec.md#adversarial-check)).
+Story-settings edits during generation are likely another.
+Definitional changes (mode, narration) probably want the same gate.
+Settle on a uniform pattern — lean toward "no settings edits while
+generation in-progress" — and document where the gate applies.
+
 ---
 
 ## Deferred sessions
