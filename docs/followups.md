@@ -436,6 +436,33 @@ etc.) is deferred. Per
 deferred" section — pending its own design pass when ≥2 content
 types are spec'd to validate the shell against.
 
+### Era flip affordance (in-story)
+
+Per [calendar-systems/spec.md → Eras](./calendar-systems/spec.md#eras-hoisted-out-manually-triggered)
+era flips are user-triggered narrative events that write rows into
+[`branch_era_flips`](./data-model.md#era-flips). The "Flip era"
+affordance itself is unspec'd UI — pending its own pass. Open
+sub-questions:
+
+- **Surface placement.** Reader chrome (next to the time chip)?
+  Actions menu? Story Settings? Likely chrome since flips are an
+  in-narrative action, not a settings change.
+- **Era name input.** Dropdown sourced from the calendar's
+  `presetNames` (matching the [picker primitive](#calendar-picker--app-settings--story-settings--wizard)
+  style at ≥4 entries) plus a free-form text option for ad-hoc
+  era names? Or strict-pick-from-presets?
+- **Anchor moment.** Flip's `at_worldtime` derives from the
+  current entry's `metadata.worldTime`. Does the user pick which
+  entry, or does it default to the latest?
+- **Confirmation.** Flips are reversible via CTRL-Z (one delta),
+  but prominent — worth a confirmation step? Or just a tooltip?
+- **Visibility on calendars without era support.** Hide entirely
+  when `eras: null`. The reader's chrome shouldn't surface the
+  affordance for Earth-shaped stories.
+
+Lands together with the calendar picker design or as a dedicated
+follow-on.
+
 ### Calendar picker — App Settings + Story Settings + Wizard
 
 The calendar picker is a shared primitive surfaced in three places:
