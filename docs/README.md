@@ -12,9 +12,10 @@ implementation, and the open questions tracked across the project.
 - **[data-model.md](./data-model.md)** — schema, decisions, the
   `entities` / `lore` / `threads` / `happenings` shapes. What's
   stored.
-- **[calendar-systems.md](./calendar-systems.md)** — tiered-counter
+- **[calendar-systems/](./calendar-systems/README.md)** — tiered-counter
   primitive for in-world date-time display, classifier vocabulary,
-  and (eventually) user-authored fictional calendars.
+  and (eventually) user-authored fictional calendars. Design spec,
+  interactive PoC, and shareable preset JSONs.
 - **[tech-stack.md](./tech-stack.md)** — tech choices and rationale.
 - **[followups.md](./followups.md)** — top-level ledger of outstanding
   data-model, architecture, and UX items.

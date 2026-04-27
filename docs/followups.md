@@ -40,7 +40,7 @@ demands it.
 
 v1 ships Earth-calendar-only (base unit = seconds, formatted via
 `worldTimeOrigin` ISO anchor). Design for fictional calendars is
-spec'd in [`calendar-systems.md`](./calendar-systems.md): a tiered
+spec'd in [`calendar-systems/`](./calendar-systems/README.md): a tiered
 counter primitive with sub-divisions for week-style cycles and
 manually-flipped eras hoisted out of the rollover chain, all
 rendered through a Liquid display template. Schema and pipeline
@@ -48,7 +48,7 @@ fit the design without a refactor; v1 ships only the Earth preset.
 
 Implementation deferred until 2–3 concrete fictional calendars
 surface to validate the design against. Adding a preset is a data
-commit per `calendar-systems.md → Presets to ship`.
+commit per `calendar-systems/spec.md → Presets to ship`.
 
 ### Manual worldTime correction — cascade vs. jump + downstream blast radius
 

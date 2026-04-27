@@ -1,0 +1,1318 @@
+<!-- prettier-ignore -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Calendar Systems — PoC</title>
+<style>
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-highlight: #eef;
+    --bg-warn: #fdf3e3;
+    --bg-ok: #e8f4ec;
+    --bg-code: #f3f3f0;
+    --warn: #c94;
+    --ok: #4a8;
+  }
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+  * { box-sizing: border-box; }
+
+  /* review bar */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-note { color: #967; font-style: italic; margin-left: auto; }
+  .review-bar select, .review-bar button { font-size: 11px; padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; cursor: pointer; }
+  .review-bar button:hover { background: #fbf6ea; }
+
+  /* topbar */
+  .topbar { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
+  .topbar h1 { margin: 0; font-size: 14px; font-weight: 600; }
+  .topbar .sub { font-size: 11px; color: var(--ink-muted); }
+
+  /* layout */
+  .layout { flex: 1; display: grid; grid-template-columns: 380px 1fr; gap: 1px; background: var(--line-soft); }
+  .pane { background: var(--bg-region); padding: 16px 20px; overflow-y: auto; }
+  .pane h2 { margin: 0 0 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .pane h3 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--ink); }
+  .pane h3:first-child { margin-top: 0; }
+  .pane p { margin: 6px 0; color: var(--ink-muted); }
+
+  /* form controls */
+  .field { margin: 8px 0; }
+  .field label { display: block; font-size: 11px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .field input[type="number"], .field input[type="text"], .field select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 3px; font: inherit; background: var(--bg-region); }
+  .field input[type="range"] { width: 100%; }
+  .row { display: flex; gap: 6px; align-items: center; }
+  .row > * { flex: 1; }
+  .btn { padding: 5px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); cursor: pointer; font: inherit; color: var(--ink); }
+  .btn:hover { background: var(--bg-highlight); }
+  .btn.tiny { padding: 3px 7px; font-size: 11px; }
+  .btn.warn { color: var(--warn); border-color: var(--warn); }
+  .btn-row { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+
+  /* render output */
+  .display-card { background: var(--bg-code); border: 1px solid var(--line-soft); border-radius: 4px; padding: 24px; margin-bottom: 16px; text-align: center; }
+  .display-card .display-text { font: 22px/1.3 ui-monospace, monospace; color: var(--ink); }
+  .display-card .display-sub { font-size: 11px; color: var(--ink-muted); margin-top: 8px; }
+
+  /* tier table */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table th, table td { padding: 5px 8px; text-align: left; border-bottom: 1px solid var(--line-soft); }
+  table th { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); font-weight: 600; }
+  table td.num { font-family: ui-monospace, monospace; text-align: right; }
+  table tr:last-child td { border-bottom: none; }
+
+  /* era log */
+  .era-log { font-size: 12px; }
+  .era-log .era-row { padding: 4px 0; border-bottom: 1px dashed var(--line-soft); display: flex; justify-content: space-between; gap: 8px; }
+  .era-log .era-row:last-child { border-bottom: none; }
+  .era-log .era-name { font-weight: 500; }
+  .era-log .era-at { font-family: ui-monospace, monospace; color: var(--ink-muted); }
+
+  /* JSON editor */
+  .json-area { width: 100%; min-height: 320px; font: 11px/1.45 ui-monospace, monospace; padding: 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-code); color: var(--ink); resize: vertical; }
+  .json-status { font-size: 11px; padding: 4px 8px; border-radius: 3px; margin-top: 4px; }
+  .json-status.ok { background: var(--bg-ok); color: #2a6e3f; }
+  .json-status.err { background: var(--bg-warn); color: #8a5a20; font-family: ui-monospace, monospace; white-space: pre-wrap; }
+
+  details { margin: 10px 0; }
+  details summary { cursor: pointer; font-size: 12px; font-weight: 500; color: var(--ink); padding: 4px 0; user-select: none; }
+  details[open] summary { color: var(--ink-muted); }
+
+  /* notes panel */
+  .notes { background: var(--bg-warn); border: 1px solid #e3d8c0; border-radius: 4px; padding: 12px 16px; margin-top: 16px; font-size: 12px; color: #6a4a18; }
+  .notes h3 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #8a5a20; }
+  .notes ul { margin: 4px 0 0; padding-left: 18px; }
+  .notes li { margin: 4px 0; }
+  .notes code { background: rgba(0,0,0,0.05); padding: 1px 4px; border-radius: 2px; font-size: 11px; }
+
+  .badge { display: inline-block; padding: 1px 6px; font-size: 10px; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.06em; vertical-align: middle; }
+  .badge.warn { background: var(--bg-warn); color: var(--warn); border: 1px solid #e3d8c0; }
+  .badge.ok { background: var(--bg-ok); color: var(--ok); border: 1px solid #c5e2ce; }
+
+  .summary-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12px; margin: 8px 0; }
+  .summary-grid dt { color: var(--ink-muted); }
+  .summary-grid dd { margin: 0; font-family: ui-monospace, monospace; }
+
+  .sub-divisions { font-size: 12px; }
+  .sub-divisions .sub-row { display: flex; justify-content: space-between; padding: 3px 0; }
+  .sub-divisions .sub-name { color: var(--ink-muted); }
+  .sub-divisions .sub-value { font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="review-bar">
+  <span class="rb-label">PoC</span>
+  <span>Calendar Systems — design stress-test</span>
+  <span class="rb-note">Spec: docs/calendar-systems.md · ephemeral, no persistence</span>
+</div>
+
+<div class="topbar">
+  <h1>Calendar Systems</h1>
+  <span class="sub">Tiered counters · sub-divisions · manually-flipped eras</span>
+</div>
+
+<div class="layout">
+  <!-- LEFT: controls -->
+  <aside class="pane">
+    <h2>Calendar</h2>
+    <div class="field">
+      <label for="preset-picker">Preset</label>
+      <select id="preset-picker"></select>
+    </div>
+    <div class="summary-grid" id="summary"></div>
+
+    <h3>World time</h3>
+    <p style="font-size:11px;">Integer base units since origin. The whole spine is one number.</p>
+    <div class="field">
+      <input type="range" id="wt-slider" />
+    </div>
+    <div class="row">
+      <input type="number" id="wt-input" />
+      <button class="btn tiny" id="wt-zero">= 0</button>
+      <button class="btn tiny" id="wt-now">Now</button>
+    </div>
+    <div class="btn-row" id="wt-stepper"></div>
+
+    <h3>Origin (worldTime = 0)</h3>
+    <p style="font-size:11px;">The tier-tuple anchor. Per-story in production; ephemeral here.</p>
+    <div id="origin-editor"></div>
+
+    <h3>Eras</h3>
+    <div id="era-controls"></div>
+    <div class="era-log" id="era-log"></div>
+
+    <details>
+      <summary>Calendar JSON (advanced — schema editor)</summary>
+      <p style="font-size:11px;">Edit the active calendar's full definition. Save re-renders. Parse errors don't break the render — last good calendar is kept.</p>
+      <textarea class="json-area" id="json-editor" spellcheck="false"></textarea>
+      <div class="row">
+        <button class="btn tiny" id="json-save">Save</button>
+        <button class="btn tiny" id="json-reset">Reset to preset</button>
+      </div>
+      <div class="json-status" id="json-status"></div>
+    </details>
+  </aside>
+
+  <!-- RIGHT: render output -->
+  <main class="pane">
+    <div class="display-card">
+      <div class="display-text" id="display-text">—</div>
+      <div class="display-sub" id="display-sub"></div>
+    </div>
+
+    <h3>Tier breakdown</h3>
+    <table id="tier-table">
+      <thead><tr><th>Tier</th><th>Value</th><th>Label</th><th>Rollover</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <h3>Sub-divisions</h3>
+    <div class="sub-divisions" id="subdiv-list"></div>
+
+    <h3>Era state</h3>
+    <div class="summary-grid" id="era-state"></div>
+
+    <h3>Days since epoch <span class="badge warn">derived</span></h3>
+    <p style="font-size:12px; font-family: ui-monospace, monospace; margin: 4px 0;">
+      <span id="days-since">—</span>
+    </p>
+
+    <h3>Display template</h3>
+    <pre style="font: 11px/1.4 ui-monospace, monospace; background: var(--bg-code); padding: 8px 12px; border-radius: 3px; margin: 4px 0; color: var(--ink-muted); white-space: pre-wrap;" id="template-display"></pre>
+
+    <div class="notes">
+      <h3>Stress-test prompts</h3>
+      <ul>
+        <li>Advance 100 years on Earth and verify Feb 29 lands only in expected leap years.</li>
+        <li>Switch from Earth to Stardate at non-zero worldTime — same integer reinterpreted.</li>
+        <li>On Imperial Japan, click each era's <code>→</code> button. Watch <code>eraYear</code> reset to 1 and month/day continue from the underlying Gregorian.</li>
+        <li>On Warhammer, scrub the slider past the M41 / M42 flips at year=1000 / 2000. Year display should reset to 0 each time, even though the absolute year tier (in the breakdown table) keeps climbing.</li>
+        <li>Compare the two era styles: switch between Imperial Japan and Warhammer at similar worldTimes and watch the difference between <code>'display-label'</code> (year continues, eraYear is just a label) and <code>'elapsed-from-flip'</code> (year tier <em>itself</em> is recomputed from the flip).</li>
+        <li>Edit the Calendar JSON to break a leap-rule condition and watch the JSON-save error path.</li>
+        <li>Try a worldTime far in the past (negative). Sequential should handle it; structured may not.</li>
+        <li>Edit the displayFormat template to render only <code>weekday</code> — verify the sub-division pipeline works.</li>
+      </ul>
+      <h3 style="margin-top:10px;">Known spec gaps surfaced by this PoC</h3>
+      <ul>
+        <li><strong>Leap day position is not in the spec's schema.</strong> Earth's Feb-gets-+1 needs the calendar to declare <em>where</em> the year's extra day lands. This PoC adds <code>leapDayPosition: { tier, indexedBy, index, leapAgainst }</code> as a proposed extension. Without it, the strict spec can't express Gregorian.</li>
+        <li><strong>Bottom tier needs an explicit rollover.</strong> Spec wording says rollover is "when this tier resets and ticks its parent" — but the bottom tier (e.g., second) <em>also</em> needs a declared rollover, because its <em>parent's</em> recursion reads it (60 seconds per minute). Without it, conversion loops forever.</li>
+        <li><strong>Memoization needs context-free tier detection.</strong> Spec mentions "per-year cumulative cache" as the optimization. In practice, you also need to detect "constant chains" — tiers whose size doesn't depend on partial state (Earth's hour/minute/second). Caching purely by partial fills the cache with millions of redundant entries on a long story.</li>
+        <li><strong>Pre-declared historical era flips.</strong> Stories carry era flips as state; calendars don't. But for shareable presets like Imperial Japan and Warhammer, baking the historical accession dates into the calendar is convenient. This PoC adds <code>eras.initialFlips: Array&lt;{ atTuple, name }&gt;</code> as a non-spec convenience.</li>
+        <li><strong>"Default to today" / fixed default UX.</strong> Calendars whose origin is far in the past (Imperial Japan from 1868) are dead at worldTime=0. PoC adds <code>defaultToToday</code> and <code>defaultWorldTime</code> flags. Spec doesn't address either.</li>
+        <li><strong>Era arithmetic with a missing year tier.</strong> Sequential calendars have no <code>year</code> tier; the spec says eras should be disabled but doesn't enforce it. PoC validates at JSON save.</li>
+        <li><strong>Resolved (folded into spec):</strong> <code>flipMode: 'display-label' | 'elapsed-from-flip' | 'calendar-aligned'</code> — disambiguates what <code>resetsOnFlip</code> actually does. Imperial Japan uses <code>'display-label'</code>; Warhammer uses <code>'elapsed-from-flip'</code>. See <code>spec.md → Era flip semantics</code>.</li>
+        <li><strong>Resolved (folded into spec):</strong> <code>Subdivision.skipWhen: Array&lt;Record&lt;string, number&gt;&gt;</code> — declare days that don't participate in the cycle. Lets Shire's Mid-year's Day sit outside the week so the 364-cycling-day year locks weekdays. <strong>Conditional skipping deferred:</strong> Shire's Overlithe (skipped only in leap years) requires predicate-based skip; out of v1. Consequence: leap-year Shire dates drift weekday by 1 — flagged for users.</li>
+      </ul>
+    </div>
+  </main>
+</div>
+
+<script>
+'use strict';
+
+// ============================================================
+// ENGINE — calendar conversion + rendering
+// ============================================================
+
+// Compute the rollover length of a tier given the partial tuple
+// (tier values for tiers above + this one). Returns the number of
+// CHILD-tier-values this tier-value spans (e.g., for 'month' under
+// year=2024, returns 28..31 depending on month; for 'day' under
+// month=Jan, returns 31).
+function tierLength(tier, partialTuple) {
+  const r = tier.rollover;
+  if (!r) return Infinity; // sequential / top tier with no rollover
+  switch (r.kind) {
+    case 'constant': return r.value;
+    case 'table': {
+      // Indexed by parent value. Caller is responsible for setting up
+      // partialTuple correctly.
+      const parentName = r.indexedBy; // PoC convention: 'table' references which tier indexes it
+      const idx = partialTuple[parentName];
+      return r.values[idx];
+    }
+    case 'rule': {
+      // base + sum of condition matches. Conditions evaluated against
+      // partialTuple[r.against] (PoC convention: explicit field).
+      let len = r.base;
+      const v = partialTuple[r.against];
+      let lastMatched = false;
+      for (const c of r.conditions) {
+        const offset = c.offset || 0;
+        const matches = ((v - offset) % c.every) === 0;
+        if (c.exclude) {
+          if (lastMatched && matches) { len -= 1; lastMatched = false; }
+        } else {
+          if (matches) { len += 1; lastMatched = true; } else { lastMatched = false; }
+        }
+      }
+      return len;
+    }
+    default:
+      throw new Error('Unknown rollover kind: ' + r.kind);
+  }
+}
+
+// "leapDayPosition": calendar-level optional field. Adds 1 to the
+// rollover of tier `tier` at index `index` when the parent tier's
+// leap rule fires. PoC extension to the spec.
+function applyLeapAdjust(rawLength, tier, partialTuple, calendar) {
+  const lp = calendar.leapDayPosition;
+  if (!lp || lp.tier !== tier.name) return rawLength;
+  const indexTier = calendar.tiers.find(t => t.name === lp.indexedBy);
+  if (!indexTier) return rawLength;
+  if (partialTuple[indexTier.name] !== lp.index) return rawLength;
+  // Check the year tier's rollover rule: does it produce a leap year?
+  const yearTier = calendar.tiers.find(t => t.name === lp.leapAgainst);
+  if (!yearTier || yearTier.rollover.kind !== 'rule') return rawLength;
+  const baseLen = yearTier.rollover.base;
+  const fullLen = tierLength(yearTier, partialTuple);
+  return rawLength + (fullLen - baseLen);
+}
+
+function getTierLength(tier, partialTuple, calendar) {
+  let len = tierLength(tier, partialTuple);
+  len = applyLeapAdjust(len, tier, partialTuple, calendar);
+  return len;
+}
+
+// Precompute: for each tier, is its `unitsPerTierValue` result
+// context-free (depends only on the tier, not partial)? Walk
+// bottom-up — a tier is context-free iff its child is context-free
+// AND its child's rollover is `kind: 'constant'`. For Earth: second/
+// minute/hour/day are constant; month/year are partial-dependent.
+function precomputeConstantSizes(calendar) {
+  const tiers = calendar.tiers;
+  if (!tiers.length) return;
+  tiers[tiers.length - 1]._constantSize = 1;
+  for (let i = tiers.length - 2; i >= 0; i--) {
+    const tier = tiers[i];
+    const child = tiers[i + 1];
+    const childRollover = child.rollover;
+    if (child._constantSize != null && childRollover && childRollover.kind === 'constant') {
+      tier._constantSize = child._constantSize * childRollover.value;
+    } else {
+      tier._constantSize = null;
+    }
+  }
+}
+
+// Recursively compute how many BASE units one tier-value occupies,
+// given partial tuple with this tier set to its current value.
+// Three-level lookup: constant-sized tiers return immediately;
+// partial-dependent tiers cache by partial; bottom is the recursion floor.
+let _unitsCache = new Map();
+function clearCalendarCache() { _unitsCache.clear(); }
+function unitsPerTierValue(tier, partial, calendar) {
+  if (tier._constantSize != null) return tier._constantSize;
+  const idx = calendar.tiers.indexOf(tier);
+  if (idx === calendar.tiers.length - 1) return 1;
+  // Cache key includes calendar.id — otherwise different calendars sharing
+  // a tier name (e.g. 'year') alias each other and cross-pollute results.
+  const key = (calendar.id || '?') + '|' + tier.name + '|' + JSON.stringify(partial);
+  if (_unitsCache.has(key)) return _unitsCache.get(key);
+  const child = calendar.tiers[idx + 1];
+  const childRollover = getTierLength(child, partial, calendar);
+  let sum = 0;
+  for (let cv = child.startValue; cv < child.startValue + childRollover; cv++) {
+    sum += unitsPerTierValue(child, { ...partial, [child.name]: cv }, calendar);
+  }
+  _unitsCache.set(key, sum);
+  return sum;
+}
+
+// Convert a tuple to absolute base units (from the all-startValue origin).
+function tupleToAbsolute(tuple, calendar) {
+  let total = 0;
+  const partial = {};
+  for (let i = 0; i < calendar.tiers.length; i++) {
+    const tier = calendar.tiers[i];
+    const value = tuple[tier.name] ?? tier.startValue;
+    if (i === calendar.tiers.length - 1) {
+      total += (value - tier.startValue);
+    } else {
+      for (let v = tier.startValue; v < value; v++) {
+        partial[tier.name] = v;
+        total += unitsPerTierValue(tier, partial, calendar);
+      }
+    }
+    partial[tier.name] = value;
+  }
+  return total;
+}
+
+// Convert absolute base units back to a tuple.
+function absoluteToTuple(abs, calendar) {
+  let remaining = abs;
+  const tuple = {};
+  const partial = {};
+  for (let i = 0; i < calendar.tiers.length; i++) {
+    const tier = calendar.tiers[i];
+    if (i === calendar.tiers.length - 1) {
+      tuple[tier.name] = tier.startValue + remaining;
+      remaining = 0;
+      continue;
+    }
+    let v = tier.startValue;
+    // Going backwards: handle negative remaining (worldTime before origin).
+    if (remaining < 0) {
+      while (true) {
+        const probe = v - 1;
+        partial[tier.name] = probe;
+        const size = unitsPerTierValue(tier, partial, calendar);
+        if (remaining + size > 0) break;
+        remaining += size;
+        v = probe;
+      }
+    } else {
+      while (true) {
+        partial[tier.name] = v;
+        const size = unitsPerTierValue(tier, partial, calendar);
+        if (size > remaining) break;
+        remaining -= size;
+        v++;
+      }
+    }
+    tuple[tier.name] = v;
+    partial[tier.name] = v;
+  }
+  return tuple;
+}
+
+function worldTimeToTuple(worldTime, calendar, originTuple) {
+  const originAbs = tupleToAbsolute(originTuple, calendar);
+  return absoluteToTuple(originAbs + worldTime, calendar);
+}
+
+// Compute the absolute "days since epoch" for the current tuple.
+// Walks until the day-shaped tier (whose rollover is a constant 24
+// hours, OR whose name is 'day', OR whichever convention the
+// calendar uses). For sequential calendars, falls back to worldTime
+// directly.
+function computeDaysSinceEpoch(worldTime, calendar, originTuple) {
+  const dayTier = calendar.tiers.find(t => t.name === 'day');
+  if (!dayTier) return null;
+  // Compute units-per-day in base units.
+  const probe = {};
+  for (const t of calendar.tiers) probe[t.name] = t.startValue;
+  // Count how many base units fit in one full day at originTuple's year.
+  for (const t of calendar.tiers) probe[t.name] = originTuple[t.name] ?? t.startValue;
+  const unitsPerDay = unitsPerTierValue(dayTier, probe, calendar);
+  if (unitsPerDay === 0) return null;
+  // Days from origin = floor((origin abs + worldTime - origin abs) / units-per-day)
+  // simplifies to floor(worldTime / unitsPerDay) for uniform days-per-base-unit.
+  // For Earth, unitsPerDay = 86400 (seconds). For Tolkien (base = day), = 1.
+  return Math.floor(worldTime / unitsPerDay);
+}
+
+// Whether the current tuple matches any skipWhen pattern (partial
+// tuple equality). Used to suppress weekday on non-cycling days like
+// Shire's Mid-year's Day.
+function isSkippedDay(tuple, skipWhen) {
+  if (!skipWhen || skipWhen.length === 0) return false;
+  for (const pattern of skipWhen) {
+    let matches = true;
+    for (const key in pattern) {
+      if (tuple[key] !== pattern[key]) { matches = false; break; }
+    }
+    if (matches) return true;
+  }
+  return false;
+}
+
+// Count sub-division-skipped days that occurred BEFORE the current
+// tuple, walking origin→current year by year. Used to compute the
+// cycling-day count = daysSinceEpoch - skipped days. O(years × patterns).
+function countSkippedDaysBefore(currentTuple, originTuple, calendar, skipWhen) {
+  if (!skipWhen || skipWhen.length === 0) return 0;
+  if (currentTuple.year === undefined || originTuple.year === undefined) return 0;
+  const originAbs = tupleToAbsolute(originTuple, calendar);
+  const currentAbs = tupleToAbsolute(currentTuple, calendar);
+  let count = 0;
+  const lo = Math.min(originTuple.year, currentTuple.year);
+  const hi = Math.max(originTuple.year, currentTuple.year);
+  for (let y = lo; y <= hi; y++) {
+    for (const pattern of skipWhen) {
+      const candidate = { ...pattern, year: y };
+      for (const t of calendar.tiers) {
+        if (candidate[t.name] === undefined) candidate[t.name] = t.startValue;
+      }
+      let candAbs;
+      try { candAbs = tupleToAbsolute(candidate, calendar); } catch (e) { continue; }
+      if (candAbs >= originAbs && candAbs < currentAbs) count++;
+    }
+  }
+  return count;
+}
+
+function subdivisionLabel(daysSince, sub, currentTuple, originTuple, calendar) {
+  if (daysSince === null) return null;
+  if (currentTuple && isSkippedDay(currentTuple, sub.skipWhen)) {
+    return { value: null, label: '—' };
+  }
+  let cyclingDays = daysSince;
+  if (sub.skipWhen && currentTuple && originTuple && calendar) {
+    cyclingDays -= countSkippedDaysBefore(currentTuple, originTuple, calendar, sub.skipWhen);
+  }
+  let v = (cyclingDays + sub.offset) % sub.length;
+  if (v < 0) v += sub.length;
+  return { value: v, label: sub.labels[v] };
+}
+
+function currentEra(eraFlips, worldTime) {
+  // eraFlips is sorted by `at` ascending; the implicit first era at 0
+  // is included by convention.
+  let active = eraFlips[0];
+  for (const e of eraFlips) {
+    if (e.at <= worldTime) active = e;
+    else break;
+  }
+  return active;
+}
+
+// ============================================================
+// MINI-LIQUID — {{ var | filter: arg | filter2: arg }} substitution
+// ============================================================
+
+const FILTERS = {
+  divide: (v, n) => Number(v) / Number(n),
+  multiply: (v, n) => Number(v) * Number(n),
+  plus: (v, n) => Number(v) + Number(n),
+  minus: (v, n) => Number(v) - Number(n),
+  round: (v, n) => Number(v).toFixed(Number(n || 0)),
+  floor: (v) => Math.floor(Number(v)),
+  ceil: (v) => Math.ceil(Number(v)),
+  abs: (v) => Math.abs(Number(v)),
+  pad: (v, n) => String(v).padStart(Number(n), '0'),
+  upcase: (v) => String(v).toUpperCase(),
+  downcase: (v) => String(v).toLowerCase(),
+  capitalize: (v) => { const s = String(v); return s ? s[0].toUpperCase() + s.slice(1) : s; },
+  default: (v, def) => (v == null || v === '') ? def : v,
+};
+
+function evalFilter(value, name, args) {
+  const fn = FILTERS[name];
+  if (!fn) return `[unknown filter: ${name}]`;
+  return fn(value, ...args);
+}
+
+function resolvePath(scope, path) {
+  const parts = path.split('.');
+  let v = scope;
+  for (const p of parts) {
+    if (v == null) return undefined;
+    v = v[p];
+  }
+  return v;
+}
+
+function renderTemplate(template, scope) {
+  return template.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, expr) => {
+    const segments = expr.split('|').map(s => s.trim());
+    const path = segments[0];
+    let value = resolvePath(scope, path);
+    if (value === undefined) value = '';
+    for (let i = 1; i < segments.length; i++) {
+      const seg = segments[i];
+      const m = seg.match(/^(\w+)(?::\s*(.+))?$/);
+      if (!m) continue;
+      const [, fname, raw] = m;
+      const args = raw ? raw.split(',').map(a => {
+        a = a.trim();
+        if ((a.startsWith('"') && a.endsWith('"')) || (a.startsWith("'") && a.endsWith("'"))) return a.slice(1, -1);
+        if (!isNaN(Number(a))) return Number(a);
+        return resolvePath(scope, a);
+      }) : [];
+      value = evalFilter(value, fname, args);
+    }
+    return String(value);
+  });
+}
+
+// ============================================================
+// PRESETS
+// ============================================================
+
+const PRESETS = {
+
+  // Earth (Gregorian). Showcases: variable-length months via 'table',
+  // leap year via 'rule' on year tier + leapDayPosition.
+  'earth-gregorian': {
+    id: 'earth-gregorian',
+    name: 'Earth (Gregorian)',
+    baseUnit: 'second',
+    tiers: [
+      {
+        name: 'year', startValue: 1,
+        rollover: {
+          kind: 'rule', against: 'year', base: 365,
+          conditions: [
+            { every: 4 },
+            { every: 100, exclude: true },
+            { every: 400 },
+          ],
+        },
+      },
+      {
+        name: 'month', startValue: 0,
+        rollover: { kind: 'constant', value: 12 },
+        labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+      },
+      {
+        name: 'day', startValue: 1,
+        rollover: { kind: 'table', indexedBy: 'month', values: [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] },
+        subdivisions: [
+          // Jan 1, 2024 was a Monday — offset = 1 maps daysSinceEpoch=0 to labels[1] = Monday.
+          { name: 'weekday', length: 7, offset: 1, labels: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] },
+        ],
+      },
+      { name: 'hour', startValue: 0, rollover: { kind: 'constant', value: 24 } },
+      { name: 'minute', startValue: 0, rollover: { kind: 'constant', value: 60 } },
+      { name: 'second', startValue: 0, rollover: { kind: 'constant', value: 60 } },
+    ],
+    leapDayPosition: { tier: 'day', indexedBy: 'month', index: 1, leapAgainst: 'year' },
+    displayFormat: '{{ year }}-{{ month | plus: 1 | pad: 2 }}-{{ day | pad: 2 }} {{ hour | pad: 2 }}:{{ minute | pad: 2 }}:{{ second | pad: 2 }} ({{ weekdayName }})',
+    eras: null,
+    defaultOrigin: { year: 2024, month: 0, day: 1, hour: 0, minute: 0, second: 0 },
+    defaultToToday: true,
+  },
+
+  // Imperial Japan (nengō / 年号). Same Gregorian structure as Earth
+  // but with eras as the centerpiece — Meiji/Taishō/Shōwa/Heisei/Reiwa
+  // pre-populated as historical flips. Year displays as eraYear (Reiwa 8
+  // for 2026), not absolute. Showcases mid-year era flips and resetsOnFlip.
+  'imperial-japan': {
+    id: 'imperial-japan',
+    name: 'Imperial Japan (年号)',
+    baseUnit: 'second',
+    tiers: [
+      {
+        name: 'year', startValue: 1,
+        rollover: {
+          kind: 'rule', against: 'year', base: 365,
+          conditions: [{ every: 4 }, { every: 100, exclude: true }, { every: 400 }],
+        },
+      },
+      { name: 'month', startValue: 0, rollover: { kind: 'constant', value: 12 } },
+      {
+        name: 'day', startValue: 1,
+        rollover: { kind: 'table', indexedBy: 'month', values: [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] },
+        subdivisions: [
+          // Oct 23, 1868 (Meiji 1) was a Friday — offset = 5 maps daysSinceEpoch=0 to 金 (Friday).
+          { name: 'weekday', length: 7, offset: 5, labels: ['日', '月', '火', '水', '木', '金', '土'] },
+        ],
+      },
+      { name: 'hour', startValue: 0, rollover: { kind: 'constant', value: 24 } },
+      { name: 'minute', startValue: 0, rollover: { kind: 'constant', value: 60 } },
+      { name: 'second', startValue: 0, rollover: { kind: 'constant', value: 60 } },
+    ],
+    leapDayPosition: { tier: 'day', indexedBy: 'month', index: 1, leapAgainst: 'year' },
+    displayFormat: '{{ era }}{{ eraYear }}年 {{ month | plus: 1 }}月{{ day }}日 ({{ weekdayName }})',
+    eras: {
+      flipMode: 'display-label',
+      resetsOnFlip: ['year'],
+      defaultStartName: 'Meiji',
+      presetNames: ['Meiji', 'Taishō', 'Shōwa', 'Heisei', 'Reiwa'],
+      // PoC extension: historical era flips, declared as Gregorian
+      // tuples relative to the calendar's origin. Converted to
+      // worldTime values at preset load. Production stories carry
+      // these as story state, not calendar state — but baking them
+      // in here makes the demo immediately legible.
+      initialFlips: [
+        { atTuple: { year: 1912, month: 6, day: 30 }, name: 'Taishō' },
+        { atTuple: { year: 1926, month: 11, day: 25 }, name: 'Shōwa' },
+        { atTuple: { year: 1989, month: 0, day: 8 }, name: 'Heisei' },
+        { atTuple: { year: 2019, month: 4, day: 1 }, name: 'Reiwa' },
+      ],
+    },
+    defaultOrigin: { year: 1868, month: 9, day: 23, hour: 0, minute: 0, second: 0 },
+    defaultToToday: true,
+  },
+
+  // Generic Fantasy 12×30 + 5 intercalary days (no leap, no eras
+  // by default). Showcases: simple table, intercalary as a 13th
+  // "month" of variable length.
+  'fantasy-12-30': {
+    id: 'fantasy-12-30',
+    name: 'Generic Fantasy (12×30 + 5)',
+    baseUnit: 'day',
+    tiers: [
+      { name: 'year', startValue: 1, rollover: { kind: 'constant', value: 13 } },
+      {
+        name: 'month', startValue: 0,
+        rollover: { kind: 'table', indexedBy: 'year', values: null },
+        // Hack: 'month' rolls into 13 named months; day-rollover handles per-month length.
+        labels: ['Frostmoon', 'Stormgale', 'Greenmark', 'Bloomfall', 'Suntide', 'Highmark', 'Goldenharp', 'Hearthbreath', 'Wanedusk', 'Witherlight', 'Stillmark', 'Yulehearth', 'Outdays'],
+      },
+      {
+        name: 'day', startValue: 1,
+        rollover: { kind: 'table', indexedBy: 'month', values: [30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 5] },
+        subdivisions: [
+          { name: 'weekday', length: 6, offset: 0, labels: ['Sunday', 'Moonday', 'Treesday', 'Skyday', 'Stoneday', 'Hearthday'] },
+        ],
+      },
+    ],
+    displayFormat: '{{ day | pad: 2 }} {{ monthName }} {{ year }} ({{ weekdayName }})',
+    eras: null,
+    defaultOrigin: { year: 1, month: 0, day: 1 },
+  },
+
+  // Warhammer 40K Imperial dating. Two tiers (year + fraction); year
+  // never rolls over structurally — instead, era flips reset year via
+  // 'elapsed-from-flip' semantics. Display matches canonical 40K format
+  // 0.fraction.year M{millennium}. Pre-loads M40 → M41 → M42 flips at
+  // year 1000 and 2000 boundaries; default opens in mid-M41.
+  'warhammer-imperial': {
+    id: 'warhammer-imperial',
+    name: 'Warhammer 40K Imperial',
+    baseUnit: 'fraction',
+    tiers: [
+      { name: 'year', startValue: 0, rollover: { kind: 'constant', value: 1000 } },
+      { name: 'fraction', startValue: 0, rollover: { kind: 'constant', value: 1000 } },
+    ],
+    displayFormat: '0.{{ fraction | pad: 3 }}.{{ year | pad: 3 }} {{ era }}',
+    eras: {
+      flipMode: 'elapsed-from-flip',
+      resetsOnFlip: ['year', 'fraction'],
+      defaultStartName: 'M40',
+      presetNames: ['M30', 'M31', 'M32', 'M33', 'M34', 'M35', 'M36', 'M37', 'M38', 'M39', 'M40', 'M41', 'M42'],
+      // Pre-load millennium boundaries: M41 starts at year=1000, M42 at year=2000.
+      initialFlips: [
+        { atTuple: { year: 1000, fraction: 0 }, name: 'M41' },
+        { atTuple: { year: 2000, fraction: 0 }, name: 'M42' },
+      ],
+    },
+    defaultOrigin: { year: 0, fraction: 0 },
+    // Default to mid-M41, year 124 ish — the iconic "current" 40K setting.
+    defaultWorldTime: 1124 * 1000 + 500,
+  },
+
+  // Stardate — sequential single-tier. Showcases: degenerate case;
+  // display via Liquid filters.
+  'stardate': {
+    id: 'stardate',
+    name: 'Stardate (sequential)',
+    baseUnit: 'tick',
+    tiers: [
+      { name: 'count', startValue: 0, rollover: null },
+    ],
+    displayFormat: 'stardate {{ count | divide: 1000 | round: 1 }}',
+    eras: null,
+    defaultOrigin: { count: 41000000 },
+  },
+
+  // Custom — minimal valid skeleton for from-scratch authoring via the
+  // JSON editor. 2 tiers (year + day), 365 days/year, no leap, no months,
+  // no week, no eras. Picking this preset auto-opens the JSON editor so
+  // you can extend it.
+  'custom': {
+    id: 'custom',
+    name: 'Custom (build your own)',
+    baseUnit: 'day',
+    tiers: [
+      { name: 'year', startValue: 1, rollover: null },
+      { name: 'day', startValue: 1, rollover: { kind: 'constant', value: 365 } },
+    ],
+    displayFormat: 'Year {{ year }}, Day {{ day }}',
+    eras: null,
+    defaultOrigin: { year: 1, day: 1 },
+  },
+};
+
+// Patch fantasy preset's month rollover (12×30 + intercalary): year length = 365 days.
+// Month tier's 'table' indexedBy year doesn't actually vary, just need a constant 13.
+PRESETS['fantasy-12-30'].tiers[1].rollover = { kind: 'constant', value: 13 };
+
+// Precompute constant tier sizes for every preset at module load.
+for (const preset of Object.values(PRESETS)) precomputeConstantSizes(preset);
+
+// ============================================================
+// STATE
+// ============================================================
+
+const state = {
+  calendarId: 'earth-gregorian',
+  calendar: clone(PRESETS['earth-gregorian']),
+  worldTime: 0,
+  origin: clone(PRESETS['earth-gregorian'].defaultOrigin),
+  eraFlips: [{ at: 0, name: 'CE' }],
+  lastJsonError: null,
+};
+
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+// ============================================================
+// UI
+// ============================================================
+
+const $ = (id) => document.getElementById(id);
+
+function init() {
+  // Populate preset picker.
+  const picker = $('preset-picker');
+  for (const [id, c] of Object.entries(PRESETS)) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = c.name;
+    picker.appendChild(opt);
+  }
+  picker.value = state.calendarId;
+  picker.addEventListener('change', () => {
+    loadPreset(picker.value);
+    if (picker.value === 'custom') {
+      // Auto-open the JSON editor so the user can start defining immediately.
+      const details = document.querySelector('details');
+      if (details) details.open = true;
+    }
+    render();
+  });
+
+  // World time controls.
+  $('wt-input').addEventListener('input', e => {
+    state.worldTime = Number(e.target.value) || 0;
+    $('wt-slider').value = state.worldTime;
+    render();
+  });
+  $('wt-slider').addEventListener('input', e => {
+    state.worldTime = Number(e.target.value);
+    $('wt-input').value = state.worldTime;
+    render();
+  });
+  $('wt-zero').addEventListener('click', () => {
+    state.worldTime = 0;
+    render();
+  });
+  $('wt-now').addEventListener('click', () => {
+    const now = new Date();
+    const todayTuple = {
+      year: now.getFullYear(), month: now.getMonth(), day: now.getDate(),
+      hour: now.getHours(), minute: now.getMinutes(), second: now.getSeconds(),
+    };
+    try {
+      state.worldTime = tupleToAbsolute(todayTuple, state.calendar) - tupleToAbsolute(state.origin, state.calendar);
+    } catch (e) { /* leave alone */ }
+    render();
+  });
+
+  // JSON editor.
+  $('json-save').addEventListener('click', saveJson);
+  $('json-reset').addEventListener('click', () => {
+    state.calendar = clone(PRESETS[state.calendarId]);
+    state.lastJsonError = null;
+    render();
+  });
+
+  loadPreset(state.calendarId);
+  render();
+}
+
+function loadPreset(id) {
+  state.calendarId = id;
+  state.calendar = clone(PRESETS[id]);
+  state.origin = clone(state.calendar.defaultOrigin);
+  state.worldTime = 0;
+  state.lastJsonError = null;
+  clearCalendarCache();
+  precomputeConstantSizes(state.calendar);
+
+  // Era setup: implicit first era at 0, plus any pre-declared
+  // historical flips converted from atTuple to worldTime.
+  if (state.calendar.eras) {
+    state.eraFlips = [{ at: 0, name: state.calendar.eras.defaultStartName }];
+    const initial = state.calendar.eras.initialFlips || [];
+    const originAbs = tupleToAbsolute(state.origin, state.calendar);
+    for (const flip of initial) {
+      const at = tupleToAbsolute(flip.atTuple, state.calendar) - originAbs;
+      state.eraFlips.push({ at, name: flip.name });
+    }
+    state.eraFlips.sort((a, b) => a.at - b.at);
+  } else {
+    state.eraFlips = [];
+  }
+
+  // Optionally jump to "today" so the demo opens at a meaningful date.
+  if (state.calendar.defaultToToday) {
+    const now = new Date();
+    const todayTuple = {
+      year: now.getFullYear(), month: now.getMonth(), day: now.getDate(),
+      hour: now.getHours(), minute: now.getMinutes(), second: now.getSeconds(),
+    };
+    try {
+      state.worldTime = tupleToAbsolute(todayTuple, state.calendar) - tupleToAbsolute(state.origin, state.calendar);
+    } catch (e) { /* leave at 0 */ }
+  } else if (typeof state.calendar.defaultWorldTime === 'number') {
+    state.worldTime = state.calendar.defaultWorldTime;
+  }
+}
+
+function render() {
+  renderSummary();
+  renderWorldTimeControls();
+  renderOriginEditor();
+  renderEraControls();
+  renderEraLog();
+  renderJsonEditor();
+  renderDisplay();
+  renderTierTable();
+  renderSubDivisions();
+  renderEraState();
+  renderDaysSince();
+  renderTemplateText();
+}
+
+function renderSummary() {
+  const c = state.calendar;
+  const grid = $('summary');
+  const subs = c.tiers.flatMap(t => (t.subdivisions || []).map(s => s.name));
+  grid.innerHTML = '';
+  appendDef(grid, 'tiers', c.tiers.map(t => t.name).join(' → '));
+  appendDef(grid, 'base unit', c.baseUnit);
+  appendDef(grid, 'sub-divisions', subs.length ? subs.join(', ') : '—');
+  appendDef(grid, 'eras', c.eras ? 'enabled' : 'disabled');
+}
+
+function appendDef(grid, term, val) {
+  const dt = document.createElement('dt'); dt.textContent = term;
+  const dd = document.createElement('dd'); dd.textContent = val;
+  grid.appendChild(dt); grid.appendChild(dd);
+}
+
+function renderWorldTimeControls() {
+  const c = state.calendar;
+  // Reasonable slider range based on baseUnit, expanded if worldTime is far
+  // from origin (so Imperial Japan's 158-year span is reachable via slider).
+  const ranges = {
+    second: 86400 * 365 * 10, // 10 years
+    day: 365 * 100,            // 100 years
+    tick: 1000000000,
+    cycle: 10000,
+  };
+  const baseSpan = ranges[c.baseUnit] || 100000;
+  const span = Math.max(baseSpan, Math.abs(state.worldTime) * 2);
+  const slider = $('wt-slider');
+  slider.min = -span;
+  slider.max = span;
+  slider.step = Math.max(1, Math.floor(span / 10000));
+  slider.value = state.worldTime;
+  $('wt-input').value = state.worldTime;
+
+  // Stepper buttons calibrated to baseUnit.
+  const stepper = $('wt-stepper');
+  stepper.innerHTML = '';
+  let steps = [];
+  if (c.baseUnit === 'second') {
+    steps = [
+      { label: '+1s', delta: 1 }, { label: '+1m', delta: 60 }, { label: '+1h', delta: 3600 },
+      { label: '+1d', delta: 86400 }, { label: '+30d', delta: 86400 * 30 }, { label: '+1y', delta: 86400 * 365 },
+      { label: '−1d', delta: -86400 }, { label: '−1y', delta: -86400 * 365 },
+    ];
+  } else if (c.baseUnit === 'day') {
+    steps = [
+      { label: '+1d', delta: 1 }, { label: '+1mo (30d)', delta: 30 }, { label: '+1y (365d)', delta: 365 },
+      { label: '+10y', delta: 3650 }, { label: '−1d', delta: -1 }, { label: '−1y', delta: -365 },
+    ];
+  } else if (c.baseUnit === 'fraction') {
+    // Warhammer: 1000 fractions per year.
+    steps = [
+      { label: '+1', delta: 1 }, { label: '+1y (1000)', delta: 1000 },
+      { label: '+10y', delta: 10000 }, { label: '+100y', delta: 100000 },
+      { label: '−1y', delta: -1000 }, { label: '−100y', delta: -100000 },
+    ];
+  } else {
+    steps = [
+      { label: '+1', delta: 1 }, { label: '+1k', delta: 1000 }, { label: '+1M', delta: 1000000 },
+      { label: '−1', delta: -1 }, { label: '−1k', delta: -1000 },
+    ];
+  }
+  for (const s of steps) {
+    const b = document.createElement('button');
+    b.className = 'btn tiny';
+    b.textContent = s.label;
+    b.addEventListener('click', () => { state.worldTime += s.delta; render(); });
+    stepper.appendChild(b);
+  }
+}
+
+function renderOriginEditor() {
+  const editor = $('origin-editor');
+  editor.innerHTML = '';
+  for (const tier of state.calendar.tiers) {
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+    const label = document.createElement('label');
+    label.textContent = tier.name;
+    wrap.appendChild(label);
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.value = state.origin[tier.name] ?? tier.startValue;
+    input.addEventListener('input', e => {
+      state.origin[tier.name] = Number(e.target.value);
+      render();
+    });
+    wrap.appendChild(input);
+    editor.appendChild(wrap);
+  }
+}
+
+function renderEraControls() {
+  const root = $('era-controls');
+  root.innerHTML = '';
+  if (!state.calendar.eras) {
+    root.innerHTML = '<p style="font-size:11px;">This calendar has eras disabled.</p>';
+    return;
+  }
+  const label = document.createElement('label');
+  label.style.fontSize = '11px';
+  label.textContent = 'Flip era at current worldTime →';
+  root.appendChild(label);
+  const row = document.createElement('div');
+  row.className = 'row';
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = 'New era name';
+  const nextPreset = nextEraName();
+  nameInput.value = nextPreset || '';
+  row.appendChild(nameInput);
+  const flipBtn = document.createElement('button');
+  flipBtn.className = 'btn tiny';
+  flipBtn.textContent = 'Flip';
+  flipBtn.addEventListener('click', () => {
+    if (!nameInput.value.trim()) return;
+    state.eraFlips.push({ at: state.worldTime, name: nameInput.value.trim() });
+    state.eraFlips.sort((a, b) => a.at - b.at);
+    render();
+  });
+  row.appendChild(flipBtn);
+  root.appendChild(row);
+}
+
+function nextEraName() {
+  const presets = state.calendar.eras?.presetNames || [];
+  const used = new Set(state.eraFlips.map(e => e.name));
+  return presets.find(n => !used.has(n)) || '';
+}
+
+function renderEraLog() {
+  const log = $('era-log');
+  log.innerHTML = '';
+  if (!state.eraFlips.length) return;
+  for (let i = 0; i < state.eraFlips.length; i++) {
+    const e = state.eraFlips[i];
+    const row = document.createElement('div');
+    row.className = 'era-row';
+    const name = document.createElement('span');
+    name.className = 'era-name';
+    name.textContent = e.name;
+    row.appendChild(name);
+    const at = document.createElement('span');
+    at.className = 'era-at';
+    at.textContent = `wt = ${e.at}`;
+    row.appendChild(at);
+    const jump = document.createElement('button');
+    jump.className = 'btn tiny';
+    jump.textContent = '→';
+    jump.title = 'Jump to this flip';
+    jump.addEventListener('click', () => {
+      state.worldTime = e.at;
+      render();
+    });
+    row.appendChild(jump);
+    if (i > 0) {
+      const undo = document.createElement('button');
+      undo.className = 'btn tiny';
+      undo.textContent = '↺';
+      undo.title = 'Undo flip';
+      undo.addEventListener('click', () => {
+        state.eraFlips.splice(i, 1);
+        render();
+      });
+      row.appendChild(undo);
+    }
+    log.appendChild(row);
+  }
+}
+
+function renderJsonEditor() {
+  if (document.activeElement === $('json-editor')) return; // don't clobber while editing
+  $('json-editor').value = JSON.stringify(state.calendar, null, 2);
+  if (state.lastJsonError) {
+    $('json-status').className = 'json-status err';
+    $('json-status').textContent = state.lastJsonError;
+  } else {
+    $('json-status').className = 'json-status ok';
+    $('json-status').textContent = 'OK · last save valid';
+  }
+}
+
+function saveJson() {
+  try {
+    const parsed = JSON.parse($('json-editor').value);
+    if (!parsed.tiers || !Array.isArray(parsed.tiers)) throw new Error('calendar.tiers must be an array');
+    if (!parsed.baseUnit) throw new Error('calendar.baseUnit is required');
+    state.calendar = parsed;
+    state.lastJsonError = null;
+    clearCalendarCache();
+    precomputeConstantSizes(state.calendar);
+  } catch (err) {
+    state.lastJsonError = String(err.message || err);
+  }
+  render();
+}
+
+function renderDisplay() {
+  let tuple, scope, displayText, displaySub;
+  try {
+    tuple = worldTimeToTuple(state.worldTime, state.calendar, state.origin);
+    scope = buildScope(tuple);
+    displayText = renderTemplate(state.calendar.displayFormat || '', scope);
+    displaySub = `worldTime = ${state.worldTime} ${state.calendar.baseUnit}${state.worldTime === 1 ? '' : 's'}`;
+  } catch (err) {
+    displayText = '— render failed —';
+    displaySub = 'error: ' + (err.message || err);
+  }
+  $('display-text').textContent = displayText;
+  $('display-sub').textContent = displaySub;
+  state._lastTuple = tuple;
+  state._lastScope = scope;
+}
+
+function buildScope(tuple) {
+  const scope = { ...tuple };
+  // labels
+  for (const tier of state.calendar.tiers) {
+    if (tier.labels) {
+      const v = tuple[tier.name] ?? tier.startValue;
+      const idx = v - tier.startValue;
+      scope[tier.name + 'Name'] = tier.labels[idx] || '';
+    }
+  }
+  // sub-divisions
+  const days = computeDaysSinceEpoch(state.worldTime, state.calendar, state.origin);
+  scope._daysSinceEpoch = days;
+  for (const tier of state.calendar.tiers) {
+    for (const sub of (tier.subdivisions || [])) {
+      const r = subdivisionLabel(days, sub, tuple, state.origin, state.calendar);
+      if (r) {
+        scope[sub.name] = r.value;
+        scope[sub.name + 'Name'] = r.label;
+      }
+    }
+  }
+  // era
+  if (state.calendar.eras && state.eraFlips.length) {
+    const era = currentEra(state.eraFlips, state.worldTime);
+    scope.era = era.name;
+    const flipMode = state.calendar.eras.flipMode || 'display-label';
+    if (flipMode === 'elapsed-from-flip') {
+      // Recompute the listed tiers as if the era flip were the calendar's
+      // origin. Other tiers stay absolute.
+      const resets = state.calendar.eras.resetsOnFlip || [];
+      const zeroOrigin = {};
+      for (const t of state.calendar.tiers) zeroOrigin[t.name] = t.startValue;
+      const elapsedTuple = worldTimeToTuple(state.worldTime - era.at, state.calendar, zeroOrigin);
+      for (const tierName of resets) {
+        if (elapsedTuple[tierName] === undefined) continue;
+        scope[tierName] = elapsedTuple[tierName];
+        const tier = state.calendar.tiers.find(t => t.name === tierName);
+        if (tier && tier.labels) {
+          const idx = elapsedTuple[tierName] - tier.startValue;
+          scope[tierName + 'Name'] = tier.labels[idx] || '';
+        }
+      }
+    } else {
+      // 'display-label' (default, nengō style): expose eraYear inline.
+      if (tuple.year !== undefined) {
+        const flipTuple = worldTimeToTuple(era.at, state.calendar, state.origin);
+        scope.eraYear = (tuple.year - flipTuple.year) + 1;
+      }
+    }
+  }
+  return scope;
+}
+
+function renderTierTable() {
+  const tbody = $('tier-table').querySelector('tbody');
+  tbody.innerHTML = '';
+  const tuple = state._lastTuple || {};
+  for (const tier of state.calendar.tiers) {
+    const tr = document.createElement('tr');
+    const nameTd = document.createElement('td'); nameTd.textContent = tier.name;
+    const valTd = document.createElement('td'); valTd.className = 'num'; valTd.textContent = tuple[tier.name] ?? '—';
+    const labelTd = document.createElement('td');
+    if (tier.labels) {
+      const v = tuple[tier.name] ?? tier.startValue;
+      labelTd.textContent = tier.labels[v - tier.startValue] || '—';
+    } else {
+      labelTd.textContent = '—';
+    }
+    const rolloverTd = document.createElement('td');
+    rolloverTd.textContent = describeRollover(tier);
+    rolloverTd.style.fontFamily = 'ui-monospace, monospace';
+    rolloverTd.style.fontSize = '11px';
+    rolloverTd.style.color = 'var(--ink-muted)';
+    tr.appendChild(nameTd); tr.appendChild(valTd); tr.appendChild(labelTd); tr.appendChild(rolloverTd);
+    tbody.appendChild(tr);
+  }
+}
+
+function describeRollover(tier) {
+  const r = tier.rollover;
+  if (!r) return 'none (top/sequential)';
+  if (r.kind === 'constant') return `constant ${r.value}`;
+  if (r.kind === 'table') return `table[${r.indexedBy || '?'}] (${r.values?.length ?? '?'})`;
+  if (r.kind === 'rule') return `rule base=${r.base} (${r.conditions?.length ?? 0} conds)`;
+  return r.kind;
+}
+
+function renderSubDivisions() {
+  const root = $('subdiv-list');
+  root.innerHTML = '';
+  const scope = state._lastScope || {};
+  let any = false;
+  for (const tier of state.calendar.tiers) {
+    for (const sub of (tier.subdivisions || [])) {
+      any = true;
+      const row = document.createElement('div');
+      row.className = 'sub-row';
+      const name = document.createElement('span');
+      name.className = 'sub-name';
+      name.textContent = `${sub.name} (cycle ${sub.length})`;
+      const val = document.createElement('span');
+      val.className = 'sub-value';
+      val.textContent = `${scope[sub.name + 'Name'] ?? '—'} (${scope[sub.name] ?? '—'})`;
+      row.appendChild(name); row.appendChild(val);
+      root.appendChild(row);
+    }
+  }
+  if (!any) root.innerHTML = '<p style="font-size:12px; color: var(--ink-muted);">No sub-divisions on this calendar.</p>';
+}
+
+function renderEraState() {
+  const root = $('era-state');
+  root.innerHTML = '';
+  const scope = state._lastScope || {};
+  if (!state.calendar.eras) {
+    appendDef(root, 'enabled', 'no');
+    return;
+  }
+  appendDef(root, 'current era', scope.era || '—');
+  appendDef(root, 'eraYear', scope.eraYear ?? '—');
+  appendDef(root, 'flips total', String(state.eraFlips.length));
+  appendDef(root, 'resetsOnFlip', (state.calendar.eras.resetsOnFlip || []).join(', ') || '—');
+}
+
+function renderDaysSince() {
+  const days = state._lastScope?._daysSinceEpoch;
+  $('days-since').textContent = days === null || days === undefined ? '— (no day tier)' : String(days);
+}
+
+function renderTemplateText() {
+  $('template-display').textContent = state.calendar.displayFormat || '— no template —';
+}
+
+// Boot.
+init();
+
+// ============================================================
+// SELF-TEST — runs at startup, logs to console.
+// ============================================================
+(function selfTest() {
+  const earth = PRESETS['earth-gregorian'];
+  const origin = { year: 2024, month: 0, day: 1, hour: 0, minute: 0, second: 0 };
+
+  // 0 worldTime → origin
+  const t0 = worldTimeToTuple(0, earth, origin);
+  console.assert(t0.year === 2024 && t0.month === 0 && t0.day === 1 && t0.hour === 0, '0 worldTime should equal origin', t0);
+
+  // 86400 seconds = 1 day
+  const t1 = worldTimeToTuple(86400, earth, origin);
+  console.assert(t1.year === 2024 && t1.month === 0 && t1.day === 2, '+1 day = Jan 2', t1);
+
+  // 31 days = Feb 1
+  const t2 = worldTimeToTuple(86400 * 31, earth, origin);
+  console.assert(t2.year === 2024 && t2.month === 1 && t2.day === 1, '+31 days = Feb 1', t2);
+
+  // 2024 is a leap year — Feb 29 should exist.
+  const t3 = worldTimeToTuple(86400 * (31 + 28), earth, origin);
+  console.assert(t3.year === 2024 && t3.month === 1 && t3.day === 29, '2024 has Feb 29', t3);
+
+  // Roundtrip 1 year (366 days in 2024 leap).
+  const t4 = worldTimeToTuple(86400 * 366, earth, origin);
+  console.assert(t4.year === 2025 && t4.month === 0 && t4.day === 1, '2024 leap → +366d = 2025', t4);
+
+  // Stardate sequential.
+  const sd = PRESETS['stardate'];
+  const ts = worldTimeToTuple(1234, sd, sd.defaultOrigin);
+  console.assert(ts.count === sd.defaultOrigin.count + 1234, 'stardate count advances', ts);
+
+  // Imperial Japan — verify era arithmetic round-trip.
+  const jp = PRESETS['imperial-japan'];
+  const jpOrigin = jp.defaultOrigin;
+  const originAbs = tupleToAbsolute(jpOrigin, jp);
+  // Reiwa 1 = May 1, 2019.
+  const reiwa1 = tupleToAbsolute({ year: 2019, month: 4, day: 1, hour: 0, minute: 0, second: 0 }, jp) - originAbs;
+  const r1 = worldTimeToTuple(reiwa1, jp, jpOrigin);
+  console.assert(r1.year === 2019 && r1.month === 4 && r1.day === 1, 'Reiwa 1 = 2019-05-01 round-trips', r1);
+  // Heisei start = Jan 8, 1989.
+  const heisei1 = tupleToAbsolute({ year: 1989, month: 0, day: 8, hour: 0, minute: 0, second: 0 }, jp) - originAbs;
+  const h1 = worldTimeToTuple(heisei1, jp, jpOrigin);
+  console.assert(h1.year === 1989 && h1.month === 0 && h1.day === 8, 'Heisei 1 = 1989-01-08 round-trips', h1);
+
+  // skipWhen — verify a synthetic Shire-shape calendar's weekday lock.
+  // 365-day year with 1 skip per year → 364 cycling days = 52×7, so
+  // year boundary preserves weekday.
+  const shire = {
+    id: 'test-shire', name: 'Test Shire', baseUnit: 'day',
+    tiers: [
+      { name: 'year', startValue: 1, rollover: { kind: 'constant', value: 1 } },
+      { name: 'month', startValue: 0, rollover: { kind: 'constant', value: 2 },
+        labels: ['Regular', 'Mid'] },
+      { name: 'day', startValue: 1,
+        rollover: { kind: 'table', indexedBy: 'month', values: [364, 1] },
+        subdivisions: [{
+          name: 'weekday', length: 7, offset: 0,
+          labels: ['A','B','C','D','E','F','G'],
+          skipWhen: [{ month: 1, day: 1 }]
+        }]
+      }
+    ],
+    displayFormat: '{{ day }}/{{ month }}/{{ year }} ({{ weekdayName }})',
+    eras: null, defaultOrigin: { year: 1, month: 0, day: 1 }
+  };
+  precomputeConstantSizes(shire);
+  // After 1 full year (365 days), weekday should be the SAME as origin
+  // because the 1 skipped day brings cycling days to 364 = 52×7.
+  const days365 = 365;
+  const tupleAfter1y = worldTimeToTuple(days365, shire, shire.defaultOrigin);
+  const skips = countSkippedDaysBefore(tupleAfter1y, shire.defaultOrigin, shire, [{ month: 1, day: 1 }]);
+  console.assert(skips === 1, 'skipWhen counts 1 skip in first year', skips);
+  const cyclingDays = days365 - skips;
+  console.assert(cyclingDays % 7 === 0, 'skipWhen: 364 cycling days = 52×7, weekday locked', cyclingDays);
+
+  // Warhammer 40K — verify elapsed-from-flip arithmetic.
+  // At year=1500 fraction=500 absolute, with M41 flip at year=1000,
+  // elapsed-from-flip should yield year=500 fraction=500.
+  const wh = PRESETS['warhammer-imperial'];
+  const whAbs = (1500 * 1000) + 500;
+  const wht = worldTimeToTuple(whAbs, wh, wh.defaultOrigin);
+  console.assert(wht.year === 1500 && wht.fraction === 500, 'Warhammer absolute: year=1500, fraction=500', wht);
+  // Now what would scope show after elapsed-from-flip? Compute manually:
+  const flipAt = 1000 * 1000; // M41 flip
+  const zeroOrigin = { year: 0, fraction: 0 };
+  const elapsed = worldTimeToTuple(whAbs - flipAt, wh, zeroOrigin);
+  console.assert(elapsed.year === 500 && elapsed.fraction === 500, 'Warhammer elapsed-from-flip: year=500, fraction=500', elapsed);
+
+  console.log('[CalendarPoC] self-test passed');
+})();
+</script>
+</body>
+</html>

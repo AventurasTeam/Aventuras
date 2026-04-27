@@ -1,0 +1,66 @@
+{
+  "id": "tolkien-shire",
+  "name": "Tolkien Shire Reckoning",
+  "baseUnit": "day",
+  "tiers": [
+    {
+      "name": "year",
+      "startValue": 1,
+      "rollover": {
+        "kind": "rule",
+        "against": "year",
+        "base": 365,
+        "conditions": [{ "every": 4 }, { "every": 100, "exclude": true }]
+      }
+    },
+    {
+      "name": "month",
+      "startValue": 0,
+      "rollover": { "kind": "constant", "value": 15 },
+      "labels": [
+        "2 Yule",
+        "Afteryule",
+        "Solmath",
+        "Rethe",
+        "Astron",
+        "Thrimidge",
+        "Forelithe",
+        "Lithedays",
+        "Afterlithe",
+        "Wedmath",
+        "Halimath",
+        "Winterfilth",
+        "Blotmath",
+        "Foreyule",
+        "1 Yule"
+      ]
+    },
+    {
+      "name": "day",
+      "startValue": 1,
+      "rollover": {
+        "kind": "table",
+        "indexedBy": "month",
+        "values": [1, 30, 30, 30, 30, 30, 30, 3, 30, 30, 30, 30, 30, 30, 1]
+      },
+      "subdivisions": [
+        {
+          "name": "weekday",
+          "length": 7,
+          "offset": 0,
+          "labels": ["Sterday", "Sunday", "Monday", "Trewsday", "Hevensday", "Mersday", "Highday"],
+          "skipWhen": [{ "month": 7, "day": 2 }]
+        }
+      ]
+    }
+  ],
+  "leapDayPosition": {
+    "tier": "day",
+    "indexedBy": "month",
+    "index": 7,
+    "leapAgainst": "year"
+  },
+  "displayFormat": "{{ day }} {{ monthName }}, SR {{ year }} ({{ weekdayName }})",
+  "eras": null,
+  "defaultOrigin": { "year": 1, "month": 0, "day": 1 }
+}

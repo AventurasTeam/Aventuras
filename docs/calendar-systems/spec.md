@@ -29,7 +29,7 @@ Things this design does not attempt to support:
   the user authors that into the active calendar's display template.
 - **Time zones.** Flagged as a potential future extension: if ever
   supported, timezone offsets would most naturally bind to
-  [location entities](./data-model.md#world-state-storage) (per-location
+  [location entities](../data-model.md#world-state-storage) (per-location
   offset on top of the active calendar's clock), not to the calendar
   itself. Out of scope for the calendar primitive.
 - First-class **moon phases / seasons / weather / holidays**. Those
@@ -61,7 +61,7 @@ unit is the bottom tier.
 | Warhammer 40K Imperial  | `millennium → fractional-year` (two-tier, decimal-shaped) |
 | Stardate (sequential)   | `count` (one tier, no rollover)                           |
 
-[`worldTime`](./data-model.md#in-world-time-tracking) — a single
+[`worldTime`](../data-model.md#in-world-time-tracking) — a single
 integer in **base time units** — is the spine. The conversion
 `worldTime ↔ tier-tuple` is one bidirectional walk. The data model
 already pre-supposes this: the integer is calendar-agnostic; the
@@ -94,6 +94,30 @@ in the chain. We default to sub-division for typical fiction.
 
 Sub-divisions never affect arithmetic. They are render-only.
 
+**Days outside the cycle — `skipWhen`.** Some calendars deliberately
+hold certain days _outside_ the weekday cycle so the cycle aligns to
+a clean year boundary. The Shire calendar's Mid-year's Day is the
+canonical example — Tolkien designed it so that 365 − 1 = 364 = 52 ×
+7, making every Shire date fall on the same weekday every year.
+Bahá'í (Ayyám-i-Há), Discworld (Hogswatchnight), and many fantasy
+systems share this trick.
+
+A sub-division can declare `skipWhen: Array<Record<string, number>>`
+— a list of partial tier-tuples. When the current day matches any
+entry, that day renders with no weekday and does not advance the
+cycle counter. Example for Shire: `[{ "month": 7, "day": 2 }]` skips
+Mid-year's Day.
+
+**Conditional skipping is deferred.** A skip whose presence depends
+on _other_ tier state — e.g. Shire's Overlithe, present only in leap
+years and only at month 7 / day 3 — cannot be expressed by a flat
+partial-tuple match. Modeling it would need a predicate against leap
+state or full-tuple inspection. Deferred in v1; consequence is that
+conditional non-cycling days drift the weekday cycle by one day per
+occurrence. For Shire this means a 1-day weekday drift in leap years
+— acceptable fidelity gap, surfaced explicitly for users authoring
+such calendars.
+
 ### Eras: hoisted out, manually triggered
 
 Eras are **not** a tier in the chain. They live in a separate
@@ -112,12 +136,69 @@ reset on flip? default first-era name? optional preset name list?).
 The story holds **era flip events** (the `at`-worldTime + name
 pairs). Flips are user-triggered — explicit "Flip era" affordance
 — and delta-logged like any narrative-state mutation (the deltas
-table is documented in [data-model.md → World-state storage](./data-model.md#world-state-storage)).
+table is documented in [data-model.md → World-state storage](../data-model.md#world-state-storage)).
 
 A calendar with predictable eras (rare — fixed-length 1000-year
 ages with no narrative branch) is unsupported by design. Users
 wanting that author it as `{{ year | divide: 1000 | floor }}` in
 the display template, with no era field at all.
+
+### Era flip semantics — `flipMode`
+
+`resetsOnFlip` says _which tiers_ are affected by an era flip; it
+doesn't say _what the affect is_. Three semantics are observable
+in real and fictional calendars, and the calendar must pick one
+explicitly via `flipMode`:
+
+- **`'display-label'` (default).** Pure annotation. The era name is
+  rendered alongside the absolute tier-tuple; `eraYear` (computed as
+  `current_cal_year - era_start_cal_year + 1`) is exposed in the
+  template scope so the calendar can re-anchor the year value in
+  display. The underlying tiers continue counting unaffected.
+  Models nengō (Japanese imperial), Chinese reign-name, Roman
+  regnal — eras are a _naming_ layer over a steady calendar. The
+  first era year is often partial (Reiwa 1 ran May–Dec 2019 only).
+
+- **`'elapsed-from-flip'`.** Full structural reset. Tiers in
+  `resetsOnFlip` are recomputed as if the era flip _was_ the
+  calendar's origin. Year 1 Day 1 of the new era literally starts at
+  the flip moment; the previous calendar's year/month/day no longer
+  participate in display. Models French Revolutionary, Warhammer 40K
+  millennium-flip, fictional cataclysm-style resets.
+
+- **`'calendar-aligned'`.** Hybrid: tiers reset to `startValue` at
+  flip, but increment at the underlying calendar's natural
+  boundaries (e.g., the next Jan 1) rather than from the flip
+  moment. For a single-tier reset, display-equivalent to
+  `'display-label'`; diverges only when multiple tiers are in
+  `resetsOnFlip` and the user wants "start a fresh year/month/day
+  count at flip but keep aligning to the underlying solar year."
+  Listed for completeness; v1 implementations may defer it.
+
+The three are visibly different when applied to the same calendar
+moment. For an era flip on May 1, 2019 and a current date of
+November 15, 2020:
+
+| `flipMode`            | display                                                                          |
+| --------------------- | -------------------------------------------------------------------------------- |
+| `'display-label'`     | `Reiwa 2年 11月15日` (calendar-year-relative; Nov/15 from underlying Gregorian)  |
+| `'elapsed-from-flip'` | `Reiwa 2年 6月15日` (recomputed; ~563 days since flip = Year 2, Month 6, Day 15) |
+| `'calendar-aligned'`  | same as `'display-label'` for single-tier reset                                  |
+
+`resetsOnFlip` semantics depend on `flipMode`:
+
+- Under `'display-label'`, the list is a hint about which tiers'
+  values are exposed via re-anchored template variables (e.g.,
+  `eraYear`). Tier counters themselves don't change.
+- Under `'elapsed-from-flip'`, the list specifies which tiers are
+  recomputed from `worldTime - era.at` (with origin = all
+  `startValue`s). Tiers not in the list stay absolute.
+- Under `'calendar-aligned'`, the list specifies which tiers reset
+  at flip but re-increment at the underlying calendar's normal
+  boundaries.
+
+Default: `'display-label'`. Picked because it has the safest
+behavior — no structural rewrite, just annotation.
 
 ## Data shape
 
@@ -162,10 +243,17 @@ type Subdivision = {
   length: number // 7
   offset: number // value at calendar's epoch
   labels: string[] // ['Sunday', 'Monday', …]; length === Subdivision.length
+  skipWhen?: Array<Record<string, number>>
+  // ^ optional: partial tier-tuples for days that DON'T cycle (e.g.
+  //   Shire's Mid-year's Day). Conditional skipping (predicate against
+  //   leap state) deferred — see "Days outside the cycle" above.
 }
 
 type EraDeclaration = {
-  resetsOnFlip: string[] // tier names to reset to startValue on era flip
+  flipMode: 'display-label' | 'elapsed-from-flip' | 'calendar-aligned'
+  // ^ how an era flip affects display; see "Era flip semantics" above.
+  //   default: 'display-label'.
+  resetsOnFlip: string[] // tier names affected by the flip; semantics depend on flipMode
   defaultStartName: string // era name at worldTime=0
   presetNames?: string[] // optional canonical sequence (e.g., ['First Age', 'Second Age', …])
 }
@@ -196,7 +284,7 @@ stories.calendar_state: {
 }
 ```
 
-[`stories.settings.worldTimeOrigin`](./data-model.md#story-settings-shape)
+[`stories.settings.worldTimeOrigin`](../data-model.md#story-settings-shape)
 holds the per-story anchor — the tier-tuple corresponding to
 `worldTime = 0`. Different stories using the same calendar can have
 different origins (one Earth story starts in 2024, another in 1942).
@@ -213,7 +301,7 @@ anywhere a string is needed.
 ### Where calendar definitions live
 
 App-global, like
-[providers and model profiles](./data-model.md#app-settings-storage):
+[providers and model profiles](../data-model.md#app-settings-storage):
 
 ```ts
 app_settings.calendars: CalendarSystem[]
@@ -253,7 +341,7 @@ calendars list with the original preset name + " (custom)" suffix.
 
 ## Rendering pipeline
 
-Hooks into the existing [generation context](./architecture.md#the-single-context-principle):
+Hooks into the existing [generation context](../architecture.md#the-single-context-principle):
 
 1. App init: load active story's `calendarSystemId` → resolve the
    calendar definition from `app_settings.calendars` → register its
@@ -278,7 +366,7 @@ weekdayName, ... }`.
    - The wizard's `worldTimeOrigin` input — calendar-specific date
      picker, not free-form text.
    - Manual worldTime correction UI (per the
-     [follow-up](./followups.md#manual-worldtime-correction--cascade-vs-jump--downstream-blast-radius)) —
+     [follow-up](../followups.md#manual-worldtime-correction--cascade-vs-jump--downstream-blast-radius)) —
      date picker, not free-form text.
      No generic free-form date parser is needed for v1.
 
@@ -288,7 +376,7 @@ Caching: per-year cumulative-day lengths memoize lazily. A
 ## Classifier integration
 
 The classifier (described under
-[architecture.md → Agent orchestration](./architecture.md#agent-orchestration))
+[architecture.md → Agent orchestration](../architecture.md#agent-orchestration))
 reads narrative and emits worldTime deltas. It needs the calendar's
 vocabulary to convert prose like "two days later" or "next Tuesday"
 into elapsed-base-unit integers.
@@ -332,7 +420,7 @@ propagate to every story using it (per
 pass when v1 ships and a real fictional calendar surfaces. Likely
 form-driven (tier list + rollover rule cards) with a raw-JSON view
 for power users (consistent with the
-[JSON viewer pattern](./ui/principles.md)).
+[JSON viewer pattern](../ui/principles.md)).
 
 Story Settings exposes the active calendar picker and a read-only
 summary of the selected calendar's shape. The full editor is at
@@ -343,7 +431,7 @@ the app level.
 **v1:** Earth (Gregorian).
 
 **Followup presets** to add as concrete fictional examples emerge
-(per [followups.md](./followups.md#fictional-calendar-systems)):
+(per [followups.md](../followups.md#fictional-calendar-systems)):
 
 - Generic fantasy 12×30 — same structure, renamed months, no leap.
 - Tolkien Shire Reckoning — 12×30 + intercalary days.
@@ -409,7 +497,7 @@ follow-ups:
 ## Resolves in followups.md
 
 The four sub-questions in
-[`Fictional calendar systems`](./followups.md#fictional-calendar-systems)
+[`Fictional calendar systems`](../followups.md#fictional-calendar-systems)
 are answered above:
 
 - **Where declared:** `stories.settings.calendarSystemId` references

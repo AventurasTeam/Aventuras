@@ -1,0 +1,15 @@
+{
+  "id": "mayan-long-count",
+  "name": "Mayan Long Count",
+  "baseUnit": "kin",
+  "tiers": [
+    { "name": "baktun", "startValue": 0, "rollover": null },
+    { "name": "katun", "startValue": 0, "rollover": { "kind": "constant", "value": 20 } },
+    { "name": "tun", "startValue": 0, "rollover": { "kind": "constant", "value": 20 } },
+    { "name": "winal", "startValue": 0, "rollover": { "kind": "constant", "value": 18 } },
+    { "name": "kin", "startValue": 0, "rollover": { "kind": "constant", "value": 20 } }
+  ],
+  "displayFormat": "{{ baktun }}.{{ katun }}.{{ tun }}.{{ winal }}.{{ kin }}",
+  "eras": null,
+  "defaultOrigin": { "baktun": 13, "katun": 0, "tun": 0, "winal": 0, "kin": 0 }
+}
