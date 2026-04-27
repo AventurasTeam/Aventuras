@@ -210,7 +210,7 @@ erDiagram
 
     vault_calendars {
         text id PK "UUID; user-authored calendars only — built-ins live in code/repo JSON loaded at boot"
-        text name "display name; for clones, original-preset-name + ' (custom)' suffix by default"
+        text name "display name; for clones, original-preset-name copied verbatim. Type indicator (built-in/custom) is a UI chip, not encoded in the name"
         json definition "CalendarSystem shape per calendar-systems/spec.md — tiers, eras, displayFormat, baseUnitName, secondsPerBaseUnit, leapDayPosition?, etc."
         integer created_at
         integer updated_at
@@ -632,9 +632,11 @@ stays on `app_settings` since it's a global default, not registry
 content.
 
 **Cloning a built-in** copies its definition to a new
-`vault_calendars` row with a new UUID and the original name + "
-(custom)" suffix. The original built-in is never mutated; the clone
-is fully independent from creation onward.
+`vault_calendars` row with a new UUID and the original preset name
+copied verbatim. The `built-in` / `custom` chip in the editor UI
+is the type indicator — no suffix is baked into the name. The
+original built-in is never mutated; the clone is fully independent
+from creation onward.
 
 **Vault content deletion** is blocked when any story references the
 content's id; otherwise allowed. Calendars set this stricter

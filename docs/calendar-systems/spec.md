@@ -381,8 +381,12 @@ No data is lost.
 **The "edit a built-in" affordance always clones first.** UI shows
 the active built-in preset with a "Clone & edit" button rather than
 a direct edit; the clone gets a new UUID and lands as a
-`vault_calendars` row with the original preset name + " (custom)"
-suffix.
+`vault_calendars` row with the original preset name copied
+verbatim. The `built-in` vs `custom` chip in the editor UI is the
+type indicator; no `(custom)` suffix is baked into the name. Two
+clones of the same built-in default to the same name and are
+distinguished by UUID; users can rename either if they want
+clearer labels.
 
 ## Rendering pipeline
 

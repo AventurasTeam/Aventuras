@@ -103,9 +103,12 @@ Layer 2.
   Tooltip: "Current default for new stories — change in App Settings
   → Story Defaults". Click deep-links to App Settings → Story
   Defaults with the calendar-default control scrolled into view.
-- **Name** — calendar display name; user-authored entries carry the
-  ` (custom)` suffix unless renamed.
-- **Type chip** — `built-in` / `custom`.
+- **Name** — calendar display name. No `(custom)` suffix; the
+  type chip below is the sole type indicator. Two clones of the
+  same built-in default to the same name and are distinguished by
+  UUID; users can rename for clarity.
+- **Type chip** — `built-in` / `custom`. The single source of
+  type identification — never duplicated inline in the name.
 - **Tier-shape line** — compact glyph chain (`y→m→d→h→m→s`), gives
   structural at-a-glance.
 - **Era support** — `era: yes` / `era: no`.
@@ -183,11 +186,11 @@ Renders below the detail head when viewing a built-in:
 > `[Clone & edit]`
 
 Clicking `[Clone & edit]` creates a new `vault_calendars` row
-(fresh UUID, name = original + ` (custom)`, definition copied
-verbatim), navigates to the clone's detail, and **auto-focuses the
-name input with text selected** — the auto-generated suffix is the
-most-likely first edit. No confirmation prompt; clone is
-non-destructive (deletable).
+(fresh UUID, name = original preset name copied verbatim,
+definition copied verbatim), navigates to the clone's detail, and
+**auto-focuses the name input with text selected** — renaming is
+the most-likely first edit since the chip already conveys the
+type. No confirmation prompt; clone is non-destructive (deletable).
 
 ### Definition section (read-only)
 
@@ -254,17 +257,17 @@ the rendered string and tier breakdown).
 
 ### Save bar
 
-When dirty, surfaces at the bottom of the canvas per the
-[save-session pattern](../../../patterns/save-sessions.md).
+Established visual per
+[save-sessions.md → Save bar visual](../../../patterns/save-sessions.md#visual)
+— warm yellow background, dirty-dot, `<b>N unsaved changes</b> —
+<dirty fields list>` text. No surface-specific layout variants.
 
-- **Unsaved-change count.**
-- **Usage warning** when `usage_count > 0`:
-  `⚠ N stories use this calendar — saving propagates labels to
-their renders.` Non-blocking; informational. Per spec: the integer
-  `worldTime` is preserved across edits, only display reinterprets.
-- **`Discard`** — throws away the session.
-- **`Save ⌘S`** — commits as one delta batch under a single
-  `action_id`.
+Calendar-specific addition: when `usage_count > 0`, a small `⚠`
+icon appears at the end of the dirty-fields line with a tooltip:
+"Saving propagates labels to N stories using this calendar."
+Tooltip-only — keeps the established single-row layout. Per spec
+the integer `worldTime` is preserved across edits, only display
+reinterprets; saving is non-destructive, the icon is informational.
 
 Navigate-away guard intercepts dirty navigation per the standard
 pattern. No surface-specific exception (calendar edits don't qualify

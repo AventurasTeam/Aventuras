@@ -163,13 +163,16 @@
   .tier-breakdown { font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-muted); padding: 6px 0; line-height: 1.7; }
   .tier-breakdown .v { color: var(--ink); }
 
-  /* save bar */
-  .save-bar { display: none; position: sticky; bottom: 0; background: var(--bg-region); border-top: 1px solid var(--line); padding: 10px 16px; align-items: center; gap: 12px; box-shadow: 0 -2px 8px rgba(0,0,0,0.04); margin: 16px -32px 0; }
+  /* save bar — matches established pattern (World, Story Settings, App Settings) */
+  .save-bar { display: none; padding: 10px 20px; border-top: 1px solid var(--line); background: #fff7dc; justify-content: space-between; align-items: center; gap: 12px; margin: 16px -32px 0; }
   .save-bar.dirty { display: flex; }
-  .save-bar .count { font-size: 12px; color: var(--ink); font-weight: 500; }
-  .save-bar .warn-line { font-size: 12px; color: var(--warn); flex: 1; }
-  .save-bar .btn-discard { padding: 5px 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); color: var(--ink-muted); font-size: 12px; cursor: pointer; }
-  .save-bar .btn-save { padding: 5px 14px; border: 1px solid var(--ink); border-radius: 3px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .save-bar .dirty-note { font-size: 12px; color: #765; display: flex; align-items: center; gap: 8px; }
+  .save-bar .dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: #c94; flex-shrink: 0; }
+  .save-bar .usage-warn { color: #c94; cursor: help; margin-left: 4px; }
+  .save-bar .actions { display: flex; gap: 8px; align-items: center; }
+  .save-bar .discard-btn { padding: 6px 14px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 12px; color: var(--ink); cursor: pointer; }
+  .save-bar .save-btn { padding: 6px 18px; border: 1px solid var(--ink); border-radius: 3px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .save-bar .save-btn .kbd { font-size: 10px; opacity: 0.7; font-family: ui-monospace, monospace; }
 
   /* ⋯ menu popover */
   .more-popover { position: absolute; top: 100%; right: 0; margin-top: 4px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,0.08); min-width: 200px; padding: 4px 0; z-index: 50; display: none; }
@@ -326,7 +329,7 @@
         <div class="top-row">
           <span class="star fav" title="Favorited">★</span>
         </div>
-        <div class="cal-name">Imperial Japan <span class="cal-name-sub">(custom)</span></div>
+        <div class="cal-name">Imperial Japan</div>
         <span class="type-badge">custom</span>
         <div class="meta-line">y→m→d→h→m→s<span class="sep">·</span>era: yes (display-label)</div>
         <div class="usage">used by 1 story</div>
@@ -384,7 +387,7 @@
       <div>
         <div class="kind-strip"><span class="kind-icon">📅</span><span>Calendar</span></div>
         <div class="name-row">
-          <input class="cal-display-name" style="border: 1px solid transparent; background: transparent; font: inherit; font-size: 20px; font-weight: 600; color: var(--ink); padding: 2px 6px; border-radius: 3px;" value="Imperial Japan (custom)">
+          <input class="cal-display-name" style="border: 1px solid transparent; background: transparent; font: inherit; font-size: 20px; font-weight: 600; color: var(--ink); padding: 2px 6px; border-radius: 3px;" value="Imperial Japan">
           <span class="pencil">✎</span>
         </div>
         <div class="badge-row">
@@ -495,12 +498,16 @@
     </div>
   </div>
 
-  <!-- SAVE BAR -->
+  <!-- SAVE BAR — established visual per patterns/save-sessions.md -->
   <div class="save-bar" id="save-bar">
-    <span class="count">3 unsaved</span>
-    <span class="warn-line">⚠ 1 story uses this calendar — saving propagates labels to its renders.</span>
-    <button class="btn-discard">Discard</button>
-    <button class="btn-save">Save ⌘S</button>
+    <div class="dirty-note">
+      <span class="dirty-dot"></span>
+      <span><b>3 unsaved changes</b> &mdash; months, weekdays<span class="usage-warn" title="Saving propagates labels to 1 story using this calendar.">⚠</span></span>
+    </div>
+    <div class="actions">
+      <span class="discard-btn">Discard</span>
+      <span class="save-btn">Save <span class="kbd">&#8984;S</span></span>
+    </div>
   </div>
 
 </div>
