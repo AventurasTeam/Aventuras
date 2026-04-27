@@ -208,6 +208,14 @@ erDiagram
         integer created_at
     }
 
+    vault_calendars {
+        text id PK "UUID; user-authored calendars only — built-ins live in code/repo JSON loaded at boot"
+        text name "display name; for clones, original-preset-name + ' (custom)' suffix by default"
+        json definition "CalendarSystem shape per calendar-systems/spec.md — tiers, eras, displayFormat, baseUnitName, secondsPerBaseUnit, leapDayPosition?, etc."
+        integer created_at
+        integer updated_at
+    }
+
     app_settings {
         text id PK "constant 'singleton' — global, single-row config table"
         json providers "Array<ProviderInstance>; user-managed multi-instance, includes API keys"
@@ -216,8 +224,7 @@ erDiagram
         text default_provider_id "FK into providers[].id; seeds Narrative + 'Reset to defaults'"
         json default_models "Record<agentId, { providerId, modelId }>; resolver fallback for un-overridden story.settings.models"
         json default_story_settings "see 'Story settings shape' — copy-at-creation source for new stories"
-        json calendars "Array<CalendarSystem>; user-authored only (clones + L3 from-scratch). Built-ins live in code/repo JSON, loaded at boot and merged into the in-memory registry"
-        text default_calendar_id "id into the merged calendar registry (built-ins + calendars[]); seeds new stories' calendarSystemId"
+        text default_calendar_id "id into the merged calendar registry (built-ins from code + vault_calendars rows); seeds new stories' calendarSystemId"
         json appearance "theme, density, accent preference"
         text ui_language "ISO 639-1; defaults to OS locale on first launch"
         integer onboarding_completed_at "set on first dismissal of the onboarding wizard (Finish, Skip, or Step 2 footer-link exit); null = wizard renders as root on next boot"
@@ -576,31 +583,16 @@ thereafter. Definitional fields (`mode`, `leadEntityId`,
 `narration`, `tone`) are absent — those are wizard-authored per
 story with no global default.
 
-**Calendars — user-authored only.**
+**Default calendar pointer.**
 
 ```ts
-app_settings.calendars: CalendarSystem[]      // see calendar-systems/spec.md for shape
 app_settings.default_calendar_id: string      // seeds new stories' calendarSystemId
 ```
 
-Built-in calendars live in code (or repo JSON loaded at boot); only
-user-authored calendars (clones of built-ins or from-scratch entries)
-persist in `app_settings.calendars`. App init merges built-ins with
-the JSON list into one in-memory `Map<id, CalendarSystem>`. Stories
-reference by id; resolver does direct lookup against the merged
-registry. Built-in ids (`'earth-gregorian'`) are stable strings;
-clone ids are UUIDs — disjoint by construction, no precedence rule
-needed.
-
-**Cloning a built-in** copies its definition to a new entry in
-`calendars` with a new UUID and the original name + " (custom)"
-suffix. The original built-in is never mutated; the clone is fully
-independent from creation onward.
-
-**Calendar deletion** is blocked when any story references the
-calendar id; otherwise allowed. (Provider/profile deletion semantics
-— currently softer — revisited separately per
-[`followups.md`](./followups.md).)
+A single-id pointer into the merged calendar registry. Calendar
+definitions themselves live in [`vault_calendars`](#vault-content-storage)
+(user-authored) + code (built-ins) — Vault content storage is
+documented in its own decision section below.
 
 **Why one table, not several.** Providers, profiles, and
 assignments form one tightly-coupled config envelope — they're
@@ -615,6 +607,55 @@ the `providers[].apiKey` JSON. v1 is local-first with no network
 exposure of the DB; the threat model that justifies encryption
 hasn't materialized. Tracked in
 [followups.md](./followups.md#encryption-at-rest-for-provider-keys).
+
+### Vault content storage
+
+**Decided:** non-story user content (calendars, future packs,
+scenarios, character templates) lives in **per-type top-level
+tables** prefixed with `vault_` — `vault_calendars` ships in v1;
+`vault_packs`, `vault_scenarios`, `vault_character_templates` etc.
+land when those features ship. Vault is the unified UI surface that
+will browse and edit these in one place; storage stays per-type.
+
+**`vault_calendars`** holds user-authored CalendarSystem definitions
+(clones of built-ins, plus from-scratch entries when L3 lands).
+Built-ins continue to live in code (or repo JSON loaded at boot)
+and are merged with `vault_calendars` rows into one in-memory
+`Map<id, CalendarSystem>` at app init. Stories reference calendars
+by id; resolver does direct lookup against the merged registry.
+Built-in ids (`'earth-gregorian'`) are stable strings; clone ids are
+UUIDs — disjoint by construction, no precedence rule needed.
+
+`app_settings.default_calendar_id` is a single-id pointer into the
+merged registry — parallel to `default_provider_id`. The pointer
+stays on `app_settings` since it's a global default, not registry
+content.
+
+**Cloning a built-in** copies its definition to a new
+`vault_calendars` row with a new UUID and the original name + "
+(custom)" suffix. The original built-in is never mutated; the clone
+is fully independent from creation onward.
+
+**Vault content deletion** is blocked when any story references the
+content's id; otherwise allowed. Calendars set this stricter
+precedent in v1; provider/profile deletion semantics — currently
+softer — are revisited separately per
+[`followups.md`](./followups.md#provider--profile--model-profile-deletion-semantics).
+
+**Why per-type, not polymorphic.** Future Vault content types have
+unrelated schemas — packs hold prompt template strings + variables,
+scenarios are whatever shape lands, character templates are a
+subset of entity state. Forcing them through one row shape
+(`vault_items` with `kind` discriminator + JSON body) is premature
+with only one type in flight. The unification question earns its
+weight when ≥2 content types ship and we can validate against
+actual schema overlap. Tracked in
+[`followups.md`](./followups.md#vault-content-storage-pattern).
+
+**Vault UI** is deferred per [`ui/README.md`](./ui/README.md); v1
+surfaces the calendar editor as the first sub-wireframe under a
+Vault parent (placeholder shell), with the broader Vault
+navigation landing later.
 
 ### Entry metadata shape
 

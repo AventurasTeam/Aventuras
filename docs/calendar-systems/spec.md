@@ -336,13 +336,21 @@ render the tuple through the calendar's `displayFormat` template.
 
 ### Where calendar definitions live
 
-App-global, like
-[providers and model profiles](../data-model.md#app-settings-storage):
+App-global. Storage splits across two homes (per
+[data-model.md → Vault content storage](../data-model.md#vault-content-storage)):
 
 ```ts
-app_settings.calendars: CalendarSystem[]
-app_settings.default_calendar_id: string   // seed for new stories
+// Built-ins — code (or repo JSON loaded at boot). Read-only.
+//   v1 ships: 'earth-gregorian'.
+// User-authored — vault_calendars rows. Mutable.
+//   Clones of built-ins + future from-scratch entries.
+
+app_settings.default_calendar_id: string   // pointer; seeds new stories
 ```
+
+App init merges built-ins + `vault_calendars` rows into one
+in-memory `Map<id, CalendarSystem>`. Stories reference calendars by
+id; resolver does direct lookup against the merged registry.
 
 A calendar is a **preset-shaped artifact**, not story-customized
 state — modifying one is conceptually creating a different calendar.
@@ -372,16 +380,17 @@ No data is lost.
 
 **The "edit a built-in" affordance always clones first.** UI shows
 the active built-in preset with a "Clone & edit" button rather than
-a direct edit; the clone gets a new id and lands in the user's
-calendars list with the original preset name + " (custom)" suffix.
+a direct edit; the clone gets a new UUID and lands as a
+`vault_calendars` row with the original preset name + " (custom)"
+suffix.
 
 ## Rendering pipeline
 
 Hooks into the existing [generation context](../architecture.md#the-single-context-principle):
 
 1. App init: load active story's `calendarSystemId` → resolve the
-   calendar definition from `app_settings.calendars` → register its
-   `displayFormat` Liquid template.
+   calendar definition from the merged registry (built-ins +
+   `vault_calendars`) → register its `displayFormat` Liquid template.
 2. Anywhere a worldTime needs a display string:
    1. Compute `tierTuple = worldTimeToTuple(worldTime, calendar)`.
       Variable-length tiers (rule, table) require accumulated
@@ -448,24 +457,31 @@ Three levels of user power, gated by complexity:
 | **L2** | Tweak labels of a chosen calendar (rename months, weekdays, eras).                | Yes      |
 | **L3** | Author a calendar from scratch — add/remove/reorder tiers, define rollover rules. | Deferred |
 
-**L1 surface** lives in the Story Creation wizard — calendar
-selection step, default = global app default.
+**L1 surface** is the calendar picker — surfaces in App Settings
+(default-calendar select, seeds new stories), Story Settings
+(per-story calendar select), and the Story Creation wizard
+(calendar selection step). Same picker primitive across all three;
+its design lands as a separate pass.
 
-**L2 surface** lives in the calendar editor at App Settings →
-Calendars (sibling to Profiles, Providers). Stories don't own
-calendar shape; they reference by id. Edits to a calendar
-propagate to every story using it (per
+**L2 surface** lives in the Vault calendar editor.
+[Vault](../ui/README.md) is the home for non-story user content
+(packs, scenarios, character templates, calendars); deferred from
+v1 as a unified surface, but the calendar sub-wireframe lands as
+the first concrete piece. Stories don't own calendar shape; they
+reference by id. Edits to a calendar propagate to every story
+using it (per
 [Where calendar definitions live](#where-calendar-definitions-live)).
 
-**L3 surface** is a dedicated Calendar Editor screen — own design
-pass when v1 ships and a real fictional calendar surfaces. Likely
-form-driven (tier list + rollover rule cards) with a raw-JSON view
-for power users (consistent with the
-[JSON viewer pattern](../ui/principles.md)).
+**L3 surface** is a dedicated from-scratch authoring view inside
+the Vault calendar editor — own design pass when v1 ships and a
+real fictional calendar surfaces. Likely form-driven (tier list +
+rollover rule cards) with a raw-JSON view for power users
+(consistent with the
+[JSON viewer pattern](../ui/patterns/data.md#raw-json-viewer--shared-modal-pattern)).
 
 Story Settings exposes the active calendar picker and a read-only
-summary of the selected calendar's shape. The full editor is at
-the app level.
+summary of the selected calendar's shape. The full editor is in
+Vault; Story Settings is selection + summary only.
 
 ## Presets to ship
 

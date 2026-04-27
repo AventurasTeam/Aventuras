@@ -106,6 +106,17 @@ Decisions needed:
 - How `sceneTime` (when it lands) co-exists with manual
   `worldTime` edits.
 
+### Vault content storage pattern
+
+When Vault gets wireframed (currently deferred per
+[`ui/README.md`](./ui/README.md)), decide whether to unify all
+content types under a polymorphic `vault_items` table with a `kind`
+discriminator + JSON body, or keep per-type tables (`vault_calendars`,
+future `vault_packs`, `vault_scenarios`, `vault_character_templates`,
+etc.). Calendars set the per-type precedent in v1; the unification
+question earns its weight when ≥2 content types ship and we can
+validate against actual schema overlap.
+
 ### Top-K-by-salience retrieval — long-term memory implications
 
 Per [Happenings & character knowledge](./data-model.md#happenings--character-knowledge):
@@ -415,20 +426,33 @@ pass: orphan handling on import, soft-warn vs hard-block tradeoffs,
 what happens to `default_provider_id` if the referenced provider is
 deleted, etc.
 
-### App Settings → Calendars surface
+### Vault parent shell
 
-Per [calendar-systems/spec.md → Authoring (UI)](./calendar-systems/spec.md#authoring-ui),
-the L2 calendar editor lives at App Settings → Calendars (sibling to
-Profiles, Providers). Wireframe and surface design pending — App
-Settings doc currently has no calendar-related elements.
+The Vault calendar editor lands as the first sub-wireframe under
+`docs/ui/screens/vault/calendars/`, but the broader Vault parent
+(navigation, content-type browsing, import/export affordances,
+etc.) is deferred. Per
+[`ui/README.md`](./ui/README.md), Vault is in the "Power-user /
+deferred" section — pending its own design pass when ≥2 content
+types are spec'd to validate the shell against.
 
-### Story Settings calendar-picker surface
+### Calendar picker — App Settings + Story Settings + Wizard
 
-Per [calendar-systems/spec.md → Authoring (UI)](./calendar-systems/spec.md#authoring-ui),
-Story Settings exposes the active calendar picker plus a read-only
-summary of the selected calendar's shape. Wireframe element pending
-— the existing Story Settings wireframe references `worldTimeOrigin`
-but doesn't surface a picker yet.
+The calendar picker is a shared primitive surfaced in three places:
+
+- **App Settings** — default-calendar select (seeds new stories'
+  `calendarSystemId`).
+- **Story Settings** — per-story calendar select + read-only summary
+  of the selected calendar's shape; calendar swap is the picker's
+  downstream effect, warning copy lives here (re-confirm origin if
+  tier shape changes; era-flips orphaning if eras differ;
+  mid-generation prohibition).
+- **Story Creation wizard** — calendar selection step (currently
+  pending the wizard's full design).
+
+Pending its own design pass. Same primitive across all three; the
+Vault calendar editor is the upstream reference for what calendar
+definitions look like.
 
 ### Backup / story export with user-authored calendars
 
