@@ -384,6 +384,8 @@ function unitsPerTierValue(tier, partial, calendar) {
 }
 
 // Convert a tuple to absolute base units (from the all-startValue origin).
+// Handles tier values BELOW startValue (e.g., negative-year origins for
+// BC/AD calendars) by subtracting each step backward.
 function tupleToAbsolute(tuple, calendar) {
   let total = 0;
   const partial = {};
@@ -392,10 +394,17 @@ function tupleToAbsolute(tuple, calendar) {
     const value = tuple[tier.name] ?? tier.startValue;
     if (i === calendar.tiers.length - 1) {
       total += (value - tier.startValue);
-    } else {
+    } else if (value >= tier.startValue) {
       for (let v = tier.startValue; v < value; v++) {
         partial[tier.name] = v;
         total += unitsPerTierValue(tier, partial, calendar);
+      }
+    } else {
+      // Tier value below startValue (e.g., year=-3 with startValue=1).
+      // Step backward and subtract each tier-value's size.
+      for (let v = tier.startValue - 1; v >= value; v--) {
+        partial[tier.name] = v;
+        total -= unitsPerTierValue(tier, partial, calendar);
       }
     }
     partial[tier.name] = value;
@@ -416,15 +425,20 @@ function absoluteToTuple(abs, calendar) {
       continue;
     }
     let v = tier.startValue;
-    // Going backwards: handle negative remaining (worldTime before origin).
+    // Going backwards: fully consume tier-values below startValue
+    // until remaining is non-negative. Only the top tier (no rollover)
+    // should ever see a negative remaining at this point — lower
+    // tiers always receive remaining in [0, parentSize). Earlier
+    // versions broke before consuming, leaving remaining negative;
+    // the next tier's table-indexed rollover then returned undefined
+    // for negative indices and the loop added 0 forever (browser
+    // freeze on BC dates).
     if (remaining < 0) {
-      while (true) {
-        const probe = v - 1;
-        partial[tier.name] = probe;
+      while (remaining < 0) {
+        v -= 1;
+        partial[tier.name] = v;
         const size = unitsPerTierValue(tier, partial, calendar);
-        if (remaining + size > 0) break;
         remaining += size;
-        v = probe;
       }
     } else {
       while (true) {
