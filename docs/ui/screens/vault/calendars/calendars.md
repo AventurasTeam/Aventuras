@@ -210,7 +210,14 @@ unit)`).
   parent tier — e.g., `weekday on day · 7-cycle, offset 4`. The
   parent tier disambiguates which tier owns the sub-division for
   calendars that attach sub-divisions to non-day tiers.
-- Era support flags (`yes — display-label` / `no`).
+- Era support flags. `yes` shows the `flipMode` inline (e.g.,
+  `yes — display-label`) and the Labels section renders the era
+  preset names block. `no` indicates the calendar has no
+  narrative-triggered era flips — astronomical-reference splits
+  like BC/AD are handled in the calendar's `displayFormat` Liquid
+  template, not the era system (per
+  [calendar-systems/spec.md → Eras](../../../../calendar-systems/spec.md#eras-hoisted-out-manually-triggered)).
+  Earth (Gregorian) ships with `eras: null` for this reason.
 
 ### Labels section (the L2 editing surface)
 

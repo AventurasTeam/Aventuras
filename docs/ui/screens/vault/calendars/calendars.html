@@ -319,7 +319,7 @@
         </div>
         <div class="cal-name">Earth (Gregorian)</div>
         <span class="type-badge">built-in</span>
-        <div class="meta-line">y→m→d→h→m→s<span class="sep">·</span>era: yes</div>
+        <div class="meta-line">y→m→d→h→m→s<span class="sep">·</span>era: no <em style="color: var(--ink-faint); font-style: normal;">(BC/AD via displayFormat)</em></div>
         <div class="usage">used by 2 stories</div>
       </div>
 
@@ -410,7 +410,7 @@
     <div class="row"><span class="lbl">Base unit:</span><span class="val">second <em style="color:var(--ink-faint);font-style:normal;">(1 second per unit)</em></span></div>
     <div class="row"><span class="lbl">Tiers:</span><span class="val mono">year → month → day → hour → minute → second</span></div>
     <div class="row"><span class="lbl">Sub-divisions:</span><span class="val mono">weekday <em style="color:var(--ink-faint);font-style:normal;">on day · 7-cycle, offset 4</em></span></div>
-    <div class="row"><span class="lbl">Era support:</span><span class="val">yes <em style="color:var(--ink-faint);font-style:normal;">— display-label</em></span></div>
+    <div class="row" id="era-support-row"><span class="lbl">Era support:</span><span class="val" id="era-support-val">no <em style="color:var(--ink-faint);font-style:normal;">— BC/AD handled in displayFormat</em></span></div>
     <div class="deferred-action">[ Edit structure (deferred · L3) ]</div>
   </div>
 
@@ -449,17 +449,29 @@
       </div>
     </div>
 
-    <div class="labels-block era-block">
+    <div class="labels-block era-block" id="era-block">
       <div class="lh">Era preset names</div>
       <div class="era-row">
         <span class="lbl">Presets:</span>
         <div class="era-presets">
           <span class="preset-row">
-            <input class="label-input" value="AD" style="max-width: 100px;">
+            <input class="label-input" value="Meiji" style="max-width: 110px;">
             <span class="x" title="Remove">×</span>
           </span>
           <span class="preset-row">
-            <input class="label-input" value="BC" style="max-width: 100px;">
+            <input class="label-input" value="Taishō" style="max-width: 110px;">
+            <span class="x" title="Remove">×</span>
+          </span>
+          <span class="preset-row">
+            <input class="label-input" value="Shōwa" style="max-width: 110px;">
+            <span class="x" title="Remove">×</span>
+          </span>
+          <span class="preset-row">
+            <input class="label-input" value="Heisei" style="max-width: 110px;">
+            <span class="x" title="Remove">×</span>
+          </span>
+          <span class="preset-row">
+            <input class="label-input" value="Reiwa" style="max-width: 110px;">
             <span class="x" title="Remove">×</span>
           </span>
           <button class="add-preset">+ Add preset</button>
@@ -468,8 +480,11 @@
       <div class="era-row">
         <span class="lbl">Default start:</span>
         <select class="label-input" style="max-width: 200px;">
-          <option value="AD" selected>AD</option>
-          <option value="BC">BC</option>
+          <option value="Meiji">Meiji</option>
+          <option value="Taishō">Taishō</option>
+          <option value="Shōwa">Shōwa</option>
+          <option value="Heisei">Heisei</option>
+          <option value="Reiwa" selected>Reiwa</option>
         </select>
         <span style="font-size: 11px; color: var(--ink-faint); font-style: italic;">era at worldTime=0 before any flip</span>
       </div>
@@ -609,11 +624,17 @@
       breadcrumb.innerHTML = '<a>Vault</a><span class="sep">/</span><a>Calendars</a><span class="sep">/</span><span class="crumb-current">' + name + '</span>';
     }
   }
+  const eraBlock = document.getElementById('era-block');
+  const eraSupportVal = document.getElementById('era-support-val');
+
   function setKind(k) {
     if (k === 'builtin') {
       headBuiltin.classList.remove('hidden');
       headCustom.classList.add('hidden');
       saveBar.classList.remove('dirty');
+      // Earth (built-in): eras: null — BC/AD handled in displayFormat
+      eraBlock.classList.add('hidden');
+      eraSupportVal.innerHTML = 'no <em style="color:var(--ink-faint);font-style:normal;">— BC/AD handled in displayFormat</em>';
       // built-ins make label inputs read-only
       document.querySelectorAll('#layer-detail .label-input').forEach(el => {
         el.classList.add('ro'); el.readOnly = true;
@@ -621,6 +642,9 @@
     } else {
       headBuiltin.classList.add('hidden');
       headCustom.classList.remove('hidden');
+      // Imperial Japan (custom): eras: yes (display-label) — narrative-triggered flips
+      eraBlock.classList.remove('hidden');
+      eraSupportVal.innerHTML = 'yes <em style="color:var(--ink-faint);font-style:normal;">— display-label</em>';
       document.querySelectorAll('#layer-detail .label-input').forEach(el => {
         el.classList.remove('ro'); el.readOnly = false;
       });

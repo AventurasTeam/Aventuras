@@ -153,10 +153,22 @@ such calendars.
 ### Eras: hoisted out, manually triggered
 
 Eras are **not** a tier in the chain. They live in a separate
-top-level field because real and fictional eras are almost always
-narrative-triggered, not arithmetic — AD/BC, Japanese imperial
+top-level field because real and fictional eras model
+**arbitrary, narrative-triggered flips** — Japanese imperial
 reigns, Tolkien's Ages, Warhammer 40K Imperial founding, Forgotten
-Realms cataclysms. All driven by story events, not clock math.
+Realms cataclysms. Driven by story events, not clock math.
+
+**Astronomical-reference splits like AD/BC are NOT eras** by this
+definition: the boundary sits at a fixed point (year 1) rather
+than an arbitrary user-chosen moment, counting reverses on the BC
+side, and the user shouldn't have to "flip era" for the calendar
+to display correctly — the calendar always knows. Such cases are
+handled in the calendar's `displayFormat` Liquid template — e.g.,
+Earth's preset uses
+`{% if year < 1 %}{{ 1 - year }} BC{% else %}{{ year }} AD{% endif %}`
+and ships with `eras: null`. The era system stays scoped to
+narrative-triggered forward-counting flips; backward-counting and
+fixed-reference splits are render concerns.
 
 Modeling eras as a top tier in the chain forces the calendar's
 structural rewrite at flip time, which is the bug surface where
