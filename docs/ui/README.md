@@ -52,7 +52,9 @@ rationale, and decisions live alongside.
 ### Power-user / deferred
 
 - Prompt / pack editor (desktop-only)
-- Vault (reusable library)
+- Vault (reusable library) — broader shell deferred; first
+  sub-wireframe (calendar editor) lands at
+  [`screens/vault/calendars/`](./screens/vault/calendars/calendars.md)
 - Import / export / backup
 - Translation wizard
 - Asset gallery

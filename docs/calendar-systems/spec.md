@@ -463,7 +463,8 @@ Three levels of user power, gated by complexity:
 (calendar selection step). Same picker primitive across all three;
 its design lands as a separate pass.
 
-**L2 surface** lives in the Vault calendar editor.
+**L2 surface** lives in the
+[Vault calendar editor](../ui/screens/vault/calendars/calendars.md).
 [Vault](../ui/README.md) is the home for non-story user content
 (packs, scenarios, character templates, calendars); deferred from
 v1 as a unified surface, but the calendar sub-wireframe lands as

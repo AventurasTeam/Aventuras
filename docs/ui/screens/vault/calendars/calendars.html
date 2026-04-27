@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Vault calendar editor (desktop)</title>
+<style>
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-highlight: #eef;
+    --bg-disabled: #f3f3f3;
+    --warn: #c94;
+    --ok: #4a8;
+    --gold: #c89a20;
+    --bg-section: #f5f5f5;
+  }
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+  .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .screen-label strong { color: var(--ink); }
+
+  /* review bar */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; }
+  .review-bar .rb-group > .gl { font-size: 10px; color: #967; margin-right: 4px; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+
+  /* top bar */
+  header.topbar { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
+  .logo { width: 32px; height: 32px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--ink-muted); flex-shrink: 0; }
+  .app-title { font-size: 16px; font-weight: 600; color: var(--ink); }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .icon-btn { width: 32px; height: 32px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 14px; cursor: pointer; }
+
+  /* sub-header (breadcrumb) */
+  .sub-header { padding: 10px 24px; background: var(--bg-region); border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 12px; }
+  .breadcrumb { display: flex; align-items: center; gap: 6px; color: var(--ink-muted); }
+  .breadcrumb a { color: var(--ink-muted); text-decoration: none; cursor: pointer; }
+  .breadcrumb a:hover { color: var(--ink); text-decoration: underline; }
+  .breadcrumb .crumb-current { color: var(--ink); font-weight: 500; }
+  .breadcrumb .sep { color: var(--ink-faint); }
+  .sub-header .primary-action { padding: 6px 14px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: #fff; font-weight: 600; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+
+  /* layer 0+1 — vault home */
+  .vault-home { display: flex; flex: 1; min-height: 0; }
+  .category-rail { width: 200px; flex-shrink: 0; padding: 16px 0; border-right: 1px solid var(--line-soft); background: var(--bg-region); }
+  .category-rail .ch { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-faint); padding: 0 16px 8px; }
+  .cat-row { display: flex; align-items: center; padding: 7px 16px; gap: 6px; cursor: pointer; color: var(--ink); font-size: 13px; border-left: 3px solid transparent; }
+  .cat-row.active { background: var(--bg-highlight); border-left-color: var(--ink); font-weight: 600; }
+  .cat-row.disabled { color: var(--ink-faint); cursor: not-allowed; }
+  .cat-row .cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .cat-row.active .cat-dot { background: var(--ink); }
+  .cat-row.disabled .cat-dot { border: 1px solid var(--line); background: transparent; }
+  .cat-row:not(.active):not(.disabled) .cat-dot { border: 1px solid var(--line); background: transparent; }
+  .cat-row .cat-count { margin-left: auto; font-size: 11px; color: var(--ink-faint); }
+  .cat-row.disabled .cat-deferred { font-size: 10px; color: var(--ink-faint); font-style: italic; margin-left: auto; }
+
+  /* category content pane */
+  .cat-content { flex: 1; min-width: 0; padding: 24px 32px 40px; overflow-y: auto; }
+  .cat-header { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; margin-bottom: 16px; }
+  .cat-title { font-size: 22px; font-weight: 600; color: var(--ink); }
+
+  .toolbar { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+  .search { flex: 1; min-width: 220px; max-width: 320px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); font-size: 12px; color: var(--ink-faint); font-style: italic; }
+  .search::before { content: "⌕  "; font-style: normal; color: var(--ink-faint); }
+  .filter-chips { display: flex; gap: 6px; }
+  .filter-chip { padding: 4px 12px; border: 1px solid var(--line-soft); border-radius: 999px; font-size: 12px; color: var(--ink-muted); cursor: pointer; background: var(--bg-region); }
+  .filter-chip.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  /* card grid */
+  .calendar-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  .cal-card { background: var(--bg-region); border: 1px solid var(--line-soft); border-radius: 6px; padding: 14px 16px 16px; cursor: pointer; position: relative; display: flex; flex-direction: column; gap: 4px; transition: border-color 0.15s, box-shadow 0.15s; }
+  .cal-card:hover { border-color: var(--line); box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+  .cal-card .top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  .cal-card .star { font-size: 16px; line-height: 1; cursor: pointer; padding: 2px; border-radius: 3px; color: var(--ink-faint); opacity: 0.35; transition: opacity 0.15s, color 0.15s; }
+  .cal-card .star:hover { opacity: 1; color: var(--ink); background: var(--bg-highlight); }
+  .cal-card .star.fav { color: var(--gold); opacity: 1; }
+  .cal-card .star.fav:hover { color: #a87810; background: #fbf3dc; }
+  .cal-card .default-badge { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; padding: 2px 8px; background: #fbf3dc; color: #7a6020; border: 1px solid #e8d890; border-radius: 999px; font-weight: 600; }
+  .cal-card .cal-name { font-size: 15px; font-weight: 600; color: var(--ink); }
+  .cal-card .cal-name-sub { font-size: 12px; color: var(--ink-muted); font-weight: 400; }
+  .cal-card .type-badge { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; background: var(--bg); color: var(--ink-muted); border: 1px solid var(--line-soft); border-radius: 2px; align-self: flex-start; margin-top: 2px; }
+  .cal-card .meta-line { font-size: 11px; color: var(--ink-muted); margin-top: 4px; font-family: ui-monospace, monospace; }
+  .cal-card .meta-line .sep { color: var(--ink-faint); margin: 0 4px; }
+  .cal-card .usage { font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
+
+  /* + add menu (positioned popover) */
+  .add-menu { position: absolute; top: 100%; right: 0; margin-top: 4px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,0.08); min-width: 220px; padding: 4px 0; z-index: 50; display: none; }
+  .add-menu.open { display: block; }
+  .add-item { padding: 7px 14px; font-size: 13px; color: var(--ink); cursor: pointer; }
+  .add-item:hover { background: var(--bg-highlight); }
+  .add-item.disabled { color: var(--ink-faint); cursor: not-allowed; }
+  .add-item.disabled:hover { background: transparent; }
+  .add-item .deferred-tag { font-size: 10px; font-style: italic; color: var(--ink-faint); margin-left: 6px; }
+
+  /* layer 2 — calendar detail */
+  .detail-canvas { flex: 1; padding: 24px 32px 0; overflow-y: auto; max-width: 960px; margin: 0 auto; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
+
+  .detail-head { background: var(--bg-region); border: 1px solid var(--line-soft); border-radius: 6px; padding: 16px 20px; margin-bottom: 18px; }
+  .detail-head .head-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .detail-head .kind-strip { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .detail-head .kind-icon { font-size: 14px; }
+  .detail-head .name-row { display: flex; align-items: center; gap: 8px; }
+  .detail-head .cal-display-name { font-size: 20px; font-weight: 600; color: var(--ink); }
+  .detail-head .pencil { color: var(--ink-faint); cursor: pointer; }
+  .detail-head .pencil:hover { color: var(--ink); }
+  .detail-head .name-readonly .pencil { display: none; }
+  .detail-head .more-btn { width: 28px; height: 28px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 16px; cursor: pointer; flex-shrink: 0; }
+  .detail-head .badge-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .detail-head .b { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 2px; }
+  .detail-head .b.type { background: var(--bg); color: var(--ink-muted); border: 1px solid var(--line-soft); }
+  .detail-head .b.default { background: #fbf3dc; color: #7a6020; border: 1px solid #e8d890; cursor: pointer; }
+  .detail-head .b.fav { background: var(--bg); color: var(--gold); border: 1px solid #e8d890; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+  .detail-head .set-default-link { font-size: 11px; color: var(--ink-muted); text-decoration: underline; cursor: pointer; margin-left: 4px; }
+  .detail-head .set-default-link:hover { color: var(--ink); }
+  .detail-head .builtin-banner { background: var(--bg); border: 1px solid var(--line-soft); border-radius: 4px; padding: 10px 12px; margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--ink-muted); }
+  .detail-head .builtin-banner .clone-edit { padding: 5px 12px; border: 1px solid var(--ink); border-radius: 3px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 500; cursor: pointer; flex-shrink: 0; }
+
+  /* sections */
+  .section { background: var(--bg-region); border: 1px solid var(--line-soft); border-radius: 6px; padding: 14px 18px 16px; margin-bottom: 16px; }
+  .section h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); margin: 0 0 10px; font-weight: 600; }
+  .section .row { display: flex; gap: 8px; padding: 4px 0; font-size: 12px; }
+  .section .row .lbl { width: 130px; color: var(--ink-muted); flex-shrink: 0; }
+  .section .row .val { color: var(--ink); }
+  .section .row .val.mono { font-family: ui-monospace, monospace; font-size: 11px; }
+  .section .deferred-action { margin-top: 10px; padding: 6px 12px; border: 1px dashed var(--line); border-radius: 3px; background: var(--bg-disabled); color: var(--ink-faint); font-size: 12px; font-style: italic; display: inline-block; cursor: not-allowed; }
+
+  /* labels editor */
+  .labels-block { margin-bottom: 14px; }
+  .labels-block:last-child { margin-bottom: 0; }
+  .labels-block .lh { font-size: 12px; color: var(--ink); font-weight: 500; margin-bottom: 6px; }
+  .labels-block .lh .sub { font-size: 11px; color: var(--ink-faint); font-weight: 400; margin-left: 6px; }
+  .labels-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 8px; }
+  .labels-grid.three { grid-template-columns: repeat(3, 1fr); }
+  .label-input { padding: 5px 9px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 12px; color: var(--ink); font-family: inherit; }
+  .label-input:focus { outline: none; border-color: var(--ink); }
+  .label-input.ro { background: var(--bg-disabled); color: var(--ink-muted); border-color: var(--line-soft); cursor: default; }
+
+  .era-block .era-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .era-block .era-row .lbl { font-size: 12px; color: var(--ink-muted); width: 130px; flex-shrink: 0; }
+  .era-block .era-presets { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .era-block .preset-row { display: inline-flex; align-items: center; gap: 4px; }
+  .era-block .preset-row .x { color: var(--ink-faint); cursor: pointer; padding: 0 4px; font-size: 14px; }
+  .era-block .preset-row .x:hover { color: var(--warn); }
+  .era-block .add-preset { font-size: 12px; color: var(--ink-muted); padding: 4px 10px; border: 1px dashed var(--line); border-radius: 3px; background: transparent; cursor: pointer; }
+  .era-block .add-preset:hover { color: var(--ink); border-color: var(--ink); }
+
+  /* preview */
+  .preview-row { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; flex-wrap: wrap; }
+  .preview-row .lbl { font-size: 12px; color: var(--ink-muted); width: 130px; flex-shrink: 0; }
+  .preview-row .wt-input { padding: 5px 8px; border: 1px solid var(--line); border-radius: 3px; font-family: ui-monospace, monospace; font-size: 12px; width: 100px; }
+  .preview-row .quick-btn { padding: 3px 9px; border: 1px solid var(--line-soft); border-radius: 3px; background: var(--bg); color: var(--ink-muted); font-size: 11px; cursor: pointer; }
+  .preview-row .quick-btn:hover { color: var(--ink); border-color: var(--line); }
+  .render-out { background: var(--bg-section); border: 1px solid var(--line-soft); border-radius: 4px; padding: 8px 12px; margin: 6px 0 10px; font-family: ui-monospace, monospace; font-size: 13px; color: var(--ink); }
+  .tier-breakdown { font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-muted); padding: 6px 0; line-height: 1.7; }
+  .tier-breakdown .v { color: var(--ink); }
+
+  /* save bar */
+  .save-bar { display: none; position: sticky; bottom: 0; background: var(--bg-region); border-top: 1px solid var(--line); padding: 10px 16px; align-items: center; gap: 12px; box-shadow: 0 -2px 8px rgba(0,0,0,0.04); margin: 16px -32px 0; }
+  .save-bar.dirty { display: flex; }
+  .save-bar .count { font-size: 12px; color: var(--ink); font-weight: 500; }
+  .save-bar .warn-line { font-size: 12px; color: var(--warn); flex: 1; }
+  .save-bar .btn-discard { padding: 5px 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); color: var(--ink-muted); font-size: 12px; cursor: pointer; }
+  .save-bar .btn-save { padding: 5px 14px; border: 1px solid var(--ink); border-radius: 3px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+
+  /* ⋯ menu popover */
+  .more-popover { position: absolute; top: 100%; right: 0; margin-top: 4px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,0.08); min-width: 200px; padding: 4px 0; z-index: 50; display: none; }
+  .more-popover.open { display: block; }
+  .more-item { padding: 7px 14px; font-size: 13px; color: var(--ink); cursor: pointer; }
+  .more-item:hover { background: var(--bg-highlight); }
+  .more-item.danger { color: var(--warn); }
+  .more-item.danger:hover { background: #fbf3dc; }
+  .more-item.disabled { color: var(--ink-faint); cursor: not-allowed; }
+  .more-item.disabled:hover { background: transparent; }
+
+  /* modals */
+  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.18); z-index: 100; align-items: center; justify-content: center; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: var(--bg-region); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); min-width: 380px; max-width: 560px; padding: 18px 22px 16px; }
+  .modal h3 { font-size: 15px; font-weight: 600; margin: 0 0 12px; color: var(--ink); }
+  .modal .body { font-size: 13px; color: var(--ink); margin-bottom: 14px; line-height: 1.55; }
+  .modal .body em { color: var(--ink-muted); font-style: normal; }
+  .modal .footer { display: flex; gap: 8px; justify-content: flex-end; }
+  .modal .btn { padding: 5px 14px; border-radius: 3px; font-size: 12px; cursor: pointer; }
+  .modal .btn-cancel { border: 1px solid var(--line); background: var(--bg-region); color: var(--ink-muted); }
+  .modal .btn-confirm { border: 1px solid var(--ink); background: var(--ink); color: #fff; font-weight: 600; }
+  .modal .btn-danger { border: 1px solid var(--warn); background: var(--warn); color: #fff; font-weight: 600; }
+
+  .clone-list .clone-row { padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 4px; margin-bottom: 8px; cursor: pointer; }
+  .clone-list .clone-row:hover { border-color: var(--ink); background: var(--bg-highlight); }
+  .clone-list .clone-row .name { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .clone-list .clone-row .meta { font-size: 11px; color: var(--ink-muted); font-family: ui-monospace, monospace; margin-top: 2px; }
+
+  .import-area { display: flex; flex-direction: column; gap: 10px; }
+  .import-area .file-pick { padding: 16px; border: 1px dashed var(--line); border-radius: 4px; text-align: center; color: var(--ink-muted); cursor: pointer; }
+  .import-area .file-pick:hover { border-color: var(--ink); color: var(--ink); }
+  .import-area .or-divider { font-size: 11px; color: var(--ink-faint); text-align: center; text-transform: uppercase; letter-spacing: 0.08em; }
+  .import-area textarea { padding: 8px 10px; border: 1px solid var(--line); border-radius: 3px; font-family: ui-monospace, monospace; font-size: 11px; min-height: 100px; resize: vertical; }
+  .import-area .err { background: #fbece6; border: 1px solid #d8a087; border-radius: 3px; padding: 8px 10px; font-size: 11px; color: #8c4a30; font-family: ui-monospace, monospace; display: none; }
+  .import-area .err.show { display: block; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="screen-label"><strong>Wireframe:</strong> Vault calendar editor &mdash; desktop (&ge; 1024px) &mdash; low-fi, interactive</div>
+
+<div class="review-bar">
+  <span class="rb-label">Review controls</span>
+  <div class="rb-group">
+    <span class="gl">layer:</span>
+    <button class="rb-btn active" data-layer="home">L0+1 home</button>
+    <button class="rb-btn" data-layer="detail">L2 detail</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">detail kind:</span>
+    <button class="rb-btn active" data-kind="builtin">built-in</button>
+    <button class="rb-btn" data-kind="custom">custom</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">save state:</span>
+    <button class="rb-btn active" data-dirty="clean">clean</button>
+    <button class="rb-btn" data-dirty="dirty">dirty (in-use warn)</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">modal:</span>
+    <button class="rb-btn active" data-modal="none">none</button>
+    <button class="rb-btn" data-modal="add-menu">+ Add menu</button>
+    <button class="rb-btn" data-modal="clone">clone built-in</button>
+    <button class="rb-btn" data-modal="import">import JSON</button>
+    <button class="rb-btn" data-modal="more-menu">⋯ menu (custom)</button>
+    <button class="rb-btn" data-modal="delete-blocked">delete blocked</button>
+    <button class="rb-btn" data-modal="delete-default">delete default</button>
+    <button class="rb-btn" data-modal="delete-confirm">delete confirm</button>
+  </div>
+  <span class="rb-note">Vault parent shell is placeholder; sub-wireframe per design</span>
+</div>
+
+<header class="topbar">
+  <div class="logo">logo</div>
+  <span class="app-title" id="app-title">Vault</span>
+  <div class="topbar-right">
+    <div class="icon-btn" title="Actions">⎇</div>
+    <div class="icon-btn" title="Settings">⚙</div>
+    <div class="icon-btn" title="Return">←</div>
+  </div>
+</header>
+
+<div class="sub-header">
+  <div class="breadcrumb" id="breadcrumb">
+    <a>Vault</a><span class="sep">/</span><span class="crumb-current">Calendars</span>
+  </div>
+  <div style="position: relative;">
+    <button class="primary-action" id="add-trigger">+ Add calendar ▾</button>
+    <div class="add-menu" id="add-menu">
+      <div class="add-item" data-add="clone">Clone built-in…</div>
+      <div class="add-item" data-add="import">From JSON file…</div>
+      <div class="add-item disabled">From scratch <span class="deferred-tag">(deferred · L3)</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- LAYER 0+1 — Vault home -->
+<div class="vault-home" id="layer-home">
+  <aside class="category-rail">
+    <div class="ch">Categories</div>
+    <div class="cat-row active">
+      <span class="cat-dot"></span>
+      <span>Calendars</span>
+      <span class="cat-count">3</span>
+    </div>
+    <div class="cat-row disabled">
+      <span class="cat-dot"></span>
+      <span>Packs</span>
+      <span class="cat-deferred">deferred</span>
+    </div>
+    <div class="cat-row disabled">
+      <span class="cat-dot"></span>
+      <span>Scenarios</span>
+      <span class="cat-deferred">deferred</span>
+    </div>
+    <div class="cat-row disabled">
+      <span class="cat-dot"></span>
+      <span>Templates</span>
+      <span class="cat-deferred">deferred</span>
+    </div>
+  </aside>
+
+  <div class="cat-content">
+    <div class="cat-header">
+      <div class="cat-title">Calendars</div>
+    </div>
+    <div class="toolbar">
+      <input class="search" placeholder="Search calendars…">
+      <div class="filter-chips">
+        <span class="filter-chip active">All</span>
+        <span class="filter-chip">Built-in</span>
+        <span class="filter-chip">Custom</span>
+      </div>
+    </div>
+
+    <div class="calendar-grid">
+      <!-- Earth (Gregorian) — built-in, default, favorited -->
+      <div class="cal-card">
+        <div class="top-row">
+          <span class="star fav" title="Favorited">★</span>
+          <span class="default-badge" title="Current default for new stories — change in App Settings → Story Defaults">⭐ default</span>
+        </div>
+        <div class="cal-name">Earth (Gregorian)</div>
+        <span class="type-badge">built-in</span>
+        <div class="meta-line">y→m→d→h→m→s<span class="sep">·</span>era: yes</div>
+        <div class="usage">used by 2 stories</div>
+      </div>
+
+      <!-- Imperial Japan — custom, favorited -->
+      <div class="cal-card">
+        <div class="top-row">
+          <span class="star fav" title="Favorited">★</span>
+        </div>
+        <div class="cal-name">Imperial Japan <span class="cal-name-sub">(custom)</span></div>
+        <span class="type-badge">custom</span>
+        <div class="meta-line">y→m→d→h→m→s<span class="sep">·</span>era: yes (display-label)</div>
+        <div class="usage">used by 1 story</div>
+      </div>
+
+      <!-- Shire Reckoning — custom, not favorited -->
+      <div class="cal-card">
+        <div class="top-row">
+          <span class="star" title="Toggle favorite">☆</span>
+        </div>
+        <div class="cal-name">Shire Reckoning</div>
+        <span class="type-badge">custom</span>
+        <div class="meta-line">y→m→d<span class="sep">·</span>era: no</div>
+        <div class="usage">used by 0 stories</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LAYER 2 — Calendar detail -->
+<div class="detail-canvas hidden" id="layer-detail">
+
+  <!-- DETAIL HEAD: built-in -->
+  <div class="detail-head" id="head-builtin">
+    <div class="head-top">
+      <div>
+        <div class="kind-strip"><span class="kind-icon">📅</span><span>Calendar</span></div>
+        <div class="name-row name-readonly">
+          <span class="cal-display-name">Earth (Gregorian)</span>
+          <span class="pencil">✎</span>
+        </div>
+        <div class="badge-row">
+          <span class="b type">built-in</span>
+          <span class="b default" title="Current default for new stories — click to manage in App Settings">⭐ default</span>
+          <span class="b fav">★ favorited</span>
+        </div>
+      </div>
+      <div style="position: relative;">
+        <div class="more-btn" id="more-trigger-builtin">⋯</div>
+        <div class="more-popover" id="more-popover-builtin">
+          <div class="more-item">View raw JSON</div>
+          <div class="more-item">Export as JSON</div>
+        </div>
+      </div>
+    </div>
+    <div class="builtin-banner">
+      <span>ⓘ Built-in calendar. Clone to customize labels.</span>
+      <button class="clone-edit">Clone &amp; edit</button>
+    </div>
+  </div>
+
+  <!-- DETAIL HEAD: custom -->
+  <div class="detail-head hidden" id="head-custom">
+    <div class="head-top">
+      <div>
+        <div class="kind-strip"><span class="kind-icon">📅</span><span>Calendar</span></div>
+        <div class="name-row">
+          <input class="cal-display-name" style="border: 1px solid transparent; background: transparent; font: inherit; font-size: 20px; font-weight: 600; color: var(--ink); padding: 2px 6px; border-radius: 3px;" value="Imperial Japan (custom)">
+          <span class="pencil">✎</span>
+        </div>
+        <div class="badge-row">
+          <span class="b type">custom</span>
+          <span class="b fav">★ favorited</span>
+          <span class="set-default-link">Set as default →</span>
+        </div>
+      </div>
+      <div style="position: relative;">
+        <div class="more-btn" id="more-trigger-custom">⋯</div>
+        <div class="more-popover" id="more-popover-custom">
+          <div class="more-item">View raw JSON</div>
+          <div class="more-item">Export as JSON</div>
+          <div class="more-item danger" id="delete-trigger">Delete</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEFINITION SECTION -->
+  <div class="section">
+    <h3>Definition</h3>
+    <div class="row"><span class="lbl">Base unit:</span><span class="val">second <em style="color:var(--ink-faint);font-style:normal;">(1 second per unit)</em></span></div>
+    <div class="row"><span class="lbl">Tiers:</span><span class="val mono">year → month → day → hour → minute → second</span></div>
+    <div class="row"><span class="lbl">Sub-divisions:</span><span class="val mono">weekday <em style="color:var(--ink-faint);font-style:normal;">(7-cycle, offset 4)</em></span></div>
+    <div class="row"><span class="lbl">Era support:</span><span class="val">yes <em style="color:var(--ink-faint);font-style:normal;">— display-label</em></span></div>
+    <div class="deferred-action">[ Edit structure (deferred · L3) ]</div>
+  </div>
+
+  <!-- LABELS SECTION -->
+  <div class="section">
+    <h3>Labels</h3>
+
+    <div class="labels-block">
+      <div class="lh">Months <span class="sub">(12)</span></div>
+      <div class="labels-grid">
+        <input class="label-input" value="January">
+        <input class="label-input" value="February">
+        <input class="label-input" value="March">
+        <input class="label-input" value="April">
+        <input class="label-input" value="May">
+        <input class="label-input" value="June">
+        <input class="label-input" value="July">
+        <input class="label-input" value="August">
+        <input class="label-input" value="September">
+        <input class="label-input" value="October">
+        <input class="label-input" value="November">
+        <input class="label-input" value="December">
+      </div>
+    </div>
+
+    <div class="labels-block">
+      <div class="lh">Weekdays <span class="sub">(7) · sub-division</span></div>
+      <div class="labels-grid">
+        <input class="label-input" value="Sunday">
+        <input class="label-input" value="Monday">
+        <input class="label-input" value="Tuesday">
+        <input class="label-input" value="Wednesday">
+        <input class="label-input" value="Thursday">
+        <input class="label-input" value="Friday">
+        <input class="label-input" value="Saturday">
+      </div>
+    </div>
+
+    <div class="labels-block era-block">
+      <div class="lh">Era preset names</div>
+      <div class="era-row">
+        <span class="lbl">Default start:</span>
+        <input class="label-input" value="AD" style="max-width: 200px;">
+      </div>
+      <div class="era-row">
+        <span class="lbl">Presets:</span>
+        <div class="era-presets">
+          <span class="preset-row">
+            <input class="label-input" value="AD" style="max-width: 100px;">
+            <span class="x" title="Remove">×</span>
+          </span>
+          <span class="preset-row">
+            <input class="label-input" value="BC" style="max-width: 100px;">
+            <span class="x" title="Remove">×</span>
+          </span>
+          <button class="add-preset">+ Add preset</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DISPLAY PREVIEW SECTION -->
+  <div class="section">
+    <h3>Display preview</h3>
+    <div class="preview-row">
+      <span class="lbl">Origin (preview):</span>
+      <span class="val mono" style="color: var(--ink-muted); font-size: 11px;">{ year:2024, month:1, day:1, hour:0, minute:0, second:0 }</span>
+    </div>
+    <div class="preview-row">
+      <span class="lbl">worldTime:</span>
+      <input class="wt-input" value="86400">
+      <span style="font-size: 11px; color: var(--ink-faint);">seconds</span>
+      <button class="quick-btn">+1d</button>
+      <button class="quick-btn">+1w</button>
+      <button class="quick-btn">+1mo</button>
+      <button class="quick-btn">+1y</button>
+    </div>
+    <div class="render-out">2024-01-02 00:00:00</div>
+    <div class="tier-breakdown">
+      year: <span class="v">2024</span> · month: <span class="v">1 (January)</span> · day: <span class="v">2</span> · hour: <span class="v">0</span> · minute: <span class="v">0</span> · second: <span class="v">0</span><br>
+      weekday: <span class="v">Tuesday</span>
+    </div>
+  </div>
+
+  <!-- SAVE BAR -->
+  <div class="save-bar" id="save-bar">
+    <span class="count">3 unsaved</span>
+    <span class="warn-line">⚠ 1 story uses this calendar — saving propagates labels to its renders.</span>
+    <button class="btn-discard">Discard</button>
+    <button class="btn-save">Save ⌘S</button>
+  </div>
+
+</div>
+
+<!-- MODALS -->
+<div class="modal-backdrop" id="modal-clone">
+  <div class="modal">
+    <h3>Clone built-in</h3>
+    <div class="clone-list">
+      <div class="clone-row">
+        <div class="name">📅 Earth (Gregorian)</div>
+        <div class="meta">y→m→d→h→m→s · era support: yes (display-label)</div>
+      </div>
+      <div style="font-size: 11px; color: var(--ink-faint); font-style: italic; padding: 8px 0;">More built-ins land as data commits — see calendar-systems/spec.md → Presets to ship.</div>
+    </div>
+    <div class="footer">
+      <button class="btn btn-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modal-import">
+  <div class="modal">
+    <h3>Import calendar</h3>
+    <div class="import-area">
+      <div class="file-pick">📁 Choose .avts file…</div>
+      <div class="or-divider">— or —</div>
+      <textarea placeholder='paste JSON envelope here&#10;{&#10;  "format": "aventuras-calendar",&#10;  "formatVersion": "1.0",&#10;  ...&#10;}'></textarea>
+      <div class="err show">⚠ calendar.tiers[0].rollover.kind: expected 'constant' | 'table' | 'rule', got 'foo'</div>
+    </div>
+    <div class="footer">
+      <button class="btn btn-cancel">Cancel</button>
+      <button class="btn btn-confirm">Import</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modal-delete-blocked">
+  <div class="modal">
+    <h3>Cannot delete</h3>
+    <div class="body">
+      "Imperial Japan (custom)" is in use by <strong>2 stories</strong>. Re-assign or remove those stories before deleting the calendar.
+    </div>
+    <div class="footer">
+      <button class="btn btn-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modal-delete-default">
+  <div class="modal">
+    <h3>Cannot delete</h3>
+    <div class="body">
+      "Imperial Japan (custom)" is the current default for new stories. Set a different default in <em>App Settings → Story Defaults</em> before deleting.
+    </div>
+    <div class="footer">
+      <button class="btn btn-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modal-delete-confirm">
+  <div class="modal">
+    <h3>Delete calendar</h3>
+    <div class="body">
+      This will permanently delete <strong>"Imperial Japan (custom)"</strong>. This action can't be undone.
+    </div>
+    <div class="footer">
+      <button class="btn btn-cancel">Cancel</button>
+      <button class="btn btn-danger">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const reviewBar = document.querySelector('.review-bar');
+  const layerHome = document.getElementById('layer-home');
+  const layerDetail = document.getElementById('layer-detail');
+  const headBuiltin = document.getElementById('head-builtin');
+  const headCustom = document.getElementById('head-custom');
+  const saveBar = document.getElementById('save-bar');
+  const breadcrumb = document.getElementById('breadcrumb');
+  const addTrigger = document.getElementById('add-trigger');
+  const addMenu = document.getElementById('add-menu');
+  const morePopoverCustom = document.getElementById('more-popover-custom');
+  const morePopoverBuiltin = document.getElementById('more-popover-builtin');
+
+  function setLayer(l) {
+    if (l === 'home') {
+      layerHome.classList.remove('hidden');
+      layerDetail.classList.add('hidden');
+      breadcrumb.innerHTML = '<a>Vault</a><span class="sep">/</span><span class="crumb-current">Calendars</span>';
+    } else {
+      layerHome.classList.add('hidden');
+      layerDetail.classList.remove('hidden');
+      const kind = document.querySelector('.rb-btn.active[data-kind]').dataset.kind;
+      const name = kind === 'builtin' ? 'Earth (Gregorian)' : 'Imperial Japan (custom)';
+      breadcrumb.innerHTML = '<a>Vault</a><span class="sep">/</span><a>Calendars</a><span class="sep">/</span><span class="crumb-current">' + name + '</span>';
+    }
+  }
+  function setKind(k) {
+    if (k === 'builtin') {
+      headBuiltin.classList.remove('hidden');
+      headCustom.classList.add('hidden');
+      saveBar.classList.remove('dirty');
+      // built-ins make label inputs read-only
+      document.querySelectorAll('#layer-detail .label-input, #layer-detail .cal-display-name input').forEach(el => {
+        if (el.tagName === 'INPUT') { el.classList.add('ro'); el.readOnly = true; }
+      });
+    } else {
+      headBuiltin.classList.add('hidden');
+      headCustom.classList.remove('hidden');
+      document.querySelectorAll('#layer-detail .label-input').forEach(el => {
+        el.classList.remove('ro'); el.readOnly = false;
+      });
+    }
+    if (layerDetail.classList.contains('hidden') === false) {
+      setLayer('detail');
+    }
+  }
+  function setDirty(d) {
+    if (d === 'dirty') {
+      saveBar.classList.add('dirty');
+    } else {
+      saveBar.classList.remove('dirty');
+    }
+  }
+  function setModal(m) {
+    document.querySelectorAll('.modal-backdrop').forEach(el => el.classList.remove('open'));
+    addMenu.classList.remove('open');
+    morePopoverCustom.classList.remove('open');
+    morePopoverBuiltin.classList.remove('open');
+    if (m === 'add-menu') addMenu.classList.add('open');
+    if (m === 'clone') document.getElementById('modal-clone').classList.add('open');
+    if (m === 'import') document.getElementById('modal-import').classList.add('open');
+    if (m === 'more-menu') {
+      setKind('custom');
+      setLayer('detail');
+      morePopoverCustom.classList.add('open');
+    }
+    if (m === 'delete-blocked') document.getElementById('modal-delete-blocked').classList.add('open');
+    if (m === 'delete-default') document.getElementById('modal-delete-default').classList.add('open');
+    if (m === 'delete-confirm') document.getElementById('modal-delete-confirm').classList.add('open');
+  }
+
+  reviewBar.addEventListener('click', e => {
+    const btn = e.target.closest('.rb-btn');
+    if (!btn) return;
+    const group = btn.parentElement;
+    group.querySelectorAll('.rb-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (btn.dataset.layer) setLayer(btn.dataset.layer);
+    if (btn.dataset.kind) setKind(btn.dataset.kind);
+    if (btn.dataset.dirty) setDirty(btn.dataset.dirty);
+    if (btn.dataset.modal) setModal(btn.dataset.modal);
+  });
+
+  addTrigger.addEventListener('click', e => {
+    e.stopPropagation();
+    addMenu.classList.toggle('open');
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#add-trigger') && !e.target.closest('#add-menu')) {
+      addMenu.classList.remove('open');
+    }
+  });
+  document.querySelectorAll('.modal-backdrop').forEach(bd => {
+    bd.addEventListener('click', e => { if (e.target === bd) bd.classList.remove('open'); });
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-backdrop').forEach(el => el.classList.remove('open'));
+      addMenu.classList.remove('open');
+      morePopoverCustom.classList.remove('open');
+      morePopoverBuiltin.classList.remove('open');
+    }
+  });
+
+  // initial state
+  setLayer('home');
+  setKind('builtin');
+  setDirty('clean');
+</script>
+
+</body>
+</html>
