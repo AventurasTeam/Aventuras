@@ -10,9 +10,13 @@ fictional calendars.
   sub-divisions, era flip semantics (`flipMode`), schema, classifier
   integration, authoring story.
 - **[poc.html](./poc.html)** — single-file interactive PoC. Open in
-  any modern browser. No install. Pre-loaded with Earth, Imperial
-  Japan (nengō), Warhammer 40K Imperial, Stardate, Generic Fantasy
-  12×30, and a Custom skeleton for from-scratch authoring.
+  any modern browser. No install. Pre-loaded with Earth (Gregorian),
+  Earth (BC/AD), Imperial Japan (nengō), Warhammer 40K Imperial,
+  Stardate, Generic Fantasy 12×30, and a Custom skeleton for
+  from-scratch authoring. Earth (BC/AD) demonstrates the
+  [spec rule](./spec.md#eras-hoisted-out-manually-triggered) that
+  astronomical-reference splits are handled in `displayFormat`
+  (via the `era_label` Liquid filter), not the era system.
 - **[presets/](./presets/)** — standalone calendar JSON definitions,
   paste-able into the PoC's JSON editor for stress-testing.
   - [tolkien-shire.json](./presets/tolkien-shire.json) —

@@ -196,6 +196,7 @@
       <h3 style="margin-top:12px;">Demo guide — what each preset uniquely shows</h3>
       <ul>
         <li><strong>Earth (Gregorian)</strong> — six-tier structured calendar. <code>'rule'</code> rollover on year encodes Gregorian leap (every 4, except 100, except 400). <code>leapDayPosition</code> declares where the extra day lands (month 1 = Feb).</li>
+        <li><strong>Earth (BC/AD)</strong> — same structure as Earth (Gregorian), but the <code>displayFormat</code> uses the <code>era_label</code> Liquid filter to render <code>"44 BC"</code> for negative years and <code>"2024 AD"</code> for positive ones. Demonstrates the spec rule: <em>astronomical-reference splits like AD/BC are not eras</em> — the boundary is at a fixed point (year 1) and counting reverses on the BC side, so they're handled in <code>displayFormat</code>, not via narrative-triggered era flips. <code>eras: null</code>; default origin near year 1 so scrubbing worldTime crosses 4 BC → 1 AD visibly.</li>
         <li><strong>Imperial Japan (年号)</strong> — same Gregorian structure, but eras are the centerpiece. <code>flipMode: 'display-label'</code> means each era flip just relabels the year (Reiwa 8 instead of 2026); month/day continue from the underlying clock. Click any era's <code>→</code> button to see eraYear reset to 1.</li>
         <li><strong>Warhammer 40K Imperial</strong> — two tiers (year + 1/1000-year fraction). <code>flipMode: 'elapsed-from-flip'</code> means M41 → M42 <em>structurally</em> resets the year tier (display goes 999 → 000) while the absolute counter (in the breakdown table) keeps climbing. The same calendar moment displays differently from Imperial Japan because of the flipMode discriminator.</li>
         <li><strong>Tolkien Shire Reckoning</strong> — 15-cell month table mixing 1-day intercalary holidays (2 Yule, 1 Yule) with a 3-day Lithedays block and twelve 30-day months. <code>subdivisions[].skipWhen</code> takes Mid-year's Day <em>out</em> of the weekday cycle, so 365 − 1 = 364 = 52×7 and weekdays lock year-to-year (Tolkien's perpetual-calendar design). Leap years still drift by 1 day because conditional skipping (Overlithe) is deferred.</li>
@@ -549,6 +550,13 @@ const FILTERS = {
   downcase: (v) => String(v).toLowerCase(),
   capitalize: (v) => { const s = String(v); return s ? s[0].toUpperCase() + s.slice(1) : s; },
   default: (v, def) => (v == null || v === '') ? def : v,
+  // BC/AD label per conventional historical numbering: year 0 = 1 BC,
+  // year -1 = 2 BC, etc. Skips year 0 in display (matches the
+  // year-zero-skipping convention; astronomical year 0 is 1 BC).
+  era_label: (v) => {
+    const n = Number(v);
+    return n < 1 ? `${1 - n} BC` : `${n} AD`;
+  },
 };
 
 function evalFilter(value, name, args) {
@@ -636,6 +644,52 @@ const PRESETS = {
     eras: null,
     defaultOrigin: { year: 2024, month: 0, day: 1, hour: 0, minute: 0, second: 0 },
     defaultToToday: true,
+  },
+
+  // Earth (BC/AD). Same Gregorian structure, but the displayFormat
+  // uses the `era_label` filter to render BC for negative-year values
+  // and AD for positive ones. Demonstrates the spec rule:
+  // astronomical-reference splits like AD/BC are NOT eras — they're
+  // a displayFormat concern. eras: null, no era system involvement.
+  // Default origin sits near the boundary so scrubbing the worldTime
+  // slider crosses BC → AD visibly.
+  'earth-gregorian-bcad': {
+    id: 'earth-gregorian-bcad',
+    name: 'Earth (BC/AD)',
+    baseUnit: 'second',
+    tiers: [
+      {
+        name: 'year', startValue: 1,
+        rollover: {
+          kind: 'rule', against: 'year', base: 365,
+          conditions: [
+            { every: 4 },
+            { every: 100, exclude: true },
+            { every: 400 },
+          ],
+        },
+      },
+      {
+        name: 'month', startValue: 0,
+        rollover: { kind: 'constant', value: 12 },
+        labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+      },
+      {
+        name: 'day', startValue: 1,
+        rollover: { kind: 'table', indexedBy: 'month', values: [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] },
+        subdivisions: [
+          { name: 'weekday', length: 7, offset: 1, labels: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] },
+        ],
+      },
+      { name: 'hour', startValue: 0, rollover: { kind: 'constant', value: 24 } },
+      { name: 'minute', startValue: 0, rollover: { kind: 'constant', value: 60 } },
+      { name: 'second', startValue: 0, rollover: { kind: 'constant', value: 60 } },
+    ],
+    leapDayPosition: { tier: 'day', indexedBy: 'month', index: 1, leapAgainst: 'year' },
+    displayFormat: '{{ monthName }} {{ day }}, {{ year | era_label }} ({{ weekdayName }})',
+    eras: null,
+    defaultOrigin: { year: -3, month: 0, day: 1, hour: 0, minute: 0, second: 0 },
+    defaultToToday: false,
   },
 
   // Imperial Japan (nengō / 年号). Same Gregorian structure as Earth
