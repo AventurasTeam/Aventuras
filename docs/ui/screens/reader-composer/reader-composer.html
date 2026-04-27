@@ -76,10 +76,24 @@
   .icon-btn { position: relative; width: 30px; height: 30px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 14px; cursor: pointer; }
   .icon-btn .count-badge { position: absolute; top: -4px; right: -4px; background: var(--ink); color: #fff; font-size: 9px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-weight: 600; letter-spacing: 0; }
 
-  .gen-status { display: none; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); font-size: 11px; color: var(--ink); }
+  .gen-status { display: none; position: relative; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); font-size: 11px; color: var(--ink); cursor: pointer; }
   .gen-status.visible { display: flex; }
   .gen-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s infinite; }
   @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(74,168,136,0.5);} 70% { box-shadow: 0 0 0 5px rgba(74,168,136,0);} 100% { box-shadow: 0 0 0 0 rgba(74,168,136,0);} }
+
+  /* cancel popover anchored to the active status pill — see principles.md → Edit restrictions */
+  .gen-cancel-popover { display: none; position: absolute; top: calc(100% + 6px); right: 0; min-width: 180px; padding: 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); box-shadow: 0 4px 10px rgba(0,0,0,0.08); z-index: 20; }
+  .gen-cancel-popover.visible { display: block; }
+  .gen-cancel-action { display: block; width: 100%; text-align: left; padding: 6px 10px; border: 0; background: transparent; color: var(--ink); font-size: 11px; cursor: pointer; border-radius: 2px; font-family: inherit; }
+  .gen-cancel-action:hover { background: var(--bg-region); }
+
+  /* chapter-close banner — sticky below chrome for the duration of the close transaction */
+  .gen-banner { display: none; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--bg-region); align-items: center; gap: 12px; font-size: 12px; color: var(--ink); }
+  .gen-banner.visible { display: flex; }
+  .gen-banner-icon { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s infinite; flex-shrink: 0; }
+  .gen-banner-label { flex: 1; }
+  .gen-banner-cancel { padding: 3px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); color: var(--ink); font-size: 11px; cursor: pointer; font-family: inherit; }
+  .gen-banner-cancel:hover { background: var(--bg-region); border-color: var(--ink-muted); }
 
   /* layout */
   .layout { flex: 1; display: grid; grid-template-columns: 1fr 300px; min-height: 0; position: relative; }
@@ -285,6 +299,12 @@
   </div>
 
   <div class="rb-group">
+    <span class="gl">cancel popover:</span>
+    <button class="rb-btn active" data-popover="closed">closed</button>
+    <button class="rb-btn" data-popover="open">open</button>
+  </div>
+
+  <div class="rb-group">
     <span class="gl">peek:</span>
     <button class="rb-btn active" data-peek="closed">closed</button>
     <button class="rb-btn" data-peek="open">open — Kael</button>
@@ -385,7 +405,13 @@
     </div>
   </div>
   <div class="topbar-right">
-    <div class="gen-status" id="gen-pill"><span class="dot"></span><span id="gen-label">generating narrative&hellip;</span></div>
+    <div class="gen-status" id="gen-pill" title="Click to cancel">
+      <span class="dot"></span>
+      <span id="gen-label">generating narrative&hellip;</span>
+      <div class="gen-cancel-popover" id="gen-cancel-popover">
+        <button class="gen-cancel-action" id="gen-cancel-action">Cancel generation</button>
+      </div>
+    </div>
     <div class="icon-btn" title="3 branches &middot; click to open Branch Navigator">&#9901;<span class="count-badge">3</span></div>
     <div class="icon-btn" title="Actions (Cmd/Ctrl-K / tap to open)">&#9906;</div>
     <div class="icon-btn" title="Story settings">&#9881;</div>
@@ -396,6 +422,13 @@
 <!-- Chapter progress strip — passive chrome, always visible -->
 <div class="topbar-progress" data-label="Chapter 3 · 8,420 / 24,000 tok">
   <div class="fill" style="width: 35%"></div>
+</div>
+
+<!-- Chapter-close banner — sticky below chrome during chapter-close transaction -->
+<div class="gen-banner" id="gen-banner">
+  <span class="gen-banner-icon"></span>
+  <span class="gen-banner-label" id="gen-banner-label">Closing chapter: 2 of 4 &mdash; generating chapter metadata&hellip;</span>
+  <button class="gen-banner-cancel" id="gen-banner-cancel">Cancel</button>
 </div>
 
 <!-- Layout -->
@@ -699,13 +732,17 @@
 
 <script>
 (function() {
-  // gen state → status pill + streaming entry + composer send/cancel
+  // gen state → status pill + streaming entry + composer send/cancel + chapter-close banner
   const genStatus = document.getElementById('gen-pill');
   const genLabel = document.getElementById('gen-label');
   const streamingEntry = document.getElementById('streaming-entry');
   const composer = document.getElementById('composer');
   const sendBtn = document.getElementById('send-btn');
   const cancelBtn = document.getElementById('cancel-btn');
+  const banner = document.getElementById('gen-banner');
+  const cancelPopover = document.getElementById('gen-cancel-popover');
+  const cancelAction = document.getElementById('gen-cancel-action');
+  const bannerCancel = document.getElementById('gen-banner-cancel');
 
   const genPhaseLabels = {
     idle: null,
@@ -745,23 +782,53 @@
         // classifying / chapter-close — keep streaming entry hidden
         streamingEntry.classList.remove('visible');
       }
+
+      // Banner shows only during chapter-close (no streaming surface to anchor user attention)
+      banner.classList.toggle('visible', state === 'chapter-close');
+      cancelAction.textContent = state === 'chapter-close' ? 'Cancel chapter close' : 'Cancel generation';
     } else {
       genStatus.classList.remove('visible');
       streamingEntry.classList.remove('visible');
       composer.classList.remove('generating');
       sendBtn.classList.remove('hidden');
       cancelBtn.classList.add('hidden');
+      banner.classList.remove('visible');
+      setCancelPopover(false); // popover always closes when generation ends
     }
     document.querySelectorAll('[data-gen]').forEach(b => {
       b.classList.toggle('active', b.dataset.gen === state);
     });
   }
 
+  function setCancelPopover(open) {
+    cancelPopover.classList.toggle('visible', open);
+    document.querySelectorAll('[data-popover]').forEach(b => {
+      b.classList.toggle('active', b.dataset.popover === (open ? 'open' : 'closed'));
+    });
+  }
+
   document.querySelectorAll('[data-gen]').forEach(b => {
     b.addEventListener('click', () => setGenState(b.dataset.gen));
   });
+  document.querySelectorAll('[data-popover]').forEach(b => {
+    b.addEventListener('click', () => setCancelPopover(b.dataset.popover === 'open'));
+  });
   sendBtn.addEventListener('click', () => setGenState('generating'));
   cancelBtn.addEventListener('click', () => setGenState('idle'));
+
+  // Pill click toggles the cancel popover (only meaningful when pill is visible)
+  genStatus.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!genStatus.classList.contains('visible')) return;
+    setCancelPopover(!cancelPopover.classList.contains('visible'));
+  });
+  cancelAction.addEventListener('click', (e) => { e.stopPropagation(); setGenState('idle'); });
+  bannerCancel.addEventListener('click', () => setGenState('idle'));
+  // Click outside the popover dismisses it
+  document.addEventListener('click', (e) => {
+    if (!cancelPopover.classList.contains('visible')) return;
+    if (!genStatus.contains(e.target)) setCancelPopover(false);
+  });
 
   // peek drawer
   const peek = document.getElementById('peek-overlay');
