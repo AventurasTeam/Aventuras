@@ -381,10 +381,10 @@ calendar tab is where everything calendar-related already lives.
   calendar's formatter (e.g., `Reiwa 1 · May 1, 2019`). Shows
   `Start of story` when `at_worldtime = 0`.
 - **Inline `×` delete icon** — follows the
-  [icon-actions pattern](../../patterns/icon-actions.md)
-  (always-visible-muted, brighten on hover; disabled during
-  in-flight pipelines per the
-  [hidden-vs-disabled rule](../../patterns/icon-actions.md#disabled-vs-hidden)).
+  [icon-actions pattern](../../patterns/icon-actions.md), with the
+  surface-specific deviation that the icon disables (rather than
+  hides) during in-flight pipelines per the
+  [hidden-vs-disabled rule](../../patterns/icon-actions.md#disabled-vs-hidden).
 
 No inline rename in v1 — see
 [followups](../../../followups.md#inline-rename-for-era-flips-in-story-settings--calendar)

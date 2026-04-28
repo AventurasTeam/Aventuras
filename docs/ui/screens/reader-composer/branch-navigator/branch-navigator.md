@@ -62,10 +62,8 @@ Two zones per row:
 - **Left**: marker (`✓` filled when current, `○` muted otherwise),
   followed by the branch name.
 - **Right**: two inline action icons — `✎` (rename) and `×`
-  (delete) — following the
-  [icon-actions pattern](../../../patterns/icon-actions.md)
-  (always-visible-but-muted, brighten on row hover/focus, same
-  affordance on desktop and mobile).
+  (delete) — per the
+  [icon-actions pattern](../../../patterns/icon-actions.md).
 
 That's it. **No** lineage hint, **no** fork-point reference, **no**
 created-at timestamp, **no** divergence count. Branch names carry
@@ -294,9 +292,9 @@ popover:
   backdrop dismisses. The handle is the typical drawer
   affordance; an X would be visual redundancy.
 - Same content + same per-row layout. Action icons follow the
-  same always-visible-but-muted treatment as desktop (touch
-  doesn't have a hover state, so the muted default is the
-  steady-state visual; tap brightens transiently).
+  [icon-actions pattern](../../../patterns/icon-actions.md) on
+  mobile too (the desktop-vs-touch differences are inside the
+  pattern doc, not duplicated here).
 - Inline rename + delete confirm work identically.
 
 The creation modal is unchanged on mobile — modals already work
