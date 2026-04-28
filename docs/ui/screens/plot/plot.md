@@ -193,8 +193,13 @@ Three signals on each row, each with a dedicated channel:
 Each indicator is mirrored in the detail pane so users learn the
 mapping by clicking around, not by reading docs:
 
-- **Recently-classified accent on the row → "Recently classified"
-  badge in the detail head** (cross-cutting; see principles).
+- **Recently-classified accent on the row → `Recently classified`
+  badge in the detail head** — sits inline next to the breadcrumb
+  /name row, visible only when the row is in `recent-1` or
+  `recent-2` state (per
+  [patterns → Recently-classified row accent → Detail-pane mirroring](../../patterns/entity.md#recently-classified-row-accent)).
+  Decays alongside the row tint. Same shape as
+  [World panel's detail-head badge](../world/world.md#detail-head-structure).
 - **Common-knowledge ⊙ on the row → ⊙ icon next to the toggle on
   Overview**. Same glyph, same on/off behavior. Toggling the detail
   flips the row icon at the same time.

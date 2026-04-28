@@ -116,18 +116,25 @@ v1; single-select keeps the UI simple.
 
 ### Accordion grouping on "All" view
 
-When `All` is active, rows group under status-tier accordion headers
-(`Active` / `Staged` / `Retired`) with click-to-collapse. Each header
-shows name + count + chevron.
+When `All` is active, rows group under accordion headers keyed on a
+**per-surface tier**, with click-to-collapse. Each header shows
+name + count + chevron.
 
-**Default expansion:**
+**Per-surface keys** (each per-screen doc names its own keys + which
+tier defaults expanded):
 
-- `Active` — expanded (the working set)
-- `Staged` — collapsed (reference)
-- `Retired` — collapsed (reference)
+- **World entities** → status tier (`Active` expanded /
+  `Staged` collapsed / `Retired` collapsed). Working set first.
+- **Plot threads** → status tier (`Active` / `Pending` /
+  `Resolved` / `Failed`).
+- **Plot happenings** → chapter bucket (`Current chapter` /
+  `Earlier chapters` / `Out of narrative`).
 
-Session-scoped (not persisted). When a non-All filter is active, the
-list renders flat (single implicit group, no accordion chrome).
+The shared shape is "default-expand the working tier, collapse the
+rest, session-scoped (not persisted), flatten to a single implicit
+group when a non-All filter is active." Pattern lives here because
+World entities adopted it first; Plot generalized to the keys above
+without changing the rendering primitive.
 
 ---
 
