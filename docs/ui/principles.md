@@ -14,30 +14,6 @@ of reusable primitives.
 
 ---
 
-## Wireframe format and interactivity
-
-Wireframes live as **standalone interactive HTML** at
-`docs/ui/screens/<screen>/<screen>.html`, colocated with the
-per-screen `.md` doc. Each is a committed artifact, no framework, no
-build, no external deps. Styling is low-fi monochrome; state
-transitions use minimal inline vanilla JS.
-
-- **Review controls bar** at the top of each interactive wireframe
-  lets reviewers flip states directly (like tiny Storybook controls).
-- Natural interactions also work (click a row, press Esc, etc.).
-- No fake data, no real logic — purely visual state-swapping.
-- **No footer or notes block.** The colocated `.md` is the spec;
-  wireframes are pure visual artifact. Don't re-narrate the doc
-  inside the HTML.
-- Stylings stay monochrome intentionally; pixel-fidelity decisions
-  (palette, typography) land in the visual identity session.
-
-When a wireframe stabilizes, its final form lives in
-`docs/ui/screens/<screen>/`. Iteration scratch lives wherever the
-author keeps it (gitignored), not in the repo.
-
----
-
 ## Naming convention — World / Plot and their "panel" descriptor
 
 The dedicated screens for world-state management are called **World**

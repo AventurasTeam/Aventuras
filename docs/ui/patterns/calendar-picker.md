@@ -317,23 +317,26 @@ Calendar swap is one of the canonical instances the
 edit-restrictions principle's followup originally cited; this
 primitive's gate is a direct consequence of that principle.
 
-## Implementation notes (forward-looking)
+## Implementation notes
 
-- **Select extension** — picker assumes Select gains rich-row
-  content + popover tail action support, OR a Picker-pattern
-  variant is created.
-- **Search threshold** — popover gains a search/filter bar at
-  some option-count threshold (rough lean: ≥ 8). Implementation
-  pass picks the actual number.
-- **Tier-path tooltip** — optional polish via native `title`
-  attribute on row, recovers detail on desktop hover for very-deep
-  calendars.
-- **Mobile shape** — dropdown becomes bottom sheet per existing
-  responsive conventions (inherits Select primitive's responsive
-  treatment).
-- **Keyboard accessibility** — arrow keys, Enter to select, Esc
-  to close popover, search-bar focus on open when present.
-  Inherits from Select / Picker base.
+- **Tier-path tooltip** — native `title` attribute on each row
+  surfaces the full tier path on desktop hover. Useful for
+  very-deep calendars where the row's compact preview can't show
+  every tier.
+- **Mobile shape** — dropdown becomes a bottom sheet per the
+  Select primitive's responsive treatment.
+- **Keyboard** — arrow keys navigate options; Enter selects; Esc
+  closes the popover; search-bar focus on open when the search
+  bar is present (see deferrals below). Inherits from Select /
+  Picker base.
+
+Two deferrals — see
+[`followups.md → Calendar picker primitive — open shape decisions`](../../followups.md#calendar-picker-primitive--open-shape-decisions):
+
+- whether the picker reuses Select with rich-row + tail-action
+  extensions vs. forks into a sibling Picker primitive;
+- the option-count threshold at which the popover gains a
+  search/filter bar.
 
 ## Storybook
 

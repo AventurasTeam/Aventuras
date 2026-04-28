@@ -112,11 +112,26 @@ item carries the resolution narrative.
 
 ### Wireframe authoring
 
-Per-screen interactive HTML wireframes live colocated with their
-`.md` doc under `docs/ui/screens/<screen>/`. Use existing wireframes
-as templates — review-controls bar at top, monochrome styling,
-vanilla JS only, no build/framework. Keep them low-fidelity;
-pixel-fidelity decisions land in the visual-identity pass.
+Wireframes live as **standalone interactive HTML** at
+`docs/ui/screens/<screen>/<screen>.html`, colocated with the
+per-screen `.md` doc. Each is a committed artifact: no framework,
+no build, no external deps. Styling is low-fi monochrome; state
+transitions use minimal inline vanilla JS.
+
+- **Review controls bar** at the top of each interactive wireframe
+  lets reviewers flip states directly (like tiny Storybook
+  controls).
+- Natural interactions also work (click a row, press Esc, etc.).
+- No fake data, no real logic — purely visual state-swapping.
+- **No footer or notes block.** The colocated `.md` is the spec;
+  wireframes are pure visual artifact. Don't re-narrate the doc
+  inside the HTML.
+- Monochrome is intentional; pixel-fidelity decisions (palette,
+  typography) land in the visual-identity pass.
+
+When a wireframe stabilizes, its final form lives in
+`docs/ui/screens/<screen>/`. Iteration scratch lives wherever the
+author keeps it (gitignored), not in the repo.
 
 ## Tooling
 

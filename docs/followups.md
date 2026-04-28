@@ -289,6 +289,26 @@ solve the same problem. Decision blocked on:
 Lands when the first virtualized component is implemented (likely
 the model picker dropdown or App Settings · Profiles model list).
 
+### Calendar picker primitive — open shape decisions
+
+The [calendar picker pattern](./ui/patterns/calendar-picker.md)
+uses Select-shaped UI but its row content + tail action go beyond
+the current Select primitive. Two open shape decisions:
+
+- **Select-extension vs. Picker-fork.** Either Select gains
+  rich-row content + popover tail-action support (and the
+  calendar picker is a configuration of Select), or a sibling
+  `Picker` primitive forks the contract for richer-row use cases
+  (calendar picker, future multi-line option pickers). Decide
+  when the second rich-row picker emerges and the trade-off is
+  concrete.
+- **Search-bar threshold.** The popover gains an inline
+  search/filter bar at some option-count threshold (rough lean:
+  ≥ 8). Pick the actual number once we have real preset catalogs
+  to test against.
+
+Lands with the Select primitive's first implementation pass.
+
 ### Storybook design-rules pattern setup
 
 When component implementation begins, set up Storybook's tree as
