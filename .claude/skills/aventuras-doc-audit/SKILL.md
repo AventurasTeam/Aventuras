@@ -15,7 +15,7 @@ Read-only audit. Do NOT modify any files in this run. The user reviews the repor
 
 The Aventuras doc tree evolves: domains start as single files (`docs/architecture.md`), fan out into subdirs with their own `README.md` index when they grow (precedent: `docs/calendar-systems/`). New patterns get added; old ones retire; principles content migrates between `principles.md` and `patterns/`. A skill that hardcodes paths breaks the moment that happens.
 
-This skill **reads the project's structure rules each run** (from `docs/README.md`, `.claude/rules/docs.md`, and `CLAUDE.md`) and **enumerates the actual file inventory** by globbing `docs/`. The audit's checks are derived from what's currently true, not from a snapshot baked into the skill. As a side effect, the skill self-audits: if files exist that aren't in the README index (or vice versa), that's itself a finding.
+This skill **reads the project's structure rules each run** (from `docs/conventions.md`, `docs/README.md`, `.claude/rules/docs.md`, and `CLAUDE.md`) and **enumerates the actual file inventory** by globbing `docs/`. The audit's checks are derived from what's currently true, not from a snapshot baked into the skill. As a side effect, the skill self-audits: if files exist that aren't in the README index (or vice versa), that's itself a finding.
 
 ## Checklist
 
@@ -32,7 +32,8 @@ Track as tasks; complete in order:
 
 Run these reads in parallel at the start of every audit:
 
-- `docs/README.md` — authoritative index + structure rules. Source of truth for "what files should exist", "where they live", "naming conventions", "principles-vs-patterns split", "README-as-index", "followups-outstanding-only", "wireframe colocated with screen doc".
+- `docs/conventions.md` — source of truth for "where files live", "naming conventions", "principles-vs-patterns split", "README-as-index", "followups-outstanding-only", "wireframe authoring", tooling, common pitfalls.
+- `docs/README.md` — authoritative index of what files should exist (cross-check against your glob inventory).
 - `.claude/rules/docs.md` — operational reminders for AI-assisted edits (anchor discipline, heading stability, bracketed inline text, followups hygiene, lint tooling).
 - `CLAUDE.md` — repo root project context (domain, repo layout, workflow rules).
 - `git log --oneline -15` — recent activity (ground for "what changed lately" findings).
@@ -60,7 +61,7 @@ Categorize findings into these classes. Don't limit yourself; flag anything else
 1. **Contradictions.** Same topic spec'd two different ways across docs (principles says X, per-screen says Y).
 2. **Wireframe vs doc drift.** _(Conditional: per-screen `.md` + `.html` colocation in use.)_ The `.md` spec disagrees with the colocated `.html`. Compare chrome elements (top-bar shape, icons, popovers, breadcrumbs), row indicators (left-edge stripes, background tints, status pills, lead badges), modal markup vs spec'd shape, demonstrated states.
 3. **Stale information.** References to renamed features / removed sections / retired patterns. Anchors that resolve mechanically but whose destination has shifted such that the citing context is no longer accurate. Old terminology replaced without all uses updated.
-4. **Duplicate information ripe for consolidation.** Same prose reused near-verbatim across multiple docs that should live in one canonical place (`principles.md` for cross-cutting philosophy, `patterns/` for component specs) and be cross-referenced. Heuristic from `docs/README.md`: "single-surface stays in per-screen doc; 2+ surfaces means promote to principles or patterns."
+4. **Duplicate information ripe for consolidation.** Same prose reused near-verbatim across multiple docs that should live in one canonical place (`principles.md` for cross-cutting philosophy, `patterns/` for component specs) and be cross-referenced. Heuristic from `docs/conventions.md → Cross-cutting vs single-surface`: "single-surface stays in per-screen doc; 2+ surfaces means promote to principles or patterns."
 5. **Cross-reference asymmetry.** A links to B for context X, but B doesn't actually cover X (or covers something subtly different). A says "see B for X" but X is in C.
 6. **Followup hygiene.** _(Conditional: `followups.md` exists.)_ Items silently resolved by integration but not removed; items contradicted by later canonical decisions; duplicate / near-duplicate entries; items aged into "this is now decided, just delete me."
 7. **Schema vs UI drift.** `data-model.md` (or `data-model/*` if fanned out) defines a shape; UI docs render or operate on it. Flag where the UI's mental model disagrees with the schema (field name, cardinality, nullability, type assumption).
@@ -100,7 +101,7 @@ Before writing the report, do a quick pass on the skill's own assumptions vs rea
 
 - **Index completeness.** Did glob find files not referenced from `docs/README.md`? → finding.
 - **Index correctness.** Does `docs/README.md` cite files that don't exist? → finding.
-- **Convention coverage.** Did you observe a pattern in use that's not codified in `docs/README.md` or `.claude/rules/docs.md`? → meta-finding (worth surfacing as a structure-rule update suggestion).
+- **Convention coverage.** Did you observe a pattern in use that's not codified in `docs/conventions.md` or `.claude/rules/docs.md`? → meta-finding (worth surfacing as a structure-rule update suggestion).
 - **Skill assumption coverage.** If you found a domain or convention this skill's checklist doesn't address, note it — the skill itself drifts when the project does, and the user maintains it.
 
 These self-audit findings go into the report under their own section so the user can patch the skill as part of triage.

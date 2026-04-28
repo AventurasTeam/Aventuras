@@ -17,16 +17,6 @@ fictional calendars.
   [spec rule](./spec.md#eras-hoisted-out-manually-triggered) that
   astronomical-reference splits are handled in `displayFormat`
   (via the `era_label` Liquid filter), not the era system.
-- **[presets/](./presets/)** — standalone calendar JSON definitions,
-  paste-able into the PoC's JSON editor for stress-testing.
-  - [tolkien-shire.json](./presets/tolkien-shire.json) —
-    Shire Reckoning with intercalary blocks (Yule, Lithedays) and
-    the Overlithe leap day. **Canon note:** Tolkien's leap rule isn't
-    fully pinned — Appendix D says "every fourth year except the last
-    of a century", but the millennium-correction clause varies by
-    interpretation. This preset uses `{ every: 4 }, { every: 100,
-exclude }` which matches the simplest reading; edit the JSON if
-    your canon differs.
-  - [mayan-long-count.json](./presets/mayan-long-count.json) —
-    five-tier vigesimal counting with the famous mixed base
-    (winal = 18 kins, not 20).
+- **[presets/](./presets/README.md)** — standalone calendar JSON
+  definitions paste-able into the PoC for stress-testing
+  (Shire, Mayan; index + canon notes inside).

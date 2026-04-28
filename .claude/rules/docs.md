@@ -9,15 +9,16 @@ paths:
 Project-scoped Claude rules for documentation work. Auto-loads when
 Claude reads anything under `docs/` or `.claude/rules/`. The full
 human-facing structure rules live in
-[`docs/README.md`](../../docs/README.md) — that's the source of
-truth; this file adds operational reminders for AI-assisted edits.
+[`docs/conventions.md`](../../docs/conventions.md) — that's the
+source of truth; this file adds operational reminders for
+AI-assisted edits.
 
 ## Documentation conventions
 
 When adding to or editing docs:
 
-- Follow the structure rules in `docs/README.md`. They're pinned for
-  a reason.
+- Follow the structure rules in `docs/conventions.md`. They're
+  pinned for a reason.
 - **Three-tier UI hierarchy**: per-screen docs at
   `docs/ui/screens/<screen>/<screen>.md` carry single-surface
   detail; cross-cutting **patterns** (component-shaped reusable
