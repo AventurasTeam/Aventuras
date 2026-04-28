@@ -19,6 +19,10 @@ Cross-cutting principles that govern this screen are in
   (Reader provides level 1 — Browse rail — and level 2 — peek drawer)
 - [Entity row indicators — four channels](../../patterns/entity.md#entity-row-indicators--four-orthogonal-channels)
 - [Browse filter chips + accordion grouping](../../patterns/entity.md#browse-filter-chips)
+- [Empty list / table state + no-results state](../../patterns/lists.md#empty-list--table-state)
+  (Browse rail inherits both: per-category empty placeholder when
+  the active kind has no rows; "No results" line when search /
+  filter narrows to zero)
 
 ## Layout
 

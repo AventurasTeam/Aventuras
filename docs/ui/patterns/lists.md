@@ -148,10 +148,46 @@ block; pick whichever reads cleaner per surface.
   custom welcome variant (the screen IS the empty surface; gets
   its own onboarding-flavored copy + visual rather than the
   generic shape).
+- [Reader · Browse rail](../screens/reader-composer/reader-composer.md#browse-rail--search-scope)
+  — per-category list, same shape as a list pane.
 - [World panel — list pane](../screens/world/world.md) +
   Involvements tab + History tab tables.
 - [Plot panel — list pane](../screens/plot/plot.md) +
   Involvements / Awareness / History tab tables.
 - [Vault calendars list](../screens/vault/calendars/calendars.md)
-  - future Vault tables (packs, templates).
+  - future Vault tables (packs, templates). Note: Vault calendars
+    effectively can't reach this state in practice — built-in
+    calendars are always present in the registry — but the surface
+    documents the shape for symmetry with future Vault content
+    types that have no built-ins.
 - Future master-detail and table surfaces inherit by default.
+
+### No-results state (search / filter narrowed to zero)
+
+A separate state from "no rows exist." When the underlying scope
+has rows but the active search query or filter chip excludes all
+of them, render a **"No results" line** below the search/filter
+controls **without hiding the toolbar**:
+
+> No results. <small>Try clearing the search or another filter.</small>
+
+Contract:
+
+- **Toolbar stays visible.** Search input, filter chips, sort
+  picker, ⓘ help, kind selector — all stay on screen so the user
+  can edit the query that produced the empty result without
+  leaving.
+- **No CTA inside the placeholder.** Same rule as the empty
+  state — the affordance to fix it (clear search / flip filter)
+  is the toolbar itself.
+- **Single-line copy by default.** Surfaces with bigger empty
+  bodies (table tabs, list-pane bodies) can lift it to a centered
+  paragraph if visual balance demands; surfaces where the input
+  sits inline (Reader Browse rail) keep it tight.
+- **Distinct from the empty state.** Empty = "no rows here yet"
+  (typically with a "classifier writes most rows" sub-text);
+  no-results = "your filter excluded everything." Don't conflate
+  the two — the user response is different (wait vs. clear).
+
+Applies anywhere the empty list/table pattern applies, plus all
+search inputs across the app (App Settings model search, etc.).
