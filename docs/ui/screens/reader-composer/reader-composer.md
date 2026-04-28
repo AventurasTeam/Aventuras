@@ -10,7 +10,7 @@ composer.
 Cross-cutting principles that govern this screen are in
 [principles.md](../../principles.md). Relevant sections:
 
-- [Top-bar design rule](../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
+- [Top-bar design rule](../../principles.md#top-bar-design-rule)
 - [Edit restrictions during in-flight generation](../../principles.md#edit-restrictions-during-in-flight-generation)
   (composer's send/cancel duality, status-pill click-to-cancel,
   disabled controls during a turn)
@@ -24,7 +24,7 @@ Cross-cutting principles that govern this screen are in
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│ [logo] <title ✎> · Chapter ▾ · 🕒 time    [status][br][⎇][⚙][←]│ ← top bar
+│ [logo] <title ✎> · Chapter ▾ · 🕒 time    [status][br][⎇][⛭][←]│ ← top bar (⛭ = Story Settings)
 ├───────────────────────────────────────────────────────────────┤
 │ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░  (chapter progress strip)              │
 ├───────────────────────────────────────┬───────────────────────┤

@@ -28,7 +28,8 @@ Cross-cutting principles that govern this screen are in
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ [logo] Aria's Descent / Chapters     [⎇] [←]                │ ← simplified top-bar
+│ [logo] Aria's Descent / Chapters    [status]  [⎇][⛭][←]    │ ← top bar
+│ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │ ← chapter token-progress strip
 ├────────────────────────────────────────────────────────────┤
 │ Chapters · 4 closed + 1 in progress                          │
 │                                                              │
@@ -328,20 +329,16 @@ fixed.
 
 ## Top-bar
 
-Simplified shape — same as Story Settings:
+Per the [Top-bar design rule](../../principles.md#top-bar-design-rule):
+universal essentials (logo + breadcrumb `<story-title> / Chapters`
 
-- Logo + breadcrumb (`<story-title> / Chapters`)
-- Actions (⎇)
-- Return (←) → back to reader
+- Actions + Story Settings icon + ←) plus universal in-story
+  chrome (status pill + progress strip). Reader-only chrome (chapter
+  chip ▾, time chip, branch chip) is absent — Chapter Timeline is
+  already the chapter management surface.
 
-No status pill, no chapter chip ▾ (we're already managing
-chapters), no progress strip, no time chip — those are reader-
-specific chrome. The ⚙ Story Settings gear is also absent (it
-points at a sibling screen; the Actions menu is the route there).
-
-See
-[followups → Top-bar shape on World and Plot](../../../followups.md#top-bar-shape-on-world-and-plot-panels)
-for the parallel question on those panels.
+The Story Settings icon routes to the sibling Story Settings
+screen, consistent with every other in-story sub-screen.
 
 ## Screen-specific open questions
 

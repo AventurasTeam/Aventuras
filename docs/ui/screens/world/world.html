@@ -39,6 +39,16 @@
   .icon-btn { position: relative; width: 30px; height: 30px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 14px; cursor: pointer; }
   .icon-btn .count-badge { position: absolute; top: -4px; right: -4px; background: var(--ink); color: #fff; font-size: 9px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-weight: 600; }
 
+  /* universal in-story chrome — generation status pill (placeholder visible state) */
+  .gen-status { display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); font-size: 11px; color: var(--ink); }
+  .gen-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(74,168,136,0.5);} 70% { box-shadow: 0 0 0 5px rgba(74,168,136,0);} 100% { box-shadow: 0 0 0 0 rgba(74,168,136,0);} }
+
+  /* universal in-story chrome — chapter token-progress strip */
+  .topbar-progress { height: 3px; background: var(--line-soft); position: relative; }
+  .topbar-progress .fill { position: absolute; top: 0; left: 0; height: 100%; background: var(--ok); }
+  .topbar-progress:hover::after { content: attr(data-label); position: absolute; top: 100%; left: 16px; background: var(--ink); color: #fff; font-size: 10px; padding: 3px 8px; border-radius: 3px; white-space: nowrap; z-index: 5; }
+
   .sub-head { padding: 10px 20px; border-bottom: 1px solid var(--line-soft); background: var(--bg-region); display: flex; align-items: center; gap: 16px; font-size: 12px; }
   .sub-head .path { color: var(--ink-muted); }
   .sub-head .path .here { color: var(--ink); font-weight: 600; }
@@ -257,19 +267,25 @@
 <header class="topbar">
   <div class="logo">A</div>
   <div class="crumbs">
-    <span class="crumb-primary">Aria's Descent</span>
-    <span class="crumb-secondary">Chapter 3 &middot; open region</span>
+    <span class="crumb-primary">Aria's Descent <span style="color: var(--ink-muted); font-weight: 400; margin: 0 6px;">/</span> World</span>
   </div>
   <div class="topbar-right">
-    <div class="icon-btn" title="3 branches">&#9901;<span class="count-badge">3</span></div>
+    <div class="gen-status" title="Click to cancel">
+      <span class="dot"></span>
+      <span>generating narrative&hellip;</span>
+    </div>
     <div class="icon-btn" title="Actions">&#9906;</div>
-    <div class="icon-btn" title="Story settings">&#9881;</div>
+    <div class="icon-btn" title="Story settings">&#9965;</div>
     <div class="icon-btn" title="Back to reader">&larr;</div>
   </div>
 </header>
 
+<div class="topbar-progress" data-label="Chapter 3 &middot; 8,420 / 24,000 tok">
+  <div class="fill" style="width: 35%"></div>
+</div>
+
 <div class="sub-head">
-  <div class="path">World <span style="margin: 0 6px;">/</span> Characters <span style="margin: 0 6px;">/</span> <span class="here">Kael</span></div>
+  <div class="path">Characters <span style="margin: 0 6px;">/</span> <span class="here">Kael</span></div>
 </div>
 
 <div class="md-layout">

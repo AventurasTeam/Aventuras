@@ -177,25 +177,6 @@ Decisions needed:
 
 ## UX
 
-### Top-bar shape on World and Plot panels
-
-Both panels currently render a moderately-simplified top-bar
-(logo + breadcrumb-with-chapter-context + branch chip + Actions +
-Settings + Return). Story Settings and Chapter Timeline ship with
-a more minimal shape (logo + breadcrumb + Actions + Return only —
-no branch chip, no chapter context).
-
-Decide whether World and Plot should match the minimal pattern.
-Trade-off: they're more "working with story state" than "configure
-the story", so retaining the chapter + branch context is arguable.
-The reader stays full-fidelity (status pill + chapter chip ▾ +
-progress strip + time chip + branch chip) regardless of the call.
-
-If the minimal pattern wins, codify the rule in principles.md:
-"Reader-specific chrome (status / chapter ▾ / progress / time)
-renders only on the reader. Supporting screens use the minimal
-shape."
-
 ### Bulk operations on entities
 
 See [ui/principles.md](./ui/principles.md) for open sub-questions. Dedicated design pass.

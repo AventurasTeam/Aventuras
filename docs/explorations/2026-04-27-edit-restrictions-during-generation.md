@@ -172,7 +172,7 @@ Three loci, calibrated to the user's attention state:
 ### Status pill (chrome) — universal
 
 The status pill specified in
-[`ui/principles.md → Top-bar design rule`](../ui/principles.md#top-bar-design-rule--essentials-vs-discretionary)
+[`ui/principles.md → Top-bar design rule`](../ui/principles.md#top-bar-design-rule)
 shows phase content for the active transaction
 (`generating narrative…` / `closing chapter…`). It's already
 listed as essential and present on every screen. **The pill is

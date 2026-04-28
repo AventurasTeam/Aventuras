@@ -75,7 +75,7 @@ different defaults:
 - **Top-bar essentials** (Settings gear, Return arrow, Actions
   icon) — chrome, not row actions. Always-visible at full
   opacity, no muted state. Their own conventions live in
-  [`principles.md → Top-bar design rule`](../principles.md#top-bar-design-rule--essentials-vs-discretionary).
+  [`principles.md → Top-bar design rule`](../principles.md#top-bar-design-rule).
 - **Dismissal affordances** (modal `×`, drawer grab handle,
   popover `×`) — these close a surface; they aren't row actions.
 - **Interactive content indicators** (e.g. the brain icon on AI

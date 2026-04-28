@@ -17,8 +17,9 @@ where the surfaces are specified.
 Cross-cutting principles that govern these surfaces are in
 [principles.md](../../../principles.md). Relevant sections:
 
-- [Top-bar design rule](../../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
-  (the reader's branch chip is the desktop entry point)
+- [Top-bar design rule](../../../principles.md#top-bar-design-rule)
+  (the reader's branch chip is the desktop entry point — branch
+  chip is reader-only chrome)
 - [Edit restrictions during in-flight generation](../../../principles.md#edit-restrictions-during-in-flight-generation)
   (branch switch / create / delete disable while a generation
   pipeline is in flight; navigation that crosses the story boundary
@@ -113,7 +114,7 @@ and putting the answer first costs nothing.
 ### During generation — switch / delete / create blocked
 
 While the
-[generation-status pill](../../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
+[generation-status pill](../../../principles.md#top-bar-design-rule)
 is active (any pipeline phase: reasoning, generating, classifying,
 chapter-closing), branch lifecycle operations are **paused**:
 
@@ -268,7 +269,7 @@ flows; names are purely display labels.
 When `stories.current_branch_id` is the only branch in the story:
 
 - The reader's top-bar chip is **hidden** (per the
-  [top-bar discretionary rule](../../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
+  [reader-only chrome rule](../../../principles.md#reader-only-chrome)
   — chip shown only when >1 branch).
 - The navigator is therefore **not reachable from the chip**.
 - It IS reachable from the

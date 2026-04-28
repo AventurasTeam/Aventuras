@@ -31,7 +31,8 @@ Cross-cutting principles that govern this screen are in
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ [logo] Aria's Descent / Story Settings     [⎇] [←]          │ ← top bar
+│ [logo] Aria's Descent / Story Settings  [status]   [⎇] [←] │ ← top bar
+│ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │ ← chapter token-progress strip
 ├───────────────┬────────────────────────────────────────────┤
 │ STORY         │ About                                       │ ← pane header
 │ • About       │ What the story is — identity and metadata.  │
@@ -440,16 +441,23 @@ for the full pattern.
 
 ## Top-bar
 
-Story Settings doesn't show the reader's chapter chip / time chip /
-progress strip / gen status — all reader-specific. The top bar
-carries only:
+Per the [Top-bar design rule](../../principles.md#top-bar-design-rule):
+universal essentials (logo + breadcrumb `<story-title> / Story
+Settings` + Actions + ←) plus universal in-story chrome (status
+pill + progress strip). Reader-only chrome (chapter chip ▾, time
+chip, branch chip) is absent — this surface is configuring the
+story, not reading it.
 
-- Logo + story-title / Story Settings breadcrumb
-- Actions (⎇)
-- Return (←) → back to reader
+The Story Settings icon is absent here (self-reference; see
+[Settings icon scope](../../principles.md#settings-icon-scope)).
+App Settings is reachable via the Actions menu.
 
-The ⚙ gear that normally opens Story Settings is absent here — we're
-already in it.
+**Contextual Return.** When Story Settings is reached via the
+story-list card overflow (`⋯ → Edit info`), the
+[stack-aware Return](../../principles.md#stack-aware-return)
+goes back to the story list on the first ←. If the user navigates
+beyond Story Settings (e.g., forward into the reader), the one-shot
+is consumed and subsequent Returns follow the default stack pop.
 
 ## Screen-specific open questions
 

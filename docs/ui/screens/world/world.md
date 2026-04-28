@@ -32,9 +32,10 @@ Cross-cutting principles that govern this panel are in
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ [logo] <title> · Chapter                   [actions][⚙][←]  │ ← top bar (app chrome)
+│ [logo] <title> / World          [status]   [actions][⛭][←]  │ ← top bar (app chrome)
+│ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │ ← chapter token-progress strip
 ├─────────────────────────────────────────────────────────────┤
-│ World / Characters / Kael                                    │ ← sub-header
+│ Characters / Kael                                            │ ← sub-header (in-pane selection)
 ├─────────────────────┬───────────────────────────────────────┤
 │ LIST PANE (~340px)  │ DETAIL PANE                           │
 │                     │                                       │
@@ -52,6 +53,17 @@ Cross-cutting principles that govern this panel are in
 │ + New entity        │                                       │
 └─────────────────────┴───────────────────────────────────────┘
 ```
+
+## Top-bar
+
+Per the [Top-bar design rule](../../principles.md#top-bar-design-rule):
+universal essentials (logo + breadcrumb `<story-title> / World` +
+Actions + Story Settings icon + ←) plus universal in-story chrome
+(status pill + progress strip). The
+[in-pane sub-header](../../principles.md#master-detail-sub-header)
+below the top bar carries the in-pane selection
+`[Characters|Locations|Items|Factions|Lore] / <selected name>` and
+updates as the user clicks list rows.
 
 ## Detail head structure
 

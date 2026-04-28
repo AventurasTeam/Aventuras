@@ -32,7 +32,7 @@ mid-generation interaction.
 - [Raw JSON viewer](../../../patterns/data.md#raw-json-viewer--shared-modal-pattern)
 - [Aventuras file format (.avts)](../../../../data-model.md#aventuras-file-format-avts)
   (envelope spec for import/export)
-- [Top-bar design rule — essentials vs discretionary](../../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
+- [Top-bar design rule](../../../principles.md#top-bar-design-rule)
 - [Search bar scope](../../../patterns/lists.md#search-bar-scope)
 
 ## Layout — Vault home (Layer 0+1)

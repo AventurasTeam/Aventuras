@@ -30,7 +30,7 @@
   .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
   .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
 
-  /* top bar — story context, settings-specific (no chapter/time/progress) */
+  /* top bar — universal essentials + universal in-story chrome (pill, progress strip) */
   header.topbar { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
   .logo { width: 28px; height: 28px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--ink-muted); }
   .crumbs { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
@@ -39,6 +39,16 @@
   .crumb-here { font-size: 13px; color: var(--ink-muted); }
   .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
   .icon-btn { width: 30px; height: 30px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 14px; cursor: pointer; }
+
+  /* universal in-story chrome — generation status pill (placeholder visible state) */
+  .gen-status { display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); font-size: 11px; color: var(--ink); }
+  .gen-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(74,168,136,0.5);} 70% { box-shadow: 0 0 0 5px rgba(74,168,136,0);} 100% { box-shadow: 0 0 0 0 rgba(74,168,136,0);} }
+
+  /* universal in-story chrome — chapter token-progress strip */
+  .topbar-progress { height: 3px; background: var(--line-soft); position: relative; }
+  .topbar-progress .fill { position: absolute; top: 0; left: 0; height: 100%; background: var(--ok); }
+  .topbar-progress:hover::after { content: attr(data-label); position: absolute; top: 100%; left: 16px; background: var(--ink); color: #fff; font-size: 10px; padding: 3px 8px; border-radius: 3px; white-space: nowrap; z-index: 5; }
 
   /* settings layout: left rail + main pane */
   .settings-layout { flex: 1; display: grid; grid-template-columns: 240px 1fr; min-height: 0; }
@@ -157,10 +167,18 @@
     <span class="crumb-here">Story Settings</span>
   </div>
   <div class="topbar-right">
+    <div class="gen-status" title="Click to cancel">
+      <span class="dot"></span>
+      <span>generating narrative&hellip;</span>
+    </div>
     <div class="icon-btn" title="Actions (Cmd/Ctrl-K)">&#9906;</div>
     <div class="icon-btn" title="Back to reader">&larr;</div>
   </div>
 </header>
+
+<div class="topbar-progress" data-label="Chapter 3 &middot; 8,420 / 24,000 tok">
+  <div class="fill" style="width: 35%"></div>
+</div>
 
 <div class="settings-layout">
 

@@ -10,8 +10,9 @@ creating new and managing the library.
 Cross-cutting principles that govern this screen are in
 [principles.md](../../principles.md). Relevant sections:
 
-- [Top-bar design rule](../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
-  (essentials — with `← Return` absent here because this IS the root)
+- [Top-bar design rule](../../principles.md#top-bar-design-rule)
+  (universal essentials — with `← Return` absent here because this
+  IS the root)
 - [Actions](../../principles.md#actions--platform-agnostic-action-directory) menu
 - [Settings architecture — split by location](../../principles.md#settings-architecture--split-by-location)
   (gear opens App Settings here, not Story Settings)
@@ -108,8 +109,10 @@ viewport.
   corner** (absolute-positioned), out of the title row so titles
   don't compete with it. Click opens a menu with:
   - **Archive / Unarchive** (toggle)
-  - **Edit info** — opens Story Settings → About for fast
-    metadata edits without navigating into the story
+  - **Edit info** — boots the story and routes directly to Story
+    Settings → About for fast metadata edits. The first ← Return
+    is [stack-aware](../../principles.md#stack-aware-return) and
+    goes back to the library.
   - **Duplicate** — clone the story row + current branch's
     entries + entities/lore snapshot. Other branches don't copy.
   - **Export** — per-story JSON export (distinct from full

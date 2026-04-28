@@ -12,7 +12,7 @@ Cross-cutting principles that govern this panel are in
 [principles.md](../../principles.md). Relevant sections:
 
 - [World / Plot split](../../principles.md#world--plot-split--unified-panels-by-purpose)
-- [Top-bar design rule](../../principles.md#top-bar-design-rule--essentials-vs-discretionary)
+- [Top-bar design rule](../../principles.md#top-bar-design-rule)
 - [Entity form UI generated from typed schema](../../patterns/entity.md#entity-form-ui-is-generated-from-the-typed-schema)
 - [Save-session pattern](../../patterns/save-sessions.md)
 - [Edit restrictions during in-flight generation](../../principles.md#edit-restrictions-during-in-flight-generation)
@@ -26,9 +26,10 @@ Cross-cutting principles that govern this panel are in
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ [logo] <title> · Chapter                   [actions][⚙][←]  │ ← top bar
+│ [logo] <title> / Plot           [status]   [actions][⛭][←]  │ ← top bar
+│ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │ ← chapter token-progress strip
 ├─────────────────────────────────────────────────────────────┤
-│ Plot / Threads / Crown's bargain                             │ ← sub-header
+│ Threads / Crown's bargain                                    │ ← sub-header (in-pane selection)
 ├─────────────────────┬───────────────────────────────────────┤
 │ LIST PANE (~340px)  │ DETAIL PANE                           │
 │                     │                                       │
@@ -253,9 +254,15 @@ navigate-away guard when dirty.
 
 ## Top-bar
 
-Same chrome as World panel — logo + story title + chapter chip +
-Actions + ⚙ + ←. Sub-header carries the breadcrumb
-`Plot / [Threads|Happenings] / <selected name>`.
+Same chrome as World panel per the
+[Top-bar design rule](../../principles.md#top-bar-design-rule):
+universal essentials (logo + breadcrumb `<story-title> / Plot` +
+Actions + Story Settings icon + ←) plus universal in-story chrome
+(status pill + progress strip). The
+[in-pane sub-header](../../principles.md#master-detail-sub-header)
+below the top bar carries the in-pane selection
+`[Threads|Happenings] / <selected name>` and updates as the user
+clicks list rows.
 
 ## Screen-specific open questions
 

@@ -91,30 +91,125 @@ routes to the appropriate surface with the row pre-selected.
 
 ---
 
-## Top-bar design rule — essentials vs discretionary
+## Top-bar design rule
 
-**Essentials** (always present, do not count against any budget):
+Three tiers of chrome, plus a screen-class scope rule for the
+Settings icon. The top bar must never grow unbounded; every element
+earns its slot via one of the tiers below.
+
+### Universal essentials
+
+Render on every screen with chrome (in-story and app-level alike):
+
+- Logo
+- Breadcrumb (screen-level path; see
+  [Master-detail sub-header](#master-detail-sub-header) for the
+  in-pane navigation case)
+- Actions entry point (icon button, opens the Actions menu — see
+  below)
+- Settings icon (scope-determined — see
+  [Settings icon scope](#settings-icon-scope))
+- ← Return ([stack-aware](#stack-aware-return)). **Absent on root-
+  level screens** (story list, which is the root).
+
+### Universal in-story chrome
+
+Render on every in-story screen — reader, World, Plot, Story
+Settings, Chapter Timeline:
 
 - Generation status pill (hides when idle, shows during active
   pipeline phases: `reasoning…` / `generating narrative…` /
   `classifying…` / `closing chapter…`). Driven by pipeline event
-  stream (per [`architecture.md`](../architecture.md)).
-- Actions entry point (icon button, opens the Actions menu — see
-  below)
-- ⚙ Settings (story settings on reader screens, app settings on
-  app-level screens)
-- ← Return (back to the previous level). **Absent on root-level
-  screens** (story list, which is the root).
+  stream (per [`architecture.md`](../architecture.md)). Pipeline
+  state is global to the active story; users navigating between
+  in-story sub-screens during generation deserve the same affordance
+  and click-to-cancel popover the reader has.
+- Chapter token-progress strip. Small visual cost; tells users how
+  close they are to chapter close regardless of which sub-screen
+  they're on. No textual label, doesn't collide with the breadcrumb.
+  Useful for awareness; ignorable when irrelevant.
 
-**Discretionary** (0–1 items per screen, context-dependent):
+### Reader-only chrome
 
-- Reader: branch icon with count badge, **shown only when > 1 branch
-  exists** (single-branch stories omit it). Tooltip reveals branch
+Render on the reader / composer only:
+
+- Chapter chip ▾ (chapter popover with jump + manage)
+- Time chip (in-world date-time display)
+- Branch chip (icon + count badge, shown only when > 1 branch
+  exists — single-branch stories omit it). Tooltip reveals branch
   name; click opens the
   [Branch navigator](./screens/reader-composer/branch-navigator/branch-navigator.md#navigator--popover-desktop).
 
-Any action beyond these lives in the Actions menu or the
-screen-specific chrome. The top bar must never grow unbounded.
+These are pulled from sub-screens for two reasons. Chapter and time
+are textual indicators that overlap semantically with the breadcrumb
+on every sub-screen — the breadcrumb already names where the user
+is in the story. Branch navigation is a reader-level concern;
+sub-screens don't switch branches as a primary action.
+
+### Settings icon scope
+
+The gear glyph's scope is determined by the screen's class:
+
+- **Regular gear ⚙** opens **App Settings**. Renders only on
+  app-level surfaces (story-list, Vault). Absent from in-story
+  chrome.
+- **A dedicated story-scoped icon** (specific glyph picked at
+  visual identity) opens **Story Settings**. Renders only on
+  in-story surfaces (reader, World, Plot, Chapter Timeline).
+  Absent on Story Settings itself (self-reference).
+
+App Settings remains reachable from in-story screens via the
+Actions menu rather than chrome. Visual identity must pick glyphs
+that read clearly different at glance — both icons being "geary"
+defeats the rule's purpose.
+
+### Master-detail sub-header
+
+**Master-detail surfaces with a kind selector + list pane** (World,
+Plot) render an in-pane breadcrumb sub-header below the top bar
+(`Characters / Kael`, `Threads / Crown's bargain`). The top-bar
+breadcrumb is screen-level (`<story-title> / World`) and stays
+stable as the user navigates list rows; the sub-header is reactive
+content that updates with the in-pane selection.
+
+**Single-content surfaces and master-detail surfaces with a
+category rail** (Story Settings, Chapter Timeline) put the full
+breadcrumb inline in the top bar — no sub-header. Their inner
+navigation is captured by the rail or the list itself.
+
+Any action beyond what these tiers and rules permit lives in the
+Actions menu or the screen-specific chrome.
+
+---
+
+## Stack-aware Return
+
+Header back-button (←) and system-level back actions (mobile
+hardware back button, swipe-back gesture, etc.) are **stack-aware**:
+they pop the in-session navigation stack rather than always routing
+to a fixed parent.
+
+- **Stack scope**: in-session only, reset on app restart. No
+  cross-launch persistence.
+- **Pop semantics**: Return = pop one level. The previous screen
+  is whatever the user came from, even if that's a sibling rather
+  than a hierarchical parent.
+- **One-shot return targets**: certain entry paths register an
+  override consumed by the next Return. `Edit info` on a story-list
+  card boots the target story and routes to its Story Settings;
+  the first Return goes back to story-list. If the user navigates
+  beyond Story Settings (e.g., forward into the reader), the
+  one-shot is consumed and subsequent Returns follow the default
+  stack pop.
+- **Empty stack (root state)**: a Return action with no previous
+  page — fresh session before any navigation, or a deep-link entry
+  that bypassed normal flow — is interpreted as "exit the app" and
+  surfaces a confirm dialog before terminating. This matters most
+  on mobile, where the system back button / swipe-back gesture is
+  the primary exit pathway and unconfirmed exits drop user state
+  silently. Desktop's window-close affordance is a separate exit
+  pathway and follows OS-native patterns; this rule covers in-app
+  back actions.
 
 ---
 
@@ -178,7 +273,7 @@ reachable from inside the story.
 ### Affordance loci
 
 **Status pill (chrome — universal).** The pill specified in
-[Top-bar design rule](#top-bar-design-rule--essentials-vs-discretionary)
+[Top-bar design rule](#top-bar-design-rule)
 gains click-to-cancel: clicking the active pill opens a small
 popover with `Cancel generation` (or `Cancel chapter close`) as
 its single action; one click triggers abort. Pill dimensions stay
@@ -275,8 +370,21 @@ rail of categories, right pane for selected category):
 
 **Entry points:**
 
-- App Settings: reached from the story list chrome.
-- Story Settings: reached from the gear icon in the reader top bar.
+- **App Settings**: reached from the gear icon ⚙ in app-level
+  chrome (story list; future Vault parent shell). On in-story
+  screens it's reachable via the Actions menu — set-and-forget
+  territory, the two-click route is acceptable.
+- **Story Settings**: reached from the dedicated story-scoped
+  Settings icon in the chrome of every in-story screen except
+  Story Settings itself. Alternative entry from outside an active
+  story: the `⋯ → Edit info` overflow on a story-list card boots
+  the target story and routes directly to Story Settings; the
+  first Return is [stack-aware](#stack-aware-return) and goes
+  back to story-list.
+
+Per the [Settings icon scope](#settings-icon-scope) rule the two
+icons are visually distinguishable — same screen never carries
+both gears.
 
 **Settings scope policy — two patterns:**
 
