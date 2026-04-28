@@ -107,7 +107,7 @@ Branches sort by `created_at` ascending — root first, then
 siblings in fork order. Stable, intuitive ("main, then the
 order I forked them in"), no extra state to remember. The
 **current** branch always renders first regardless of position
-(matches the [story list pinned-to-top sort layer](../../story-list/story-list.md#story-card--text-first))
+(matches the [pinned-to-top sort layer](../../../patterns/entity.md#entity-list-sort-order--static-four-layer))
 — because "where am I?" is the navigator's most-asked question
 and putting the answer first costs nothing.
 

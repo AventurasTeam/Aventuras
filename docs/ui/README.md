@@ -62,7 +62,8 @@ rationale, and decisions live alongside.
 ### Cross-cutting states (not standalone screens)
 
 - Streaming / loading / error inside the reader (error surface
-  locked as system entries — see [principles.md](./principles.md))
+  locked as system entries — see
+  [reader-composer.md → Error surface](./screens/reader-composer/reader-composer.md#error-surface--system-entries-not-chrome-indicators))
 - Empty states for each list
 - Mobile variants for everything (deferred)
 
