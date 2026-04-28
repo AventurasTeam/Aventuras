@@ -20,36 +20,6 @@ depend on this. Wireframes scaffold the regions; field-level UI lands
 once the discriminated-union types (`CharacterState`, `LocationState`,
 `ItemState`, `FactionState`) are designed.
 
-### Non-linear narrative (v1 limitation → future exit)
-
-Single-`worldTime` cleanly models linear narrative plus short
-flashbacks. Does NOT model structural non-linearity (alternating
-timelines, time travel, parallel chronologies). Captured in
-data-model.md → "In-world time tracking" as a documented v1
-limitation.
-
-Future exit if demand emerges: optional
-`story_entries.metadata.sceneTime: number | null`. Null = same as
-`worldTime`; non-null = this entry depicts a scene at this historical
-time. Awareness + happening logic would consult `sceneTime` when
-present. Zero schema-migration cost (metadata is a JSON blob) — no
-reason to reserve the field now. Revisit when a concrete user story
-demands it.
-
-### Fictional calendar systems
-
-v1 ships Earth-calendar-only (base unit = seconds, formatted via
-`worldTimeOrigin` ISO anchor). Design for fictional calendars is
-spec'd in [`calendar-systems/`](./calendar-systems/README.md): a tiered
-counter primitive with sub-divisions for week-style cycles and
-manually-flipped eras hoisted out of the rollover chain, all
-rendered through a Liquid display template. Schema and pipeline
-fit the design without a refactor; v1 ships only the Earth preset.
-
-Implementation deferred until 2–3 concrete fictional calendars
-surface to validate the design against. Adding a preset is a data
-commit per `calendar-systems/spec.md → Presets to ship`.
-
 ### Manual worldTime correction — cascade vs. jump + downstream blast radius
 
 Per [In-world time tracking](./data-model.md#in-world-time-tracking)
@@ -86,7 +56,8 @@ Secondary concerns the design needs to answer:
   worldTime on a flashback entry to mean "this scene depicts 1872
   AR." That collides with the "metadata.worldTime is always
   main-timeline elapsed" contract. The future `sceneTime` exit
-  (already in [Non-linear narrative](#non-linear-narrative-v1-limitation--future-exit))
+  (documented in
+  [`data-model.md → In-world time tracking`](./data-model.md#in-world-time-tracking))
   is the cleaner home for this — manual worldTime edits on
   flashback entries should probably be blocked with guidance
   pointing at sceneTime once it lands.
@@ -267,15 +238,11 @@ the model picker dropdown or App Settings · Profiles model list).
 
 When component implementation begins, set up Storybook's tree as
 **Foundations / Patterns / Components / Screens**. Patterns pages
-are MDX with prose + live component demos. Rule is **dual-source**:
-`docs/ui/patterns/` stays authoritative (greppable, versionable,
-IDE-readable); Storybook Patterns pages cite the corresponding
-pattern file as canonical and add the visual / interactive layer
-(live render-mode demos for Select, side-by-side comparisons,
-accessibility checks).
-
-No duplication of prose — Storybook pages prose-cite the patterns
-file and embed component stories. Drift prevention by construction.
+are MDX, prose-citing the corresponding
+[`docs/ui/patterns/`](./ui/patterns/README.md) file as canonical
+(per the pattern README's dual-source rule) and embedding live
+component stories beneath — render-mode demos, side-by-side
+comparisons, accessibility checks.
 
 Lands when we start building shared components (Select first,
 probably). Premature to scaffold before components exist; the live
@@ -409,13 +376,21 @@ deleted, etc.
 
 ### Vault parent shell
 
-The Vault calendar editor lands as the first sub-wireframe under
-`docs/ui/screens/vault/calendars/`, but the broader Vault parent
-(navigation, content-type browsing, import/export affordances,
-etc.) is deferred. Per
-[`ui/README.md`](./ui/README.md), Vault is in the "Power-user /
-deferred" section — pending its own design pass when ≥2 content
-types are spec'd to validate the shell against.
+Vault home navigation + the calendar editor have shipped (see
+[`docs/ui/screens/vault/calendars/calendars.md`](./ui/screens/vault/calendars/calendars.md)).
+What's still deferred:
+
+- **Import/export at the Vault level** — round-tripping calendar
+  packs (and future content types) as `.av*` files. Per-card import
+  exists; the Vault-level "import many" / "export selected" surface
+  doesn't.
+- **Vault entry-point UI from app chrome** — how the user gets to
+  Vault from outside an open story. Story list has the Vault icon
+  slot pencilled in; behavior + placement aren't locked.
+- **Design for non-calendar content types** — Vault home will
+  eventually carry packs, presets, possibly templates. Each needs
+  its own list/editor design once the content types are spec'd.
+  Pending a second content type to validate the shell against.
 
 ### Per-entry icon-row composition with conditional 5th icon
 

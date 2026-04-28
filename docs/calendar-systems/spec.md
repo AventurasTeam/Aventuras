@@ -514,8 +514,7 @@ Vault; Story Settings is selection + summary only.
 
 **v1:** Earth (Gregorian).
 
-**Followup presets** to add as concrete fictional examples emerge
-(per [followups.md](../followups.md#fictional-calendar-systems)):
+**Followup presets** to add as concrete fictional examples emerge:
 
 - Generic fantasy 12×30 — same structure, renamed months, no leap.
 - Tolkien Shire Reckoning — 12×30 + intercalary days.
@@ -586,9 +585,9 @@ follow-ups:
 
 ## Resolves in followups.md
 
-The four sub-questions in
-[`Fictional calendar systems`](../followups.md#fictional-calendar-systems)
-are answered above:
+The four sub-questions originally tracked under "Fictional calendar
+systems" in `followups.md` (now removed once this spec landed) are
+answered above:
 
 - **Where declared:** `stories.settings.calendarSystemId` references
   an entry in the calendar registry (built-ins in code +
