@@ -1078,11 +1078,14 @@ each logged as deltas so the whole thing is reversible via rollback:
 
 1. **LLM generates title, summary, theme, keywords, time range** for the closed range.
 2. **Lore-management agent runs** — promotes staged entities, updates
-   lore, creates new lore from events discovered in the range. Exact behavior TBD.
+   lore, creates new lore from events discovered in the range.
+   Concrete prompt + parse shape is parked in
+   [`followups.md → Lore-management agent shape`](./followups.md#lore-management-agent-shape).
 3. **Memory compaction runs** — consolidates low-salience
    `happening_awareness` rows from the just-closed range into summary
-   happenings, decays salience, drops redundancies. Exact behavior TBD.
-   Salience logic especially TBD.
+   happenings, decays salience, drops redundancies. Salience math +
+   compaction philosophy parked in
+   [`followups.md → Top-K-by-salience retrieval`](./followups.md#top-k-by-salience-retrieval--long-term-memory-implications).
 
 **Per-branch, forks cleanly.** Each branch has its own `chapters` rows
 with its own IDs. On branch creation, chapter rows (and all other state)

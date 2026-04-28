@@ -640,10 +640,11 @@ rule.
 
 **Structural invariant** (UI implication): active + in-scene entities
 are ALWAYS injected regardless of the mode dropdown. The dropdown
-only governs off-scene/inactive rows. The UI may surface a
-"structurally pinned" indicator for active+in-scene entities so users
-know the mode is moot for those rows — TBD with World panel · Overview
-detail design.
+only governs off-scene/inactive rows. Whether (and how) the UI
+surfaces this — e.g., a "structurally pinned" indicator on
+active+in-scene rows so users know the mode is moot for them — is
+parked in
+[`followups.md → Structurally-pinned indicator`](../followups.md#structurally-pinned-indicator).
 
 Mechanics (how `keyword_llm` retrieval works, token budgets, the
 in-scene-bypass) live in

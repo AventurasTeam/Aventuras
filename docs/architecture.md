@@ -801,12 +801,11 @@ Happenings don't carry `injection_mode` at all — the awareness graph
 happenings (`happenings.common_knowledge=1`) bypass awareness
 filtering entirely.
 
-### Token budgeting
-
-TBD. Old app used coarse priority + truncation; v2 revisits once the
-retrieval agent's shape is pinned. Floor is set by recent buffer
-plus structurally-required injections; everything else competes for
-remaining budget.
+**Token budgeting** is a sub-concern of the retrieval-agent design
+and is tracked alongside ranking + agent shape in the deferral list
+below. The structural floor is fixed (recent buffer + required
+injections); what's deferred is the policy that allocates the
+remainder.
 
 ---
 

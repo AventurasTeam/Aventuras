@@ -88,6 +88,36 @@ etc.). Calendars set the per-type precedent in v1; the unification
 question earns its weight when ≥2 content types ship and we can
 validate against actual schema overlap.
 
+### Lore-management agent shape
+
+[`data-model.md → Chapters / memory system`](./data-model.md#chapters--memory-system)
+declares that a lore-management agent runs at chapter close to
+promote staged entities, update lore, and write new lore from
+events discovered in the just-closed range. Cadence + scope are
+locked; what's deferred is the agent's concrete shape:
+
+- Prompt design — what context does it see (the closed range only?
+  the open buffer too? structural floor?), and what's the output
+  format (a list of proposed mutations, a delta JSON, free-form
+  prose to re-parse)?
+- Promotion rules — when does staged → active fire automatically vs
+  surface as a suggestion the user confirms? Conservative bias is
+  the lean (don't auto-mutate without a high-confidence signal).
+- New-lore creation policy — proactive (writes anything novel
+  observed) vs conservative (only writes when explicit story-world
+  context warrants a new lore entry). Old app erred proactive and
+  produced lore noise.
+- Failure modes — agent timeouts mid-cadence, partial output,
+  contradictions with existing state. Each delta is reversible via
+  rollback so the floor isn't catastrophic, but it should still be
+  designed not to thrash.
+
+Lands once the retrieval agent's shape is also pinned (per
+[`architecture.md → What this doc does not yet cover`](./architecture.md#what-this-doc-does-not-yet-cover))
+— both agents share enough scaffolding (prompt construction,
+output validation, delta emission) to design as a pair rather than
+sequentially.
+
 ### Top-K-by-salience retrieval — long-term memory implications
 
 Per [Happenings & character knowledge](./data-model.md#happenings--character-knowledge):
@@ -165,6 +195,17 @@ Sub-questions parked for the dedicated design pass:
 - Selection persistence across tab switches, filter changes,
   navigation away and back?
 - Visual design of the selection bar — persistent vs contextual?
+
+### Structurally-pinned indicator
+
+[`ui/principles.md → Injection / retrieval rules for prompt context`](./ui/principles.md#injection--retrieval-rules-for-prompt-context)
+records the structural invariant: active + in-scene entities are
+ALWAYS injected, the dropdown only governs off-scene/inactive rows.
+Open question: should the UI surface this — e.g., a small "pinned"
+chip or icon adjacent to the mode dropdown when the row is
+structurally injected — so users know the mode is moot for that
+row, or is the dropdown's enabled/disabled state already enough
+signal? Lands with the World panel · Overview detail design pass.
 
 ### Cover display on story list cards
 
