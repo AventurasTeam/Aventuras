@@ -291,6 +291,18 @@
       .list-empty .empty-sub { font-size: 11px; color: var(--ink-muted); max-width: 220px; line-height: 1.5; }
       body[data-list-state="empty"] .list-items { display: none; }
       body[data-list-state="empty"] .list-empty { display: flex; }
+
+      /* Empty table state in detail-pane tabs (Involvements, Awareness, History) */
+      .tab-empty { display: none; flex-direction: column; align-items: center; text-align: center; padding: 32px 16px; gap: 10px; }
+      .tab-empty .empty-title { font-size: 13px; font-weight: 500; color: var(--ink); }
+      .tab-empty .empty-sub { font-size: 11px; color: var(--ink-muted); max-width: 320px; line-height: 1.5; }
+      body[data-tab-empty="empty"] .tab-panel .tbl,
+      body[data-tab-empty="empty"] .tab-panel .tbl-add,
+      body[data-tab-empty="empty"] .tab-panel .ck-notice,
+      body[data-tab-empty="empty"] .tab-panel .history-row,
+      body[data-tab-empty="empty"] .tab-panel .history-foot,
+      body[data-tab-empty="empty"] .tab-panel .history-controls { display: none; }
+      body[data-tab-empty="empty"] .tab-panel .tab-empty { display: flex; }
       .list-row {
         display: flex;
         gap: 8px;
@@ -1296,6 +1308,11 @@
         <button class="rb-btn active" data-empty-btn="populated">populated</button>
         <button class="rb-btn" data-empty-btn="empty">empty</button>
       </div>
+      <div class="rb-group">
+        <span class="gl">tab tables:</span>
+        <button class="rb-btn active" data-tab-empty="populated">populated</button>
+        <button class="rb-btn" data-tab-empty="empty">empty</button>
+      </div>
       <span class="rb-note">click a row · tab · ⓘ help · + new menu</span>
     </div>
 
@@ -1795,6 +1812,15 @@
             <code>happening_involvements</code> rows. Entity picker is kind-aware
             (character / location / item / faction); role is free-form. Add or remove via the row controls.
           </div>
+          <!-- Empty state (per patterns/lists.md → Empty list / table state) -->
+          <div class="tab-empty">
+            <div class="empty-title">No involvements yet.</div>
+            <div class="empty-sub">
+              The classifier links happenings to entities as the
+              story progresses. You can also add involvements
+              manually with <b>+ Add involvement</b> below.
+            </div>
+          </div>
           <table class="tbl">
             <thead>
               <tr>
@@ -1839,6 +1865,16 @@
           <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 14px">
             <code>happening_awareness</code> rows &mdash; characters who know about this happening. <code>salience</code>
             is a 0&ndash;1 retrieval rank; <code>source</code> is the LLM-authored descriptor used verbatim in prompts.
+          </div>
+
+          <!-- Empty state (per patterns/lists.md → Empty list / table state) -->
+          <div class="tab-empty">
+            <div class="empty-title">No characters know yet.</div>
+            <div class="empty-sub">
+              The classifier writes awareness rows when characters
+              encounter the happening. You can also add rows
+              manually with <b>+ Add awareness</b> below.
+            </div>
           </div>
 
           <div class="ck-rows">
@@ -1898,6 +1934,13 @@
 
         <!-- HISTORY -->
         <div class="tab-panel" data-panel="history">
+          <!-- Empty state (per patterns/lists.md → Empty list / table state) -->
+          <div class="tab-empty">
+            <div class="empty-title">No history yet.</div>
+            <div class="empty-sub">
+              Edits and rollbacks will appear here as they happen.
+            </div>
+          </div>
           <div class="history-controls">
             <div class="history-search">Search field / op&hellip;</div>
             <div class="history-op-filter">
@@ -2070,6 +2113,17 @@
         }
         document.querySelectorAll('[data-empty-btn]').forEach((b) =>
           b.addEventListener('click', () => setEmpty(b.dataset.emptyBtn)),
+        );
+
+        // empty tab-table state toggle (Involvements / Awareness / History)
+        function setTabEmpty(state) {
+          body.dataset.tabEmpty = state;
+          document.querySelectorAll('[data-tab-empty]').forEach((b) =>
+            b.classList.toggle('active', b.dataset.tabEmpty === state),
+          );
+        }
+        document.querySelectorAll('[data-tab-empty]').forEach((b) =>
+          b.addEventListener('click', () => setTabEmpty(b.dataset.tabEmpty)),
         );
 
         // overflow menu toggles

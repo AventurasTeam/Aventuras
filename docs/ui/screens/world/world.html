@@ -72,6 +72,16 @@
   .list-empty .empty-sub { font-size: 11px; color: var(--ink-muted); max-width: 220px; line-height: 1.5; }
   body[data-list-state="empty"] .list-items { display: none; }
   body[data-list-state="empty"] .list-empty { display: flex; }
+
+  /* Empty table state in detail-pane tabs (Involvements, History) — same pattern */
+  .tab-empty { display: none; flex-direction: column; align-items: center; text-align: center; padding: 32px 16px; gap: 10px; }
+  .tab-empty .empty-title { font-size: 13px; font-weight: 500; color: var(--ink); }
+  .tab-empty .empty-sub { font-size: 11px; color: var(--ink-muted); max-width: 320px; line-height: 1.5; }
+  body[data-tab-empty="empty"] .tab-panel .tbl,
+  body[data-tab-empty="empty"] .tab-panel .history-row,
+  body[data-tab-empty="empty"] .tab-panel .history-foot,
+  body[data-tab-empty="empty"] .tab-panel .history-controls { display: none; }
+  body[data-tab-empty="empty"] .tab-panel .tab-empty { display: flex; }
   .list-row { display: flex; gap: 8px; align-items: center; padding: 8px 8px; border-bottom: 1px dotted var(--line-soft); border-radius: 3px; cursor: pointer; border: 1px solid transparent; }
   .list-row:hover { background: var(--bg-highlight); }
   .list-row.selected { background: var(--bg-highlight); border-color: var(--line); }
@@ -270,6 +280,11 @@
     <span class="gl">list pane:</span>
     <button class="rb-btn active" data-empty-btn="populated">populated</button>
     <button class="rb-btn" data-empty-btn="empty">empty</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">tab tables:</span>
+    <button class="rb-btn active" data-tab-empty="populated">populated</button>
+    <button class="rb-btn" data-tab-empty="empty">empty</button>
   </div>
   <span class="rb-note">click a row · tab · ⓘ help · + new menu</span>
 </div>
@@ -613,6 +628,15 @@
       <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 14px;">
         Happenings that involve Kael, via <code>happening_involvements</code>. Clicking a row opens the happening in the Happenings view.
       </div>
+      <!-- Empty state (per patterns/lists.md → Empty list / table state) -->
+      <div class="tab-empty">
+        <div class="empty-title">No involvements yet.</div>
+        <div class="empty-sub">
+          The classifier links happenings to entities as the story
+          progresses. You can also add involvements manually from
+          a happening's Involvements tab in Plot.
+        </div>
+      </div>
       <table class="tbl">
         <thead>
           <tr>
@@ -646,6 +670,13 @@
 
     <!-- HISTORY — with search + sort + load more -->
     <div class="tab-panel" data-panel="history">
+      <!-- Empty state (per patterns/lists.md → Empty list / table state) — rare in practice since every entity has at least a create delta -->
+      <div class="tab-empty">
+        <div class="empty-title">No history yet.</div>
+        <div class="empty-sub">
+          Edits and rollbacks will appear here as they happen.
+        </div>
+      </div>
       <div class="history-controls">
         <div class="history-search">Search field / op&hellip;</div>
         <div class="history-op-filter">
@@ -758,12 +789,19 @@
   }
   document.querySelectorAll('[data-dirty]').forEach(b => b.addEventListener('click', () => setDirty(b.dataset.dirty)));
 
-  // empty list-pane state toggle (per patterns/lists.md → Empty list-pane state)
+  // empty list-pane state toggle (per patterns/lists.md → Empty list / table state)
   function setEmpty(state) {
     document.body.dataset.listState = state;
     document.querySelectorAll('[data-empty-btn]').forEach(b => b.classList.toggle('active', b.dataset.emptyBtn === state));
   }
   document.querySelectorAll('[data-empty-btn]').forEach(b => b.addEventListener('click', () => setEmpty(b.dataset.emptyBtn)));
+
+  // empty tab-table state toggle (Involvements + History)
+  function setTabEmpty(state) {
+    document.body.dataset.tabEmpty = state;
+    document.querySelectorAll('[data-tab-empty]').forEach(b => b.classList.toggle('active', b.dataset.tabEmpty === state));
+  }
+  document.querySelectorAll('[data-tab-empty]').forEach(b => b.addEventListener('click', () => setTabEmpty(b.dataset.tabEmpty)));
 
   // overflow menu toggle
   const overflowBtn = document.getElementById('overflow-btn');

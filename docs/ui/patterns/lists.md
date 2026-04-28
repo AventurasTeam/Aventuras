@@ -104,33 +104,54 @@ authoritative version; this is the cross-cutting summary:
 
 ---
 
-## Empty list-pane state
+## Empty list / table state
 
-Every filterable list / table surfaces a **centered placeholder**
-when the active kind has zero rows on the active branch. Common
-shape across all such surfaces:
+Every filterable list pane and every detail-pane table surfaces a
+**centered placeholder** when there are zero rows for the active
+scope. Same contract across all shapes:
 
 - **Title** — kind-specific, single sentence ("No threads on this
-  branch yet.", "No characters on this branch yet.").
+  branch yet.", "No characters on this branch yet.", "No
+  involvements yet.").
 - **Sub-text** — names the typical author of these rows. For
   classifier-written kinds: "The classifier writes most rows
   automatically as the story progresses. You can also add them
-  manually with **+ New** below." For purely user-authored kinds:
-  "Add one with **+ New** below."
-- **No CTA inside the placeholder.** The existing `+ New` footer
-  affordance is the call-to-action; placeholder doesn't duplicate
-  it. Keeps the empty state from competing with the toolbar.
-- **Filter chips and search row stay visible.** The empty result
-  is per-kind, not per-surface — the user may flip the kind
-  selector or filter without leaving the screen. (Plot's threads
-  empty doesn't mean Plot's happenings is empty.)
+  manually with **+ New** below." For user-authored kinds:
+  "Add one with **+ Add** below." For read-only tables (History):
+  "Edits and rollbacks will appear here as they happen."
+- **No CTA inside the placeholder.** The host surface already
+  exposes the affordance (`+ New` footer, `+ Add involvement`
+  button, etc.) — placeholder doesn't duplicate it. Keeps the
+  empty state from competing with the toolbar.
+- **Filter chips, search row, and table headers stay visible.**
+  The empty result is per-scope, not per-surface — the user may
+  flip the kind selector / filter / tab without leaving. Plot's
+  threads empty doesn't mean Plot's happenings is empty; an
+  entity's empty Involvements doesn't mean its History is empty.
 - **Search-with-no-matches is distinct.** Empty-no-rows uses this
   pattern; empty-no-matches uses a "No results" line below the
   search row without hiding the rest of the toolbar.
 
+**List-pane shape:** centered flex placeholder fills the list-pane
+body when it would otherwise render zero rows. Toolbar above
+stays. `+ New` footer below stays.
+
+**Table shape (detail-pane tabs):** the placeholder lives inside
+the table region — same title + sub-text — replacing the row
+area while column headers and any toolbar above remain. Visually
+this can be a single "empty" row spanning the table or a centered
+block; pick whichever reads cleaner per surface.
+
 **Where applied:**
 
-- [Plot panel — threads + happenings list pane](../screens/plot/plot.md)
-- [World panel — entity / lore list pane](../screens/world/world.md)
-- Vault tables (calendars list, future packs / templates lists)
+- [Story list grid](../screens/story-list/story-list.md) —
+  custom welcome variant (the screen IS the empty surface; gets
+  its own onboarding-flavored copy + visual rather than the
+  generic shape).
+- [World panel — list pane](../screens/world/world.md) +
+  Involvements tab + History tab tables.
+- [Plot panel — list pane](../screens/plot/plot.md) +
+  Involvements / Awareness / History tab tables.
+- [Vault calendars list](../screens/vault/calendars/calendars.md)
+  - future Vault tables (packs, templates).
 - Future master-detail and table surfaces inherit by default.

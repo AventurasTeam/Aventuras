@@ -27,9 +27,10 @@ Cross-cutting principles that govern this panel are in
 - [Scene presence is runtime-derived, not status](../../principles.md#scene-presence-is-runtime-derived-not-status)
 - [Recently-classified row accent](../../patterns/entity.md#recently-classified-row-accent)
   (entities and lore on this panel; classifier writes both)
-- [Empty list-pane state](../../patterns/lists.md#empty-list-pane-state)
-  (centered placeholder when the active kind has no rows on the
-  branch; per-kind copy in this surface follows the standard shape)
+- [Empty list / table state](../../patterns/lists.md#empty-list--table-state)
+  (centered placeholder when the active scope has zero rows;
+  applies to the list pane AND the detail-pane Involvements +
+  History tabs)
 
 ## Layout
 

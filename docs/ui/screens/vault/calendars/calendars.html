@@ -83,6 +83,12 @@
 
   /* card grid */
   .calendar-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  /* Empty list state per patterns/lists.md → Empty list / table state */
+  .list-empty { display: none; flex-direction: column; align-items: center; text-align: center; padding: 48px 16px; gap: 12px; }
+  .list-empty .empty-title { font-size: 14px; font-weight: 500; color: var(--ink); }
+  .list-empty .empty-sub { font-size: 12px; color: var(--ink-muted); max-width: 360px; line-height: 1.5; }
+  body[data-list-state="empty"] .calendar-grid { display: none; }
+  body[data-list-state="empty"] .list-empty { display: flex; }
   .cal-card { background: var(--bg-region); border: 1px solid var(--line-soft); border-radius: 6px; padding: 14px 16px 16px; cursor: pointer; position: relative; display: flex; flex-direction: column; gap: 4px; transition: border-color 0.15s, box-shadow 0.15s; }
   .cal-card:hover { border-color: var(--line); box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
   .cal-card .top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
@@ -218,7 +224,7 @@
   .hidden { display: none !important; }
 </style>
 </head>
-<body>
+<body data-list-state="populated">
 
 <div class="screen-label"><strong>Wireframe:</strong> Vault calendar editor &mdash; desktop (&ge; 1024px) &mdash; low-fi, interactive</div>
 
@@ -249,6 +255,11 @@
     <button class="rb-btn" data-modal="delete-blocked">delete blocked</button>
     <button class="rb-btn" data-modal="delete-default">delete default</button>
     <button class="rb-btn" data-modal="delete-confirm">delete confirm</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">list:</span>
+    <button class="rb-btn active" data-empty-btn="populated">populated</button>
+    <button class="rb-btn" data-empty-btn="empty">empty</button>
   </div>
   <span class="rb-note">Vault parent shell is placeholder; sub-wireframe per design</span>
 </div>
@@ -357,6 +368,16 @@
         <span class="type-badge">custom</span>
         <div class="meta-line">y→m→d<span class="sep">·</span>era: no</div>
         <div class="usage">used by 0 stories</div>
+      </div>
+    </div>
+
+    <!-- Empty list state — surfaces when data-list-state="empty" (per patterns/lists.md → Empty list / table state) -->
+    <div class="list-empty">
+      <div class="empty-title">No calendars in your library yet.</div>
+      <div class="empty-sub">
+        Built-in calendars are always available. Clone one with
+        <b>+ Add</b> above to start customizing, or import a
+        calendar JSON file.
       </div>
     </div>
   </div>
@@ -680,6 +701,9 @@
       saveBar.classList.remove('dirty');
     }
   }
+  function setEmpty(state) {
+    document.body.dataset.listState = state;
+  }
   function setModal(m) {
     document.querySelectorAll('.modal-backdrop').forEach(el => el.classList.remove('open'));
     addMenu.classList.remove('open');
@@ -708,6 +732,7 @@
     if (btn.dataset.kind) setKind(btn.dataset.kind);
     if (btn.dataset.dirty) setDirty(btn.dataset.dirty);
     if (btn.dataset.modal) setModal(btn.dataset.modal);
+    if (btn.dataset.emptyBtn) setEmpty(btn.dataset.emptyBtn);
   });
 
   addTrigger.addEventListener('click', e => {

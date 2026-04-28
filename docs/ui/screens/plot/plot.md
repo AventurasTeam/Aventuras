@@ -269,7 +269,7 @@ clicks list rows.
 - **Awareness `salience` UI** — numeric 0-1 input, slider, or stepped
   preset (low / medium / high)? Defer to typed-state design pass.
 - **Empty states** — list pane uses the cross-cutting
-  [empty list-pane state pattern](../../patterns/lists.md#empty-list-pane-state).
+  [empty list-pane state pattern](../../patterns/lists.md#empty-list--table-state).
   Per-kind shape: "No threads on this branch yet." / "No
   happenings on this branch yet." plus the classifier-writes-rows
   explainer and a pointer at the existing `+ New` footer
