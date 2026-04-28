@@ -217,32 +217,20 @@ contrast) — manual creation is uncommon since most rows are
 classifier-authored, but it's a real use case (user authoring a
 backstory thread, manually marking an off-screen happening).
 
-Each opens a small menu offering:
-
-- **Blank** — empty form, create mode.
-- **From JSON file…** — file picker; pasted/picked JSON validated
-  against the kind's zod schema before creating.
-- **From Vault…** — disabled placeholder until Vault lands.
-
-Zod schema constraints prevent incoherent rows — no happening with
-both `occurred_at_entry` and `temporal` set, no thread without status,
-etc. The form surfaces these as inline validation rather than letting
-the user save broken state. Same validation gates JSON imports —
-mismatched JSON fails with a friendly error rather than a partial
-save.
-
-Cross-cutting pattern in
-[patterns → Import counterparts](../../patterns/data.md#import-counterparts--file-based--vault).
+Each follows the standard
+[import-counterparts pattern](../../patterns/data.md#import-counterparts--file-based--vault)
+(Blank / From JSON file… / From Vault…). Zod schema constraints
+gate both manual entry and JSON imports — no happening with both
+`occurred_at_entry` and `temporal` set, no thread without status,
+etc. — surfaced as inline validation rather than partial-save.
 
 ## Detail pane — raw JSON viewer
 
-The `⋯ → View raw JSON` action on either threads or happenings opens
-the shared right-anchored drawer (read-only in v1, copy button,
-edit-mode deferred). Same component as World panel and story-list.
-For happenings, the drawer's JSON includes the row + its
-involvements + awareness summary inline. For threads, just the row.
-Cross-cutting spec in
-[patterns → Raw JSON viewer](../../patterns/data.md#raw-json-viewer--shared-modal-pattern).
+The `⋯ → View raw JSON` action opens the shared
+[Raw JSON viewer](../../patterns/data.md#raw-json-viewer--shared-modal-pattern)
+drawer. Plot-specific deviation: for happenings the JSON includes
+the row + its involvements + awareness summary inline; for threads
+just the row.
 
 ## Save session
 

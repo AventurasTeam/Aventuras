@@ -114,22 +114,17 @@ JSON `tags` array. Placeholder + tooltip + ⓘ help icon per
 
 ## Detail pane — raw JSON viewer
 
-The `⋯ → View raw JSON` action opens the shared right-anchored
-drawer (read-only in v1, copy-button, edit-mode deferred). Same
-pattern as Plot panel and story-list. Cross-cutting spec in
-[patterns → Raw JSON viewer](../../patterns/data.md#raw-json-viewer--shared-modal-pattern).
+The `⋯ → View raw JSON` action opens the shared
+[Raw JSON viewer](../../patterns/data.md#raw-json-viewer--shared-modal-pattern)
+drawer. No World-specific deviation.
 
 ## Per-row import
 
-The list-pane footer's `+ New entity` opens a small menu:
-
-- **Blank** — empty form, create mode (current behavior).
-- **From JSON file…** — file picker; pasted/picked JSON validated
-  against the kind's zod schema before creating. Mismatch fails with
-  a friendly error.
-- **From Vault…** — disabled placeholder until Vault lands.
-
-See [patterns → Import counterparts](../../patterns/data.md#import-counterparts--file-based--vault).
+`+ New entity` in the list-pane footer follows the standard
+[import-counterparts pattern](../../patterns/data.md#import-counterparts--file-based--vault)
+(Blank / From JSON file… / From Vault…). JSON imports validate
+against the kind's zod schema; mismatch fails with a friendly
+error rather than a partial save.
 
 ## History tab
 
