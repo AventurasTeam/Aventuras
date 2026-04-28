@@ -197,9 +197,9 @@ mapping by clicking around, not by reading docs:
 
 - **Recently-classified accent on the row → `Recently classified`
   badge in the detail head** — sits inline next to the breadcrumb
-  /name row, visible only when the row is in `recent-1` or
-  `recent-2` state (per
-  [patterns → Recently-classified row accent → Detail-pane mirroring](../../patterns/entity.md#recently-classified-row-accent)).
+  /name row, visible while the row is in the fresh or fading state
+  (per
+  [patterns → Recently-classified row accent](../../patterns/entity.md#recently-classified-row-accent)).
   Decays alongside the row tint. Same shape as
   [World panel's detail-head badge](../world/world.md#detail-head-structure).
 - **Common-knowledge ⊙ on the row → ⊙ icon next to the toggle on

@@ -184,9 +184,14 @@ by the classifier (or any agent) in the last 1-2 turns get a faint
 **info-blue background tint** that decays. Single signal with two
 visual states:
 
-- **`recent-1`** (full-color info-blue): touched in the last turn
-- **`recent-2`** (faded info-blue): touched 1-2 turns ago
+- **Fresh** (full-color info-blue): touched in the last turn.
+- **Fading** (faded info-blue): touched 1-2 turns ago.
 - After that the tint is gone.
+
+The two tiers are conceptual states — wireframe HTML happens to
+encode them as `recent-1` / `recent-2` CSS classes, but that's a
+rendering detail. Per-screen specs and prose refer to fresh /
+fading by name.
 
 **Where it applies:** any list-pane row whose source data the
 classifier writes — entities and lore (World panel + Browse rail),

@@ -71,9 +71,9 @@ field inside the Overview tab. The detail head carries only:
 
 - A small breadcrumb strip: kind-icon + kind-name
 - The entity name (inline-editable with pencil)
-- A `Recently classified` badge — visible only when the row is in
-  `recent-1` or `recent-2` state (per
-  [patterns → Recently-classified row accent → Detail-pane mirroring](../../patterns/entity.md#recently-classified-row-accent)).
+- A `Recently classified` badge — visible while the row is in the
+  fresh or fading state (per
+  [patterns → Recently-classified row accent](../../patterns/entity.md#recently-classified-row-accent)).
   Decays alongside the row tint.
 - An overflow menu (⋯) anchored to the name row
 
