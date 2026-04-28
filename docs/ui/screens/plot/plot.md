@@ -110,8 +110,8 @@ Affordances per the
   over field-path / op / change-summary text per
   [patterns → Search bar scope](../../patterns/lists.md#search-bar-scope).
   Same shape as World's History tab; uses the
-  [load-older](../../patterns/lists.md#large-lists--virtualization-rule)
-  pattern, not virtualization.
+  [load-older pattern](../../patterns/lists.md#load-older--log-shaped-unbounded-lists),
+  not virtualization.
 
 No Involvements tab — threads aren't directly entity-linked in the
 schema.

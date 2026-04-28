@@ -140,11 +140,9 @@ editable — rollback happens in the reader.
   delta log doesn't need to be fully in memory.
 - **Op filter** — all / create / update / delete
 - **Sort** — newest-first (default) or oldest-first
-- **Load-older chunking** — no page numbers, log-shaped data. Per
-  [patterns → Large lists](../../patterns/lists.md#large-lists--virtualization-rule),
-  history uses the load-older pattern (explicit button) rather than
-  virtualization, since the user's working context is "recent" and
-  surprise auto-loads of older content would be jarring.
+- **Load-older chunking** — log-shaped data; uses the
+  [load-older pattern](../../patterns/lists.md#load-older--log-shaped-unbounded-lists)
+  (explicit button), not virtualization.
 
 Involvements table gets the same load-older pattern eventually; list
 pane is fine unpaginated for normal stories (filter chips + search
