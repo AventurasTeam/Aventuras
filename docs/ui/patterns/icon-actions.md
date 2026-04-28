@@ -8,9 +8,15 @@ per-row actions follows it.
 Used by:
 
 - [Reader per-entry actions](../screens/reader-composer/reader-composer.md#per-entry-actions)
-  (edit / regen / branch / delete on each story entry)
+  (edit / regen / branch / delete / 📅 flip-era on each story entry)
 - [Branch navigator row actions](../screens/reader-composer/branch-navigator/branch-navigator.md#row-actions--inline-icons)
   (rename / delete on each branch row)
+- [Story Settings · Era flips on this branch](../screens/story-settings/story-settings.md#era-flips-on-this-branch)
+  (delete on each flip row)
+- [Chapter Timeline per-card actions](../screens/chapter-timeline/chapter-timeline.md#per-card-actions)
+  (edit / re-run cadence / etc. per chapter card)
+- [Rollback-confirm hover-preview row icons](../screens/reader-composer/rollback-confirm/rollback-confirm.md#hover-preview--pre-click)
+  (entry-row affordances inside the rollback confirmation modal)
 
 Future row-shaped surfaces with per-row actions follow the same
 pattern.

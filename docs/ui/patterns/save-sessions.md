@@ -153,9 +153,18 @@ where the explicit-save pattern applies.
 
 ## Where applied
 
-- World panel — entity detail pane (one session per detail row).
-- Plot panel — thread / happening detail pane.
-- Story Settings — all tabs share one session.
-- App Settings — all tabs share one session.
+- [World panel](../screens/world/world.md) — entity detail pane
+  (one session per detail row).
+- [Plot panel](../screens/plot/plot.md) — thread / happening detail
+  pane.
+- [Story Settings](../screens/story-settings/story-settings.md) —
+  all tabs share one session.
+- [App Settings](../screens/app-settings/app-settings.md) — all
+  tabs share one session.
+- [Chapter Timeline](../screens/chapter-timeline/chapter-timeline.md#save-session--per-card)
+  — per-card variant (one session per chapter card; closing one
+  card while another is dirty is blocked).
+- [Vault calendars editor](../screens/vault/calendars/calendars.md)
+  — editor surface uses the standard one-session-per-detail shape.
 - Future master-detail surfaces inherit the pattern by default
   unless they declare a quick-edit exception like the peek drawer.

@@ -99,4 +99,5 @@ authoritative version; this is the cross-cutting summary:
 | World panel list        | category-aware (same as Browse rail equivalents)                                                                                                        |
 | Plot panel — threads    | `title`, `description`, `category`, `tags`                                                                                                              |
 | Plot panel — happenings | `title`, `description`, `category`, `tags`                                                                                                              |
+| Vault calendars         | `name`                                                                                                                                                  |
 | History tab (any panel) | structurally different — field-path strings, op (`create`/`update`/`delete`), rendered change-summary text                                              |

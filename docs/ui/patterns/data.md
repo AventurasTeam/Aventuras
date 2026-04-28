@@ -59,8 +59,13 @@ pane's `+ New X` affordance becomes a small menu offering:
 - `From JSON file…` — file picker, paste-supported. Validates against
   the kind's zod schema before creating; mismatch fails with a
   friendly error rather than a partial save.
-- `From Vault…` — disabled placeholder until Vault lands. Belongs
-  here so future-Vault has its slot.
+- `From Vault…` — disabled placeholder until the Vault parent shell
+  lands (per the
+  [Vault parent shell followup](../../followups.md#vault-parent-shell)).
+  The first Vault content type — calendars — has its editor at
+  [vault/calendars](../screens/vault/calendars/calendars.md); the
+  picker affordance hooks into the same content store once the
+  shell catches up.
 
 **Validation contract:** all imports (story-level or row-level) pass
 through the same zod schema that protects writes. JSON that doesn't
