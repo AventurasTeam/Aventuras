@@ -678,7 +678,7 @@ story_entries.metadata: {
   currentLocationId: string | null  // location entity that IS the current scene; singleton
 
   // In-world time — classifier-authored, user-editable
-  worldTime: number                 // base time units since story start; monotonically non-decreasing within a branch
+  worldTime: number                 // physical seconds since story start; calendar-uniform; monotonically non-decreasing within a branch
 }
 ```
 

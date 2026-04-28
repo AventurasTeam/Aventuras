@@ -84,18 +84,20 @@ menu.
 
 ## Top-bar — in-world time display
 
-In-world time is rendered by a calendar formatter from the latest
-entry's `metadata.worldTime` (integer base time units since story
-start; seconds for the Earth calendar) plus the story's
-`settings.worldTimeOrigin` (ISO 8601 Earth datetime that anchors the
-elapsed units to a display calendar).
+In-world time is rendered by the active calendar's renderer from the
+latest entry's `metadata.worldTime` (physical seconds since story
+start; calendar-uniform) plus the story's
+`settings.worldTimeOrigin` — a `TierTuple` keyed by the active
+calendar's tier names that anchors the elapsed seconds to a starting
+point on the display tier-stack. See
+[`calendar-systems/spec.md`](../../../calendar-systems/spec.md#calendar-definition)
+for the primitive.
 
-**v1 ships Earth calendar only.** Renderer:
-`formatEarthTime(worldTime, worldTimeOrigin)` → "Day 12, Dusk" /
-"March 5, 2026 09:42" depending on rendering style (TBD). Fictional
-calendar systems are future-deferred replacement formatters over the
-same integer (see
-[followups.md](../../../followups.md#fictional-calendar-systems)).
+The renderer walks `worldTime + worldTimeOrigin` through the
+calendar's tier stack to a tier-tuple, then renders via the
+calendar's `displayFormat` Liquid template. Reader chrome treats
+the rendered string as opaque; all calendar-specific shaping is
+inside the template.
 
 **Surfaces:**
 
