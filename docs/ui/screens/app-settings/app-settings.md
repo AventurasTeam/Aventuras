@@ -435,10 +435,10 @@ anyone else.
   app-level "reset everything"? Lean: per-profile reset only;
   app-level reset is too dangerous without a stronger confirmation
   flow.
-- **Provider deletion** — when a user removes a provider key, what
-  happens to profiles using that provider's models? Lean: profiles
-  remain (with broken-config error state), prompting the user to
-  re-pick. Don't auto-delete profiles on key removal.
+- **Provider deletion** — see
+  [`followups.md → Provider / profile / model-profile deletion semantics`](../../../followups.md#provider--profile--model-profile-deletion-semantics)
+  (the working lean — broken-config state, no auto-delete — is
+  recorded there pending the dedicated pass).
 - **Custom OpenAI-compatible endpoint UX** — separate "Configure
   endpoint" surface (URL + auth scheme + model list strategy)?
   Or inline in the Keys row? Defer until we have a concrete custom

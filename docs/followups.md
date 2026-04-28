@@ -150,7 +150,21 @@ Decisions needed:
 
 ### Bulk operations on entities
 
-See [ui/principles.md](./ui/principles.md) for open sub-questions. Dedicated design pass.
+Bulk ops (multi-select, batch status change, batch tag, batch retire,
+batch export) span World panel rows, story list cards, and possibly
+Plot rows. v1 ships without any of it; principles records the shipped
+invariant in
+[`ui/principles.md → Bulk operations — deferred`](./ui/principles.md#bulk-operations--deferred).
+
+Sub-questions parked for the dedicated design pass:
+
+- How do batch ops group under `action_id` for single-press undo?
+- Confirmation patterns — when, how loud, what counts shown?
+- Cross-kind selection — does "retire all" make sense across mixed
+  kinds (characters + items + factions)?
+- Selection persistence across tab switches, filter changes,
+  navigation away and back?
+- Visual design of the selection bar — persistent vs contextual?
 
 ### Cover display on story list cards
 
@@ -373,6 +387,13 @@ Provider/profile probably want the same shape but worth a dedicated
 pass: orphan handling on import, soft-warn vs hard-block tradeoffs,
 what happens to `default_provider_id` if the referenced provider is
 deleted, etc.
+
+**Working lean** (per app-settings open-questions): when a user
+removes a provider key, profiles using that provider's models stay
+in place with a broken-config error state, prompting the user to
+re-pick. Profiles are NOT auto-deleted on key removal. This is the
+narrow case the dedicated design pass should formalize and extend
+to profile / model-profile deletion.
 
 ### Vault parent shell
 

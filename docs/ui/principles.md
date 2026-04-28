@@ -653,17 +653,10 @@ in-scene-bypass) live in
 
 ## Bulk operations — deferred
 
-Bulk ops (multi-select, batch status change, batch tag, batch retire,
-batch export) are deferred pending their own design pass. Open
-sub-questions:
-
-- How do batch ops group under `action_id` for single-press undo?
-- Confirmation patterns — when, how loud, what counts shown?
-- Cross-kind selection — does "retire all" make sense across mixed
-  kinds?
-- Selection persistence across tab switches, filter changes,
-  navigation?
-- Visual design of the selection bar — persistent vs contextual?
-
-World panel does NOT include checkboxes or a bulk action bar
-currently.
+World panel does NOT include checkboxes or a bulk action bar in v1.
+Same applies to other list surfaces (story list cards, plot rows).
+Bulk ops (multi-select, batch status change, batch tag, batch
+retire, batch export) are deferred pending their own design pass —
+see
+[`followups.md → Bulk operations on entities`](../followups.md#bulk-operations-on-entities)
+for the parked sub-questions.

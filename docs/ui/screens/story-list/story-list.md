@@ -249,9 +249,8 @@ authority and rationale in
 
 ## Screen-specific open questions
 
-- **Cover treatment when set**: subtle background image behind text?
-  Small thumbnail in title row? Fully replacing the accent area?
-  Deferred to the visual identity session.
+- **Cover treatment when set** — see
+  [`followups.md → Cover display on story list cards`](../../../followups.md#cover-display-on-story-list-cards).
 - **Archived visibility**: currently `All` hides archived, `Archived`
   shows only archived. Alternative: `All` shows everything with
   archived dimmed. Current behavior keeps the library focused on
@@ -259,8 +258,9 @@ authority and rationale in
 - **Hover preview**: should hovering a card show a larger preview
   (fuller description, key entities, recent chapter summary)?
   Probably v2.
-- **Bulk select on cards**: pinning/archiving N at once. Same deferred
-  bulk-ops question as in World panel — revisit in the bulk pass.
+- **Bulk select on cards** — covered by
+  [`followups.md → Bulk operations on entities`](../../../followups.md#bulk-operations-on-entities)
+  (umbrella followup spans both World panel and story-list cards).
 - **Genre autocomplete**: free-text today, could offer suggestions
   drawn from common genres + genres used in other stories in this
   library. Would help consistency without forcing an enum.
