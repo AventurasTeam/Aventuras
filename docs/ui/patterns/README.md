@@ -31,6 +31,10 @@ cites them, doesn't duplicate.
   (virtualization vs load-older), search bar scope.
 - [`forms.md`](./forms.md) — Select primitive (segment / dropdown /
   radio render-mode rule).
+- [`calendar-picker.md`](./calendar-picker.md) — calendar-system
+  selector shared across App Settings, Story Settings, and Wizard:
+  rich rows, summary panel, swap warnings (origin / eras / display),
+  edit-restrictions gating.
 - [`data.md`](./data.md) — raw JSON viewer, import counterparts
   (file-based + Vault).
 

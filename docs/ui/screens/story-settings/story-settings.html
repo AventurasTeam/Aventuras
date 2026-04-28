@@ -138,6 +138,7 @@
     <button class="rb-btn" data-tab="memory">Memory</button>
     <button class="rb-btn" data-tab="translation">Translation</button>
     <button class="rb-btn" data-tab="pack">Pack</button>
+    <button class="rb-btn" data-tab="calendar">Calendar</button>
     <button class="rb-btn" data-tab="advanced">Advanced</button>
   </div>
   <div class="rb-group">
@@ -175,6 +176,7 @@
       <div class="nav-item" data-nav="memory">Memory</div>
       <div class="nav-item" data-nav="translation">Translation</div>
       <div class="nav-item" data-nav="pack">Pack</div>
+      <div class="nav-item" data-nav="calendar">Calendar</div>
       <div class="nav-item" data-nav="advanced">Advanced</div>
     </div>
   </aside>
@@ -589,6 +591,71 @@
         </div>
       </div>
 
+      <!-- CALENDAR -->
+      <div class="tab-panel" data-panel="calendar">
+        <div class="field-row">
+          <div class="field-label">calendar system
+            <span class="hint">per-story</span>
+          </div>
+          <div class="input-select" style="max-width: 320px;">
+            <span>Earth (Gregorian)</span>
+            <span class="add-chip" style="padding: 1px 7px; cursor: default; margin-left: 6px;">built-in</span>
+            <span style="color: var(--ink-faint); margin-left: auto;">&#9662;</span>
+          </div>
+        </div>
+
+        <div class="tab-section">
+          <div class="tab-section-title">Summary</div>
+          <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 10px;">
+            Read-only view of the active calendar's structure. Stays visible when generation is in flight; the picker above and the Clone &amp; edit action disable per the edit-restrictions principle.
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">tiers</div>
+          <div style="font-size: 12px; line-height: 1.7; color: var(--ink);">
+            year &middot; <span style="color: var(--ink-muted);">rule: Gregorian leap</span><br>
+            month &middot; <span style="color: var(--ink-muted);">table: 28&ndash;31 days</span><br>
+            day &middot; <span style="color: var(--ink-muted);">constant: 24 hours</span><br>
+            hour &middot; <span style="color: var(--ink-muted);">constant: 60 minutes</span><br>
+            minute &middot; <span style="color: var(--ink-muted);">constant: 60 seconds</span><br>
+            second &middot; <span style="color: var(--ink-muted);">base unit</span>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">sub-divisions</div>
+          <span>weekday: Sun&ndash;Sat (7-day cycle)</span>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">eras</div>
+          <span class="placeholder-text">disabled</span>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">sample render
+            <span class="hint">at this story's current worldTime</span>
+          </div>
+          <span>April 28, 2026 09:14:00</span>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">status</div>
+          <div>
+            <span style="color: var(--ink-muted);">built-in (read-only)</span>
+            <span class="add-chip" style="padding: 4px 10px; margin-left: 8px;">Clone &amp; edit</span>
+          </div>
+        </div>
+
+        <div class="field-row" style="margin-top: 8px;">
+          <div class="field-label"></div>
+          <div style="font-size: 12px; color: var(--ink-muted);">
+            Manage all calendars in the <a href="../vault/calendars/calendars.html" style="color: var(--ink); text-decoration: underline;">Vault calendar editor</a>. Swapping the calendar may surface confirmation warnings (origin re-pick, hidden era flips, display reformatting) per the calendar picker pattern.
+          </div>
+        </div>
+      </div>
+
       <!-- ADVANCED -->
       <div class="tab-panel" data-panel="advanced">
         <div class="field-row">
@@ -641,6 +708,7 @@
     memory: ['Memory', 'Chapter closure + compaction.'],
     translation: ['Translation', 'Multi-language output for LLM-generated text.'],
     pack: ['Pack', 'Prompt template bundle used for generation.'],
+    calendar: ['Calendar', 'Active calendar system for in-world date display.'],
     advanced: ['Advanced', 'Identifiers, diagnostics, raw exports.'],
   };
   function setTab(t) {

@@ -328,6 +328,16 @@ literally reused; only data binding differs.
 Same form as Story Settings · Translation — master enable, target
 language, granular per-content-type toggles.
 
+### Calendar
+
+Default calendar system seeded into new stories at creation. Same
+calendar picker primitive as Story Settings · Calendar (full spec
+in
+[`patterns/calendar-picker.md`](../../patterns/calendar-picker.md)),
+without swap warnings — App Settings changes don't propagate to
+existing stories. Field copy: `Default for new stories. Existing
+stories keep their current picks.`
+
 ### Composer prefs
 
 Same form as Story Settings · Generation · Authoring aids — composer

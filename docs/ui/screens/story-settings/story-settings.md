@@ -42,8 +42,8 @@ Cross-cutting principles that govern this screen are in
 │ · Memory      │ tags: [chips] +                             │
 │ · Translation │ author notes: [textarea]                    │
 │ · Pack        │ ─ Appearance                                │
-│ · Advanced    │ cover, accent color                         │
-│               │ ─ Library                                   │
+│ · Calendar    │ cover, accent color                         │
+│ · Advanced    │ ─ Library                                   │
 │               │ status: [Active|Archived] · ★ pinned        │
 │               │                                             │
 │               ├────────────────────────────────────────────┤
@@ -102,6 +102,9 @@ card `⋯ → Edit info` routes to `About` directly.
 - **Translation** — master enable, target language, granular
   per-content-type toggles
 - **Pack** — active pack + pack-declared variables (see below)
+- **Calendar** — active calendar system + read-only summary; full
+  spec in
+  [`patterns/calendar-picker.md`](../../patterns/calendar-picker.md)
 - **Advanced** — story ID, timestamps, branch info, diagnostics
   (export JSON, view raw settings)
 
@@ -335,6 +338,20 @@ orphaned but accessible. Decide before pack switching ships.
 
 Pack authoring (editing the templates + declaring variables) lives on
 the dedicated Prompt / Pack Editor screen (inventory #12).
+
+## Calendar tab — picker + summary
+
+The active calendar for this story. The tab content is the
+calendar picker plus a read-only summary panel; full spec —
+option-row content, summary sections, swap warnings, edit-
+restrictions interaction — lives in
+[`patterns/calendar-picker.md`](../../patterns/calendar-picker.md).
+
+Story Settings is one of three host surfaces for the picker
+primitive (App Settings, Story Settings, Wizard); this tab is the
+swap-aware host. Swapping the calendar may surface a combined
+confirmation modal (origin re-pick, hidden era flips, display
+reformatting); details in the pattern doc.
 
 ## Definitional-change confirmations
 

@@ -448,9 +448,10 @@ sub-questions:
   Actions menu? Story Settings? Likely chrome since flips are an
   in-narrative action, not a settings change.
 - **Era name input.** Dropdown sourced from the calendar's
-  `presetNames` (matching the [picker primitive](#calendar-picker--app-settings--story-settings--wizard)
-  style at ≥4 entries) plus a free-form text option for ad-hoc
-  era names? Or strict-pick-from-presets?
+  `presetNames` (per the
+  [calendar picker pattern](./ui/patterns/calendar-picker.md))
+  plus a free-form text option for ad-hoc era names? Or
+  strict-pick-from-presets?
 - **Anchor moment.** Flip's `at_worldtime` derives from the
   current entry's `metadata.worldTime`. Does the user pick which
   entry, or does it default to the latest?
@@ -462,24 +463,6 @@ sub-questions:
 
 Lands together with the calendar picker design or as a dedicated
 follow-on.
-
-### Calendar picker — App Settings + Story Settings + Wizard
-
-The calendar picker is a shared primitive surfaced in three places:
-
-- **App Settings** — default-calendar select (seeds new stories'
-  `calendarSystemId`).
-- **Story Settings** — per-story calendar select + read-only summary
-  of the selected calendar's shape; calendar swap is the picker's
-  downstream effect, warning copy lives here (re-confirm origin if
-  tier shape changes; era-flips orphaning if eras differ;
-  mid-generation prohibition).
-- **Story Creation wizard** — calendar selection step (currently
-  pending the wizard's full design).
-
-Pending its own design pass. Same primitive across all three; the
-Vault calendar editor is the upstream reference for what calendar
-definitions look like.
 
 ### Backup / story export with user-authored calendars
 

@@ -438,8 +438,8 @@ leaving the story first).
   Defer until L3 design lands.
 - **`Set as default →` deep-link entry route** — the App Settings →
   Story Defaults section needs an entry route accepting a calendar
-  id to pre-pick. Folds into the
-  [calendar picker followup](../../../../followups.md#calendar-picker--app-settings--story-settings--wizard).
+  id to pre-pick. Folds into the calendar picker pattern (see
+  [`ui/patterns/calendar-picker.md`](../../../patterns/calendar-picker.md)).
 - **Story-list filtering by calendar** — would let the
   "Cannot delete (in use)" copy include an actionable deep-link.
   Deferred until real demand surfaces.

@@ -477,7 +477,8 @@ Three levels of user power, gated by complexity:
 (default-calendar select, seeds new stories), Story Settings
 (per-story calendar select), and the Story Creation wizard
 (calendar selection step). Same picker primitive across all three;
-its design lands as a separate pass.
+spec'd in
+[`ui/patterns/calendar-picker.md`](../ui/patterns/calendar-picker.md).
 
 **L2 surface** lives in the
 [Vault calendar editor](../ui/screens/vault/calendars/calendars.md).
