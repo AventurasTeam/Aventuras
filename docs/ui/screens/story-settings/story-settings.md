@@ -515,12 +515,10 @@ operationally.
 
 ## Save session
 
-Same pattern as the World panel: **explicit save**, session-based.
-First field edit opens a session; all changes across all tabs share
-one `action_id`; Save commits as one unit; Discard throws it away;
-navigate-away guard when dirty. See
-[patterns → Save sessions](../../patterns/save-sessions.md)
-for the full pattern.
+Standard [save-session pattern](../../patterns/save-sessions.md).
+Session boundary: this entire surface — any tab, any field. Save
+commits all dirty fields under one `action_id`; Definitional-change
+confirmation (above) intercepts the commit when applicable.
 
 ## Top-bar
 

@@ -393,11 +393,8 @@ followups.
 
 ## Save session
 
-Same explicit-save pattern as Story Settings — see
-[patterns → Save sessions](../../patterns/save-sessions.md).
-First field edit opens a session; tab switching is within session;
-Save commits all changes under one `action_id`; Discard throws away;
-navigate-away guard when dirty.
+Standard [save-session pattern](../../patterns/save-sessions.md).
+Session boundary: this entire surface — any tab, any field.
 
 ## Top-bar
 
