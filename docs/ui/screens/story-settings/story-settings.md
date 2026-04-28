@@ -240,19 +240,30 @@ is the form component reused across both surfaces.
 
 ### Prompt context — recent buffer
 
-Only the most-recent N entries go **verbatim** into the prompt.
-Earlier entries reach the prompt through the **retrieval agent** that
-queries the delta log and relevant world state for the current
-context, not direct insertion.
-
 Per-story setting: `stories.settings.recentBuffer: number` (entries).
-Default 10. Lives under a "Prompt context" sub-section on this tab.
-Architecture covers the retrieval agent's mechanics in
-[`architecture.md → Retrieval / injection phase`](../../../architecture.md).
+Default 10. Governs how many entries from the **previous chapter**
+spill over into prompt context once a chapter has closed; current-
+chapter entries are always injected verbatim regardless of this
+value.
 
-This interacts with chapter closure: closed chapters' content is the
-primary fodder for retrieval. Active / open-region entries are always
-in the buffer (or reachable from it).
+Concretely: if you're on entry 5 of a new chapter with
+`recentBuffer: 10`, you get those 5 plus the last 5 entries of the
+just-closed previous chapter (5 + 5 = 10 entries verbatim). On
+entry 20 of the same chapter you get those 20 alone — the buffer
+has been "absorbed" by the current chapter. The setting therefore
+shapes the early-chapter handoff, not steady-state.
+
+The retrieval agent (deferred design — see
+[`architecture.md → Retrieval / injection phase`](../../../architecture.md))
+fills out remaining prompt context against the world state
+(entities, lore, threads, happenings) scored by scene presence,
+awareness graph, and `injection_mode`. It does **not** query the
+delta log — the delta log is rollback's substrate, not retrieval's.
+
+The structural floor — active+in-scene entities, current-location
+lore, awareness-driven happenings, always-injection rows — is not
+governed by `recentBuffer` either. Those reach the prompt
+unconditionally when their structural conditions hold.
 
 ### Compaction detail
 

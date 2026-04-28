@@ -741,19 +741,25 @@ Detailed design pending (ranking strategy, agent shape, token
 budgeting); the load-bearing contracts this phase must honor are
 locked in.
 
-### Recent buffer — always verbatim
+### Recent buffer — chapter-boundary spillover
 
-The tail of the narrative is always injected verbatim.
-`stories.settings.recentBuffer` (default 10) specifies how many most-
-recent `story_entries` go in word-for-word before retrieval considers
-anything earlier. Retrieval starts at `entry_count - recentBuffer`;
-everything more recent bypasses selection.
+`stories.settings.recentBuffer` (default 10) governs the
+chapter-boundary handoff, not steady-state. The current chapter's
+entries are **always** injected verbatim regardless of the buffer
+value. The buffer fills the remaining slots with verbatim entries
+from the **previous chapter**:
 
-Why the separate knob: the last few entries are almost never
-retrieval candidates (they're "now"). Scoring them by relevance
-wastes agent work and risks the retrieval agent omitting something
-the narrative just referenced. Hardcoding a buffer keeps retrieval
-free to focus on earlier content where selection genuinely matters.
+- Entry 5 of a new chapter, `recentBuffer: 10` → those 5 + the last
+  5 of the previous chapter (5 + 5 = 10 verbatim).
+- Entry 20 of the same chapter → only those 20 (the previous
+  chapter has been absorbed).
+- Within a chapter where entry-count already exceeds the buffer,
+  the previous chapter contributes nothing.
+
+Why the knob: the early entries of a fresh chapter need anchoring
+context from what just happened — but only briefly. The buffer
+makes that handoff explicit and tunable; once the new chapter has
+established itself, retrieval takes over for older context.
 
 ### Active + in-scene invariant — structural override of `injection_mode`
 
