@@ -96,9 +96,9 @@ different grouping key. Groups: Active (default expanded), Pending,
 Resolved, Failed (all collapsed by default). Picking a non-All filter
 flattens to that single tier.
 
-**Search.** `title`, `description`, `category`, `tags`. Placeholder
-shows truncation-safe hint; full scope via tooltip + ⓘ help icon —
-see [patterns → Search bar scope](../../patterns/lists.md#search-bar-scope).
+**Search.** Scope: `title`, `description`, `category`, `tags`.
+Affordances per the
+[search-bar-scope pattern](../../patterns/lists.md#search-bar-scope).
 
 **Detail tabs:**
 
@@ -145,9 +145,9 @@ pattern as World, different grouping key. Buckets:
 within for v1), **Out of narrative** (collapsed; rows with `temporal`
 set). Picking a non-All filter flattens to just the matching subset.
 
-**Search.** `title`, `description`, `category`, `tags`. Placeholder
-shows truncation-safe hint; full scope via tooltip + ⓘ help icon —
-see [patterns → Search bar scope](../../patterns/lists.md#search-bar-scope).
+**Search.** Scope: `title`, `description`, `category`, `tags`.
+Affordances per the
+[search-bar-scope pattern](../../patterns/lists.md#search-bar-scope).
 
 **Detail tabs:**
 

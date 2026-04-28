@@ -58,11 +58,9 @@ landing from anywhere else, but we're already here).
 ## Toolbar
 
 - **Search** — single input, left-anchored, takes available width up
-  to ~360px. **Searches**: `title`, `description`, `genre`, `tags`,
-  `author_notes`. Placeholder shows truncation-safe hint
-  (`Search title, description…`); full scope via tooltip + ⓘ help
-  icon — see
-  [patterns → Search bar scope](../../patterns/lists.md#search-bar-scope).
+  to ~360px. Scope: `title`, `description`, `genre`, `tags`,
+  `author_notes`. Affordances per the
+  [search-bar-scope pattern](../../patterns/lists.md#search-bar-scope).
 - **Filter chips** — single-select: `All` / `Pinned` / `Archived`.
   `All` hides archived by default (they only appear when the
   `Archived` filter is active). `Pinned` shows only pinned.

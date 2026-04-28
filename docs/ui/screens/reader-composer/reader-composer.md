@@ -362,8 +362,8 @@ type. Different axes.
 
 ## Browse rail — search scope
 
-The rail's search input is **category-aware** — scope changes with
-the active category in the dropdown:
+Search is **category-aware** — scope changes with the active
+category in the dropdown:
 
 - **Characters / locations / items / factions** (entity rows):
   `name`, `description`, `tags`
@@ -371,9 +371,10 @@ the active category in the dropdown:
 - **Threads**: `title`, `description`, `category`, `tags`
 - **Happenings**: `title`, `description`, `category`, `tags`
 
-Placeholder text reflects the active category (`Search characters…` /
-`Search lore…` / etc.). Tooltip + ⓘ help icon list the full scope per
-[patterns → Search bar scope](../../patterns/lists.md#search-bar-scope).
+Placeholder text rotates with the active category
+(`Search characters…` / `Search lore…` / etc.) — reader-specific
+deviation; standard tooltip + ⓘ affordances per the
+[search-bar-scope pattern](../../patterns/lists.md#search-bar-scope).
 
 ## Peek drawer — lead affordance for characters
 

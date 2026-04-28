@@ -101,16 +101,17 @@ power-user/debug territory. One consistent pattern: ⋯ menus are where
 
 ## List pane — search scope
 
-The list pane's search input is **category-aware** — scope changes
-with the active category dropdown:
+Search is **category-aware** — scope changes with the active
+category dropdown:
 
 - **Characters / locations / items / factions** (entity rows):
   `name`, `description`, `tags`
 - **Lore**: `title`, `body`, `category`, `tags`
 
-SQLite-side: `LIKE` against typed columns + `json_each` over the
-JSON `tags` array. Placeholder + tooltip + ⓘ help icon per
-[patterns → Search bar scope](../../patterns/lists.md#search-bar-scope).
+Affordances (placeholder + tooltip + ⓘ help icon) follow the
+[search-bar-scope pattern](../../patterns/lists.md#search-bar-scope);
+SQLite-side, `LIKE` against typed columns + `json_each` over the
+JSON `tags` array.
 
 ## Detail pane — raw JSON viewer
 
