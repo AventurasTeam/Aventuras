@@ -57,7 +57,12 @@ digraph design_flow {
   "Self-review" [shape=box];
   "Integration plan" [shape=box];
   "User approves both?" [shape=diamond];
-  "Apply to canonical docs\n(auto-commit)" [shape=doublecircle];
+  "Apply canonical-doc edits\n(staged, not committed)" [shape=box];
+  "Drift pass (subagent)" [shape=box];
+  "Apply drift fixes inline" [shape=box];
+  "Findings extensive?" [shape=diamond];
+  "Surface to user before commit" [shape=box];
+  "Commit (single focused commit)" [shape=doublecircle];
 
   "Orient (synthesis)" -> "User picked target?";
   "User picked target?" -> "Session ends" [label="just looking"];
@@ -79,11 +84,10 @@ digraph design_flow {
   "User approves both?" -> "Apply canonical-doc edits\n(staged, not committed)" [label="approved"];
   "Apply canonical-doc edits\n(staged, not committed)" -> "Drift pass (subagent)";
   "Drift pass (subagent)" -> "Apply drift fixes inline";
-  "Apply drift fixes inline" -> "Findings extensive?" [shape=diamond];
+  "Apply drift fixes inline" -> "Findings extensive?";
   "Findings extensive?" -> "Surface to user before commit" [label="yes (>~5)"];
   "Findings extensive?" -> "Commit (single focused commit)" [label="no"];
   "Surface to user before commit" -> "Commit (single focused commit)";
-  "Commit (single focused commit)" [shape=doublecircle];
 }
 ```
 
