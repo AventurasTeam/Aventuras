@@ -300,7 +300,7 @@ implementation layer.
 
 Per
 [`principles.md → Edit restrictions during in-flight generation`](../principles.md#edit-restrictions-during-in-flight-generation),
-the picker control + the summary's `Clone & edit` action gate
+the picker control + the summary's `Edit in Vault →` action gate
 when a generation pipeline is in flight. Universal tooltip on
 disabled controls: `Generation is in flight. Cancel to edit.`
 
