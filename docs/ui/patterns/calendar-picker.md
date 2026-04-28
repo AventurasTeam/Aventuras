@@ -127,10 +127,21 @@ Sections:
   calendar's `displayFormat` (Story Settings, against the story's
   origin). App Settings uses a placeholder render; Wizard uses a
   generic placeholder until origin is picked.
-- **Status / actions** — `built-in (read-only)` with a
-  `Clone & edit` button (clones the built-in, routes to vault
-  editor for the new clone) OR `custom` with `Manage in Vault →`
-  link (routes to vault editor for that calendar).
+- **`Edit in Vault →`** — single inline action that routes to the
+  [Vault calendar editor](../screens/vault/calendars/calendars.md)
+  with the currently-selected calendar opened in edit mode (even
+  if the selection is unsaved in this picker host). The editor
+  handles the clone-vs-direct-edit fork by calendar type:
+  built-ins auto-clone per
+  [`calendar-systems/spec.md → Where calendar definitions live`](../../calendar-systems/spec.md#where-calendar-definitions-live)
+  ("the 'edit a built-in' affordance always clones first") and
+  open the new clone in edit mode; user-authored calendars open
+  directly in edit mode. The picker doesn't ask the user to
+  pre-classify their intent (clone vs edit vs view) — the editor
+  knows.
+
+  The built-in / custom type is already communicated by the chip
+  on the picker's selected option; not duplicated here.
 
 The summary's tier list intentionally duplicates the row's tier
 path string — different fidelity tiers serving different
