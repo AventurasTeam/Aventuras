@@ -251,14 +251,12 @@ Session boundary: the entire detail pane (any tab, any field).
 
 ## Top-bar
 
-Same chrome as World panel per the
-[Top-bar design rule](../../principles.md#top-bar-design-rule):
-universal essentials (logo + breadcrumb `<story-title> / Plot` +
-Actions + Story Settings icon + ←) plus universal in-story chrome
-(status pill + progress strip). The
-[in-pane sub-header](../../principles.md#master-detail-sub-header)
+Standard in-story chrome per
+[principles → Top-bar design rule](../../principles.md#top-bar-design-rule).
+Breadcrumb: `<story-title> / Plot`. The
+[master-detail sub-header](../../principles.md#master-detail-sub-header)
 below the top bar carries the in-pane selection
-`[Threads|Happenings] / <selected name>` and updates as the user
+`[Threads|Happenings] / <selected name>`, updating as the user
 clicks list rows.
 
 ## Screen-specific open questions

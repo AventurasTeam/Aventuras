@@ -56,14 +56,13 @@ Cross-cutting principles that govern this panel are in
 
 ## Top-bar
 
-Per the [Top-bar design rule](../../principles.md#top-bar-design-rule):
-universal essentials (logo + breadcrumb `<story-title> / World` +
-Actions + Story Settings icon + ←) plus universal in-story chrome
-(status pill + progress strip). The
-[in-pane sub-header](../../principles.md#master-detail-sub-header)
+Standard in-story chrome per
+[principles → Top-bar design rule](../../principles.md#top-bar-design-rule).
+Breadcrumb: `<story-title> / World`. The
+[master-detail sub-header](../../principles.md#master-detail-sub-header)
 below the top bar carries the in-pane selection
-`[Characters|Locations|Items|Factions|Lore] / <selected name>` and
-updates as the user clicks list rows.
+`[Characters|Locations|Items|Factions|Lore] / <selected name>`,
+updating as the user clicks list rows.
 
 ## Detail head structure
 

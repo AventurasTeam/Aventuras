@@ -329,16 +329,12 @@ fixed.
 
 ## Top-bar
 
-Per the [Top-bar design rule](../../principles.md#top-bar-design-rule):
-universal essentials (logo + breadcrumb `<story-title> / Chapters`
-
-- Actions + Story Settings icon + ←) plus universal in-story
-  chrome (status pill + progress strip). Reader-only chrome (chapter
-  chip ▾, time chip, branch chip) is absent — Chapter Timeline is
-  already the chapter management surface.
-
-The Story Settings icon routes to the sibling Story Settings
-screen, consistent with every other in-story sub-screen.
+Standard in-story chrome per
+[principles → Top-bar design rule](../../principles.md#top-bar-design-rule).
+Breadcrumb: `<story-title> / Chapters`. Reader-only chrome (chapter
+chip ▾, time chip, branch chip) is absent — Chapter Timeline is
+already the chapter management surface, so the chapter chip in
+particular would be redundant.
 
 ## Screen-specific open questions
 

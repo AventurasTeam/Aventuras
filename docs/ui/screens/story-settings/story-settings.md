@@ -522,15 +522,11 @@ confirmation (above) intercepts the commit when applicable.
 
 ## Top-bar
 
-Per the [Top-bar design rule](../../principles.md#top-bar-design-rule):
-universal essentials (logo + breadcrumb `<story-title> / Story
-Settings` + Actions + ←) plus universal in-story chrome (status
-pill + progress strip). Reader-only chrome (chapter chip ▾, time
-chip, branch chip) is absent — this surface is configuring the
-story, not reading it.
-
-The Story Settings icon is absent here (self-reference; see
-[Settings icon scope](../../principles.md#settings-icon-scope)).
+Standard in-story chrome per
+[principles → Top-bar design rule](../../principles.md#top-bar-design-rule).
+Breadcrumb: `<story-title> / Story Settings`. Self-reference: the
+Story Settings icon is absent on this surface (see
+[Settings icon scope](../../principles.md#settings-icon-scope));
 App Settings is reachable via the Actions menu.
 
 **Contextual Return.** When Story Settings is reached via the

@@ -398,13 +398,15 @@ Session boundary: this entire surface — any tab, any field.
 
 ## Top-bar
 
-App Settings doesn't show story-context chrome (no chapter chip,
-time chip, branch icon, gen status — none of those exist outside
-a loaded story). Top bar carries:
-
-- Logo + `App Settings` heading
-- Actions (⚲)
-- Return (←) → back to story list
+Standard chrome per
+[principles → Top-bar design rule](../../principles.md#top-bar-design-rule),
+app-level slice: logo + `App Settings` heading + Actions (⚲) + ←.
+Universal in-story chrome (status pill + progress strip) and
+reader-only chrome (chapter chip, time chip, branch chip) are both
+absent — none of that state exists outside a loaded story. The
+gear glyph slot here is empty by self-reference (per
+[Settings icon scope](../../principles.md#settings-icon-scope) the
+regular gear opens App Settings, which is the surface itself).
 
 ## Onboarding adjacency
 
