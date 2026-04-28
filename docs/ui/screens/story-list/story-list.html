@@ -42,11 +42,26 @@
   .list-header { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; margin-bottom: 16px; }
   .list-title { font-size: 22px; font-weight: 600; color: var(--ink); }
   .list-title .count { font-size: 12px; color: var(--ink-faint); font-weight: 400; margin-left: 10px; }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
   .new-story-btn { padding: 8px 18px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: #fff; font-weight: 600; font-size: 13px; cursor: pointer; }
+  .import-btn { padding: 8px 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-weight: 500; font-size: 13px; cursor: pointer; }
+  .import-btn:hover { border-color: var(--ink); }
+
+  /* AI-not-configured banner — sits between topbar and main when app_settings.providers is empty */
+  .ai-banner { display: none; padding: 10px 32px; background: #fff8e6; border-bottom: 1px solid #e8d890; color: #7a6020; font-size: 13px; align-items: center; gap: 12px; }
+  .ai-banner.show { display: flex; }
+  .ai-banner .ai-banner-cta { color: #7a6020; text-decoration: underline; cursor: pointer; font-weight: 500; }
+  .ai-banner .ai-banner-cta:hover { color: #5a4810; }
 
   .toolbar { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
-  .search { flex: 1; min-width: 220px; max-width: 360px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); font-size: 12px; color: var(--ink-faint); font-style: italic; }
+  .search-row { flex: 1; min-width: 220px; max-width: 360px; display: flex; gap: 4px; align-items: center; position: relative; }
+  .search { flex: 1; padding: 7px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); font-size: 12px; color: var(--ink-faint); font-style: italic; }
   .search::before { content: "⌕  "; font-style: normal; color: var(--ink-faint); }
+  .help-icon { width: 18px; height: 18px; border: 1px solid var(--line-soft); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: var(--ink-muted); cursor: help; background: var(--bg-region); flex-shrink: 0; position: relative; }
+  .help-popover { position: absolute; top: calc(100% + 6px); right: 0; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); padding: 10px 12px; font-size: 11px; color: var(--ink); line-height: 1.5; min-width: 240px; z-index: 6; display: none; text-align: left; }
+  .help-popover.open { display: block; }
+  .help-popover h5 { margin: 0 0 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); }
+  .help-popover code { background: var(--bg); padding: 1px 5px; border-radius: 2px; border: 1px solid var(--line-soft); font-size: 10px; }
   .filter-chips { display: flex; gap: 6px; }
   .filter-chip { padding: 4px 12px; border: 1px solid var(--line-soft); border-radius: 999px; font-size: 12px; color: var(--ink-muted); cursor: pointer; background: var(--bg-region); }
   .filter-chip.active { background: var(--ink); color: #fff; border-color: var(--ink); }
@@ -126,6 +141,11 @@
     <button class="rb-btn" data-sort="created">created</button>
     <button class="rb-btn" data-sort="title">title</button>
   </div>
+  <div class="rb-group">
+    <span class="gl">ai:</span>
+    <button class="rb-btn active" data-ai="configured">configured</button>
+    <button class="rb-btn" data-ai="unconfigured">unconfigured</button>
+  </div>
   <span class="rb-note">click a card to "open" (no-op in wireframe)</span>
 </div>
 
@@ -139,17 +159,34 @@
   </div>
 </header>
 
+<!-- AI-not-configured banner — visible when app_settings.providers is empty -->
+<div class="ai-banner" id="ai-banner">
+  <span>&#9888; AI generation not configured.</span>
+  <span class="ai-banner-cta">Set up a provider &rarr;</span>
+</div>
+
 <div class="main">
   <div class="list-header">
     <div class="list-title">
       Stories
       <span class="count" id="story-count">6 total</span>
     </div>
-    <div class="new-story-btn">+ New story</div>
+    <div class="header-actions">
+      <div class="import-btn" title="Import .avts file">Import story&hellip;</div>
+      <div class="new-story-btn">+ New story</div>
+    </div>
   </div>
 
   <div class="toolbar">
-    <div class="search">Search stories&hellip;</div>
+    <div class="search-row">
+      <div class="search">Search stories&hellip;</div>
+      <span class="help-icon" id="search-help-icon" title="What does the search look at?">&#9432;
+        <div class="help-popover" id="search-help-popover">
+          <h5>This search looks at</h5>
+          <span><code>title</code> &middot; <code>description</code> &middot; <code>genre</code> &middot; <code>tags</code> &middot; <code>author_notes</code></span>
+        </div>
+      </span>
+    </div>
     <div class="filter-chips" id="filter-chips">
       <span class="filter-chip active" data-chip="all">All</span>
       <span class="filter-chip" data-chip="pinned">Pinned</span>
@@ -323,6 +360,20 @@
     document.querySelectorAll('[data-sort]').forEach(b => b.classList.toggle('active', b.dataset.sort === s));
   }
   document.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', () => setSort(b.dataset.sort)));
+
+  // ai-config banner toggle
+  const banner = document.getElementById('ai-banner');
+  function setAi(s) {
+    banner.classList.toggle('show', s === 'unconfigured');
+    document.querySelectorAll('[data-ai]').forEach(b => b.classList.toggle('active', b.dataset.ai === s));
+  }
+  document.querySelectorAll('[data-ai]').forEach(b => b.addEventListener('click', () => setAi(b.dataset.ai)));
+
+  // search-help popover
+  const helpIcon = document.getElementById('search-help-icon');
+  const helpPop = document.getElementById('search-help-popover');
+  helpIcon.addEventListener('click', e => { e.stopPropagation(); helpPop.classList.toggle('open'); });
+  document.addEventListener('click', e => { if (!helpIcon.contains(e.target)) helpPop.classList.remove('open'); });
 
   // set initial count with "all" filter applied (archived hidden)
   setFilter('all');
