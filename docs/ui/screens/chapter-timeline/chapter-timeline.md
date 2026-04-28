@@ -361,9 +361,11 @@ particular would be redundant.
   chapter-close), the `Close chapter…` button on this screen
   should disable. Same rule as
   [branch-navigator → during generation](../reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked).
-  Visual treatment TBD with the visual-identity pass.
+  Visual treatment lands with the
+  [visual-identity pass](../../../followups.md#visual-identity).
 - **Animation when the in-progress card transitions to closed.**
   After successful chapter close, the in-progress card morphs
   into a new closed card at the bottom of the timeline, plus a
   fresh in-progress card appears below it. Smooth transition vs
-  hard re-render — visual identity pass.
+  hard re-render — lands with the
+  [visual-identity pass](../../../followups.md#visual-identity).

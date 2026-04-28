@@ -514,14 +514,20 @@ target any character, not just the lead.
 is allowed at any point in the narrative. Previous leads revert to
 plain characters. Entry points:
 
-- **World Panel · Overview** — "Set as lead" action on any character
-  entity, alongside status.
+- **World Panel · detail-head ⋯ menu** — `Set as lead` listed
+  alongside Export / Delete / View raw JSON on any character
+  entity's detail head, rendered tab-agnostically. See
+  [world.md → Detail head structure](./screens/world/world.md#detail-head-structure).
 - **Reader peek drawer** — character peek-head shows a `Set as lead`
   inline text-action when not lead, or a `You` / `Protagonist` badge
   when current. Quick switch without navigating out. See
   [reader-composer → Peek drawer lead affordance](./screens/reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters).
 - **Actions menu** — "Set lead character → pick" searchable command.
-- **Story Settings · About** — alongside the mode selector.
+- **Story Settings · Generation** — the `lead character` form field
+  on the Generation tab is the form-shaped surface; assigning lead
+  via field is shaped differently from the per-character
+  `Set as lead` action above but it's the same mutation. See
+  [story-settings.md → Generation tab](./screens/story-settings/story-settings.md#generation-tab--definitional-fields--authoring-aids).
 
 All four are redundant entry points for the same mutation. Lead is
 important enough that over-reachability beats one-true-place purity.

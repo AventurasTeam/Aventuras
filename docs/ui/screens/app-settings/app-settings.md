@@ -445,4 +445,5 @@ anyone else.
 - **Diagnostics tab depth** — currently lightweight. Likely grows
   over time (debug flags, retry counts, cache stats, schema
   inspector). Eventually overlaps with the planned global delta-log
-  observability panel — boundaries TBD.
+  observability panel — boundary lands with the
+  [Observability / debug UI followup](../../../followups.md#observability--debug-ui).
