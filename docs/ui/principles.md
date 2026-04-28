@@ -661,3 +661,43 @@ retire, batch export) are deferred pending their own design pass —
 see
 [`followups.md → Bulk operations on entities`](../followups.md#bulk-operations-on-entities)
 for the parked sub-questions.
+
+---
+
+## Persistent app-level banners
+
+Some app states warrant a persistent warn bar above the main
+content of the **story list** screen — the only app-level surface
+that sees them. Two banner shapes are defined today:
+
+- **AI not configured** — fires when `app_settings.providers` is
+  empty (user skipped onboarding, or deleted the last provider).
+  Copy: `⚠ AI generation not configured. [Set up a provider →]`.
+  CTA routes to
+  [App Settings · Providers](./screens/app-settings/app-settings.md#generation--providers).
+  Never re-opens the onboarding wizard — that path is intentionally
+  one-shot (see
+  [Onboarding → Skip behavior](./screens/onboarding/onboarding.md#skip-behavior)).
+- **Profile errors** — fires when at least one profile has a
+  configuration error (e.g., references a model that's no longer
+  in the provider's catalog). Copy:
+  `⚠ N profiles have configuration errors. [Open settings →]`.
+
+**Mutual exclusion + priority.** Both banners can be true at the
+same time — a user who skipped onboarding might also have leftover
+profile errors from a prior session. Only one renders, with
+**no-providers taking priority** (profile errors are downstream
+of having a provider in the first place). When the user fixes the
+no-providers state, profile-error renders if still applicable.
+
+**Provider-only misconfiguration** (e.g., a key the user typed
+wrong, but no profile references that provider yet) does **not**
+trigger any banner. Per-row indicators on the Providers list
+surface that lower-stakes case. A misconfigured provider only
+escalates to banner status once a profile references it.
+
+**Why no "Resume setup" CTA.** Once the user crosses the wizard's
+skip threshold, onboarding is over; the banner sends them to App
+Settings, where the affordances are richer and the hand-hold isn't
+needed. Re-opening the wizard would duplicate paths and create
+state-recovery questions we don't want.

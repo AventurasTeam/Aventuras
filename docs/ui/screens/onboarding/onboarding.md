@@ -299,28 +299,14 @@ deliberately. Onboarding never mentions the words "profile",
 
 ## Story list integration — banner
 
-A persistent warning bar at the top of the Story list surfaces when
-no providers are configured. Wording:
-
-```
-⚠ AI generation not configured. [Set up a provider →]
-```
-
-The CTA opens
-[App Settings · Providers](../app-settings/app-settings.md#generation--providers)
-(not the wizard — see [Skip behavior](#skip-behavior)).
-
-The banner extends the existing AI-config error banner pattern from
-App Settings (`⚠ N profiles have configuration errors. [Open
-settings →]`). Mutual exclusion when both could fire — the no-
-providers state takes priority because misconfigured-profile
-errors are downstream of having a provider in the first place.
-
-**Provider misconfiguration alone (e.g., a key the user typed wrong)
-does NOT trigger the banner.** A misconfigured provider only
-escalates to the banner once a profile references it, matching the
-existing rule. Per-row misconfigured indicators on the Providers
-page surface the lower-stakes case.
+When the user skips this wizard (per [Skip behavior](#skip-behavior)),
+the story list shows a persistent warn bar driving them back to App
+Settings · Providers when ready. Banner copy, mutual exclusion with
+the profile-error banner, and the no-Resume-Setup-CTA rationale all
+live in
+[principles → Persistent app-level banners](../../principles.md#persistent-app-level-banners).
+Onboarding is the trigger driver; the story list is the host
+surface.
 
 ## Data-model touchpoints
 

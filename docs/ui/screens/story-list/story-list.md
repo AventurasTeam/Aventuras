@@ -205,21 +205,14 @@ parallelism).
 
 ## Banner — AI configuration
 
-When `app_settings.providers` is empty (user skipped
-[Onboarding](../onboarding/onboarding.md#skip-behavior), or
-deleted the last provider after the fact), a persistent warning bar
-sits at the top of the screen:
-
-```
-⚠ AI generation not configured. [Set up a provider →]
-```
-
-The CTA opens
-[App Settings · Providers](../app-settings/app-settings.md#generation--providers).
-Always opens Settings — never re-opens the wizard. See
-[Onboarding → Story list integration](../onboarding/onboarding.md#story-list-integration--banner)
-for the full contract (priority vs. the existing profile-error
-banner, why no "Resume setup" route, etc.).
+This screen is the host for the persistent app-level banners (AI
+not configured, profile errors). Both contracts — copy, CTA
+routing, mutual-exclusion priority, why there's no "Resume setup"
+path — live in
+[principles → Persistent app-level banners](../../principles.md#persistent-app-level-banners).
+Per-screen note: the banner sits above the toolbar, never replaces
+content, and is non-dismissible (the underlying state is the
+dismiss).
 
 ## Empty state (first launch)
 
