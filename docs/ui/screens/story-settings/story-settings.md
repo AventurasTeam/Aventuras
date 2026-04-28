@@ -228,9 +228,15 @@ numeric input: `Short (8k)`, `Balanced (24k)`, `Long (48k)`,
 `Custom…`. Gentle guidance on typical choices without hiding the raw
 number.
 
-**Auto-close toggle** — when off, the threshold is just guidance and
-the user wraps chapters manually. The reader's chapter progress strip
-color (yellow at 80%, red at 90%) becomes the primary signal.
+### Auto-close chapters
+
+Per-story field: `stories.settings.chapterAutoClose: boolean`.
+Default `true`. When off, the threshold becomes pure guidance — the
+user wraps chapters manually and the reader's chapter progress strip
+color (yellow at 80%, red at 90%) is the primary signal. The toggle
+mirrors into App Settings · Memory as the same control bound to
+`app_settings.default_story_settings.chapterAutoClose`, since Memory
+is the form component reused across both surfaces.
 
 ### Prompt context — recent buffer
 
