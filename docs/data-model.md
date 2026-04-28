@@ -815,10 +815,13 @@ involvements or awareness; the conflation would muddy both domains.
   moment on the same branch. UI-level invariant; the user has no
   normal flow to construct conflicting writes.
 - A flip at `at_worldtime = 0` overrides the calendar's
-  `EraDeclaration.defaultStartName`. The wizard's initial-era picker
-  creates a flip at 0 if the user picks something other than the
-  default; otherwise the default applies until the first
-  user-triggered flip.
+  `EraDeclaration.defaultStartName`. The story-creation wizard
+  (deferred — not yet drawn; lands with the wizard pass) is the
+  intended surface for picking the initial era at story creation;
+  if it ships an era-picker that produces a non-default choice, it
+  writes a flip at 0. Until the wizard exists, new stories
+  inherit `defaultStartName` and the user's first explicit flip is
+  whatever they trigger from the reader chrome.
 
 **Resolver convention.** "Active era at worldTime N" = the row with
 the largest `at_worldtime ≤ N` for the current branch. Before any

@@ -310,6 +310,26 @@ Each is an independent toggle. Default set (enabled on first
 turn-on): narrative + user actions + entity fields + lore bodies.
 Others off. User can flip.
 
+**User-action toggle runs inversely.** The display-only invariant
+holds for everything the AI produces: source is canonical, target
+is display alongside. User actions are the exception — when the
+user types in the target language, the system translates the input
+into the source language **before** sending so the AI always sees
+source-language input. The translated source becomes the entry's
+canonical content; the user's typed target text is stored as the
+translation row. The flow is the inverse of the AI's output path.
+
+**Modified entries — translation refresh.** When the user edits an
+already-translated entry's content, we don't re-translate the
+entire story. Instead the pipeline interrogates the delta log for
+that entry's content-mutation history, re-runs translation only on
+the changed range, and writes a new `translations` row keyed to
+the new content state. Steady-state translations stay; edits
+trigger targeted refresh. (Concrete shape lands with the retrieval
+
+- memory agents — see
+  [`architecture.md → Translation as a pipeline concern`](../../../architecture.md).)
+
 ### Data model note
 
 The `translations` table already supports multi-language via its
