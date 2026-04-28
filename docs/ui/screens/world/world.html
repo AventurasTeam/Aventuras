@@ -77,16 +77,15 @@
   .row-status-pill.active { color: var(--ink-faint); border-color: var(--line-soft); background: var(--bg); }
   .row-status-pill.staged { color: #686; border-color: #dec; background: #f4faef; }
   .row-status-pill.retired { color: #963; border-color: #ecb; background: #fef7e8; }
-  /* scene presence — row-level accent */
+  /* Channel separation per patterns/entity.md → Edge vs tint:
+     scene-presence owns the left-edge stripe (only); recently-classified
+     owns the background tint (only). Both can fire on the same row
+     without contention because they target different primitives. */
   .list-row { border-left: 3px solid transparent; }
-  .list-row.in-scene { border-left-color: var(--ok); background: linear-gradient(to right, rgba(74,168,136,0.05), transparent 60%); }
-  .list-row.in-scene.selected { background: linear-gradient(to right, rgba(74,168,136,0.08), var(--bg-highlight)); }
-  /* recently-classified — cross-cutting accent (info-blue, fading over 1-2 turns) */
-  .list-row.recent-1 { border-left-color: var(--info); background: linear-gradient(to right, rgba(85,136,170,0.06), transparent 60%); }
-  .list-row.recent-2 { border-left-color: rgba(85,136,170,0.4); }
-  .list-row.recent-1.selected { background: linear-gradient(to right, rgba(85,136,170,0.10), var(--bg-highlight)); }
-  /* in-scene + recent: scene takes precedence on the border (current scene matters more for retrieval) */
-  .list-row.in-scene.recent-1, .list-row.in-scene.recent-2 { border-left-color: var(--ok); }
+  .list-row.in-scene { border-left-color: var(--ok); }
+  .list-row.recent-1 { background: rgba(85,136,170,0.08); }
+  .list-row.recent-2 { background: rgba(85,136,170,0.04); }
+  .list-row.recent-1.selected, .list-row.recent-2.selected { background: var(--bg-highlight); }
   .lead-badge { font-size: 9px; color: #000; background: #ffe68a; padding: 2px 5px; border-radius: 2px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0; }
 
   /* accordion groups (All filter) */

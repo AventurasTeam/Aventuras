@@ -294,16 +294,19 @@
         background: var(--bg-highlight);
         border-color: var(--line);
       }
-      /* recently-classified left-edge accent — fades over turns */
+      /* Recently-classified — info-blue background tint, fades over turns.
+         Per patterns/entity.md → Channel separation: this signal owns the
+         row background tint (only); the left-edge stripe is reserved for
+         scene-presence (not applicable on Plot). */
       .list-row.recent-1 {
-        border-left-color: var(--info);
-        background: linear-gradient(to right, rgba(85, 136, 170, 0.06), transparent 60%);
+        background: rgba(85, 136, 170, 0.08);
       }
       .list-row.recent-2 {
-        border-left-color: rgba(85, 136, 170, 0.4);
+        background: rgba(85, 136, 170, 0.04);
       }
-      .list-row.recent-1.selected {
-        background: linear-gradient(to right, rgba(85, 136, 170, 0.1), var(--bg-highlight));
+      .list-row.recent-1.selected,
+      .list-row.recent-2.selected {
+        background: var(--bg-highlight);
       }
 
       .list-kind {

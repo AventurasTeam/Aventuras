@@ -193,9 +193,14 @@
   .row-status-pill.active { color: var(--ink-faint); border-color: var(--line-soft); background: var(--bg); }
   .row-status-pill.staged { color: #686; border-color: #dec; background: #f4faef; }
   .row-status-pill.retired { color: #963; border-color: #ecb; background: #fef7e8; }
-  /* scene presence — row-level accent */
+  /* Channel separation per patterns/entity.md → Edge vs tint:
+     scene-presence owns the left-edge stripe (only); recently-classified
+     owns the background tint (only). */
   .entity-row { border-left: 3px solid transparent; }
-  .entity-row.in-scene { border-left-color: var(--ok); background: linear-gradient(to right, rgba(74,168,136,0.05), transparent 60%); }
+  .entity-row.in-scene { border-left-color: var(--ok); }
+  .entity-row.recent-1 { background: rgba(85,136,170,0.08); }
+  .entity-row.recent-2 { background: rgba(85,136,170,0.04); }
+  .entity-row.recent-1.selected, .entity-row.recent-2.selected { background: var(--bg-highlight); }
   .lead-badge { font-size: 9px; color: #000; background: #ffe68a; padding: 2px 5px; border-radius: 2px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0; }
 
   /* status accordion groups (All filter) */
@@ -667,12 +672,12 @@
               <span class="entity-name"><span class="name-text">Bartender</span></span>
               <span class="row-status-pill active">active</span>
             </div>
-            <div class="entity-row in-scene" data-entity="kael">
+            <div class="entity-row in-scene recent-1" data-entity="kael" title="In scene + recently classified — both signals fire on the same row without contention">
               <span class="entity-kind" title="character">☺</span>
               <span class="entity-name"><span class="name-text">Kael</span></span>
               <span class="row-status-pill active">active</span>
             </div>
-            <div class="entity-row" data-entity="jorin">
+            <div class="entity-row recent-2" data-entity="jorin" title="Recently classified — faded tint (1-2 turns ago)">
               <span class="entity-kind" title="character">☺</span>
               <span class="entity-name"><span class="name-text">Jorin</span></span>
               <span class="row-status-pill active">active</span>
