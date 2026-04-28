@@ -12,7 +12,7 @@ This is for **analysis and design work**, not implementation. The output is docu
 The skill opens with an **orient** that surfaces recent activity, open followups, the user's scratchpad, and proposed focus candidates — then waits for the user to pick a target. Once a target is chosen, the design workflow runs (scope check → clarifying questions → approaches → sectioned design → adversarial pass → spec → integration). If the user only wanted to look around, the session ends cleanly after orient.
 
 <HARD-GATE>
-Do NOT modify canonical docs (`architecture.md`, `data-model.md`, `calendar-systems.md`, `ui/**`) until (1) a written design exists, (2) it has been through adversarial analysis, (3) the user has approved both the design and the integration plan. Drafting under `docs/explorations/` during the session is fine; touching canonical docs is the gated step. After approval, integration commits automatically without further confirmation.
+Do NOT modify canonical docs (`architecture.md`, `data-model.md`, `calendar-systems.md`, `ui/**`) until (1) a written design exists, (2) it has been through adversarial analysis, (3) the user has approved both the design and the integration plan. Drafting under `docs/explorations/` during the session is fine; touching canonical docs is the gated step. After approval, integration applies edits → runs the **Drift pass** subagent against the staged diff → applies any drift fixes → commits. No second user confirmation between approval and commit.
 </HARD-GATE>
 
 ## Anti-pattern: "this is too small for a design"
@@ -34,7 +34,9 @@ Track as tasks; complete in order:
 9. **Self-review** — placeholders, consistency, scope, ambiguity, doc rules. Fix inline.
 10. **Integration plan** — exact files / sections / followups / wireframes affected.
 11. **User reviews doc + plan.**
-12. **Integrate.** On approval, apply changes in a focused commit (automatic — no second confirmation). Update `followups.md`.
+12. **Apply canonical-doc edits + wireframe changes.** Stage them with `git add` but do NOT commit yet.
+13. **Drift pass** (subagent). Hand a fresh subagent the staged diff, the integration plan, and the four drift checks (rename impact / pattern adoption / followups in-out / boilerplate detection — see _Drift pass_ below). Subagent reports findings; orchestrator interprets and applies fixes inline. If findings are extensive (>~5 non-trivial), surface to the user before commit.
+14. **Commit.** Single focused commit including drift-pass fixes. `pnpm lint:docs` already ran via the pre-commit hook.
 
 ## Process
 
@@ -74,7 +76,14 @@ digraph design_flow {
   "Self-review" -> "Integration plan";
   "Integration plan" -> "User approves both?";
   "User approves both?" -> "Write exploration doc\n(+ wireframe if UI)" [label="changes"];
-  "User approves both?" -> "Apply to canonical docs\n(auto-commit)" [label="approved"];
+  "User approves both?" -> "Apply canonical-doc edits\n(staged, not committed)" [label="approved"];
+  "Apply canonical-doc edits\n(staged, not committed)" -> "Drift pass (subagent)";
+  "Drift pass (subagent)" -> "Apply drift fixes inline";
+  "Apply drift fixes inline" -> "Findings extensive?" [shape=diamond];
+  "Findings extensive?" -> "Surface to user before commit" [label="yes (>~5)"];
+  "Findings extensive?" -> "Commit (single focused commit)" [label="no"];
+  "Surface to user before commit" -> "Commit (single focused commit)";
+  "Commit (single focused commit)" [shape=doublecircle];
 }
 ```
 
@@ -145,27 +154,93 @@ Fix inline. No need to re-review — fix and move on.
 
 ## Integration plan
 
-Draft before requesting review:
+Draft before requesting review. The plan doubles as the input brief for the drift-pass subagent — every item below has a corresponding drift check, so the more explicit the plan, the cleaner the drift report.
 
-- Which canonical files change.
-- For each, which section / anchor.
-- Which `followups.md` items resolve (and are removed).
-- Which new follow-ups are introduced (and where).
-- Whether any wireframes need updating.
+- **Which canonical files change.** For each, which section / anchor.
+- **Renames** — every heading or schema field name being renamed, with old → new mapping. (Drift check 1 grep-sweeps inbound refs.)
+- **Patterns adopted on a new surface** — list the `(per-screen doc, pattern.md)` pairs where this surface is citing a pattern it hasn't cited before. (Drift check 2 verifies the pattern's Used-by got updated.)
+- **Followups resolved** — list followup entries this integration closes, with `followups.md` anchors. (Drift check 3 confirms removal.)
+- **Followups introduced** — list new deferrals + where the new entry lands in `followups.md`. (Drift check 3 confirms addition.)
+- **Wireframes updated** — paths + which states / behaviors changed.
+- **Intentional repeated prose** — if the integration writes prose into a per-screen doc that's near-identical to existing prose elsewhere on purpose (e.g., a deliberate local restatement for context), call it out so drift check 4 doesn't churn on it.
 
 ## User review gate
 
 > "Design written to `<path>`, integration plan above. Please review both before I touch the canonical docs."
 
-Wait. If changes requested, revise and re-self-review. Only proceed once both doc AND integration plan are approved. After approval, integration runs and commits without a second confirmation step.
+Wait. If changes requested, revise and re-self-review. Only proceed once both doc AND integration plan are approved. After approval, the flow runs apply → drift pass → fix-if-needed → commit without a second confirmation, **unless** the drift pass surfaces extensive findings — in which case the orchestrator pauses and shows the findings before committing.
 
 ## Integrating
 
-- Apply canonical-doc changes in a focused commit. Project commit style: concise subject, narrative body with the resolution.
+- Apply canonical-doc changes and stage with `git add` — do NOT commit yet. The drift pass runs against the staged diff before the commit fires.
 - `git mv` for any reorganization. Update inbound anchor / path references in the same commit.
 - Update `followups.md` (resolved or new) in the same commit.
 - Exploration doc: kept as a record or removed once integrated — user's call (ask once, then act).
-- Run `pnpm lint:docs` after canonical-doc edits exist to validate. Do not run before there are real edits to validate.
+- Project commit style: concise subject, narrative body with the resolution.
+- The pre-commit hook runs `prettier` + `remark` automatically; no need to run `pnpm lint:docs` manually before staging.
+
+## Drift pass
+
+After canonical-doc edits are staged but before the commit fires, dispatch a **fresh subagent** to check the staged diff against the integration plan. Session context biases toward "I thought really hard, this is right" — the audit-fix work that prompted this stage found exactly the kind of drift the original session writers didn't see. Fresh eyes with deterministic checks catch the common cases.
+
+### Why a subagent
+
+- **No session bias.** The orchestrator's context includes hours of "this is the right design" — that lens makes drift invisible. A subagent sees only the diff + the plan + the rules to check against.
+- **Forced explicitness.** Briefing the subagent forces the orchestrator to articulate exactly what was supposed to happen.
+- **Fresh prompt budget.** The orchestrator has consumed context discussing the design; the subagent gets a clean window for focused checks.
+
+### Subagent invocation
+
+Use the `general-purpose` subagent type (no specialized agent needed). Brief it with:
+
+- The staged diff: `git diff --staged` (or work-tree diff if not yet staged).
+- The integration plan from this design session (verbatim — names files / sections / followups it intended to touch).
+- The four drift checks below, each with a "report drift if X" rule.
+
+Tell it explicitly: **"Report drift findings only. Do not re-evaluate the design itself. Do not propose alternative approaches. The design is locked; you're checking that what got written matches what was planned + standing project rules."**
+
+### The four checks
+
+1. **Rename impact.** If the diff renames any heading (`## X` → `## Y`) or schema field name (TS comment, ER diagram, prose mention), grep the rest of the repo for inbound refs to the old name. Report any inbound ref the diff didn't sweep. Special attention to:
+   - Anchor links `[label](./file.md#old-slug)` — lint catches the broken anchor but not stale labels.
+   - Prose mentions of the old name in per-screen docs.
+   - Cross-doc references in `principles.md` / `patterns/*.md`.
+
+2. **Pattern adoption.** If the diff adds a citation like `[xxx pattern](../../patterns/<pattern>.md)` from a per-screen doc that wasn't already in that pattern's `Used by` list, report. The pattern doc's Used-by list is the canonical surface→pattern map; a new adoption that doesn't update it leaves the pattern stale.
+
+3. **Followups in / out.** Two questions:
+   - **Resolved any parked decision?** Grep `followups.md` for keywords matching changed canonical content (field names, feature names from the integration plan). If a followup entry references something the diff just resolved, report — entry should be removed.
+   - **Deferred anything new?** If the diff prose contains "deferred", "TBD", "pending design pass", or similar, AND the diff doesn't add a `followups.md` entry covering it, report — the deferral should be parked.
+
+4. **Boilerplate detection.** If the diff writes prose into a per-screen doc that closely matches prose already in another per-screen doc, report. Heuristic: 2+ matching sentences = candidate; 4+ = strong signal. Cross-cutting prose belongs in `principles.md` or `patterns/`, not duplicated. (Soft check — orchestrator weighs surface-specific deviations against generic boilerplate.)
+
+### Output shape
+
+Subagent returns structured findings, one per check:
+
+```
+### Rename impact
+[no drift] OR [drift: <file>:<line> still references old name `X`; planned rename to `Y` in <other file>]
+
+### Pattern adoption
+[no drift] OR [drift: <surface doc> cites <pattern>, but <pattern>.md → Used by doesn't list <surface>]
+
+### Followups in/out
+[no drift] OR [drift: <followup entry name> appears resolved by this integration but the followup wasn't removed]
+[no drift] OR [drift: integration prose defers <topic> but no followup entry was added]
+
+### Boilerplate detection
+[no drift] OR [drift: <surface A>:<lines> and <surface B>:<lines> contain near-identical prose about <topic>; consider promoting]
+```
+
+### What the orchestrator does with findings
+
+- **No drift across all four checks** → proceed to commit. Drift pass took 30-60s; cost is acceptable as standing tax.
+- **Drift found, mechanical fixes only** (rename ref to update, Used-by entry to add, followup to remove/add) → apply inline, re-stage, commit.
+- **Drift found, judgment call needed** (boilerplate detection often surfaces things that are intentionally local) → surface to user with the subagent's evidence; user decides whether to fix or note as intentional.
+- **Findings extensive** (~5+ non-trivial) → don't auto-fix. Surface the full list to the user; redesign-or-revise might be warranted.
+
+The subagent never commits. Only the orchestrator commits, after fixes are applied.
 
 ## Visual artifacts
 
@@ -185,7 +260,8 @@ A UI topic isn't automatically a visual question. "What does 'lead character' me
 - **2–3 approaches before settling.**
 - **Section-by-section approval.**
 - **Adversarial pass is non-optional.** "Feels right" doesn't ship.
-- **Canonical docs are gated.** Touch them only after approval; auto-commit after.
+- **Drift pass is non-optional.** Subagent runs on the staged diff before every commit. The orchestrator's session context is the wrong lens for catching consistency drift — fresh eyes find what the writer can't see.
+- **Canonical docs are gated.** Touch them only after approval; drift pass runs between apply and commit.
 - **Verified vs. assumed.** Never let an assumption ride as a conclusion.
 - **Be flexible.** Go back when something doesn't fit.
 
