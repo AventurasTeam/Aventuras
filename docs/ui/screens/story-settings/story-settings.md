@@ -354,6 +354,83 @@ swap-aware host. Swapping the calendar may surface a combined
 confirmation modal (origin re-pick, hidden era flips, display
 reformatting); details in the pattern doc.
 
+### Era flips on this branch
+
+Below the calendar picker + summary, the tab surfaces the era flip
+log for the **current branch** — `branch_era_flips` is branch-
+scoped, so switching branches via the reader's branch navigator and
+returning here reloads the list against the new branch's flips.
+Authoring lives in the reader (see
+[`reader-composer.md → Era flip`](../reader-composer/reader-composer.md#era-flip));
+this surface is read-only-plus-delete. The semantic seam is
+slightly fuzzy — flips aren't strictly "settings" — but the
+calendar tab is where everything calendar-related already lives.
+
+**Per-row anatomy:**
+
+- **Era name** — the canonical commit form (normalized to preset
+  casing where applicable per the
+  [Autocomplete-with-create primitive](../../patterns/forms.md#autocomplete-with-create-primitive)).
+- **Anchor display** — `at_worldtime` rendered via the active
+  calendar's formatter (e.g., `Reiwa 1 · May 1, 2019`). Shows
+  `Start of story` when `at_worldtime = 0`.
+- **Inline `×` delete icon** — follows the
+  [icon-actions pattern](../../patterns/icon-actions.md)
+  (always-visible-muted, brighten on hover; disabled during
+  in-flight pipelines per the
+  [hidden-vs-disabled rule](../../patterns/icon-actions.md#disabled-vs-hidden)).
+
+No inline rename in v1 — see
+[followups](../../../followups.md#inline-rename-for-era-flips-in-story-settings--calendar)
+for the deferral.
+
+**Sort.** `at_worldtime` ascending — chronological within the
+branch's lifetime.
+
+**Empty state.** When the active calendar has `eras !== null` but
+the branch has no flips:
+
+> No era flips on this branch yet. Use **Flip era…** in the reader
+> to mark a new era.
+
+**Sub-section visibility.** When the active calendar has
+`eras: null` AND the branch has no orphan flips (see below),
+the entire `Era flips on this branch` sub-section hides — there's
+nothing meaningful to surface.
+
+### Orphan flips (after calendar swap)
+
+When the user swaps the active calendar to one with `eras: null`,
+existing flips on the branch are kept as orphan data per the
+[calendar-picker swap behavior](../../patterns/calendar-picker.md).
+The flip-list still renders so users have a cleanup path:
+
+> **Reiwa** · `Reiwa 1 · May 1, 2019` · `[from previous calendar]` · `×`
+
+The `[from previous calendar]` annotation is muted text after the
+anchor display. Delete still works the same way; CTRL-Z restores.
+
+**Anchor display for orphans.** Formatter prefers the previously-
+active calendar's renderer when its definition is still available
+(calendar definitions live in `app_settings.calendars` /
+`vault_calendars`, not on the story; they survive the swap). If
+the previous calendar was deleted from Vault, the row falls back
+to the raw integer worldTime with a small `(raw)` annotation.
+
+### Inline delete confirm
+
+Click `×` → inline confirm in place (matching the
+[branch-navigator inline delete pattern](../reader-composer/branch-navigator/branch-navigator.md#inline-delete-confirm)):
+
+```
+   Reiwa · Reiwa 1 · May 1, 2019
+   Delete this flip?       [ Cancel ]  [ Delete ]
+```
+
+`Cancel` reverts to the read-only row. `Delete` writes the
+delete-row delta and removes the row from the list. CTRL-Z
+restores.
+
 ## Definitional-change confirmations
 
 A small set of fields trigger a confirmation modal at **save** when

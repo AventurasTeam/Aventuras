@@ -417,33 +417,26 @@ etc.) is deferred. Per
 deferred" section — pending its own design pass when ≥2 content
 types are spec'd to validate the shell against.
 
-### Era flip affordance (in-story)
+### Per-entry icon-row composition with conditional 5th icon
 
-Per [calendar-systems/spec.md → Eras](./calendar-systems/spec.md#eras-hoisted-out-manually-triggered)
-era flips are user-triggered narrative events that write rows into
-[`branch_era_flips`](./data-model.md#era-flips). The "Flip era"
-affordance itself is unspec'd UI — pending its own pass. Open
-sub-questions:
+Reader's per-entry icon row currently caps at 4 icons (edit / regen
+/ branch / delete on AI rows). The era-flip design adds a
+conditional 5th `📅 flip era` icon visible only when the active
+calendar has `eras !== null`. Visual identity should audit the
+5-icon row composition once it lands — possibly groupable with a
+per-entry overflow menu pattern (which doesn't currently exist),
+possibly fine as-is depending on glyph + spacing decisions. Not
+blocking the era-flip design; revisit at the visual identity
+session.
 
-- **Surface placement.** Reader chrome (next to the time chip)?
-  Actions menu? Story Settings? Likely chrome since flips are an
-  in-narrative action, not a settings change.
-- **Era name input.** Dropdown sourced from the calendar's
-  `presetNames` (per the
-  [calendar picker pattern](./ui/patterns/calendar-picker.md))
-  plus a free-form text option for ad-hoc era names? Or
-  strict-pick-from-presets?
-- **Anchor moment.** Flip's `at_worldtime` derives from the
-  current entry's `metadata.worldTime`. Does the user pick which
-  entry, or does it default to the latest?
-- **Confirmation.** Flips are reversible via CTRL-Z (one delta),
-  but prominent — worth a confirmation step? Or just a tooltip?
-- **Visibility on calendars without era support.** Hide entirely
-  when `eras: null`. The reader's chrome shouldn't surface the
-  affordance for Earth-shaped stories.
+### Inline rename for era flips in Story Settings · Calendar
 
-Lands together with the calendar picker design or as a dedicated
-follow-on.
+The era flips list in Story Settings (per
+[era-flip design](./explorations/2026-04-28-era-flip-affordance.md))
+ships v1 with delete-only per-row actions. Inline rename is the
+natural extension if real demand surfaces — would let users fix
+typos or re-canonicalize without delete + re-flip. Defer until
+demand is real.
 
 ### Backup / story export with user-authored calendars
 

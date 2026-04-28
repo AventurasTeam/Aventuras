@@ -60,21 +60,106 @@ line dropdowns), not "anywhere wide-ish."
 
 ### What stays separate
 
-- **Autocomplete / Picker** — own primitive (typeahead, async
-  loading, large datasets, "create new" tail action). Used for
-  entity-link pickers (`current_location_id`, `equipped_items`,
-  etc.) and tag inputs. Same conceptual family as Select but
-  different surface area.
+- **Autocomplete-with-create primitive** — its own pattern, see
+  [below](#autocomplete-with-create-primitive). Same conceptual
+  family as Select but different surface area: typeahead against a
+  list with a tail-create affordance.
 - **Filter chips** — own primitive (rounded, wrap-capable layout,
   often paired with `All` accordion behavior). Filtering-centric
   concern, not "pick a value to commit." Folding into Select as a
   `chips` render mode is a possible future move; deferred until
   enough chip-using surfaces converge.
 
-### Storybook
+### Storybook (Select)
 
 Live demos of each render mode + the auto-derivation rule belong in
 a `Patterns/Form controls/Select primitive` MDX page when component
 implementation begins. The page cites this principle as canonical
 and embeds component stories — no prose duplication. See
 [`followups.md → Storybook design-rules pattern setup`](../../followups.md#storybook-design-rules-pattern-setup).
+
+---
+
+## Autocomplete-with-create primitive
+
+Single text input with a live filtered dropdown and a tail-create
+option. Used wherever the user picks from a known list **OR**
+contributes a new entry to the same field — narrative free-text
+fields where canonical suggestions exist but coverage is open.
+
+**First user**: era flip's `era_name` input (per
+[era-flip design](../../explorations/2026-04-28-era-flip-affordance.md)).
+Likely future users: tag pickers, entity-link pickers when an
+ad-hoc entity is acceptable, entry-ref pickers.
+
+### Anatomy
+
+- **Text input** — always present, focused on open in modal
+  contexts.
+- **Dropdown** — appears below the input on focus / typing. Two
+  zones:
+  - **Suggestions** (top) — entries from the source list filtered
+    by the typed value (case-insensitive substring match by
+    default; short lists don't need fuzzy matching). Up to ~7
+    visible; scroll within the dropdown beyond that.
+  - **`+ Add new: "<typed>"` row** (bottom) — appears only when
+    the typed value doesn't exactly match any source entry
+    (case-insensitive comparison). Visually distinct from
+    suggestions (e.g., separator above + muted "+ Add new" label
+    prefix).
+
+### Source list semantics
+
+- **Empty / absent source** — no suggestions; the dropdown shows
+  only the `+ Add new` row when the user has typed something.
+  Component degrades cleanly to a free-form input with consistent
+  UI.
+- **Casing normalization** — exact case-insensitive match against a
+  source entry **commits in the source's canonical case**. Typing
+  `"reiwa"` against `['Reiwa']` commits `Reiwa`. Preserves the
+  intent of curated source lists; users don't have to nail casing
+  to hit a known value.
+- **Match on whitespace-trimmed value** — leading/trailing
+  whitespace ignored for matching; commit value is also trimmed.
+
+### Default Enter behavior
+
+- **Has matching suggestions** → pick the first match (commit in
+  canonical casing).
+- **No matching suggestions** → treat as `+ Add new` and commit
+  the trimmed typed text.
+
+Empty input is a no-op on Enter — the consuming form decides
+whether the field is required (and disables its submit button
+accordingly per the standard form pattern).
+
+### Configurability per use site
+
+Use-site config props (informative; finalize at component
+implementation):
+
+- `sourceList: string[]` — the suggestions; may be empty / absent.
+- `casingNormalization: 'canonical' | 'as-typed'` — default
+  `canonical`. Use `as-typed` when the source list is hint-only
+  rather than canonical (e.g., tag lists where users may
+  intentionally re-case).
+- `createTailLabel: string` — copy for the tail row; `+ Add new:
+"{value}"` is the default template.
+- `placeholder: string`, `required: boolean` — standard form
+  affordances.
+
+### Interaction with edit-restrictions
+
+The component disables uniformly during in-flight pipelines, per
+[`principles.md → Edit restrictions during in-flight generation`](../principles.md#edit-restrictions-during-in-flight-generation).
+Disabled state shows the typed value (no dropdown, no tail row),
+hover/focus reveals the same uniform tooltip every other gated
+control uses.
+
+### Storybook (autocomplete)
+
+Live demos for: source-list-with-presets (era flip pattern),
+empty-source (free-form-only behavior), casing-normalization
+in action, the tail-create-on-new-typed-value state. Belongs in
+the same `Patterns/Form controls/` Storybook tree as the Select
+primitive when component implementation begins.

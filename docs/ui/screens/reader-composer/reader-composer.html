@@ -42,9 +42,21 @@
   .crumb-chapter:hover, .crumb-chapter.open { border-color: var(--line-soft); background: var(--bg); }
   .crumb-chapter .chev { font-size: 9px; color: var(--ink-faint); }
   /* in-world time chip — opaque string from metadata, format-agnostic */
-  .crumb-time { font-size: 12px; color: var(--ink-muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 1; min-width: 0; max-width: 260px; overflow: hidden; }
+  .crumb-time { font-size: 12px; color: var(--ink-muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 1; min-width: 0; max-width: 260px; overflow: hidden; position: relative; }
   .crumb-time .clock { font-size: 11px; opacity: 0.8; }
   .crumb-time .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .crumb-time.interactive { cursor: pointer; }
+  .crumb-time.interactive:hover { color: var(--ink); }
+  .crumb-time .chev { font-size: 9px; color: var(--ink-faint); margin-left: 2px; }
+  .crumb-time:not(.interactive) .chev { display: none; }
+  /* time-chip popover — same anchor pattern as chapter-popover; lighter content */
+  .time-popover { position: absolute; top: calc(100% + 8px); left: 0; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 6px 16px rgba(0,0,0,0.1); min-width: 240px; z-index: 20; display: none; padding: 10px 12px; }
+  .time-popover.open { display: block; }
+  .time-popover-header { font-size: 11px; color: var(--ink-muted); padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); margin-bottom: 8px; }
+  .time-popover-era { font-size: 12px; color: var(--ink); margin-bottom: 10px; }
+  .time-popover-era .label { color: var(--ink-muted); }
+  .time-popover-action { padding: 6px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); font-size: 12px; cursor: pointer; color: var(--ink); text-align: center; display: block; }
+  .time-popover-action:hover { background: var(--bg-highlight); }
 
   /* thin progress strip along the bottom edge of the top-bar — passive chrome */
   .topbar-progress { height: 3px; background: var(--line-soft); position: relative; cursor: pointer; }
@@ -90,6 +102,30 @@
   /* chapter-close banner — sticky below chrome for the duration of the close transaction */
   .gen-banner { display: none; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--bg-region); align-items: center; gap: 12px; font-size: 12px; color: var(--ink); }
   .gen-banner.visible { display: flex; }
+
+  /* flip-era modal — uses the Autocomplete-with-create primitive (patterns/forms.md) */
+  .flip-era-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
+  .flip-era-modal.open { display: flex; }
+  .flip-era-modal .dialog { background: var(--bg-region); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 12px 32px rgba(0,0,0,0.18); width: 400px; max-width: 100%; }
+  .flip-era-modal .dialog-head { padding: 12px 16px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; justify-content: space-between; }
+  .flip-era-modal .dialog-head h3 { margin: 0; font-size: 14px; color: var(--ink); font-weight: 600; }
+  .flip-era-modal .dialog-close { font-size: 18px; color: var(--ink-faint); cursor: pointer; line-height: 1; padding: 0 4px; }
+  .flip-era-modal .dialog-body { padding: 14px 16px; }
+  .flip-era-modal .context-line { font-size: 12px; color: var(--ink-muted); margin-bottom: 12px; }
+  .flip-era-modal .field-label { font-size: 11px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .flip-era-modal .ac-input { width: 100%; padding: 6px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); font-size: 13px; font-family: inherit; box-sizing: border-box; }
+  .flip-era-modal .ac-dropdown { margin-top: 4px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); max-height: 180px; overflow: auto; }
+  .flip-era-modal .ac-suggestion { padding: 6px 10px; font-size: 12px; color: var(--ink); cursor: pointer; }
+  .flip-era-modal .ac-suggestion:hover { background: var(--bg-highlight); }
+  .flip-era-modal .ac-create { padding: 6px 10px; font-size: 12px; color: var(--ink-muted); cursor: pointer; border-top: 1px solid var(--line-soft); }
+  .flip-era-modal .ac-create:hover { background: var(--bg-highlight); color: var(--ink); }
+  .flip-era-modal .ac-create::before { content: "+ Add new era: "; }
+  .flip-era-modal .dialog-foot { padding: 10px 16px; border-top: 1px solid var(--line-soft); display: flex; justify-content: flex-end; gap: 8px; background: var(--bg); }
+  .flip-era-modal .btn { padding: 5px 14px; border: 1px solid var(--line); border-radius: 3px; font-size: 12px; cursor: pointer; background: var(--bg); color: var(--ink); font-family: inherit; }
+  .flip-era-modal .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .flip-era-modal .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .flip-era-modal .collision-error { display: none; padding: 8px 10px; border: 1px solid #d9a617; background: #fff8e1; color: #765; font-size: 11px; border-radius: 3px; margin-top: 8px; }
+  .flip-era-modal.collision .collision-error { display: block; }
   .gen-banner-icon { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s infinite; flex-shrink: 0; }
   .gen-banner-label { flex: 1; }
   .gen-banner-cancel { padding: 3px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); color: var(--ink); font-size: 11px; cursor: pointer; font-family: inherit; }
@@ -371,9 +407,15 @@
       <span class="chev">&#9662;</span>
     </span>
     <span class="crumb-sep">&middot;</span>
-    <span class="crumb-time" id="crumb-time" title="Day 3, dusk">
+    <span class="crumb-time interactive" id="crumb-time" title="Day 3, dusk · click for era affordances">
       <span class="clock">&#9201;</span>
       <span class="label" id="time-label">Day 3, dusk</span>
+      <span class="chev">&#9662;</span>
+      <div class="time-popover" id="time-popover">
+        <div class="time-popover-header">Day 3, dusk</div>
+        <div class="time-popover-era"><span class="label">Current era:</span> Reiwa</div>
+        <button class="time-popover-action" id="time-popover-flip">Flip era&hellip;</button>
+      </div>
     </span>
 
     <div class="chapter-popover" id="chapter-popover">
@@ -467,6 +509,7 @@
             <span class="entry-action" title="Edit">&#x270E;</span>
             <span class="entry-action" title="Regenerate this reply">&#x21BB;</span>
             <span class="entry-action" title="Branch from this entry">&#x2387;</span>
+            <span class="entry-action" title="Flip era from this entry (renders only when calendar has eras)" onclick="document.getElementById('flip-era-modal').classList.add('open')">&#128197;</span>
             <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
           </div>
         </div>
@@ -728,6 +771,31 @@
     </div>
   </div>
 
+</div>
+
+<!-- Flip-era modal — triggered from time-chip popover, Actions menu, or per-entry icon -->
+<div class="flip-era-modal" id="flip-era-modal">
+  <div class="dialog">
+    <div class="dialog-head">
+      <h3>Flip era</h3>
+      <span class="dialog-close" id="flip-era-close">&times;</span>
+    </div>
+    <div class="dialog-body">
+      <div class="context-line">Flipping at entry 47 (Day 12, Reiwa 6).</div>
+      <div class="field-label">Era name *</div>
+      <input type="text" class="ac-input" id="flip-era-input" value="Hei" autocomplete="off">
+      <!-- Autocomplete-with-create dropdown — see patterns/forms.md -->
+      <div class="ac-dropdown">
+        <div class="ac-suggestion">Heisei</div>
+        <div class="ac-create">"Hei"</div>
+      </div>
+      <div class="collision-error">An era flip already exists at this moment: <b>"Heisei"</b>. Delete it from <i>Story Settings &rarr; Calendar</i> before flipping again.</div>
+    </div>
+    <div class="dialog-foot">
+      <button class="btn" id="flip-era-cancel">Cancel</button>
+      <button class="btn primary" id="flip-era-confirm">Flip</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1094,6 +1162,40 @@
     chapterCrumb.classList.remove('open');
   });
   chapterPopover.addEventListener('click', e => e.stopPropagation());
+
+  // time-chip popover toggle (era affordances)
+  const crumbTimeEl = document.getElementById('crumb-time');
+  const timePopover = document.getElementById('time-popover');
+  if (crumbTimeEl && timePopover) {
+    crumbTimeEl.addEventListener('click', e => {
+      if (!crumbTimeEl.classList.contains('interactive')) return;
+      e.stopPropagation();
+      timePopover.classList.toggle('open');
+    });
+    document.addEventListener('click', () => timePopover.classList.remove('open'));
+    timePopover.addEventListener('click', e => e.stopPropagation());
+    const flipBtn = document.getElementById('time-popover-flip');
+    if (flipBtn) {
+      flipBtn.addEventListener('click', () => {
+        timePopover.classList.remove('open');
+        const modal = document.getElementById('flip-era-modal');
+        if (modal) modal.classList.add('open');
+      });
+    }
+  }
+
+  // flip-era modal — open/close handlers
+  const flipModal = document.getElementById('flip-era-modal');
+  if (flipModal) {
+    const close = () => flipModal.classList.remove('open');
+    const closeBtn = document.getElementById('flip-era-close');
+    const cancelBtn = document.getElementById('flip-era-cancel');
+    const confirmBtn = document.getElementById('flip-era-confirm');
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    if (cancelBtn) cancelBtn.addEventListener('click', close);
+    if (confirmBtn) confirmBtn.addEventListener('click', close);
+    flipModal.addEventListener('click', e => { if (e.target === flipModal) close(); });
+  }
 
   // reasoning expansion toggle — brain icon in meta line
   document.querySelectorAll('[data-reasoning-toggle]').forEach(t => {

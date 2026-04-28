@@ -102,7 +102,9 @@ same integer (see
 - **Top-bar time chip** — small clock icon + label, after the chapter
   chip. Always visible. Renders the formatter's output as opaque
   text. `max-width: 260px` with ellipsis on overflow; full label in
-  tooltip.
+  tooltip. Becomes interactive (click → popover) when the active
+  calendar has surfaceable affordances; see
+  [Time-chip popover](#time-chip-popover) below.
 - **Chapter break (inline)** — each closed chapter's break in the
   entries list shows time at close (formatter applied to that
   chapter's `end_entry_id` worldTime).
@@ -117,6 +119,39 @@ the formatter; UI code is untouched.
 Storage / classifier contract: see
 [`data-model.md → In-world time tracking`](../../../data-model.md).
 
+### Time-chip popover
+
+The time chip becomes interactive when there are calendar-time
+affordances to surface. Today: era flip on calendars where
+`eras !== null`. The chip stays passive (no `▾` indicator, no
+hover affordance, no popover) when nothing is surfacable — e.g.,
+calendars with `eras: null` and no other affordances yet.
+
+When interactive, click → small popover anchored to the chip:
+
+```
+┌── Day 12 · Reiwa 6 ──────────┐
+│  Current era: Reiwa           │
+│  [ Flip era…              ]  │
+└───────────────────────────────┘
+```
+
+- **Header** — the chip's rendered time, repeated for context.
+- **Current era** — read-only `Current era: <name>` label;
+  confirms what era is active (the era applied to the latest
+  entry's `worldTime` per the calendar formatter). Hidden when
+  the calendar has `eras: null`.
+- **`Flip era…` action** — opens the
+  [Flip era modal](#era-flip) anchored at the latest entry.
+  Hidden when `eras: null`.
+
+Symmetric with the chapter chip ▾ pattern: both chips become
+interactive surfaces for their respective calendar-domain
+concerns. The popover is the **anchor point for future
+calendar-time affordances** — when the deferred
+[manual `worldTime` correction](../../../followups.md#manual-worldtime-correction--cascade-vs-jump--downstream-blast-radius)
+gets its design pass, it lands here without growing chrome.
+
 ## Per-entry actions
 
 Actions on an individual entry (edit, regenerate, branch, delete)
@@ -129,20 +164,107 @@ Icon set (placeholder glyphs per the
 [shared glyph vocabulary](../../patterns/icon-actions.md#glyph-vocabulary);
 finalize with visual identity):
 
-| Action | Glyph | Meaning                                                                                                                        |
-| ------ | ----- | ------------------------------------------------------------------------------------------------------------------------------ |
-| edit   | ✎     | Edit entry content                                                                                                             |
-| regen  | ↻     | Regenerate this AI reply                                                                                                       |
-| branch | ⎇     | Branch from this entry — opens the [creation modal](./branch-navigator/branch-navigator.md#branch-creation--modal)             |
-| delete | ×     | Delete this entry — opens the [rollback confirmation](./rollback-confirm/rollback-confirm.md) (cascade preview + counts modal) |
+| Action   | Glyph | Meaning                                                                                                                        |
+| -------- | ----- | ------------------------------------------------------------------------------------------------------------------------------ |
+| edit     | ✎     | Edit entry content                                                                                                             |
+| regen    | ↻     | Regenerate this AI reply                                                                                                       |
+| branch   | ⎇     | Branch from this entry — opens the [creation modal](./branch-navigator/branch-navigator.md#branch-creation--modal)             |
+| flip era | 📅    | Flip era from this entry — opens the [flip-era modal](#era-flip). Conditional: renders only when active calendar has eras.     |
+| delete   | ×     | Delete this entry — opens the [rollback confirmation](./rollback-confirm/rollback-confirm.md) (cascade preview + counts modal) |
 
 Per-entry action sets:
 
-- **User entry:** edit, delete
-- **AI entry:** edit, regen, branch, delete
+- **User entry:** edit, `[flip era]`, delete
+- **AI entry:** edit, regen, branch, `[flip era]`, delete
 - **System entry:** content-level buttons (Retry / Details / Dismiss)
 - **Streaming entry:** no per-entry actions; cancel happens via the
   composer's Send→Cancel transform
+
+Bracketed `[flip era]` indicates conditional visibility — the icon
+renders only when the active calendar has `eras !== null`. See
+[Era flip](#era-flip) below.
+
+## Era flip
+
+Era flips are user-triggered narrative events writing one row to
+[`branch_era_flips`](../../../data-model.md#era-flips) — see
+[`calendar-systems/spec.md → Eras`](../../../calendar-systems/spec.md#eras-hoisted-out-manually-triggered)
+for what the underlying system models. This section covers the UI
+surfaces that trigger a flip and the modal that captures the era
+name.
+
+**Trigger surfaces** (all conditional on `eras !== null`):
+
+- **[Time-chip popover](#time-chip-popover) — `Flip era…` action.**
+  Primary in-narrative path. Defaults the modal's anchor to the
+  latest entry's `worldTime`.
+- **[Actions menu](../../principles.md#actions--platform-agnostic-action-directory) — `Flip era…`.**
+  Universal route. Same default anchor (latest entry).
+- **Per-entry `📅 flip era` icon.** Defaults the anchor to the
+  chosen entry's `worldTime` — covers the retcon case without
+  needing the deferred entry-ref picker.
+
+### Flip-era modal
+
+```
+┌──── Flip era ─────────────────────────── × ─┐
+│                                              │
+│   Flipping at entry 47 (Day 12, Reiwa 6).    │
+│                                              │
+│   Era name *                                 │
+│   ┌────────────────────────────────────┐     │
+│   │ Hei                                │     │
+│   └────────────────────────────────────┘     │
+│   ┌────────────────────────────────────┐     │
+│   │ Heisei                             │     │
+│   │ + Add new era: "Hei"               │     │
+│   └────────────────────────────────────┘     │
+│                                              │
+│                       [ Cancel ]  [ Flip ]   │
+└──────────────────────────────────────────────┘
+```
+
+- **Width** ~400px. Centered. Backdrop dim.
+- **Context line** — formatted via the active calendar's renderer
+  on the chosen entry's `worldTime`. Read-only. Says "start of
+  story" when `at_worldtime ≈ 0`.
+- **Era name input** — uses the
+  [Autocomplete-with-create primitive](../../patterns/forms.md#autocomplete-with-create-primitive)
+  configured against `EraDeclaration.presetNames`. Casing
+  normalization = canonical (commit form snaps to the preset's
+  canonical case on case-insensitive match). Required;
+  auto-focused on open.
+- **`Flip` button** — disabled until input is non-empty
+  (whitespace doesn't count). Enter inside the input also confirms,
+  per the primitive's default Enter behavior.
+- **`Cancel`** — closes; no row written. Esc and click-outside
+  also Cancel.
+
+**Collision guard.** `branch_era_flips` enforces unique
+`(branch_id, at_worldtime)`. If the chosen anchor's `worldTime`
+matches an existing flip's `at_worldtime` on the current branch,
+the modal blocks save with an inline error pointing the user to
+the existing flip's name and to the flip-list affordance in
+[Story Settings · Calendar](../story-settings/story-settings.md#era-flips-on-this-branch)
+where they can delete it.
+
+**Confirmation.** No separate "are you sure" step. The modal's
+form IS the confirmation. The time chip re-renders immediately
+post-flip — that's the feedback. Reversible via CTRL-Z (one
+delta).
+
+**Edit-restrictions gating.** Every trigger surface and the modal's
+`Flip` button disable when a pipeline transaction is in flight,
+per
+[`principles.md → Edit restrictions during in-flight generation`](../../principles.md#edit-restrictions-during-in-flight-generation).
+Tooltip copy is principle-owned.
+
+**Visibility.** All three trigger surfaces hide entirely when the
+active calendar has `eras: null`. Browsing / cleanup of orphan
+flips (when the calendar swap leaves a branch carrying flips that
+the new calendar doesn't support) lives in
+[Story Settings · Calendar → Era flips](../story-settings/story-settings.md#era-flips-on-this-branch)
+— the trigger surfaces stay hidden regardless.
 
 ## Reasoning expansion + token metadata on AI entries
 

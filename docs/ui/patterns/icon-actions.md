@@ -42,12 +42,13 @@ icons on desktop.
 A small shared semantic mapping. The same glyph means the same
 action everywhere it appears.
 
-| Action        | Glyph | Use cases                                               |
-| ------------- | ----- | ------------------------------------------------------- |
-| edit / rename | `✎`   | Edit entry content (reader); rename branch (navigator). |
-| regenerate    | `↻`   | Regenerate this AI reply (reader).                      |
-| branch        | `⎇`   | Branch from this entry (reader).                        |
-| delete        | `×`   | Delete entry (reader); delete branch (navigator).       |
+| Action        | Glyph | Use cases                                                                                                |
+| ------------- | ----- | -------------------------------------------------------------------------------------------------------- |
+| edit / rename | `✎`   | Edit entry content (reader); rename branch (navigator).                                                  |
+| regenerate    | `↻`   | Regenerate this AI reply (reader).                                                                       |
+| branch        | `⎇`   | Branch from this entry (reader).                                                                         |
+| delete        | `×`   | Delete entry (reader); delete branch (navigator); delete era flip (Story Settings · Calendar flip-list). |
+| flip era      | `📅`  | Flip era from this entry (reader, conditional on `eras !== null`).                                       |
 
 Glyphs are placeholders pending the visual identity session; the
 consistent **semantic mapping** is what matters now and what

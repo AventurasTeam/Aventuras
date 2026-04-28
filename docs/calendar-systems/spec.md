@@ -181,8 +181,9 @@ reset on flip? default first-era name? optional preset name list?).
 — a branch-scoped table; flips fork with branches like every other
 narrative state. Each row carries `at_worldtime` (in physical
 seconds) + `era_name`. Flips are user-triggered (explicit "Flip era"
-affordance) and delta-logged via the standard per-row delta
-machinery.
+affordance — UI surfaces specified in
+[`reader-composer.md → Era flip`](../ui/screens/reader-composer/reader-composer.md#era-flip))
+and delta-logged via the standard per-row delta machinery.
 
 A calendar with predictable eras (rare — fixed-length 1000-year
 ages with no narrative branch) is unsupported by design. Users

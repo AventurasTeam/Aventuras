@@ -674,6 +674,37 @@
             Swapping the calendar may surface confirmation warnings (origin re-pick, hidden era flips, display reformatting) per the calendar picker pattern.
           </div>
         </div>
+
+        <!-- Era flips on this branch — read-only-plus-delete; authoring lives in the reader -->
+        <div class="field-row" style="margin-top: 18px;">
+          <div class="field-label" style="align-self: flex-start;">era flips on this branch</div>
+          <div style="flex: 1;">
+            <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 8px;">
+              Branch-scoped log of era changes. Authoring happens in the reader (time-chip popover, Actions menu, or per-entry icon).
+            </div>
+            <div style="border: 1px solid var(--line-soft); border-radius: 3px; background: var(--bg-region);">
+              <div style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line-soft); font-size: 12px;">
+                <span style="font-weight: 500; color: var(--ink); min-width: 80px;">Reiwa</span>
+                <span style="color: var(--ink-muted); flex: 1;">Reiwa 1 &middot; May 1, 2019</span>
+                <span style="color: var(--ink-faint); cursor: pointer; font-size: 14px;" title="Delete this flip">&times;</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line-soft); font-size: 12px;">
+                <span style="font-weight: 500; color: var(--ink); min-width: 80px;">Heisei</span>
+                <span style="color: var(--ink-muted); flex: 1;">Heisei 31 &middot; Jan 8, 1989</span>
+                <span style="color: var(--ink-faint); cursor: pointer; font-size: 14px;" title="Delete this flip">&times;</span>
+              </div>
+              <!-- Orphan-flip example — shown only after a calendar swap; muted annotation -->
+              <div style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; font-size: 12px;">
+                <span style="font-weight: 500; color: var(--ink); min-width: 80px;">Post-Cataclysm</span>
+                <span style="color: var(--ink-muted); flex: 1;">Year 1 &middot; Day 1 <span style="color: var(--ink-faint); font-style: italic;">[from previous calendar]</span></span>
+                <span style="color: var(--ink-faint); cursor: pointer; font-size: 14px;" title="Delete this flip">&times;</span>
+              </div>
+            </div>
+            <div style="font-size: 11px; color: var(--ink-faint); margin-top: 6px; font-style: italic;">
+              Sort: chronological (<code>at_worldtime</code> ascending). Empty state when calendar has eras but branch has no flips: &ldquo;No era flips on this branch yet. Use <b>Flip era&hellip;</b> in the reader to mark a new era.&rdquo; Whole sub-section hides when calendar has <code>eras: null</code> AND no orphan flips exist.
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ADVANCED -->
