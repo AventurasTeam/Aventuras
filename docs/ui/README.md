@@ -66,13 +66,3 @@ rationale, and decisions live alongside.
   [reader-composer.md → Error surface](./screens/reader-composer/reader-composer.md#error-surface--system-entries-not-chrome-indicators))
 - Empty states for each list
 - Mobile variants for everything (deferred)
-
-## Scope of the initial session (2026-04-24)
-
-- Locked: Reader / composer + World panel, plus all the cross-cutting
-  decisions that emerged while wireframing those two (see
-  [principles.md](./principles.md)).
-- Data-model follow-ups accumulated in
-  [`../followups.md`](../followups.md).
-- Visual identity, feature components in Storybook, mobile variants,
-  and pixel-fidelity mockups deferred to future sessions.

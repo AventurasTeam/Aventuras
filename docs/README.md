@@ -21,6 +21,9 @@ implementation, and the open questions tracked across the project.
   data-model, architecture, and UX items.
 - **[ui/](./ui/README.md)** — UI design: principles + per-screen
   wireframes and docs.
+- **[explorations/](./explorations/README.md)** — dated session
+  records of design discussions. Frozen historical reasoning;
+  canonical docs are authoritative once a design lands.
 
 ## Structure rules
 
@@ -46,7 +49,10 @@ Pinned conventions — how we keep the docs navigable as they grow.
 
 - Kebab-case filenames (`reader-composer.md`, not `readerComposer.md`
   or `ui-reader-composer.md`).
-- No prefixes — the directory already scopes the file.
+- No category prefixes — the directory already scopes the file.
+  Exception: chronological scratch directories
+  (`docs/explorations/`) use a `YYYY-MM-DD-<topic>.md` prefix
+  because date is the primary axis there, not topic.
 - Wireframe HTML basename matches the doc basename
   (`reader-composer.md` ↔ `reader-composer.html`).
 
