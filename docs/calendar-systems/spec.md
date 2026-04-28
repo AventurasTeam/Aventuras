@@ -584,8 +584,8 @@ are answered above:
 
 - **Where declared:** `stories.settings.calendarSystemId` references
   an entry in the calendar registry (built-ins in code +
-  `app_settings.calendars`); `branch_era_flips` table holds runtime
-  era-flip log.
+  user-authored rows in `vault_calendars`); `branch_era_flips`
+  table holds runtime era-flip log.
 - **How authored:** declarative tiered schema + Liquid display
   template. v1 ships preset catalog + label-tweak (L1/L2);
   full from-scratch authoring (L3) deferred.

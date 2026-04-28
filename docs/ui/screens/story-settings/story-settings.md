@@ -412,8 +412,8 @@ anchor display. Delete still works the same way; CTRL-Z restores.
 
 **Anchor display for orphans.** Formatter prefers the previously-
 active calendar's renderer when its definition is still available
-(calendar definitions live in `app_settings.calendars` /
-`vault_calendars`, not on the story; they survive the swap). If
+(calendar definitions live in `vault_calendars`, not on the story;
+they survive the swap). If
 the previous calendar was deleted from Vault, the row falls back
 to the raw integer worldTime with a small `(raw)` annotation.
 

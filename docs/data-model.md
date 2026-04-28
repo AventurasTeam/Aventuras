@@ -428,7 +428,7 @@ stories.settings: {
 
   // World time — see calendar-systems/spec.md for the primitive
   calendarSystemId: string          // references CalendarSystem.id in the calendar registry
-                                    //   (built-ins in code + user-authored in app_settings.calendars);
+                                    //   (built-ins in code + user-authored in vault_calendars);
                                     //   seeded from app_settings.default_calendar_id at creation
   worldTimeOrigin: TierTuple        // Record<tierName, number> matching the active calendar's tier shape
                                     //   Earth: { year, month, day, hour, minute, second }
