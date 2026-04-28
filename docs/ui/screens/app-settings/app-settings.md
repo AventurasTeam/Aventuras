@@ -24,7 +24,7 @@ Cross-cutting principles that govern this surface are in
 ┌────────────────────────────────────────────────────────────┐
 │ ⚠ N profiles have configuration errors. [Open settings →] │ ← global error banner (when broken)
 ├────────────────────────────────────────────────────────────┤
-│ [logo] App Settings                       [⎇] [←]          │ ← top bar
+│ [logo] App Settings                       [⚲] [←]          │ ← top bar
 ├───────────────┬────────────────────────────────────────────┤
 │ GENERATION    │ Profiles                                    │ ← pane header
 │ · Providers   │ ─────                                       │
@@ -406,7 +406,7 @@ time chip, branch icon, gen status — none of those exist outside
 a loaded story). Top bar carries:
 
 - Logo + `App Settings` heading
-- Actions (⎇)
+- Actions (⚲)
 - Return (←) → back to story list
 
 ## Onboarding adjacency

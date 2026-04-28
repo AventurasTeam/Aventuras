@@ -163,6 +163,26 @@ Actions menu rather than chrome. Visual identity must pick glyphs
 that read clearly different at glance — both icons being "geary"
 defeats the rule's purpose.
 
+**Scratch glyph vocabulary** for top-bar / chrome (placeholders
+pending visual identity; chosen so wireframe ASCII and HTML mocks
+read consistently and don't collide with row-action vocabulary in
+[`patterns/icon-actions.md`](./patterns/icon-actions.md#glyph-vocabulary)):
+
+| Concern        | Glyph | Notes                                               |
+| -------------- | ----- | --------------------------------------------------- |
+| App Settings   | `⚙`   | Regular gear; app-level surfaces only.              |
+| Story Settings | `⛭`   | Gear without hub (`&#9965;`); in-story surfaces.    |
+| Actions menu   | `⚲`   | Neuter symbol (`&#9906;`); chrome overflow / Cmd-K. |
+| Return         | `←`   | Stack-aware back; see "Stack-aware Return" below.   |
+| Branch         | `⎇`   | Reserved for branch semantics (chip + per-entry).   |
+| Overflow row   | `⋯`   | Per-row / per-card overflow menus.                  |
+
+`⎇` (branch) MUST NOT be reused for Actions or any non-branch
+surface. The visual similarity at small sizes is real (`⚲` and `⎇`
+both read as "circle with a stroke"); reviewers who confuse them
+in mocks should treat the doc text as authoritative until visual
+identity ships final glyphs.
+
 ### Master-detail sub-header
 
 **Master-detail surfaces with a kind selector + list pane** (World,

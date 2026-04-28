@@ -29,7 +29,7 @@ Cross-cutting principles that govern these surfaces are in
 
 ```
 ─── Reader top bar ──────────────────────────────────────────
- ← │ <story> · Ch 5 · 🕒 ... │ [status] [⎇ 3] [⎇] [⚙] │
+ ← │ <story> · Ch 5 · 🕒 ... │ [status] [⎇ 3] [⚲] [⛭] │
                                        ↓
                           (click chip — desktop popover)
                                        ↓
