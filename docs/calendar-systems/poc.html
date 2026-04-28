@@ -210,7 +210,12 @@
         <pre style="font: 11px/1.45 ui-monospace, monospace; background: rgba(0,0,0,0.04); padding: 10px 12px; border-radius: 3px; margin: 8px 0; white-space: pre-wrap; color: var(--ink);">type CalendarSystem = {
   id: string                       // stable id; e.g. 'earth-gregorian'
   name: string                     // human-readable label
-  baseUnit: string                 // bottom tier's name in vocabulary terms
+  baseUnitName: string             // bottom tier's display name ('second',
+                                   //   'day', 'kin', 'tick'). Label only —
+                                   //   classifier prompt + UI; not semantic.
+  secondsPerBaseUnit: number       // physical seconds per one bottom-tier unit.
+                                   //   Earth = 1; Shire = 86400; Mayan kin = 86400.
+                                   //   Bridges worldTime (always seconds) → tiers.
   tiers: Tier[]                    // ordered top-down; bottom tier = base unit
   displayFormat: string            // Liquid template; tier-tuple in scope
   eras: EraDeclaration | null      // null = no era support
@@ -222,7 +227,7 @@
   }
   defaultOrigin: TierTuple         // worldTime=0 anchor for the demo
   defaultToToday?: boolean         // PoC: jump to wallclock now on load
-  defaultWorldTime?: number        // PoC: alternative fixed default
+  defaultWorldTime?: number        // PoC: alternative fixed default (seconds)
 }
 
 type Tier = {
@@ -235,7 +240,7 @@ type Tier = {
 
 type TierRollover =
   | { kind: 'constant'; value: number }
-  | { kind: 'table'; indexedBy: string; values: number[] }
+  | { kind: 'table'; indexedBy: string; values: number[] }      // length-by-parent-value
   | { kind: 'rule'; against: string; base: number; conditions: LeapCondition[] }
 
 type LeapCondition = {
@@ -276,6 +281,18 @@ type TierTuple = Record&lt;string, number&gt;</pre>
 // ENGINE — calendar conversion + rendering
 // ============================================================
 
+// Universal-seconds bridge per spec: state.worldTime is physical
+// seconds; the tier engine walks in base-units. Convert at the
+// boundary so the engine never has to know about secondsPerBaseUnit.
+function secondsToBaseUnits(seconds, calendar) {
+  const spb = calendar.secondsPerBaseUnit || 1;
+  return Math.trunc(seconds / spb);
+}
+function baseUnitsToSeconds(units, calendar) {
+  const spb = calendar.secondsPerBaseUnit || 1;
+  return units * spb;
+}
+
 // Compute the rollover length of a tier given the partial tuple
 // (tier values for tiers above + this one). Returns the number of
 // CHILD-tier-values this tier-value spans (e.g., for 'month' under
@@ -287,15 +304,14 @@ function tierLength(tier, partialTuple) {
   switch (r.kind) {
     case 'constant': return r.value;
     case 'table': {
-      // Indexed by parent value. Caller is responsible for setting up
-      // partialTuple correctly.
-      const parentName = r.indexedBy; // PoC convention: 'table' references which tier indexes it
-      const idx = partialTuple[parentName];
+      // Length looked up by the tier value named in r.indexedBy.
+      const idx = partialTuple[r.indexedBy];
       return r.values[idx];
     }
     case 'rule': {
       // base + sum of condition matches. Conditions evaluated against
-      // partialTuple[r.against] (PoC convention: explicit field).
+      // partialTuple[r.against] (e.g., Earth's day-tier leap rule
+      // tests the year value, two tiers up).
       let len = r.base;
       const v = partialTuple[r.against];
       let lastMatched = false;
@@ -623,7 +639,8 @@ const PRESETS = {
   'earth-gregorian': {
     id: 'earth-gregorian',
     name: 'Earth (Gregorian)',
-    baseUnit: 'second',
+    baseUnitName: 'second',
+    secondsPerBaseUnit: 1,
     tiers: [
       {
         name: 'year', startValue: 1,
@@ -670,7 +687,8 @@ const PRESETS = {
   'earth-gregorian-bcad': {
     id: 'earth-gregorian-bcad',
     name: 'Earth (BC/AD)',
-    baseUnit: 'second',
+    baseUnitName: 'second',
+    secondsPerBaseUnit: 1,
     tiers: [
       {
         name: 'year', startValue: 1,
@@ -713,7 +731,8 @@ const PRESETS = {
   'imperial-japan': {
     id: 'imperial-japan',
     name: 'Imperial Japan (年号)',
-    baseUnit: 'second',
+    baseUnitName: 'second',
+    secondsPerBaseUnit: 1,
     tiers: [
       {
         name: 'year', startValue: 1,
@@ -764,7 +783,8 @@ const PRESETS = {
   'fantasy-12-30': {
     id: 'fantasy-12-30',
     name: 'Generic Fantasy (12×30 + 5)',
-    baseUnit: 'day',
+    baseUnitName: 'day',
+    secondsPerBaseUnit: 86400,
     tiers: [
       { name: 'year', startValue: 1, rollover: { kind: 'constant', value: 13 } },
       {
@@ -794,7 +814,9 @@ const PRESETS = {
   'warhammer-imperial': {
     id: 'warhammer-imperial',
     name: 'Warhammer 40K Imperial',
-    baseUnit: 'fraction',
+    baseUnitName: 'fraction',
+    secondsPerBaseUnit: 86400, // PoC: 1 fraction = 1 Earth day; canon-loose
+                               //   so the demo uses an integer factor.
     tiers: [
       { name: 'year', startValue: 0, rollover: { kind: 'constant', value: 1000 } },
       { name: 'fraction', startValue: 0, rollover: { kind: 'constant', value: 1000 } },
@@ -813,7 +835,8 @@ const PRESETS = {
     },
     defaultOrigin: { year: 0, fraction: 0 },
     // Default to mid-M41, year 124 ish — the iconic "current" 40K setting.
-    defaultWorldTime: 1124 * 1000 + 500,
+    // (1124 * 1000 + 500) fractions × 86400 sec/fraction = seconds-grain default.
+    defaultWorldTime: (1124 * 1000 + 500) * 86400,
   },
 
   // Tolkien Shire Reckoning. 15-cell month table mixing single-day
@@ -827,7 +850,8 @@ const PRESETS = {
   'tolkien-shire': {
     id: 'tolkien-shire',
     name: 'Tolkien Shire Reckoning',
-    baseUnit: 'day',
+    baseUnitName: 'day',
+    secondsPerBaseUnit: 86400,
     tiers: [
       {
         name: 'year', startValue: 1,
@@ -869,7 +893,8 @@ const PRESETS = {
   'mayan-long-count': {
     id: 'mayan-long-count',
     name: 'Mayan Long Count',
-    baseUnit: 'kin',
+    baseUnitName: 'kin',
+    secondsPerBaseUnit: 86400,
     tiers: [
       { name: 'baktun', startValue: 0, rollover: null },
       { name: 'katun', startValue: 0, rollover: { kind: 'constant', value: 20 } },
@@ -887,7 +912,9 @@ const PRESETS = {
   'stardate': {
     id: 'stardate',
     name: 'Stardate (sequential)',
-    baseUnit: 'tick',
+    baseUnitName: 'tick',
+    secondsPerBaseUnit: 1, // PoC: 1 tick = 1 second; the displayFormat
+                           //   divides by 1000 to render the TNG stardate.
     tiers: [
       { name: 'count', startValue: 0, rollover: null },
     ],
@@ -903,7 +930,8 @@ const PRESETS = {
   'custom': {
     id: 'custom',
     name: 'Custom (build your own)',
-    baseUnit: 'day',
+    baseUnitName: 'day',
+    secondsPerBaseUnit: 86400,
     tiers: [
       { name: 'year', startValue: 1, rollover: null },
       { name: 'day', startValue: 1, rollover: { kind: 'constant', value: 365 } },
@@ -984,7 +1012,8 @@ function init() {
       hour: now.getHours(), minute: now.getMinutes(), second: now.getSeconds(),
     };
     try {
-      state.worldTime = tupleToAbsolute(todayTuple, state.calendar) - tupleToAbsolute(state.origin, state.calendar);
+      const baseUnits = tupleToAbsolute(todayTuple, state.calendar) - tupleToAbsolute(state.origin, state.calendar);
+      state.worldTime = baseUnitsToSeconds(baseUnits, state.calendar);
     } catch (e) { /* leave alone */ }
     render();
   });
@@ -1011,14 +1040,14 @@ function loadPreset(id) {
   precomputeConstantSizes(state.calendar);
 
   // Era setup: implicit first era at 0, plus any pre-declared
-  // historical flips converted from atTuple to worldTime.
+  // historical flips converted from atTuple to worldTime (seconds).
   if (state.calendar.eras) {
     state.eraFlips = [{ at: 0, name: state.calendar.eras.defaultStartName }];
     const initial = state.calendar.eras.initialFlips || [];
     const originAbs = tupleToAbsolute(state.origin, state.calendar);
     for (const flip of initial) {
-      const at = tupleToAbsolute(flip.atTuple, state.calendar) - originAbs;
-      state.eraFlips.push({ at, name: flip.name });
+      const baseUnits = tupleToAbsolute(flip.atTuple, state.calendar) - originAbs;
+      state.eraFlips.push({ at: baseUnitsToSeconds(baseUnits, state.calendar), name: flip.name });
     }
     state.eraFlips.sort((a, b) => a.at - b.at);
   } else {
@@ -1033,7 +1062,8 @@ function loadPreset(id) {
       hour: now.getHours(), minute: now.getMinutes(), second: now.getSeconds(),
     };
     try {
-      state.worldTime = tupleToAbsolute(todayTuple, state.calendar) - tupleToAbsolute(state.origin, state.calendar);
+      const baseUnits = tupleToAbsolute(todayTuple, state.calendar) - tupleToAbsolute(state.origin, state.calendar);
+      state.worldTime = baseUnitsToSeconds(baseUnits, state.calendar);
     } catch (e) { /* leave at 0 */ }
   } else if (typeof state.calendar.defaultWorldTime === 'number') {
     state.worldTime = state.calendar.defaultWorldTime;
@@ -1061,7 +1091,8 @@ function renderSummary() {
   const subs = c.tiers.flatMap(t => (t.subdivisions || []).map(s => s.name));
   grid.innerHTML = '';
   appendDef(grid, 'tiers', c.tiers.map(t => t.name).join(' → '));
-  appendDef(grid, 'base unit', c.baseUnit);
+  appendDef(grid, 'base unit', c.baseUnitName);
+  appendDef(grid, 'seconds per base unit', String(c.secondsPerBaseUnit));
   appendDef(grid, 'sub-divisions', subs.length ? subs.join(', ') : '—');
   appendDef(grid, 'eras', c.eras ? 'enabled' : 'disabled');
 }
@@ -1074,15 +1105,13 @@ function appendDef(grid, term, val) {
 
 function renderWorldTimeControls() {
   const c = state.calendar;
-  // Reasonable slider range based on baseUnit, expanded if worldTime is far
-  // from origin (so Imperial Japan's 158-year span is reachable via slider).
-  const ranges = {
-    second: 86400 * 365 * 10, // 10 years
-    day: 365 * 100,            // 100 years
-    tick: 1000000000,
-    cycle: 10000,
-  };
-  const baseSpan = ranges[c.baseUnit] || 100000;
+  const spb = c.secondsPerBaseUnit || 1;
+  // Slider range (in seconds). For sub-day base units we span ~10 years;
+  // for day-grain or coarser, span ~100 years so things like Tolkien Shire
+  // and Mayan Long Count are reachable. state.worldTime stays in scope to
+  // expand the span if the demo is parked far from origin.
+  const yearsSpan = spb >= 86400 ? 100 : 10;
+  const baseSpan = 86400 * 365 * yearsSpan;
   const span = Math.max(baseSpan, Math.abs(state.worldTime) * 2);
   const slider = $('wt-slider');
   slider.min = -span;
@@ -1091,32 +1120,35 @@ function renderWorldTimeControls() {
   slider.value = state.worldTime;
   $('wt-input').value = state.worldTime;
 
-  // Stepper buttons calibrated to baseUnit.
+  // Stepper buttons emit seconds. Per-baseUnitName layout picks meaningful
+  // unit jumps (1 day, 1 year, …) and converts via secondsPerBaseUnit.
   const stepper = $('wt-stepper');
   stepper.innerHTML = '';
   let steps = [];
-  if (c.baseUnit === 'second') {
+  if (c.baseUnitName === 'second') {
     steps = [
       { label: '+1s', delta: 1 }, { label: '+1m', delta: 60 }, { label: '+1h', delta: 3600 },
       { label: '+1d', delta: 86400 }, { label: '+30d', delta: 86400 * 30 }, { label: '+1y', delta: 86400 * 365 },
       { label: '−1d', delta: -86400 }, { label: '−1y', delta: -86400 * 365 },
     ];
-  } else if (c.baseUnit === 'day') {
+  } else if (c.baseUnitName === 'day' || c.baseUnitName === 'kin') {
     steps = [
-      { label: '+1d', delta: 1 }, { label: '+1mo (30d)', delta: 30 }, { label: '+1y (365d)', delta: 365 },
-      { label: '+10y', delta: 3650 }, { label: '−1d', delta: -1 }, { label: '−1y', delta: -365 },
+      { label: '+1d', delta: 86400 }, { label: '+1mo (30d)', delta: 86400 * 30 }, { label: '+1y (365d)', delta: 86400 * 365 },
+      { label: '+10y', delta: 86400 * 3650 }, { label: '−1d', delta: -86400 }, { label: '−1y', delta: -86400 * 365 },
     ];
-  } else if (c.baseUnit === 'fraction') {
-    // Warhammer: 1000 fractions per year.
+  } else if (c.baseUnitName === 'fraction') {
+    // Warhammer: 1000 fractions per year × 86400 sec/fraction.
+    const yr = 1000 * spb;
     steps = [
-      { label: '+1', delta: 1 }, { label: '+1y (1000)', delta: 1000 },
-      { label: '+10y', delta: 10000 }, { label: '+100y', delta: 100000 },
-      { label: '−1y', delta: -1000 }, { label: '−100y', delta: -100000 },
+      { label: '+1', delta: spb }, { label: '+1y (1000)', delta: yr },
+      { label: '+10y', delta: yr * 10 }, { label: '+100y', delta: yr * 100 },
+      { label: '−1y', delta: -yr }, { label: '−100y', delta: -yr * 100 },
     ];
   } else {
+    // Generic / 'tick' / unknown: step in base-unit multiples × spb.
     steps = [
-      { label: '+1', delta: 1 }, { label: '+1k', delta: 1000 }, { label: '+1M', delta: 1000000 },
-      { label: '−1', delta: -1 }, { label: '−1k', delta: -1000 },
+      { label: '+1', delta: spb }, { label: '+1k', delta: 1000 * spb }, { label: '+1M', delta: 1000000 * spb },
+      { label: '−1', delta: -spb }, { label: '−1k', delta: -1000 * spb },
     ];
   }
   for (const s of steps) {
@@ -1243,7 +1275,10 @@ function saveJson() {
   try {
     const parsed = JSON.parse($('json-editor').value);
     if (!parsed.tiers || !Array.isArray(parsed.tiers)) throw new Error('calendar.tiers must be an array');
-    if (!parsed.baseUnit) throw new Error('calendar.baseUnit is required');
+    if (!parsed.baseUnitName) throw new Error('calendar.baseUnitName is required');
+    if (!Number.isFinite(parsed.secondsPerBaseUnit) || parsed.secondsPerBaseUnit <= 0) {
+      throw new Error('calendar.secondsPerBaseUnit must be a positive number');
+    }
     state.calendar = parsed;
     state.lastJsonError = null;
     clearCalendarCache();
@@ -1257,10 +1292,12 @@ function saveJson() {
 function renderDisplay() {
   let tuple, scope, displayText, displaySub;
   try {
-    tuple = worldTimeToTuple(state.worldTime, state.calendar, state.origin);
+    const baseUnits = secondsToBaseUnits(state.worldTime, state.calendar);
+    tuple = worldTimeToTuple(baseUnits, state.calendar, state.origin);
     scope = buildScope(tuple);
     displayText = renderTemplate(state.calendar.displayFormat || '', scope);
-    displaySub = `worldTime = ${state.worldTime} ${state.calendar.baseUnit}${state.worldTime === 1 ? '' : 's'}`;
+    const unit = state.calendar.baseUnitName;
+    displaySub = `worldTime = ${state.worldTime} second${state.worldTime === 1 ? '' : 's'} (= ${baseUnits} ${unit}${baseUnits === 1 ? '' : 's'} × ${state.calendar.secondsPerBaseUnit})`;
   } catch (err) {
     displayText = '— render failed —';
     displaySub = 'error: ' + (err.message || err);
@@ -1282,7 +1319,8 @@ function buildScope(tuple) {
     }
   }
   // sub-divisions
-  const days = computeDaysSinceEpoch(state.worldTime, state.calendar, state.origin);
+  const baseUnits = secondsToBaseUnits(state.worldTime, state.calendar);
+  const days = computeDaysSinceEpoch(baseUnits, state.calendar, state.origin);
   scope._daysSinceEpoch = days;
   for (const tier of state.calendar.tiers) {
     for (const sub of (tier.subdivisions || [])) {
@@ -1304,7 +1342,7 @@ function buildScope(tuple) {
       const resets = state.calendar.eras.resetsOnFlip || [];
       const zeroOrigin = {};
       for (const t of state.calendar.tiers) zeroOrigin[t.name] = t.startValue;
-      const elapsedTuple = worldTimeToTuple(state.worldTime - era.at, state.calendar, zeroOrigin);
+      const elapsedTuple = worldTimeToTuple(secondsToBaseUnits(state.worldTime - era.at, state.calendar), state.calendar, zeroOrigin);
       for (const tierName of resets) {
         if (elapsedTuple[tierName] === undefined) continue;
         scope[tierName] = elapsedTuple[tierName];
@@ -1317,7 +1355,7 @@ function buildScope(tuple) {
     } else {
       // 'display-label' (default, nengō style): expose eraYear inline.
       if (tuple.year !== undefined) {
-        const flipTuple = worldTimeToTuple(era.at, state.calendar, state.origin);
+        const flipTuple = worldTimeToTuple(secondsToBaseUnits(era.at, state.calendar), state.calendar, state.origin);
         scope.eraYear = (tuple.year - flipTuple.year) + 1;
       }
     }
@@ -1457,7 +1495,7 @@ init();
   // 365-day year with 1 skip per year → 364 cycling days = 52×7, so
   // year boundary preserves weekday.
   const shire = {
-    id: 'test-shire', name: 'Test Shire', baseUnit: 'day',
+    id: 'test-shire', name: 'Test Shire', baseUnitName: 'day', secondsPerBaseUnit: 86400,
     tiers: [
       { name: 'year', startValue: 1, rollover: { kind: 'constant', value: 1 } },
       { name: 'month', startValue: 0, rollover: { kind: 'constant', value: 2 },

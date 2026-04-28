@@ -279,11 +279,11 @@ type Tier = {
 
 type TierRollover =
   | { kind: 'constant'; value: number } // hours-in-day = 24
-  | { kind: 'table'; values: number[] } // month-length table indexed by parent value
-  | { kind: 'rule'; base: number; conditions: LeapCondition[] } // Gregorian-shaped
+  | { kind: 'table'; indexedBy: string; values: number[] } // length-by-parent-value table
+  | { kind: 'rule'; against: string; base: number; conditions: LeapCondition[] } // Gregorian-shaped
 
 type LeapCondition = {
-  every: number // applies when (parent-value % every) === 0
+  every: number // applies when ((target - offset) % every) === 0
   offset?: number // shift the cycle (default 0)
   exclude?: boolean // negate the previous match
   // Gregorian Feb: { every:4 } → +1, { every:100, exclude } → cancel,
@@ -313,11 +313,19 @@ type EraDeclaration = {
 type TierTuple = Record<string, number> // keyed by tier name
 ```
 
-`rollover.kind: 'rule'` evaluates against the **full tier-tuple
-state**, not just the immediate parent. Gregorian's leap rule
-depends on the year value, which is two tiers up from `day` (where
-the leap day is inserted). The schema allows this because rule
-conditions are evaluated against the tier-tuple at conversion time.
+**`indexedBy` (table) and `against` (rule)** name which tier-tuple
+key the rollover consults. `table` rollovers look up their length by
+the named tier's value (e.g., Earth's day-tier rollover indexes a
+12-entry month-length table by `month`). `rule` rollovers test their
+`every`/`offset` conditions against the named tier's value. Both
+default to "the immediate parent" in prose but the binding is
+declared explicitly so the runtime never has to infer.
+
+The `against` field matters most when the rule target isn't the
+immediate parent — Gregorian's leap rule lives on the `day` tier
+(that's where the extra day is inserted) but tests the `year` value
+two tiers up; without `against: 'year'` the runtime would have no
+way to know which tier-tuple key to feed `% 4`/`% 100`/`% 400`.
 
 ### Per-story state
 
