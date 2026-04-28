@@ -69,8 +69,14 @@
   .cat-title { font-size: 22px; font-weight: 600; color: var(--ink); }
 
   .toolbar { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
-  .search { flex: 1; min-width: 220px; max-width: 320px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); font-size: 12px; color: var(--ink-faint); font-style: italic; }
+  .search-row { flex: 1; min-width: 220px; max-width: 320px; display: flex; gap: 4px; align-items: center; position: relative; }
+  .search { flex: 1; padding: 7px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); font-size: 12px; color: var(--ink-faint); font-style: italic; }
   .search::before { content: "⌕  "; font-style: normal; color: var(--ink-faint); }
+  .help-icon { width: 18px; height: 18px; border: 1px solid var(--line-soft); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: var(--ink-muted); cursor: help; background: var(--bg-region); flex-shrink: 0; position: relative; }
+  .help-popover { position: absolute; top: calc(100% + 6px); right: 0; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); padding: 10px 12px; font-size: 11px; color: var(--ink); line-height: 1.5; min-width: 220px; z-index: 6; display: none; text-align: left; }
+  .help-popover.open { display: block; }
+  .help-popover h5 { margin: 0 0 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); }
+  .help-popover code { background: var(--bg); padding: 1px 5px; border-radius: 2px; border: 1px solid var(--line-soft); font-size: 10px; }
   .filter-chips { display: flex; gap: 6px; }
   .filter-chip { padding: 4px 12px; border: 1px solid var(--line-soft); border-radius: 999px; font-size: 12px; color: var(--ink-muted); cursor: pointer; background: var(--bg-region); }
   .filter-chip.active { background: var(--ink); color: #fff; border-color: var(--ink); }
@@ -302,7 +308,15 @@
       <div class="cat-title">Calendars</div>
     </div>
     <div class="toolbar">
-      <input class="search" placeholder="Search calendars…">
+      <div class="search-row">
+        <input class="search" placeholder="Search calendars…">
+        <span class="help-icon" id="search-help-icon" title="What does the search look at?">&#9432;
+          <div class="help-popover" id="search-help-popover">
+            <h5>This search looks at</h5>
+            <span><code>name</code></span>
+          </div>
+        </span>
+      </div>
       <div class="filter-chips">
         <span class="filter-chip active">All</span>
         <span class="filter-chip">Built-in</span>
@@ -599,6 +613,12 @@
 </div>
 
 <script>
+  // search-help popover
+  const helpIcon = document.getElementById('search-help-icon');
+  const helpPop = document.getElementById('search-help-popover');
+  helpIcon.addEventListener('click', e => { e.stopPropagation(); helpPop.classList.toggle('open'); });
+  document.addEventListener('click', e => { if (!helpIcon.contains(e.target)) helpPop.classList.remove('open'); });
+
   const reviewBar = document.querySelector('.review-bar');
   const layerHome = document.getElementById('layer-home');
   const layerDetail = document.getElementById('layer-detail');
