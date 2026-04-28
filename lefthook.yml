@@ -14,4 +14,4 @@ pre-commit:
       stage_fixed: true
     remark:
       glob: '*.md'
-      run: pnpm exec remark --quiet --frail {staged_files}
+      run: pnpm exec remark --quiet --frail --silently-ignore {staged_files}
