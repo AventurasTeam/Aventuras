@@ -111,14 +111,14 @@ with the active category dropdown:
 
 SQLite-side: `LIKE` against typed columns + `json_each` over the
 JSON `tags` array. Placeholder + tooltip + ⓘ help icon per
-[principles → Search bar scope](../../patterns/lists.md#search-bar-scope).
+[patterns → Search bar scope](../../patterns/lists.md#search-bar-scope).
 
 ## Detail pane — raw JSON viewer
 
 The `⋯ → View raw JSON` action opens the shared right-anchored
 drawer (read-only in v1, copy-button, edit-mode deferred). Same
 pattern as Plot panel and story-list. Cross-cutting spec in
-[principles → Raw JSON viewer](../../patterns/data.md#raw-json-viewer--shared-modal-pattern).
+[patterns → Raw JSON viewer](../../patterns/data.md#raw-json-viewer--shared-modal-pattern).
 
 ## Per-row import
 
@@ -130,7 +130,7 @@ The list-pane footer's `+ New entity` opens a small menu:
   a friendly error.
 - **From Vault…** — disabled placeholder until Vault lands.
 
-See [principles → Import counterparts](../../patterns/data.md#import-counterparts--file-based--vault).
+See [patterns → Import counterparts](../../patterns/data.md#import-counterparts--file-based--vault).
 
 ## History tab
 
@@ -146,7 +146,7 @@ editable — rollback happens in the reader.
 - **Op filter** — all / create / update / delete
 - **Sort** — newest-first (default) or oldest-first
 - **Load-older chunking** — no page numbers, log-shaped data. Per
-  [principles → Large lists](../../patterns/lists.md#large-lists--virtualization-rule),
+  [patterns → Large lists](../../patterns/lists.md#large-lists--virtualization-rule),
   history uses the load-older pattern (explicit button) rather than
   virtualization, since the user's working context is "recent" and
   surprise auto-loads of older content would be jarring.

@@ -142,7 +142,7 @@ models →` toggle that expands to a search + filter view of the
   - **View all expanded** — search input (filter by name) + capability
     filter chips (`🧠 reasoning`, `⚙ structured`, `★ pinned only`) +
     scrollable list. Virtualized for large catalogs per
-    [principles → Large lists](../../patterns/lists.md#large-lists--virtualization-rule)
+    [patterns → Large lists](../../patterns/lists.md#large-lists--virtualization-rule)
     (OpenRouter ships 340+ models). Pinned float to the top of the
     unified list.
   - **Per-row actions** — pin star (☆ / ★), capability badges

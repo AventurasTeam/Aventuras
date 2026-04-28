@@ -371,7 +371,7 @@ the active category in the dropdown:
 
 Placeholder text reflects the active category (`Search characters…` /
 `Search lore…` / etc.). Tooltip + ⓘ help icon list the full scope per
-[principles → Search bar scope](../../patterns/lists.md#search-bar-scope).
+[patterns → Search bar scope](../../patterns/lists.md#search-bar-scope).
 
 ## Peek drawer — lead affordance for characters
 

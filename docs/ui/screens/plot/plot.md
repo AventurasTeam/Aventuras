@@ -91,14 +91,14 @@ Failed.
 
 **All view — accordion grouping by status tier.** Same pattern as
 World's accordion (per
-[principles → Accordion grouping](../../patterns/entity.md#accordion-grouping-on-all-view)),
+[patterns → Accordion grouping](../../patterns/entity.md#accordion-grouping-on-all-view)),
 different grouping key. Groups: Active (default expanded), Pending,
 Resolved, Failed (all collapsed by default). Picking a non-All filter
 flattens to that single tier.
 
 **Search.** `title`, `description`, `category`, `tags`. Placeholder
 shows truncation-safe hint; full scope via tooltip + ⓘ help icon —
-see [principles → Search bar scope](../../patterns/lists.md#search-bar-scope).
+see [patterns → Search bar scope](../../patterns/lists.md#search-bar-scope).
 
 **Detail tabs:**
 
@@ -108,7 +108,7 @@ see [principles → Search bar scope](../../patterns/lists.md#search-bar-scope).
   resolved/failed), tags.
 - **History** — delta log filtered to this thread; structured search
   over field-path / op / change-summary text per
-  [principles → Search bar scope](../../patterns/lists.md#search-bar-scope).
+  [patterns → Search bar scope](../../patterns/lists.md#search-bar-scope).
   Same shape as World's History tab; uses the
   [load-older](../../patterns/lists.md#large-lists--virtualization-rule)
   pattern, not virtualization.
@@ -147,7 +147,7 @@ set). Picking a non-All filter flattens to just the matching subset.
 
 **Search.** `title`, `description`, `category`, `tags`. Placeholder
 shows truncation-safe hint; full scope via tooltip + ⓘ help icon —
-see [principles → Search bar scope](../../patterns/lists.md#search-bar-scope).
+see [patterns → Search bar scope](../../patterns/lists.md#search-bar-scope).
 
 **Detail tabs:**
 
@@ -178,7 +178,7 @@ normal editor; existing awareness rows (if any survived) reappear.
 Three signals on each row, each with a dedicated channel:
 
 - **Left-edge accent — recently classified.** Cross-cutting pattern;
-  see [principles → Recently-classified row accent](../../patterns/entity.md#recently-classified-row-accent).
+  see [patterns → Recently-classified row accent](../../patterns/entity.md#recently-classified-row-accent).
   Applies to threads and happenings here, also to entities and lore on
   the World panel.
 - **Right-side common-knowledge icon (happenings only) — ⊙.** Same
@@ -232,7 +232,7 @@ mismatched JSON fails with a friendly error rather than a partial
 save.
 
 Cross-cutting pattern in
-[principles → Import counterparts](../../patterns/data.md#import-counterparts--file-based--vault).
+[patterns → Import counterparts](../../patterns/data.md#import-counterparts--file-based--vault).
 
 ## Detail pane — raw JSON viewer
 
@@ -242,7 +242,7 @@ edit-mode deferred). Same component as World panel and story-list.
 For happenings, the drawer's JSON includes the row + its
 involvements + awareness summary inline. For threads, just the row.
 Cross-cutting spec in
-[principles → Raw JSON viewer](../../patterns/data.md#raw-json-viewer--shared-modal-pattern).
+[patterns → Raw JSON viewer](../../patterns/data.md#raw-json-viewer--shared-modal-pattern).
 
 ## Save session
 

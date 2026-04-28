@@ -62,7 +62,7 @@ landing from anywhere else, but we're already here).
   `author_notes`. Placeholder shows truncation-safe hint
   (`Search title, description…`); full scope via tooltip + ⓘ help
   icon — see
-  [principles → Search bar scope](../../patterns/lists.md#search-bar-scope).
+  [patterns → Search bar scope](../../patterns/lists.md#search-bar-scope).
 - **Filter chips** — single-select: `All` / `Pinned` / `Archived`.
   `All` hides archived by default (they only appear when the
   `Archived` filter is active). `Pinned` shows only pinned.
@@ -201,7 +201,7 @@ Legacy `.avt` files (old-app format) are accepted but route through
 a migration pass — see
 [`followups.md → Legacy .avt migration import`](../../../followups.md#legacy-avt-migration-import).
 
-See [principles → Import counterparts](../../patterns/data.md#import-counterparts--file-based--vault)
+See [patterns → Import counterparts](../../patterns/data.md#import-counterparts--file-based--vault)
 for the cross-cutting pattern (versioning, zod validation, Vault
 parallelism).
 
