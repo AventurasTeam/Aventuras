@@ -100,7 +100,7 @@ configured provider renders as a collapsible row:
   ─────
   Models   12 cached · last 2h ago · ⟳
   ★ claude-sonnet-4-7    🧠 ⚙              [×]
-  ☆ claude-haiku-4.5     ⚙                 [×]
+  ☆ claude-haiku-4-5     ⚙                 [×]
   ★ claude-opus-4-7      🧠 ⚙              [×]
   …
   + Add custom model id

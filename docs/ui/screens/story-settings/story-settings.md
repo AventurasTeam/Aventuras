@@ -136,8 +136,8 @@ their currently-resolved chain:
 - `classifier` — Fast tasks → gpt-4o-mini
 - `translation` — Fast tasks → gpt-4o-mini
 - `suggestion` — Fast tasks → gpt-4o-mini
-- `lore-mgmt` — Heavy reasoning → claude-opus-4
-- `memory-compaction` — Heavy reasoning → claude-opus-4
+- `lore-mgmt` — Heavy reasoning → claude-opus-4-7
+- `memory-compaction` — Heavy reasoning → claude-opus-4-7
 - `retrieval` — Fast tasks → gpt-4o-mini (when designed)
 
 (Image generation is deferred — see
