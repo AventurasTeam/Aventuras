@@ -213,6 +213,7 @@
         <button class="rb-btn active" data-tab="profiles">Profiles</button>
         <button class="rb-btn" data-tab="memory">Memory</button>
         <button class="rb-btn" data-tab="translation">Translation</button>
+        <button class="rb-btn" data-tab="calendar">Calendar</button>
         <button class="rb-btn" data-tab="composer">Composer</button>
         <button class="rb-btn" data-tab="appearance">Appearance</button>
         <button class="rb-btn" data-tab="language">Language</button>
@@ -263,6 +264,7 @@
           <div class="rail-section-title">Story defaults</div>
           <div class="nav-item" data-nav="memory">Memory</div>
           <div class="nav-item" data-nav="translation">Translation</div>
+          <div class="nav-item" data-nav="calendar">Calendar</div>
           <div class="nav-item" data-nav="composer">Composer prefs</div>
         </div>
 
@@ -807,6 +809,45 @@
               narrative &middot; user actions &middot; entity fields &middot; lore &middot; threads + happenings &middot; chapter summaries
               <div style="font-size: 10px; color: var(--ink-faint); margin-top: 4px;">(individual toggles render here when enabled)</div>
             </div>
+          </div>
+        </div>
+
+        <!-- CALENDAR -->
+        <div class="tab-panel" data-panel="calendar">
+          <div class="tab-title">Calendar <span style="font-size: 12px; color: var(--ink-muted); font-weight: 400;">&middot; story default</span></div>
+          <div class="tab-subtitle">Default for new stories. Existing stories keep their current picks. Same picker primitive as Story Settings &middot; Calendar.</div>
+
+          <div class="field-row">
+            <div class="field-label">default calendar
+              <span class="hint">seeds new stories</span>
+            </div>
+            <div class="input-select" style="max-width: 320px;">
+              <span>Earth (Gregorian)</span>
+              <span class="add-chip" style="padding: 1px 7px; cursor: default; margin-left: 6px;">built-in</span>
+              <span style="color: var(--ink-faint); margin-left: auto;">&#9662;</span>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field-label">summary
+              <span class="hint">shape of selected calendar</span>
+            </div>
+            <div style="font-size: 12px; line-height: 1.7; color: var(--ink);">
+              <b style="font-weight: 600;">Tiers</b><br>
+              year &middot; <span style="color: var(--ink-muted);">rule: Gregorian leap</span><br>
+              month &middot; <span style="color: var(--ink-muted);">table: 28&ndash;31 days</span><br>
+              day &middot; <span style="color: var(--ink-muted);">constant: 24 hours</span><br>
+              hour &middot; <span style="color: var(--ink-muted);">constant: 60 minutes</span><br>
+              minute &middot; <span style="color: var(--ink-muted);">constant: 60 seconds</span><br>
+              second &middot; <span style="color: var(--ink-muted);">base unit</span>
+              <div style="margin-top: 8px;"><b style="font-weight: 600;">Sub-divisions</b> &middot; weekday: Sun&ndash;Sat (7-day cycle)</div>
+              <div style="margin-top: 4px;"><b style="font-weight: 600;">Eras</b> &middot; <span style="color: var(--ink-muted);">disabled</span></div>
+              <div style="margin-top: 4px;"><b style="font-weight: 600;">Status</b> &middot; <span style="color: var(--ink-muted);">built-in (read-only)</span> <span class="add-chip" style="padding: 3px 9px; margin-left: 6px;">Clone &amp; edit</span></div>
+            </div>
+          </div>
+
+          <div class="panel-note" style="margin-top: 14px;">
+            Manage all calendars (clone built-ins, author from scratch, edit user-authored) in the Vault calendar editor. Full picker spec &mdash; option-row content, swap warnings, edit-restrictions interaction &mdash; lives in <code>ui/patterns/calendar-picker.md</code>.
           </div>
         </div>
 
