@@ -268,7 +268,9 @@ clicks list rows.
   reused across other entry-ref fields.
 - **Awareness `salience` UI** — numeric 0-1 input, slider, or stepped
   preset (low / medium / high)? Defer to typed-state design pass.
-- **Empty states** — what does the list pane look like when there are
-  zero threads or zero happenings yet? For new stories the classifier
-  hasn't populated anything. Probably a centered placeholder with the
-  "+ New" CTA promoted. Drawn in v1 wireframe.
+- **Empty states** — list pane uses the cross-cutting
+  [empty list-pane state pattern](../../patterns/lists.md#empty-list-pane-state).
+  Per-kind shape: "No threads on this branch yet." / "No
+  happenings on this branch yet." plus the classifier-writes-rows
+  explainer and a pointer at the existing `+ New` footer
+  affordance.

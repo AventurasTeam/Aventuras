@@ -101,3 +101,36 @@ authoritative version; this is the cross-cutting summary:
 | Plot panel — happenings | `title`, `description`, `category`, `tags`                                                                                                              |
 | Vault calendars         | `name`                                                                                                                                                  |
 | History tab (any panel) | structurally different — field-path strings, op (`create`/`update`/`delete`), rendered change-summary text                                              |
+
+---
+
+## Empty list-pane state
+
+Every filterable list / table surfaces a **centered placeholder**
+when the active kind has zero rows on the active branch. Common
+shape across all such surfaces:
+
+- **Title** — kind-specific, single sentence ("No threads on this
+  branch yet.", "No characters on this branch yet.").
+- **Sub-text** — names the typical author of these rows. For
+  classifier-written kinds: "The classifier writes most rows
+  automatically as the story progresses. You can also add them
+  manually with **+ New** below." For purely user-authored kinds:
+  "Add one with **+ New** below."
+- **No CTA inside the placeholder.** The existing `+ New` footer
+  affordance is the call-to-action; placeholder doesn't duplicate
+  it. Keeps the empty state from competing with the toolbar.
+- **Filter chips and search row stay visible.** The empty result
+  is per-kind, not per-surface — the user may flip the kind
+  selector or filter without leaving the screen. (Plot's threads
+  empty doesn't mean Plot's happenings is empty.)
+- **Search-with-no-matches is distinct.** Empty-no-rows uses this
+  pattern; empty-no-matches uses a "No results" line below the
+  search row without hiding the rest of the toolbar.
+
+**Where applied:**
+
+- [Plot panel — threads + happenings list pane](../screens/plot/plot.md)
+- [World panel — entity / lore list pane](../screens/world/world.md)
+- Vault tables (calendars list, future packs / templates lists)
+- Future master-detail and table surfaces inherit by default.

@@ -66,6 +66,12 @@
   .list-toggle.active { background: var(--ink); color: #fff; border-color: var(--ink); }
 
   .list-items { flex: 1; overflow: auto; padding: 6px 8px; }
+  /* Empty list-pane state — surfaces when the active kind has no rows on this branch (per patterns/lists.md → Empty list-pane state) */
+  .list-empty { display: none; flex: 1; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 32px 16px; gap: 12px; }
+  .list-empty .empty-title { font-size: 13px; font-weight: 500; color: var(--ink); }
+  .list-empty .empty-sub { font-size: 11px; color: var(--ink-muted); max-width: 220px; line-height: 1.5; }
+  body[data-list-state="empty"] .list-items { display: none; }
+  body[data-list-state="empty"] .list-empty { display: flex; }
   .list-row { display: flex; gap: 8px; align-items: center; padding: 8px 8px; border-bottom: 1px dotted var(--line-soft); border-radius: 3px; cursor: pointer; border: 1px solid transparent; }
   .list-row:hover { background: var(--bg-highlight); }
   .list-row.selected { background: var(--bg-highlight); border-color: var(--line); }
@@ -236,7 +242,7 @@
   .json-drawer-foot { padding: 10px 16px; border-top: 1px solid var(--line-soft); background: var(--bg); font-size: 10px; color: var(--ink-faint); font-style: italic; text-align: center; }
 </style>
 </head>
-<body>
+<body data-list-state="populated">
 
 <div class="screen-label"><strong>Wireframe:</strong> World &mdash; entities + lore &mdash; desktop (&ge; 1024px) &mdash; low-fi, interactive</div>
 
@@ -259,6 +265,11 @@
     <span class="gl">json drawer:</span>
     <button class="rb-btn active" data-json-btn="closed">closed</button>
     <button class="rb-btn" data-json-btn="open">open</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">list pane:</span>
+    <button class="rb-btn active" data-empty-btn="populated">populated</button>
+    <button class="rb-btn" data-empty-btn="empty">empty</button>
   </div>
   <span class="rb-note">click a row · tab · ⓘ help · + new menu</span>
 </div>
@@ -382,6 +393,16 @@
         </div>
       </div>
       <div style="margin-top: 8px; font-size: 10px; color: var(--ink-faint); text-align: center;">&hellip; 10 more &hellip;</div>
+    </div>
+
+    <!-- Empty list-pane state — visible when data-list-state="empty" (per patterns/lists.md → Empty list-pane state) -->
+    <div class="list-empty">
+      <div class="empty-title">No characters on this branch yet.</div>
+      <div class="empty-sub">
+        The classifier writes most rows automatically as the
+        story progresses. You can also add them manually with
+        <b>+ New</b> below.
+      </div>
     </div>
 
     <div class="list-footer">
@@ -736,6 +757,13 @@
     document.querySelectorAll('[data-dirty]').forEach(b => b.classList.toggle('active', b.dataset.dirty === state));
   }
   document.querySelectorAll('[data-dirty]').forEach(b => b.addEventListener('click', () => setDirty(b.dataset.dirty)));
+
+  // empty list-pane state toggle (per patterns/lists.md → Empty list-pane state)
+  function setEmpty(state) {
+    document.body.dataset.listState = state;
+    document.querySelectorAll('[data-empty-btn]').forEach(b => b.classList.toggle('active', b.dataset.emptyBtn === state));
+  }
+  document.querySelectorAll('[data-empty-btn]').forEach(b => b.addEventListener('click', () => setEmpty(b.dataset.emptyBtn)));
 
   // overflow menu toggle
   const overflowBtn = document.getElementById('overflow-btn');
