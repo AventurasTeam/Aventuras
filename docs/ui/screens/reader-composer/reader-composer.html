@@ -398,6 +398,12 @@
     <button class="rb-btn" data-sugg="hidden">hidden (disabled)</button>
   </div>
 
+  <div class="rb-group">
+    <span class="gl">branches:</span>
+    <button class="rb-btn" data-branch-count="1">1 (chip hidden)</button>
+    <button class="rb-btn active" data-branch-count="3">3 (chip visible)</button>
+  </div>
+
   <span class="rb-note">also: click a Browse row · <kbd>Esc</kbd> closes peek</span>
 </div>
 
@@ -459,7 +465,7 @@
         <button class="gen-cancel-action" id="gen-cancel-action">Cancel generation</button>
       </div>
     </div>
-    <div class="icon-btn" title="3 branches &middot; click to open Branch Navigator">&#x2387;<span class="count-badge">3</span></div>
+    <div class="icon-btn" id="branch-chip" title="3 branches &middot; click to open Branch Navigator">&#x2387;<span class="count-badge" id="branch-count-badge">3</span></div>
     <div class="icon-btn" title="Actions (Cmd/Ctrl-K / tap to open)">&#9906;</div>
     <div class="icon-btn" title="Story settings">&#9965;</div>
     <div class="icon-btn" title="Back to story list">&larr;</div>
@@ -1104,6 +1110,18 @@
     suggestionsPanel.classList.toggle('collapsed');
   });
   suggestionsRegen.addEventListener('click', () => setSugg('loading'));
+
+  // branch-chip visibility — chip is hidden when only 1 branch exists
+  const branchChip = document.getElementById('branch-chip');
+  const branchCountBadge = document.getElementById('branch-count-badge');
+  function setBranchCount(n) {
+    const count = parseInt(n, 10);
+    branchChip.style.display = count > 1 ? '' : 'none';
+    branchCountBadge.textContent = String(count);
+    branchChip.title = count + ' branches · click to open Branch Navigator';
+    document.querySelectorAll('[data-branch-count]').forEach(b => b.classList.toggle('active', b.dataset.branchCount === n));
+  }
+  document.querySelectorAll('[data-branch-count]').forEach(b => b.addEventListener('click', () => setBranchCount(b.dataset.branchCount)));
 
   // in-world time label (format-agnostic)
   const crumbTime = document.getElementById('crumb-time');

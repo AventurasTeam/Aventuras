@@ -129,6 +129,19 @@
   .save-bar .save-btn { padding: 6px 18px; border: 1px solid var(--ink); border-radius: 3px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
   .save-bar .save-btn .kbd { font-size: 10px; opacity: 0.7; font-family: ui-monospace, monospace; }
 
+  /* Definitional-change confirmation modal — fires on Save when flagged fields are dirty AND story has entries */
+  .def-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.18); display: none; align-items: center; justify-content: center; z-index: 30; }
+  .def-modal-backdrop.show { display: flex; }
+  .def-modal { background: var(--bg-region); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 24px rgba(0,0,0,0.16); width: 100%; max-width: 520px; }
+  .def-modal-head { padding: 14px 20px; border-bottom: 1px solid var(--line-soft); font-size: 14px; font-weight: 600; color: var(--ink); }
+  .def-modal-body { padding: 16px 20px; font-size: 12px; color: var(--ink); line-height: 1.55; }
+  .def-modal-body .lead { color: var(--ink-muted); margin-bottom: 12px; }
+  .def-modal-body ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
+  .def-modal-body code { background: var(--bg); padding: 1px 5px; border-radius: 2px; border: 1px solid var(--line-soft); font-size: 10px; }
+  .def-modal-foot { padding: 12px 20px; border-top: 1px solid var(--line-soft); display: flex; justify-content: flex-end; gap: 8px; background: #fcfcfc; }
+  .def-modal-foot .btn { padding: 6px 16px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 13px; cursor: pointer; font-family: inherit; }
+  .def-modal-foot .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
+
   /* section headings within tab */
   .tab-section { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
   .tab-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); margin-bottom: 10px; font-weight: 600; }
@@ -156,7 +169,12 @@
     <button class="rb-btn active" data-dirty="clean">clean</button>
     <button class="rb-btn" data-dirty="dirty">dirty</button>
   </div>
-  <span class="rb-note">click a left-rail item or a tab chip</span>
+  <div class="rb-group">
+    <span class="gl">entries:</span>
+    <button class="rb-btn active" data-entries="has">has entries</button>
+    <button class="rb-btn" data-entries="empty">story empty</button>
+  </div>
+  <span class="rb-note">click Save with dirty + flagged-tab to see definitional-change modal</span>
 </div>
 
 <header class="topbar">
@@ -739,11 +757,34 @@
       </div>
       <div class="actions">
         <span class="discard-btn">Discard</span>
-        <span class="save-btn">Save <span class="kbd">&#8984;S</span></span>
+        <span class="save-btn" id="save-btn">Save <span class="kbd">&#8984;S</span></span>
       </div>
     </div>
   </main>
 
+</div>
+
+<!-- Definitional-change confirmation modal (fires on Save when story has entries AND a flagged field is dirty) -->
+<div class="def-modal-backdrop" id="def-modal-backdrop">
+  <div class="def-modal" role="dialog" aria-labelledby="def-modal-title">
+    <div class="def-modal-head" id="def-modal-title">Confirm definitional changes</div>
+    <div class="def-modal-body">
+      <div class="lead">
+        These fields shape future generation. Existing entries stay
+        as-saved; the changes apply from the next turn forward.
+      </div>
+      <ul>
+        <li><b>mode</b> — Reframes the user's relationship to the story going forward. New generation will treat you as a <code>character</code> instead of a <code>director</code>.</li>
+        <li><b>narration</b> — Changes the AI's prose voice from the next turn forward. Existing entries are unchanged.</li>
+        <li><b>composerWrapPov</b> — Affects how new user input in <code>Do</code> / <code>Say</code> / <code>Think</code> modes is rendered. Existing entries stay as-saved.</li>
+        <li><b>activePackId</b> — Switches the active pack — the prompt shape rewrites on the next turn. Story content stays; generation patterns change.</li>
+      </ul>
+    </div>
+    <div class="def-modal-foot">
+      <button class="btn" id="def-modal-cancel">Cancel</button>
+      <button class="btn primary" id="def-modal-confirm">Save anyway</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -775,6 +816,41 @@
     document.querySelectorAll('[data-dirty]').forEach(b => b.classList.toggle('active', b.dataset.dirty === s));
   }
   document.querySelectorAll('[data-dirty]').forEach(b => b.addEventListener('click', () => setDirty(b.dataset.dirty)));
+
+  // Definitional-change confirmation modal — Save click triggers it
+  // when the story has entries AND the active tab is one of the flagged
+  // tabs (Generation or Pack). Modal copy is fixed; in production the
+  // body would render only the dirty flagged fields.
+  let entriesState = 'has'; // 'has' | 'empty'
+  function setEntries(s) {
+    entriesState = s;
+    document.querySelectorAll('[data-entries]').forEach(b => b.classList.toggle('active', b.dataset.entries === s));
+  }
+  document.querySelectorAll('[data-entries]').forEach(b => b.addEventListener('click', () => setEntries(b.dataset.entries)));
+
+  const defModalBackdrop = document.getElementById('def-modal-backdrop');
+  const flaggedTabs = new Set(['generation', 'pack']);
+  document.getElementById('save-btn').addEventListener('click', () => {
+    if (!saveBar.classList.contains('dirty')) return;
+    const activeTab = document.querySelector('[data-tab].active')?.dataset.tab;
+    const flaggedDirty = flaggedTabs.has(activeTab);
+    if (entriesState === 'has' && flaggedDirty) {
+      defModalBackdrop.classList.add('show');
+    } else {
+      // empty story OR non-flagged tab — commit immediately
+      setDirty('clean');
+    }
+  });
+  document.getElementById('def-modal-cancel').addEventListener('click', () => {
+    defModalBackdrop.classList.remove('show');
+  });
+  document.getElementById('def-modal-confirm').addEventListener('click', () => {
+    defModalBackdrop.classList.remove('show');
+    setDirty('clean');
+  });
+  defModalBackdrop.addEventListener('click', e => {
+    if (e.target === defModalBackdrop) defModalBackdrop.classList.remove('show');
+  });
 })();
 </script>
 

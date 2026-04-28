@@ -76,8 +76,9 @@
   .provider-meta .desc { font-size: 11px; color: var(--ink-muted); margin-top: 2px; line-height: 1.4; }
   .provider-meta .extra-warn { font-size: 11px; color: var(--warn); margin-top: 4px; }
   .other-providers { margin-top: 16px; text-align: center; font-size: 11px; }
-  .other-providers a { color: var(--ink-muted); text-decoration: none; border-bottom: 1px dashed var(--line); padding-bottom: 1px; }
-  .other-providers a:hover { color: var(--ink); }
+  .other-providers a { color: var(--ink); text-decoration: none; border: 1px solid var(--line); padding: 4px 12px; border-radius: 3px; display: inline-block; cursor: pointer; }
+  .other-providers a:hover { background: var(--bg-highlight); border-color: var(--ink); }
+  .other-providers .exit-hint { display: block; font-size: 10px; color: var(--ink-faint); margin-top: 6px; font-style: italic; }
 
   /* step 3 — config form */
   .field-group { margin-bottom: 16px; }
@@ -226,7 +227,8 @@
         </div>
 
         <div class="other-providers">
-          <a href="#">Other providers (Anthropic, OpenAI, Google) available in Settings &rarr;</a>
+          <a href="#" id="other-providers-exit" title="Exits the wizard and routes to App Settings · Providers with the type picker open">Set up Anthropic / OpenAI / Google &rarr;</a>
+          <span class="exit-hint">Exits the wizard. Same end state as <b>Skip for now</b>; lands you on App Settings · Providers instead of the Story list.</span>
         </div>
       </div>
 
@@ -371,6 +373,21 @@
 
   // skip link is illustrative — do nothing
   document.getElementById('skip-link').addEventListener('click', e => e.preventDefault());
+
+  // step-2 footer "Other providers" link is a real wizard exit (per onboarding.md):
+  // routes to App Settings · Providers with the type picker open. Wireframe-mode
+  // gives visual feedback (no real navigation) so reviewers can see it fires.
+  document.getElementById('other-providers-exit').addEventListener('click', e => {
+    e.preventDefault();
+    const link = e.currentTarget;
+    const original = link.textContent;
+    link.textContent = '→ App Settings · Providers (type picker open)';
+    link.style.background = 'var(--bg-highlight)';
+    setTimeout(() => {
+      link.textContent = original;
+      link.style.background = '';
+    }, 1400);
+  });
 
   // init
   setStep(1);

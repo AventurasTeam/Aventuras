@@ -126,6 +126,13 @@
   .modal-foot .btn { padding: 6px 16px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 13px; cursor: pointer; font-family: inherit; }
   .modal-foot .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
   .modal-foot .btn.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* paused-during-generation state (per branch-navigator.md → During generation) */
+  .gen-banner { display: none; padding: 8px 14px; background: #fff8e6; border-bottom: 1px solid #e8d890; color: #7a6020; font-size: 11px; }
+  .in-flight .gen-banner { display: block; }
+  .in-flight .branch-row { opacity: 0.45; pointer-events: none; }
+  .in-flight .branch-row .row-icon.delete { display: none; }
+  .in-flight .branch-row .row-icon.rename { opacity: 0.35; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -146,6 +153,11 @@
     <button class="rb-btn" data-row-state="hover">row hover (icons brightened)</button>
     <button class="rb-btn" data-row-state="renaming">renaming</button>
     <button class="rb-btn" data-row-state="confirming">delete confirm</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">gen:</span>
+    <button class="rb-btn active" data-gen-state="idle">idle</button>
+    <button class="rb-btn" data-gen-state="in-flight">in-flight (paused)</button>
   </div>
   <span class="rb-note">flip controls to inspect each state</span>
 </div>
@@ -185,12 +197,13 @@
   <!-- navigator popover (desktop) -->
   <div class="popover-wrap" id="popover-wrap">
     <div class="popover-arrow"></div>
-    <div class="popover">
+    <div class="popover" id="popover-pane">
       <div class="popover-head">
         <span class="popover-title">Branches</span>
         <span class="popover-count">· 3</span>
         <span class="popover-close">×</span>
       </div>
+      <div class="gen-banner">Generation in progress &mdash; switching paused.</div>
       <div class="popover-body" id="popover-body-desktop">
         <!-- rows injected by script for state simulation -->
       </div>
@@ -205,6 +218,7 @@
       <span class="popover-title">Branches</span>
       <span class="popover-count">· 3</span>
     </div>
+    <div class="gen-banner">Generation in progress &mdash; switching paused.</div>
     <div class="popover-body" id="popover-body-mobile">
       <!-- rows injected by script for state simulation -->
     </div>
@@ -242,6 +256,7 @@
   let currentSurface = 'popover';      // 'popover' | 'drawer' | 'modal'
   let rowState = 'default';            // 'default' | 'menu' | 'renaming' | 'confirming'
   let stateRowId = 'b2';               // which row carries the current rowState (for non-default)
+  let genState = 'idle';               // 'idle' | 'in-flight' (paused)
 
   function renderRows(targetEl) {
     targetEl.innerHTML = '';
@@ -330,6 +345,14 @@
     const mobileBody = document.getElementById('popover-body-mobile');
     renderRows(desktopBody);
     renderRows(mobileBody);
+
+    // gen-state: toggle .in-flight on the active surface so the banner
+    // shows + rows dim + delete icons hide per the paused contract
+    const popoverPane = document.getElementById('popover-pane');
+    const drawerPane = document.getElementById('drawer');
+    const inFlight = genState === 'in-flight';
+    popoverPane.classList.toggle('in-flight', inFlight);
+    drawerPane.classList.toggle('in-flight', inFlight);
   }
 
   // --- review controls ---
@@ -344,6 +367,13 @@
     document.querySelectorAll('.rb-btn[data-row-state]').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
     rowState = b.dataset.rowState;
+    applySurface();
+  }));
+
+  document.querySelectorAll('.rb-btn[data-gen-state]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.rb-btn[data-gen-state]').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    genState = b.dataset.genState;
     applySurface();
   }));
 

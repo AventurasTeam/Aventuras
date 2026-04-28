@@ -276,6 +276,21 @@
         overflow: auto;
         padding: 6px 8px;
       }
+      /* Empty list-pane state — surfaces when the branch has no rows of the active kind */
+      .list-empty {
+        display: none;
+        flex: 1;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 32px 16px;
+        gap: 12px;
+      }
+      .list-empty .empty-title { font-size: 13px; font-weight: 500; color: var(--ink); }
+      .list-empty .empty-sub { font-size: 11px; color: var(--ink-muted); max-width: 220px; line-height: 1.5; }
+      body[data-list-state="empty"] .list-items { display: none; }
+      body[data-list-state="empty"] .list-empty { display: flex; }
       .list-row {
         display: flex;
         gap: 8px;
@@ -1242,7 +1257,7 @@
       }
     </style>
   </head>
-  <body data-side="threads" data-ck="off">
+  <body data-side="threads" data-ck="off" data-list-state="populated">
     <div class="screen-label">
       <strong>Wireframe:</strong> Plot &mdash; threads + happenings &mdash; desktop (&ge; 1024px) &mdash; low-fi, interactive
     </div>
@@ -1275,6 +1290,11 @@
         <span class="gl">json drawer:</span>
         <button class="rb-btn active" data-json-btn="closed">closed</button>
         <button class="rb-btn" data-json-btn="open">open</button>
+      </div>
+      <div class="rb-group">
+        <span class="gl">list pane:</span>
+        <button class="rb-btn active" data-empty-btn="populated">populated</button>
+        <button class="rb-btn" data-empty-btn="empty">empty</button>
       </div>
       <span class="rb-note">click a row · tab · ⓘ help · + new menu</span>
     </div>
@@ -1502,6 +1522,19 @@
                 <span class="ck-icon placeholder">⊙</span>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- Empty list-pane state — visible when data-list-state="empty" -->
+        <div class="list-empty">
+          <div class="empty-title">
+            <span class="threads-only">No threads on this branch yet.</span>
+            <span class="happenings-only">No happenings on this branch yet.</span>
+          </div>
+          <div class="empty-sub">
+            The classifier writes most rows automatically as the
+            story progresses. You can also add them manually with
+            <b>+ New</b> below.
           </div>
         </div>
 
@@ -2026,6 +2059,17 @@
         });
         document.querySelectorAll('[data-dirty-btn]').forEach((b) =>
           b.addEventListener('click', () => setDirty(b.dataset.dirtyBtn)),
+        );
+
+        // empty list-pane state toggle
+        function setEmpty(state) {
+          body.dataset.listState = state;
+          document.querySelectorAll('[data-empty-btn]').forEach((b) =>
+            b.classList.toggle('active', b.dataset.emptyBtn === state),
+          );
+        }
+        document.querySelectorAll('[data-empty-btn]').forEach((b) =>
+          b.addEventListener('click', () => setEmpty(b.dataset.emptyBtn)),
         );
 
         // overflow menu toggles
