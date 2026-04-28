@@ -126,6 +126,7 @@ erDiagram
         integer created_at
         integer updated_at
     }
+    %% CHECK (occurred_at_entry IS NULL OR temporal IS NULL) — mutual exclusivity enforced at the SQLite level
 
     happening_involvements {
         text happening_id FK
@@ -212,6 +213,7 @@ erDiagram
         text id PK "UUID; user-authored calendars only — built-ins live in code/repo JSON loaded at boot"
         text name "display name; for clones, original-preset-name copied verbatim. Type indicator (built-in/custom) is a UI chip, not encoded in the name"
         json definition "CalendarSystem shape per calendar-systems/spec.md — tiers, eras, displayFormat, baseUnitName, secondsPerBaseUnit, leapDayPosition?, etc."
+        integer favorite "0/1; user-toggled per row; surfaced as a star in Vault and as the curated list in pickers"
         integer created_at
         integer updated_at
     }
@@ -402,7 +404,7 @@ stories.settings: {
   narration: 'first' | 'second' | 'third'
   tone: string                      // free-form style/tone note injected into prompts
 
-  // Operational — defaults copied from App Settings → Default story settings at creation
+  // Operational — defaults copied from App Settings → Story Defaults at creation
   chapterTokenThreshold: number     // moved out of top-level column
   chapterAutoClose: boolean         // auto-close at threshold; off = threshold is guidance only, user wraps manually; default true
   recentBuffer: number              // entries always injected verbatim before retrieval; default 10
@@ -444,8 +446,8 @@ stories.settings: {
     classifier?: string
     translation?: string
     suggestion?: string
-    loreMgmt?: string
-    memoryCompaction?: string
+    'lore-mgmt'?: string             // kebab-case agent ids match the UI labels in app-settings + story-settings Models tabs
+    'memory-compaction'?: string
     retrieval?: string
   }
 
@@ -458,10 +460,12 @@ stories.settings: {
 **Scope policy — two patterns for global vs story.**
 
 1. **Copy-at-creation** (operational + UX prefs). App Settings exposes
-   a **"Default story settings"** section holding the same field
-   shape; on story creation the current globals are copied into the
-   new story. After creation, the story owns its values; changing the
-   global default does NOT propagate to existing stories.
+   a **"Story Defaults"** section holding the same field shape (the
+   underlying schema field is `app_settings.default_story_settings`;
+   the UI label is "Story Defaults"). On story creation the current
+   globals are copied into the new story. After creation, the story
+   owns its values; changing the global default does NOT propagate
+   to existing stories.
 2. **Override-at-render** (`settings.models` only). Fields are
    optional; absent means "use the global app-settings default at
    render time." Changing the global propagates to every
@@ -550,7 +554,7 @@ app_settings.assignments: Record<AgentId, string>  // agentId → profile.id
 
 The `AgentId` registry is the single source of truth for which
 agents exist. v1 ships:
-`classifier | translation | suggestion | loreMgmt | memoryCompaction | retrieval`.
+`classifier | translation | suggestion | lore-mgmt | memory-compaction | retrieval`.
 Narrative is not an agent — it's the storyteller, always wired to
 the `kind: 'narrative'` profile, no assignment slot needed.
 
@@ -568,7 +572,7 @@ on next render. Distinct from `assignments` (which controls the
 LLM-call parameter envelope via profile lookup) — defaults are
 about model selection, profiles are about call configuration.
 
-**Default story settings — copy-at-creation source.**
+**Story Defaults (`default_story_settings`) — copy-at-creation source.**
 
 ```ts
 app_settings.default_story_settings: Partial<StorySettings>
@@ -630,6 +634,16 @@ UUIDs — disjoint by construction, no precedence rule needed.
 merged registry — parallel to `default_provider_id`. The pointer
 stays on `app_settings` since it's a global default, not registry
 content.
+
+**Favorite is a per-row flag** on `vault_calendars`, not a separate
+app-level array. Surfaced as a `★`/`☆` toggle on Vault cards and
+calendar pickers; sorts favorited rows above non-favorited ones.
+Built-ins live in code so they have no row to carry the flag —
+favoriting a built-in requires cloning it first (the resulting
+`vault_calendars` row is the favoritable artifact). Acceptable
+constraint: the workflow that prompts a "I want this pinned" is
+also the workflow that prompts "I want to tweak its label or
+displayFormat," so the clone step has independent value.
 
 **Cloning a built-in** copies its definition to a new
 `vault_calendars` row with a new UUID and the original preset name
@@ -999,8 +1013,12 @@ referenced entry's `metadata.worldTime` (see "Entry metadata shape" and
 `temporal` is only populated when there is no narrative entry to
 derive from (pre-story history, scheduled future, ambient backdrop) —
 its free-form text is the anchor because out-of-narrative happenings
-have no cumulative counter to reference. In practice `occurred_at_entry`
-and `temporal` are mutually exclusive per row. `threads` don't carry
+have no cumulative counter to reference. `occurred_at_entry`
+and `temporal` are **mutually exclusive per row**, enforced both
+at the SQLite level (CHECK constraint at table-create time:
+`CHECK (occurred_at_entry IS NULL OR temporal IS NULL)`) and at
+the Zod boundary on form/import. The DB constraint is the floor;
+the Zod check is the friendlier validation surface. `threads` don't carry
 `temporal` because threads only exist during narrative and always
 resolve via entry positions (same worldTime-derivation story as
 happenings).

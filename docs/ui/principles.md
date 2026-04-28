@@ -377,7 +377,7 @@ Two independent settings areas with the same layout pattern (left
 rail of categories, right pane for selected category):
 
 - **App Settings** — global, persists across stories. Scope: provider
-  keys, default models per feature, **Default story settings**
+  keys, default models per feature, **Story Defaults**
   (memory knobs, translation config, composer UX prefs, suggestions
   toggle — values copied into new stories on creation; see scope
   policy below), appearance, data (backup / import / export), UI
@@ -408,7 +408,7 @@ both gears.
 
 **Settings scope policy — two patterns:**
 
-1. **Copy-at-creation** — App Settings · Default story settings holds
+1. **Copy-at-creation** — App Settings · Story Defaults holds
    the defaults for new stories. On creation, those values are
    copied into the new story's `settings`. After creation, the story
    owns its values; changing the App Settings default does NOT

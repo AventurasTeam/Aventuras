@@ -95,8 +95,10 @@ Text-first, monochrome until visual identity. Click body → drill to
 Layer 2.
 
 - **★ favorite star** — top-left. Clickable toggle (`★` filled /
-  `☆` empty). Persists in `app_settings.favorite_calendar_ids`.
-  Click doesn't drill.
+  `☆` empty). Persists as the `favorite` column on the calendar's
+  `vault_calendars` row. Built-ins have no row, so they can't be
+  favorited until cloned (the clone carries the flag). Click
+  doesn't drill.
 - **`⭐ default` badge** — top-right, **only on the calendar matching
   `app_settings.default_calendar_id`**. **Read-only on this surface**
   (the source-of-truth lives in App Settings → Story Defaults).
@@ -389,18 +391,19 @@ calendar is its own followup if real demand surfaces.
 
 On confirm:
 
-- `vault_calendars` row deleted.
-- Calendar's id removed from `app_settings.favorite_calendar_ids`
-  if present (cleanup).
+- `vault_calendars` row deleted (the row carries the favorite flag,
+  so cleanup is automatic).
 - Navigation returns to Layer 0+1 with Calendars active.
 
 ## Favorite + default behavior
 
 **Favorite** is user-managed library affordance. Toggle from the
 card star OR the detail head badge — same data
-(`app_settings.favorite_calendar_ids: string[]`). Doesn't open a
+(`vault_calendars.favorite` flag on the row). Doesn't open a
 save-session (favorites aren't calendar-definition state). Sort
-tiers (above) reflect favorite status.
+tiers (above) reflect favorite status. Built-ins live in code and
+have no row to carry the flag, so they can't be favorited until
+cloned (per data-model.md → Vault content storage).
 
 **Default** is a single-id pointer in
 `app_settings.default_calendar_id`. **Source-of-truth lives at App

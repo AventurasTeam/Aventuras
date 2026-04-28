@@ -153,7 +153,9 @@ Affordances per the
 
 - **Overview** — title, description, category, icon, common-knowledge
   toggle, time anchor (mutually exclusive form — entry-ref picker OR
-  `temporal` string field, schema enforces only one is set), tags.
+  `temporal` string field; both the SQLite CHECK constraint and the
+  Zod schema at the form/import boundary enforce that only one is
+  set), tags.
 - **Involvements** — `happening_involvements` rows: entity picker
   (kind-aware, character / location / item / faction) + role
   (free-form text). Add / remove rows.
