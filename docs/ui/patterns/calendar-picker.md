@@ -248,10 +248,15 @@ existing origin partially or wholly unmatched:
 
 Triggered when current calendar has eras enabled, existing
 [`branch_era_flips`](../../data-model.md#era-flips) rows exist,
-and the new calendar has `eras: null`. Existing flip rows are
-kept in storage (per
-[`calendar-systems/spec.md → Adversarial check`](../../calendar-systems/spec.md#adversarial-check))
-but become invisible until a calendar with eras is re-selected.
+and the new calendar's era set doesn't contain one or more of
+those rows' `era_name` values (the trivial case being the new
+calendar having `eras: null`). Existing flip rows are kept in
+storage and surface as
+[orphan flips](../screens/story-settings/story-settings.md#orphan-flips-after-calendar-swap)
+in Story Settings · Calendar — `era_name · (orphaned)` with the
+raw `at_worldtime` in the tooltip. A later swap to a calendar
+whose era set DOES include matching names automatically
+un-orphans them.
 
 **Asymmetric trigger.** Going FROM no-eras TO with-eras has no
 flips to orphan — no warning fires.

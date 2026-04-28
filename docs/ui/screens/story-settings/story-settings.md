@@ -437,22 +437,43 @@ nothing meaningful to surface.
 
 ### Orphan flips (after calendar swap)
 
-When the user swaps the active calendar to one with `eras: null`,
-existing flips on the branch are kept as orphan data per the
-[calendar-picker swap behavior](../../patterns/calendar-picker.md).
-The flip-list still renders so users have a cleanup path:
+When the user swaps the active calendar to one whose era set
+doesn't contain the flip's `era_name`, the flip becomes an
+**orphan** — its name no longer maps to a renderable era in the
+current calendar. The flip-list still renders so users have a
+cleanup path:
 
-> **Reiwa** · `Reiwa 1 · May 1, 2019` · `[from previous calendar]` · `×`
+> **Reiwa** · `(orphaned)` · raw worldTime tooltip · `×`
 
-The `[from previous calendar]` annotation is muted text after the
-anchor display. Delete still works the same way; CTRL-Z restores.
+**Per-row rendering for orphans.** Two pieces of information
+survive orphaning unconditionally — both are stored on the flip
+itself (`era_name`, `at_worldtime`):
 
-**Anchor display for orphans.** Formatter prefers the previously-
-active calendar's renderer when its definition is still available
-(calendar definitions live in `vault_calendars`, not on the story;
-they survive the swap). If
-the previous calendar was deleted from Vault, the row falls back
-to the raw integer worldTime with a small `(raw)` annotation.
+- The **`era_name`** prints normally as the row's primary label.
+  Identity-preserving even when no calendar can render the
+  `at_worldtime` against it.
+- The **anchor slot** prints `(orphaned)` instead of a formatted
+  date — the active calendar's renderer would produce nonsense if
+  forced. The raw `at_worldtime` integer is available in the row's
+  tooltip for power users / debugging.
+
+We deliberately do not render the orphan via the previously-active
+calendar's formatter, even when that calendar is still in Vault.
+A user who just swapped calendars wants the new calendar's
+framing; surfacing the old one fights the swap. The schema also
+doesn't track which calendar a flip was created under
+(`branch_era_flips` has no `calendar_id_at_creation` column), so
+"render with previous" would also fail any time the flip's source
+calendar has been removed from Vault. Cleaner to walk back the
+promise.
+
+**Lifecycle.** Orphan flips become non-orphan automatically on the
+next calendar swap if the new calendar's eras include the flip's
+`era_name` (matching is exact-string against the calendar's
+`presetNames` + any user-added flips). The user can also delete
+orphans outright; CTRL-Z restores. No "convert to a different era
+name" affordance — if that need surfaces, delete + re-flip in the
+reader is the path.
 
 ### Inline delete confirm
 

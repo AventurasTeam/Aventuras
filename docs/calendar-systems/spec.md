@@ -534,8 +534,13 @@ Things that could go wrong, flagged for implementation:
 - **Calendar swap on existing story** — the integer `worldTime` (in
   physical seconds) is preserved; display reinterprets under the new
   tier shape + `secondsPerBaseUnit`. Era flips on the current branch
-  are kept as orphaned data if the new calendar has `eras: null`
-  (re-surface if eras are re-enabled). Warn in the swap affordance.
+  are kept as orphaned data when the new calendar's era set doesn't
+  contain a flip's `era_name` — orphans render as
+  `era_name · (orphaned)` in
+  [Story Settings · Calendar](../ui/screens/story-settings/story-settings.md#orphan-flips-after-calendar-swap)
+  with the raw `at_worldtime` in the tooltip. They become non-orphan
+  automatically if a later swap lands on a calendar whose eras
+  include the matching name. Warn in the swap affordance.
   Mid-generation swap is prohibited per
   [`ui/principles.md → Edit restrictions during in-flight generation`](../ui/principles.md#edit-restrictions-during-in-flight-generation).
 - **`secondsPerBaseUnit` validation** — must be a positive integer.
