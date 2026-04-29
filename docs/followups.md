@@ -497,6 +497,45 @@ to populating `sceneEntities` / `currentLocationId` against the
 wizard-curated cast (no entity creation). Add at the design pass
 that surfaces the need.
 
+### Next-turn suggestions — design pass
+
+Reader / composer surfaces a next-turn suggestion affordance. Three
+open questions worth a joint design pass rather than ad-hoc
+decisions during the reader-composer detail pass:
+
+- **Customizable categories.** Whether the user can tailor what
+  categories of suggestion are surfaced (action / dialogue /
+  introspection / time-skip / scene-change / custom) and how that
+  customization persists (per-story setting, per-branch,
+  user-global) is unspec'd. Lean: per-story setting on
+  `stories.settings` with a sensible default category set; revisit
+  granularity on real signal.
+- **User input as guidance.** Letting partial input in the
+  composer's input box act as guidance for the suggestion engine
+  ("user typed 'Aria approaches the …' → suggest completions") is
+  an interaction model worth designing rather than retrofitting.
+  Affects refresh cadence (debounce, on-pause), placement relative
+  to the input cursor, commit semantics (tap to replace vs merge
+  with typed text), and how this composes with category filtering.
+- **Pipeline consolidation — fold classifier (and possibly
+  suggestions) into the main narrative prompt.** Today's pipeline
+  treats classification as a separate post-generation pass per
+  [`architecture.md`](./architecture.md). Folding classification —
+  and possibly suggestion-emission — into the narrative call is
+  cheaper (one round-trip instead of two or three) but couples
+  responsibilities and may degrade output quality, especially on
+  smaller models. Inverse intuition: capable models can do it all
+  in one pass; smaller models need the split to stay coherent.
+  Worth exploring as an optional consolidated mode rather than a
+  replacement, and the suggestion-emission half is the natural
+  first slice to fold (lower stakes than classification, lives next
+  to narrative output anyway).
+
+The three questions interact: consolidation mode shapes how
+suggestions are produced, which constrains how categories can be
+filtered and how user-input guidance is fed into the call. Designing
+them together avoids painting into a corner.
+
 ### Per-branch definition override
 
 `stories.definition` is story-level — all branches share the same
