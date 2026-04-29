@@ -1,17 +1,23 @@
 # https://lefthook.dev/configuration/
 # Only the staged files are linted / formatted. `stage_fixed: true` puts
 # any auto-fixes back in the index so the commit carries the fixed version.
+#
+# Hooks invoke binaries directly from node_modules/.bin rather than via
+# `pnpm exec`. Lefthook always runs from the repo root, so the relative
+# path resolves; this requires only `node` on PATH (always GUI-visible
+# across Linux/macOS/Windows), avoiding the failure where IDE-launched
+# commits inherit a shell environment that doesn't include pnpm.
 pre-commit:
   parallel: true
   commands:
     prettier:
       glob: '*.{js,jsx,ts,tsx,mjs,cjs,json,md,css,yml,yaml}'
-      run: pnpm exec prettier --write {staged_files}
+      run: node_modules/.bin/prettier --write {staged_files}
       stage_fixed: true
     eslint:
       glob: '*.{js,jsx,ts,tsx}'
-      run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
+      run: node_modules/.bin/eslint --fix --no-warn-ignored {staged_files}
       stage_fixed: true
     remark:
       glob: '*.md'
-      run: pnpm exec remark --quiet --frail --silently-ignore {staged_files}
+      run: node_modules/.bin/remark --quiet --frail --silently-ignore {staged_files}
