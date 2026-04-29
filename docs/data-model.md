@@ -327,29 +327,323 @@ Historical/scheduled events are NOT lore — they moved to `happenings` (see
 below), because events are things that occurred/will occur and participate
 in character knowledge in a way static reference doesn't.
 
-**Kind-specific state shape is deferred** (discriminated-union details to
-be ironed out later). Two concrete decisions captured now:
+`entities` gains a `retired_reason` freeform text column alongside
+`status`, only meaningful when `status=retired` ("killed by Kael",
+"faction disbanded after coup", etc.).
 
-- `entities` gains a `retired_reason` freeform text column alongside
-  `status`, only meaningful when `status=retired` ("killed by Kael",
-  "faction disbanded after coup", etc.).
-- `LocationState` carries an optional `parent_location_id` — a
-  self-referential reference to another entity where `kind=location`,
-  giving locations a containment hierarchy (Shop → Town Square → City).
-  Distinct from characters' `current_location_id` / items' `at_location_id`,
-  which are positional (where something is right now); `parent_location_id`
-  is compositional (this place is part of that place). Prompt rendering
-  walks the parent chain at runtime (e.g. `Aria is in [Shop in Town Square in City]`).
-  Cycle prevention is app-layer — SQLite can't enforce it.
-- `CharacterState` carries `lastSeenAt`:
-  `{ entryId: string; locationId: string | null; worldTime: number } | null`.
-  Cached snapshot of the character's most recent narrative appearance —
-  updated by the classifier whenever the character is present in
-  `metadata.sceneEntities` of a new entry (or is the location's anchor
-  via `metadata.currentLocationId`). `null` until first appearance.
-  Drives "last seen 3 days ago in The Tavern" UX on the World panel
-  and Browse rail; without caching, surfacing this would require
-  walking entry history per row on every render.
+#### Description vs `state` boundary
+
+`entities.description` (top-level text column) is the
+**user-authoritative "who" prose**. State is the **typed,
+classifier-mutable layer** carrying everything that needs structure
+for query, classifier evolution, or prompt rendering.
+
+The split rule:
+
+- **Description** holds the prose-y identity sketch. Whoever spawns
+  the entity authors the initial description (user via wizard /
+  `+ New entity` → user-authored; classifier via mid-story discovery
+  → classifier-authored once). Subsequent writes are **user-only**
+  in v1.
+- **State** holds typed slots for: things that evolve mid-stream
+  (classifier needs structural slots to record changes), things
+  needed structurally (entity refs, hierarchy walks, caches), and
+  things the UI needs as discrete fields rather than parsed from
+  prose.
+
+The classifier writes prose well at _introduction_ moments; mid-stream
+description rewrites risk coherence drift across long stories. Keeping
+description as a stable user-authoritative surface protects the entity's
+"who" from per-turn churn; typed state slots absorb the per-turn /
+per-chapter evolution.
+
+**v1 collapse:** the lore-management agent suggestion-queue UI
+(autonomous-vs-confirm-mode toggle on classifier-proposed description
+revisions) is deferred. Until it ships, classifier never updates
+description after first introduction; user is the only ongoing editor.
+Stale descriptions are the user's problem until they edit — acceptable
+v1 floor. The suggestion-queue UI design folds into the
+[Lore-management agent shape](./followups.md#lore-management-agent-shape)
+followup.
+
+#### `CharacterState` shape
+
+```ts
+type CharacterState = {
+  // Identity — visual descriptors (type-relaxed strings, no enum lock-in)
+  visual: {
+    physique?: string // height + build merged
+    face?: string // facial features, complexion, expression-tendency
+    hair?: string // color + style + state
+    eyes?: string // color + distinctive eye traits
+    attire?: string // live current attire — classifier-updates on observed change
+    distinguishing?: string[] // catch-all: scars, tattoos, voice tone, gait, posture, scent
+  }
+
+  // Identity — personality + motivation
+  traits: string[] // who they are: personality / skills / background; soft cap 8
+  drives: string[] // what pushes/pulls them: goals, fears, sore spots; soft cap 6
+  voice?: string // single prose note on speech pattern
+
+  // Relationships — entity refs
+  current_location_id: EntityId | null
+  equipped_items: EntityId[] // unique items only (worn/wielded)
+  inventory: EntityId[] // unique items only (carried, not active)
+  stackables?: Record<string, number> // currencies + ammo + supplies
+  // string-keyed quantities, lowercase canonical
+  faction_id: EntityId | null // primary affiliation, single
+
+  // Cache (classifier-maintained denormalization)
+  lastSeenAt: {
+    entryId: string
+    locationId: string | null
+    worldTime: number
+  } | null
+}
+```
+
+**Visual descriptors are type-relaxed strings**, not enums. Enum
+vocabularies don't survive contact with genre flexibility — "disposition"
+in romance vs war saga vs eldritch horror demands different vocabularies.
+Free strings let the classifier write whatever fits the prose; field
+names stay stable for UI and translation.
+
+**`attire` is live current attire**, not signature. Classifier updates on
+observed prose change ("Kael changed into noble robes"). Staleness risk
+is acknowledged; mitigation is prompting discipline + chapter-close
+compaction.
+
+**`traits` and `drives` are flat string arrays.** Symmetric shape; UI
+renders as chip groups; classifier emits one element at a time. A third
+`behaviors` bag was considered and rejected — "negotiates before fighting"
+is functionally a trait ("diplomatic") or a drive ("avoids violence");
+separate bag silently bloats with mis-classified entries.
+
+**`voice` is single-string, optional.** Distinct from `distinguishing[]`
+because dialogue-coherence demands voice be surfaced explicitly; folding
+into distinguishing buries it.
+
+**`equipped_items` vs `inventory` asymmetry.** Both are `EntityId[]` of
+unique items; the split is semantic — equipped is what's actively in use,
+inventory is what's carried but stowed. Stackables don't go through
+either; they live in the separate `stackables` slot.
+
+**`lastSeenAt`** drives "last seen 3 days ago in The Tavern" UX on the
+World panel and Browse rail; without caching, surfacing this would
+require walking entry history per row on every render. Classifier
+updates whenever the character is present in `metadata.sceneEntities`
+of a new entry (or is the location's anchor via
+`metadata.currentLocationId`).
+
+#### Stackable items — holder-side `Record<string, number>`, not entities
+
+Fungible items (currencies, ammunition, generic supplies) are NOT
+modeled as entities. They're string-keyed quantities held on the
+character via `stackables`.
+
+**Why not item entities + count.** An earlier draft proposed an
+`is_stackable` flag on `ItemState` plus a counted-inventory shape. The
+classifier-prompt cost was prohibitive: to dedup stackables on creation,
+the classifier would need to inspect "all stackable items in the branch"
+(or accept duplicate entities for chapter-close compaction to merge).
+Either route adds real prompt-token cost or intermediate-state noise.
+The shape is also over-modeled — gold pieces don't need descriptions,
+conditions, or any entity machinery; they're just quantities.
+
+**Convention:**
+
+- Lowercase canonical keys (`"gold"`, not `"Gold"` or `"Gold pieces"`).
+- Cross-character consistency is classifier-prompt discipline +
+  lore-mgmt compaction (key normalization at chapter close).
+- Transfer ("Aria gives Kael 50 gold") writes deltas under one matching
+  `action_id`: decrement on Aria's `stackables.gold`, increment-or-create
+  on Kael's.
+- Depletion: decrement; if count → 0, remove the key from the Record.
+
+**v1 limitations** — locations don't get stackables (loose-fungibles-at-
+locations stay in prose); named fungibles with descriptions ("magical
+arrows blessed by Vael") aren't well-supported (model as a unique item
+entity covering the whole batch, or narrate). Both tracked in followups.
+
+#### Containers — descriptive-only in v1
+
+Container items (satchel, quiver, purse, chest) exist as ordinary item
+entities; their _contents_ live on whoever holds the container
+(character.inventory + character.stackables). The "in the satchel"
+relationship is narrative texture, not structural.
+
+Structural one-level containment (`is_container` + `contained_*` on
+`ItemState`) was considered and deferred — cycle prevention, transfer-
+cascade complexity, and a holder-tree UI add cost most narratives don't
+need. Additive future: those fields can land in v1.5 without breaking
+v1 data; existing satchel entities just gain them when filled in.
+
+UX consequence: users expecting D&D-grade "drag gold into purse" find
+that gold lives on the character, not in the purse. UI labels say
+"Carried items" / "Carried quantities" at the character level, not
+"Satchel contents." Container items get a flagged display with a
+tooltip ("Container — contents are tracked on the holder").
+
+#### `LocationState` shape
+
+```ts
+type LocationState = {
+  parent_location_id: EntityId | null // compositional hierarchy
+  condition?: string // ongoing dynamic state delta from description baseline
+  // ("war-damaged", "abandoned since the plague")
+}
+```
+
+**`parent_location_id`** is a self-referential reference to another
+entity where `kind=location`, giving locations a containment hierarchy
+(Shop → Town Square → City). Distinct from characters'
+`current_location_id` / items' `at_location_id`, which are _positional_
+(where something is right now); `parent_location_id` is _compositional_
+(this place is part of that place). Prompt rendering walks the parent
+chain at runtime (e.g. `Aria is in [Shop in Town Square in City]`).
+Cycle prevention is app-layer — SQLite can't enforce it.
+
+**Why so few fields.** Locations are dramatically less dynamic than
+characters. Type, appearance, atmosphere, landmark features all
+naturally live in `description` prose, established at spawn time and
+edited by the user when needed. Discrete change events (the bell
+tower fell, the gate was breached) are recorded as `happenings` rows
+with the location as a participant via `happening_involvements` — not
+as state mutations. State carries the _running consequence_ (`condition:
+"earthquake-damaged"`), not the event log.
+
+#### `ItemState` shape
+
+```ts
+type ItemState = {
+  at_location_id: EntityId | null // location of item if loose;
+  // null when held by a character
+  // (look up via character.equipped_items / inventory)
+  condition?: string // dynamic state ("intact", "broken",
+  //                "cursed", "activated")
+}
+```
+
+**Position convention.** `at_location_id = null` means "held by a
+character — find via character arrays." Single source of truth in the
+held direction (character arrays are canonical for held items); no
+back-pointer on item to drift against. Cost: "who holds the silver
+coin?" requires scanning characters' equipped + inventory arrays.
+Acceptable for v1 scale; FTS5 upgrade applies if it bites.
+
+**Why so few fields.** What an item _is_ (type, material, properties,
+magical traits, history, value) fits cleanly in description prose.
+Position and dynamic condition are the two things that genuinely
+need typed slots.
+
+#### `FactionState` shape
+
+```ts
+type FactionState = {
+  standing?: string // dynamic power/situation
+  // ("ascendant after the coup", "embattled in the south")
+  agenda?: string[] // current goals/objectives; soft cap 4
+}
+```
+
+Identity (ideology, history, structure, founding circumstances,
+signature reputation) lives in description prose. `standing` is the
+faction's dynamic-state slot (parallel to LocationState.condition);
+`agenda` parallels character `drives` with a tighter cap because
+faction-level goals are coarser-grained than individual motivations.
+
+Member roster derives from inverse query on `character.faction_id`;
+inter-faction relationships fold into the deferred relationships-graph
+followup.
+
+#### Soft caps + compaction discipline
+
+Schema does NOT enforce field-count caps via Zod `.max()` (would
+create production write-rejection drama on classifier overflow). Bloat
+is mitigated structurally:
+
+- **Soft caps in classifier prompt.** `traits ≤ 8`, `drives ≤ 6`,
+  `agenda ≤ 4`. Classifier prompt explicitly directs "replace, don't
+  append" when at cap.
+- **No per-turn classifier write to traits / drives / agenda.** These
+  slow-evolving identity fields update only at chapter-close
+  lore-mgmt agent. Per-turn pipeline handles scene metadata,
+  `lastSeenAt`, `current_location_id`, attire changes,
+  `equipped_items` / `inventory` / `stackables` transfers.
+  Personality / behavioral / motivational fields lag scene-by-scene
+  observations by up to one chapter — the right cadence for these
+  fields specifically.
+- **Chapter-close compaction (lore-mgmt agent).** Dedupes synonyms
+  ("brave" + "courageous" → one), prunes outdated ("former alcoholic"
+  10 chapters past sobriety → drop), consolidates overly-specific
+  entries. The long-term bloat fix; soft caps are the per-turn
+  discipline.
+
+Cadence stratification is `architecture.md` territory; this section
+declares the _requirement_ (compaction at chapter close), not the
+agent design.
+
+**Zod degradation bounds** (separate from soft caps — these are
+"don't crash on pathological values" caps, much higher than the
+prompt-discipline caps): `voice.max(2000)` characters; `traits` /
+`drives` / `agenda` arrays `.max(50)`; `distinguishing.max(20)`;
+each visual sub-field `.max(500)`; `condition` / `standing`
+`.max(500)`; `stackables` keys non-empty + `.max(40)` characters;
+`stackables` values non-negative integers.
+
+#### Translation targets
+
+The [`translations`](#translation) table can address state fields
+via dotted paths. The split:
+
+**Translatable** (text content the user faces in different languages):
+
+- All `visual.*` sub-fields (string and per-element of `distinguishing[]`).
+- `traits[]`, `drives[]`, `voice` per element / single string.
+- `condition` (Location, Item).
+- `standing` (Faction).
+- `agenda[]` per element.
+
+**Not translatable** (structural / numeric):
+
+- All `EntityId` references (`current_location_id`, `equipped_items`,
+  `inventory`, `parent_location_id`, `at_location_id`, `faction_id`).
+- `lastSeenAt` (numeric snapshot).
+- `stackables` keys — translatable in principle, but key normalization
+  across characters is structurally complex; v1 treats keys as
+  canonical lowercase English, untranslated. The _concept_ (gold) is
+  rendered translated in narrative prose; the key is a structural
+  identifier.
+- `stackables` values (numeric counts).
+
+#### Authorship contract
+
+Per-field "who writes / when":
+
+| Field group                                 | First write                                  | Subsequent writes                                         |
+| ------------------------------------------- | -------------------------------------------- | --------------------------------------------------------- |
+| `description` (top-level)                   | Whoever spawns the entity                    | User-only in v1                                           |
+| `visual.*`                                  | Classifier from prose, or user via form      | Both — classifier evolves on observed prose change        |
+| `traits`, `drives`                          | Classifier from prose                        | Classifier (chapter-close lore-mgmt only) + user via form |
+| `voice`                                     | Classifier from prose, or user via form      | Both                                                      |
+| `current_location_id`                       | Classifier per-turn                          | Classifier per-turn primary; user can edit                |
+| `equipped_items`, `inventory`, `stackables` | Classifier per-turn                          | Classifier per-turn primary; user can edit                |
+| `faction_id`                                | Classifier or user                           | Both                                                      |
+| `lastSeenAt`                                | Classifier-only                              | Classifier-only                                           |
+| `parent_location_id`                        | User at creation, or classifier on discovery | Both — rare changes                                       |
+| `condition` (Location/Item)                 | Classifier or user                           | Both                                                      |
+| `standing`, `agenda` (Faction)              | Classifier or user                           | Classifier (chapter-close) + user                         |
+| `at_location_id` (Item)                     | Classifier per-turn                          | Classifier per-turn primary; user can edit                |
+
+Manual user edit vs classifier overwrite policy is parked as an
+architecture concern. v1 lean: classifier writes from prose-evidenced
+changes; user edits "stick" only until classifier reads contradicting
+prose. Per-field provenance metadata (deferred to v1.5) is the proper
+fix.
+
+The full design rationale, alternatives considered, and adversarial
+findings are recorded in
+[`explorations/2026-04-29-entities-state-shape.md`](./explorations/2026-04-29-entities-state-shape.md).
 
 ### Story identity fields
 

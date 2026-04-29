@@ -60,7 +60,7 @@ contract — not a per-surface choice:
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│ ●  3 unsaved changes — description, disposition  [Discard][Save⌘S] │
+│ ●  3 unsaved changes — description, visual.hair, traits  [Discard][Save⌘S] │
 └────────────────────────────────────────────────────────────────┘
    warm-yellow background tint (#fff7dc); top border line
 ```

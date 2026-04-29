@@ -464,8 +464,8 @@
     <!-- OVERVIEW — typed fields -->
     <div class="tab-panel active" data-panel="overview">
       <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 14px; padding: 8px 12px; background: #fffbe6; border-left: 3px solid #e3d8c0; border-radius: 2px;">
-        Fields shown here are the <b>character-kind</b> subset of the typed entity shape: <code>entities</code> columns + <code>CharacterState</code> scalar fields.
-        Entity-to-entity links (<code>current_location_id</code>, <code>equipped_items</code>, <code>faction_id</code>) live on the Relationships tab.
+        Fields shown here are the <b>character-kind</b> subset of the typed entity shape: <code>entities</code> columns + scalar fields from <code>CharacterState</code> (<code>visual.*</code>, <code>traits</code>, <code>drives</code>, <code>voice</code>) + the <code>stackables</code> key-quantity record.
+        Entity-to-entity links (<code>current_location_id</code>, <code>equipped_items</code>, <code>inventory</code>, <code>faction_id</code>) live on the Relationships tab.
         Other kinds (location / item / faction) render a different composition driven by their typed state.
       </div>
 
@@ -508,25 +508,119 @@
         </div>
       </div>
 
-      <!-- CharacterState.disposition (enum) -->
+      <!-- CharacterState.visual — sub-section: 6 type-relaxed string slots -->
+      <div class="rel-section-title">Visual</div>
+
       <div class="field-row">
-        <div class="field-label">disposition
-          <span class="type-hint">enum &middot; CharacterState</span>
+        <div class="field-label">visual.physique
+          <span class="type-hint">string &middot; CharacterState.visual</span>
         </div>
         <div class="input-select">
-          <span>wary</span>
-          <span style="color: var(--ink-faint);">&#9662;</span>
+          <span>tall, lean</span>
         </div>
       </div>
 
-      <!-- CharacterState.condition (enum) -->
       <div class="field-row">
-        <div class="field-label">condition
-          <span class="type-hint">enum &middot; CharacterState</span>
+        <div class="field-label">visual.face
+          <span class="type-hint">string &middot; CharacterState.visual</span>
         </div>
         <div class="input-select">
-          <span>healthy</span>
-          <span style="color: var(--ink-faint);">&#9662;</span>
+          <span>weathered, sharp jaw, faint scar across left cheek</span>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field-label">visual.hair
+          <span class="type-hint">string &middot; CharacterState.visual</span>
+        </div>
+        <div class="input-select">
+          <span>raven-black, shoulder-length, often tied back</span>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field-label">visual.eyes
+          <span class="type-hint">string &middot; CharacterState.visual</span>
+        </div>
+        <div class="input-select">
+          <span>ice-blue</span>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field-label">visual.attire
+          <span class="type-hint">string &middot; live current attire (classifier-updated)</span>
+        </div>
+        <div class="input-select">
+          <span>worn leathers, dark cloak, silver brooch</span>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field-label">visual.distinguishing
+          <span class="type-hint">string[] &middot; CharacterState.visual</span>
+        </div>
+        <div class="chip-row">
+          <span class="chip-small">scar across left cheek <span class="x">&times;</span></span>
+          <span class="chip-small">low gravelly voice <span class="x">&times;</span></span>
+          <span class="chip-small">slight limp from old wound <span class="x">&times;</span></span>
+          <span class="add-chip">+ add</span>
+        </div>
+      </div>
+
+      <!-- CharacterState.traits — soft cap 8 -->
+      <div class="field-row">
+        <div class="field-label">traits
+          <span class="type-hint">string[] &middot; CharacterState &middot; soft cap 8 (compacted at chapter close)</span>
+        </div>
+        <div class="chip-row">
+          <span class="chip-small">stubborn <span class="x">&times;</span></span>
+          <span class="chip-small">former soldier <span class="x">&times;</span></span>
+          <span class="chip-small">expert tracker <span class="x">&times;</span></span>
+          <span class="chip-small">distrusts authority <span class="x">&times;</span></span>
+          <span class="add-chip">+ add</span>
+        </div>
+      </div>
+
+      <!-- CharacterState.drives — soft cap 6 -->
+      <div class="field-row">
+        <div class="field-label">drives
+          <span class="type-hint">string[] &middot; CharacterState &middot; soft cap 6 (compacted at chapter close)</span>
+        </div>
+        <div class="chip-row">
+          <span class="chip-small">seeks vengeance for father's death <span class="x">&times;</span></span>
+          <span class="chip-small">fears becoming his father <span class="x">&times;</span></span>
+          <span class="chip-small">must prove self to mother <span class="x">&times;</span></span>
+          <span class="add-chip">+ add</span>
+        </div>
+      </div>
+
+      <!-- CharacterState.voice — single prose note -->
+      <div class="field-row">
+        <div class="field-label">voice
+          <span class="type-hint">string? &middot; speech pattern</span>
+        </div>
+        <div class="input-select">
+          <span>clipped, formal in court; drawls when relaxed; never finishes sentences when angry</span>
+        </div>
+      </div>
+
+      <!-- CharacterState.stackables — Record<string, number> for fungibles -->
+      <div class="field-row">
+        <div class="field-label">stackables
+          <span class="type-hint">Record&lt;string, number&gt; &middot; CharacterState</span>
+        </div>
+        <div>
+          <div class="chip-row">
+            <span class="chip-small">gold &times; 200 <span class="x">&times;</span></span>
+            <span class="chip-small">silver &times; 30 <span class="x">&times;</span></span>
+            <span class="chip-small">arrows &times; 15 <span class="x">&times;</span></span>
+            <span class="chip-small">rations &times; 7 <span class="x">&times;</span></span>
+            <span class="add-chip" title="Add a new stackable key (currency, ammo, supply)">+ add</span>
+          </div>
+          <div style="font-size: 10px; color: var(--ink-muted); margin-top: 4px; line-height: 1.5;">
+            Carried quantities &mdash; tracked on the character, not on container items. Currencies, ammo, supplies.
+          </div>
         </div>
       </div>
 
@@ -585,13 +679,28 @@
       <div class="rel-section-title">Possession</div>
       <div class="field-row">
         <div class="field-label">equipped_items
-          <span class="type-hint">EntityId[] (item)</span>
+          <span class="type-hint">EntityId[] (item) &middot; worn / wielded</span>
         </div>
         <div class="chip-row">
           <span class="chip-small entity">Silver coin on cord <span class="x">&times;</span></span>
           <span class="chip-small entity">Worn blade <span class="x">&times;</span></span>
           <span class="add-chip" title="Opens a branch-scoped item picker with option to create new">+ link item</span>
         </div>
+      </div>
+      <div class="field-row">
+        <div class="field-label">inventory
+          <span class="type-hint">EntityId[] (item) &middot; carried, not active</span>
+        </div>
+        <div class="chip-row">
+          <span class="chip-small entity">Father's letter <span class="x">&times;</span></span>
+          <span class="chip-small entity">Worn satchel <span class="x">&times;</span></span>
+          <span class="chip-small entity">Wax-sealed vial <span class="x">&times;</span></span>
+          <span class="add-chip" title="Opens a branch-scoped item picker with option to create new">+ link item</span>
+        </div>
+      </div>
+      <div style="font-size: 10px; color: var(--ink-muted); margin: 6px 0 12px 0; line-height: 1.5;">
+        Stackables (currencies, ammo, supplies) live on the Overview tab as a key-quantity record, not in this list.
+        Container items (satchel above) are ordinary items here; their contents are tracked on the holder &mdash; v1 does not model structural containment.
       </div>
 
       <div class="rel-section-title">Affiliation</div>
@@ -660,7 +769,7 @@
     <div class="save-bar" id="save-bar">
       <div class="dirty-note">
         <span class="dirty-dot"></span>
-        <span><b>3 unsaved changes</b> &mdash; description, disposition, equipped_items</span>
+        <span><b>3 unsaved changes</b> &mdash; description, visual.hair, traits</span>
       </div>
       <div class="actions">
         <span class="discard-btn">Discard</span>
@@ -708,14 +817,19 @@
         <span><code>state.equipped_items</code> &mdash; added "silver coin on cord"</span>
       </div>
       <div class="history-row">
+        <span class="history-ts">2026-04-24 15:11</span>
+        <span class="history-op update">update</span>
+        <span><code>state.stackables.gold</code> &mdash; 250 &rarr; 200 (paid for room)</span>
+      </div>
+      <div class="history-row">
         <span class="history-ts">2026-04-24 15:02</span>
         <span class="history-op update">update</span>
-        <span><code>description</code> &mdash; (expanded from classifier, entry 19)</span>
+        <span><code>state.visual.attire</code> &mdash; "noble robes" &rarr; "worn leathers, dark cloak, silver brooch"</span>
       </div>
       <div class="history-row">
         <span class="history-ts">2026-04-24 14:45</span>
         <span class="history-op update">update</span>
-        <span><code>state.disposition</code> &mdash; neutral &rarr; wary</span>
+        <span><code>state.traits</code> &mdash; added "distrusts authority" (chapter close)</span>
       </div>
       <div class="history-row">
         <span class="history-ts">2026-04-24 14:21</span>
@@ -750,11 +864,23 @@
   <span class="k">"retired_reason"</span><span class="p">:</span> <span class="n">null</span><span class="p">,</span>
   <span class="k">"injection_mode"</span><span class="p">:</span> <span class="s">"keyword_llm"</span><span class="p">,</span>
   <span class="k">"state"</span><span class="p">:</span> <span class="p">{</span>
-    <span class="k">"disposition"</span><span class="p">:</span> <span class="s">"wary"</span><span class="p">,</span>
-    <span class="k">"condition"</span><span class="p">:</span> <span class="s">"healthy"</span><span class="p">,</span>
+    <span class="k">"visual"</span><span class="p">:</span> <span class="p">{</span>
+      <span class="k">"physique"</span><span class="p">:</span> <span class="s">"tall, lean"</span><span class="p">,</span>
+      <span class="k">"face"</span><span class="p">:</span> <span class="s">"weathered, sharp jaw, faint scar across left cheek"</span><span class="p">,</span>
+      <span class="k">"hair"</span><span class="p">:</span> <span class="s">"raven-black, shoulder-length, often tied back"</span><span class="p">,</span>
+      <span class="k">"eyes"</span><span class="p">:</span> <span class="s">"ice-blue"</span><span class="p">,</span>
+      <span class="k">"attire"</span><span class="p">:</span> <span class="s">"worn leathers, dark cloak, silver brooch"</span><span class="p">,</span>
+      <span class="k">"distinguishing"</span><span class="p">:</span> <span class="p">[</span><span class="s">"scar across left cheek"</span><span class="p">,</span> <span class="s">"low gravelly voice"</span><span class="p">,</span> <span class="s">"slight limp from old wound"</span><span class="p">]</span>
+    <span class="p">},</span>
+    <span class="k">"traits"</span><span class="p">:</span> <span class="p">[</span><span class="s">"stubborn"</span><span class="p">,</span> <span class="s">"former soldier"</span><span class="p">,</span> <span class="s">"expert tracker"</span><span class="p">,</span> <span class="s">"distrusts authority"</span><span class="p">],</span>
+    <span class="k">"drives"</span><span class="p">:</span> <span class="p">[</span><span class="s">"seeks vengeance for father's death"</span><span class="p">,</span> <span class="s">"fears becoming his father"</span><span class="p">,</span> <span class="s">"must prove self to mother"</span><span class="p">],</span>
+    <span class="k">"voice"</span><span class="p">:</span> <span class="s">"clipped, formal in court; drawls when relaxed"</span><span class="p">,</span>
     <span class="k">"current_location_id"</span><span class="p">:</span> <span class="s">"l-iron-tavern"</span><span class="p">,</span>
     <span class="k">"equipped_items"</span><span class="p">:</span> <span class="p">[</span><span class="s">"i-silver-coin"</span><span class="p">,</span> <span class="s">"i-worn-blade"</span><span class="p">],</span>
-    <span class="k">"faction_id"</span><span class="p">:</span> <span class="s">"f-bounty-guild"</span>
+    <span class="k">"inventory"</span><span class="p">:</span> <span class="p">[</span><span class="s">"i-fathers-letter"</span><span class="p">,</span> <span class="s">"i-worn-satchel"</span><span class="p">,</span> <span class="s">"i-wax-vial"</span><span class="p">],</span>
+    <span class="k">"stackables"</span><span class="p">:</span> <span class="p">{</span> <span class="k">"gold"</span><span class="p">:</span> <span class="n">200</span><span class="p">,</span> <span class="k">"silver"</span><span class="p">:</span> <span class="n">30</span><span class="p">,</span> <span class="k">"arrows"</span><span class="p">:</span> <span class="n">15</span><span class="p">,</span> <span class="k">"rations"</span><span class="p">:</span> <span class="n">7</span> <span class="p">},</span>
+    <span class="k">"faction_id"</span><span class="p">:</span> <span class="s">"f-bounty-guild"</span><span class="p">,</span>
+    <span class="k">"lastSeenAt"</span><span class="p">:</span> <span class="p">{</span> <span class="k">"entryId"</span><span class="p">:</span> <span class="s">"e-23"</span><span class="p">,</span> <span class="k">"locationId"</span><span class="p">:</span> <span class="s">"l-iron-tavern"</span><span class="p">,</span> <span class="k">"worldTime"</span><span class="p">:</span> <span class="n">1238400</span> <span class="p">}</span>
   <span class="p">},</span>
   <span class="k">"tags"</span><span class="p">:</span> <span class="p">[</span><span class="s">"bounty-hunter"</span><span class="p">,</span> <span class="s">"ally"</span><span class="p">,</span> <span class="s">"chapter-2-introduced"</span><span class="p">],</span>
   <span class="k">"created_at"</span><span class="p">:</span> <span class="n">1745510321</span><span class="p">,</span>

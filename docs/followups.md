@@ -12,14 +12,6 @@ they accumulate items.
 
 ## Data-model
 
-### `entities.state` kind-specific shape
-
-Per `data-model.md`: "Kind-specific state shape is deferred." Peek
-drawer's fields, World panel's Overview and Relationships tabs all
-depend on this. Wireframes scaffold the regions; field-level UI lands
-once the discriminated-union types (`CharacterState`, `LocationState`,
-`ItemState`, `FactionState`) are designed.
-
 ### Manual worldTime correction — cascade vs. jump + downstream blast radius
 
 Per [In-world time tracking](./data-model.md#in-world-time-tracking)
@@ -111,6 +103,23 @@ locked; what's deferred is the agent's concrete shape:
   contradictions with existing state. Each delta is reversible via
   rollback so the floor isn't catastrophic, but it should still be
   designed not to thrash.
+- **Compaction of `traits` / `drives` (CharacterState) and `agenda`
+  (FactionState).** Per [`data-model.md → World-state storage`](./data-model.md#world-state-storage),
+  these slow-evolving identity arrays are written ONLY at
+  chapter-close lore-mgmt — never per-turn. The agent dedupes
+  synonyms ("brave" + "courageous" → one), prunes outdated entries
+  ("former alcoholic" 10 chapters past sobriety → drop), and
+  consolidates overly-specific entries against the soft caps
+  (`traits ≤ 8`, `drives ≤ 6`, `agenda ≤ 4`).
+- **Stackable-key normalization on `CharacterState.stackables`.** Cross-
+  character keys ("gold" / "Gold" / "gold pieces") drift over time;
+  the agent normalizes to canonical lowercase keys at chapter close.
+- **Description revision suggestion-queue** — the deferred
+  autonomous-vs-confirm-mode toggle for classifier-proposed
+  description revisions (per the entity description authorship
+  contract). Until this UI lands, classifier writes description
+  only at first introduction; the agent never amends post-
+  establishment.
 
 Lands once the retrieval agent's shape is also pinned (per
 [`architecture.md → What this doc does not yet cover`](./architecture.md#what-this-doc-does-not-yet-cover))
@@ -173,6 +182,171 @@ Decisions needed:
 - "Memory probe" affordance for users to inspect what the model
   is actually seeing on a given turn — debug tool to surface the
   dropped happenings.
+
+### Per-field provenance metadata for `entities.state`
+
+The [state-field shape](./data-model.md#world-state-storage) lands
+in v1 without per-field provenance. Each typed slot stores its
+value; nothing records _who_ wrote it (classifier vs user vs
+wizard) or _when_ it was last touched. Two real costs:
+
+- **Stale detection.** No way to surface "this character's
+  `visual.attire` was last classifier-touched 12 turns ago — possibly
+  stale" in the UI.
+- **User-edit precedence.** A user manually edits Kael's
+  `current_location_id` to "The Iron Tavern"; next turn's prose
+  has Kael at the bridge. Without provenance, classifier
+  unconditionally overwrites the user's edit. With provenance,
+  classifier could honor user-asserted values until prose
+  explicitly contradicts.
+
+Sketch shape (v1.5):
+
+```ts
+type FieldMeta = {
+  source: 'classifier' | 'user' | 'wizard'
+  last_observed_entry: string  // entry id
+  last_observed_worldTime: number
+}
+// Sparse sidecar map keyed by dotted path, only fields that have been touched
+state._fieldMeta?: Record<string /* dotted path */, FieldMeta>
+```
+
+Open questions: storage cost (every classifier write maintains
+metadata), UI surfacing (passive "last updated N turns ago"
+tooltip vs active "stale fields" filter view), interaction with
+chapter-close compaction (does compaction reset provenance to
+"agent" or preserve original source?). Lands once v1 testing
+surfaces real signal that the policy gap (manual-edit-vs-overwrite,
+stale-tracking) bites.
+
+### Structural one-level containers on `ItemState`
+
+[`data-model.md → World-state storage`](./data-model.md#world-state-storage)
+ships v1 with descriptive-only containers — satchels and quivers
+exist as ordinary item entities; their _contents_ live on the
+holder (character.inventory + character.stackables). Structural
+one-level containment was considered and deferred:
+
+```ts
+// v1.5 sketch — additive to existing ItemState
+type ItemState = {
+  at_location_id: EntityId | null
+  condition?: string
+  is_container?: boolean // default false
+  contained_items?: EntityId[] // unique items only
+  contained_stackables?: Record<string, number> // currencies / ammo
+}
+```
+
+Convention: contained items can't themselves be containers
+(recursion bound at one level). Container transfer cascades
+contents (handing Kael's satchel to Aria moves contained_items
+
+- contained_stackables along).
+
+Open questions:
+
+- **Cycle prevention** — app-layer; SQLite can't enforce that
+  `contained_items` doesn't include the container itself
+  transitively. Same family of bugs as `parent_location_id`.
+- **Transfer cascade semantics** — when classifier processes
+  "Kael handed Aria his satchel," it walks contents and
+  re-parents them. UI should show this clearly (the contents
+  visibly moving between holders, or just the container moving
+  with a contents-attached badge).
+- **UI tree depth** — character form gains a holder-tree
+  rendering for contained items. Shape isn't drawn.
+
+When v1.5 escalates: real signal that prose-driven satchel
+handoff is unreliable (classifier consistently loses contents on
+character-to-character transfer); strong RPG-style demand for
+inventory-management UX; or testing surfaces "the AI keeps
+forgetting the gold was in the chest, not on the floor."
+
+### `LocationState.stackables`
+
+`CharacterState.stackables: Record<string, number>` covers
+character-side fungibles in v1. Loose-fungibles-at-locations
+("the chest at the Iron Tavern contains 200 gold") stay in prose;
+when a character takes the gold, classifier creates the stack
+reference on the character at that moment.
+
+If real demand surfaces (looting scenes that need precise
+location-side tracking; multi-character looting where prose-only
+loses precision), add the same shape to `LocationState`:
+
+```ts
+type LocationState = {
+  parent_location_id: EntityId | null
+  condition?: string
+  stackables?: Record<string, number> // NEW
+}
+```
+
+Same cross-holder key-normalization concern as character
+stackables (chapter-close lore-mgmt handles).
+
+### Named fungibles with descriptions
+
+Stackables-as-string-keys covers the common fungible cases
+(currencies, generic ammo, generic supplies) but can't carry
+entity-level rich data. The "magical arrows blessed by Vael, +1
+to hit, glow faintly in dark places" case has no place for the
+description in v1.
+
+Two routes when the case lands:
+
+- **Unique item entity covering the whole batch.** "Quiver of
+  Vael-blessed arrows" is one item entity with description; user
+  treats it as a single named item that gets depleted. Classifier
+  manages the batch level. Works for set-sized batches.
+- **`entity_stacks` table.** Promoted shape — stackables become
+  entities with their own row + description, plus a stack table:
+  ```ts
+  entity_stacks {
+    item_id FK
+    holder_kind: 'character' | 'location'
+    holder_id: EntityId
+    count: number
+  }
+  ```
+  Symmetric for character + location holders. Loses the
+  Record<string, number> simplicity for currencies and gains real
+  entity-level data for named fungibles.
+
+Decide route at design pass; lean unique-item-as-batch for
+narrow cases, `entity_stacks` if/when broader stackable-with-
+description demand emerges.
+
+### State-field write contract — architecture
+
+[`data-model.md → World-state storage → Authorship contract`](./data-model.md#authorship-contract)
+declares per-field "first write" and "subsequent writes"
+authority, but the _enforcement mechanism_ is architecture
+territory. Open:
+
+- **Per-turn classifier write contract.** Which agent (per-turn
+  classifier vs every-N-turn classifier vs chapter-close
+  lore-mgmt) writes which fields, with what cadence? This design
+  proposes a stratification (per-turn for scene metadata + visual
+  - relationships + stackables; chapter-close-only for traits /
+    drives / agenda) but locks neither the agent boundaries nor
+    the prompt designs.
+- **Manual-edit-vs-classifier-overwrite policy.** v1 lean:
+  classifier writes from prose-evidenced changes; user edits
+  "stick" only until classifier reads contradicting prose.
+  Per-field provenance metadata (separate followup) is the proper
+  fix; v1 accepts this floor.
+- **Concurrency / coordination.** Per the existing
+  [Concurrent pipeline / agent coordination](#concurrent-pipeline--agent-coordination)
+  followup — when background agents enter the picture (style-
+  review, standalone memory-compaction), state-field writes from
+  multiple agents need conflict policies.
+
+Lands with the architecture-side write-cadence + agent-boundary
+design pass. Likely paired with the
+[Lore-management agent shape](#lore-management-agent-shape) work.
 
 ---
 
@@ -332,6 +506,37 @@ thousands of entries + their delta log) eventually need FTS5
 Mirror searchable text into an FTS index, triggers keep it in
 sync. Pending — revisit when a real story hits the wall.
 
+### Search scope on state fields
+
+Per
+[`reader-composer.md → Browse rail — search scope`](./ui/screens/reader-composer/reader-composer.md#browse-rail--search-scope)
+and
+[`world.md → List pane — search scope`](./ui/screens/world/world.md#list-pane--search-scope),
+entity search currently scans `name`, `description`, `tags`. With
+the new
+[`entities.state` shape](./data-model.md#world-state-storage),
+several state fields carry user-facing text content worth
+including in search:
+
+- **Likely yes — `traits`, `drives`** (CharacterState chip lists,
+  `agenda` for FactionState). Users will want to filter "all
+  characters with `former soldier` trait" or "factions whose agenda
+  mentions Vex."
+- **Likely no — `voice`** (low search-value; prose stylistic note
+  rather than searchable identity).
+- **Edge cases — `visual.*`** sub-fields. "All red-haired
+  characters" feels like a search you'd want, but the chip-style
+  noise (every character has 6 visual slots, mostly populated) may
+  flood unrelated search results.
+- **Stackables keys** — searching "all characters with gold > 0" is
+  a different shape (numeric filter, not text search); treat
+  separately if real demand surfaces.
+
+Decision lands with the next pass over the World panel + Browse
+rail search-scope definition. Lean: include `traits` + `drives` +
+`agenda` immediately when implementing the new shape; defer
+`visual.*` until UX testing surfaces flooding-or-not-flooding signal.
+
 ### Translation Wizard
 
 Multi-language conversion of an existing story's content (per-story
@@ -365,7 +570,23 @@ brainstorm.
 Only character-kind Overview is wireframed. Location / item / faction
 need their own composition driven by their typed state. Lore's
 Overview is separate again (different table, different fields). All
-pending — blocks on `entities.state` shape.
+pending. Schema unblock landed in
+[`data-model.md → World-state storage`](./data-model.md#world-state-storage)
+— Location, Item, and Faction shapes are now spec'd; UI Overview
+drawing for those three kinds remains. Each is small (Location 2
+fields, Item 2 fields, Faction 2 fields), so the design pass is
+about how shared chrome (description, tags, retired_reason,
+portrait, status, injection_mode) composes with those few typed
+slots, not about extensive per-kind form design.
+
+**Peek-drawer state-field layout** is in the same family — the
+reader-composer peek drawer (per
+[`reader-composer.md → Peek drawer`](./ui/screens/reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters))
+shows a subset of state fields per kind in its lightweight surface.
+What subset, in what order, with what affordances per kind — same
+design pass as the World panel Overview. Peek is the lighter
+surface; deep edit routes to World. The schema unblock applies to
+both surfaces equally.
 
 ### Asset gallery
 

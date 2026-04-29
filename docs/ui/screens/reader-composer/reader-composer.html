@@ -756,8 +756,10 @@
       <div class="peek-field">
         <div class="label">State &mdash; kind-specific fields</div>
         <div class="value placeholder" style="padding: 8px; border: 1px dashed var(--line-soft); border-radius: 3px; font-size: 12px;">
-          [state JSON shape is TBD per kind. Layout here will depend on the<br>
-          CharacterState / LocationState / ItemState / FactionState discriminated union.]
+          [peek-drawer state-field layout pending its own design pass.<br>
+          Schema lives in data-model &mdash; CharacterState carries visual.*, traits, drives,<br>
+          voice, current_location_id, equipped_items, inventory, stackables, faction_id, lastSeenAt.<br>
+          Peek selects a subset; deep edit routes to World panel.]
         </div>
       </div>
       <div class="peek-field">

@@ -149,12 +149,22 @@ has a direct UI consequence:
   validation, types — all from the same source.
 - **No "+ add field" UI.** You can't add fields to a typed shape.
 - **Fields distribute deterministically by shape:**
-  - **Scalar / enum / primitive fields** → **Overview tab** as typed
-    controls (dropdown, text, chips, etc.).
+  - **Scalar / primitive fields** → **Overview tab** as typed
+    controls (text inputs, chip-list editors, prose textareas). For
+    character, this means the `visual.*` sub-fields, `traits[]`,
+    `drives[]`, and `voice` per the
+    [`CharacterState` shape](../../data-model.md#characterstate-shape).
   - **Entity-to-entity ID fields** → **Relationships tab** as
-    picker-backed inputs. Grouped by semantic label (Positional /
-    Possession / Affiliation for character; different groups for
-    other kinds).
+    picker-backed inputs. Grouped by semantic label — for character,
+    `current_location_id` (Positional), `equipped_items[]` +
+    `inventory[]` (Possession), `faction_id` (Affiliation). Different
+    groups for other kinds (locations have `parent_location_id` as
+    Compositional; items have `at_location_id` as Positional).
+  - **Holder-side quantity records** (`stackables: Record<string,
+number>` on character) → **Overview tab** as a key-quantity panel,
+    distinct from the `inventory[]` chip list. UI labels emphasize
+    the holder-level framing ("Carried quantities — tracked on the
+    character, not on container items").
 - **Overview composition is per-kind.** Character / Location / Item /
   Faction each define their own Overview section driven by their
   typed state. Some shared fields (description, tags, retired_reason,

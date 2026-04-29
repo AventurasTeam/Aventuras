@@ -94,9 +94,13 @@ power-user/debug territory. One consistent pattern: ⋯ menus are where
 
 ## Tabs (character kind)
 
-- **Overview** — scalar/enum fields from `entities` + `CharacterState`:
-  status, injection_mode, description, disposition, condition,
-  retired_reason (conditional), tags, portrait.
+- **Overview** — scalar fields from `entities` + `CharacterState`:
+  status, injection_mode, description, the `visual.*` sub-fields
+  (physique, face, hair, eyes, attire, distinguishing[]), traits[],
+  drives[], voice, the `stackables` key-quantity record,
+  retired_reason (conditional), tags, portrait. See
+  [`data-model.md → CharacterState`](../../../data-model.md#characterstate-shape)
+  for the typed shape.
 - **Relationships** — all entity-to-entity ID fields from
   `CharacterState`, grouped by semantic label (Positional /
   Possession / Affiliation).
@@ -158,8 +162,14 @@ handle it).
 
 ## Open for per-kind composition
 
-Location / item / faction Overview compositions are not drawn —
-pending kind-specific state schema design (see
-[followups.md](../../../followups.md)). Lore's composition is
-separate again (different table, different fields — simpler than
-entities, more text-heavy).
+Location / item / faction Overview compositions are not drawn.
+The state schema landed in
+[`data-model.md → World-state storage`](../../../data-model.md#world-state-storage)
+(LocationState 2 fields, ItemState 2 fields, FactionState 2
+fields), unblocking the UI Overview drawing for those three
+kinds. The remaining work is small per kind — how shared chrome
+(description, tags, retired_reason, portrait, status,
+injection_mode) composes with the few typed slots — tracked in
+[`followups.md → Per-kind Overview composition`](../../../followups.md#per-kind-overview-composition-in-world-panel).
+Lore's composition is separate again (different table, different
+fields — simpler than entities, more text-heavy).
