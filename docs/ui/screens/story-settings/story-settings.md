@@ -39,13 +39,12 @@ Cross-cutting principles that govern this screen are in
 │ · Generation  │ ─────                                       │
 │               │ title: Aria's Descent                       │
 │ SETTINGS      │ description: [textarea]                     │
-│ · Models      │ genre: [Dark Fantasy]                       │
-│ · Memory      │ tags: [chips] +                             │
-│ · Translation │ author notes: [textarea]                    │
-│ · Pack        │ ─ Appearance                                │
-│ · Calendar    │ cover, accent color                         │
-│ · Advanced    │ ─ Library                                   │
-│               │ status: [Active|Archived] · ★ pinned        │
+│ · Models      │ tags: [chips] +                             │
+│ · Memory      │ author notes: [textarea]                    │
+│ · Translation │ ─ Appearance                                │
+│ · Pack        │ cover, accent color                         │
+│ · Calendar    │ ─ Library                                   │
+│ · Advanced    │ status: [Active|Archived] · ★ pinned        │
 │               │                                             │
 │               ├────────────────────────────────────────────┤
 │               │ save bar (when dirty)                       │
@@ -62,8 +61,8 @@ The left rail splits into two sections reflecting two conceptually
 distinct domains:
 
 - **Story** section — wizard-editable fields. What the story IS.
-  Tabs: About (identity), Generation (mode/lead/narration/tone +
-  authoring aids).
+  Tabs: About (library/identity), Generation (mode / lead / narration
+  - story-shaping content + authoring aids).
 - **Settings** section — post-creation tuning knobs. How it
   generates. Tabs: Models, Memory, Translation, Pack, Advanced.
 
@@ -74,6 +73,13 @@ Collapsing both domains into one screen with a visual sectional
 split avoids inflating the top-bar with a second entry point while
 keeping the cognitive separation clear.
 
+**Storage shape mirrors the section split.** The Story section maps
+to `stories.definition` JSON; the Settings section maps to
+`stories.settings` JSON. See
+[`data-model.md → Story settings shape`](../../../data-model.md#story-settings-shape)
+for the authoritative schemas and the cross-field constraints they
+enforce.
+
 **No standalone "Edit Story" surface.** Editing story identity
 happens on the `About` tab. Title is additionally click-to-edit
 inline in the reader top bar for the fast case. The story list's
@@ -83,17 +89,20 @@ card `⋯ → Edit info` routes to `About` directly.
 
 **Story section** (definitional — set during wizard, editable after):
 
-- **About** — title, description, genre, tags, author notes
-  (private), cover, accent color, library status (`active` /
-  `archived` — segment per
-  [Select primitive rule](../../patterns/forms.md#select-primitive)),
+- **About** — title, description, tags, author notes (private),
+  cover, accent color, library status (`active` / `archived` — segment
+  per [Select primitive rule](../../patterns/forms.md#select-primitive)),
   pin (orthogonal star toggle; matches the inline-pin pattern on
-  story-list cards).
+  story-list cards). Library-shaped metadata only — story-shaping
+  content (genre / tone / setting) lives on the Generation tab.
 - **Generation** — mode (adventure/creative), lead character,
-  narration (first/second/third-person), tone/style, plus
-  **Authoring aids** sub-section: composer modes toggle + wrap POV
-  (first/third) + suggestions toggle. Behavior that shapes what the
-  AI writes and how the user composes.
+  narration (first/second/third-person), and the **Story content**
+  sub-section (genre / tone / setting — substantial preset+prose
+  fields per the
+  [Story-shaping content principle](../../principles.md#story-shaping-content--genre-tone-setting)),
+  plus **Authoring aids** sub-section: composer modes toggle + wrap
+  POV (first/third) + suggestions toggle. Behavior that shapes what
+  the AI writes and how the user composes.
 
 **Settings section** (operational — post-creation knobs):
 
@@ -202,23 +211,60 @@ for the cross-cutting pattern.
 
 ## Generation tab — definitional fields + authoring aids
 
-Houses the three orthogonal concepts (mode / lead / narration — see
-[principles](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts)),
-the tone/style note, and an **Authoring aids** sub-section toggling
-composer modes / wrap POV / suggestions per-story.
+Houses three groupings, each with its own sub-section:
 
-**Some Generation fields trigger a confirmation modal at save**
-once narrative exists. Mode and narration can't meaningfully change
-mid-story without risking coherence breaks; composer wrap POV
-(Authoring aids) shifts how new user input renders. The tab
-surfaces a soft warn-box at the top once any entry has been
-written; the actual confirmation lives at the save-session commit
-step, not at field-edit time. See
-[Definitional-change confirmations](#definitional-change-confirmations)
-below for the flagged-field list, copy, and modal shape.
+1. **Orthogonal axes** — mode / lead / narration (per
+   [principles → Mode, lead, narration](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts)).
+2. **Story content** — genre, tone, setting (per
+   [principles → Story-shaping content](../../principles.md#story-shaping-content--genre-tone-setting)) —
+   the substantial preset+prose fields the AI consumes during
+   generation.
+3. **Authoring aids** — composer modes toggle + wrap POV
+   (first/third) + suggestions toggle.
 
-Lead is **not** flagged — lead-switching is a first-class action
-per
+### Orthogonal axes
+
+- **mode** — `Adventure | Creative` segment.
+- **lead** — character picker. Required when `mode='adventure'` OR
+  `narration ∈ {first, second}` (per the
+  [cross-field constraint](../../../data-model.md#story-settings-shape)).
+  Save is rejected if the constraint is unmet, with copy explaining
+  why.
+- **narration** — `1st | 2nd | 3rd` segment. Picking 1st or 2nd
+  while lead is null surfaces an inline lead-required prompt before
+  save can succeed.
+
+### Story content
+
+Each field renders a preset picker (Select-primitive variant) at the
+top with the prose-body editor below. Selecting a preset copies its
+`displayName` into `label` and its `promptBody` into the editor —
+selection is fire-and-forget (no preset id stored on the story);
+post-selection edits are user-owned. Skipping the preset picker is
+allowed — user can author label + prose from scratch.
+
+- **genre** — `{ label, promptBody }`. Library-card overline reads
+  `definition.genre.label`.
+- **tone** — `{ label, promptBody }`. Same shape as genre.
+- **setting** — freeform prose only (no preset). The world / time /
+  place. Future Vault setting templates are deferred per
+  [followups → Vault setting templates](../../../followups.md#vault-setting-templates).
+
+**Soft warn-box at the top of the Generation tab** when narrative
+exists, copy along the lines of "Edits to genre / tone / setting
+propagate from the next turn forward." Story content prose changes
+do **not** trigger the
+[Definitional-change confirmation modal](#definitional-change-confirmations) —
+they shift AI output gradually without coherence breaks.
+
+### Modal-flagged fields (existing scope, unchanged)
+
+Mode and narration trigger the
+[Definitional-change confirmation modal](#definitional-change-confirmations)
+at save when changed mid-story. The tab additionally surfaces a
+warn-box at the top once any entry has been written; the actual
+confirmation lives at the save-session commit step. Lead is **not**
+flagged — lead-switching is a first-class action per
 [principles → Mode, lead, narration](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts).
 
 ## Memory tab — chapter threshold + recent buffer + compaction
@@ -519,6 +565,10 @@ Not flagged, deliberately:
 
 - `leadEntityId` — first-class action; see
   [principles → Mode, lead, narration](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts).
+- `genre` / `tone` / `setting` — story-shaping content shifts AI
+  output from the next turn forward without coherence breaks per
+  [principles → Story-shaping content](../../principles.md#story-shaping-content--genre-tone-setting).
+  The Generation tab carries a soft warn-box at the top instead.
 - `worldTimeOrigin` — display-only shift. Stored worldTimes are
   unchanged; only the calendar formatter renders them differently.
 - All operational tuning (memory, translation, models, pack

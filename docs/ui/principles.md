@@ -359,10 +359,10 @@ rail of categories, right pane for selected category):
   policy below), appearance, data (backup / import / export), UI
   language, about / diagnostics.
 - **Story Settings** — per-story, owned by the story row. Scope:
-  identity (genre, tags, cover, accent, etc.), definitional fields
-  (mode, lead, narration, tone), operational knobs (memory,
-  translation, pack, composer UX prefs as story-owned values),
-  Models overrides.
+  identity (tags, cover, accent, etc.), definitional fields
+  (mode, lead, narration, genre, tone, setting, calendar),
+  operational knobs (memory, translation, pack, composer UX prefs as
+  story-owned values), Models overrides.
 
 **Entry points:**
 
@@ -382,6 +382,15 @@ Per the [Settings icon scope](#settings-icon-scope) rule the two
 icons are visually distinguishable — same screen never carries
 both gears.
 
+**Storage shape mirrors the UI section split.** `stories.definition`
+JSON holds definitional content (`mode`, `lead`, `narration`,
+`genre`, `tone`, `setting`, calendar fields); `stories.settings` JSON
+holds operational config (memory, translation, models, pack,
+composer prefs). The Story Settings screen's left-rail "Story" /
+"Settings" sections map 1:1 to these two storage blobs. Full schema
+and rationale in
+[`data-model.md → Story settings shape`](../data-model.md#story-settings-shape).
+
 **Settings scope policy — two patterns:**
 
 1. **Copy-at-creation** — App Settings · Story Defaults holds
@@ -394,12 +403,9 @@ both gears.
    render time. Changing the global propagates to every un-overridden
    story.
 
-Definitional fields (mode, lead, narration, tone) and identity fields
-(genre, tags, cover, etc.) follow neither pattern — they're authored
-in the wizard or per-story, with no global default.
-
-Full schema and rationale in
-[`data-model.md → Story settings shape`](../data-model.md#story-settings-shape).
+Definitional fields (everything in `stories.definition`) and identity
+fields (tags, cover, accent, etc.) follow neither pattern — they're
+authored in the wizard or per-story, with no global default.
 
 Per-screen detail in
 [`screens/story-settings/`](./screens/story-settings/story-settings.md).
@@ -467,19 +473,37 @@ user's own input gets wrapped — see "Composer mode" below. Composer
 wrap POV is a separate setting restricted to first/third
 (second-person makes no sense for user-composed input).
 
-Field: `stories.settings.narration: 'first' | 'second' | 'third'`.
+Field: `stories.definition.narration: 'first' | 'second' | 'third'`.
 
-A first- or second-person story still has a lead (whose "I" / "you"
-the narrator inhabits). A third-person story can have a lead too (the
-camera's anchor) — or none (creative mode with omniscient narration).
+A first- or second-person story always has a lead (whose "I" / "you"
+the narrator inhabits) — enforced as a hard zod constraint at the
+`definition` boundary, not just a documented principle. A
+third-person story can have a lead too (the camera's anchor) — or
+none (creative mode with omniscient narration).
 
 Encoding:
 
-- `stories.settings.mode = 'adventure' | 'creative'`
-- `stories.settings.leadEntityId` (required when mode=adventure,
-  optional in creative). Must be `kind=character` — enforced at the
-  zod schema boundary.
-- `stories.settings.narration = 'first' | 'second' | 'third'`
+- `stories.definition.mode = 'adventure' | 'creative'`
+- `stories.definition.leadEntityId` — must reference an entity with
+  `kind='character'`. Required when:
+  - `mode='adventure'`, OR
+  - `narration ∈ { 'first', 'second' }`.
+
+  The two requirements are independent; either alone is sufficient
+  to require a lead. Optional only in `mode='creative' +
+narration='third'` (the omniscient-narrator ensemble case).
+
+- `stories.definition.narration = 'first' | 'second' | 'third'`
+
+Cross-field constraint summary:
+
+```
+narration ∈ { 'first', 'second' }  →  leadEntityId != null
+mode = 'adventure'                 →  leadEntityId != null
+```
+
+Both apply at the
+[`StoryDefinition` zod boundary](../data-model.md#story-settings-shape).
 
 **Lead is a generation-level concept, not a UI gate.** The UI never
 restricts what the user can see regardless of mode. The "view through
@@ -507,6 +531,65 @@ plain characters. Entry points:
 
 All four are redundant entry points for the same mutation. Lead is
 important enough that over-reachability beats one-true-place purity.
+
+---
+
+## Story-shaping content — genre, tone, setting
+
+Sibling concept to "Mode, lead, and narration." Where mode/lead/
+narration are orthogonal **axes** (each independently chosen), genre /
+tone / setting are substantial **prose content** the user authors at
+wizard time, injected into prompts to shape what the AI writes.
+
+All three live in
+[`stories.definition`](../data-model.md#story-settings-shape) and are
+wizard-authored per story (no global default, no copy-at-creation).
+
+### Two shapes
+
+- **`genre` and `tone`** — preset+prose hybrid:
+  `{ label: string; promptBody: string }`. Bundled preset catalog in
+  code (~20-30 entries each for v1) gives the user an on-ramp; the
+  user can edit either field freely. Selection copies the preset's
+  `displayName` into `label` and the preset's `promptBody` into
+  `promptBody` — fire-and-forget, no preset id stored. App updates
+  to bundled presets don't propagate to existing stories.
+- **`setting`** — freeform prose only (no preset). Settings are
+  genuinely unique per story; preset clustering doesn't fit. A
+  future Vault content type for reusable setting templates is
+  parked in
+  [`followups.md → Vault setting templates`](../followups.md#vault-setting-templates).
+
+### No-modal-on-edit rule
+
+Edits to genre / tone / setting prose — including post-wizard
+substantial rewrites — do **not** trigger the
+[Definitional-change confirmation modal](./screens/story-settings/story-settings.md#definitional-change-confirmations).
+Unlike `mode` / `narration` / `composerWrapPov` (which reframe the
+user's relationship to the story or invalidate established
+patterns), prose content shifts AI output from the next turn forward
+without coherence breaks. A soft warn-box at the top of the
+Generation tab ("edits propagate from the next turn") is sufficient
+guidance.
+
+### Single canonical edit surface
+
+Both `label` and `promptBody` for genre / tone are edited together
+on the
+[Story Settings · Generation tab](./screens/story-settings/story-settings.md#generation-tab--definitional-fields--authoring-aids).
+The library card's "Genre:" overline reads `definition.genre.label`
+directly — there's no echo of the field on the About tab. One
+canonical edit surface per field; the library card is its own
+surface where the result shows up.
+
+### Definitional content is story-level, not branch-level
+
+`stories.definition` lives at the story row, not per-branch. All
+branches of a story share the same genre / tone / setting / mode /
+narration. Editing definition propagates to all branches. A user
+wanting tonal experimentation across narrative paths uses a separate
+story, not a branch. Per-branch override is parked in
+[`followups.md → Per-branch definition override`](../followups.md#per-branch-definition-override).
 
 ---
 

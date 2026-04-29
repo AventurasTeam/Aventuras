@@ -91,7 +91,7 @@ menu.
 In-world time is rendered by the active calendar's renderer from the
 latest entry's `metadata.worldTime` (physical seconds since story
 start; calendar-uniform) plus the story's
-`settings.worldTimeOrigin` — a `TierTuple` keyed by the active
+`definition.worldTimeOrigin` — a `TierTuple` keyed by the active
 calendar's tier names that anchors the elapsed seconds to a starting
 point on the display tier-stack. See
 [`calendar-systems/spec.md`](../../../calendar-systems/spec.md#calendar-definition)
@@ -393,7 +393,7 @@ For a character peek:
   styling used in the Browse rail row, so the indicator is uniform
   wherever a character is surfaced.
 - **Not lead** — small inline `Set as lead` text-action after the
-  name. Click sets `stories.settings.leadEntityId` to this entity;
+  name. Click sets `stories.definition.leadEntityId` to this entity;
   the peek transitions to the badge state in place.
 
 For non-character kinds (location / item / faction / lore / threads /

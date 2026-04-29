@@ -242,13 +242,6 @@
         </div>
 
         <div class="field-row">
-          <div class="field-label">genre
-            <span class="hint">single free-text string</span>
-          </div>
-          <input class="input-text" style="max-width: 380px;" value="Dark Fantasy">
-        </div>
-
-        <div class="field-row">
           <div class="field-label">tags
             <span class="hint">search/filter only; not shown on cards</span>
           </div>
@@ -316,7 +309,11 @@
       <!-- GENERATION -->
       <div class="tab-panel" data-panel="generation">
         <div class="warn-box">
-          <b>&#9888; These fields affect how the AI generates.</b> Mode, narration, and composer wrap POV (Authoring aids) become effectively immutable once narrative exists &mdash; changing them mid-story can break coherence. Saving changes to any of them surfaces a confirmation modal if the story has entries. See <code>story-settings.md &rarr; Definitional-change confirmations</code>.
+          <b>&#9888; These fields affect how the AI generates.</b> Mode, narration, and composer wrap POV (Authoring aids) become effectively immutable once narrative exists &mdash; changing them mid-story can break coherence. Saving changes to any of them surfaces a confirmation modal if the story has entries. Story content (genre / tone / setting) edits propagate from the next turn forward without a confirmation modal &mdash; see the soft warn line above the Story content section. See <code>story-settings.md &rarr; Definitional-change confirmations</code>.
+        </div>
+
+        <div class="tab-section">
+          <div class="tab-section-title">Orthogonal axes</div>
         </div>
 
         <div class="field-row">
@@ -331,7 +328,7 @@
 
         <div class="field-row">
           <div class="field-label">lead character
-            <span class="hint">required in adventure<br>optional in creative</span>
+            <span class="hint">required in adventure<br>required when narration is 1st or 2nd<br>optional in creative + 3rd</span>
           </div>
           <div class="input-select">
             <span>&#9786; Aria <span style="font-size: 10px; color: var(--ink-muted); margin-left: 6px;">(character)</span></span>
@@ -350,11 +347,51 @@
           </div>
         </div>
 
+        <div class="tab-section">
+          <div class="tab-section-title">Story content</div>
+        </div>
+
+        <div class="warn-box" style="margin-bottom: 12px;">
+          Edits to genre / tone / setting propagate from the next turn forward. No confirmation modal &mdash; the AI shifts vibe gradually without coherence breaks.
+        </div>
+
         <div class="field-row">
-          <div class="field-label">tone / style
-            <span class="hint">free-form direction to the narrative model</span>
+          <div class="field-label">genre
+            <span class="hint">label + prose body<br>preset+prose hybrid</span>
           </div>
-          <textarea class="input-textarea" placeholder="e.g. Sparse, weighty prose. Prefer present tense. Characters speak in short fragments when tense.">Sparse, weighty prose. Present tense. Dialogue sparse and clipped.</textarea>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <div class="input-select" style="min-width: 200px;">
+                <span>Noir grimdark <span style="font-size: 10px; color: var(--ink-muted); margin-left: 6px;">(preset)</span></span>
+                <span style="color: var(--ink-faint);">&#9662;</span>
+              </div>
+              <input class="input-text" style="max-width: 220px;" value="Dark Fantasy" placeholder="label (overline)">
+            </div>
+            <textarea class="input-textarea" placeholder="Substantial prose injected into generation context. Selecting a preset above overwrites this with the preset's body; you can edit freely.">Dark fantasy in the late-feudal mode &mdash; small mercies in a kingdom that has run out of grace. Magic exists but is rare, transactional, and morally compromised. The prose leans cold; violence is ordinary.</textarea>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">tone
+            <span class="hint">label + prose body<br>preset+prose hybrid</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <div class="input-select" style="min-width: 200px;">
+                <span>Sparse / weighty <span style="font-size: 10px; color: var(--ink-muted); margin-left: 6px;">(preset)</span></span>
+                <span style="color: var(--ink-faint);">&#9662;</span>
+              </div>
+              <input class="input-text" style="max-width: 220px;" value="Sparse / weighty" placeholder="label">
+            </div>
+            <textarea class="input-textarea" placeholder="Substantial prose injected into generation context.">Sparse, weighty prose. Present tense. Dialogue sparse and clipped. Long passages of internal monologue between sparse external action. The narrator notices light, weather, and silence.</textarea>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">setting
+            <span class="hint">freeform prose &mdash; the world / time / place</span>
+          </div>
+          <textarea class="input-textarea" placeholder="The world this story takes place in. Where, when, and what the user needs to know about how things work here.">Late-medieval kingdom on the brink of civil war. Magic newly returned after centuries of absence; the people who can use it are rare and politically dangerous. The capital sits on a tidal river; the undercities run beneath it.</textarea>
         </div>
 
         <div class="tab-section">
@@ -791,7 +828,7 @@
 (function() {
   const titles = {
     about: ['About', 'What the story is — identity and metadata.'],
-    generation: ['Generation', 'Definitional behavior: mode, lead, POV, tone.'],
+    generation: ['Generation', 'Definitional behavior: mode, lead, narration, plus story content (genre / tone / setting).'],
     models: ['Models', 'Override global model picks for this story.'],
     memory: ['Memory', 'Chapter closure + compaction.'],
     translation: ['Translation', 'Multi-language output for LLM-generated text.'],

@@ -267,7 +267,7 @@ type CalendarSystem = {
   eras: EraDeclaration | null // null = this calendar doesn't support eras
 }
 // Note: the worldTime=0 anchor is per-story, not per-calendar. See
-// `stories.settings.worldTimeOrigin` below.
+// `stories.definition.worldTimeOrigin` below.
 
 type Tier = {
   name: string // 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second'
@@ -332,8 +332,8 @@ way to know which tier-tuple key to feed `% 4`/`% 100`/`% 400`.
 Two pieces of state, separated by mutability and scope:
 
 ```ts
-// Story-level — copy-at-creation, references the calendar registry
-stories.settings.calendarSystemId: string   // e.g. 'earth-gregorian'
+// Story-level — wizard-authored, references the calendar registry
+stories.definition.calendarSystemId: string   // e.g. 'earth-gregorian'
 
 // Branch-level — narrative state, forks with the branch
 branch_era_flips                            // see data-model.md → Era flips
@@ -342,7 +342,7 @@ branch_era_flips                            // see data-model.md → Era flips
 //   era_name: string
 ```
 
-[`stories.settings.worldTimeOrigin`](../data-model.md#story-settings-shape)
+[`stories.definition.worldTimeOrigin`](../data-model.md#story-settings-shape)
 holds the per-story anchor — a `TierTuple` (`Record<tierName, number>`)
 corresponding to `worldTime = 0`. Different stories using the same
 calendar can have different origins (one Earth story starts in 2024,
@@ -594,7 +594,7 @@ The four sub-questions originally tracked under "Fictional calendar
 systems" in `followups.md` (now removed once this spec landed) are
 answered above:
 
-- **Where declared:** `stories.settings.calendarSystemId` references
+- **Where declared:** `stories.definition.calendarSystemId` references
   an entry in the calendar registry (built-ins in code +
   user-authored rows in `vault_calendars`); `branch_era_flips`
   table holds runtime era-flip log.

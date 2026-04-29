@@ -407,34 +407,135 @@ entirely vs show "no tags" placeholder).
 Defer until visual identity lands or sooner if real demand
 surfaces.
 
-### Story definition baseline
+### Vault genre + tone preset content types
 
-What's the minimum set of inputs that defines a story? The wizard
-needs to prompt for the load-bearing fields without inflating the
-flow with optional extras. Today's `stories.settings` shape mixes
-definitional (mode, leadEntityId, narration, tone) with operational
-(memory knobs, translation, models, pack) — all set somehow at
-creation but only the definitional fields are wizard-required.
+The bundled preset library for `definition.genre` and
+`definition.tone` (preset+prose hybrid per
+[`data-model.md → Story settings shape`](./data-model.md#story-settings-shape))
+lives in code for v1. Post-v1, user-authored presets land in Vault
+as new content types — parallel to user-authored calendars in
+`vault_calendars` (per
+[`data-model.md → Vault content storage`](./data-model.md#vault-content-storage)).
+Each preset row carries `displayName`, optional `tagline`, and
+`promptBody`. Per-type tables (`vault_genre_presets`,
+`vault_tone_presets`) follow the per-type-not-polymorphic precedent
+calendars set; the unification question revisits with multiple
+content types live (see
+[Vault content storage pattern](#vault-content-storage-pattern)).
 
-Discussion needed:
+Built-in catalog stays in code for both v1 and post-v1; user
+clones land in Vault. Selection at wizard time copies preset
+content into the story (fire-and-forget) — no preset id stored,
+no orphan handling.
 
-- Which fields are **required** at story creation (cannot be left
-  empty, no sensible default)?
-- Which are **prompted but skippable** (defaults work; user can
-  refine later)?
-- Which are **deferred to post-creation** entirely (user gets to
-  them in Story Settings if/when needed)?
-- What's the minimum-viable "blank slate" — start writing
-  immediately vs. fill in setting first?
+### Vault setting templates
 
-Sister concern: `entities.state` discriminated-union shape — the
-same "what's required vs deferred" question for character /
-location / item / faction state. Tracked separately in
-[`entities.state` kind-specific shape](#entitiesstate-kind-specific-shape).
+`definition.setting` is freeform prose only in v1. Some users will
+want reusable setting prose across stories ("my Forgotten Realms
+homebrew", "the Aetherium cyberpunk stack I keep returning to"). A
+post-v1 Vault content type for setting templates fits the same
+shape as the genre/tone preset content types above. Setting
+templates are larger blobs typically — possibly with subsections
+for world-rules / atmosphere / key locations — though the v1
+freeform `setting: string` shape covers the common case without
+forcing structure.
 
-Both feed into the wizard design (Story Creation wizard, inventory
-#2, pending) and the entity-creation form (per-kind, blocked on
-state shape).
+Lands when the genre/tone Vault content types are designed (the
+shapes and Vault-shell affordances are likely shared).
+
+### Optional user-side scene tagging on user-written openings
+
+User-written openings start with empty
+`metadata.sceneEntities` / `currentLocationId` / `worldTime: 0`
+per the locked
+[opening entry contract](./data-model.md#opening-entry).
+Turn-2 classifier picks up scene presence from there. Some users may
+want to pre-tag scene presence on the opening at wizard time — pick
+which cast members are in the opening's scene, which location is
+current — so first-turn generation context is grounded from entry 1.
+
+Wizard concern, not data-model. Lands with the Wizard design pass
+(Inventory #2). The data shape already supports it (the metadata
+fields exist and are user-editable per the
+[Entry metadata shape](./data-model.md#entry-metadata-shape)
+decision); only the wizard UX is missing.
+
+### Regenerate-opening affordance
+
+The opening entry is permanent within its branch (block-delete per
+the [opening invariants](./data-model.md#opening-entry)) but
+editable. For AI-assisted openings, "I want to regenerate this
+opening with the same settings" is a likely user need — particularly
+right after wizard commit when the user reads the AI output and
+isn't satisfied. Two candidate surfaces:
+
+- **Wizard one-shot regenerate** — within the wizard's preview-the-
+  opening step, a `Regenerate` button before commit. Same generation
+  call; replaces the candidate prose. Lives in wizard UX.
+- **Post-commit regenerate from reader chrome** — surfaces an
+  affordance on the opening entry in the reader (a non-standard icon
+  since regen is suppressed on opening per its render contract).
+  Heavier — needs a confirmation flow since the opening's text is
+  the floor for the entire branch.
+
+Wizard surface ships first (light, contained); reader-chrome
+post-commit surface is the deferred extension if real demand
+surfaces.
+
+### Classifier-on-opening retrofit
+
+The locked
+[opening entry contract](./data-model.md#opening-entry) skips the
+classifier on the opening for v1 — AI-generated openings inline
+their own minimal scene metadata; user-written openings start with
+empty metadata. If a future feature genuinely needs entry-1
+metadata to be populated for user-written openings (e.g., chapter
+timeline showing first-scene cast, awareness-graph queries that
+include the opening), retrofit by running the classifier as a
+separate scene-tagging pass against the opening prose — restricted
+to populating `sceneEntities` / `currentLocationId` against the
+wizard-curated cast (no entity creation). Add at the design pass
+that surfaces the need.
+
+### Per-branch definition override
+
+`stories.definition` is story-level — all branches share the same
+genre / tone / setting / mode / narration. A user wanting a tonal
+experiment across narrative paths uses a separate story today, not
+a branch. If real demand for "this branch is comedic, the parent is
+brooding" surfaces post-launch, the design space is per-branch
+override of selected definition fields (probably a sparse JSON on
+`branches` that overlays the story-level `definition`). Speculative;
+low priority pending real signal.
+
+### Opening generation structured-output fallback
+
+The wizard's AI-assisted opening generation uses structured output
+to emit prose AND minimal scene metadata (`sceneEntities`,
+`currentLocationId`, `worldTime: 0`) in one call (per
+[`data-model.md → Opening entry`](./data-model.md#opening-entry)).
+Structured-output reliability varies by provider — some
+OpenAI-compatible endpoints don't honor the schema cleanly. When
+the call fails to produce valid structured output, the wizard
+should fall back to prose-only and treat the opening as
+user-written for metadata purposes (empty
+`sceneEntities` / `currentLocationId`); turn-2 classifier picks up
+from there.
+
+Implementation concern; lands at wizard-pass implementation. The
+data shape already accommodates both populated and empty metadata
+without ceremony.
+
+### Per-story export envelope verification
+
+The `aventuras-story` per-story export envelope (per
+[`data-model.md → Aventuras file format`](./data-model.md#aventuras-file-format-avts))
+is intended to handle JSON columns generically — the new
+`stories.definition` JSON column should serialize naturally without
+envelope-format changes. Verify at export-feature implementation
+time that the exporter iterates story columns rather than
+enumerating a fixed list (which would silently skip
+`definition`).
 
 ### Provider / profile / model-profile deletion semantics
 

@@ -219,6 +219,29 @@ don't arise in v1. Future relaxation (concurrent pipelines, or
 background agents running alongside per-turn) requires the
 coordination story below.
 
+**Wizard creation transaction — exempt from the delta log.**
+
+Story creation runs as its own atomic SQLite transaction, parallel
+in shape to the per-turn / chapter-close pipelines but distinct in
+two ways: (1) writes are **not** delta-logged (the rows are baked
+in as the story's initial state), and (2) the orchestrator that
+drives it is the wizard, not the pipeline orchestrator. Writes:
+
+- `stories` row (identity columns + `definition` JSON +
+  copy-at-creation `settings` JSON)
+- initial `branches` row
+- initial cast (`entities` rows incl. lead)
+- world rules (`lore` rows, optional)
+- opening (`story_entries[1]`, `kind='opening'`); for AI-assisted
+  openings, the metadata fields are populated inline via structured
+  output (see `## Agent orchestration → Classifier`)
+
+All five succeed together or none. No `action_id` on the wizard
+transaction (no deltas exist to group). Earliest possible
+`action_id` in the log is the user's first turn after wizard commit.
+See data-model.md → "Entry mutability & rollback" for the
+delta-exemption rule and "Opening entry" for opening invariants.
+
 **Background-agent declaration interface.**
 
 Future background agents (style-review, future standalone
@@ -504,7 +527,7 @@ template in the `promptContext` group renders against.
 ### Settings: strict types, defaults at load
 
 The `promptContext.userSettings` slice exposes the LLM-relevant subset
-of settings that prompt templates consume. Three shapes feed into it:
+of settings that prompt templates consume. Several shapes feed into it:
 
 1. **App-level settings** (`useAppSettingsStore`) — global, persist
    across stories. Holds two distinct roles:
@@ -521,20 +544,24 @@ of settings that prompt templates consume. Three shapes feed into it:
    - **App-only settings** — global concerns that never appear
      per-story (API keys, classifier truncation caps, diagnostics
      toggles).
-2. **Story-level settings** (`stories.settings` JSON on the loaded
-   story) — per-story definitional and operational config. Zod-
-   parsed at story open. Full shape in data-model.md → "Story
-   settings shape."
-3. **Story identity fields** (`stories` columns — title, genre,
-   tone, etc.) — not LLM-consumed directly as "settings," but a
-   handful (`genre`, `tone`) are passed into prompt context as
-   plain string fields.
+2. **Story-level definition** (`stories.definition` JSON on the
+   loaded story) — definitional content (`mode`, `leadEntityId`,
+   `narration`, `genre`, `tone`, `setting`, calendar fields). Zod-
+   parsed at story open via the `StoryDefinition` schema with
+   defaults applied. Full shape in data-model.md → "Story settings
+   shape."
+3. **Story-level settings** (`stories.settings` JSON on the loaded
+   story) — operational config (memory knobs, translation, models,
+   pack). Zod-parsed at story open via the `StorySettings` schema.
+4. **Story identity fields** (`stories` columns — title, tags,
+   cover, accent, etc.) — not LLM-consumed directly; these are
+   library-shaped metadata.
 
 **Scope policy — two patterns:** See data-model.md → "Story settings
 shape" for the authoritative version. Summary: copy-at-creation for
-operational + UX defaults; override-at-render for models only;
-wizard-authored (no global) for definitional fields (mode,
-leadEntityId, narration, tone); columns-on-stories for identity.
+operational + UX defaults (`stories.settings`); override-at-render
+for models only; wizard-authored with no global default for
+everything in `stories.definition`; columns-on-stories for identity.
 
 **Pattern to avoid (the old app's):** inline `??` fallbacks and hardcoded
 defaults at every read site, scattered across the `promptContext` getter
@@ -588,16 +615,25 @@ yields an event (orchestrator applies derived deltas to SQLite +
 
 ### v2 shape of `promptContext` — what's carried over, what changes
 
-| Old variable                                   | V2 replacement                                                                                                               |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `characters` / `locations` / `items`           | Unified under `entities` discriminated by `kind`                                                                             |
-| `storyBeats`                                   | Renamed `threads`                                                                                                            |
-| `lorebookEntries`                              | Split: `lore` (timeless reference) + entities with `status='staged'` (pre-introduced actors)                                 |
-| `relevantWorldState`                           | Same concept; filtered slice of entities/happenings/lore driven by POV character's `happening_awareness`                     |
-| `timeTracker`                                  | Derived from latest entry's `metadata.worldTime` + `settings.worldTimeOrigin` (see data-model.md → "In-world time tracking") |
-| `translated_*` columns via `translationResult` | Reads through the `translations` table (polymorphic target) instead of per-column fields                                     |
-| Pipeline intermediates (narrativeResult, etc.) | Same — written to generation store, available to later templates                                                             |
-| `packVariables.runtimeVariables`               | Same pattern; deferred until pack system lands                                                                               |
+| Old variable                                   | V2 replacement                                                                                                                  |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `characters` / `locations` / `items`           | Unified under `entities` discriminated by `kind`                                                                                |
+| `storyBeats`                                   | Renamed `threads`                                                                                                               |
+| `lorebookEntries`                              | Split: `lore` (timeless reference) + entities with `status='staged'` (pre-introduced actors)                                    |
+| `relevantWorldState`                           | Same concept; filtered slice of entities/happenings/lore driven by POV character's `happening_awareness`                        |
+| `timeTracker`                                  | Derived from latest entry's `metadata.worldTime` + `definition.worldTimeOrigin` (see data-model.md → "In-world time tracking")  |
+| `genre` / `tone` (single-string fields)        | `definition.genre.{label,promptBody}` and `definition.tone.{label,promptBody}` — substantial preset+prose blocks (label + body) |
+| `setting` (no v1 equivalent in old context)    | New: `definition.setting` — freeform prose injected into generation context                                                     |
+| `translated_*` columns via `translationResult` | Reads through the `translations` table (polymorphic target) instead of per-column fields                                        |
+| Pipeline intermediates (narrativeResult, etc.) | Same — written to generation store, available to later templates                                                                |
+| `packVariables.runtimeVariables`               | Same pattern; deferred until pack system lands                                                                                  |
+
+Definitional fields (mode, lead, narration, genre, tone, setting,
+calendar) are sourced from `story.definition`; operational fields
+(memory knobs, translation, models, pack) from `story.settings`. The
+two zod-parsed shapes feed `promptContext` through different
+sub-getters but compose into one rendered context object per
+[The single-context principle](#the-single-context-principle).
 
 ### Why intermediates aren't persisted
 
@@ -652,6 +688,28 @@ awareness deltas, the classifier populates the new entry's metadata:
   can manually correct drift via metadata edit (delta-logged). v1
   doesn't model structural non-linear narrative — see data-model.md →
   "In-world time tracking" for the limitation.
+
+**Classifier does NOT run on the opening entry** (`kind='opening'`).
+Two paths populate opening metadata, both at wizard-commit time
+rather than via a classifier pass:
+
+- **AI-generated openings** emit minimal scene metadata inline as
+  part of the wizard's structured-output generation call (prose +
+  `sceneEntities` + `currentLocationId` + `worldTime: 0` in one
+  call). The model is constrained to reference only wizard-curated
+  cast entity ids in the metadata refs.
+- **User-written openings** start with empty metadata
+  (`worldTime: 0`, `sceneEntities: []`,
+  `currentLocationId: null`). The first AI reply's prompt context
+  includes the opening prose verbatim (recent buffer covers it),
+  so turn-2 classifier picks up scene presence going forward.
+
+A separate tagging pass for user-written openings is parked in
+[`followups.md → Classifier-on-opening retrofit`](./followups.md#classifier-on-opening-retrofit)
+— retrofit if entry-1 metadata becomes load-bearing for any
+downstream feature. See
+[`data-model.md → Opening entry`](./data-model.md#opening-entry) for
+the full opening contract.
 
 **Chapter-close** is its own sub-pipeline, triggered when the token
 threshold is crossed (per-story setting) or the user explicitly closes.

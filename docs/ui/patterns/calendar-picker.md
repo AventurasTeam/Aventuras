@@ -233,7 +233,7 @@ modals would turn one power-user decision into 2–3 dialog clicks.
 
 Per
 [`data-model.md → Story settings shape`](../../data-model.md#story-settings-shape),
-`stories.settings.worldTimeOrigin` is a `TierTuple` keyed by tier
+`stories.definition.worldTimeOrigin` is a `TierTuple` keyed by tier
 names. A new calendar with a different tier set leaves the
 existing origin partially or wholly unmatched:
 

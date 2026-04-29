@@ -83,7 +83,7 @@ field inside the Overview tab. The detail head carries only:
 
 The overflow menu holds rare-but-important actions:
 
-- **Set as lead** (sets `stories.settings.leadEntityId`)
+- **Set as lead** (sets `stories.definition.leadEntityId`)
 - **Export entity as JSON** (single-entity export)
 - **View raw JSON** (debug/dev affordance)
 - **Delete entity** (destructive; needs confirmation pass)

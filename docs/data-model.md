@@ -36,7 +36,6 @@ erDiagram
         text id PK
         text title
         text description
-        text genre "single free-text label; card overline"
         json tags "string[]; search/filter only, not shown on cards"
         text cover_asset_id FK "optional; references assets"
         text accent_color "optional hex/HSL; falls back to mode-derived"
@@ -44,7 +43,8 @@ erDiagram
         integer pinned "0 | 1; orthogonal to status"
         text author_notes "private; distinct from description"
         integer last_opened_at "distinct from updated_at; drives last-opened sort"
-        json settings "see 'Story settings shape' decision below"
+        json definition "definitional content (what the story IS); see 'Story settings shape' decision"
+        json settings "operational config (how it generates); see 'Story settings shape' decision"
         integer created_at
         integer updated_at
         text current_branch_id FK
@@ -63,7 +63,7 @@ erDiagram
         text id PK
         text branch_id FK
         integer position "ordered within branch"
-        text kind "user_action | ai_reply | system"
+        text kind "user_action | ai_reply | system | opening"
         text content
         text chapter_id FK "null while in open region; set at chapter-create time"
         json metadata "worldTime + sceneEntities + currentLocationId + generation provenance; see 'Entry metadata shape' decision below"
@@ -354,14 +354,10 @@ be ironed out later). Two concrete decisions captured now:
 ### Story identity fields
 
 **Decided:** `stories` gains identity metadata as columns (not inside
-`settings` JSON). Columns where the library needs filter/sort/search
-access; JSON reserved for settings where direct SQL queries aren't
-needed.
+the JSON blobs). Columns where the library needs filter/sort/search
+access; JSON reserved for shape that doesn't require direct SQL
+queries.
 
-- `genre text` — single free-text label ("Dark Fantasy", "Medieval
-  Mystery"). Not an enum; users type what reads right to them.
-  Rendered verbatim as the library card's overline. If multi-genre
-  demand emerges, promote to `json genres` later.
 - `tags json` — `string[]`. Indexable via `json_each` for
   search/filter. Not shown on library cards (tag phrases are longer
   than chip format tolerates).
@@ -392,28 +388,81 @@ stories always float to the top within any filter. Mirrors the Layer
 
 ### Story settings shape
 
-**Decided:** `stories.settings` is a zod-parsed JSON blob, with
-defaults applied at load time (parse mechanics in architecture.md →
-"Settings: strict types, defaults at load"). Full shape:
+**Decided:** `stories` carries TWO zod-parsed JSON blobs, split by
+lifecycle:
+
+- **`definition`** — definitional content (what the story IS).
+  Wizard-authored at story creation; no global default. Edits propagate
+  to all branches of the story (definition is story-level, not
+  branch-level).
+- **`settings`** — operational config (how it generates). Copy-at-
+  creation from `app_settings.default_story_settings`; story owns its
+  values thereafter. Some fields use override-at-render instead
+  (models only).
+
+Both are parsed with defaults applied at load time (parse mechanics
+in architecture.md → "Settings: strict types, defaults at load").
+The split mirrors the two-section left rail of the
+[Story Settings screen](./ui/screens/story-settings/story-settings.md):
+`definition` ↔ Story section, `settings` ↔ Settings section.
+
+**`stories.definition` shape:**
+
+```ts
+stories.definition: {
+  // Author-relationship
+  mode: 'adventure' | 'creative'
+  leadEntityId: string | null       // see cross-field constraint below; must reference entity with kind=character
+  narration: 'first' | 'second' | 'third'
+
+  // Substantial prompt content — preset+prose hybrid (see "Genre + tone preset+prose hybrid" below)
+  genre: { label: string; promptBody: string }
+  tone:  { label: string; promptBody: string }
+
+  // Substantial prompt content — freeform
+  setting: string                   // freeform prose; the world / time / place
+
+  // World time — see calendar-systems/spec.md for the primitive
+  calendarSystemId: string          // references CalendarSystem.id in the calendar registry
+                                    //   (built-ins in code + user-authored in vault_calendars);
+                                    //   seeded from app_settings.default_calendar_id at creation
+  worldTimeOrigin: TierTuple        // Record<tierName, number> matching the active calendar's tier shape
+                                    //   Earth: { year, month, day, hour, minute, second }
+                                    //   Shire: { year, month, day }
+                                    //   Stardate: { count }
+}
+```
+
+**Cross-field constraint** (enforced at the zod boundary on
+`definition`):
+
+```
+narration ∈ { 'first', 'second' }  →  leadEntityId != null
+```
+
+A first- or second-person story has a lead by definition (whose "I"
+or "you" the narrator inhabits). Coexists with the existing
+`mode='adventure' → leadEntityId != null` rule; either alone is
+sufficient to require a lead. Wizard rejects commit; Story Settings
+rejects save. Creative + third-person + null lead remains valid (the
+omniscient-narrator ensemble case).
+
+**`stories.settings` shape (operational only):**
 
 ```ts
 stories.settings: {
-  // Definitional — wizard-authored, no global default
-  mode: 'adventure' | 'creative'
-  leadEntityId: string | null       // required when mode=adventure; must reference an entity with kind=character
-  narration: 'first' | 'second' | 'third'
-  tone: string                      // free-form style/tone note injected into prompts
-
-  // Operational — defaults copied from App Settings → Story Defaults at creation
-  chapterTokenThreshold: number     // moved out of top-level column
+  // Memory — defaults copied from App Settings → Story Defaults at creation
+  chapterTokenThreshold: number     // default 24000
   chapterAutoClose: boolean         // auto-close at threshold; off = threshold is guidance only, user wraps manually; default true
   recentBuffer: number              // entries always injected verbatim before retrieval; default 10
   compactionDetail: string          // one-line focus directive for memory-compaction agent
 
+  // Composer
   composerModesEnabled: boolean     // adventure-only; creative ignores
   composerWrapPov: 'first' | 'third' // how composer modes wrap user input (NOT narration)
   suggestionsEnabled: boolean       // gates next-turn suggestion pane
 
+  // Translation
   translation: {
     enabled: boolean
     targetLanguage: string | null   // ISO 639-1
@@ -427,15 +476,6 @@ stories.settings: {
       chapterMeta: boolean
     }
   }
-
-  // World time — see calendar-systems/spec.md for the primitive
-  calendarSystemId: string          // references CalendarSystem.id in the calendar registry
-                                    //   (built-ins in code + user-authored in vault_calendars);
-                                    //   seeded from app_settings.default_calendar_id at creation
-  worldTimeOrigin: TierTuple        // Record<tierName, number> matching the active calendar's tier shape
-                                    //   Earth: { year, month, day, hour, minute, second }
-                                    //   Shire: { year, month, day }
-                                    //   Stardate: { count }
 
   // Models — override-at-render pattern. Keys are agent ids drawn from the
   // assignments registry (single source of truth, evolves over time);
@@ -457,15 +497,53 @@ stories.settings: {
 }
 ```
 
+#### Genre + tone preset+prose hybrid
+
+Both `genre` and `tone` carry the same shape: a short `label` (used
+in chrome — library-card overline, etc.) and a multi-paragraph
+`promptBody` (substantial prose injected into generation context).
+Wizard selection is **preset-driven** with snapshot copy:
+
+- User picks from a bundled preset catalog (Hard sci-fi / Cozy
+  fantasy / Noir / …); the preset's `displayName` copies into
+  `label`, the preset's `promptBody` copies into `promptBody`.
+- User can edit either freely afterward.
+- **Fire-and-forget** — no preset id stored on the story. App
+  updates that change the bundled preset don't propagate to existing
+  stories. Mirrors the calendar-clone pattern (see
+  [Vault content storage](#vault-content-storage)).
+- **No-preset path:** preset selection is optional; user can skip
+  and author label + prose from scratch.
+
+Preset catalog lives in code (bundled JSON, ~20-30 entries each for
+v1). User-authored presets in Vault are deferred —
+[Vault genre + tone preset content types](./followups.md#vault-genre--tone-preset-content-types)
+captures the post-v1 path.
+
+#### Why two JSON columns, not promoting to columns
+
+Each definitional compound field (`genre`, `tone`, `worldTimeOrigin`)
+needs a JSON-typed column anyway — promoting to columns yields no
+query benefit and adds schema rigidity for every future definitional
+addition. JSON keeps the shape additive. The library-card genre
+overline reads `definition.genre.label` via `json_extract`;
+performance is fine for thousands of stories, and an indexed
+expression solves any future scale.
+
+The previous single-`settings` shape semantically overloaded "settings"
+to mean both definitional content and operational config. The split
+disentangles them and matches the UI's two-section structure.
+
 **Scope policy — two patterns for global vs story.**
 
-1. **Copy-at-creation** (operational + UX prefs). App Settings exposes
-   a **"Story Defaults"** section holding the same field shape (the
-   underlying schema field is `app_settings.default_story_settings`;
-   the UI label is "Story Defaults"). On story creation the current
-   globals are copied into the new story. After creation, the story
-   owns its values; changing the global default does NOT propagate
-   to existing stories.
+1. **Copy-at-creation** (operational + UX prefs — `stories.settings`).
+   App Settings exposes a **"Story Defaults"** section holding the
+   `settings` field shape (the underlying schema field is
+   `app_settings.default_story_settings`; the UI label is "Story
+   Defaults"). On story creation the current globals are copied into
+   the new story's `settings`. After creation, the story owns its
+   values; changing the global default does NOT propagate to existing
+   stories.
 2. **Override-at-render** (`settings.models` only). Fields are
    optional; absent means "use the global app-settings default at
    render time." Changing the global propagates to every
@@ -479,9 +557,16 @@ top-level sibling fields on `app_settings` because they're single-id
 pointers into a registry rather than full state copies. Same
 copy-at-creation semantics; just a different source path.
 
-Definitional settings (mode, leadEntityId, narration, tone) and
-identity fields (genre, tags, cover, etc.) follow neither pattern —
-they're wizard-authored per story, no global default exists.
+**`stories.definition` follows neither pattern** — every field is
+wizard-authored per story; no global default exists. Definitional
+fields are `definition`'s entire scope by construction.
+
+**`stories.definition` fields are NOT translation targets.** The
+substantial prose in `genre.promptBody` / `tone.promptBody` /
+`setting` is user-typed source-language input consumed by the AI
+during generation; it's not AI-output displayed in different UI
+languages. The translations table targets AI-output content (entities,
+lore, threads, happenings, story_entries) — not author-input fields.
 
 **Narration vs composer wrap POV — orthogonal axes, often confused.**
 `narration` governs how the AI writes prose (`first | second | third`
@@ -578,14 +663,15 @@ about model selection, profiles are about call configuration.
 app_settings.default_story_settings: Partial<StorySettings>
 ```
 
-Mirrors the **operational** subset of
-[`stories.settings`](#story-settings-shape) — chapter threshold,
+Mirrors the operational
+[`stories.settings`](#story-settings-shape) shape — chapter threshold,
 auto-close, recent buffer, compaction detail, translation block,
 composer prefs, suggestions toggle. On story creation these copy
 into the new `stories.settings`; the story owns its values
-thereafter. Definitional fields (`mode`, `leadEntityId`,
-`narration`, `tone`) are absent — those are wizard-authored per
-story with no global default.
+thereafter. Definitional fields (those in `stories.definition` —
+`mode`, `leadEntityId`, `narration`, `genre`, `tone`, `setting`,
+`calendarSystemId`, `worldTimeOrigin`) are absent from this default
+shape — they're wizard-authored per story with no global default.
 
 **Default calendar pointer.**
 
@@ -708,6 +794,73 @@ metadata mutations write a delta. Consequence: a user correcting
 flashback produces a reversible delta, reachable via CTRL-Z or
 rollback. Same for `sceneEntities` / `currentLocationId` user-edits.
 
+### Opening entry
+
+**Decided:** the opening of a story is `story_entries[1]` of the
+initial branch — a first-class narrative entry, not a settings
+field. Adds a new value to the `story_entries.kind` enum:
+
+```ts
+story_entries.kind:
+  'user_action' | 'ai_reply' | 'system' | 'opening'  // NEW: 'opening'
+```
+
+**Authorship discriminator: `metadata.model`.** Set when the wizard's
+AI-assist path generated the opening; `null` when the user wrote it
+themselves. No separate `authorSource` field needed — model presence
+is the discriminator.
+
+**AI-generated openings emit minimal classification inline.** The
+wizard's opening-generation call uses structured output to produce
+prose AND minimal scene metadata in one call:
+
+```ts
+{
+  prose: string,
+  sceneEntities: string[],          // subset of wizard-curated cast entity ids
+  currentLocationId: string | null, // one of the wizard-curated cast location ids
+  worldTime: 0                      // story start; always 0
+}
+```
+
+The model is constrained to reference only the wizard-curated cast
+in the metadata refs (passed as enum-shaped reference data in the
+generation context). Prose can mention unbacked names freely
+("Old Jorin was sleeping at the bar") — only the metadata refs are
+constrained.
+
+**No separate classifier pass on the opening (v1).** User-written
+openings start with empty metadata (`worldTime: 0`,
+`sceneEntities: []`, `currentLocationId: null`); turn 2's classifier
+populates scene presence going forward. The first AI reply's prompt
+context includes the opening prose verbatim (recent buffer covers
+it), so the AI grounds itself from prose regardless of metadata
+state. A separate tagging pass for user-written openings is parked
+in
+[`followups.md → Classifier-on-opening retrofit`](./followups.md#classifier-on-opening-retrofit).
+
+**Opening invariants** (enforced at the action layer):
+
+- **Position invariant.** Always position 1 of its branch. Action
+  layer rejects any write that would create or move an `opening`
+  entry to a different position.
+- **Block-delete.** `op=delete` on `kind='opening'` is rejected at
+  the action layer. Use cases for "redo the opening" are addressed
+  by text-edit (the existing side-channel exemption — see "Entry
+  mutability & rollback") or by a wizard-driven regenerate pass
+  (parked in
+  [`followups.md → Regenerate-opening affordance`](./followups.md#regenerate-opening-affordance)).
+- **Branching:** copies forward via the standard branch-copy
+  mechanism — the opening behaves like any entry being copied into
+  the new branch.
+- **Rollback:** can target entry 1 (which leaves only the opening);
+  can never go below the opening.
+
+**Reader rendering** is identical to `ai_reply` bubbles — narrative
+prose is narrative prose, regardless of authorship. Provenance lives
+in metadata, not in styling. No regen icon, no model-name label;
+delete is suppressed by the block-delete invariant.
+
 ### In-world time tracking
 
 **Decided:** time is modeled as a single monotonically non-decreasing
@@ -719,7 +872,7 @@ Earth, 86400 for Shire's day-grain, 86400 for Mayan kin) plus its
 tier rollover stack. See [`calendar-systems/spec.md`](./calendar-systems/spec.md)
 for the calendar primitive.
 
-`stories.settings.worldTimeOrigin: TierTuple` — a `Record<string,
+`stories.definition.worldTimeOrigin: TierTuple` — a `Record<string,
 number>` keyed by the active calendar's tier names — anchors
 `worldTime = 0` to a display moment. Earth's origin is `{ year,
 month, day, hour, minute, second }`; Shire's is `{ year, month,
@@ -903,6 +1056,31 @@ delta. Consequences:
   the intended behaviour — text edits are user intent, not narrative
   state that needs reversing.
 
+**Wizard creation is exempt from the delta log.** The wizard's commit
+transaction writes the `stories` row, the initial `branches` row, the
+initial cast (`entities` rows), the world rules (`lore` rows), and
+the opening (`story_entries[1]`, kind=`opening`) — all in one atomic
+SQLite transaction, **no deltas written**. They are baked in as the
+story's initial state. Implications:
+
+- Earliest possible delta in the log is the user's first turn (a
+  `user_action` create on the initial branch).
+- CTRL-Z in a freshly-wizard-created story is a no-op until the user
+  takes a turn (no delta exists to reverse).
+- Rollback can target entry 1 (leaves only the opening) but can never
+  go below — there's nothing below the opening to roll back to.
+- Branching from the opening copies wizard-created rows + the (empty)
+  delta log up to that point — clean handoff with no special-case
+  branch-copy logic needed.
+
+Subsequent edits to wizard-created rows (text edits on the opening,
+field edits on initial entities, body edits on initial lore) follow
+**normal delta semantics** — only the wizard's _creation_ is exempt;
+update / delete operations on those rows produce deltas as usual.
+This is the second delta-scope exemption alongside the
+`story_entries.content` text-edit side-channel above; together they
+are the only narrative-state mutations that bypass the log.
+
 **Delta storage economy.** Each delta stores only **undo** information in
 a single `undo_payload` column — no redundant "after" snapshot, since the
 live row already holds that. For `op=create` the payload is null (undo =
@@ -1044,6 +1222,13 @@ Rationale: the old app spread `translated_name`, `translated_description`,
 `translated_relationship`, etc. across every world-state table — column
 proliferation that also hard-coded "one target language" and lost prior
 translations if the user reconfigured. Dedicated table fixes all three.
+
+**Definition fields are NOT translation targets.** The substantial
+prose in `stories.definition` (`genre.promptBody` / `tone.promptBody`
+/ `setting`) is user-typed source-language input consumed by the AI
+during generation; it's not AI-output displayed in different UI
+languages. The translations table targets AI-output content only —
+not author-input fields.
 
 **Shape:**
 

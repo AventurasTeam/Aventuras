@@ -115,7 +115,7 @@ Layer 2.
   structural at-a-glance.
 - **Era support** — `era: yes` / `era: no`.
 - **Usage count** — `used by N stories` (count of stories whose
-  `settings.calendarSystemId` references this calendar).
+  `definition.calendarSystemId` references this calendar).
 
 ### Card sort order
 
@@ -265,7 +265,7 @@ the rendered string and tier breakdown).
 - **Preview origin** — sourced from the calendar's `defaultOrigin`
   if present (PoC extension); otherwise tier `startValue` defaults.
   **Not user-editable in L2** — origin authoring is L3 territory.
-  This is distinct from `stories.settings.worldTimeOrigin` (the
+  This is distinct from `stories.definition.worldTimeOrigin` (the
   per-story origin set in the wizard / Story Settings).
 - **worldTime input** — direct numeric input (seconds) with four
   quick-walk buttons:

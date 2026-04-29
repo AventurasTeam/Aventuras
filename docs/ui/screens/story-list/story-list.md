@@ -58,8 +58,8 @@ landing from anywhere else, but we're already here).
 ## Toolbar
 
 - **Search** — single input, left-anchored, takes available width up
-  to ~360px. Scope: `title`, `description`, `genre`, `tags`,
-  `author_notes`. Affordances per the
+  to ~360px. Scope: `title`, `description`, `definition.genre.label`,
+  `tags`, `author_notes`. Affordances per the
   [search-bar-scope pattern](../../patterns/lists.md#search-bar-scope).
 - **Filter chips** — single-select: `All` / `Pinned` / `Archived`.
   `All` hides archived by default (they only appear when the
@@ -88,14 +88,16 @@ viewport.
   `accentColor` field on the story. Gives scannable visual variety
   without requiring cover art.
 - **Genre overline** — small uppercase label above the title,
-  newspaper-section style. Colored to match the accent. Comes from
-  `stories.genre: string | null` — a **single free-text string**,
-  not a list. Rendered verbatim: `Fantasy` / `Dark Fantasy` /
-  `Medieval Mystery` / `Folk Horror` / `Slice of Life with Magic`
-  — whatever the user typed. For drafts with no genre yet, shows
-  a muted "Genre not set" placeholder. (If multi-genre stories
-  become a common need later, split to `genres: string[]` — but
-  for v1, one string keeps authoring friction low.)
+  newspaper-section style. Colored to match the accent. Sourced from
+  `definition.genre.label` (read via `json_extract`; the underlying
+  `stories.definition` JSON shape carries `genre` as a
+  preset+prose compound — see
+  [`data-model.md → Story settings shape`](../../../data-model.md#story-settings-shape)).
+  Rendered verbatim: `Fantasy` / `Dark Fantasy` / `Medieval Mystery`
+  / `Folk Horror` / `Slice of Life with Magic` — whatever the user
+  set as the label (typically a preset display name; user-editable).
+  For drafts with no genre label yet, shows a muted "Genre not set"
+  placeholder.
 - **Title row** — title (bold), with a **pin star inline before
   the title** that's a clickable toggle: outline + muted for
   unpinned (~25% opacity, reveals on hover), filled gold for
@@ -179,8 +181,8 @@ user.
 
 - Inline `Draft` badge next to the title (same pattern as `Archived`,
   yellow tint).
-- Genre overline reads "Genre not set" (muted) if the user hadn't
-  picked a genre yet.
+- Genre overline reads "Genre not set" (muted) if
+  `definition.genre.label` is empty.
 - Meta line shows "draft · 0 entries".
 - Left-edge accent still renders per mode (even draft stories have
   a chosen mode).
@@ -232,11 +234,13 @@ the centered CTA carries that role more prominently.
 
 ## Data-model dependencies
 
-Card identity fields (`genre`, `tags`, `cover_asset_id`,
-`accent_color`, `status`, `pinned`, `author_notes`,
-`last_opened_at`) live as columns on the `stories` table. Schema
-authority and rationale in
-[`data-model.md → Story identity fields`](../../../data-model.md#story-identity-fields).
+Card identity fields — `tags`, `cover_asset_id`, `accent_color`,
+`status`, `pinned`, `author_notes`, `last_opened_at` — live as
+columns on the `stories` table. The genre overline sources from
+`definition.genre.label` (a JSON path into the `stories.definition`
+column, not a top-level column). Schema authority and rationale in
+[`data-model.md → Story identity fields`](../../../data-model.md#story-identity-fields)
+and [`data-model.md → Story settings shape`](../../../data-model.md#story-settings-shape).
 
 ## Screen-specific open questions
 
@@ -252,8 +256,10 @@ authority and rationale in
 - **Bulk select on cards** — covered by
   [`followups.md → Bulk operations on entities`](../../../followups.md#bulk-operations-on-entities)
   (umbrella followup spans both World panel and story-list cards).
-- **Genre autocomplete**: free-text today, could offer suggestions
-  drawn from common genres + genres used in other stories in this
-  library. Would help consistency without forcing an enum.
+- **Genre label autocomplete**: the bundled preset catalog already
+  surfaces common labels; an additional autocomplete drawn from
+  labels used in other stories in this library could help
+  consistency for user-typed labels. Lives on the Story Settings ·
+  Generation tab editor, not on the library card.
 - **Create flow entry point**: `+ New story` opens the Story Creation
   Wizard (inventory #2, pending).
