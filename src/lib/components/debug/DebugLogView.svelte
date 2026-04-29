@@ -18,7 +18,6 @@
   import { Separator } from '$lib/components/ui/separator'
   import { Autocomplete } from '$lib/components/ui/autocomplete'
   import { cn } from '$lib/utils/cn.js'
-  import { SvelteMap } from 'svelte/reactivity'
 
   interface Props {
     logs: DebugLogEntry[]
@@ -62,7 +61,8 @@
     return `${(duration / 1000).toFixed(2)}s`
   }
 
-  const jsonCache = new SvelteMap<string, string>()
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- SvelteMap cannot be mutated inside template expressions (state_unsafe_mutation)
+  const jsonCache = new Map<string, string>()
 
   const MAX_DISPLAY_CHARS = 200_000
 
@@ -71,25 +71,47 @@
     const cached = jsonCache.get(cacheKey)
     if (cached) return cached
 
+    let raw: string | undefined
     try {
-      let json = JSON.stringify(entry.data, null, 2)
-      if (renderNewlines) {
-        json = json.replace(/\\n/g, '\n')
-      }
-      if (json.length > MAX_DISPLAY_CHARS) {
-        json =
-          json.slice(0, MAX_DISPLAY_CHARS) +
-          `\n\n... [truncated — ${json.length.toLocaleString()} total chars] ...`
-      }
-      if (jsonCache.size > 200) {
-        const firstKey = jsonCache.keys().next().value
-        if (firstKey) jsonCache.delete(firstKey)
-      }
-      jsonCache.set(cacheKey, json)
-      return json
+      raw = JSON.stringify(entry.data, null, 2)
     } catch {
-      return String(entry.data)
+      // Likely circular references — retry with a safe replacer
+      try {
+        // eslint-disable-next-line svelte/prefer-svelte-reactivity -- SvelteSet cannot be mutated inside template expressions (state_unsafe_mutation)
+        const seen = new Set()
+        raw = JSON.stringify(
+          entry.data,
+          (_key, value) => {
+            if (typeof value === 'object' && value !== null) {
+              if (seen.has(value)) return '[Circular]'
+              seen.add(value)
+            }
+            return value
+          },
+          2,
+        )
+      } catch (e) {
+        console.error('[DebugLogView] formatJson failed for entry', entry.id, e)
+        // Not cached — lets the next render retry in case the data changes
+        return `[Serialization error: ${e instanceof Error ? e.message : String(e)}]`
+      }
     }
+
+    let json = raw ?? '(no data)'
+    if (renderNewlines) {
+      json = json.replace(/\\n/g, '\n')
+    }
+    if (json.length > MAX_DISPLAY_CHARS) {
+      json =
+        json.slice(0, MAX_DISPLAY_CHARS) +
+        `\n\n... [truncated — ${json.length.toLocaleString()} total chars] ...`
+    }
+    if (jsonCache.size > 200) {
+      const firstKey = jsonCache.keys().next().value
+      if (firstKey) jsonCache.delete(firstKey)
+    }
+    jsonCache.set(cacheKey, json)
+    return json
   }
 
   async function copyToClipboard(entry: DebugLogEntry) {
@@ -120,7 +142,8 @@
     }
 
     const groups: { request?: DebugLogEntry; response?: DebugLogEntry }[] = []
-    const requestMap = new SvelteMap<string, number>()
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- SvelteMap cannot be mutated inside $derived (state_unsafe_mutation)
+    const requestMap = new Map<string, number>()
 
     for (const log of currentLogs) {
       if (log.type === 'request') {
