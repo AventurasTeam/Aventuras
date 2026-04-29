@@ -279,7 +279,7 @@ implementation.
 
 Image generation is **deferred** as a feature; no `imageGen` agent
 entry until the feature lands. Tracked in
-[`followups.md`](../../../followups.md#image-generation).
+[`followups.md`](../../../parked.md#image-generation).
 
 ### Per-profile error states + global banner
 
@@ -446,4 +446,4 @@ anyone else.
   over time (debug flags, retry counts, cache stats, schema
   inspector). Eventually overlaps with the planned global delta-log
   observability panel — boundary lands with the
-  [Observability / debug UI followup](../../../followups.md#observability--debug-ui).
+  [Observability / debug UI followup](../../../parked.md#observability--debug-ui).

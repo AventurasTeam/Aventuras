@@ -199,7 +199,7 @@ references) is materialized into the library as a new row.
 
 Legacy `.avt` files (old-app format) are accepted but route through
 a migration pass — see
-[`followups.md → Legacy .avt migration import`](../../../followups.md#legacy-avt-migration-import).
+[`followups.md → Legacy .avt migration import`](../../../parked.md#legacy-avt-migration-import).
 
 See [patterns → Import counterparts](../../patterns/data.md#import-counterparts--file-based--vault)
 for the cross-cutting pattern (versioning, zod validation, Vault
@@ -245,7 +245,7 @@ and [`data-model.md → Story settings shape`](../../../data-model.md#story-sett
 ## Screen-specific open questions
 
 - **Cover treatment when set** — see
-  [`followups.md → Cover display on story list cards`](../../../followups.md#cover-display-on-story-list-cards).
+  [`followups.md → Cover display on story list cards`](../../../parked.md#cover-display-on-story-list-cards).
 - **Archived visibility**: currently `All` hides archived, `Archived`
   shows only archived. Alternative: `All` shows everything with
   archived dimmed. Current behavior keeps the library focused on
@@ -254,7 +254,7 @@ and [`data-model.md → Story settings shape`](../../../data-model.md#story-sett
   (fuller description, key entities, recent chapter summary)?
   Probably v2.
 - **Bulk select on cards** — covered by
-  [`followups.md → Bulk operations on entities`](../../../followups.md#bulk-operations-on-entities)
+  [`followups.md → Bulk operations on entities`](../../../parked.md#bulk-operations-on-entities)
   (umbrella followup spans both World panel and story-list cards).
 - **Genre label autocomplete**: the bundled preset catalog already
   surfaces common labels; an additional autocomplete drawn from

@@ -705,7 +705,7 @@ rather than via a classifier pass:
   so turn-2 classifier picks up scene presence going forward.
 
 A separate tagging pass for user-written openings is parked in
-[`followups.md → Classifier-on-opening retrofit`](./followups.md#classifier-on-opening-retrofit)
+[`followups.md → Classifier-on-opening retrofit`](./parked.md#classifier-on-opening-retrofit)
 — retrofit if entry-1 metadata becomes load-bearing for any
 downstream feature. See
 [`data-model.md → Opening entry`](./data-model.md#opening-entry) for

@@ -18,8 +18,10 @@ vars, no BaaS.
   state, retrieval, translation.
 - [`docs/ui/`](./docs/ui/README.md) — UI design (principles +
   per-screen wireframes & docs).
-- [`docs/followups.md`](./docs/followups.md) — outstanding
-  cross-domain items.
+- [`docs/followups.md`](./docs/followups.md) — active outstanding
+  items (current milestone).
+- [`docs/parked.md`](./docs/parked.md) — items deferred beyond v1
+  (post-v1 confirmed + parked-until-signal).
 
 ## Repo layout
 

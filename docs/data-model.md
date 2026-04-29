@@ -811,7 +811,7 @@ Wizard selection is **preset-driven** with snapshot copy:
 
 Preset catalog lives in code (bundled JSON, ~20-30 entries each for
 v1). User-authored presets in Vault are deferred —
-[Vault genre + tone preset content types](./followups.md#vault-genre--tone-preset-content-types)
+[Vault genre + tone preset content types](./parked.md#vault-genre--tone-preset-content-types)
 captures the post-v1 path.
 
 #### Why two JSON columns, not promoting to columns
@@ -990,7 +990,7 @@ loaded once into Zustand at boot).
 the `providers[].apiKey` JSON. v1 is local-first with no network
 exposure of the DB; the threat model that justifies encryption
 hasn't materialized. Tracked in
-[followups.md](./followups.md#encryption-at-rest-for-provider-keys).
+[followups.md](./parked.md#encryption-at-rest-for-provider-keys).
 
 ### Vault content storage
 
@@ -1046,7 +1046,7 @@ subset of entity state. Forcing them through one row shape
 with only one type in flight. The unification question earns its
 weight when ≥2 content types ship and we can validate against
 actual schema overlap. Tracked in
-[`followups.md`](./followups.md#vault-content-storage-pattern).
+[`followups.md`](./parked.md#vault-content-storage-pattern).
 
 **Vault UI** is deferred per [`ui/README.md`](./ui/README.md); v1
 surfaces the calendar editor as the first sub-wireframe under a
@@ -1131,7 +1131,7 @@ context includes the opening prose verbatim (recent buffer covers
 it), so the AI grounds itself from prose regardless of metadata
 state. A separate tagging pass for user-written openings is parked
 in
-[`followups.md → Classifier-on-opening retrofit`](./followups.md#classifier-on-opening-retrofit).
+[`followups.md → Classifier-on-opening retrofit`](./parked.md#classifier-on-opening-retrofit).
 
 **Opening invariants** (enforced at the action layer):
 
@@ -1143,7 +1143,7 @@ in
   by text-edit (the existing side-channel exemption — see "Entry
   mutability & rollback") or by a wizard-driven regenerate pass
   (parked in
-  [`followups.md → Regenerate-opening affordance`](./followups.md#regenerate-opening-affordance)).
+  [`followups.md → Regenerate-opening affordance`](./parked.md#regenerate-opening-affordance)).
 - **Branching:** copies forward via the standard branch-copy
   mechanism — the opening behaves like any entry being copied into
   the new branch.
@@ -1585,7 +1585,7 @@ each logged as deltas so the whole thing is reversible via rollback:
    `happening_awareness` rows from the just-closed range into summary
    happenings, decays salience, drops redundancies. Salience math +
    compaction philosophy parked in
-   [`followups.md → Top-K-by-salience retrieval`](./followups.md#top-k-by-salience-retrieval--long-term-memory-implications).
+   [`followups.md → Top-K-by-salience retrieval`](./parked.md#top-k-by-salience-retrieval--long-term-memory-implications).
 
 **Per-branch, forks cleanly.** Each branch has its own `chapters` rows
 with its own IDs. On branch creation, chapter rows (and all other state)
@@ -1679,7 +1679,7 @@ and fail clearly:
    Contextual safety: you can't accidentally import a calendar into
    a story slot.
 2. **Universal import** (deferred — see
-   [followups.md](./followups.md#universal-import-surface)). One
+   [followups.md](./parked.md#universal-import-surface)). One
    dispatcher accepts any `.avts`, reads the `format` field, and
    routes to the matching creation flow. Useful for "I have this
    file, just import it." Not blocking v1; per-UI gated covers the
@@ -1687,7 +1687,7 @@ and fail clearly:
 
 **Legacy `.avt` import** (from the old app) is a separate migration
 path with its own format handling, tracked in
-[`followups.md`](./followups.md#legacy-avt-migration-import). Not
+[`followups.md`](./parked.md#legacy-avt-migration-import). Not
 part of this convention.
 
 **Extension policy.** `.avts` is canonical; UI file pickers

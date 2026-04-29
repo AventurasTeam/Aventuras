@@ -41,7 +41,7 @@ This skill **reads the project's structure rules each run** (from `docs/conventi
 
 Track as tasks; complete in order:
 
-1. **Discovery.** Read `docs/conventions.md`, `docs/README.md`, glob `docs/**/*.md` and `docs/**/*.html`. Confirm the four conventions this skill checks against are still in use (per-screen `<screen>/<screen>.md` colocation, `principles.md` + `patterns/` split, `followups.md` ledger).
+1. **Discovery.** Read `docs/conventions.md`, `docs/README.md`, glob `docs/**/*.md` and `docs/**/*.html`. Confirm the four conventions this skill checks against are still in use (per-screen `<screen>/<screen>.md` colocation, `principles.md` + `patterns/` split, `followups.md` + `parked.md` two-ledger split per `conventions.md → Followups vs parked`).
 2. **Baseline lint.** Run `pnpm lint:docs` once. If it fails, surface mechanical errors first; user fixes those before the drift sweep continues.
 3. **Dispatch 2 subagents in parallel.** Subagent A handles mechanical sweeps (renames + pattern Used-by). Subagent B handles prose-level checks (followups hygiene + boilerplate detection). See [Methodology](#methodology) for briefing details.
 4. **Aggregate findings** by class. Within each class, sort by impact (highest first).

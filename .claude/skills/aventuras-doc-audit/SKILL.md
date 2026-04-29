@@ -32,7 +32,7 @@ Track as tasks; complete in order:
 
 Run these reads in parallel at the start of every audit:
 
-- `docs/conventions.md` — source of truth for "where files live", "naming conventions", "principles-vs-patterns split", "README-as-index", "followups-outstanding-only", "wireframe authoring", tooling, common pitfalls.
+- `docs/conventions.md` — source of truth for "where files live", "naming conventions", "principles-vs-patterns split", "README-as-index", "Followups vs parked" placement rule, "wireframe authoring", tooling, common pitfalls.
 - `docs/README.md` — authoritative index of what files should exist (cross-check against your glob inventory).
 - `.claude/rules/docs.md` — operational reminders for AI-assisted edits (anchor discipline, heading stability, bracketed inline text, followups hygiene, lint tooling).
 - `CLAUDE.md` — repo root project context (domain, repo layout, workflow rules).
@@ -87,7 +87,7 @@ Suggested slicing — adapt based on what discovery surfaces:
 - **Subagent A — Cross-cutting rules vs per-screen contradictions.** Read every cross-cutting doc (`docs/ui/principles.md` if present, every `docs/ui/patterns/*.md`). For each rule, scan every per-screen doc (`docs/ui/screens/<screen>/<screen>.md` + nested sub-screens) for places that effectively countermand it.
 - **Subagent B — Wireframe vs doc drift.** _(Skip if no wireframes.)_ For each per-screen directory, diff the `.md` spec against the colocated `.html`. Compare chrome / row indicators / modals / state coverage. The most common drift class — landed integrations sometimes update one and not the other.
 - **Subagent C — Patterns coverage + duplication.** Read every cross-cutting pattern doc. For each, find prose in per-screen docs that duplicates the pattern (should be cross-referenced) and content in principles that's actually pattern-shaped (or vice versa).
-- **Subagent D — Followups hygiene.** _(Skip if no followups ledger.)_ Read `docs/followups.md`. For each entry, search canonical docs for evidence of resolution. Flag silently-resolved, contradicted, duplicated, or aged entries.
+- **Subagent D — Followups hygiene.** _(Skip if neither ledger exists.)_ Read both `docs/followups.md` (active items) and `docs/parked.md` (post-v1 confirmed + parked-until-signal). For each entry in either file, search canonical docs for evidence of resolution. Flag silently-resolved, contradicted, duplicated, or aged entries. Also flag entries whose placement (active vs parked) looks wrong relative to the placement rule in `conventions.md → Followups vs parked`.
 - **Subagent E — Domain cross-refs.** Read top-level domain docs (`architecture.md`, `data-model.md`, `calendar-systems/spec.md`, or whatever the discovery turned up). For each schema field or pipeline contract, find UI docs operating against it; flag drift.
 - **Subagent F — Anchor + structural integrity.** Walk every cross-reference in every doc. Verify destination section content matches the citing context semantically (not just that the anchor resolves). Walk file naming + structure rules and flag violations.
 

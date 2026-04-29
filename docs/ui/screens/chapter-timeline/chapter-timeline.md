@@ -343,14 +343,14 @@ particular would be redundant.
   Re-running lore-mgmt + memory compaction would overwrite
   consolidated state; that's destructive and gated on the
   long-deferred compaction philosophy work (see
-  [followups → Top-K-by-salience retrieval](../../../followups.md#top-k-by-salience-retrieval--long-term-memory-implications)).
+  [followups → Top-K-by-salience retrieval](../../../parked.md#top-k-by-salience-retrieval--long-term-memory-implications)).
   Defer until the compaction session lands; the eventual answer
   will probably be "available, but only via an explicit
   consent-modal heavy enough that users don't fire it casually."
 - **Bulk chapter operations.** Multi-select to delete or
   re-generate-summary multiple chapters at once. Defer; matches
   the
-  [bulk operations on entities](../../../followups.md#bulk-operations-on-entities)
+  [bulk operations on entities](../../../parked.md#bulk-operations-on-entities)
   followup which sets the precedent.
 - **Chapter merging / splitting.** "Merge chapter 3 into chapter
   4" or "split chapter 5 at entry N" — both are user-visible
@@ -362,10 +362,10 @@ particular would be redundant.
   should disable. Same rule as
   [branch-navigator → during generation](../reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked).
   Visual treatment lands with the
-  [visual-identity pass](../../../followups.md#visual-identity).
+  [visual-identity pass](../../../parked.md#visual-identity).
 - **Animation when the in-progress card transitions to closed.**
   After successful chapter close, the in-progress card morphs
   into a new closed card at the bottom of the timeline, plus a
   fresh in-progress card appears below it. Smooth transition vs
   hard re-render — lands with the
-  [visual-identity pass](../../../followups.md#visual-identity).
+  [visual-identity pass](../../../parked.md#visual-identity).

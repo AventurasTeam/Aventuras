@@ -21,8 +21,10 @@ rationale, and decisions live alongside.
   (entity rows, list rendering, Select primitive, JSON viewer,
   imports). Cross-cutting like principles, but visual-spec rather
   than philosophy.
-- **[../followups.md](../followups.md)** — top-level ledger of
-  outstanding data-model, architecture, and UX items.
+- **[../followups.md](../followups.md)** — active outstanding
+  items (current milestone) across data-model, architecture, and
+  UX. See [`../parked.md`](../parked.md) for items deferred beyond
+  v1 (post-v1 confirmed + parked-until-signal).
 - **`screens/<screen>/`** — one directory per surface. Holds the
   per-screen `.md` doc and its interactive `.html` wireframe.
 

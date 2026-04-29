@@ -40,18 +40,40 @@ When adding to or editing docs:
 - **Moving doc files**: use `git mv` to preserve history. Update all
   inbound path references in the same commit.
 
-## followups.md hygiene
+## followups.md + parked.md hygiene
 
-`docs/followups.md` is **outstanding-only**. When resolving an item:
+Outstanding work splits across two ledgers per
+[`conventions.md → Followups vs parked`](../../docs/conventions.md#followups-vs-parked):
+
+- **`docs/followups.md`** — active items needed for the current
+  milestone (v1) or blocking v1 work.
+- **`docs/parked.md`** — deferred items, two flavors: **post-v1
+  confirmed** (will ship later; known landing window) and
+  **parked until signal** (speculative / "if real demand").
+
+When resolving an item from either file:
 
 1. Add the resolution detail to the canonical doc (`data-model.md`,
    `architecture.md`, the relevant per-screen `.md`, etc.).
-2. Remove the corresponding entry from `followups.md`.
+2. Remove the corresponding entry from whichever ledger it's in.
 3. Carry the resolution narrative in the commit message.
 
-When a session surfaces a new deferral, add a section to
-`followups.md` under the appropriate domain (Data-model / UX /
-Deferred sessions / etc.).
+When a session surfaces a new deferral, decide placement:
+
+- **Active** (current milestone needs it OR blocks v1 work) →
+  add to `followups.md` under `## Data-model` or `## UX`.
+- **Post-v1 confirmed** (clear future landing window) → add to
+  `parked.md` under `## Post-v1 confirmed → ### Data-model | UX |
+Deferred design sessions`.
+- **Parked until signal** (speculative / "if real demand") →
+  add to `parked.md` under `## Parked until signal → ### Data-model
+| UX`.
+
+Movement between files as scope clarifies is normal — preserve
+entry content verbatim across moves so the diff reads as a
+relocation, not a rewrite. Update inbound anchor references
+(grep for `./followups.md#X` and `./parked.md#X`) when an entry
+moves.
 
 ## Wireframes
 

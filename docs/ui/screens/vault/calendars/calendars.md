@@ -425,7 +425,7 @@ Save bar's usage warning surfaces this contract.
 ## Vault entry point
 
 **Deferred** — covered by the existing followup
-[Vault parent shell](../../../../followups.md#vault-parent-shell). For
+[Vault parent shell](../../../../parked.md#vault-parent-shell). For
 the wireframe, the back arrow returns to "wherever you came from"
 without committing to a specific entry-point UI. The back-from-Vault
 flow does not need to support returning to an open story (Vault is

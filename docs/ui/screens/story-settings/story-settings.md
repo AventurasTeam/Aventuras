@@ -150,7 +150,7 @@ their currently-resolved chain:
 - `retrieval` — Fast tasks → gpt-4o-mini (when designed)
 
 (Image generation is deferred — see
-[followups.md](../../../followups.md#image-generation).)
+[followups.md](../../../parked.md#image-generation).)
 
 User picks an agent; the override row materializes with a model
 picker. `×` on the row removes the override; agent reverts to App
@@ -248,7 +248,7 @@ allowed — user can author label + prose from scratch.
 - **tone** — `{ label, promptBody }`. Same shape as genre.
 - **setting** — freeform prose only (no preset). The world / time /
   place. Future Vault setting templates are deferred per
-  [followups → Vault setting templates](../../../followups.md#vault-setting-templates).
+  [followups → Vault setting templates](../../../parked.md#vault-setting-templates).
 
 **Soft warn-box at the top of the Generation tab** when narrative
 exists, copy along the lines of "Edits to genre / tone / setting
@@ -464,7 +464,7 @@ calendar tab is where everything calendar-related already lives.
   [hidden-vs-disabled rule](../../patterns/icon-actions.md#disabled-vs-hidden).
 
 No inline rename in v1 — see
-[followups](../../../followups.md#inline-rename-for-era-flips-in-story-settings--calendar)
+[followups](../../../parked.md#inline-rename-for-era-flips-in-story-settings--calendar)
 for the deferral.
 
 **Sort.** `at_worldtime` ascending — chronological within the

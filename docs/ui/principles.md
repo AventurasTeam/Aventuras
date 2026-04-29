@@ -425,7 +425,7 @@ is the single source of truth (centralized; per
 [`data-model.md → App settings storage`](../data-model.md#app-settings-storage));
 the override pattern is identical regardless of which agents exist.
 Image generation is deferred past v1; see
-[followups.md → Image generation](../followups.md#image-generation).
+[followups.md → Image generation](../parked.md#image-generation).
 
 UI surface lives in
 [Story Settings · Models tab](./screens/story-settings/story-settings.md#models-tab--overrides-only)
@@ -558,7 +558,7 @@ wizard-authored per story (no global default, no copy-at-creation).
   genuinely unique per story; preset clustering doesn't fit. A
   future Vault content type for reusable setting templates is
   parked in
-  [`followups.md → Vault setting templates`](../followups.md#vault-setting-templates).
+  [`followups.md → Vault setting templates`](../parked.md#vault-setting-templates).
 
 ### No-modal-on-edit rule
 
@@ -589,7 +589,7 @@ branches of a story share the same genre / tone / setting / mode /
 narration. Editing definition propagates to all branches. A user
 wanting tonal experimentation across narrative paths uses a separate
 story, not a branch. Per-branch override is parked in
-[`followups.md → Per-branch definition override`](../followups.md#per-branch-definition-override).
+[`followups.md → Per-branch definition override`](../parked.md#per-branch-definition-override).
 
 ---
 
@@ -709,7 +709,7 @@ only governs off-scene/inactive rows. Whether (and how) the UI
 surfaces this — e.g., a "structurally pinned" indicator on
 active+in-scene rows so users know the mode is moot for them — is
 parked in
-[`followups.md → Structurally-pinned indicator`](../followups.md#structurally-pinned-indicator).
+[`followups.md → Structurally-pinned indicator`](../parked.md#structurally-pinned-indicator).
 
 Mechanics (how `keyword_llm` retrieval works, token budgets, the
 in-scene-bypass) live in
@@ -724,7 +724,7 @@ Same applies to other list surfaces (story list cards, plot rows).
 Bulk ops (multi-select, batch status change, batch tag, batch
 retire, batch export) are deferred pending their own design pass —
 see
-[`followups.md → Bulk operations on entities`](../followups.md#bulk-operations-on-entities)
+[`followups.md → Bulk operations on entities`](../parked.md#bulk-operations-on-entities)
 for the parked sub-questions.
 
 ---

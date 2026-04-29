@@ -17,8 +17,10 @@ implementation, and the open questions tracked across the project.
   and (eventually) user-authored fictional calendars. Design spec,
   interactive PoC, and shareable preset JSONs.
 - **[tech-stack.md](./tech-stack.md)** — tech choices and rationale.
-- **[followups.md](./followups.md)** — top-level ledger of outstanding
-  data-model, architecture, and UX items.
+- **[followups.md](./followups.md)** — active outstanding items the
+  current milestone (v1) needs answered or that block v1 work.
+- **[parked.md](./parked.md)** — deferred items: post-v1 confirmed
+  - parked-until-signal.
 - **[ui/](./ui/README.md)** — UI design: principles + per-screen
   wireframes and docs.
 - **[explorations/](./explorations/README.md)** — dated session

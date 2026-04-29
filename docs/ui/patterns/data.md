@@ -50,7 +50,7 @@ handling are canonical there.
 
 **Legacy `.avt` import** (from the old app) is supported for
 migration. The import flow needs its own design pass — see
-[`followups.md`](../../followups.md#legacy-avt-migration-import).
+[`followups.md`](../../parked.md#legacy-avt-migration-import).
 
 **Per-row import (entity / thread / happening / lore).** Each list
 pane's `+ New X` affordance becomes a small menu offering:
@@ -61,7 +61,7 @@ pane's `+ New X` affordance becomes a small menu offering:
   friendly error rather than a partial save.
 - `From Vault…` — disabled placeholder until the Vault parent shell
   lands (per the
-  [Vault parent shell followup](../../followups.md#vault-parent-shell)).
+  [Vault parent shell followup](../../parked.md#vault-parent-shell)).
   The first Vault content type — calendars — has its editor at
   [vault/calendars](../screens/vault/calendars/calendars.md); the
   picker affordance hooks into the same content store once the

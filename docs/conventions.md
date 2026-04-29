@@ -103,12 +103,42 @@ file refactorable without breaking inbound anchor links — there's
 nothing to anchor to. This applies to the project root index too;
 substantive structural content lives in this conventions doc.
 
-### Followups: top-level, outstanding-only
+### Followups vs parked
 
-`docs/followups.md` is the single cross-domain ledger of items
-deferred from earlier work (data-model, architecture, UX). Resolved
-items are **removed**, not crossed out. The commit that resolves an
-item carries the resolution narrative.
+Outstanding work is split across two top-level ledgers by milestone
+relevance:
+
+- **[`docs/followups.md`](./followups.md)** — **active** items the
+  current milestone (v1) needs answered, or that block other v1
+  work. Kept short and focused; consulted at orient time.
+- **[`docs/parked.md`](./parked.md)** — items deferred beyond the
+  current milestone, in two flavors:
+  - **Post-v1 confirmed** — work that will be addressed; just not
+    in v1. Has a known landing window (post-MVP feature, when
+    component X is built, etc.).
+  - **Parked until signal** — speculative or "if real demand
+    surfaces" items. May never be addressed; only revisited if
+    testing or real use produces concrete signal.
+
+**Placement rule.** A new deferral goes into `followups.md` if and
+only if **the current milestone needs it answered or it blocks
+other current-milestone work**. Otherwise it goes into `parked.md`
+under the appropriate flavor:
+
+- A clear future-milestone landing window or feature dependency →
+  **Post-v1 confirmed**.
+- "If signal surfaces", "if real demand", "speculative" → **Parked
+  until signal**.
+
+Movement between the two files is normal as scope clarifies. When
+a parked item becomes blocking for the current milestone, move it
+into `followups.md`; when an active item gets pushed past the
+milestone, move it out. Use `git mv`-aware editing semantics —
+preserve content verbatim across moves so the commit reflects
+"changed location" rather than "rewrote."
+
+Resolved items in either file are **removed** (not crossed out).
+The commit that resolves an item carries the resolution narrative.
 
 ### Wireframe authoring
 
