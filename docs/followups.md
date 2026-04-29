@@ -268,28 +268,36 @@ rail search-scope definition. Lean: include `traits` + `drives` +
 `agenda` immediately when implementing the new shape; defer
 `visual.*` until UX testing surfaces flooding-or-not-flooding signal.
 
-### Per-kind Overview composition in World panel
+### Lore detail-pane composition
 
-Only character-kind Overview is wireframed. Location / item / faction
-need their own composition driven by their typed state. Lore's
-Overview is separate again (different table, different fields). All
-pending. Schema unblock landed in
-[`data-model.md → World-state storage`](./data-model.md#world-state-storage)
-— Location, Item, and Faction shapes are now spec'd; UI Overview
-drawing for those three kinds remains. Each is small (Location 2
-fields, Item 2 fields, Faction 2 fields), so the design pass is
-about how shared chrome (description, tags, retired_reason,
-portrait, status, injection_mode) composes with those few typed
-slots, not about extensive per-kind form design.
+The
+[per-kind detail-pane composition](./ui/screens/world/world.md#tabs--per-kind-composition)
+is spec'd for character / location / item / faction. Lore lives
+in the `lore` table (separate from `entities`) with a different
+schema, and its detail-pane composition wasn't drawn in the same
+pass — different table shape, more text-heavy, simpler than
+entities. Same philosophical shape applies (glance Overview +
+body editing tabs by semantic group), but the per-kind specifics
+need their own pass.
 
-**Peek-drawer state-field layout** is in the same family — the
-reader-composer peek drawer (per
-[`reader-composer.md → Peek drawer`](./ui/screens/reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters))
-shows a subset of state fields per kind in its lightweight surface.
-What subset, in what order, with what affordances per kind — same
-design pass as the World panel Overview. Peek is the lighter
-surface; deep edit routes to World. The schema unblock applies to
-both surfaces equally.
+Open questions:
+
+- **Tab skeleton** — does lore inherit the same `Overview |
+Identity | Connections | Assets | Involvements | History`
+  skeleton, or is the simpler shape better served by fewer tabs
+  (`Overview | Body | History`)? Lore has no Carrying analog; it
+  may have no Connections analog either depending on whether
+  cross-lore references exist.
+- **Body content** — lore's `title` + `body` + `category` +
+  `tags` is mostly text. The Overview glance vs Identity-edit
+  split may be overkill for a simpler 4-field shape.
+- **Per-lore peek** — does the reader peek drawer show lore
+  rows at all (today the rail surfaces lore but peek is
+  character-focused)? If yes, what does the peek body look
+  like for lore?
+
+Lands when lore detail-pane gets focused attention (likely as
+part of a wider lore polish pass).
 
 ### Next-turn suggestions — design pass
 

@@ -13,7 +13,7 @@ Cross-cutting principles that govern this panel are in
 
 - [World / Plot split](../../principles.md#world--plot-split--unified-panels-by-purpose)
 - [Top-bar design rule](../../principles.md#top-bar-design-rule)
-- [Entity form UI generated from typed schema](../../patterns/entity.md#entity-form-ui-is-generated-from-the-typed-schema)
+- [Entity detail-pane composition](../../patterns/entity.md#entity-detail-pane-composition)
 - [Save-session pattern](../../patterns/save-sessions.md)
 - [Edit restrictions during in-flight generation](../../principles.md#edit-restrictions-during-in-flight-generation)
   (thread / happening detail-pane edits and save bars disable while

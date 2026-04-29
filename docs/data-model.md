@@ -385,7 +385,7 @@ type CharacterState = {
   drives: string[] // what pushes/pulls them: goals, fears, sore spots; soft cap 6
   voice?: string // single prose note on speech pattern
 
-  // Relationships — entity refs
+  // Entity-graph references — split across UI tabs (Connections + Carrying)
   current_location_id: EntityId | null
   equipped_items: EntityId[] // unique items only (worn/wielded)
   inventory: EntityId[] // unique items only (carried, not active)

@@ -16,7 +16,7 @@ Cross-cutting principles that govern this panel are in
 - [Entity list sort order — four-layer, lead pinned](../../patterns/entity.md#entity-list-sort-order--static-four-layer)
 - [Browse filter chips + accordion grouping](../../patterns/entity.md#browse-filter-chips)
 - [Entity surfacing — three levels](../../patterns/entity.md#entity-surfacing--three-levels-same-data)
-- [Entity form UI generated from typed schema](../../patterns/entity.md#entity-form-ui-is-generated-from-the-typed-schema)
+- [Entity detail-pane composition](../../patterns/entity.md#entity-detail-pane-composition)
 - [Save-session pattern](../../patterns/save-sessions.md)
 - [Edit restrictions during in-flight generation](../../principles.md#edit-restrictions-during-in-flight-generation)
   (entity / lore detail-pane edits and save bars disable while a
@@ -46,9 +46,10 @@ Cross-cutting principles that govern this panel are in
 │ [Characters ▾]      │ breadcrumb: ☺ character               │
 │ search              │ Name: Kael ✎                    [⋯]  │
 │ filter chips        │ ─────                                 │
-│                     │ tabs: Overview | Rel | Assets |       │
-│ list (accordion     │       Involvements | History          │
-│ on All filter)      │                                       │
+│                     │ tabs: Overview | Identity | Carrying  │
+│ list (accordion     │       | Connections | Assets |        │
+│ on All filter)      │       Involvements | History          │
+│                     │                                       │
 │                     │ (selected tab content, scrolls)       │
 │                     │                                       │
 │                     │ ───                                   │
@@ -92,24 +93,173 @@ Raw JSON lives here (not as a prominent link) because it's
 power-user/debug territory. One consistent pattern: ⋯ menus are where
 "extra / rare" item-scoped actions live on any per-item surface.
 
-## Tabs (character kind)
+## Tabs — per-kind composition
 
-- **Overview** — scalar fields from `entities` + `CharacterState`:
-  status, injection_mode, description, the `visual.*` sub-fields
-  (physique, face, hair, eyes, attire, distinguishing[]), traits[],
-  drives[], voice, the `stackables` key-quantity record,
-  retired_reason (conditional), tags, portrait. See
-  [`data-model.md → CharacterState`](../../../data-model.md#characterstate-shape)
-  for the typed shape.
-- **Relationships** — all entity-to-entity ID fields from
-  `CharacterState`, grouped by semantic label (Positional /
-  Possession / Affiliation).
+All four entity kinds share the same tab skeleton. Tabs distribute
+fields by **semantic purpose**, not by JS shape — implemented as
+[hand-written per-kind detail-pane components](../../patterns/entity.md#entity-detail-pane-composition):
+`CharacterDetailPane`, `LocationDetailPane`, `ItemDetailPane`,
+`FactionDetailPane`. Schema is the validation contract; UI owns
+layout.
+
+```
+Overview | Identity | Carrying | Connections | Assets | Involvements | History
+```
+
+`Carrying` is **character-only** — hidden on location, item,
+faction (no carry semantics). Other tabs render for every kind
+with kind-specific content.
+
+### Overview — glance summary, read-mostly
+
+The Overview tab is a glance summary card, not the full form.
+Click any region to route to the relevant edit tab. Doubles as
+the [peek-drawer body](../reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters)
+at narrower (440px) width — same content, no duplicated design.
+
+**Character Overview** (top-down):
+
+- Status pill (`active` / `staged` / `retired` + `retired_reason`
+  inline when retired).
+- Description prose — full text (typically 1-3 sentences). Click →
+  Identity tab.
+- Visual line — first 1-2 populated `visual.*` fields joined with
+  `·`. Click → Identity / Visual.
+- `TRAITS` and `DRIVES` chip rows — first ~3 of each with `+ N` overflow
+  indicator. Click → Identity / Personality.
+- `IN <location>` (current_location_id link) `· last seen N days ago`
+  (from `lastSeenAt`). Click location → that entity's detail pane.
+- `WITH <faction>` (faction_id link). Click → that faction's detail
+  pane.
+- Carrying summary — top stackables by quantity + equipped/carried
+  counts in one line. Click → Carrying tab.
+- Tags chip row — read-only on Overview; edits live on Identity /
+  Lifecycle.
+- Portrait — floats upper-right when populated; placeholder
+  otherwise.
+
+**Location Overview**:
+
+- Status pill + location icon
+- Description prose
+- Parent chain — breadcrumb (`Shop in Town Square in City`) per
+  [`LocationState.parent_location_id`](../../../data-model.md#locationstate-shape)
+- `condition` — single line if populated
+- "Characters here" count + first 3 portraits (links)
+- "Items here" count + first few names
+- Portrait slot
+- Tags
+
+**Item Overview**:
+
+- Status pill + item icon
+- Description prose
+- `condition` — single line if populated
+- Position — `at_location_id` link OR "Held by `<character>`"
+  inverse-derived from any character's `equipped_items` /
+  `inventory`
+- Portrait slot
+- Tags
+
+**Faction Overview**:
+
+- Status pill + faction icon
+- Description prose
+- `standing` — single line if populated
+- Top agenda chips — top ~3 with overflow indicator
+- Member count + first few member portraits (links from
+  inverse-derived `character.faction_id`)
+- Portrait slot
+- Tags
+
+Empty regions show `— not yet described —` style placeholders with
+`add →` links into Identity. The Overview stays read-mostly even
+when sparse.
+
+### Identity — editable body of "who this is"
+
+Identity is the longest tab, intentionally — it carries the
+intrinsic content of the entity. Composed top-down:
+
+**Character Identity**:
+
+- Description (textarea)
+- `Visual` sub-section: `visual.physique`, `visual.face`,
+  `visual.hair`, `visual.eyes`, `visual.attire` (live current —
+  classifier-updated), `visual.distinguishing[]` (chip list)
+- `Personality` sub-section: `traits[]`, `drives[]`, `voice`
+- `Lifecycle` sub-section: `status`, `injection_mode`,
+  `retired_reason` (conditional), `tags`. Smaller visual weight
+  (collapsed-by-default accordion or quieter divider — visual
+  identity decision). Lifecycle is intentionally not promoted to
+  detail-head chrome.
+
+**Location Identity**:
+
+- Description
+- `condition` (single-string, optional — dynamic state delta
+  from description baseline)
+- `Lifecycle` sub-section
+
+**Item Identity**:
+
+- Description
+- `condition` (single-string, optional)
+- `Lifecycle` sub-section
+
+**Faction Identity**:
+
+- Description
+- `standing` (single-string, optional — dynamic power / situation)
+- `agenda[]` (chip list, soft cap 4)
+- `Lifecycle` sub-section
+
+Faction's Identity is the closest in shape to character's, since
+`standing` + `agenda` parallel `voice` + `drives`. Location and
+Item are sparser (one dynamic field plus Lifecycle).
+
+### Carrying — character-only
+
+Composition (in order):
+
+- `stackables` (`Record<string, number>`): chip row,
+  `<key> × <count>` chips with `+ add`. Footnote retained
+  ("Carried quantities — tracked on the character, not on
+  container items").
+- `equipped_items[]`: entity-ref list (picker-backed), labeled
+  `Equipped`.
+- `inventory[]`: entity-ref list, labeled `Carried`.
+
+Tab is hidden entirely for non-character kinds.
+
+### Connections — positional / compositional / affiliation
+
+Slimmed from the older "Relationships" tab — the rename is
+documented in
+[`patterns/entity.md`](../../patterns/entity.md#entity-detail-pane-composition).
+Per-kind sub-labels:
+
+| Kind          | Sub-labels                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------- |
+| **Character** | `Positional` (current_location_id) · `Affiliation` (faction_id) · `Last seen` (read-only)         |
+| **Location**  | `Compositional` (parent_location_id) · `Characters here` · `Items here` (inverse)                 |
+| **Item**      | `Positional` (at_location_id) · `Held by` (inverse from `character.equipped_items` / `inventory`) |
+| **Faction**   | `Members` (inverse from `character.faction_id`) · inter-faction (deferred)                        |
+
+`lastSeenAt` is classifier-only per the
+[authorship contract](../../../data-model.md#authorship-contract);
+read-only on the UI.
+
+### Assets, Involvements, History
+
+Unchanged from prior design.
+
 - **Assets** — attached images / audio / files via `entry_assets`.
   Drop upload, pick from gallery, remove.
-- **Involvements** — `happening_involvements` table for this entity.
-  Rows link to happenings.
-- **History** — delta log filtered to this entity. See History tab
-  detail below.
+- **Involvements** — `happening_involvements` table for this
+  entity. Rows link to happenings.
+- **History** — delta log filtered to this entity. See
+  [History tab](#history-tab) section below.
 
 ## List pane — search scope
 
@@ -160,16 +310,10 @@ Involvements table gets the same load-older pattern eventually; list
 pane is fine unpaginated for normal stories (filter chips + search
 handle it).
 
-## Open for per-kind composition
+## Lore — separate kind
 
-Location / item / faction Overview compositions are not drawn.
-The state schema landed in
-[`data-model.md → World-state storage`](../../../data-model.md#world-state-storage)
-(LocationState 2 fields, ItemState 2 fields, FactionState 2
-fields), unblocking the UI Overview drawing for those three
-kinds. The remaining work is small per kind — how shared chrome
-(description, tags, retired_reason, portrait, status,
-injection_mode) composes with the few typed slots — tracked in
-[`followups.md → Per-kind Overview composition`](../../../followups.md#per-kind-overview-composition-in-world-panel).
-Lore's composition is separate again (different table, different
-fields — simpler than entities, more text-heavy).
+Lore lives in the `lore` table, not `entities`. Different schema,
+different table, simpler than entities (more text-heavy). The same
+philosophical shape applies — glance Overview + body editing tabs
+by semantic group — but lore's detail-pane composition is its own
+design pass.

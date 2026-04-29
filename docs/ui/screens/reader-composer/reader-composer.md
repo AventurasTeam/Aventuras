@@ -510,6 +510,17 @@ new lead, which IS the feedback (consistent with the no-toast
 precedent in the
 [branch creation flow](./branch-navigator/branch-navigator.md#after-confirm)).
 
+### State-field composition — same as World panel Overview
+
+The peek body's content is a 440px-width projection of the
+[Overview tab](../world/world.md#overview--glance-summary-read-mostly)
+from the World panel. Per-kind glance composition lives there;
+peek doesn't restate it. Single design, two surfaces.
+
+Peek is read-mostly. The lead-character mutation above is the only
+inline mutation surface. Deep edits route to the World panel via
+the existing `Open in World panel →` foot link.
+
 ## Screen-specific notes
 
 - Title max-width capped at 320px with ellipsis + tooltip; keeps long

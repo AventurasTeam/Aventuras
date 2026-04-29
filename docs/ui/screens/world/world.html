@@ -261,7 +261,9 @@
   <div class="rb-group">
     <span class="gl">tab:</span>
     <button class="rb-btn active" data-tab="overview">Overview</button>
-    <button class="rb-btn" data-tab="relationships">Relationships</button>
+    <button class="rb-btn" data-tab="identity">Identity</button>
+    <button class="rb-btn" data-tab="carrying">Carrying</button>
+    <button class="rb-btn" data-tab="connections">Connections</button>
     <button class="rb-btn" data-tab="assets">Assets</button>
     <button class="rb-btn" data-tab="involvements">Involvements</button>
     <button class="rb-btn" data-tab="history">History</button>
@@ -455,50 +457,93 @@
 
     <nav class="tabs" id="tabs">
       <span class="tab active" data-tab="overview">Overview</span>
-      <span class="tab" data-tab="relationships">Relationships <span class="tab-count">3</span></span>
+      <span class="tab" data-tab="identity">Identity</span>
+      <span class="tab" data-tab="carrying">Carrying <span class="tab-count">7</span></span>
+      <span class="tab" data-tab="connections">Connections <span class="tab-count">3</span></span>
       <span class="tab" data-tab="assets">Assets <span class="tab-count">2</span></span>
       <span class="tab" data-tab="involvements">Involvements <span class="tab-count">7</span></span>
       <span class="tab" data-tab="history">History</span>
     </nav>
 
-    <!-- OVERVIEW — typed fields -->
+    <!-- OVERVIEW — glance summary card. Read-mostly. Click any region routes to relevant edit tab.
+         Doubles as the peek-drawer body at 440px width. -->
     <div class="tab-panel active" data-panel="overview">
-      <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 14px; padding: 8px 12px; background: #fffbe6; border-left: 3px solid #e3d8c0; border-radius: 2px;">
-        Fields shown here are the <b>character-kind</b> subset of the typed entity shape: <code>entities</code> columns + scalar fields from <code>CharacterState</code> (<code>visual.*</code>, <code>traits</code>, <code>drives</code>, <code>voice</code>) + the <code>stackables</code> key-quantity record.
-        Entity-to-entity links (<code>current_location_id</code>, <code>equipped_items</code>, <code>inventory</code>, <code>faction_id</code>) live on the Relationships tab.
-        Other kinds (location / item / faction) render a different composition driven by their typed state.
-      </div>
-
-      <!-- entities.status — moved in from detail head -->
-      <div class="field-row">
-        <div class="field-label">status
-          <span class="type-hint">enum &middot; entities.status</span>
-        </div>
-        <div class="input-select">
-          <span>active</span>
-          <span style="color: var(--ink-faint);">&#9662;</span>
-        </div>
-      </div>
-
-      <!-- entities.injection_mode — new column per the injection/retrieval decision -->
-      <div class="field-row">
-        <div class="field-label">injection_mode
-          <span class="type-hint">enum &middot; entities.injection_mode</span>
-        </div>
-        <div>
-          <div class="input-select" title="How this entity reaches the prompt">
-            <span>keyword_llm <span style="color: var(--ink-faint); font-size: 11px;">(default &mdash; smart retrieval)</span></span>
-            <span style="color: var(--ink-faint);">&#9662;</span>
+      <!-- Overview is read-mostly. Click any region routes to the relevant edit tab. -->
+      <div style="display: flex; gap: 20px; align-items: flex-start;">
+        <div style="flex: 1; min-width: 0;">
+          <!-- Status pill — top of card, content-state not chrome -->
+          <div style="margin-bottom: 14px;">
+            <span class="row-status-pill active" style="display: inline-block;">active</span>
           </div>
-          <div style="font-size: 10px; color: var(--ink-muted); margin-top: 4px; line-height: 1.5;">
-            <b>always</b>: unconditional &middot; <b>keyword_llm</b>: keyword match + LLM relevance &middot; <b>disabled</b>: excluded.
-            <br>
-            Overridden for in-scene active entities (always injected for coherence, regardless of mode).
+
+          <!-- Description prose (full text). Click → Identity tab. -->
+          <div style="cursor: pointer; padding: 8px 0; margin-bottom: 4px;" title="Edit in Identity tab">
+            <div style="font-size: 13px; line-height: 1.55;">A weathered bounty-hunter with a grudge against the Warden. Keeps a silver coin on a cord, never far from his blade.</div>
+          </div>
+
+          <!-- Visual line — first populated visual fields. Click → Identity / Visual. -->
+          <div style="cursor: pointer; padding: 10px 0; border-top: 1px solid var(--line-soft);" title="Edit in Identity / Visual">
+            <div style="font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px;">Visual</div>
+            <div style="font-size: 13px;">tall, lean &middot; weathered face, sharp jaw, faint scar across left cheek</div>
+          </div>
+
+          <!-- Personality chips — top traits + drives. Click → Identity / Personality. -->
+          <div style="cursor: pointer; padding: 10px 0; border-top: 1px solid var(--line-soft);" title="Edit in Identity / Personality">
+            <div style="font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px;">Traits</div>
+            <div class="chip-row">
+              <span class="chip-small">stubborn</span>
+              <span class="chip-small">former soldier</span>
+              <span class="chip-small">expert tracker</span>
+              <span class="chip-small" style="background: var(--bg); color: var(--ink-faint);">+1</span>
+            </div>
+          </div>
+          <div style="cursor: pointer; padding: 10px 0;" title="Edit in Identity / Personality">
+            <div style="font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px;">Drives</div>
+            <div class="chip-row">
+              <span class="chip-small">seeks vengeance for father's death</span>
+              <span class="chip-small">fears becoming his father</span>
+              <span class="chip-small" style="background: var(--bg); color: var(--ink-faint);">+1</span>
+            </div>
+          </div>
+
+          <!-- Position + affiliation — Connections refs surfaced inline. Click links → those entities. -->
+          <div style="padding: 10px 0; border-top: 1px solid var(--line-soft);">
+            <div style="font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px;">In</div>
+            <div style="font-size: 13px;"><a style="color: var(--ink); text-decoration: underline; text-decoration-style: dotted; cursor: pointer;">The Iron Tavern</a> &middot; <span style="color: var(--ink-muted); font-size: 11px;">last seen 2 days ago</span></div>
+          </div>
+          <div style="padding: 10px 0;">
+            <div style="font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px;">With</div>
+            <div style="font-size: 13px;"><a style="color: var(--ink); text-decoration: underline; text-decoration-style: dotted; cursor: pointer;">Ironshore Bounty Guild</a></div>
+          </div>
+
+          <!-- Carrying summary. Click → Carrying tab. -->
+          <div style="cursor: pointer; padding: 10px 0; border-top: 1px solid var(--line-soft);" title="Edit in Carrying tab">
+            <div style="font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px;">Carrying</div>
+            <div style="font-size: 13px;">200 gold &middot; 30 silver &middot; 7 rations</div>
+            <div style="font-size: 11px; color: var(--ink-muted); margin-top: 2px;">2 equipped &middot; 3 carried</div>
+          </div>
+
+          <!-- Tags (read-only on Overview; edits live in Identity / Lifecycle). -->
+          <div style="padding: 10px 0; border-top: 1px solid var(--line-soft);">
+            <div style="font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px;">Tags</div>
+            <div class="chip-row">
+              <span class="chip-small">bounty-hunter</span>
+              <span class="chip-small">ally</span>
+              <span class="chip-small">chapter-2-introduced</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- entities.description -->
+        <!-- Portrait floating right -->
+        <div class="portrait-slot" style="flex-shrink: 0; width: 220px; height: 220px; cursor: pointer;" title="Drop image or pick from Assets tab">
+          [portrait]
+        </div>
+      </div>
+    </div>
+
+    <!-- IDENTITY — editable body of "who this character is": description + Visual + Personality + Lifecycle. -->
+    <div class="tab-panel" data-panel="identity">
+      <!-- Description (textarea) -->
       <div class="field-row">
         <div class="field-label">description
           <span class="type-hint">text &middot; from entities</span>
@@ -508,9 +553,8 @@
         </div>
       </div>
 
-      <!-- CharacterState.visual — sub-section: 6 type-relaxed string slots -->
+      <!-- Visual sub-section -->
       <div class="rel-section-title">Visual</div>
-
       <div class="field-row">
         <div class="field-label">visual.physique
           <span class="type-hint">string &middot; CharacterState.visual</span>
@@ -519,7 +563,6 @@
           <span>tall, lean</span>
         </div>
       </div>
-
       <div class="field-row">
         <div class="field-label">visual.face
           <span class="type-hint">string &middot; CharacterState.visual</span>
@@ -528,7 +571,6 @@
           <span>weathered, sharp jaw, faint scar across left cheek</span>
         </div>
       </div>
-
       <div class="field-row">
         <div class="field-label">visual.hair
           <span class="type-hint">string &middot; CharacterState.visual</span>
@@ -537,7 +579,6 @@
           <span>raven-black, shoulder-length, often tied back</span>
         </div>
       </div>
-
       <div class="field-row">
         <div class="field-label">visual.eyes
           <span class="type-hint">string &middot; CharacterState.visual</span>
@@ -546,7 +587,6 @@
           <span>ice-blue</span>
         </div>
       </div>
-
       <div class="field-row">
         <div class="field-label">visual.attire
           <span class="type-hint">string &middot; live current attire (classifier-updated)</span>
@@ -555,7 +595,6 @@
           <span>worn leathers, dark cloak, silver brooch</span>
         </div>
       </div>
-
       <div class="field-row">
         <div class="field-label">visual.distinguishing
           <span class="type-hint">string[] &middot; CharacterState.visual</span>
@@ -568,7 +607,8 @@
         </div>
       </div>
 
-      <!-- CharacterState.traits — soft cap 8 -->
+      <!-- Personality sub-section -->
+      <div class="rel-section-title">Personality</div>
       <div class="field-row">
         <div class="field-label">traits
           <span class="type-hint">string[] &middot; CharacterState &middot; soft cap 8 (compacted at chapter close)</span>
@@ -581,8 +621,6 @@
           <span class="add-chip">+ add</span>
         </div>
       </div>
-
-      <!-- CharacterState.drives — soft cap 6 -->
       <div class="field-row">
         <div class="field-label">drives
           <span class="type-hint">string[] &middot; CharacterState &middot; soft cap 6 (compacted at chapter close)</span>
@@ -594,8 +632,6 @@
           <span class="add-chip">+ add</span>
         </div>
       </div>
-
-      <!-- CharacterState.voice — single prose note -->
       <div class="field-row">
         <div class="field-label">voice
           <span class="type-hint">string? &middot; speech pattern</span>
@@ -605,7 +641,73 @@
         </div>
       </div>
 
-      <!-- CharacterState.stackables — Record<string, number> for fungibles -->
+      <!-- Lifecycle sub-section — quieter weight at the bottom; visual identity may collapse-by-default -->
+      <div class="rel-section-title" style="margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--line-soft); color: var(--ink-muted);">Lifecycle</div>
+      <div style="font-size: 10px; color: var(--ink-faint); margin-bottom: 10px; line-height: 1.5;">
+        Entity-level chrome: status, injection rule, retired-reason (when applicable), tags. Lower visual weight; collapse target if density bites.
+      </div>
+      <div class="field-row">
+        <div class="field-label">status
+          <span class="type-hint">enum &middot; entities.status</span>
+        </div>
+        <div class="input-select">
+          <span>active</span>
+          <span style="color: var(--ink-faint);">&#9662;</span>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field-label">injection_mode
+          <span class="type-hint">enum &middot; entities.injection_mode</span>
+        </div>
+        <div>
+          <div class="input-select" title="How this entity reaches the prompt">
+            <span>keyword_llm <span style="color: var(--ink-faint); font-size: 11px;">(default &mdash; smart retrieval)</span></span>
+            <span style="color: var(--ink-faint);">&#9662;</span>
+          </div>
+          <div style="font-size: 10px; color: var(--ink-muted); margin-top: 4px; line-height: 1.5;">
+            <b>always</b>: unconditional &middot; <b>keyword_llm</b>: keyword match + LLM relevance &middot; <b>disabled</b>: excluded.
+          </div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field-label">retired_reason
+          <span class="type-hint">text &middot; only when status=retired</span>
+        </div>
+        <div class="input-select conditional-disabled">
+          <span class="placeholder-text">(disabled &mdash; status is "active")</span>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field-label">tags
+          <span class="type-hint">string[] &middot; from entities</span>
+        </div>
+        <div class="chip-row">
+          <span class="chip-small">bounty-hunter <span class="x">&times;</span></span>
+          <span class="chip-small">ally <span class="x">&times;</span></span>
+          <span class="chip-small">chapter-2-introduced <span class="x">&times;</span></span>
+          <span class="add-chip">+ add tag</span>
+        </div>
+      </div>
+
+      <!-- Portrait — asset ref. Lives at end of Identity since it's an identity-anchoring asset. -->
+      <div class="rel-section-title" style="margin-top: 20px;">Portrait</div>
+      <div class="field-row">
+        <div class="field-label">portrait
+          <span class="type-hint">asset ref &middot; optional</span>
+        </div>
+        <div class="portrait-slot">
+          [portrait slot &mdash; drop image or pick from Assets tab]
+        </div>
+      </div>
+    </div>
+
+    <!-- CARRYING — character-only. stackables + equipped + inventory together. -->
+    <div class="tab-panel" data-panel="carrying">
+      <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 14px; padding: 8px 12px; background: #fffbe6; border-left: 3px solid #e3d8c0; border-radius: 2px;">
+        Everything this character is carrying &mdash; fungibles (stackables), equipped items, and stowed inventory. Tab is hidden on non-character kinds.
+      </div>
+
+      <div class="rel-section-title">Stackables</div>
       <div class="field-row">
         <div class="field-label">stackables
           <span class="type-hint">Record&lt;string, number&gt; &middot; CharacterState</span>
@@ -624,45 +726,41 @@
         </div>
       </div>
 
-      <!-- entities.retired_reason — conditionally enabled -->
+      <div class="rel-section-title">Equipped</div>
       <div class="field-row">
-        <div class="field-label">retired_reason
-          <span class="type-hint">text &middot; only when status=retired</span>
-        </div>
-        <div class="input-select conditional-disabled">
-          <span class="placeholder-text">(disabled &mdash; status is "active")</span>
-        </div>
-      </div>
-
-      <!-- entities.tags (json array) -->
-      <div class="field-row">
-        <div class="field-label">tags
-          <span class="type-hint">string[] &middot; from entities</span>
+        <div class="field-label">equipped_items
+          <span class="type-hint">EntityId[] (item) &middot; worn / wielded</span>
         </div>
         <div class="chip-row">
-          <span class="chip-small">bounty-hunter <span class="x">&times;</span></span>
-          <span class="chip-small">ally <span class="x">&times;</span></span>
-          <span class="chip-small">chapter-2-introduced <span class="x">&times;</span></span>
-          <span class="add-chip">+ add tag</span>
+          <span class="chip-small entity">Silver coin on cord <span class="x">&times;</span></span>
+          <span class="chip-small entity">Worn blade <span class="x">&times;</span></span>
+          <span class="add-chip" title="Opens a branch-scoped item picker with option to create new">+ link item</span>
         </div>
       </div>
 
-      <!-- portrait (asset reference) -->
+      <div class="rel-section-title">Carried</div>
       <div class="field-row">
-        <div class="field-label">portrait
-          <span class="type-hint">asset ref &middot; optional</span>
+        <div class="field-label">inventory
+          <span class="type-hint">EntityId[] (item) &middot; carried, not active</span>
         </div>
-        <div class="portrait-slot">
-          [portrait slot &mdash; drop image or pick from Assets tab]
+        <div class="chip-row">
+          <span class="chip-small entity">Father's letter <span class="x">&times;</span></span>
+          <span class="chip-small entity">Worn satchel <span class="x">&times;</span></span>
+          <span class="chip-small entity">Wax-sealed vial <span class="x">&times;</span></span>
+          <span class="add-chip" title="Opens a branch-scoped item picker with option to create new">+ link item</span>
         </div>
+      </div>
+      <div style="font-size: 10px; color: var(--ink-muted); margin: 6px 0 12px 0; line-height: 1.5;">
+        Container items (e.g., satchel) are ordinary items here; their contents are tracked on the holder &mdash; v1 does not model structural containment.
       </div>
     </div>
 
-    <!-- RELATIONSHIPS — all entity-to-entity links -->
-    <div class="tab-panel" data-panel="relationships">
+    <!-- CONNECTIONS — positional / compositional / affiliation links to other entities.
+         Renamed from "Relationships" — see patterns/entity.md. Carrying refs (equipped/inventory)
+         leave for the Carrying tab; only non-carry refs remain here. -->
+    <div class="tab-panel" data-panel="connections">
       <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 14px; padding: 8px 12px; background: #fffbe6; border-left: 3px solid #e3d8c0; border-radius: 2px;">
-        Every field on this entity's typed state that's <b>an ID pointing to another entity</b> lives here.
-        Shape is driven by the typed state schema &mdash; these are the picker-backed fields from <code>CharacterState</code>.
+        Where this character is and who they're affiliated with. <b>Equipped items + inventory live on the Carrying tab.</b>
       </div>
 
       <div class="rel-section-title">Positional</div>
@@ -676,33 +774,6 @@
         </div>
       </div>
 
-      <div class="rel-section-title">Possession</div>
-      <div class="field-row">
-        <div class="field-label">equipped_items
-          <span class="type-hint">EntityId[] (item) &middot; worn / wielded</span>
-        </div>
-        <div class="chip-row">
-          <span class="chip-small entity">Silver coin on cord <span class="x">&times;</span></span>
-          <span class="chip-small entity">Worn blade <span class="x">&times;</span></span>
-          <span class="add-chip" title="Opens a branch-scoped item picker with option to create new">+ link item</span>
-        </div>
-      </div>
-      <div class="field-row">
-        <div class="field-label">inventory
-          <span class="type-hint">EntityId[] (item) &middot; carried, not active</span>
-        </div>
-        <div class="chip-row">
-          <span class="chip-small entity">Father's letter <span class="x">&times;</span></span>
-          <span class="chip-small entity">Worn satchel <span class="x">&times;</span></span>
-          <span class="chip-small entity">Wax-sealed vial <span class="x">&times;</span></span>
-          <span class="add-chip" title="Opens a branch-scoped item picker with option to create new">+ link item</span>
-        </div>
-      </div>
-      <div style="font-size: 10px; color: var(--ink-muted); margin: 6px 0 12px 0; line-height: 1.5;">
-        Stackables (currencies, ammo, supplies) live on the Overview tab as a key-quantity record, not in this list.
-        Container items (satchel above) are ordinary items here; their contents are tracked on the holder &mdash; v1 does not model structural containment.
-      </div>
-
       <div class="rel-section-title">Affiliation</div>
       <div class="field-row">
         <div class="field-label">faction_id
@@ -711,6 +782,16 @@
         <div class="input-picker picked-state">
           <span class="picked">Ironshore Bounty Guild</span>
           <span style="color: var(--ink-faint);">change&hellip;</span>
+        </div>
+      </div>
+
+      <div class="rel-section-title">Last seen</div>
+      <div class="field-row">
+        <div class="field-label">lastSeenAt
+          <span class="type-hint">cache &middot; classifier-only (read-only)</span>
+        </div>
+        <div style="font-size: 12px; color: var(--ink-muted); padding: 6px 10px; border: 1px solid var(--line-soft); border-radius: 3px; background: var(--bg);">
+          The Iron Tavern &middot; entry #47 &middot; <span style="color: var(--ink-faint); font-style: italic;">2 days ago in-world</span>
         </div>
       </div>
     </div>

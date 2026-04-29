@@ -39,8 +39,9 @@ pattern:
   workshop pattern: filterable list on the left, single-row detail
   with tabs on the right, explicit save session, peek drawer for
   summary access in the reader. Per-kind tab composition (characters
-  get Overview/Relationships/Assets/Involvements/History; lore gets a
-  simpler composition keyed on its schema).
+  get Overview/Identity/Carrying/Connections/Assets/Involvements/History;
+  Carrying is character-only; lore gets a simpler composition keyed
+  on its schema).
 - **Plot** — threads + happenings. Narrative progression — things
   that _happen_. Different pattern (dashboard / monitor / audit
   rather than workshop), reflecting that these rows are predominantly

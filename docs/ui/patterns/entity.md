@@ -22,8 +22,11 @@ Same entity, three depths of UI:
    (pencil icons on text fields). Opens on row click; Esc or × closes.
 3. **World panel** (dedicated full-screen surface) — master-detail
    workshop. Left pane = filterable list. Right pane = single-entity
-   detail with **five tabs**: Overview / Relationships / Assets /
-   Involvements / History.
+   detail with the standard tab skeleton (Overview / Identity /
+   Carrying / Connections / Assets / Involvements / History; Carrying
+   is character-only). See
+   [Entity detail-pane composition](#entity-detail-pane-composition)
+   below for the routing rules.
 
 Peek drawer's footer link "Open in World panel →" routes to the panel.
 
@@ -138,41 +141,117 @@ without changing the rendering primitive.
 
 ---
 
-## Entity form UI is generated from the typed schema
+## Entity detail-pane composition
 
 `entities.state` is a typed discriminated union (CharacterState /
-LocationState / ItemState / FactionState) — not a dynamic bag. This
-has a direct UI consequence:
+LocationState / ItemState / FactionState) — not a dynamic bag. With
+the v1 schema locked across four kinds, detail-pane UI is
+**hand-written per kind** rather than generated from the schema.
+The Zod schema stays the validation contract; UI components own
+layout.
 
-- **No generic key/value editor.** Form fields are generated from the
-  Zod schema (already in the stack). One schema drives form controls,
-  validation, types — all from the same source.
-- **No "+ add field" UI.** You can't add fields to a typed shape.
-- **Fields distribute deterministically by shape:**
-  - **Scalar / primitive fields** → **Overview tab** as typed
-    controls (text inputs, chip-list editors, prose textareas). For
-    character, this means the `visual.*` sub-fields, `traits[]`,
-    `drives[]`, and `voice` per the
-    [`CharacterState` shape](../../data-model.md#characterstate-shape).
-  - **Entity-to-entity ID fields** → **Relationships tab** as
-    picker-backed inputs. Grouped by semantic label — for character,
-    `current_location_id` (Positional), `equipped_items[]` +
-    `inventory[]` (Possession), `faction_id` (Affiliation). Different
-    groups for other kinds (locations have `parent_location_id` as
-    Compositional; items have `at_location_id` as Positional).
-  - **Holder-side quantity records** (`stackables: Record<string,
-number>` on character) → **Overview tab** as a key-quantity panel,
-    distinct from the `inventory[]` chip list. UI labels emphasize
-    the holder-level framing ("Carried quantities — tracked on the
-    character, not on container items").
-- **Overview composition is per-kind.** Character / Location / Item /
-  Faction each define their own Overview section driven by their
-  typed state. Some shared fields (description, tags, retired_reason,
-  portrait) anchor the pattern.
-- **`retired_reason` is conditional** — disabled when
-  `status !== 'retired'`, enabled when it is.
-- **Raw JSON view** remains as a small power-user/debug affordance
-  (overflow menu next to entity name), for export and troubleshooting.
+### Hand-written per-kind components
+
+- **One component per kind:** `CharacterDetailPane`,
+  `LocationDetailPane`, `ItemDetailPane`, `FactionDetailPane`. Each
+  knows its tab structure and field layout explicitly.
+- **Schema = validation contract.** Zod parses + validates;
+  components reference fields by name; TypeScript inference keeps
+  field-name renames compile-time-safe.
+- **No "+ add field" UI.** Schema is fixed; only per-kind fields
+  exist.
+- **Common chrome lives as shared sub-components** — status pill,
+  description textarea, tags chip row, portrait slot, save bar,
+  sub-section header. Reused across the four panes; not auto-
+  generated.
+- **Translation routes via JSON paths** per
+  [`data-model.md → Translation targets`](../../data-model.md#translation-targets),
+  independent of UI composition.
+- **Raw JSON view** remains as a small power-user / debug
+  affordance (overflow menu next to entity name), for export and
+  troubleshooting.
+
+### Tab architecture
+
+All four kinds use the same tab skeleton:
+
+```
+Overview | Identity | Carrying | Connections | Assets | Involvements | History
+```
+
+| Tab              | Purpose                                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Overview**     | Glance summary card. Read-mostly. Click any region routes to the relevant edit tab. Doubles as the peek body. |
+| **Identity**     | Editable body of "who the entity is": description, kind-specific identity slots, Lifecycle sub-section.       |
+| **Carrying**     | Holder-shaped contents (stackables + equipped + inventory). **Character-only** — hidden on other kinds.       |
+| **Connections**  | Positional + compositional + affiliation links to other entities. Per-kind sub-labels.                        |
+| **Assets**       | Attached images / audio / files via `entry_assets`.                                                           |
+| **Involvements** | `happening_involvements` table for this entity.                                                               |
+| **History**      | Delta log filtered to this entity.                                                                            |
+
+The tab name **Connections** is preferred over the older
+"Relationships" — the latter reads as social bonds (friend / enemy /
+romantic), which the deferred social-relationships graph
+([`data-model.md → FactionState`](../../data-model.md#factionstate-shape)
+notes inter-faction relationships folding into a deferred graph)
+will eventually own. Connections is forward-compatible.
+
+#### Routing fields to tabs
+
+Tabs distribute fields by **semantic purpose**, not by JS shape.
+The detail-pane component decides which fields render under which
+tab; per-kind nuances are explicit.
+
+For the character kind:
+
+- **Overview** displays a glance composition derived from multiple
+  fields (description excerpt, top traits / drives chips, current
+  location, faction, carrying summary, portrait, tags, status pill).
+  See per-kind composition in
+  [`world.md → Tabs`](../screens/world/world.md#tabs--per-kind-composition).
+- **Identity** edits `description` + Visual sub-section (`visual.*`)
+  - Personality sub-section (`traits[]`, `drives[]`, `voice`) +
+    Lifecycle sub-section (`status`, `injection_mode`,
+    `retired_reason`, `tags`).
+- **Carrying** edits `stackables`, `equipped_items[]`,
+  `inventory[]` together — the "what does this character carry"
+  question lives in one place rather than splitting holder-side
+  quantities (scalar) from item refs (entity-typed).
+- **Connections** edits `current_location_id` (Positional),
+  `faction_id` (Affiliation); displays `lastSeenAt` read-only
+  (classifier-only per the
+  [authorship contract](../../data-model.md#authorship-contract)).
+
+Per-kind Identity / Connections compositions for location, item,
+faction live in
+[`world.md`](../screens/world/world.md). Carrying is hidden on
+those kinds.
+
+### Why hand-written (not generated)
+
+Schema-driven generation made sense when the data shape was
+uncertain and the kind count might grow. Both no longer hold —
+v1 schema is locked across exactly four kinds. The trade-off
+flipped:
+
+- **Generated UI is generic UI.** Auto-routing fields by JS shape
+  (scalar → here, entity-ref → there, record → there) produces
+  uniform `field-row` layouts that don't reflect how a user thinks
+  about the content. Hand-written panes can compose the Visual
+  sub-section as a rich card, render Personality side-by-side
+  with Carrying inline, group Lifecycle in a quieter accordion at
+  the bottom — none of which fights a generator.
+- **Schema-side layout hints leak concerns.** Decorating the
+  schema with UI-routing metadata mixes data definition and
+  presentation. Hand-written panes keep the schema clean.
+- **Drift risk is low at v1 scale.** Four kinds × locked schema =
+  rare schema-vs-UI updates. TypeScript catches field-rename
+  drift at compile time.
+
+### `retired_reason` is conditional
+
+Disabled when `status !== 'retired'`; enabled when it is. Lives
+in the Identity / Lifecycle sub-section.
 
 ---
 

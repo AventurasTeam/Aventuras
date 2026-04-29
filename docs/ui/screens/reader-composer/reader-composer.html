@@ -765,23 +765,58 @@
       <span class="peek-close" id="peek-close" title="Close (Esc)">&times;</span>
     </div>
     <div class="peek-body">
-      <div class="peek-field">
-        <div class="label">Description <span class="edit-pencil">&#9998; edit</span></div>
-        <div class="value placeholder">[free-form description &mdash; exact field layout depends on entities.state shape being finalized; see data-model TBD]</div>
+      <!-- Status pill — top-left -->
+      <div style="margin-bottom: 12px;">
+        <span class="row-status-pill active" style="display: inline-block;">active</span>
       </div>
-      <div class="peek-field">
-        <div class="label">Kind / status <span class="edit-pencil">&#9998;</span></div>
-        <div class="value">character &middot; active</div>
+
+      <!-- Description prose (full text — typically 1-3 sentences) -->
+      <div class="peek-field" style="cursor: pointer;" title="Click to edit in World panel · Identity">
+        <div class="value">A weathered bounty-hunter with a grudge against the Warden. Keeps a silver coin on a cord, never far from his blade.</div>
       </div>
-      <div class="peek-field">
-        <div class="label">State &mdash; kind-specific fields</div>
-        <div class="value placeholder" style="padding: 8px; border: 1px dashed var(--line-soft); border-radius: 3px; font-size: 12px;">
-          [peek-drawer state-field layout pending its own design pass.<br>
-          Schema lives in data-model &mdash; CharacterState carries visual.*, traits, drives,<br>
-          voice, current_location_id, equipped_items, inventory, stackables, faction_id, lastSeenAt.<br>
-          Peek selects a subset; deep edit routes to World panel.]
+
+      <!-- Visual line — first populated visual fields -->
+      <div class="peek-field" style="cursor: pointer;" title="Edit in World panel · Identity / Visual">
+        <div class="label">Visual</div>
+        <div class="value">tall, lean &middot; weathered face, sharp jaw, faint scar across left cheek</div>
+      </div>
+
+      <!-- Personality chips — top traits + drives -->
+      <div class="peek-field" style="cursor: pointer;" title="Edit in World panel · Identity / Personality">
+        <div class="label">Traits</div>
+        <div class="peek-tags">
+          <span class="peek-tag">stubborn</span>
+          <span class="peek-tag">former soldier</span>
+          <span class="peek-tag">expert tracker</span>
+          <span class="peek-tag" style="background: var(--bg); color: var(--ink-faint);">+1</span>
         </div>
       </div>
+      <div class="peek-field" style="cursor: pointer;" title="Edit in World panel · Identity / Personality">
+        <div class="label">Drives</div>
+        <div class="peek-tags">
+          <span class="peek-tag">seeks vengeance for father's death</span>
+          <span class="peek-tag">fears becoming his father</span>
+          <span class="peek-tag" style="background: var(--bg); color: var(--ink-faint);">+1</span>
+        </div>
+      </div>
+
+      <!-- Position + affiliation (Connections refs surfaced on Overview) -->
+      <div class="peek-field">
+        <div class="label">In</div>
+        <div class="value"><a style="color: var(--ink); text-decoration: underline; text-decoration-style: dotted; cursor: pointer;">The Tavern</a> &middot; <span style="color: var(--ink-muted); font-size: 11px;">last seen 2 days ago</span></div>
+      </div>
+      <div class="peek-field">
+        <div class="label">With</div>
+        <div class="value"><a style="color: var(--ink); text-decoration: underline; text-decoration-style: dotted; cursor: pointer;">Iron Cross</a></div>
+      </div>
+
+      <!-- Carrying summary -->
+      <div class="peek-field" style="cursor: pointer;" title="Edit in World panel · Carrying">
+        <div class="label">Carrying</div>
+        <div class="value" style="font-size: 12px;">200 gold &middot; 30 silver &middot; 7 rations<br><span style="color: var(--ink-muted);">3 equipped &middot; 4 carried</span></div>
+      </div>
+
+      <!-- Tags — read-only on Overview/peek; edits live on Identity / Lifecycle -->
       <div class="peek-field">
         <div class="label">Tags</div>
         <div class="peek-tags">
@@ -790,16 +825,9 @@
           <span class="peek-tag">chapter-2-introduced</span>
         </div>
       </div>
-      <div class="peek-field">
-        <div class="label">Recent involvement</div>
-        <div class="value placeholder" style="font-size: 11px;">
-          &rarr; Kael's warning (happening, ch.3)<br>
-          &rarr; The Warden's Mark (thread, active)
-        </div>
-      </div>
     </div>
     <div class="peek-foot">
-      <span class="note">Quick edits here; deep work in Panel</span>
+      <span class="note">Read-mostly; deep edits in Panel</span>
       <span class="link">Open in World panel &rarr;</span>
     </div>
   </div>
