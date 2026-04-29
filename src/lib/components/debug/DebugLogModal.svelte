@@ -41,17 +41,8 @@
         pendingUpdate = null
       }
 
-      // Defer content rendering to next frame when modal first opens
       if (untrack(() => !showContent)) {
-        const scheduleContent = () => {
-          showContent = true
-        }
-        // Use requestIdleCallback if available, otherwise setTimeout
-        if (typeof requestIdleCallback !== 'undefined') {
-          requestIdleCallback(scheduleContent, { timeout: 50 })
-        } else {
-          setTimeout(scheduleContent, 0)
-        }
+        showContent = true
       }
     } else if (!pendingUpdate) {
       // Schedule update for remaining throttle time
