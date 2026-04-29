@@ -364,6 +364,109 @@ type. Different axes.
   (`stories.settings.suggestionsEnabled = false`); panel never
   appears
 
+## Browse rail — collapse / expand
+
+The rail is collapsible to give the narrative full prose width and
+to reduce chrome during pure reading. It also adapts to small
+Electron windows (responsive auto-collapse below a viewport
+threshold) without committing to a mobile shape.
+
+### Collapsed state — full-height edge strip
+
+Collapsed, the rail squeezes to a full-height vertical strip on
+the screen's right edge (~16–24px wide; exact value finalized in
+the visual identity pass). The strip:
+
+- Provides a **visual silhouette** so the rail stays
+  discoverable — a continuous vertical region telegraphs "the
+  rail lives here," matching OS sidebar conventions.
+- Is the **expand affordance**: clicking anywhere on it restores
+  the rail.
+- Has **no functional content** — no indicators, no kind icons,
+  no awareness signals. Pure click target plus silhouette.
+
+The strip sits at muted opacity and brightens slightly on hover
+(tooltip: `Expand rail`).
+
+The strip is intentionally not a "what's new on the rail since
+you last looked" awareness surface; cross-surface classification
+awareness is parked as a separate pattern design (see
+[`followups.md → Classification awareness pattern`](../../../followups.md#classification-awareness-pattern)).
+
+### Open state — collapse trigger
+
+A small chevron (`›`) in the rail header's top-right corner
+collapses the rail. The chevron points toward the right edge to
+telegraph the motion. Tooltip: `Collapse rail`.
+
+Keyboard shortcut: `Cmd/Ctrl+\` (toggles regardless of focus
+location, mirroring VSCode's sidebar shortcut).
+
+No top-bar slot for the toggle. The back button stays in its
+existing rightmost position, and the right-edge spatial gravity
+belongs to the rail itself, not to the chrome cluster.
+
+### State model — manual + viewport, decoupled
+
+Two inputs combine to determine display:
+
+- **Manual preference** — set by the chevron, the strip, or the
+  keyboard shortcut. Persists app-globally across launches (not
+  per-story, not per-session).
+- **Viewport-forced collapse** — fired by resize events crossing
+  a width threshold downward. Overrides display without
+  overwriting manual preference.
+
+```
+on user toggle (chevron / strip / shortcut):
+  manual_preference = (toggle); apply immediately
+
+on resize crossing threshold downward (viewport < ~900px):
+  display = collapsed (manual_preference unchanged)
+
+on resize crossing threshold upward (viewport > ~980px,
+~80px hysteresis):
+  display = manual_preference (restore)
+```
+
+Viewport check is **event-driven** (one-shot on threshold cross),
+not a continuous constraint. A continuous constraint would
+silently re-collapse the rail every time a user clicks the strip
+in a small window. Decoupling lets the user explicitly expand the
+rail in a cramped window and accept the squeeze.
+
+Threshold pixel values (~900 / ~980 with ~80px hysteresis) are
+tunable in the visual identity pass; the **rule shape** —
+event-driven, hysteresis-buffered, manual preference preserved
+underneath — is what's locked here.
+
+First-launch default: **open**. Storage venue is implementation
+detail (an ergonomic UI-state surface, not `stories.settings` —
+this is chrome state, not story content).
+
+### Peek drawer — peek implies rail open
+
+The peek drawer is invoked only by clicking entity rows in the
+expanded rail (per
+[Peek drawer](#peek-drawer--lead-affordance-for-characters)).
+Peek and collapsed-rail are mutually exclusive states:
+
+- Open + click entity row → peek slides in over rail + narrative
+  (status quo).
+- Collapsed → no path to invoke peek without first expanding.
+
+Collapsing the rail (manually or via viewport-forced collapse)
+while peek is open closes the peek simultaneously. They're a
+continuum: peek is a deeper state of "rail engaged," collapse is
+"rail dismissed." Closing the container closes its contents.
+
+### Animation
+
+~150ms symmetric horizontal slide (ease-out collapse, ease-in
+expand). The rail and the strip are visually a continuum — no
+fade, no separate elements appearing. The narrative column's
+right edge slides left/right in lockstep.
+
 ## Browse rail — search scope
 
 Search is **category-aware** — scope changes with the active

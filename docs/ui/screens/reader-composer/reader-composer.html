@@ -132,7 +132,18 @@
   .gen-banner-cancel:hover { background: var(--bg-region); border-color: var(--ink-muted); }
 
   /* layout */
-  .layout { flex: 1; display: grid; grid-template-columns: 1fr 300px; min-height: 0; position: relative; }
+  .layout { flex: 1; display: grid; grid-template-columns: 1fr 300px; min-height: 0; position: relative; transition: grid-template-columns 150ms ease-out; }
+  /* collapsed rail: layout grid squeezes the right column to a thin strip;
+     aside.right still occupies the cell but its inner content is hidden,
+     leaving the strip as a click target + visual silhouette. */
+  body.rail-collapsed .layout { grid-template-columns: 1fr 20px; }
+  body.rail-collapsed aside.right { overflow: hidden; cursor: pointer; }
+  body.rail-collapsed aside.right > * { display: none; }
+  body.rail-collapsed aside.right::before { content: ""; display: block; flex: 1; }
+  body.rail-collapsed aside.right:hover { background: var(--bg); }
+  /* chevron in rail header — collapses on click */
+  .rail-collapse-chev { font-size: 14px; color: var(--ink-faint); cursor: pointer; padding: 0 4px; line-height: 1; user-select: none; transition: color 0.12s; }
+  .rail-collapse-chev:hover { color: var(--ink); }
 
   /* peek drawer */
   .peek-overlay { position: absolute; top: 0; right: 0; bottom: 0; width: 440px; background: var(--bg-region); border-left: 1px solid var(--line); box-shadow: -4px 0 12px rgba(0,0,0,0.06); display: none; flex-direction: column; z-index: 10; }
@@ -404,7 +415,13 @@
     <button class="rb-btn active" data-branch-count="3">3 (chip visible)</button>
   </div>
 
-  <span class="rb-note">also: click a Browse row · <kbd>Esc</kbd> closes peek</span>
+  <div class="rb-group">
+    <span class="gl">rail:</span>
+    <button class="rb-btn active" data-rail="open">open</button>
+    <button class="rb-btn" data-rail="collapsed">collapsed</button>
+  </div>
+
+  <span class="rb-note">also: click a Browse row · <kbd>Esc</kbd> closes peek · <kbd>Ctrl</kbd>+<kbd>\</kbd> toggles rail</span>
 </div>
 
 <!-- Top bar -->
@@ -627,7 +644,10 @@
     <div class="rail-section">
       <div class="section-head">
         <span>Browse</span>
-        <span class="count">12 of 17 characters</span>
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <span class="count">12 of 17 characters</span>
+          <span class="rail-collapse-chev" id="rail-collapse" title="Collapse rail (Cmd/Ctrl+\)">&rsaquo;</span>
+        </span>
       </div>
 
       <div class="browse-controls">
@@ -1230,6 +1250,33 @@
       bubble.classList.toggle('reasoning-open');
       t.setAttribute('title', bubble.classList.contains('reasoning-open') ? 'Hide reasoning trace' : 'Show reasoning trace');
     });
+  });
+
+  // Rail collapse / expand — chevron, strip click, review-controls toggle, keyboard shortcut.
+  // Closes peek on collapse (peek and collapsed-rail are mutually exclusive states).
+  const railButtons = document.querySelectorAll('[data-rail]');
+  const railCollapseChev = document.getElementById('rail-collapse');
+  const aside = document.querySelector('aside.right');
+  function setRail(state) {
+    document.body.classList.toggle('rail-collapsed', state === 'collapsed');
+    railButtons.forEach(b => b.classList.toggle('active', b.dataset.rail === state));
+    if (state === 'collapsed') setPeek('closed');
+  }
+  railButtons.forEach(b => b.addEventListener('click', () => setRail(b.dataset.rail)));
+  if (railCollapseChev) {
+    railCollapseChev.addEventListener('click', e => {
+      e.stopPropagation();
+      setRail('collapsed');
+    });
+  }
+  aside.addEventListener('click', () => {
+    if (document.body.classList.contains('rail-collapsed')) setRail('open');
+  });
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === '\\') {
+      e.preventDefault();
+      setRail(document.body.classList.contains('rail-collapsed') ? 'open' : 'collapsed');
+    }
   });
 })();
 </script>

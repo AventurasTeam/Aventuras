@@ -153,6 +153,42 @@ design pass. Likely paired with the
 
 ## UX
 
+### Classification awareness pattern
+
+The reader-composer's right-side rail collapses to a full-height
+edge strip (per
+[`reader-composer.md → Browse rail — collapse / expand`](./ui/screens/reader-composer/reader-composer.md#browse-rail--collapse--expand)).
+Designing that strip surfaced a tempting but premature feature:
+projecting a "what's new on the rail since you last looked"
+indicator onto the strip — a dot, a count, or a recently-classified
+warmth ([per the entity row indicators pattern](./ui/patterns/entity.md#entity-row-indicators--four-orthogonal-channels)).
+
+The deeper concern: the project has no defined vocabulary for
+**classification awareness across surfaces**. The rail rows have
+a per-row recently-classified accent that decays over time
+(`entity.md`), but there's no aggregate concept, no per-kind
+signal, no cross-surface treatment for "what changed since the
+user last engaged with this state."
+
+Open questions for the design pass:
+
+- **Granularity.** Per-row, per-kind, per-classifier-pass,
+  aggregate? What's the unit being announced?
+- **Surfaces.** Does this live on the rail strip, in the top-bar
+  status pill, in the peek drawer, in the World panel? Some
+  combination? What's authoritative vs derived?
+- **Vocabulary.** Dot vs count vs warmth vs pulse — what's the
+  visual language, and what does each variant mean?
+- **Decay semantics.** When does an awareness signal "expire"?
+  On rail-open? On time-elapsed? On user-acknowledge?
+- **Interaction with `recently classified` filter chip** — the
+  Browse rail already has a filter that surfaces recently-
+  classified rows. The awareness pattern needs to compose with
+  that, not duplicate it.
+
+Lands when classification awareness becomes the focus of its own
+design pass; not subsidiary to any single surface.
+
 ### Virtual-list library choice
 
 `react-window` vs `@tanstack/react-virtual` — both mature, both
