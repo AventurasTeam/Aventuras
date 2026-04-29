@@ -209,7 +209,7 @@
   const needsWorkflow = $derived(
     profileProviderType === 'comfyui' &&
       profileMode === ComfyMode.CustomWorkflow &&
-      !profileCustomWorkflow,
+      (!profileCustomWorkflow || !!pendingWorkflowData),
   )
   const canSaveProfile = $derived(!!profileName.trim() && !needsWorkflow)
 
@@ -392,6 +392,8 @@
     const profile = settings.getImageProfile(testProfileId)
     if (!profile) return
 
+    const activeProfileId = testProfileId
+
     isGeneratingTestImage = true
     testError = null
     testImageResult = null
@@ -404,15 +406,20 @@
         profileId: profile.id,
       })
 
+      if (testProfileId !== activeProfileId || !isGeneratingTestImage) return
+
       if (result.base64) {
         testImageResult = result.base64
       } else {
         testError = 'No image data returned'
       }
     } catch (e) {
+      if (testProfileId !== activeProfileId || !isGeneratingTestImage) return
       testError = e instanceof Error ? e.message : 'Unknown error'
     } finally {
-      isGeneratingTestImage = false
+      if (testProfileId === activeProfileId) {
+        isGeneratingTestImage = false
+      }
     }
   }
 

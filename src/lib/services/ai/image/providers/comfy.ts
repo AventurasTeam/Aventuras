@@ -53,10 +53,16 @@ export async function fetchModelList(
   const timerId = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null
   try {
     const resp = await fetch(`${baseUrl}/models/${type}`, { signal: controller.signal })
-    if (!resp.ok) return []
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '')
+      throw new Error(`ComfyUI /models/${type} responded ${resp.status}: ${body}`)
+    }
     return (await resp.json()) as string[]
-  } catch {
-    return []
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error(`ComfyUI /models/${type} timed out after ${timeoutMs}ms`)
+    }
+    throw err
   } finally {
     if (timerId !== null) clearTimeout(timerId)
   }
@@ -158,6 +164,7 @@ export function detectWorkflowFields(workflow: ComfyCustomWorkflow['workflow']):
     string,
     { nodeId: string; title: string; path: string; textPreview: string }
   >()
+  const kSamplerNodes = new Map<string, WorkflowNode>()
   let kSamplerNodeId: string | null = null
   let kSamplerNode: WorkflowNode | null = null
   let seedPath: string | null = null
@@ -178,11 +185,7 @@ export function detectWorkflowFields(workflow: ComfyCustomWorkflow['workflow']):
       }
       case 'KSampler':
       case 'KSamplerAdvanced': {
-        if (!kSamplerNodeId) {
-          kSamplerNodeId = nodeId
-          kSamplerNode = node
-          seedPath = `${nodeId}.inputs.seed`
-        }
+        kSamplerNodes.set(nodeId, node)
         break
       }
       case 'SaveImage': {
@@ -191,6 +194,38 @@ export function detectWorkflowFields(workflow: ComfyCustomWorkflow['workflow']):
         break
       }
     }
+  }
+
+  // ── Walk back from SaveImage to find the sampler on the output branch ───
+  // Object.entries() order is unrelated to graph topology, so we can't just
+  // pick the first KSampler seen — in multi-stage workflows a refiner or
+  // upscaler sampler may appear earlier than the one that feeds SaveImage.
+  if (outputNodeId) {
+    const visited = new Set<string>()
+    const queue = [outputNodeId]
+    while (queue.length > 0) {
+      const currentId = queue.shift()!
+      if (visited.has(currentId)) continue
+      visited.add(currentId)
+      if (kSamplerNodes.has(currentId)) {
+        kSamplerNodeId = currentId
+        kSamplerNode = kSamplerNodes.get(currentId)!
+        seedPath = `${currentId}.inputs.seed`
+        break
+      }
+      const n = workflow[currentId]
+      if (!n) continue
+      for (const input of Object.values(n.inputs)) {
+        if (Array.isArray(input)) queue.push(String(input[0]))
+      }
+    }
+  }
+  // Fallback for workflows without SaveImage: use first sampler in iteration order
+  if (!kSamplerNodeId && kSamplerNodes.size > 0) {
+    const [id, node] = kSamplerNodes.entries().next().value as [string, WorkflowNode]
+    kSamplerNodeId = id
+    kSamplerNode = node
+    seedPath = `${id}.inputs.seed`
   }
 
   // ── Pass 2: resolve via KSampler connections ────────────────────────────
