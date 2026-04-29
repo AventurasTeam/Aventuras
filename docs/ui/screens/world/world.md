@@ -47,8 +47,8 @@ Cross-cutting principles that govern this panel are in
 │ search              │ Name: Kael ✎                    [⋯]  │
 │ filter chips        │ ─────                                 │
 │                     │ tabs: Overview | Identity | Carrying  │
-│ list (accordion     │       | Connections | Assets |        │
-│ on All filter)      │       Involvements | History          │
+│ list (accordion     │       | Connections | Settings |      │
+│ on All filter)      │       Assets | Involvements | History │
 │                     │                                       │
 │                     │ (selected tab content, scrolls)       │
 │                     │                                       │
@@ -103,12 +103,13 @@ fields by **semantic purpose**, not by JS shape — implemented as
 layout.
 
 ```
-Overview | Identity | Carrying | Connections | Assets | Involvements | History
+Overview | Identity | Carrying | Connections | Settings | Assets | Involvements | History
 ```
 
 `Carrying` is **character-only** — hidden on location, item,
-faction (no carry semantics). Other tabs render for every kind
-with kind-specific content.
+faction (no carry semantics). `Settings` applies to every kind
+(every entity has status / injection_mode / retired_reason / tags).
+Other tabs render for every kind with kind-specific content.
 
 ### Overview — glance summary, read-mostly
 
@@ -133,8 +134,8 @@ at narrower (440px) width — same content, no duplicated design.
   pane.
 - Carrying summary — top stackables by quantity + equipped/carried
   counts in one line. Click → Carrying tab.
-- Tags chip row — read-only on Overview; edits live on Identity /
-  Lifecycle.
+- Tags chip row — read-only on Overview; edits live on the
+  Settings tab.
 - Portrait — floats upper-right when populated; placeholder
   otherwise.
 
@@ -178,8 +179,8 @@ when sparse.
 
 ### Identity — editable body of "who this is"
 
-Identity is the longest tab, intentionally — it carries the
-intrinsic content of the entity. Composed top-down:
+Identity is pure identity content — no operational chrome. Composed
+top-down:
 
 **Character Identity**:
 
@@ -188,35 +189,32 @@ intrinsic content of the entity. Composed top-down:
   `visual.hair`, `visual.eyes`, `visual.attire` (live current —
   classifier-updated), `visual.distinguishing[]` (chip list)
 - `Personality` sub-section: `traits[]`, `drives[]`, `voice`
-- `Lifecycle` sub-section: `status`, `injection_mode`,
-  `retired_reason` (conditional), `tags`. Smaller visual weight
-  (collapsed-by-default accordion or quieter divider — visual
-  identity decision). Lifecycle is intentionally not promoted to
-  detail-head chrome.
 
 **Location Identity**:
 
 - Description
 - `condition` (single-string, optional — dynamic state delta
   from description baseline)
-- `Lifecycle` sub-section
 
 **Item Identity**:
 
 - Description
 - `condition` (single-string, optional)
-- `Lifecycle` sub-section
 
 **Faction Identity**:
 
 - Description
 - `standing` (single-string, optional — dynamic power / situation)
 - `agenda[]` (chip list, soft cap 4)
-- `Lifecycle` sub-section
 
 Faction's Identity is the closest in shape to character's, since
 `standing` + `agenda` parallel `voice` + `drives`. Location and
-Item are sparser (one dynamic field plus Lifecycle).
+Item are sparser (one dynamic field).
+
+`status`, `injection_mode`, `retired_reason`, `tags`, and
+`portrait` deliberately do not live here — see
+[Settings](#settings--entity-management-chrome) and the Overview
+portrait slot.
 
 ### Carrying — character-only
 
@@ -249,6 +247,23 @@ Per-kind sub-labels:
 `lastSeenAt` is classifier-only per the
 [authorship contract](../../../data-model.md#authorship-contract);
 read-only on the UI.
+
+### Settings — entity-management chrome
+
+Same fields for every kind:
+
+- `status` (enum select): `active` / `staged` / `retired`. Edits
+  here propagate to the Overview status pill.
+- `injection_mode` (enum select with explanation): `always` /
+  `keyword_llm` (default) / `disabled`. Includes the standard
+  in-line explanation about scene-presence override.
+- `retired_reason` (text, conditional): only enabled when
+  `status === 'retired'`.
+- `tags` (chip row with `+ add`): edit destination for the tags
+  surfaced read-only on Overview.
+
+Rationale for separating these fields from Identity lives in
+[`patterns/entity.md → Why Settings is a separate tab`](../../patterns/entity.md#why-settings-is-a-separate-tab).
 
 ### Assets, Involvements, History
 

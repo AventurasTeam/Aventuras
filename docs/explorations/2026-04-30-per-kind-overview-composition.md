@@ -516,3 +516,40 @@ typed schema` → `Entity detail-pane composition`. Old anchor
   or `[free-form description ... data-model TBD]` placeholder).
 - **`docs/followups.md`** — remove the "Per-kind Overview
   composition in World panel" entry (resolved by this integration).
+
+## Post-integration refinement: Settings tab hoist
+
+After the initial integration commit landed, review challenged the
+Identity tab's Lifecycle sub-section. Three observations resonated:
+
+- `status` and `injection_mode` are entity-management chrome, not
+  identity content. Mixing them with description / visual /
+  personality dilutes the Identity tab and pulls it back toward
+  "the form" rather than "who they are."
+- `portrait` already lives on the Overview glance card (top-right
+  slot, drop-to-attach + click-to-pick). The Identity tab's
+  duplicate `portrait` field-row served no one.
+- `tags` are Overview-coded — display works on Overview; edits-on-
+  Identity-Lifecycle is awkward.
+
+Resolved by adding a **Settings tab** between Connections and
+Assets in the tab strip:
+
+`Overview | Identity | Carrying | Connections | Settings | Assets | Involvements | History`
+
+- **Settings** holds `status`, `injection_mode`, `retired_reason`,
+  `tags`. Same fields for every kind. Operational chrome, not
+  identity.
+- **Identity** strips its Lifecycle sub-section and its portrait
+  field. Remaining content: description + Visual sub-section +
+  Personality sub-section. Pure "who they are."
+- **Portrait** lives only on Overview (display + drop-to-edit) and
+  Assets (asset management). No Identity field-row.
+
+Trade-off: 8 tabs total for character (7 for other kinds). Borderline
+density — narrow viewports / mobile will need responsive treatment
+(overflow into a "more" menu, horizontal scroll, or per-kind
+visibility tweaks). Cross-bridge concern; not v1-blocking.
+
+Refinement landed in a follow-on commit on top of the initial
+integration.

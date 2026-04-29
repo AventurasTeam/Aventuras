@@ -264,6 +264,7 @@
     <button class="rb-btn" data-tab="identity">Identity</button>
     <button class="rb-btn" data-tab="carrying">Carrying</button>
     <button class="rb-btn" data-tab="connections">Connections</button>
+    <button class="rb-btn" data-tab="settings">Settings</button>
     <button class="rb-btn" data-tab="assets">Assets</button>
     <button class="rb-btn" data-tab="involvements">Involvements</button>
     <button class="rb-btn" data-tab="history">History</button>
@@ -460,6 +461,7 @@
       <span class="tab" data-tab="identity">Identity</span>
       <span class="tab" data-tab="carrying">Carrying <span class="tab-count">7</span></span>
       <span class="tab" data-tab="connections">Connections <span class="tab-count">3</span></span>
+      <span class="tab" data-tab="settings">Settings</span>
       <span class="tab" data-tab="assets">Assets <span class="tab-count">2</span></span>
       <span class="tab" data-tab="involvements">Involvements <span class="tab-count">7</span></span>
       <span class="tab" data-tab="history">History</span>
@@ -523,7 +525,7 @@
             <div style="font-size: 11px; color: var(--ink-muted); margin-top: 2px;">2 equipped &middot; 3 carried</div>
           </div>
 
-          <!-- Tags (read-only on Overview; edits live in Identity / Lifecycle). -->
+          <!-- Tags (read-only on Overview; edits live in Settings tab). -->
           <div style="padding: 10px 0; border-top: 1px solid var(--line-soft);">
             <div style="font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px;">Tags</div>
             <div class="chip-row">
@@ -541,7 +543,7 @@
       </div>
     </div>
 
-    <!-- IDENTITY — editable body of "who this character is": description + Visual + Personality + Lifecycle. -->
+    <!-- IDENTITY — pure identity content: description + Visual + Personality. Operational chrome lives on Settings. -->
     <div class="tab-panel" data-panel="identity">
       <!-- Description (textarea) -->
       <div class="field-row">
@@ -641,10 +643,13 @@
         </div>
       </div>
 
-      <!-- Lifecycle sub-section — quieter weight at the bottom; visual identity may collapse-by-default -->
-      <div class="rel-section-title" style="margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--line-soft); color: var(--ink-muted);">Lifecycle</div>
-      <div style="font-size: 10px; color: var(--ink-faint); margin-bottom: 10px; line-height: 1.5;">
-        Entity-level chrome: status, injection rule, retired-reason (when applicable), tags. Lower visual weight; collapse target if density bites.
+    </div>
+
+    <!-- SETTINGS — entity-management chrome (status, injection_mode, retired_reason, tags).
+         Same fields for every kind. Lives separate from Identity so identity content stays clean. -->
+    <div class="tab-panel" data-panel="settings">
+      <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 14px; padding: 8px 12px; background: #fffbe6; border-left: 3px solid #e3d8c0; border-radius: 2px;">
+        Operational configuration of this entity record. Same four fields for every kind &mdash; status, injection rule, retired-reason (conditional), tags.
       </div>
       <div class="field-row">
         <div class="field-label">status
@@ -665,7 +670,7 @@
             <span style="color: var(--ink-faint);">&#9662;</span>
           </div>
           <div style="font-size: 10px; color: var(--ink-muted); margin-top: 4px; line-height: 1.5;">
-            <b>always</b>: unconditional &middot; <b>keyword_llm</b>: keyword match + LLM relevance &middot; <b>disabled</b>: excluded.
+            <b>always</b>: unconditional &middot; <b>keyword_llm</b>: keyword match + LLM relevance &middot; <b>disabled</b>: excluded. Overridden for in-scene active entities.
           </div>
         </div>
       </div>
@@ -686,17 +691,6 @@
           <span class="chip-small">ally <span class="x">&times;</span></span>
           <span class="chip-small">chapter-2-introduced <span class="x">&times;</span></span>
           <span class="add-chip">+ add tag</span>
-        </div>
-      </div>
-
-      <!-- Portrait — asset ref. Lives at end of Identity since it's an identity-anchoring asset. -->
-      <div class="rel-section-title" style="margin-top: 20px;">Portrait</div>
-      <div class="field-row">
-        <div class="field-label">portrait
-          <span class="type-hint">asset ref &middot; optional</span>
-        </div>
-        <div class="portrait-slot">
-          [portrait slot &mdash; drop image or pick from Assets tab]
         </div>
       </div>
     </div>

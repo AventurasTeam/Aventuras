@@ -23,8 +23,8 @@ Same entity, three depths of UI:
 3. **World panel** (dedicated full-screen surface) — master-detail
    workshop. Left pane = filterable list. Right pane = single-entity
    detail with the standard tab skeleton (Overview / Identity /
-   Carrying / Connections / Assets / Involvements / History; Carrying
-   is character-only). See
+   Carrying / Connections / Settings / Assets / Involvements /
+   History; Carrying is character-only). See
    [Entity detail-pane composition](#entity-detail-pane-composition)
    below for the routing rules.
 
@@ -176,15 +176,16 @@ layout.
 All four kinds use the same tab skeleton:
 
 ```
-Overview | Identity | Carrying | Connections | Assets | Involvements | History
+Overview | Identity | Carrying | Connections | Settings | Assets | Involvements | History
 ```
 
 | Tab              | Purpose                                                                                                       |
 | ---------------- | ------------------------------------------------------------------------------------------------------------- |
 | **Overview**     | Glance summary card. Read-mostly. Click any region routes to the relevant edit tab. Doubles as the peek body. |
-| **Identity**     | Editable body of "who the entity is": description, kind-specific identity slots, Lifecycle sub-section.       |
+| **Identity**     | Editable body of "who the entity is": description + kind-specific identity slots. Pure identity content.      |
 | **Carrying**     | Holder-shaped contents (stackables + equipped + inventory). **Character-only** — hidden on other kinds.       |
 | **Connections**  | Positional + compositional + affiliation links to other entities. Per-kind sub-labels.                        |
+| **Settings**     | Entity-management chrome: status, injection_mode, retired_reason, tags. Same fields for all kinds.            |
 | **Assets**       | Attached images / audio / files via `entry_assets`.                                                           |
 | **Involvements** | `happening_involvements` table for this entity.                                                               |
 | **History**      | Delta log filtered to this entity.                                                                            |
@@ -196,6 +197,28 @@ romantic), which the deferred social-relationships graph
 notes inter-faction relationships folding into a deferred graph)
 will eventually own. Connections is forward-compatible.
 
+#### Why Settings is a separate tab
+
+`status`, `injection_mode`, `retired_reason`, and `tags` are
+entity-management chrome — operational configuration of the entity
+record, not "who they are." Earlier drafts placed them as a
+Lifecycle sub-section at the bottom of Identity; review found that
+mixing them with description / visual / personality diluted the
+Identity tab and pulled it back toward "the form" rather than
+"who they are."
+
+Settings stands alone. Same four fields for every kind. Sits
+between Connections and Assets in the tab strip — close to the
+entity-management concerns, before the content-attached tabs.
+
+#### Why portrait lives only on Overview
+
+Portrait is the entity's primary visual asset. Its canonical
+display is the Overview glance card's top-right slot, with
+drop-to-attach + click-to-pick-from-Assets affordances. Asset
+management lives on the Assets tab. The Identity tab no longer
+carries a `portrait` field-row — duplication served no one.
+
 #### Routing fields to tabs
 
 Tabs distribute fields by **semantic purpose**, not by JS shape.
@@ -205,14 +228,13 @@ tab; per-kind nuances are explicit.
 For the character kind:
 
 - **Overview** displays a glance composition derived from multiple
-  fields (description excerpt, top traits / drives chips, current
-  location, faction, carrying summary, portrait, tags, status pill).
-  See per-kind composition in
+  fields (description prose, visual line, top traits / drives chips,
+  current location, faction, carrying summary, tags, status pill,
+  portrait). See per-kind composition in
   [`world.md → Tabs`](../screens/world/world.md#tabs--per-kind-composition).
 - **Identity** edits `description` + Visual sub-section (`visual.*`)
-  - Personality sub-section (`traits[]`, `drives[]`, `voice`) +
-    Lifecycle sub-section (`status`, `injection_mode`,
-    `retired_reason`, `tags`).
+  - Personality sub-section (`traits[]`, `drives[]`, `voice`).
+    Pure identity content — no operational chrome.
 - **Carrying** edits `stackables`, `equipped_items[]`,
   `inventory[]` together — the "what does this character carry"
   question lives in one place rather than splitting holder-side
@@ -221,11 +243,13 @@ For the character kind:
   `faction_id` (Affiliation); displays `lastSeenAt` read-only
   (classifier-only per the
   [authorship contract](../../data-model.md#authorship-contract)).
+- **Settings** edits `status`, `injection_mode`, `retired_reason`
+  (conditional on status), `tags`. Same shape on every kind.
 
 Per-kind Identity / Connections compositions for location, item,
 faction live in
 [`world.md`](../screens/world/world.md). Carrying is hidden on
-those kinds.
+those kinds; Settings applies to all.
 
 ### Why hand-written (not generated)
 
@@ -238,9 +262,9 @@ flipped:
   (scalar → here, entity-ref → there, record → there) produces
   uniform `field-row` layouts that don't reflect how a user thinks
   about the content. Hand-written panes can compose the Visual
-  sub-section as a rich card, render Personality side-by-side
-  with Carrying inline, group Lifecycle in a quieter accordion at
-  the bottom — none of which fights a generator.
+  sub-section as a rich card, render Personality side-by-side with
+  Carrying inline, route operational chrome to its own Settings
+  tab — none of which fights a generator.
 - **Schema-side layout hints leak concerns.** Decorating the
   schema with UI-routing metadata mixes data definition and
   presentation. Hand-written panes keep the schema clean.
@@ -251,7 +275,7 @@ flipped:
 ### `retired_reason` is conditional
 
 Disabled when `status !== 'retired'`; enabled when it is. Lives
-in the Identity / Lifecycle sub-section.
+in the Settings tab.
 
 ---
 
