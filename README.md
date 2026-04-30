@@ -12,6 +12,12 @@ through Expo Go, desktop (Linux / macOS / Windows) through
 Electron wrapping the web build. No accounts, no cloud, no
 environment variables; everything in local database file.
 
+> **Note on history.** The previous iteration of this project
+> lives on the `legacy/master` branch. The `main` branch is a
+> ground-up rewrite — same problem space, different architecture.
+> Old issues, branches, and history remain reachable via
+> `legacy/master`.
+
 ## Status
 
 **Pre-implementation.** The project is in the design + foundation
