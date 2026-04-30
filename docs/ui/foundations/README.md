@@ -8,10 +8,9 @@ pattern consumes token slots from foundations and obeys principles
 from `principles.md`; foundations carry the visual contract
 themselves.
 
-Multi-session pass; session 1 (architecture / contract) lands in
-this initial set. Subsequent sessions add files for color,
-typography, density, motion, iconography, and the curated theme
-gallery.
+Multi-session pass — see [Sessions](#sessions) below. Each
+session lands its own file(s) and updates the session list with
+its status + exploration-record link.
 
 ## Files
 
@@ -28,6 +27,76 @@ gallery.
   Default Dark, Parchment). Replaces visual identity with a
   working architecture proof; specific palettes are not the
   curated gallery.
+
+## Sessions
+
+The visual identity contract spans six design sessions. They land
+sequentially; each session updates this list with its status and a
+link to its exploration record. Sessions that follow may be
+collapsed (e.g. 4+5 into one pass) or split further as scope
+becomes concrete; the list reflects the current plan, not a fixed
+contract.
+
+1. **Foundations / theme architecture** — landed 2026-04-30
+   ([exploration record](../../explorations/2026-04-30-visual-identity-foundations.md)).
+   Token classes + semantic naming, theme data shape, registry
+   pattern, switching mechanism (CSS vars at root + NativeWind
+   runtime), persistence in `app_settings.appearance`,
+   accent-override opt-in (per-theme flag + JS-side derivation),
+   density-token policy with cut-path, interactive demo HTML.
+   Files: [`tokens.md`](./tokens.md), [`theming.md`](./theming.md),
+   [`theming.html`](./theming.html).
+2. **Color system + accessibility** — pending. Final color slot
+   inventory, contrast targets (WCAG AA at minimum, AAA on body
+   prose where reachable), focus / disabled / hover treatments,
+   accent-derivation specifics (mode-aware deltas, auto-flip
+   thresholds, selection-bg tinting), pattern-driven slots
+   (recently-classified accent decay per
+   [`../patterns/entity.md`](../patterns/entity.md), any future
+   patterns adding their own decay-pair slots). Lands as
+   `color.md`.
+3. **Typography** — pending. Reading-text font choice
+   (system-stack vs custom-bundled; load-bearing for the primary
+   reading activity), type scale (sizes / line-heights / weights),
+   per-font leading multiplier (escape valve for serif vs sans
+   harmony at the locked scale), `--font-display` decision,
+   cross-platform font availability + fallback chains. Lands as
+   `typography.md`.
+4. **Density / spacing / radii / depth metaphor** — pending. Base
+   spacing unit, density posture (the comfortable / compact
+   variants on component-internal padding tokens), radii
+   vocabulary (`--radius-sm` / `-md` / `-lg` / `-full`), the
+   "flat, nothing flashy" cashing out as borders + tinted fills as
+   the depth metaphor (no shadows, or shadows only on overlay
+   surfaces — TBD). **Density toggle ship-or-cut decision lands
+   here** per the cut-path in
+   [`theming.md → Density-token policy`](./theming.md#density-token-policy).
+   Lands as `density.md` (and possibly `radii.md` / `spacing.md`
+   if the topic fans out further).
+5. **Iconography + motion** — pending. Icon set choice (Lucide is
+   the obvious default; alternatives evaluated), stroke weight,
+   sizing scale, top-bar glyph vocabulary (App Settings ⚙ vs Story
+   Settings glyph per
+   [`../principles.md → Top-bar design rule → Settings icon scope`](../principles.md#settings-icon-scope)),
+   per-entry icon row composition with conditional 5th icon (per
+   [`../../parked.md`](../../parked.md#per-entry-icon-row-composition-with-conditional-5th-icon)),
+   motion budget (`--duration-fast` / `-base` / `-slow`,
+   `--easing-standard` / `-emphasis`), reduced-motion behavior.
+   Lands as `iconography.md` + `motion.md` (or combined).
+6. **Curated theme palettes** — pending. Author each theme in the
+   v1 curated gallery (5–10+ entries, mode-locked per
+   [`theming.md → Theme data shape`](./theming.md#theme-data-shape)).
+   Pick `Default Light` and `Default Dark` (the
+   [accent-overridable](./theming.md#accent-override-opt-in) base
+   pair) and one or more opinionated themes (Parchment / Catppuccin
+   variants / Tokyo Night / etc.). Default `themeId` for first
+   launch lands here. Lands as `themes.md` (or `themes/` subdir
+   if it fans out further).
+
+After session 6, foundations is feature-complete for v1. Component
+implementation begins consuming the contract; per-pattern visual
+specs (the "how" each pattern looks under the foundations) layer
+on as components ship.
 
 ## Wireframe convention exemption
 
