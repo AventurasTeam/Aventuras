@@ -197,11 +197,22 @@ solve the same problem. Decision blocked on:
 - React Native Web compatibility verification (we render to RN-Web
   for desktop via Electron; library must work there).
 - Per-row height handling: uniform vs computed-per-row vs measured.
-  Model rows are uniform; history rows might vary slightly.
+  Model rows are uniform; history rows might vary slightly. The
+  [reader narrative scroll model](./ui/screens/reader-composer/reader-composer.md#scroll-behavior)
+  forces **measured** — entries are variable length and reasoning-
+  body expansion toggles row height post-mount.
+- **Scroll-anchoring on above-viewport mutations.** The reader's
+  auto-load-older + reasoning-expansion behaviors require the
+  library to preserve native scroll-anchoring when content is
+  inserted above the viewport. Libraries that manipulate
+  `scrollTop` programmatically and break native anchoring are
+  disqualified.
 - Bundle size and tree-shaking story.
 
-Lands when the first virtualized component is implemented (likely
-the model picker dropdown or App Settings · Profiles model list).
+Lands when the first virtualized component is implemented. v1
+surfaces that pull on this: the model picker dropdown, App
+Settings · Profiles model list, **and the reader narrative**
+(per [`reader-composer.md → Scroll behavior`](./ui/screens/reader-composer/reader-composer.md#scroll-behavior)).
 
 ### Calendar picker primitive — open shape decisions
 

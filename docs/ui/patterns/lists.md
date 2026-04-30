@@ -55,11 +55,30 @@ Virtualization earns its weight at **>100 rows**. Below that, plain
 rendering is simpler, accessibility-friendlier, and indistinguishable
 to users. Lean toward not virtualizing until measurements warrant it.
 
+### Composing virtualization with load-older
+
+The two patterns above are not exclusive. Log-shaped surfaces that
+grow past the threshold compose them: load-older governs **fetching**
+(which entries are in memory), virtualization governs **rendering**
+(which loaded entries hit the DOM). The reader / composer's narrative
+is the v1 surface that lands here — its loaded-set behavior plus the
+auto-load-on-boundary deviation from the explicit-click rule are
+documented in
+[`reader-composer.md → Scroll behavior`](../screens/reader-composer/reader-composer.md#scroll-behavior).
+Other log-shaped surfaces (History tabs, delta logs) currently fit
+under the threshold and stay on plain load-older; they adopt
+virtualization only if their own scale demands it.
+
 ### Library choice
 
 Deferred to component implementation — `react-window` and
 `@tanstack/react-virtual` are both mature options; React Native Web
-compatibility needs verification. Tracked in
+compatibility needs verification. The reader narrative adds
+**variable-height entries** (reasoning-body expansion toggles row
+height) and **scroll-anchoring on above-viewport mutations** as
+hard constraints — the chosen library must preserve native
+scroll-anchoring when content is inserted above the viewport, or the
+auto-load behavior visibly jumps. Tracked in
 [`followups.md`](../../followups.md#virtual-list-library-choice).
 
 ---

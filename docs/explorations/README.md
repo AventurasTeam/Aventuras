@@ -32,6 +32,11 @@ the primary axis here.
 - [`2026-04-28-in-story-top-bar-and-settings-routing.md`](./2026-04-28-in-story-top-bar-and-settings-routing.md)
   — three-tier in-story chrome shape + Settings-icon scope rule
   - stack-aware Return.
+- [`2026-04-30-reader-scroll-polish.md`](./2026-04-30-reader-scroll-polish.md)
+  — reader / composer scroll behavior: single-window model with
+  swap-on-jump and auto-load-on-boundary, autoscroll engage /
+  disengage / re-engage rules, jump-to-top + jump-to-bottom
+  affordances with App Settings toggle for the optional top button.
 
 ## When to write one
 

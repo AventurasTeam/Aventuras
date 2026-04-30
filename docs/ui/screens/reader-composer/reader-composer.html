@@ -230,7 +230,22 @@
 
   /* main */
   main { display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+  /* entries-wrap is the relative anchor for the floating scroll chrome (jump buttons).
+     .entries scrolls inside it; .scroll-chrome floats over the visible scroll viewport. */
+  .entries-wrap { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
   .entries { flex: 1; overflow: auto; padding: 20px 28px; max-width: 860px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+
+  /* boundary shimmer — auto-load loading indicator at the loaded-set top/bottom edge */
+  .boundary-shimmer { display: none; padding: 8px 0 14px; text-align: center; font-size: 11px; color: var(--ink-faint); font-style: italic; letter-spacing: 0.04em; }
+  .boundary-shimmer.visible { display: block; }
+  .boundary-shimmer .dot { display: inline-block; animation: reasoning-pulse 1.6s infinite; }
+
+  /* scroll-chrome — floating jump buttons at right edge of the entries viewport */
+  .scroll-chrome { position: absolute; right: 24px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; z-index: 12; pointer-events: none; }
+  .scroll-jump { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink-muted); font-size: 14px; line-height: 1; cursor: pointer; display: none; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.06); pointer-events: auto; transition: opacity 0.12s, color 0.12s, transform 0.12s; }
+  .scroll-jump.visible { display: flex; }
+  .scroll-jump:hover { color: var(--ink); border-color: var(--ink-muted); }
+  .scroll-jump.engaged { color: var(--ok); border-color: var(--ok); }
   .chapter-break { display: flex; align-items: center; gap: 12px; margin: 28px 0 16px; color: var(--ink-faint); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; }
   .chapter-break::before, .chapter-break::after { content: ""; flex: 1; border-top: 1px solid var(--line-soft); }
   .chapter-break .bk-title { color: var(--ink-muted); }
@@ -421,6 +436,32 @@
     <button class="rb-btn" data-rail="collapsed">collapsed</button>
   </div>
 
+  <div class="rb-group">
+    <span class="gl">jump-to-top button:</span>
+    <button class="rb-btn active" data-jumptop="hidden">hidden</button>
+    <button class="rb-btn" data-jumptop="shown">shown</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">window:</span>
+    <button class="rb-btn active" data-window="recent">recent</button>
+    <button class="rb-btn" data-window="top">top (post-jump)</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">autoscroll:</span>
+    <button class="rb-btn active" data-autoscroll="off">off (no stream)</button>
+    <button class="rb-btn" data-autoscroll="engaged">engaged</button>
+    <button class="rb-btn" data-autoscroll="disengaged">disengaged (user scrolled up)</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">boundary:</span>
+    <button class="rb-btn active" data-boundary="idle">idle</button>
+    <button class="rb-btn" data-boundary="top">loading top</button>
+    <button class="rb-btn" data-boundary="bottom">loading bottom</button>
+  </div>
+
   <span class="rb-note">also: click a Browse row · <kbd>Esc</kbd> closes peek · <kbd>Ctrl</kbd>+<kbd>\</kbd> toggles rail</span>
 </div>
 
@@ -505,7 +546,12 @@
 <div class="layout">
 
   <main>
-    <div class="entries">
+    <div class="entries-wrap">
+    <div class="entries" id="entries">
+
+      <!-- top boundary shimmer — visible while auto-fetching the next older chunk on scroll-near-top.
+           Hidden when at branch start (no older to load) or when not actively fetching. -->
+      <div class="boundary-shimmer" id="boundary-top"><span class="dot">&middot;&middot;&middot;</span> loading older entries</div>
 
       <div class="chapter-break"><span class="bk-title">Chapter 3<span class="bk-time">&#9201; Day 2, dawn</span></span></div>
 
@@ -587,6 +633,21 @@
         </div>
       </div>
 
+      <!-- bottom boundary shimmer — visible while auto-fetching the next forward chunk
+           on scroll-near-bottom (only meaningful when current window is the top window;
+           recent window's bottom is the live edge — no forward to fetch). -->
+      <div class="boundary-shimmer" id="boundary-bottom"><span class="dot">&middot;&middot;&middot;</span> loading more entries</div>
+
+    </div>
+
+    <!-- Floating jump buttons — see Scroll behavior in reader-composer.md.
+         Visibility: jump-to-bottom shows when not at-bottom of recent (or in non-recent window).
+         Jump-to-top shows when App Settings toggle is on AND current window != top-window-at-entry-1.
+         Engaged class: jump-to-bottom flashes briefly when autoscroll re-engages on stream-active landing. -->
+    <div class="scroll-chrome">
+      <button class="scroll-jump" id="jump-top" title="Jump to top of branch (Home)" aria-label="Jump to top of branch">&uarr;</button>
+      <button class="scroll-jump" id="jump-bottom" title="Jump to live edge (End)" aria-label="Jump to bottom">&darr;</button>
+    </div>
     </div>
 
     <!-- Next-turn suggestions — shown after a completed AI reply, collapses when not needed -->
@@ -1306,6 +1367,53 @@
       setRail(document.body.classList.contains('rail-collapsed') ? 'open' : 'collapsed');
     }
   });
+
+  // Scroll chrome — jump buttons + boundary shimmers. Review-controls only;
+  // real engagement / visibility / fetch logic lives in the component implementation.
+  const jumpTopBtn = document.getElementById('jump-top');
+  const jumpBottomBtn = document.getElementById('jump-bottom');
+  const boundaryTop = document.getElementById('boundary-top');
+  const boundaryBottom = document.getElementById('boundary-bottom');
+
+  function setJumpTop(state) {
+    jumpTopBtn.classList.toggle('visible', state === 'shown');
+    document.querySelectorAll('[data-jumptop]').forEach(b => b.classList.toggle('active', b.dataset.jumptop === state));
+  }
+  document.querySelectorAll('[data-jumptop]').forEach(b => {
+    b.addEventListener('click', () => setJumpTop(b.dataset.jumptop));
+  });
+
+  function setWindow(state) {
+    // Wireframe: both window states keep jump-to-bottom visible for review.
+    // Real visibility (at-bottom-of-recent vs in-top-window) is component-side.
+    jumpBottomBtn.classList.add('visible');
+    document.querySelectorAll('[data-window]').forEach(b => b.classList.toggle('active', b.dataset.window === state));
+  }
+  document.querySelectorAll('[data-window]').forEach(b => {
+    b.addEventListener('click', () => setWindow(b.dataset.window));
+  });
+
+  function setAutoscroll(state) {
+    jumpBottomBtn.classList.toggle('engaged', state === 'engaged');
+    document.querySelectorAll('[data-autoscroll]').forEach(b => b.classList.toggle('active', b.dataset.autoscroll === state));
+  }
+  document.querySelectorAll('[data-autoscroll]').forEach(b => {
+    b.addEventListener('click', () => setAutoscroll(b.dataset.autoscroll));
+  });
+
+  function setBoundary(state) {
+    boundaryTop.classList.toggle('visible', state === 'top');
+    boundaryBottom.classList.toggle('visible', state === 'bottom');
+    document.querySelectorAll('[data-boundary]').forEach(b => b.classList.toggle('active', b.dataset.boundary === state));
+  }
+  document.querySelectorAll('[data-boundary]').forEach(b => {
+    b.addEventListener('click', () => setBoundary(b.dataset.boundary));
+  });
+
+  // Initial: jump-to-bottom visible (representative — user is scrolled up
+  // enough to see the live-edge return affordance). Real behavior derives
+  // from current scrollTop vs scrollHeight in the component.
+  jumpBottomBtn.classList.add('visible');
 })();
 </script>
 
