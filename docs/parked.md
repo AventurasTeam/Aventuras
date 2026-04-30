@@ -509,6 +509,36 @@ description demand emerges.
 
 ### UX (parked)
 
+#### Reader font-size scaling generalized to all body prose
+
+[`ui/foundations/typography.md → Reader font-size setting`](./ui/foundations/typography.md#reader-font-size-setting)
+ships v1 with the user-orthogonal reader font-size axis scoped to
+**reader entry content only** — prose body, entry titles, entry
+meta line. Body prose elsewhere (lore detail panes, entity
+descriptions, peek drawer prose, wizard prose) stays at locked
+sizes regardless of the user setting. Generalization to all body
+prose was considered and parked: scope-creep risks scaling things
+the user didn't intend (a `1.4×` lore-detail-pane likely looks
+worse than the default; short-form prose elsewhere doesn't share
+the marathon-reading rationale that drives the reader's setting).
+
+When real demand surfaces (users asking "the reader scaled but
+my entity descriptions didn't"), the work is:
+
+- Decide whether the existing setting generalizes (one axis,
+  broader scope) or a new orthogonal axis lands (separate "UI
+  prose scale").
+- Decide which surfaces opt in — likely lore + entity + peek +
+  wizard at minimum; story-list cards and chrome stay locked.
+- Verify the multiplier doesn't break click-targets or visual
+  hierarchy on short-form panes; surface UX testing needed.
+- The CSS-variable cascade pattern is already established
+  (per `typography.md`); generalizing scope is mostly a matter
+  of adding `--reader-font-scale` references to the additional
+  surfaces' size calcs.
+
+Lands when user demand surfaces.
+
 #### User-authored themes
 
 The visual identity contract (per

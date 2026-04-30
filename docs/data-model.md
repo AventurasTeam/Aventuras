@@ -227,7 +227,7 @@ erDiagram
         json default_models "Record<agentId, { providerId, modelId }>; resolver fallback for un-overridden story.settings.models"
         json default_story_settings "see 'Story settings shape' — copy-at-creation source for new stories"
         text default_calendar_id "id into the merged calendar registry (built-ins from code + vault_calendars rows); seeds new stories' calendarSystemId"
-        json appearance "{ themeId, density, accentOverride? } — see ui/foundations/theming.md"
+        json appearance "{ themeId, density, readerFontScale, accentOverride? } — see ui/foundations/theming.md"
         text ui_language "ISO 639-1; defaults to OS locale on first launch"
         integer onboarding_completed_at "set on first dismissal of the onboarding wizard (Finish, Skip, or Step 2 footer-link exit); null = wizard renders as root on next boot"
         json diagnostics "debug toggles, retry counts, view-logs prefs"

@@ -61,13 +61,20 @@ contract.
    per-theme contrast + derivation reporting; CI gate parked
    until session 6 lands real palette data. File:
    [`color.md`](./color.md).
-3. **Typography** — pending. Reading-text font choice
-   (system-stack vs custom-bundled; load-bearing for the primary
-   reading activity), type scale (sizes / line-heights / weights),
-   per-font leading multiplier (escape valve for serif vs sans
-   harmony at the locked scale), `--font-display` decision,
-   cross-platform font availability + fallback chains. Lands as
-   `typography.md`.
+3. **Typography** — landed 2026-05-01
+   ([exploration record](../../explorations/2026-05-01-typography.md)).
+   System-stacks for v1 default fonts (zero bundled — themes opt
+   into bundling at theme-author time). Tailwind-aligned type
+   scale at 16 px base (xs through 3xl, paired `--leading-*`,
+   four weights at 400 / 500 / 600 / 700; reading body at
+   `--text-lg`, one step above UI base). `Theme.leadingMultiplier`
+   optional escape valve for serif-vs-sans harmony, scoped to
+   reading-text line-heights only. **Reader font-size setting** —
+   new user-orthogonal axis at
+   `app_settings.appearance.readerFontScale` (`sm` / `md` / `lg` /
+   `xl`); applies to reader entry content only. `--font-display`
+   slot evaluated and **skipped** for v1. File:
+   [`typography.md`](./typography.md).
 4. **Density / spacing / radii / depth metaphor** — pending. Base
    spacing unit, density posture (the comfortable / compact
    variants on component-internal padding tokens), radii

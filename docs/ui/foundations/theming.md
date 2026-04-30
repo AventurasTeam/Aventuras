@@ -23,6 +23,7 @@ export interface Theme {
   description?: string // optional one-liner shown in picker
   family?: string // optional grouping ("Default", "Slate") for picker UX
   accentOverridable?: boolean // when true, user accent override applies; default false
+  leadingMultiplier?: number // default 1.0; scales reading-text line-heights — see typography.md
   tokens: {
     colors: Record<ColorToken, string>
     fonts?: Partial<Record<FontToken, string>> // omit to inherit defaults
@@ -108,9 +109,10 @@ carries:
 
 ```ts
 app_settings.appearance: {
-  themeId: string                          // into the theme registry
-  density: 'comfortable' | 'compact'        // user-orthogonal toggle
-  accentOverride?: string                   // hex; honored only when active theme has accentOverridable: true
+  themeId: string                                 // into the theme registry
+  density: 'comfortable' | 'compact'              // user-orthogonal toggle
+  readerFontScale: 'sm' | 'md' | 'lg' | 'xl'      // user-orthogonal reader prose scale — see typography.md
+  accentOverride?: string                         // hex; honored only when active theme has accentOverridable: true
 }
 ```
 
@@ -122,9 +124,9 @@ write through immediately.
 ### First-launch defaults
 
 Default `themeId` is one of the curated gallery's entries (TBD at
-session 6). Default `density` is `'comfortable'`. The
-implementation seeds `appearance` to these defaults on first boot
-or after a wipe.
+session 6). Default `density` is `'comfortable'`. Default
+`readerFontScale` is `'md'` (multiplier `1.0`). The implementation
+seeds `appearance` to these defaults on first boot or after a wipe.
 
 ### Backup / restore + invalid `themeId`
 

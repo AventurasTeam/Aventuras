@@ -84,26 +84,27 @@ semantics.
 
 ## Font-family slots
 
-Three slots:
+Three slots — concrete default stacks locked at session 3 in
+[`typography.md → Default font stacks`](./typography.md#default-font-stacks).
 
 - `--font-reading` — body prose. **Load-bearing for the primary
-  reading activity.** Default stack favors a readable serif or
-  humanist sans across platforms.
-- `--font-ui` — chrome, labels, buttons, list rows. Default stack
-  favors a system-default sans for platform-native feel.
+  reading activity.** Default: serif system-stack (Charter / Iowan /
+  Source Serif / Georgia / Cambria / Liberation / Noto / serif).
+- `--font-ui` — chrome, labels, buttons, list rows. Default:
+  `system-ui` chain.
 - `--font-mono` — code, system-entry chrome, technical readouts
-  (raw JSON viewer, delta log). Default stack favors a system
-  mono.
+  (raw JSON viewer, delta log). Default: `ui-monospace` chain.
 
 **Font tokens declare stacks, not single names.** A theme
 introducing a custom font for `--font-reading` declares it as
-`"Lora", Georgia, serif` — never as `"Lora"` alone. Guards
+`"Lora", Charter, ..., serif` — never as `"Lora"` alone. Guards
 against font-load failures and platform variance (mobile native
 may not have the font bundled).
 
-A `--font-display` slot (for headers / hero typography) may be
-added at session 3 if real demand surfaces; the body type scale
-covers the common case without it.
+`--font-display` was evaluated and **skipped** at session 3 — v1
+surfaces are covered by `--text-2xl` / `-3xl` against `--font-ui`;
+no hero-scale typography demand emerged. Revisitable if a future
+surface materializes.
 
 ## Structural slot families
 
@@ -111,8 +112,10 @@ Slot families exist in the contract; values are deferred to the
 relevant session:
 
 - **Type scale** (`--text-xs` / `-sm` / `-base` / `-lg` /
-  `-xl` / `-2xl` / `-3xl`, with corresponding line-heights and
-  weight tokens). Final scale firmed at session 3 (typography).
+  `-xl` / `-2xl` / `-3xl`, paired `--leading-*` tokens, four
+  `--font-weight-*` tokens at 400 / 500 / 600 / 700). Final scale
+  locked at session 3 — see
+  [`typography.md → Type scale + weights`](./typography.md#type-scale--weights).
 - **Radii** (`--radius-sm`, `--radius-md`, `--radius-lg`,
   `--radius-full`). Session 4.
 - **Motion** (`--duration-fast`, `--duration-base`,

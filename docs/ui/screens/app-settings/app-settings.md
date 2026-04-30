@@ -366,6 +366,15 @@ and applies app-wide independent of theme. May be cut at session 4
 if the cross-platform implementation cost doesn't pencil — see the
 session 4 cut path.
 
+**Reader font size** is a 4-state `S` / `M` / `L` / `XL` segment.
+Persists at
+[`app_settings.appearance.readerFontScale`](../../foundations/typography.md#reader-font-size-setting)
+and scales reader entry content only — prose body, entry titles,
+entry meta. Reader-side chrome (top-bar, action buttons, toolbar)
+and the rest of the app (lore detail panes, peek drawer, wizard
+prose) stay at locked sizes. Live preview is the reader itself —
+no embedded sample paragraph here. Default `M` (multiplier `1.0`).
+
 **Accent override is conditional.** Renders only when the active
 theme has
 [`accentOverridable: true`](../../foundations/theming.md#accent-override-opt-in)
