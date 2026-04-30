@@ -10,7 +10,7 @@ data lives on your machine.
 Cross-platform via a single Expo app: mobile (iOS / Android)
 through Expo Go, desktop (Linux / macOS / Windows) through
 Electron wrapping the web build. No accounts, no cloud, no
-environment variables — everything in local database file.
+environment variables; everything in local database file.
 
 ## Status
 
@@ -35,22 +35,22 @@ describes the design. Code-following-design lands incrementally.
 The substance of the project today is the design corpus. Start
 here:
 
-- **[`docs/README.md`](./docs/README.md)** — index of all
+- **[`docs/README.md`](./docs/README.md)** index of all
   documentation.
-- **[`docs/architecture.md`](./docs/architecture.md)** —
+- **[`docs/architecture.md`](./docs/architecture.md)**
   pipeline, generation context, retrieval, translation. How the
   code will be organized.
-- **[`docs/data-model.md`](./docs/data-model.md)** — schema
+- **[`docs/data-model.md`](./docs/data-model.md)** schema
   decisions: stories, branches, entries, entities, lore, threads,
   happenings, chapters, delta log.
-- **[`docs/ui/`](./docs/ui/README.md)** — UI design: principles,
+- **[`docs/ui/`](./docs/ui/README.md)** UI design: principles,
   cross-cutting patterns, and per-screen wireframes (interactive
   HTML + companion `.md` rationale per surface).
-- **[`docs/tech-stack.md`](./docs/tech-stack.md)** — full stack
+- **[`docs/tech-stack.md`](./docs/tech-stack.md)** full stack
   with rationale.
-- **[`docs/followups.md`](./docs/followups.md)** — open design
+- **[`docs/followups.md`](./docs/followups.md)** open design
   questions (current milestone).
-- **[`docs/explorations/`](./docs/explorations/README.md)** —
+- **[`docs/explorations/`](./docs/explorations/README.md)**
   dated session records of design decisions.
 
 ## Stack
@@ -102,7 +102,7 @@ pnpm lint:docs       # remark over docs/
 
 Wireframes are static HTML colocated with each screen's `.md`
 under `docs/ui/screens/<screen>/`. Open the `.html` directly in a
-browser — no build step.
+browser.
 
 ### Storybook (design-system primitives)
 
@@ -121,7 +121,7 @@ pnpm android         # Android emulator
 pnpm ios             # iOS simulator
 ```
 
-The app shell is currently the default Expo scaffold — domain
+The app shell is currently the default Expo scaffold, domain
 implementation hasn't started. These commands work but won't show
 the writing app itself.
 
