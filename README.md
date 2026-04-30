@@ -1,50 +1,158 @@
-# Welcome to your Expo app 👋
+# Aventuras
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A local-first AI-collaborative writing app. You write fiction with
+an AI co-author against a typed world model that evolves alongside
+the prose — characters, locations, items, factions, lore, plot
+threads, and event history all tracked structurally as the story
+unfolds. Branch the narrative freely. Roll back any change. All
+data lives on your machine.
 
-## Get started
+Cross-platform via a single Expo app: mobile (iOS / Android)
+through Expo Go, desktop (Linux / macOS / Windows) through
+Electron wrapping the web build. No accounts, no cloud, no
+environment variables — everything in local SQLite.
 
-1. Install dependencies
+## Status
 
-   ```bash
-   npm install
-   ```
+**Pre-implementation.** The project is in the design + foundation
+phase:
 
-2. Start the app
+- Domain, schema, architecture, and UI surfaces are
+  comprehensively specified in [`docs/`](./docs/README.md).
+- Tooling is wired (Expo, Electron, Storybook, ESLint, Prettier,
+  remark, lefthook, Vitest, Playwright story tests, CI).
+- A handful of design-system primitives have been scaffolded
+  (`components/ui/*` with Storybook stories).
+- The writing-app domain itself — stories, entries, the
+  classifier pipeline, world-state retrieval, the AI collaborator —
+  has not yet been built.
 
-   ```bash
-   npx expo start
-   ```
+This README describes the project's intent. Documentation
+describes the design. Code-following-design lands incrementally.
 
-In the output, you'll find options to open the app in a
+## Documentation
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+The substance of the project today is the design corpus. Start
+here:
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+- **[`docs/README.md`](./docs/README.md)** — index of all
+  documentation.
+- **[`docs/architecture.md`](./docs/architecture.md)** —
+  pipeline, generation context, retrieval, translation. How the
+  code will be organized.
+- **[`docs/data-model.md`](./docs/data-model.md)** — schema
+  decisions: stories, branches, entries, entities, lore, threads,
+  happenings, chapters, delta log.
+- **[`docs/ui/`](./docs/ui/README.md)** — UI design: principles,
+  cross-cutting patterns, and per-screen wireframes (interactive
+  HTML + companion `.md` rationale per surface).
+- **[`docs/tech-stack.md`](./docs/tech-stack.md)** — full stack
+  with rationale.
+- **[`docs/followups.md`](./docs/followups.md)** — open design
+  questions (current milestone).
+- **[`docs/explorations/`](./docs/explorations/README.md)** —
+  dated session records of design decisions.
 
-## Get a fresh project
+## Stack
 
-When you're ready, run:
+- **Runtime**: Expo SDK 55, React 19, React Native 0.83, React
+  Native Web, Electron 41.
+- **Styling**: NativeWind 4 + Tailwind 3 with shadcn-style theme
+  CSS variables.
+- **Storage**: `expo-sqlite` (local-first; no backend).
+- **Build / dev**: pnpm 10, Node 24, Vite (via Storybook), TypeScript.
+- **Quality**: ESLint 9, Prettier 3, remark (doc lint), lefthook
+  (pre-commit hooks), Vitest + Playwright (story tests).
 
-```bash
-npm run reset-project
+Full rationale in [`docs/tech-stack.md`](./docs/tech-stack.md).
+
+## Repository layout
+
+```
+.
+├── app/                Expo Router routes (mobile + web)
+├── electron/           Electron main + preload (desktop shell)
+├── components/         Shared UI components (RN + RN Web)
+│   └── ui/             Design-system primitives + Storybook stories
+├── lib/ hooks/ types/ constants/
+├── docs/               Project documentation (the canonical spec)
+│   ├── ui/             UI principles, patterns, per-screen designs
+│   ├── explorations/   Dated design-session records
+│   └── followups.md / parked.md
+├── scripts/            Repository scripts
+├── .storybook/         Storybook config
+├── .github/            CI workflows
+└── .claude/            Claude-Code-specific tooling (rules, skills)
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Development
 
-## Learn more
+Requires Node 24 and pnpm 10 (both pinned via `.nvmrc` and
+`packageManager`).
 
-To learn more about developing your project with Expo, look at the following resources:
+```sh
+pnpm install
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### Doc tooling
 
-## Join the community
+```sh
+pnpm lint:docs       # remark over docs/
+```
 
-Join our community of developers creating universal apps.
+Wireframes are static HTML colocated with each screen's `.md`
+under `docs/ui/screens/<screen>/`. Open the `.html` directly in a
+browser — no build step.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### Storybook (design-system primitives)
+
+```sh
+pnpm storybook       # http://localhost:6006
+```
+
+Runs the active design-system catalog. Stories under
+`components/ui/*.stories.tsx`.
+
+### Web / mobile (Expo)
+
+```sh
+pnpm web             # web build via Expo
+pnpm android         # Android emulator
+pnpm ios             # iOS simulator
+```
+
+The app shell is currently the default Expo scaffold — domain
+implementation hasn't started. These commands work but won't show
+the writing app itself.
+
+### Desktop (Electron)
+
+```sh
+pnpm desktop         # web build + Electron, hot-reloaded
+```
+
+### Quality
+
+```sh
+pnpm lint            # ESLint
+pnpm format:check    # Prettier
+pnpm typecheck       # tsc --noEmit
+pnpm test            # Vitest watch
+pnpm test:run        # Vitest single-run + Playwright story tests
+```
+
+CI runs all of the above on every push / PR.
+
+## Workflow
+
+- **Pre-commit hooks** (`lefthook.yml`) run prettier + eslint +
+  remark in parallel on staged files. Don't bypass with
+  `--no-verify`.
+- **Commits** are small and focused. Multiple commits beat a
+  single omnibus commit when the work is logically separable.
+- **File moves** use `git mv` to preserve history; inbound
+  references update in the same commit.
+
+Project-specific Claude-Code rules live under
+[`.claude/`](./.claude/) (skills + topic-scoped rules that
+auto-load when relevant files are read).
