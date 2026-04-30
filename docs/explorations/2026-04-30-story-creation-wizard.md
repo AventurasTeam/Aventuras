@@ -816,8 +816,7 @@ emits:
 Standard `Discard / Refine / Regenerate / Use this` actions.
 Failure path: inline error in popover. Implementation-level
 fallback (treat as user-written prose on malformed structured
-output) tracked in
-[opening generation structured-output fallback](../followups.md#opening-generation-structured-output-fallback).
+output).
 
 **Refine on opening keeps metadata refs aligned.** Each refine call
 includes the current metadata as context so refs aren't broken by

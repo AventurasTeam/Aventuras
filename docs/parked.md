@@ -35,6 +35,29 @@ etc.). Calendars set the per-type precedent in v1; the unification
 question earns its weight when ≥2 content types ship and we can
 validate against actual schema overlap.
 
+#### Backup / export packaging shape
+
+Two adjacent packaging questions deferred from
+[`data-model.md → Backup & export format`](./data-model.md#backup--export-format)
+to implementation time:
+
+- **Full backup — failsafe JSON dump location.** The full backup
+  produces a `.sqlite` snapshot via `VACUUM INTO` plus a failsafe
+  JSON dump of each story. Bundling shape (single combined file
+  vs adjacent sidecar files) is unspec'd; lands at backup
+  implementation.
+- **Per-story export — binary asset packaging.** `.avts` envelopes
+  embed entry assets either base64-inline within the JSON or as
+  sidecar files inside the envelope. Tradeoff: inline is simpler
+  to parse but inflates JSON size on image-heavy stories; sidecar
+  preserves binary efficiency but complicates the
+  single-file-per-story mental model. Lands at export
+  implementation.
+
+Both questions live with the broader backup design pass — see
+[Backup / export consistency](#backup--export-consistency) for the
+gating concerns that share the same pass.
+
 #### Top-K-by-salience retrieval — long-term memory implications
 
 Per [Happenings & character knowledge](./data-model.md#happenings--character-knowledge):
@@ -307,6 +330,19 @@ example; any standalone memory-compaction agent that splits out of
 the chapter-close pipeline is another candidate. Each agent's
 design pass picks values with reasoning; the principle doesn't
 prescribe defaults.
+
+#### Pack runtimeVariables surface
+
+`packVariables.runtimeVariables` follows the same context-shape
+pattern as static pack variables (per
+[`architecture.md`](./architecture.md)) but is deferred until the
+broader pack system lands. The Story Settings · Pack tab ships
+the static side in v1; the runtime-variable surface (variables
+the user can adjust live across turns, or that derive from
+in-story state) lands as a later-phase pack-system extension.
+Adds a Pack tab section or sibling control set; design pass picks
+the affordance shape once the static pack workflow has been used
+in practice.
 
 ### Deferred design sessions
 
@@ -600,35 +636,37 @@ borderline busy on a fork-in-the-road decision; v1 floor is
 two-button + destructive labeling. If users report losing work via
 the destructive path, the third button lands.
 
-#### Wizard cast / lore reorder
+#### Wizard step 3-4 long-list ergonomics
 
-Wizard's cast list (step 4) and lore list (step 3) currently
-render insertion-ordered with no reorder UX. Drag-to-reorder
-within a wizard list would let users author a deliberate
-arrangement (lead character first, lore in narrative order, etc.).
-Skipped in v1 because reorder is fiddly to implement and the
-underlying data shape doesn't carry an order column. If real demand
-surfaces, add an `order: number` field on `entities` / `lore` (or
-a story-scoped ordering JSON) and ship the drag affordance.
+Three deferred ergonomics improvements for the wizard's lore list
+(step 3) and cast list (step 4). All three trigger on the same
+signal — real cast/lore counts producing friction in the
+long-scroll layout — and are not orthogonal solutions (per-kind
+tabs may obviate section-collapse, etc.), so they are likely
+designed together at signal time:
 
-#### Wizard cast / lore section-collapse toggle
+- **Reorder.** Lists currently render insertion-ordered with no
+  reorder UX. Drag-to-reorder within a wizard list would let users
+  author a deliberate arrangement (lead character first, lore in
+  narrative order, etc.). Skipped in v1 because reorder is fiddly
+  to implement and the underlying data shape doesn't carry an
+  order column. If shipped, requires an `order: number` field on
+  `entities` / `lore` (or a story-scoped ordering JSON) and the
+  drag affordance.
+- **Section-collapse toggle.** At pathological row counts (20+
+  per section) the step's scroll length grows. A section-collapse
+  toggle (`▼ Initial lore (12 rows)` → click to collapse to a
+  one-liner) would let users hide bulk while authoring other
+  sections. v1 ships expanded-only.
+- **Per-kind grouping or tabs in step 4.** Step 4's cast list is a
+  single mixed list with kind icons (per
+  [`patterns/entity.md`](./ui/patterns/entity.md)). At high counts
+  (20+ entities, character-heavy), grouping by kind or tabbing
+  (Characters | Locations | Items | Factions) might improve scan
+  density. v1 ships flat mixed list.
 
-Wizard's step 3 (lore list) and step 4 (cast list) use long-scroll
-at high counts (no pagination). At pathological counts (20+ rows
-per section) the step's scroll length grows. A
-section-collapse toggle (`▼ Initial lore (12 rows)` → click to
-collapse to a one-liner) would let users hide bulk while
-authoring other sections. v1 ships expanded-only; add if real
-friction surfaces.
-
-#### Wizard per-kind grouping or tabs in step 4
-
-Wizard's step 4 cast list is a single mixed list with kind icons
-([`patterns/entity.md`](./ui/patterns/entity.md)). At high counts
-(20+ entities, character-heavy), grouping by kind or tabbing
-(Characters | Locations | Items | Factions) might improve scan
-density. v1 ships flat mixed list; revisit if real cast counts
-push beyond comfortable mixed-list density.
+Revisit when real cast/lore counts push beyond comfortable
+mixed-list density.
 
 #### Wizard-time pack selection
 
@@ -639,6 +677,36 @@ might want to pick a non-default pack at story creation rather
 than post-creation in Story Settings. Adds a wizard-step affordance
 or step-5 disclosure. Speculative; low priority pending real
 signal.
+
+#### Wizard session storage cleanup
+
+The [Story creation wizard's](./ui/screens/wizard/wizard.md)
+auto-save session persists in SQLite (Zustand persist) on the
+first meaningful state change and survives across app restarts
+indefinitely. Without a cleanup pass, sessions accrue when users
+abandon them long-term (laptop in a drawer, install lingers).
+
+Open sub-questions:
+
+- TTL-based expiry (e.g., session older than 30 days auto-cleared
+  on app boot)?
+- App-boot age check + user-prompt-to-discard for very old
+  sessions?
+- Storage budget before triggering cleanup?
+
+v1 ships with no cleanup, accepts storage drift. Lands when
+session storage shows real accumulation in usage signal.
+
+#### Calendar picker search-bar threshold
+
+The [calendar picker pattern's](./ui/patterns/calendar-picker.md)
+popover gains an inline search/filter bar at some option-count
+threshold (rough lean: ≥ 8). Pick the actual number once we have
+real preset catalogs to test against — speculative until the
+catalog size is concrete enough to validate against. Pairs with
+the active
+[Calendar picker primitive — Select-extension vs Picker-fork](./followups.md#calendar-picker-primitive--open-shape-decisions)
+followup.
 
 #### Chip input vs comma-separated string
 

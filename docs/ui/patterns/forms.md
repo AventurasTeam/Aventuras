@@ -2,9 +2,26 @@
 
 Input primitives reused across settings, entity forms, and any
 "pick a value" interaction. Sister patterns to
-[`entity.md`](./entity.md) (entity-form generation rules that
-consume these), [`lists.md`](./lists.md), and
+[`entity.md`](./entity.md) (entity detail-pane composition rules
+that consume these), [`lists.md`](./lists.md), and
 [`data.md`](./data.md).
+
+Used by:
+
+- [App Settings](../screens/app-settings/app-settings.md)
+  (Select primitive across providers / profiles / story defaults)
+- [Story Settings](../screens/story-settings/story-settings.md#generation-tab--definitional-fields--authoring-aids)
+  (Select primitive across mode / narration / generation knobs;
+  Autocomplete-with-create on the model field)
+- [Wizard](../screens/wizard/wizard.md#step-1--frame)
+  (Select primitive in segment mode for mode / narration; calendar
+  picker integration cite)
+- [Reader composer](../screens/reader-composer/reader-composer.md#per-entry-actions)
+  (Autocomplete-with-create primitive in entity / lore creation)
+- [Onboarding](../screens/onboarding/onboarding.md)
+  (Select primitive in initial setup flow)
+- [Vault calendars](../screens/vault/calendars/calendars.md)
+  (Select primitive in the calendar editor)
 
 ---
 

@@ -55,7 +55,7 @@ Cross-cutting principles that govern this panel are in
 │                     │ ───                                   │
 │                     │ save bar (when dirty)                 │
 │                     │   N unsaved · [discard] [save ⌘S]     │
-│ + New entity        │                                       │
+│ + New <kind>        │                                       │ ← label tracks active filter
 └─────────────────────┴───────────────────────────────────────┘
 ```
 
@@ -76,10 +76,8 @@ field inside the Overview tab. The detail head carries only:
 
 - A small breadcrumb strip: kind-icon + kind-name
 - The entity name (inline-editable with pencil)
-- A `Recently classified` badge — visible while the row is in the
-  fresh or fading state (per
-  [patterns → Recently-classified row accent](../../patterns/entity.md#recently-classified-row-accent)).
-  Decays alongside the row tint.
+- A `Recently classified` badge — per
+  [patterns → Recently-classified row accent](../../patterns/entity.md#recently-classified-row-accent).
 - An overflow menu (⋯) anchored to the name row
 
 The overflow menu holds rare-but-important actions:
@@ -297,9 +295,7 @@ category dropdown:
 - **Lore**: `title`, `body`, `category`, `tags`
 
 Affordances (placeholder + tooltip + ⓘ help icon) follow the
-[search-bar-scope pattern](../../patterns/lists.md#search-bar-scope);
-SQLite-side, `LIKE` against typed columns + `json_each` over the
-JSON `tags` array.
+[search-bar-scope pattern](../../patterns/lists.md#search-bar-scope).
 
 ## Detail pane — raw JSON viewer
 
@@ -384,8 +380,7 @@ Mirrors the [entity detail head pattern](#detail-head-structure):
 - Breadcrumb strip: kind-icon + "Lore"
 - **Title** (inline-editable with pencil) — equivalent of the entity
   name slot. Edits dirty the save session.
-- **Recently-classified badge** — visible while the row is in the
-  fresh or fading state per
+- **Recently-classified badge** — per
   [`patterns/entity.md → Recently-classified row accent`](../../patterns/entity.md#recently-classified-row-accent).
   Lore is classifier-touched at chapter close via the
   lore-management agent (per

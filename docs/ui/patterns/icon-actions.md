@@ -20,6 +20,9 @@ Used by:
 - [Wizard cast / lore row actions](../screens/wizard/wizard.md)
   (✕ delete on each cast or lore row; ⭐ set-as-lead on character
   rows; ✨ AI-assist triggers at field labels)
+- [Vault calendar card affordances](../screens/vault/calendars/calendars.md#calendar-card)
+  (★ favorite toggle on each card; `⭐ default` badge on the card
+  matching the app default)
 
 Future row-shaped surfaces with per-row actions follow the same
 pattern.

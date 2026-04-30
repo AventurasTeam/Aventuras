@@ -5,6 +5,25 @@ them. Sister patterns to [`entity.md`](./entity.md) (entity-row
 specifics that compose with these), [`forms.md`](./forms.md), and
 [`data.md`](./data.md).
 
+Used by:
+
+- [App Settings · Profiles · "View all" model list](../screens/app-settings/app-settings.md#generation--profiles)
+  (virtual list — OpenRouter 340+ entries)
+- [Vault calendars](../screens/vault/calendars/calendars.md)
+  (search bar scope + empty list state)
+- [World panel](../screens/world/world.md)
+  (search bar scope, load-older for History tab, empty list state)
+- [Reader composer](../screens/reader-composer/reader-composer.md#scroll-behavior)
+  (composing virtualization + load-older for the narrative; empty
+  state + no-results state on the Browse rail; search bar scope)
+- [Story list](../screens/story-list/story-list.md)
+  (search bar scope on cards)
+- [Plot panel](../screens/plot/plot.md)
+  (search bar scope on threads / happenings; load-older for
+  History; empty list-pane state)
+- [Wizard · step 3 lore list](../screens/wizard/wizard.md#initial-lore--list-with-inline-editor)
+  (lists pattern — long scroll, virtualization conditional)
+
 ---
 
 ## Large lists — virtualization rule

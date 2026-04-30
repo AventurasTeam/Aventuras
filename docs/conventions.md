@@ -95,6 +95,29 @@ referenced from 2+ per-screen docs OR (b) it carries enough
 component-spec detail that the principles doc would lose focus.
 Otherwise leave the prose where it lives.
 
+### Pattern doc Used-by lists
+
+Each pattern doc carries a `Used by:` bullet list near the top
+(after the intro / sister-pattern paragraph, before the first
+`##`). Consumers cite a pattern; the pattern lists its consumers
+back. The reciprocal coupling makes consumer impact visible at a
+glance — when editing a pattern, you can see which surfaces'
+specs you might affect.
+
+Format follows
+[`patterns/icon-actions.md`](./ui/patterns/icon-actions.md):
+
+- One bullet per consuming surface.
+- Anchor link to the specific section that consumes the pattern
+  when easily determinable; file-level link otherwise.
+- Brief parenthetical describing the consumption shape (which
+  sub-pattern, which affordance).
+
+A new surface adopting a pattern updates both files in the same
+commit (the surface's cite + the pattern's Used-by entry). When
+removing a consumer, drop the Used-by entry in the same commit
+that removes the cite.
+
 ### README.md is index only
 
 Any `README.md` (`docs/README.md`, `docs/ui/README.md`, future subdir

@@ -126,9 +126,11 @@ Lands once the retrieval agent's shape is also pinned (per
 [`architecture.md → What this doc does not yet cover`](./architecture.md#what-this-doc-does-not-yet-cover))
 — both agents share enough scaffolding (prompt construction,
 output validation, delta emission) to design as a pair rather than
-sequentially.
+sequentially. The write-cadence + state-field authorship contract
+below is the architecture-side counterpart to this same design
+pass.
 
-### State-field write contract — architecture
+#### State-field write contract — architecture
 
 [`data-model.md → World-state storage → Authorship contract`](./data-model.md#authorship-contract)
 declares per-field "first write" and "subsequent writes"
@@ -154,9 +156,9 @@ territory. Open:
   review, standalone memory-compaction), state-field writes from
   multiple agents need conflict policies.
 
-Lands with the architecture-side write-cadence + agent-boundary
-design pass. Likely paired with the
-[Lore-management agent shape](#lore-management-agent-shape) work.
+Same design pass as the lore-management agent shape above —
+chapter-close lore-mgmt is one of the agents whose write contract
+this section locks down.
 
 ---
 
@@ -227,19 +229,16 @@ Settings · Profiles model list, **and the reader narrative**
 
 The [calendar picker pattern](./ui/patterns/calendar-picker.md)
 uses Select-shaped UI but its row content + tail action go beyond
-the current Select primitive. Two open shape decisions:
+the current Select primitive. Open shape decision: either Select
+gains rich-row content + popover tail-action support (and the
+calendar picker is a configuration of Select), or a sibling
+`Picker` primitive forks the contract for richer-row use cases
+(calendar picker, future multi-line option pickers). Decide when
+the second rich-row picker emerges and the trade-off is concrete.
 
-- **Select-extension vs. Picker-fork.** Either Select gains
-  rich-row content + popover tail-action support (and the
-  calendar picker is a configuration of Select), or a sibling
-  `Picker` primitive forks the contract for richer-row use cases
-  (calendar picker, future multi-line option pickers). Decide
-  when the second rich-row picker emerges and the trade-off is
-  concrete.
-- **Search-bar threshold.** The popover gains an inline
-  search/filter bar at some option-count threshold (rough lean:
-  ≥ 8). Pick the actual number once we have real preset catalogs
-  to test against.
+The popover-search threshold sub-question (parked-until-signal)
+moved to
+[`parked.md → Calendar picker search-bar threshold`](./parked.md#calendar-picker-search-bar-threshold).
 
 Lands with the Select primitive's first implementation pass.
 
@@ -327,35 +326,6 @@ suggestions are produced, which constrains how categories can be
 filtered and how user-input guidance is fed into the call. Designing
 them together avoids painting into a corner.
 
-### Opening generation structured-output fallback
-
-The wizard's AI-assisted opening generation uses structured output
-to emit prose AND minimal scene metadata (`sceneEntities`,
-`currentLocationId`, `worldTime: 0`) in one call (per
-[`data-model.md → Opening entry`](./data-model.md#opening-entry)).
-Structured-output reliability varies by provider — some
-OpenAI-compatible endpoints don't honor the schema cleanly. When
-the call fails to produce valid structured output, the wizard
-should fall back to prose-only and treat the opening as
-user-written for metadata purposes (empty
-`sceneEntities` / `currentLocationId`); turn-2 classifier picks up
-from there.
-
-Implementation concern; lands at wizard-pass implementation. The
-data shape already accommodates both populated and empty metadata
-without ceremony.
-
-### Per-story export envelope verification
-
-The `aventuras-story` per-story export envelope (per
-[`data-model.md → Aventuras file format`](./data-model.md#aventuras-file-format-avts))
-is intended to handle JSON columns generically — the new
-`stories.definition` JSON column should serialize naturally without
-envelope-format changes. Verify at export-feature implementation
-time that the exporter iterates story columns rather than
-enumerating a fixed list (which would silently skip
-`definition`).
-
 ### Provider / profile / model-profile deletion semantics
 
 No spec'd behavior for deleting a provider, profile, or model
@@ -368,13 +338,6 @@ Provider/profile probably want the same shape but worth a dedicated
 pass: orphan handling on import, soft-warn vs hard-block tradeoffs,
 what happens to `default_provider_id` if the referenced provider is
 deleted, etc.
-
-**Working lean** (per app-settings open-questions): when a user
-removes a provider key, profiles using that provider's models stay
-in place with a broken-config error state, prompting the user to
-re-pick. Profiles are NOT auto-deleted on key removal. This is the
-narrow case the dedicated design pass should formalize and extend
-to profile / model-profile deletion.
 
 ### Crash recovery for in-flight transactions
 
@@ -399,23 +362,3 @@ Open sub-questions:
   reverted on restart" toast?
 - Interaction with chained transactions (per-turn → chapter-close):
   does recovery treat them as one unit or two?
-
-### Wizard session storage cleanup
-
-The [Story creation wizard's](./ui/screens/wizard/wizard.md)
-auto-save session persists in SQLite (Zustand persist) on the
-first meaningful state change and survives across app restarts
-indefinitely. Without a cleanup pass, sessions accrue when users
-abandon them long-term (laptop in a drawer, install lingers).
-
-Open sub-questions:
-
-- TTL-based expiry (e.g., session older than 30 days auto-cleared
-  on app boot)?
-- App-boot age check + user-prompt-to-discard for very old
-  sessions?
-- Storage budget before triggering cleanup?
-
-Implementation concern; lands when session storage shows real
-accumulation in usage signal. v1 ships with no cleanup, accepts
-storage drift.

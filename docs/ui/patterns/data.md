@@ -4,6 +4,23 @@ Shared modals + import/export plumbing reused across surfaces.
 Sister patterns to [`entity.md`](./entity.md),
 [`lists.md`](./lists.md), and [`forms.md`](./forms.md).
 
+Used by:
+
+- [World panel · ⋯ → View raw JSON](../screens/world/world.md#detail-pane--raw-json-viewer)
+  (raw JSON viewer)
+- [World per-row import](../screens/world/world.md#per-row-import)
+  (import counterparts: Blank / From JSON / From Vault)
+- [Plot panel · ⋯ → View raw JSON](../screens/plot/plot.md#detail-pane--raw-json-viewer)
+  (raw JSON viewer)
+- [Plot per-row import](../screens/plot/plot.md#manual-creation--per-row-import)
+  (import counterparts for threads / happenings)
+- [Vault calendars · ⋯ → View raw JSON](../screens/vault/calendars/calendars.md#detail-head)
+  (raw JSON viewer)
+- [Vault calendars · + Add calendar ▾](../screens/vault/calendars/calendars.md)
+  (import counterparts: Clone built-in / From JSON / From scratch)
+- [Story list · Story import](../screens/story-list/story-list.md#story-import)
+  (import counterparts for stories)
+
 ---
 
 ## Raw JSON viewer — shared modal pattern

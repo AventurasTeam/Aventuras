@@ -1324,8 +1324,10 @@ it on a user-set `disabled` flag would produce broken prompts. The
 mode setting is consulted only for entities that are NOT
 structurally required — staged, retired, or active-but-off-scene.
 Same invariant applies structurally-required lore/threads when
-applicable (TBD as retrieval design lands); pipeline details in
-architecture.md → "Retrieval / injection phase."
+applicable (TBD as retrieval design lands — tracked in
+[`followups.md → Lore-management agent shape`](./followups.md#lore-management-agent-shape));
+pipeline details in architecture.md → "Retrieval / injection
+phase."
 
 ### Entry mutability & rollback
 
@@ -1611,15 +1613,18 @@ Branch model above. Chapters are user-visible structure, not gatekeepers.
 
 1. **Full backup** — produces a `.sqlite` snapshot via `VACUUM INTO`,
    plus a failsafe JSON dump of each story bundled alongside (same file
-   or adjacent — TBD at implementation). Intended for full-app restore.
-   Also copies the assets directory since media lives on disk, not in
-   SQLite.
+   or adjacent — packaging shape parked, see
+   [`parked.md → Backup / export packaging shape`](./parked.md#backup--export-packaging-shape)).
+   Intended for full-app restore. Also copies the assets directory
+   since media lives on disk, not in SQLite.
 
 2. **Per-story export** — produces a single self-contained `.avts`
    file for one story: all its branches, entries, entities, lore,
    threads, happenings + links, chapters, deltas, and entry→asset
    references. Binary assets are embedded as base64 or sidecar files
-   (TBD). Wrapped in the standard
+   (packaging shape parked, see
+   [`parked.md → Backup / export packaging shape`](./parked.md#backup--export-packaging-shape)).
+   Wrapped in the standard
    [Aventuras file envelope](#aventuras-file-format-avts) for
    version-tagged imports. Intended for sharing / archiving /
    migration.

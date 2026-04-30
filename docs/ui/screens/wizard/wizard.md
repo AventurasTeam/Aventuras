@@ -15,6 +15,8 @@ Cross-cutting principles that govern this surface live in
 - [Settings architecture — split by location](../../principles.md#settings-architecture--split-by-location)
   (definitional fields wizard-authored, operational copies from
   app defaults)
+- [Icon-actions pattern](../../patterns/icon-actions.md) (governs
+  ✕ / ⭐-set-as-lead row affordances on the cast and lore lists)
 
 Design rationale, alternatives explored, and adversarial findings
 in [`explorations/2026-04-30-story-creation-wizard.md`](../../../explorations/2026-04-30-story-creation-wizard.md).
@@ -610,10 +612,13 @@ Wizard-assist emits:
 ```
 
 Standard `Discard / Refine / Regenerate / Use this` actions.
-Failure path: inline error in popover. Implementation-level
-fallback (treat as user-written prose on malformed structured
-output) tracked in
-[opening generation structured-output fallback](../../../followups.md#opening-generation-structured-output-fallback).
+Failure path: inline error in popover. On malformed structured
+output, the implementation falls back to treating the prose as
+user-written (empty `sceneEntities` / `currentLocationId`); turn-2
+classifier picks up scene metadata from there. The data shape
+(per [`data-model.md → Opening entry`](../../../data-model.md#opening-entry))
+already accommodates both populated and empty metadata without
+ceremony.
 
 ### Title + description — inlined below opening
 
@@ -808,14 +813,11 @@ Tracked centrally:
   [parked.md](../../../parked.md#wizard-assist-agent-profile-splitting).
 - **Concurrent-state prompt third button** — see
   [parked.md](../../../parked.md#wizard-concurrent-state-prompt-third-button).
-- **Cast / lore reorder** — see
-  [parked.md](../../../parked.md#wizard-cast--lore-reorder).
-- **Cast / lore section-collapse toggle** — see
-  [parked.md](../../../parked.md#wizard-cast--lore-section-collapse-toggle).
-- **Per-kind grouping or tabs in step 4** — see
-  [parked.md](../../../parked.md#wizard-per-kind-grouping-or-tabs-in-step-4).
+- **Step 3-4 long-list ergonomics** (reorder / section-collapse /
+  per-kind grouping) — see
+  [parked.md](../../../parked.md#wizard-step-3-4-long-list-ergonomics).
 - **Wizard session storage cleanup** — see
-  [followups.md](../../../followups.md#wizard-session-storage-cleanup).
+  [parked.md](../../../parked.md#wizard-session-storage-cleanup).
 - **Wizard-time pack selection** — see
   [parked.md](../../../parked.md#wizard-time-pack-selection).
 - **Chip input vs comma-separated string** — see

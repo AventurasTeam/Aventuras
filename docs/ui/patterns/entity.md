@@ -10,6 +10,27 @@ entity forms ride), [`forms.md`](./forms.md),
 Anchors here are the canonical URL for these patterns — per-screen
 docs link in.
 
+Used by:
+
+- [Reader · Browse rail](../screens/reader-composer/reader-composer.md#browse-rail--collapse--expand)
+  (entity surfacing levels, row indicators, kind icons, filter
+  chips, accordion grouping)
+- [Reader · Peek drawer](../screens/reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters)
+  (entity surfacing — peek level; State-field composition projects
+  from the World panel Overview tab)
+- [World panel](../screens/world/world.md#tabs--per-kind-composition)
+  (full row pattern, detail-pane composition, recently-classified
+  accent — primary consumer)
+- [Plot panel](../screens/plot/plot.md)
+  (entity / happening row composition, recently-classified accent,
+  accordion grouping)
+- [Story list cards](../screens/story-list/story-list.md)
+  (entity-list sort order rule)
+- [Branch navigator](../screens/reader-composer/branch-navigator/branch-navigator.md)
+  (pinned-to-top sort layer for current branch)
+- [Wizard cast / lore lists](../screens/wizard/wizard.md#step-4--cast)
+  (entity row composition + kind icons in step 3-4)
+
 ---
 
 ## Entity surfacing — three levels, same data
@@ -321,10 +342,10 @@ reserved for "recently written," other signals get their own
 treatments.
 
 **Detail-pane mirroring.** The tint is echoed in the detail head as
-a "Recently classified" badge in the same color (faded variant for
-the older state). Self-documenting via visual repetition — open a
-row, see the same signal echoed in text. No copy needed beyond the
-badge label.
+a "Recently classified" badge in the same color, visible while the
+row is in the fresh or fading state and decaying alongside the row
+tint. Self-documenting via visual repetition — open a row, see the
+same signal echoed in text. No copy needed beyond the badge label.
 
 **Implementation.** Computed runtime from the delta log; no schema
 change. Decay rule is hardcoded for v1 (1-2 turns); revisit if users

@@ -615,18 +615,18 @@ yields an event (orchestrator applies derived deltas to SQLite +
 
 ### v2 shape of `promptContext` — what's carried over, what changes
 
-| Old variable                                   | V2 replacement                                                                                                                  |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `characters` / `locations` / `items`           | Unified under `entities` discriminated by `kind`                                                                                |
-| `storyBeats`                                   | Renamed `threads`                                                                                                               |
-| `lorebookEntries`                              | Split: `lore` (timeless reference) + entities with `status='staged'` (pre-introduced actors)                                    |
-| `relevantWorldState`                           | Same concept; filtered slice of entities/happenings/lore driven by POV character's `happening_awareness`                        |
-| `timeTracker`                                  | Derived from latest entry's `metadata.worldTime` + `definition.worldTimeOrigin` (see data-model.md → "In-world time tracking")  |
-| `genre` / `tone` (single-string fields)        | `definition.genre.{label,promptBody}` and `definition.tone.{label,promptBody}` — substantial preset+prose blocks (label + body) |
-| `setting` (no v1 equivalent in old context)    | New: `definition.setting` — freeform prose injected into generation context                                                     |
-| `translated_*` columns via `translationResult` | Reads through the `translations` table (polymorphic target) instead of per-column fields                                        |
-| Pipeline intermediates (narrativeResult, etc.) | Same — written to generation store, available to later templates                                                                |
-| `packVariables.runtimeVariables`               | Same pattern; deferred until pack system lands                                                                                  |
+| Old variable                                   | V2 replacement                                                                                                                                |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `characters` / `locations` / `items`           | Unified under `entities` discriminated by `kind`                                                                                              |
+| `storyBeats`                                   | Renamed `threads`                                                                                                                             |
+| `lorebookEntries`                              | Split: `lore` (timeless reference) + entities with `status='staged'` (pre-introduced actors)                                                  |
+| `relevantWorldState`                           | Same concept; filtered slice of entities/happenings/lore driven by POV character's `happening_awareness`                                      |
+| `timeTracker`                                  | Derived from latest entry's `metadata.worldTime` + `definition.worldTimeOrigin` (see data-model.md → "In-world time tracking")                |
+| `genre` / `tone` (single-string fields)        | `definition.genre.{label,promptBody}` and `definition.tone.{label,promptBody}` — substantial preset+prose blocks (label + body)               |
+| `setting` (no v1 equivalent in old context)    | New: `definition.setting` — freeform prose injected into generation context                                                                   |
+| `translated_*` columns via `translationResult` | Reads through the `translations` table (polymorphic target) instead of per-column fields                                                      |
+| Pipeline intermediates (narrativeResult, etc.) | Same — written to generation store, available to later templates                                                                              |
+| `packVariables.runtimeVariables`               | Same pattern; deferred until pack system lands (see [`parked.md → Pack runtimeVariables surface`](./parked.md#pack-runtimevariables-surface)) |
 
 Definitional fields (mode, lead, narration, genre, tone, setting,
 calendar) are sourced from `story.definition`; operational fields

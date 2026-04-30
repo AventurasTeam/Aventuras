@@ -10,8 +10,8 @@ The split heuristic + when-to-add rules live in
 ## Files
 
 - [`entity.md`](./entity.md) — entity rows: indicators, kind icons,
-  sort order, filter chips, three surfacing levels, schema-driven
-  forms, recently-classified accent.
+  sort order, filter chips, three surfacing levels, detail-pane
+  composition (hand-written per-kind), recently-classified accent.
 - [`icon-actions.md`](./icon-actions.md) — inline action icons on
   row-shaped surfaces: always-visible-muted + hover-brighten,
   shared glyph vocabulary, hidden vs disabled rules.

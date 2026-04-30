@@ -16,6 +16,21 @@ The calendar definition shape the picker reads is in
 the upstream editor is the
 [Vault calendar editor](../screens/vault/calendars/calendars.md).
 
+Used by:
+
+- [App Settings · Story Defaults · Calendar](../screens/app-settings/app-settings.md#calendar)
+  (default-calendar control; primary host)
+- [Story Settings · Calendar tab](../screens/story-settings/story-settings.md#calendar-tab--picker--summary)
+  (per-story calendar with edit-restrictions wrapper)
+- [Wizard · Step 2 — Calendar](../screens/wizard/wizard.md#step-2--calendar)
+  (definitional pick at story creation)
+- [Vault calendar editor · Set as default](../screens/vault/calendars/calendars.md)
+  (deep-link entry that hands off to the App-Settings picker)
+
+Per-host wrapper differences (framing copy, summary placement, swap
+warnings, edit-restrictions gating) are detailed in the [Host
+adaptations](#host-adaptations) section below.
+
 ---
 
 ## Render mode — dropdown across all hosts
