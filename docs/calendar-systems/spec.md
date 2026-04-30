@@ -263,6 +263,14 @@ type CalendarSystem = {
   //   Positive integer (validated at JSON save).
   //   Earth = 1; Shire = 86400; Stardate = 86400; Mayan kin = 86400.
   tiers: Tier[] // ordered top-down; bottom tier is the base unit
+  exampleStartValue: TierTuple // mandatory; sensible default origin tuple
+  //   for a new story using this calendar. Seeds the
+  //   wizard's worldTimeOrigin input (per
+  //   [wizard.md → Calendar step](../ui/screens/wizard/wizard.md)).
+  //   Distinct from per-tier `startValue` — that's structural
+  //   ("where the tier counter starts"); this is narrative
+  //   ("when stories typically begin"). E.g. earth-gregorian:
+  //   { year: 2024, month: 1, day: 1, hour: 0, minute: 0, second: 0 }.
   displayFormat: string // Liquid template; full state in scope
   eras: EraDeclaration | null // null = this calendar doesn't support eras
 }
@@ -271,7 +279,10 @@ type CalendarSystem = {
 
 type Tier = {
   name: string // 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second'
-  startValue: number // typical: 0 or 1
+  startValue: number // structural: where this tier's counter starts
+  //   (Earth months start at 1, not 0; necessary for rollover math).
+  //   NOT a per-story default — see `CalendarSystem.exampleStartValue`
+  //   for the wizard-seed origin tuple.
   rollover: TierRollover // when this tier resets and ticks its parent
   labels?: string[] // labels by tier value; e.g. month names indexed by month value
   subdivisions?: Subdivision[] // cycling overlays (weekday-style)
@@ -579,10 +590,6 @@ follow-ups:
   calendar OTHER than the story's active one (e.g., a flashback
   scene labeled in a historical calendar). Probably not v1; defer
   until needed.
-- **Wizard `worldTimeOrigin` input UX per calendar** — each
-  calendar's parser shapes a different input form (date picker for
-  Earth; tier-by-tier inputs for Tolkien; bare integer for
-  stardate). Component design lands with the wizard work.
 - **Classifier vocabulary breadth** — does the prompt also need
   era _history_ (not just current era) for prose like "before the
   Sundering"? Probably yes for any story with multiple eras;

@@ -1,0 +1,877 @@
+<!-- prettier-ignore -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Story creation wizard</title>
+<style>
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-highlight: #eef;
+    --bg-dim: #ececec;
+    --bg-faint: #f6f6f6;
+    --warn: #c94;
+    --warn-bg: #fdf3e3;
+    --ok: #4a8;
+    --accent: #5a4820;
+    --staged-bg: #f0eee8;
+  }
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+
+  .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .screen-label strong { color: var(--ink); }
+
+  /* review bar */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; }
+  .review-bar .rb-group > .gl { font-size: 10px; color: #967; margin-right: 4px; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+
+  /* full-page wizard chrome */
+  .wizard-page { flex: 1; display: flex; flex-direction: column; background: var(--bg); }
+
+  .top-bar { padding: 10px 24px; background: var(--bg-region); border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; }
+  .top-bar .cancel-btn { justify-self: start; padding: 5px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 12px; cursor: pointer; }
+  .top-bar .cancel-btn:hover { background: var(--bg-faint); }
+  .top-bar .center-title { justify-self: center; font-size: 13px; font-weight: 600; color: var(--ink); }
+  .top-bar .center-title .step-count { color: var(--ink-muted); font-weight: normal; margin-left: 8px; }
+
+  /* step indicator pills */
+  .step-pills { padding: 12px 24px; background: var(--bg-region); border-bottom: 1px solid var(--line-soft); display: flex; gap: 8px; align-items: center; justify-content: center; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--line-soft); border-radius: 16px; background: var(--bg-region); color: var(--ink-muted); font-size: 12px; cursor: not-allowed; }
+  .pill.active { background: var(--ink); color: #fff; border-color: var(--ink); cursor: default; }
+  .pill.done { background: var(--bg-region); color: var(--ink); border-color: var(--line); cursor: pointer; }
+  .pill.done:hover { background: var(--bg-faint); }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid currentColor; box-sizing: border-box; }
+  .pill.active .dot { background: #fff; border-color: #fff; }
+  .pill.done .dot { background: var(--ink); border-color: var(--ink); }
+
+  /* step body */
+  .step-body { flex: 1; padding: 32px 48px; max-width: 880px; margin: 0 auto; width: 100%; box-sizing: border-box; overflow-y: auto; }
+  .step-heading { font-size: 22px; font-weight: 600; color: var(--ink); margin: 0 0 4px; }
+  .step-intro { font-size: 13px; color: var(--ink-muted); margin: 0 0 28px; line-height: 1.5; }
+  .step-section { margin-bottom: 32px; }
+  .section-rule { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
+  .section-rule .rule-line { flex: 1; height: 1px; background: var(--line-soft); }
+  .section-rule .rule-label { font-size: 12px; font-weight: 600; color: var(--ink); text-transform: uppercase; letter-spacing: 0.08em; }
+  .section-rule .rule-actions { display: inline-flex; gap: 8px; }
+
+  /* footer */
+  .footer { padding: 14px 24px; background: var(--bg-region); border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .footer .right-group { display: flex; gap: 8px; align-items: center; }
+  .footer .btn { padding: 7px 16px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 13px; cursor: pointer; }
+  .footer .btn:hover { background: var(--bg-faint); }
+  .footer .btn-primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .footer .btn-primary:hover { background: #444; }
+  .footer .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+  .footer .btn-back.hidden { visibility: hidden; }
+
+  /* generic form controls */
+  .label-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .label-row .label { font-size: 12px; font-weight: 600; color: var(--ink); }
+  .label-row .actions { margin-left: auto; display: inline-flex; gap: 6px; }
+  .input { width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 4px; font-size: 13px; color: var(--ink); background: var(--bg-region); font-family: inherit; box-sizing: border-box; }
+  .input::placeholder { color: var(--ink-faint); font-style: italic; }
+  .textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; font-size: 13px; color: var(--ink); background: var(--bg-region); font-family: inherit; box-sizing: border-box; min-height: 70px; resize: vertical; }
+  .input-narrow { padding: 5px 8px; font-size: 12px; min-width: 60px; max-width: 100px; }
+  .field-help { font-size: 11px; color: var(--ink-faint); margin-top: 4px; font-style: italic; }
+  .icon-btn { padding: 4px 8px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); color: var(--ink); font-size: 11px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+  .icon-btn:hover { background: var(--bg-faint); }
+  .sparkle { color: var(--accent); font-weight: 600; }
+
+  /* segment + dropdown */
+  .segment { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .segment .seg { padding: 8px 16px; font-size: 12px; color: var(--ink-muted); background: var(--bg-region); cursor: pointer; border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 110px; }
+  .segment .seg:last-child { border-right: none; }
+  .segment .seg.active { background: var(--ink); color: #fff; }
+  .segment .seg .seg-main { font-weight: 600; font-size: 13px; }
+  .segment .seg .seg-sub { font-size: 10px; color: inherit; opacity: 0.75; }
+
+  .select { padding: 6px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); font-size: 12px; color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 120px; }
+  .select::after { content: "▾"; font-size: 10px; color: var(--ink-muted); }
+
+  /* notice chips */
+  .notice { padding: 10px 12px; background: var(--bg-faint); border-left: 3px solid var(--line); font-size: 12px; color: var(--ink); border-radius: 0 4px 4px 0; margin-top: 14px; }
+  .notice.info::before { content: "ⓘ "; color: var(--ink-muted); }
+  .notice.warn { background: var(--warn-bg); border-left-color: var(--warn); color: #7a5820; }
+  .notice.warn::before { content: "⚠ "; color: var(--warn); }
+
+  /* calendar step */
+  .calendar-pickrow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .summary-panel { padding: 14px; background: var(--bg-faint); border: 1px solid var(--line-soft); border-radius: 4px; font-size: 12px; }
+  .summary-panel .sp-title { font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .summary-panel .sp-chip { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 6px; background: var(--bg-region); border: 1px solid var(--line-soft); border-radius: 3px; color: var(--ink-muted); }
+  .summary-panel .sp-row { display: flex; justify-content: space-between; padding: 2px 0; color: var(--ink-muted); }
+  .summary-panel .sp-row .sp-key { color: var(--ink); }
+  .summary-panel .sp-section { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line-soft); font-size: 11px; }
+  .origin-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-top: 12px; }
+  .origin-cell { display: flex; flex-direction: column; gap: 4px; }
+  .origin-cell .origin-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); }
+
+  /* world step preset+prose */
+  .preset-prose .label-row .actions { display: inline-flex; gap: 4px; }
+
+  /* lore + cast row cards */
+  .row-list { display: flex; flex-direction: column; gap: 8px; }
+  .row-card { padding: 10px 12px; background: var(--bg-region); border: 1px solid var(--line-soft); border-radius: 4px; cursor: pointer; position: relative; }
+  .row-card:hover { border-color: var(--line); }
+  .row-card.editing { border-color: var(--ink); background: var(--bg-region); cursor: default; }
+  .row-card.staged { background: var(--staged-bg); }
+  .row-card.staged .row-title, .row-card.staged .row-desc { color: var(--ink-muted); }
+  .row-title-line { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .row-icon { font-size: 14px; }
+  .row-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .row-chip { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 6px; background: var(--bg-faint); border: 1px solid var(--line-soft); border-radius: 3px; color: var(--ink-muted); }
+  .row-chip.lead { background: #fcf2c4; border-color: #d8c267; color: #6c4f10; }
+  .row-chip.staged { background: #e8e3d6; border-color: #c8bb95; color: #5a4820; }
+  .row-desc { font-size: 12px; color: var(--ink-muted); line-height: 1.45; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .row-meta-line { font-size: 11px; color: var(--ink-faint); margin-top: 4px; }
+  .row-delete { position: absolute; top: 8px; right: 8px; opacity: 0.4; padding: 2px 6px; border: 1px solid var(--line-soft); border-radius: 3px; background: var(--bg-region); cursor: pointer; }
+  .row-delete:hover { opacity: 1; }
+  .row-set-lead { margin-top: 6px; }
+
+  /* row inline editor */
+  .row-edit-grid { display: grid; grid-template-columns: 100px 1fr auto; gap: 10px 12px; align-items: center; padding: 4px 0; }
+  .row-edit-grid .field-label { font-size: 11px; color: var(--ink-muted); }
+  .row-edit-grid .field-input { display: flex; gap: 6px; align-items: center; }
+  .row-edit-disclosure { margin-top: 12px; }
+  .row-edit-disclosure summary { font-size: 12px; color: var(--ink); cursor: pointer; padding: 4px 0; }
+  .row-edit-disclosure[open] summary { font-weight: 600; }
+  .row-actions-bar { display: flex; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+
+  /* chip input */
+  .chip-input { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); min-height: 28px; align-items: center; }
+  .chip { font-size: 11px; padding: 2px 8px; background: var(--bg-faint); border: 1px solid var(--line-soft); border-radius: 12px; color: var(--ink); display: inline-flex; align-items: center; gap: 4px; }
+  .chip .chip-x { color: var(--ink-muted); cursor: pointer; font-size: 11px; }
+  .chip-input .chip-input-typer { flex: 1; min-width: 80px; border: none; outline: none; padding: 3px 4px; font-size: 12px; font-family: inherit; background: transparent; color: var(--ink); }
+  .chip-cap-warn { font-size: 10px; color: var(--warn); margin-top: 2px; }
+
+  /* AI-assist popover (render at-rest as a card; toggle to overlay-style if needed) */
+  .ai-popover { padding: 14px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); max-width: 380px; margin-top: 8px; }
+  .ai-popover .ai-title { font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .ai-popover .ai-guidance-label { font-size: 11px; color: var(--ink-muted); margin-bottom: 4px; }
+  .ai-popover .ai-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+  .ai-result { padding: 14px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 6px; margin-top: 12px; }
+  .ai-result .ai-result-title { font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .ai-result .ai-preview { padding: 10px; background: var(--bg-faint); border-radius: 4px; font-size: 12px; line-height: 1.5; color: var(--ink); margin-bottom: 10px; }
+  .ai-result .ai-meta { font-size: 11px; color: var(--ink-muted); padding: 6px 10px; background: var(--bg-faint); border-left: 3px solid var(--line); margin-bottom: 10px; }
+  .ai-result .ai-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .ai-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; background: var(--bg-faint); border-radius: 4px; margin-bottom: 10px; }
+  .ai-chip { padding: 4px 10px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 14px; font-size: 12px; color: var(--ink); cursor: pointer; }
+  .ai-chip:hover { background: var(--bg-highlight); border-color: var(--ink); }
+  .ai-list { display: flex; flex-direction: column; gap: 6px; padding: 10px; background: var(--bg-faint); border-radius: 4px; margin-bottom: 10px; }
+  .ai-list-row { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; background: var(--bg-region); border: 1px solid var(--line-soft); border-radius: 4px; }
+  .ai-list-row input[type="checkbox"] { margin-top: 3px; }
+  .ai-list-row .ai-list-row-meta { flex: 1; }
+  .ai-list-row .ai-list-row-title { font-size: 12px; font-weight: 600; color: var(--ink); }
+  .ai-list-row .ai-list-row-desc { font-size: 11px; color: var(--ink-muted); }
+  .ai-list-row.disabled { opacity: 0.5; }
+  .ai-list-row.disabled .dedupe-note { font-size: 10px; color: var(--warn); font-style: italic; margin-left: 4px; }
+
+  /* confirm-replace modal (rendered inline as a representative card) */
+  .modal-card { max-width: 380px; padding: 18px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); margin: 16px 0; }
+  .modal-title { font-size: 14px; font-weight: 600; color: var(--ink); margin: 0 0 8px; }
+  .modal-body { font-size: 12px; color: var(--ink-muted); margin: 0 0 14px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+  /* opening preview pane */
+  .opening-preview { padding: 14px 16px; background: var(--bg-faint); border: 1px solid var(--line-soft); border-radius: 6px; font-size: 13px; line-height: 1.6; color: var(--ink); }
+  .opening-state-empty { padding: 24px; text-align: center; background: var(--bg-faint); border: 1px dashed var(--line); border-radius: 6px; color: var(--ink-muted); font-size: 12px; }
+
+  /* utility */
+  .hidden { display: none !important; }
+  .pill-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .add-dropdown { position: relative; display: inline-block; }
+  .add-menu { position: absolute; top: 100%; right: 0; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; padding: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); z-index: 5; }
+  .add-menu .add-menu-item { padding: 4px 10px; font-size: 12px; color: var(--ink); cursor: pointer; border-radius: 3px; white-space: nowrap; }
+  .add-menu .add-menu-item:hover { background: var(--bg-faint); }
+</style>
+</head>
+<body>
+<div class="screen-label"><strong>Story creation wizard</strong> — full-page replacement, 5 steps</div>
+
+<div class="review-bar">
+  <span class="rb-label">Step</span>
+  <div class="rb-group" id="step-switcher">
+    <button class="rb-btn active" data-step="1">1 · Frame</button>
+    <button class="rb-btn" data-step="2">2 · Calendar</button>
+    <button class="rb-btn" data-step="3">3 · World</button>
+    <button class="rb-btn" data-step="4">4 · Cast</button>
+    <button class="rb-btn" data-step="5">5 · Opening &amp; finish</button>
+  </div>
+  <span class="rb-label">Variant</span>
+  <div class="rb-group" id="variant-switcher">
+    <span class="gl">step 4:</span>
+    <button class="rb-btn active" data-variant="default">default</button>
+    <button class="rb-btn" data-variant="lead-required">lead required</button>
+    <button class="rb-btn" data-variant="staged">staged char</button>
+    <span class="gl">step 5:</span>
+    <button class="rb-btn" data-variant="opening-empty">opening empty</button>
+    <button class="rb-btn" data-variant="opening-preview">opening preview</button>
+    <button class="rb-btn" data-variant="opening-committed">opening committed</button>
+  </div>
+  <span class="rb-label">Overlay</span>
+  <div class="rb-group" id="overlay-switcher">
+    <button class="rb-btn active" data-overlay="none">none</button>
+    <button class="rb-btn" data-overlay="ai-guidance">AI guidance</button>
+    <button class="rb-btn" data-overlay="ai-prose-result">prose result</button>
+    <button class="rb-btn" data-overlay="ai-list-result">list result</button>
+    <button class="rb-btn" data-overlay="ai-chips-result">chips result</button>
+    <button class="rb-btn" data-overlay="replace-confirm">replace confirm</button>
+  </div>
+  <span class="rb-note">Wireframe — chrome + per-step composition only; pixel polish in visual identity pass</span>
+</div>
+
+<div class="wizard-page">
+  <!-- top bar -->
+  <div class="top-bar">
+    <button class="cancel-btn">← Cancel</button>
+    <div class="center-title">New story <span class="step-count" id="step-count">· step 1 of 5</span></div>
+    <span></span>
+  </div>
+
+  <!-- step indicator pills -->
+  <div class="step-pills" id="step-pills">
+    <button class="pill active" data-step="1"><span class="dot"></span>Frame</button>
+    <button class="pill" data-step="2"><span class="dot"></span>Calendar</button>
+    <button class="pill" data-step="3"><span class="dot"></span>World</button>
+    <button class="pill" data-step="4"><span class="dot"></span>Cast</button>
+    <button class="pill" data-step="5"><span class="dot"></span>Opening</button>
+  </div>
+
+  <!-- step body -->
+  <div class="step-body" id="step-body">
+
+    <!-- ============= STEP 1 — FRAME ============= -->
+    <div class="step-pane" data-step="1">
+      <h1 class="step-heading">How is this story told?</h1>
+      <p class="step-intro">The basics — who plays, and whose voice the story is in. Both have permissive defaults; you can change anything later in Story Settings.</p>
+
+      <div class="step-section">
+        <div class="label-row"><span class="label">Mode</span></div>
+        <div class="segment">
+          <div class="seg active">
+            <span class="seg-main">Adventure</span>
+            <span class="seg-sub">You play a character. AI runs the world.</span>
+          </div>
+          <div class="seg">
+            <span class="seg-main">Creative</span>
+            <span class="seg-sub">You write the prose. AI helps draft.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-section">
+        <div class="label-row"><span class="label">Narration</span></div>
+        <div class="segment">
+          <div class="seg active">
+            <span class="seg-main">First</span>
+            <span class="seg-sub">"I drew…"</span>
+          </div>
+          <div class="seg">
+            <span class="seg-main">Second</span>
+            <span class="seg-sub">"You drew…"</span>
+          </div>
+          <div class="seg">
+            <span class="seg-main">Third</span>
+            <span class="seg-sub">"Aria drew…"</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="notice info">This combination will require a lead character in Cast.</div>
+    </div>
+
+    <!-- ============= STEP 2 — CALENDAR ============= -->
+    <div class="step-pane hidden" data-step="2">
+      <h1 class="step-heading">When does this story take place?</h1>
+      <p class="step-intro">Pick a calendar system and your in-world starting moment. Every entry's worldTime is recorded relative to this start.</p>
+
+      <div class="step-section">
+        <div class="label-row"><span class="label">Calendar system</span></div>
+        <p class="field-help" style="margin-top:0;margin-bottom:10px;">Pick a calendar that matches your story's setting. Default is Earth (Gregorian).</p>
+        <div class="calendar-pickrow">
+          <div>
+            <div class="select" style="width:100%;">Earth (Gregorian)</div>
+            <p class="field-help">Manage calendars in Vault is hidden in the wizard — cancel to author a custom calendar in Vault, then restart.</p>
+          </div>
+          <div class="summary-panel">
+            <div class="sp-title">Earth (Gregorian) <span class="sp-chip">built-in</span></div>
+            <div class="sp-row"><span class="sp-key">year</span><span>Gregorian leap</span></div>
+            <div class="sp-row"><span class="sp-key">month</span><span>28–31 days</span></div>
+            <div class="sp-row"><span class="sp-key">day</span><span>24 hours</span></div>
+            <div class="sp-row"><span class="sp-key">hour</span><span>60 minutes</span></div>
+            <div class="sp-row"><span class="sp-key">minute</span><span>60 seconds</span></div>
+            <div class="sp-row"><span class="sp-key">second</span><span>base unit</span></div>
+            <div class="sp-section">Subdivisions: weekday Sun–Sat (7-day cycle)</div>
+            <div class="sp-section">Eras: disabled</div>
+            <div class="sp-section">Sample: April 30, 2026 14:00:00</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-section">
+        <div class="label-row"><span class="label">Story start moment</span></div>
+        <p class="field-help" style="margin-top:0;margin-bottom:10px;">What in-world date and time the story begins. Defaults seeded from this calendar's <code>exampleStartValue</code>.</p>
+        <div class="origin-row">
+          <div class="origin-cell">
+            <span class="origin-label">Year</span>
+            <input class="input input-narrow" value="2024">
+          </div>
+          <div class="origin-cell">
+            <span class="origin-label">Month</span>
+            <div class="select">January</div>
+          </div>
+          <div class="origin-cell">
+            <span class="origin-label">Day</span>
+            <input class="input input-narrow" value="1">
+          </div>
+          <div class="origin-cell">
+            <span class="origin-label">Hour</span>
+            <input class="input input-narrow" value="0">
+          </div>
+          <div class="origin-cell">
+            <span class="origin-label">Minute</span>
+            <input class="input input-narrow" value="0">
+          </div>
+          <div class="origin-cell">
+            <span class="origin-label">Second</span>
+            <input class="input input-narrow" value="0">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============= STEP 3 — WORLD ============= -->
+    <div class="step-pane hidden" data-step="3">
+      <h1 class="step-heading">What's the world like?</h1>
+      <p class="step-intro">Genre, tone, the setting it unfolds in, plus any world rules. Browse presets for genre/tone, write the setting freeform, add lore as it comes.</p>
+
+      <div class="step-section preset-prose">
+        <div class="section-rule">
+          <span class="rule-label">Genre</span>
+          <span class="rule-line"></span>
+          <span class="rule-actions">
+            <button class="icon-btn">📚 Browse presets</button>
+            <button class="icon-btn"><span class="sparkle">✨</span> Suggest</button>
+          </span>
+        </div>
+        <div class="label-row"><span class="label">Label</span></div>
+        <input class="input" placeholder="e.g. Hard sci-fi, Cozy fantasy, Noir…">
+        <div class="label-row" style="margin-top:10px;"><span class="label">Body</span></div>
+        <textarea class="textarea" rows="5" placeholder="Substantial prompt content — what the AI should know about this genre. Multi-paragraph prose."></textarea>
+      </div>
+
+      <div class="step-section preset-prose">
+        <div class="section-rule">
+          <span class="rule-label">Tone</span>
+          <span class="rule-line"></span>
+          <span class="rule-actions">
+            <button class="icon-btn">📚 Browse presets</button>
+            <button class="icon-btn"><span class="sparkle">✨</span> Suggest</button>
+          </span>
+        </div>
+        <div class="label-row"><span class="label">Label</span></div>
+        <input class="input" placeholder="e.g. Grim, Hopeful, Wry…">
+        <div class="label-row" style="margin-top:10px;"><span class="label">Body</span></div>
+        <textarea class="textarea" rows="4" placeholder="Substantial prompt content — what the AI should know about this tone."></textarea>
+      </div>
+
+      <div class="step-section">
+        <div class="section-rule">
+          <span class="rule-label">Setting</span>
+          <span class="rule-line"></span>
+          <span class="rule-actions">
+            <button class="icon-btn"><span class="sparkle">✨</span> Suggest</button>
+          </span>
+        </div>
+        <textarea class="textarea" rows="5" placeholder="Where and when does this story take place? Freeform prose — describe the world, era, location."></textarea>
+      </div>
+
+      <div class="step-section">
+        <div class="section-rule">
+          <span class="rule-label">Initial lore</span>
+          <span class="rule-line"></span>
+          <span class="rule-actions">
+            <button class="icon-btn"><span class="sparkle">✨</span> Suggest lore</button>
+            <button class="icon-btn">+ Add lore</button>
+          </span>
+        </div>
+        <div class="row-list">
+          <div class="row-card">
+            <button class="row-delete">✕</button>
+            <div class="row-title-line">
+              <span class="row-title">Magic systems</span>
+            </div>
+            <div class="row-desc">Magic flows from sealed wells across the realm. Each well has a guardian; the guardians are dying out, and the wells are becoming unstable…</div>
+            <div class="row-meta-line">category: cosmology · keyword_llm</div>
+          </div>
+          <div class="row-card">
+            <button class="row-delete">✕</button>
+            <div class="row-title-line">
+              <span class="row-title">The Old Empire</span>
+            </div>
+            <div class="row-desc">A thousand years ago, the Empire ruled most of the continent under a single dynasty. The fall is recent enough that elder characters remember it.</div>
+          </div>
+          <!-- expanded edit row -->
+          <div class="row-card editing">
+            <button class="row-delete">✕</button>
+            <div class="row-edit-grid">
+              <span class="field-label">Title</span>
+              <span class="field-input"><input class="input" value="Religions"></span>
+              <span></span>
+              <span class="field-label">Body</span>
+              <span class="field-input" style="grid-column: 2 / span 2;"><textarea class="textarea" rows="3">Three major faiths share the realm. The Solar Cult is dominant in the south; the Quiet Path holds the western islands; the Grey Faith is universally feared.</textarea></span>
+              <span class="field-label">Category</span>
+              <span class="field-input"><input class="input" value="religion"></span>
+              <span></span>
+            </div>
+            <details class="row-edit-disclosure">
+              <summary>▶ More options</summary>
+              <div class="row-edit-grid" style="margin-top:8px;">
+                <span class="field-label">Tags</span>
+                <span class="field-input">
+                  <div class="chip-input" style="flex:1;">
+                    <span class="chip">faith <span class="chip-x">×</span></span>
+                    <input class="chip-input-typer" placeholder="add tag…">
+                  </div>
+                </span>
+                <span></span>
+                <span class="field-label">Injection mode</span>
+                <span class="field-input"><div class="select">keyword_llm</div></span>
+                <span></span>
+                <span class="field-label">Priority</span>
+                <span class="field-input"><input class="input input-narrow" value="0"></span>
+                <span></span>
+              </div>
+            </details>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============= STEP 4 — CAST ============= -->
+    <div class="step-pane hidden" data-step="4">
+      <h1 class="step-heading">Who's in this story?</h1>
+      <p class="step-intro">Characters, plus the locations, items, and factions that matter from the start. Add manually or generate a starting cast with ✨.</p>
+
+      <!-- Lead-required notice (variant: lead-required) -->
+      <div class="notice info" id="lead-required-notice">First-person narration requires a lead character. Mark one with the ⭐ on a character row.</div>
+
+      <div class="section-rule" style="margin-bottom: 16px;">
+        <span class="rule-line"></span>
+        <span class="rule-actions">
+          <button class="icon-btn"><span class="sparkle">✨</span> Suggest cast</button>
+          <span class="add-dropdown">
+            <button class="icon-btn">+ Add ▾</button>
+          </span>
+        </span>
+      </div>
+
+      <div class="row-list" id="cast-rows">
+        <!-- character with lead -->
+        <div class="row-card" data-row="aria">
+          <button class="row-delete">✕</button>
+          <div class="row-title-line">
+            <span class="row-icon">👤</span>
+            <span class="row-title">Aria Stoneheart</span>
+            <span class="row-chip lead">⭐ lead</span>
+          </div>
+          <div class="row-desc">A young blacksmith from a fallen kingdom; left her village after raiders took her brother. Methodical, slow to anger, slower to trust.</div>
+        </div>
+
+        <!-- character without lead, set-as-lead button -->
+        <div class="row-card" data-row="jorin">
+          <button class="row-delete">✕</button>
+          <div class="row-title-line">
+            <span class="row-icon">👤</span>
+            <span class="row-title">Old Jorin</span>
+          </div>
+          <div class="row-desc">The grizzled barkeeper of the Iron Tankard. Knows every regular's drink and every regional rumor. Quietly fond of Aria.</div>
+          <div class="row-set-lead"><button class="icon-btn">⭐ Set as lead</button></div>
+        </div>
+
+        <!-- location -->
+        <div class="row-card" data-row="mornstone">
+          <button class="row-delete">✕</button>
+          <div class="row-title-line">
+            <span class="row-icon">📍</span>
+            <span class="row-title">Mornstone Keep</span>
+          </div>
+          <div class="row-desc">The fortified seat of House Aerwyn, perched on a basalt cliff over the bay. Its black towers are visible for thirty miles inland.</div>
+        </div>
+
+        <!-- staged character (variant: staged) -->
+        <div class="row-card staged hidden" data-row="gandalf" id="staged-row">
+          <button class="row-delete">✕</button>
+          <div class="row-title-line">
+            <span class="row-icon">👤</span>
+            <span class="row-title">Gandalf</span>
+            <span class="row-chip staged">staged</span>
+          </div>
+          <div class="row-desc">A wandering wizard, gray of cloak and white of beard. Rarely arrives unbidden; never arrives unprepared.</div>
+        </div>
+
+        <!-- faction -->
+        <div class="row-card" data-row="ironbrotherhood">
+          <button class="row-delete">✕</button>
+          <div class="row-title-line">
+            <span class="row-icon">🏛</span>
+            <span class="row-title">The Iron Brotherhood</span>
+          </div>
+          <div class="row-desc">A militant order sworn to root out lingering Old Empire sympathizers. Ruthless, secretive, and increasingly resented in the borderlands.</div>
+        </div>
+
+        <!-- expanded character editor -->
+        <div class="row-card editing" data-row="kael">
+          <button class="row-delete">✕</button>
+          <div class="row-edit-grid">
+            <span class="field-label">Name</span>
+            <span class="field-input">
+              <input class="input" value="Kael Vex" style="flex:1;">
+              <div class="select" style="margin-left:6px;">Active</div>
+            </span>
+            <span></span>
+            <span class="field-label">Description</span>
+            <span class="field-input" style="grid-column: 2 / span 2;">
+              <textarea class="textarea" rows="3">A former Imperial scribe turned freelance archivist. Wears spectacles he doesn't always need. Carries an unsigned letter from a dead duke.</textarea>
+            </span>
+            <span class="field-label">Voice</span>
+            <span class="field-input" style="grid-column: 2 / span 2;">
+              <input class="input" value="Drops articles when nervous; speaks in short declaratives.">
+            </span>
+            <span class="field-label">Traits</span>
+            <span class="field-input" style="grid-column: 2 / span 2;">
+              <div class="chip-input" style="flex:1;">
+                <span class="chip">methodical <span class="chip-x">×</span></span>
+                <span class="chip">guarded <span class="chip-x">×</span></span>
+                <span class="chip">archivist <span class="chip-x">×</span></span>
+                <input class="chip-input-typer" placeholder="add trait…">
+              </div>
+            </span>
+            <span class="field-label">Drives</span>
+            <span class="field-input" style="grid-column: 2 / span 2;">
+              <div class="chip-input" style="flex:1;">
+                <span class="chip">find lost sister <span class="chip-x">×</span></span>
+                <span class="chip">avoid debt collectors <span class="chip-x">×</span></span>
+                <input class="chip-input-typer" placeholder="add drive…">
+              </div>
+            </span>
+          </div>
+          <details class="row-edit-disclosure">
+            <summary>▶ Visual</summary>
+            <div class="row-edit-grid" style="margin-top:8px;">
+              <span class="field-label">Physique</span>
+              <span class="field-input" style="grid-column: 2 / span 2;"><input class="input" value="Tall, lean, slight stoop"></span>
+              <span class="field-label">Face</span>
+              <span class="field-input" style="grid-column: 2 / span 2;"><input class="input" placeholder="facial features, complexion, expression-tendency"></span>
+              <span class="field-label">Hair</span>
+              <span class="field-input" style="grid-column: 2 / span 2;"><input class="input" value="Cropped salt-and-pepper"></span>
+              <span class="field-label">Eyes</span>
+              <span class="field-input" style="grid-column: 2 / span 2;"><input class="input" placeholder="eye color, distinctive traits"></span>
+              <span class="field-label">Attire</span>
+              <span class="field-input" style="grid-column: 2 / span 2;"><input class="input" value="Wool jerkin, ink-stained sleeves, ledger satchel"></span>
+              <span class="field-label">Distinguishing</span>
+              <span class="field-input" style="grid-column: 2 / span 2;">
+                <div class="chip-input" style="flex:1;">
+                  <span class="chip">scar across left palm <span class="chip-x">×</span></span>
+                  <input class="chip-input-typer" placeholder="add detail…">
+                </div>
+              </span>
+            </div>
+          </details>
+          <details class="row-edit-disclosure">
+            <summary>▶ More options</summary>
+            <div class="row-edit-grid" style="margin-top:8px;">
+              <span class="field-label">Tags</span>
+              <span class="field-input" style="grid-column: 2 / span 2;">
+                <div class="chip-input" style="flex:1;">
+                  <input class="chip-input-typer" placeholder="add tag…">
+                </div>
+              </span>
+              <span class="field-label">Faction</span>
+              <span class="field-input" style="grid-column: 2 / span 2;"><div class="select">(no factions yet)</div></span>
+            </div>
+          </details>
+          <div class="row-actions-bar">
+            <button class="icon-btn">⭐ Set as lead</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============= STEP 5 — OPENING & FINISH ============= -->
+    <div class="step-pane hidden" data-step="5">
+      <h1 class="step-heading">How does this story begin?</h1>
+      <p class="step-intro">The opening is your story's first words — entry 1 of the narrative. Generate one with AI, or write it yourself. Below, name your story.</p>
+
+      <div class="step-section">
+        <div class="section-rule">
+          <span class="rule-label">Opening</span>
+          <span class="rule-line"></span>
+          <span class="rule-actions">
+            <button class="icon-btn"><span class="sparkle">✨</span></button>
+          </span>
+        </div>
+
+        <!-- Empty state (variant: opening-empty) -->
+        <div id="opening-empty" class="opening-state-empty">
+          Generate with <span class="sparkle">✨</span>, or start typing below.
+          <textarea class="textarea" rows="6" style="margin-top: 12px;" placeholder="Write the opening here…"></textarea>
+        </div>
+
+        <!-- Preview state (variant: opening-preview) -->
+        <div id="opening-preview" class="hidden">
+          <div class="ai-result">
+            <div class="ai-result-title"><span class="sparkle">✨</span> Suggested opening</div>
+            <div class="ai-preview">The bell of the abbey tolled twice as Aria reached the tree line. Snow lay thick on the broken road, and the wind smelled of old smoke. Below, the keep's torches flickered against the dusk — too few, she thought, for a household preparing supper.</div>
+            <div class="ai-meta">
+              <strong>Scene metadata:</strong><br>
+              Cast in scene: Aria Stoneheart<br>
+              Location: Mornstone Keep
+            </div>
+            <div class="ai-actions">
+              <button class="icon-btn">Discard</button>
+              <button class="icon-btn">Refine…</button>
+              <button class="icon-btn">Regenerate</button>
+              <button class="icon-btn" style="background: var(--ink); color: #fff; border-color: var(--ink);">Use this</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Committed state (variant: opening-committed) -->
+        <div id="opening-committed" class="hidden">
+          <div class="opening-preview" contenteditable="true">The bell of the abbey tolled twice as Aria reached the tree line. Snow lay thick on the broken road, and the wind smelled of old smoke. Below, the keep's torches flickered against the dusk — too few, she thought, for a household preparing supper.</div>
+          <div class="ai-meta" style="margin-top: 8px;">Scene metadata: Aria Stoneheart · Mornstone Keep</div>
+        </div>
+      </div>
+
+      <div class="step-section">
+        <div class="section-rule">
+          <span class="rule-label">Story name</span>
+          <span class="rule-line"></span>
+          <span class="rule-actions">
+            <button class="icon-btn"><span class="sparkle">✨</span></button>
+          </span>
+        </div>
+        <div class="label-row"><span class="label">Title</span></div>
+        <input class="input" placeholder="What is this story called?">
+        <div class="label-row" style="margin-top: 12px;"><span class="label">Description</span></div>
+        <input class="input" placeholder="A sentence or two summarizing what the story is about.">
+      </div>
+
+      <!-- Overlay: AI guidance popover -->
+      <div id="overlay-ai-guidance" class="ai-popover hidden">
+        <div class="ai-title"><span class="sparkle">✨</span> Suggest setting</div>
+        <div class="ai-guidance-label">Optional guidance</div>
+        <input class="input" placeholder='e.g. "Norse-flavored, post-apocalypse"'>
+        <div class="ai-actions">
+          <button class="icon-btn">Cancel</button>
+          <button class="icon-btn" style="background: var(--ink); color: #fff; border-color: var(--ink);">Generate</button>
+        </div>
+      </div>
+
+      <!-- Overlay: AI prose result -->
+      <div id="overlay-ai-prose-result" class="ai-result hidden">
+        <div class="ai-result-title"><span class="sparkle">✨</span> Suggested setting</div>
+        <div class="ai-preview">A frozen tundra at the edge of the inhabited world, where dying gods still walk in the long winters. Settlements cluster around hot springs; trade caravans cross the ice on bonelegged sledges. The old Empire's roads are buried under twenty feet of snow.</div>
+        <div class="ai-actions">
+          <button class="icon-btn">Discard</button>
+          <button class="icon-btn">Refine…</button>
+          <button class="icon-btn">Regenerate</button>
+          <button class="icon-btn" style="background: var(--ink); color: #fff; border-color: var(--ink);">Use this</button>
+        </div>
+      </div>
+
+      <!-- Overlay: AI list result -->
+      <div id="overlay-ai-list-result" class="ai-result hidden">
+        <div class="ai-result-title"><span class="sparkle">✨</span> Suggested cast (5 of 5)</div>
+        <div class="ai-list">
+          <div class="ai-list-row">
+            <input type="checkbox" checked>
+            <div class="ai-list-row-meta">
+              <div class="ai-list-row-title">👤 Brennan Voss</div>
+              <div class="ai-list-row-desc">A weather-worn caravan-master, missing two fingers on his left hand…</div>
+            </div>
+          </div>
+          <div class="ai-list-row">
+            <input type="checkbox" checked>
+            <div class="ai-list-row-meta">
+              <div class="ai-list-row-title">👤 Lyra (younger sister)</div>
+              <div class="ai-list-row-desc">Bookish, bright, prone to elaborate hand gestures…</div>
+            </div>
+          </div>
+          <div class="ai-list-row disabled">
+            <input type="checkbox" disabled>
+            <div class="ai-list-row-meta">
+              <div class="ai-list-row-title">👤 Aria Stoneheart <span class="dedupe-note">(already exists)</span></div>
+              <div class="ai-list-row-desc">A young blacksmith from a fallen kingdom…</div>
+            </div>
+          </div>
+          <div class="ai-list-row">
+            <input type="checkbox" checked>
+            <div class="ai-list-row-meta">
+              <div class="ai-list-row-title">📍 The Iron Tankard</div>
+              <div class="ai-list-row-desc">A coaching inn at the crossroads of three trade routes…</div>
+            </div>
+          </div>
+          <div class="ai-list-row">
+            <input type="checkbox">
+            <div class="ai-list-row-meta">
+              <div class="ai-list-row-title">🎒 The unsigned letter</div>
+              <div class="ai-list-row-desc">A folded parchment, sealed in dark wax with no sigil…</div>
+            </div>
+          </div>
+        </div>
+        <div class="ai-actions">
+          <button class="icon-btn">Discard</button>
+          <button class="icon-btn">Regenerate</button>
+          <button class="icon-btn">Generate more</button>
+          <button class="icon-btn" style="background: var(--ink); color: #fff; border-color: var(--ink);">Import selected (3)</button>
+        </div>
+      </div>
+
+      <!-- Overlay: AI chips result -->
+      <div id="overlay-ai-chips-result" class="ai-result hidden">
+        <div class="ai-result-title"><span class="sparkle">✨</span> Suggested titles</div>
+        <div class="ai-chips">
+          <button class="ai-chip">The Bell at Mornstone</button>
+          <button class="ai-chip">Snow Over Old Roads</button>
+          <button class="ai-chip">Aria's Reckoning</button>
+          <button class="ai-chip">The Last Smith of Aerwyn</button>
+          <button class="ai-chip">Where the Wells Run Dry</button>
+          <button class="ai-chip">Ironbound</button>
+          <button class="ai-chip">The Quiet Path</button>
+        </div>
+        <div class="ai-actions">
+          <button class="icon-btn">Discard</button>
+          <button class="icon-btn">Regenerate</button>
+        </div>
+      </div>
+
+      <!-- Overlay: replace-confirm modal -->
+      <div id="overlay-replace-confirm" class="modal-card hidden">
+        <h3 class="modal-title">Replace genre with "Hard sci-fi"?</h3>
+        <p class="modal-body">Your current label and body will be lost.</p>
+        <div class="modal-actions">
+          <button class="icon-btn">Cancel</button>
+          <button class="icon-btn" style="background: var(--ink); color: #fff; border-color: var(--ink);">Replace</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- footer -->
+  <div class="footer">
+    <button class="btn">Save as draft</button>
+    <div class="right-group">
+      <button class="btn btn-back hidden" id="btn-back">← Back</button>
+      <button class="btn btn-primary" id="btn-next">Next →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // step switcher
+  const stepBtns = document.querySelectorAll('#step-switcher .rb-btn');
+  const stepPanes = document.querySelectorAll('.step-pane');
+  const stepPills = document.querySelectorAll('#step-pills .pill');
+  const stepCount = document.getElementById('step-count');
+  const btnBack = document.getElementById('btn-back');
+  const btnNext = document.getElementById('btn-next');
+
+  function setStep(n) {
+    stepBtns.forEach(b => b.classList.toggle('active', b.dataset.step === n));
+    stepPanes.forEach(p => p.classList.toggle('hidden', p.dataset.step !== n));
+    stepPills.forEach((p, i) => {
+      const idx = i + 1;
+      p.classList.remove('active', 'done');
+      if (String(idx) === n) p.classList.add('active');
+      else if (idx < +n) p.classList.add('done');
+    });
+    stepCount.textContent = `· step ${n} of 5`;
+    btnBack.classList.toggle('hidden', n === '1');
+    btnNext.textContent = n === '5' ? 'Finish' : 'Next →';
+  }
+  stepBtns.forEach(b => b.addEventListener('click', () => setStep(b.dataset.step)));
+  stepPills.forEach(p => p.addEventListener('click', () => {
+    if (p.classList.contains('done') || p.classList.contains('active')) {
+      setStep(p.dataset.step);
+    }
+  }));
+
+  // variant switcher (step 4 lead-required, step 4 staged, step 5 opening states)
+  const variantBtns = document.querySelectorAll('#variant-switcher .rb-btn');
+  const leadNotice = document.getElementById('lead-required-notice');
+  const stagedRow = document.getElementById('staged-row');
+  const openingEmpty = document.getElementById('opening-empty');
+  const openingPreview = document.getElementById('opening-preview');
+  const openingCommitted = document.getElementById('opening-committed');
+
+  // initial state
+  leadNotice.classList.add('hidden');
+  stagedRow.classList.add('hidden');
+
+  variantBtns.forEach(b => b.addEventListener('click', () => {
+    variantBtns.forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    const v = b.dataset.variant;
+    if (v === 'default') {
+      leadNotice.classList.add('hidden');
+      stagedRow.classList.add('hidden');
+    } else if (v === 'lead-required') {
+      leadNotice.classList.remove('hidden');
+      stagedRow.classList.add('hidden');
+    } else if (v === 'staged') {
+      leadNotice.classList.add('hidden');
+      stagedRow.classList.remove('hidden');
+    } else if (v === 'opening-empty') {
+      openingEmpty.classList.remove('hidden');
+      openingPreview.classList.add('hidden');
+      openingCommitted.classList.add('hidden');
+    } else if (v === 'opening-preview') {
+      openingEmpty.classList.add('hidden');
+      openingPreview.classList.remove('hidden');
+      openingCommitted.classList.add('hidden');
+    } else if (v === 'opening-committed') {
+      openingEmpty.classList.add('hidden');
+      openingPreview.classList.add('hidden');
+      openingCommitted.classList.remove('hidden');
+    }
+  }));
+
+  // overlay switcher (AI popovers, replace-confirm)
+  const overlayBtns = document.querySelectorAll('#overlay-switcher .rb-btn');
+  const overlays = {
+    'ai-guidance': document.getElementById('overlay-ai-guidance'),
+    'ai-prose-result': document.getElementById('overlay-ai-prose-result'),
+    'ai-list-result': document.getElementById('overlay-ai-list-result'),
+    'ai-chips-result': document.getElementById('overlay-ai-chips-result'),
+    'replace-confirm': document.getElementById('overlay-replace-confirm'),
+  };
+  function hideAllOverlays() { Object.values(overlays).forEach(o => o && o.classList.add('hidden')); }
+  overlayBtns.forEach(b => b.addEventListener('click', () => {
+    overlayBtns.forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    hideAllOverlays();
+    const v = b.dataset.overlay;
+    if (overlays[v]) {
+      // make sure step 5 is shown when surfacing step-5 overlays
+      if (v === 'ai-prose-result' || v === 'ai-chips-result' || v === 'ai-list-result') setStep('5');
+      if (v === 'replace-confirm') setStep('3');
+      overlays[v].classList.remove('hidden');
+    }
+  }));
+</script>
+</body>
+</html>

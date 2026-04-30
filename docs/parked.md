@@ -533,33 +533,32 @@ want to pre-tag scene presence on the opening at wizard time — pick
 which cast members are in the opening's scene, which location is
 current — so first-turn generation context is grounded from entry 1.
 
-Wizard concern, not data-model. Lands with the Wizard design pass
-(Inventory #2). The data shape already supports it (the metadata
-fields exist and are user-editable per the
-[Entry metadata shape](./data-model.md#entry-metadata-shape)
-decision); only the wizard UX is missing.
+Wizard concern, not data-model. The
+[Wizard design pass](./explorations/2026-04-30-story-creation-wizard.md)
+landed without this affordance — AI-generated openings emit
+metadata refs via structured output, but user-written openings
+remain empty until turn-2 classifier picks up. Adding a manual
+scene-tagging surface on the wizard's step 5 was deliberately
+deferred. Parked-until-signal: revisit if user feedback shows
+unbacked turn-1 generation quality is materially worse than
+seeded-metadata generation. The data shape already supports it
+(metadata fields exist and are user-editable per
+[Entry metadata shape](./data-model.md#entry-metadata-shape));
+only the wizard UX is missing.
 
-#### Regenerate-opening affordance
+#### Regenerate-opening affordance — post-commit from reader chrome
 
 The opening entry is permanent within its branch (block-delete per
 the [opening invariants](./data-model.md#opening-entry)) but
-editable. For AI-assisted openings, "I want to regenerate this
-opening with the same settings" is a likely user need — particularly
-right after wizard commit when the user reads the AI output and
-isn't satisfied. Two candidate surfaces:
-
-- **Wizard one-shot regenerate** — within the wizard's preview-the-
-  opening step, a `Regenerate` button before commit. Same generation
-  call; replaces the candidate prose. Lives in wizard UX.
-- **Post-commit regenerate from reader chrome** — surfaces an
-  affordance on the opening entry in the reader (a non-standard icon
-  since regen is suppressed on opening per its render contract).
-  Heavier — needs a confirmation flow since the opening's text is
-  the floor for the entire branch.
-
-Wizard surface ships first (light, contained); reader-chrome
-post-commit surface is the deferred extension if real demand
-surfaces.
+editable. Wizard-time regeneration is shipped per
+[wizard.md → Step 5](./ui/screens/wizard/wizard.md) (the `✨`
+trigger + `Refine` / `Regenerate` actions on the opening preview).
+What remains parked is the **post-commit regenerate from reader
+chrome** path: surfaces an affordance on the opening entry in the
+reader (a non-standard icon since regen is suppressed on opening
+per its render contract). Heavier than the wizard surface — needs
+a confirmation flow since the opening's text is the floor for the
+entire branch. Defers until real demand surfaces post-launch.
 
 #### Classifier-on-opening retrofit
 
@@ -575,6 +574,87 @@ separate scene-tagging pass against the opening prose — restricted
 to populating `sceneEntities` / `currentLocationId` against the
 wizard-curated cast (no entity creation). Add at the design pass
 that surfaces the need.
+
+#### Wizard-assist agent profile splitting
+
+[`wizard-assist`](./data-model.md#app-settings-storage) is one
+agent serving every AI call fired from the
+[Story creation wizard](./ui/screens/wizard/wizard.md) — title-chip
+generation (5 tokens, low-stakes) AND structured-output opening
+prose with metadata refs (800 words, higher-stakes). One profile
+backs both. If real signal post-launch shows quality varies
+pathologically (small profile underdelivers on opening prose, or
+expensive profile is wasteful for chip generation), split into
+`wizard-assist-light` and `wizard-assist-prose`. The architecture
+supports it; v1 ships single-agent.
+
+#### Wizard concurrent-state prompt third button
+
+The [story-list concurrent-state prompts](./ui/screens/story-list/story-list.md#unfinished-wizard-session-automatic-safety-net)
+ship two-button (`Continue` / `Discard session & ...`). A third
+button — `Save session as draft & continue with <target>` — would
+let users preserve in-flight session state AND open the new target
+in one click, instead of dismissing the prompt → save-as-draft
+inside the wizard → re-trigger the click. Three buttons is
+borderline busy on a fork-in-the-road decision; v1 floor is
+two-button + destructive labeling. If users report losing work via
+the destructive path, the third button lands.
+
+#### Wizard cast / lore reorder
+
+Wizard's cast list (step 4) and lore list (step 3) currently
+render insertion-ordered with no reorder UX. Drag-to-reorder
+within a wizard list would let users author a deliberate
+arrangement (lead character first, lore in narrative order, etc.).
+Skipped in v1 because reorder is fiddly to implement and the
+underlying data shape doesn't carry an order column. If real demand
+surfaces, add an `order: number` field on `entities` / `lore` (or
+a story-scoped ordering JSON) and ship the drag affordance.
+
+#### Wizard cast / lore section-collapse toggle
+
+Wizard's step 3 (lore list) and step 4 (cast list) use long-scroll
+at high counts (no pagination). At pathological counts (20+ rows
+per section) the step's scroll length grows. A
+section-collapse toggle (`▼ Initial lore (12 rows)` → click to
+collapse to a one-liner) would let users hide bulk while
+authoring other sections. v1 ships expanded-only; add if real
+friction surfaces.
+
+#### Wizard per-kind grouping or tabs in step 4
+
+Wizard's step 4 cast list is a single mixed list with kind icons
+([`patterns/entity.md`](./ui/patterns/entity.md)). At high counts
+(20+ entities, character-heavy), grouping by kind or tabbing
+(Characters | Locations | Items | Factions) might improve scan
+density. v1 ships flat mixed list; revisit if real cast counts
+push beyond comfortable mixed-list density.
+
+#### Wizard-time pack selection
+
+[`stories.settings.activePackId`](./data-model.md#story-settings-shape)
+copies from `app_settings.default_story_settings` at wizard time
+per the operational-config copy-at-creation rule. A power user
+might want to pick a non-default pack at story creation rather
+than post-creation in Story Settings. Adds a wizard-step affordance
+or step-5 disclosure. Speculative; low priority pending real
+signal.
+
+#### Chip input vs comma-separated string
+
+Several string-array fields surface as **chip inputs** across the
+app — `entities.state.traits`, `drives`, `agenda`,
+`visual.distinguishing`, `tags` (entities, lore, stories), and
+the same fields surfaced inline in the
+[wizard's step 4 cast editor](./ui/screens/wizard/wizard.md).
+Chip inputs are richer (per-element delete affordances, validation
+per chip, preview shape) but more expensive to implement and
+arguably overkill for the underlying simple `string[]` shape. A
+plain comma-separated single-line input may be cheaper to author,
+simpler to implement, and adequate for the common case. Cross-
+cutting reconsideration; affects entity / lore / wizard surfaces
+uniformly. Defer until first chip-input component is implemented
+and the per-feature cost is concrete.
 
 #### Per-branch definition override
 

@@ -35,7 +35,7 @@ rationale, and decisions live alongside.
 | #   | Screen                         | Directory                                                                |
 | --- | ------------------------------ | ------------------------------------------------------------------------ |
 | 1   | Story list (landing)           | [screens/story-list/](./screens/story-list/story-list.md)                |
-| 2   | Story creation wizard          | pending                                                                  |
+| 2   | Story creation wizard          | [screens/wizard/](./screens/wizard/wizard.md)                            |
 | 3   | Reader / composer              | [screens/reader-composer/](./screens/reader-composer/reader-composer.md) |
 | 4   | App Settings                   | [screens/app-settings/](./screens/app-settings/app-settings.md)          |
 | 5   | Onboarding (first launch)      | [screens/onboarding/](./screens/onboarding/onboarding.md)                |

@@ -220,6 +220,14 @@ unit)`).
   template, not the era system (per
   [calendar-systems/spec.md → Eras](../../../../calendar-systems/spec.md#eras-hoisted-out-manually-triggered)).
   Earth (Gregorian) ships with `eras: null` for this reason.
+- **Example start value** — read-only in v1; the calendar
+  definition's mandatory `exampleStartValue` `TierTuple` (per
+  [calendar-systems/spec.md → Calendar definition](../../../../calendar-systems/spec.md#calendar-definition))
+  rendered through the calendar's display format. Seeds the
+  [Story creation wizard's](../../wizard/wizard.md) `worldTimeOrigin`
+  input. Built-ins ship with sensible values baked in; clones of
+  built-ins inherit from the source. Editable from-scratch
+  authoring lands at L3 alongside structural editing.
 
 ### Labels section (the L2 editing surface)
 

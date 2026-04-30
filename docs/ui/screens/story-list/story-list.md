@@ -147,13 +147,33 @@ forgiving without cluttering the library.
 ### Unfinished wizard session (automatic safety net)
 
 - Zustand with persist (SQLite-backed) continuously saves wizard
-  state on every step change.
+  state on every step change. Persistence begins on the first
+  meaningful state change (a field commit or `Next` click) — opening
+  the wizard, glancing at it, and cancelling does NOT create a
+  session.
 - **One active session at a time** — the latest unfinished wizard
-  attempt.
+  attempt. The session is mutually exclusive with any specific
+  wizard target (fresh `+ New story` OR an existing draft).
 - Survives app restart.
-- Re-entering `+ New story` detects the session and prompts:
-  **"Continue unfinished draft?"** `[Continue] [Start fresh]`
-  — "Start fresh" discards the session.
+- **Concurrent-state prompts** — both wizard entry paths trigger
+  the same prompt shape when a session exists:
+  - **`+ New story` while session exists** → prompt:
+    `[Continue]` (resume session) /
+    `[Discard session & start fresh]` (discard session, open fresh
+    wizard).
+  - **Click a draft card while session exists** → prompt:
+    `[Continue session]` (resume session, draft click no-ops) /
+    `[Discard session & open <DraftName>]` (discard session, open
+    the picked draft).
+
+  Destructive labeling makes the loss explicit. Users with valuable
+  in-flight state can dismiss the prompt → return to wizard via
+  `+ New story` (re-fires prompt → `Continue`) → save-as-draft
+  explicitly → re-trigger their original click. A future
+  third-button bridge (`[Save session as draft & continue]`) is
+  parked-until-signal per
+  [parked.md → Wizard concurrent-state prompt third button](../../../parked.md#wizard-concurrent-state-prompt-third-button).
+
 - **No library presence** — session state is not a `stories` row;
   it's transient wizard state, separate from the library.
 
@@ -181,6 +201,8 @@ user.
 
 - Inline `Draft` badge next to the title (same pattern as `Archived`,
   yellow tint).
+- Title reads `Untitled story` (muted) if the wizard's `title` field
+  is empty at save-as-draft time. User can rename when they resume.
 - Genre overline reads "Genre not set" (muted) if
   `definition.genre.label` is empty.
 - Meta line shows "draft · 0 entries".
@@ -261,5 +283,8 @@ and [`data-model.md → Story settings shape`](../../../data-model.md#story-sett
   labels used in other stories in this library could help
   consistency for user-typed labels. Lives on the Story Settings ·
   Generation tab editor, not on the library card.
-- **Create flow entry point**: `+ New story` opens the Story Creation
-  Wizard (inventory #2, pending).
+- **Create flow entry point**: `+ New story` opens the
+  [Story Creation Wizard](../wizard/wizard.md). Concurrent-state
+  prompt rules (session vs draft) live in
+  [Unfinished wizard session](#unfinished-wizard-session-automatic-safety-net)
+  above.

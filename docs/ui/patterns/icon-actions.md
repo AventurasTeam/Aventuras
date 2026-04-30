@@ -17,6 +17,9 @@ Used by:
   (edit / re-run cadence / etc. per chapter card)
 - [Rollback-confirm hover-preview row icons](../screens/reader-composer/rollback-confirm/rollback-confirm.md#hover-preview--pre-click)
   (entry-row affordances inside the rollback confirmation modal)
+- [Wizard cast / lore row actions](../screens/wizard/wizard.md)
+  (✕ delete on each cast or lore row; ⭐ set-as-lead on character
+  rows; ✨ AI-assist triggers at field labels)
 
 Future row-shaped surfaces with per-row actions follow the same
 pattern.

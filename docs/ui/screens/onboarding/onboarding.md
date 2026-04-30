@@ -283,7 +283,10 @@ written without any user-facing UI:
   - `Heavy reasoning` — chapter-close work.
 - **Assignments** — every agent in the
   [agent registry](../../../data-model.md#app-settings-storage)
-  gets wired to one of the two profiles.
+  gets wired to one of the two profiles. Includes
+  `wizard-assist` (backs all AI calls fired from the
+  [Story creation wizard](../wizard/wizard.md)), seeded to
+  the `Fast tasks` profile by default.
 
 > **Note:** the specific profile names (`Fast tasks` /
 > `Heavy reasoning`), the per-agent assignment matrix, and the

@@ -399,3 +399,23 @@ Open sub-questions:
   reverted on restart" toast?
 - Interaction with chained transactions (per-turn → chapter-close):
   does recovery treat them as one unit or two?
+
+### Wizard session storage cleanup
+
+The [Story creation wizard's](./ui/screens/wizard/wizard.md)
+auto-save session persists in SQLite (Zustand persist) on the
+first meaningful state change and survives across app restarts
+indefinitely. Without a cleanup pass, sessions accrue when users
+abandon them long-term (laptop in a drawer, install lingers).
+
+Open sub-questions:
+
+- TTL-based expiry (e.g., session older than 30 days auto-cleared
+  on app boot)?
+- App-boot age check + user-prompt-to-discard for very old
+  sessions?
+- Storage budget before triggering cleanup?
+
+Implementation concern; lands when session storage shows real
+accumulation in usage signal. v1 ships with no cleanup, accepts
+storage drift.

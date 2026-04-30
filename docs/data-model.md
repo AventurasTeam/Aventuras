@@ -933,9 +933,16 @@ app_settings.assignments: Record<AgentId, string>  // agentId → profile.id
 
 The `AgentId` registry is the single source of truth for which
 agents exist. v1 ships:
-`classifier | translation | suggestion | lore-mgmt | memory-compaction | retrieval`.
+`classifier | translation | suggestion | lore-mgmt | memory-compaction | retrieval | wizard-assist`.
 Narrative is not an agent — it's the storyteller, always wired to
 the `kind: 'narrative'` profile, no assignment slot needed.
+
+`wizard-assist` backs all AI calls fired from the
+[Story creation wizard](./ui/screens/wizard/wizard.md) (title chips,
+description / genre / tone / setting / opening prose, cast and lore
+list suggestions). One agent serves the whole wizard surface;
+splitting per-call-shape is a parked concern (see
+[parked.md → Wizard-assist agent profile splitting](./parked.md#wizard-assist-agent-profile-splitting)).
 
 **Default models — render-time resolver fallback.**
 
@@ -1143,7 +1150,7 @@ in
   by text-edit (the existing side-channel exemption — see "Entry
   mutability & rollback") or by a wizard-driven regenerate pass
   (parked in
-  [`followups.md → Regenerate-opening affordance`](./parked.md#regenerate-opening-affordance)).
+  [`parked.md → Regenerate-opening affordance — post-commit from reader chrome`](./parked.md#regenerate-opening-affordance--post-commit-from-reader-chrome)).
 - **Branching:** copies forward via the standard branch-copy
   mechanism — the opening behaves like any entry being copied into
   the new branch.

@@ -152,11 +152,11 @@ rollover detail.
 
 ## Host adaptations
 
-| Host           | Picker mode | Summary panel      | Vault tail link | Swap warnings | Edit-restrictions gating | Notes                                                                        |
-| -------------- | ----------- | ------------------ | --------------- | ------------- | ------------------------ | ---------------------------------------------------------------------------- |
-| App Settings   | dropdown    | adjacent / below   | yes             | none          | n/a (out-of-story)       | "Default for new stories" framing                                            |
-| Story Settings | dropdown    | adjacent / below   | yes             | W1 / W2 / W3  | yes (gates picker)       | Lives on a dedicated Calendar tab                                            |
-| Wizard         | dropdown    | adjacent always-on | no              | none          | n/a (no story yet)       | Wrapper carries definitional weight; worldTimeOrigin sister-control adjacent |
+| Host           | Picker mode | Summary panel      | Vault tail link | Swap warnings | Edit-restrictions gating | Notes                                                                                                                          |
+| -------------- | ----------- | ------------------ | --------------- | ------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| App Settings   | dropdown    | adjacent / below   | yes             | none          | n/a (out-of-story)       | "Default for new stories" framing                                                                                              |
+| Story Settings | dropdown    | adjacent / below   | yes             | W1 / W2 / W3  | yes (gates picker)       | Lives on a dedicated Calendar tab                                                                                              |
+| Wizard         | dropdown    | adjacent always-on | no              | none          | n/a (no story yet)       | Wrapper carries definitional weight; tier-derived `worldTimeOrigin` input below — see [wizard.md](../screens/wizard/wizard.md) |
 
 ### App Settings — default calendar
 
@@ -192,8 +192,11 @@ as a single combined modal (W1 / W2 / W3 below).
 
 ### Wizard — calendar selection slot
 
-The wizard's full flow isn't designed; what's specified here is
-the slot the picker occupies, not the surrounding wizard.
+The wizard's full flow is designed in
+[`screens/wizard/wizard.md`](../screens/wizard/wizard.md). What's
+specified here is the slot the picker occupies; full step
+composition (origin input, validation, swap behavior inside the
+wizard) lives there.
 
 - **Initial value** — App Settings' `default_calendar_id` per
   copy-at-creation.
@@ -205,11 +208,12 @@ the slot the picker occupies, not the surrounding wizard.
 - **Wrapper styling** — full-width control, generous padding,
   section heading `Calendar system`, 2–3 lines of explanatory
   copy.
-- **`worldTimeOrigin` sister-control adjacent** — its UX is
-  per-calendar-shaped (date picker for Earth, tier-by-tier for
-  Tolkien, bare integer for Stardate). Designed alongside the
-  wizard pass; tracked in
-  [`calendar-systems/spec.md → Open questions`](../../calendar-systems/spec.md#open-questions).
+- **`worldTimeOrigin` sister-control adjacent** — tier-derived
+  input (one control per tier, top-down; numeric input or
+  labeled-value dropdown depending on whether the tier carries
+  `labels`). Initial values come from the picked calendar's
+  `exampleStartValue`. Full spec in
+  [`wizard.md → Calendar step`](../screens/wizard/wizard.md).
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -219,7 +223,7 @@ the slot the picker occupies, not the surrounding wizard.
 │ [picker dropdown]            [summary panel adjacent]     │
 │                                                            │
 │ Story start moment                                        │
-│ <calendar-specific worldTimeOrigin input — design pending> │
+│ {tier-derived inputs — see wizard.md → Calendar step}     │
 └──────────────────────────────────────────────────────────┘
 ```
 
