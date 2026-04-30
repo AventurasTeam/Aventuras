@@ -166,6 +166,20 @@
   .peek-head .name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .peek-head .lead-action { font-size: 11px; color: var(--ink); font-weight: 500; cursor: pointer; border-bottom: 1px dashed var(--line); padding-bottom: 1px; }
   .peek-head .lead-action:hover { border-bottom-color: var(--ink); }
+  /* portrait — floats upper-right of peek body, content wraps */
+  .peek-portrait { float: right; width: 76px; height: 76px; margin: 0 0 8px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.08em; }
+  /* operational chip row — non-default injection mode + (lore-only) category */
+  .peek-op-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .peek-chip-injection { font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 7px; border-radius: 3px; background: var(--bg); color: var(--ink-muted); border: 1px solid var(--line-soft); cursor: pointer; }
+  .peek-chip-category { font-size: 10px; padding: 2px 7px; border: 1px solid var(--line-soft); border-radius: 999px; color: var(--ink-muted); }
+  /* peek-kind switching: hide non-active body */
+  body[data-peek-kind="character"] .peek-body-lore { display: none; }
+  body[data-peek-kind="lore"] .peek-body-character { display: none; }
+  body[data-peek-kind="lore"] .peek-head .lead-action,
+  body[data-peek-kind="lore"] .peek-head .lead-badge { display: none !important; }
+  /* lore-peek body content */
+  .peek-body-lore .lore-prose { font-size: 13px; color: var(--ink); line-height: 1.55; max-height: 220px; overflow: hidden; position: relative; }
+  .peek-body-lore .lore-prose::after { content: "…"; position: absolute; bottom: 0; right: 0; padding-left: 28px; background: linear-gradient(to right, transparent, var(--bg-region) 30%); color: var(--ink-muted); }
 
   /* right rail */
   aside.right { background: var(--bg-region); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
@@ -375,6 +389,12 @@
     <span class="gl">peek:</span>
     <button class="rb-btn active" data-peek="closed">closed</button>
     <button class="rb-btn" data-peek="open">open — Kael</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">peek kind:</span>
+    <button class="rb-btn active" data-peek-kind="character">character (Kael)</button>
+    <button class="rb-btn" data-peek-kind="lore">lore (Cosmology)</button>
   </div>
 
   <div class="rb-group">
@@ -816,7 +836,7 @@
   <div class="peek-overlay" id="peek-overlay">
     <div class="peek-head">
       <div>
-        <div class="crumb">Character &middot; active &middot; in scene</div>
+        <div class="crumb" id="peek-crumb">Character &middot; active &middot; in scene</div>
         <div class="name-row">
           <div class="name" id="peek-name">Kael</div>
           <span class="lead-badge" id="peek-lead-badge" style="display: none;">You</span>
@@ -826,64 +846,96 @@
       <span class="peek-close" id="peek-close" title="Close (Esc)">&times;</span>
     </div>
     <div class="peek-body">
-      <!-- Status pill — top-left -->
-      <div style="margin-bottom: 12px;">
-        <span class="row-status-pill active" style="display: inline-block;">active</span>
-      </div>
+      <!-- ENTITY peek body — projection of Overview at 440px width -->
+      <div class="peek-body-character">
+        <!-- Portrait — floats upper-right (drift fix per 2026-04-30-lore-detail-pane.md decision 9) -->
+        <div class="peek-portrait" title="Portrait slot &mdash; populated when set, placeholder when empty">portrait</div>
 
-      <!-- Description prose (full text — typically 1-3 sentences) -->
-      <div class="peek-field" style="cursor: pointer;" title="Click to edit in World panel · Identity">
-        <div class="value">A weathered bounty-hunter with a grudge against the Warden. Keeps a silver coin on a cord, never far from his blade.</div>
-      </div>
+        <!-- Operational chip row + status pill -->
+        <div class="peek-op-row">
+          <span class="row-status-pill active" style="display: inline-block;">active</span>
+          <!-- Non-default injection_mode chip (visible only when 'always' or 'disabled'; demo shows 'always') -->
+          <span class="peek-chip-injection" title="Injection mode &mdash; click to edit in Settings">always injected</span>
+        </div>
 
-      <!-- Visual line — first populated visual fields -->
-      <div class="peek-field" style="cursor: pointer;" title="Edit in World panel · Identity / Visual">
-        <div class="label">Visual</div>
-        <div class="value">tall, lean &middot; weathered face, sharp jaw, faint scar across left cheek</div>
-      </div>
+        <!-- Description prose (full text — typically 1-3 sentences). Wraps around portrait. -->
+        <div class="peek-field" style="cursor: pointer;" title="Click to edit in World panel · Identity">
+          <div class="value">A weathered bounty-hunter with a grudge against the Warden. Keeps a silver coin on a cord, never far from his blade.</div>
+        </div>
 
-      <!-- Personality chips — top traits + drives -->
-      <div class="peek-field" style="cursor: pointer;" title="Edit in World panel · Identity / Personality">
-        <div class="label">Traits</div>
-        <div class="peek-tags">
-          <span class="peek-tag">stubborn</span>
-          <span class="peek-tag">former soldier</span>
-          <span class="peek-tag">expert tracker</span>
-          <span class="peek-tag" style="background: var(--bg); color: var(--ink-faint);">+1</span>
+        <!-- Visual line — first populated visual fields -->
+        <div class="peek-field" style="cursor: pointer;" title="Edit in World panel · Identity / Visual">
+          <div class="label">Visual</div>
+          <div class="value">tall, lean &middot; weathered face, sharp jaw, faint scar across left cheek</div>
+        </div>
+
+        <!-- Personality chips — top traits + drives -->
+        <div class="peek-field" style="cursor: pointer;" title="Edit in World panel · Identity / Personality">
+          <div class="label">Traits</div>
+          <div class="peek-tags">
+            <span class="peek-tag">stubborn</span>
+            <span class="peek-tag">former soldier</span>
+            <span class="peek-tag">expert tracker</span>
+            <span class="peek-tag" style="background: var(--bg); color: var(--ink-faint);">+1</span>
+          </div>
+        </div>
+        <div class="peek-field" style="cursor: pointer;" title="Edit in World panel · Identity / Personality">
+          <div class="label">Drives</div>
+          <div class="peek-tags">
+            <span class="peek-tag">seeks vengeance for father's death</span>
+            <span class="peek-tag">fears becoming his father</span>
+            <span class="peek-tag" style="background: var(--bg); color: var(--ink-faint);">+1</span>
+          </div>
+        </div>
+
+        <!-- Position + affiliation (Connections refs surfaced on Overview) -->
+        <div class="peek-field">
+          <div class="label">In</div>
+          <div class="value"><a style="color: var(--ink); text-decoration: underline; text-decoration-style: dotted; cursor: pointer;">The Tavern</a> &middot; <span style="color: var(--ink-muted); font-size: 11px;">last seen 2 days ago</span></div>
+        </div>
+        <div class="peek-field">
+          <div class="label">With</div>
+          <div class="value"><a style="color: var(--ink); text-decoration: underline; text-decoration-style: dotted; cursor: pointer;">Iron Cross</a></div>
+        </div>
+
+        <!-- Carrying summary -->
+        <div class="peek-field" style="cursor: pointer;" title="Edit in World panel · Carrying">
+          <div class="label">Carrying</div>
+          <div class="value" style="font-size: 12px;">200 gold &middot; 30 silver &middot; 7 rations<br><span style="color: var(--ink-muted);">3 equipped &middot; 4 carried</span></div>
+        </div>
+
+        <!-- Tags — read-only on Overview/peek; edits live on Settings tab -->
+        <div class="peek-field">
+          <div class="label">Tags</div>
+          <div class="peek-tags">
+            <span class="peek-tag">bounty-hunter</span>
+            <span class="peek-tag">ally</span>
+            <span class="peek-tag">chapter-2-introduced</span>
+          </div>
         </div>
       </div>
-      <div class="peek-field" style="cursor: pointer;" title="Edit in World panel · Identity / Personality">
-        <div class="label">Drives</div>
-        <div class="peek-tags">
-          <span class="peek-tag">seeks vengeance for father's death</span>
-          <span class="peek-tag">fears becoming his father</span>
-          <span class="peek-tag" style="background: var(--bg); color: var(--ink-faint);">+1</span>
+
+      <!-- LORE peek body — read-only projection of Body tab + non-default operational signals from Settings -->
+      <div class="peek-body-lore">
+        <!-- Operational chip row: non-default injection chip + category chip -->
+        <div class="peek-op-row">
+          <span class="peek-chip-injection" title="Injection mode &mdash; click to edit in Settings">always injected</span>
+          <span class="peek-chip-category" title="Category">cosmology</span>
         </div>
-      </div>
 
-      <!-- Position + affiliation (Connections refs surfaced on Overview) -->
-      <div class="peek-field">
-        <div class="label">In</div>
-        <div class="value"><a style="color: var(--ink); text-decoration: underline; text-decoration-style: dotted; cursor: pointer;">The Tavern</a> &middot; <span style="color: var(--ink-muted); font-size: 11px;">last seen 2 days ago</span></div>
-      </div>
-      <div class="peek-field">
-        <div class="label">With</div>
-        <div class="value"><a style="color: var(--ink); text-decoration: underline; text-decoration-style: dotted; cursor: pointer;">Iron Cross</a></div>
-      </div>
+        <!-- Body prose — read-only; truncates at ~10 visible lines with ellipsis fade -->
+        <div class="peek-field">
+          <div class="lore-prose">The world spins under three moons. The largest, Vael, governs the tides; the middle, Tessera, governs dreams; the smallest, Cinder, governs death. The three were once a single moon, sundered in the First War when the gods cast down the Architect for his hubris. Each fragment carries a sliver of the Architect's mind &mdash; bound to its sphere of influence. Mortals who lose their reason on Tessera's full nights are said to be glimpsed by the moon and reshaped by what it sees.<br><br>The orbit cycle is 240 days. The three moons align once per cycle, and on that day the boundary between the living and the dead grows thin. Necromancers gather, oracles fall mute, and prophecy</div>
+        </div>
 
-      <!-- Carrying summary -->
-      <div class="peek-field" style="cursor: pointer;" title="Edit in World panel · Carrying">
-        <div class="label">Carrying</div>
-        <div class="value" style="font-size: 12px;">200 gold &middot; 30 silver &middot; 7 rations<br><span style="color: var(--ink-muted);">3 equipped &middot; 4 carried</span></div>
-      </div>
-
-      <!-- Tags — read-only on Overview/peek; edits live on Settings tab -->
-      <div class="peek-field">
-        <div class="label">Tags</div>
-        <div class="peek-tags">
-          <span class="peek-tag">bounty-hunter</span>
-          <span class="peek-tag">ally</span>
-          <span class="peek-tag">chapter-2-introduced</span>
+        <!-- Tags — read-only mirror of Settings tags -->
+        <div class="peek-field">
+          <div class="label">Tags</div>
+          <div class="peek-tags">
+            <span class="peek-tag">cosmology</span>
+            <span class="peek-tag">moon-cycle</span>
+            <span class="peek-tag">prophecy</span>
+          </div>
         </div>
       </div>
     </div>
@@ -1074,6 +1126,28 @@
     b.addEventListener('click', () => setPeekLead(b.dataset.lead));
   });
   peekLeadAction.addEventListener('click', () => setPeekLead('is-lead'));
+
+  // peek kind — toggles between character peek body and lore peek body
+  const peekCrumb = document.getElementById('peek-crumb');
+  function setPeekKind(kind) {
+    document.body.dataset.peekKind = kind;
+    if (kind === 'lore') {
+      peekCrumb.innerHTML = 'Lore &middot; cosmology';
+      peekName.textContent = 'Three Moons of Aventura';
+      // ensure peek opens to show lore variant
+      setPeek('open', 'Three Moons of Aventura');
+    } else {
+      peekCrumb.innerHTML = 'Character &middot; active &middot; in scene';
+      peekName.textContent = 'Kael';
+    }
+    document.querySelectorAll('[data-peek-kind]').forEach(b => {
+      b.classList.toggle('active', b.dataset.peekKind === kind);
+    });
+  }
+  document.querySelectorAll('[data-peek-kind]').forEach(b => {
+    b.addEventListener('click', () => setPeekKind(b.dataset.peekKind));
+  });
+  document.body.dataset.peekKind = 'character';
 
   // scope filter chip
   const scopeChip = document.getElementById('scope-chip');

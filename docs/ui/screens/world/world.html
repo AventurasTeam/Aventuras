@@ -144,6 +144,27 @@
   .tab-panel { flex: 1; overflow: auto; padding: 20px 24px; display: none; max-width: 820px; }
   .tab-panel.active { display: block; }
 
+  /* lore-kind variant — collapses tab strip to Body | Settings | History */
+  body[data-kind="lore"] .tab[data-tab="identity"],
+  body[data-kind="lore"] .tab[data-tab="carrying"],
+  body[data-kind="lore"] .tab[data-tab="connections"],
+  body[data-kind="lore"] .tab[data-tab="assets"],
+  body[data-kind="lore"] .tab[data-tab="involvements"],
+  body[data-kind="lore"] .tab[data-tab="overview"] { display: none; }
+  body[data-kind="lore"] .tab-panel[data-panel="overview"],
+  body[data-kind="lore"] .tab-panel[data-panel="identity"],
+  body[data-kind="lore"] .tab-panel[data-panel="carrying"],
+  body[data-kind="lore"] .tab-panel[data-panel="connections"],
+  body[data-kind="lore"] .tab-panel[data-panel="assets"],
+  body[data-kind="lore"] .tab-panel[data-panel="involvements"] { display: none !important; }
+  body:not([data-kind="lore"]) .tab[data-tab="body"],
+  body:not([data-kind="lore"]) .tab-panel[data-panel="body"] { display: none !important; }
+  /* lore Body tab — minimal content layout */
+  .lore-body-pane .lore-category { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; padding: 8px 10px; background: var(--bg); border: 1px solid var(--line-soft); border-radius: 4px; }
+  .lore-body-pane .lore-category .label { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .lore-body-pane .lore-category .value { font-size: 13px; color: var(--ink); cursor: pointer; }
+  .lore-body-pane textarea.lore-body-input { width: 100%; min-height: 360px; padding: 12px; border: 1px solid var(--line); border-radius: 4px; font-family: inherit; font-size: 13px; line-height: 1.55; background: var(--bg); color: var(--ink); resize: vertical; }
+
   /* form fields — typed shape */
   .field { margin-bottom: 16px; }
   .field-row { display: grid; grid-template-columns: 180px 1fr; gap: 14px; align-items: start; margin-bottom: 12px; }
@@ -288,6 +309,11 @@
     <span class="gl">tab tables:</span>
     <button class="rb-btn active" data-tab-empty="populated">populated</button>
     <button class="rb-btn" data-tab-empty="empty">empty</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">kind:</span>
+    <button class="rb-btn active" data-kind="entity">entity (Kael)</button>
+    <button class="rb-btn" data-kind="lore">lore (Three Moons)</button>
   </div>
   <span class="rb-note">click a row · tab · ⓘ help · + new menu</span>
 </div>
@@ -456,8 +482,19 @@
       </div>
     </div>
 
+    <!--
+      ENTITY tab strip — character / location / item / faction.
+      Carrying is character-only (hidden on other kinds).
+
+      LORE variant (when list-pane category = Lore): the strip
+      collapses to `Body | Settings | History`. No Overview (lore
+      body is glanceable directly), no Carrying / Connections /
+      Assets / Involvements analogs. Per
+      docs/ui/screens/world/world.md → "Lore — separate kind".
+    -->
     <nav class="tabs" id="tabs">
       <span class="tab active" data-tab="overview">Overview</span>
+      <span class="tab" data-tab="body">Body</span>
       <span class="tab" data-tab="identity">Identity</span>
       <span class="tab" data-tab="carrying">Carrying <span class="tab-count">7</span></span>
       <span class="tab" data-tab="connections">Connections <span class="tab-count">3</span></span>
@@ -473,9 +510,13 @@
       <!-- Overview is read-mostly. Click any region routes to the relevant edit tab. -->
       <div style="display: flex; gap: 20px; align-items: flex-start;">
         <div style="flex: 1; min-width: 0;">
-          <!-- Status pill — top of card, content-state not chrome -->
-          <div style="margin-bottom: 14px;">
+          <!-- Status pill — top of card, content-state not chrome.
+               Non-default injection_mode chip pairs inline when injection_mode is
+               'always' or 'disabled' (hidden for the 'keyword_llm' default).
+               Demo shows 'always injected' to make the chip visible. -->
+          <div style="margin-bottom: 14px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
             <span class="row-status-pill active" style="display: inline-block;">active</span>
+            <span style="font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 7px; border-radius: 3px; background: var(--bg); color: var(--ink-muted); border: 1px solid var(--line-soft); cursor: pointer;" title="Injection mode &mdash; click to edit in Settings">always injected</span>
           </div>
 
           <!-- Description prose (full text). Click → Identity tab. -->
@@ -541,6 +582,21 @@
           [portrait]
         </div>
       </div>
+    </div>
+
+    <!-- BODY — lore-only tab. Title lives in detail head; body has category + body textarea. -->
+    <div class="tab-panel lore-body-pane" data-panel="body">
+      <div class="lore-category">
+        <span class="label">Category</span>
+        <span class="value" title="Free-form. Click to edit; popover suggests existing categories from this branch.">cosmology</span>
+      </div>
+      <textarea class="lore-body-input" placeholder="Body — required. Write the lore entry's content here.">The world spins under three moons. The largest, Vael, governs the tides; the middle, Tessera, governs dreams; the smallest, Cinder, governs death.
+
+The three were once a single moon, sundered in the First War when the gods cast down the Architect for his hubris. Each fragment carries a sliver of the Architect's mind — bound to its sphere of influence.
+
+Mortals who lose their reason on Tessera's full nights are said to be glimpsed by the moon and reshaped by what it sees.
+
+The orbit cycle is 240 days. The three moons align once per cycle, and on that day the boundary between the living and the dead grows thin.</textarea>
     </div>
 
     <!-- IDENTITY — pure identity content: description + Visual + Personality. Operational chrome lives on Settings. -->
@@ -1003,6 +1059,20 @@
     document.querySelectorAll('[data-tab-empty]').forEach(b => b.classList.toggle('active', b.dataset.tabEmpty === state));
   }
   document.querySelectorAll('[data-tab-empty]').forEach(b => b.addEventListener('click', () => setTabEmpty(b.dataset.tabEmpty)));
+
+  // kind toggle — entity vs lore. lore collapses tab strip to Body | Settings | History.
+  function setKind(kind) {
+    document.body.dataset.kind = kind;
+    document.querySelectorAll('[data-kind]').forEach(b => b.classList.toggle('active', b.dataset.kind === kind));
+    // when switching to lore, default-active tab is Body (Overview is hidden)
+    if (kind === 'lore') {
+      setTab('body');
+    } else {
+      setTab('overview');
+    }
+  }
+  document.querySelectorAll('[data-kind]').forEach(b => b.addEventListener('click', () => setKind(b.dataset.kind)));
+  document.body.dataset.kind = 'entity';
 
   // overflow menu toggle
   const overflowBtn = document.getElementById('overflow-btn');

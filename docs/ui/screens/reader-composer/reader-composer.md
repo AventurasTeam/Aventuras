@@ -624,12 +624,12 @@ this is chrome state, not story content).
 
 ### Peek drawer — peek implies rail open
 
-The peek drawer is invoked only by clicking entity rows in the
+The peek drawer is invoked only by clicking rail rows in the
 expanded rail (per
 [Peek drawer](#peek-drawer--lead-affordance-for-characters)).
 Peek and collapsed-rail are mutually exclusive states:
 
-- Open + click entity row → peek slides in over rail + narrative
+- Open + click rail row → peek slides in over rail + narrative
   (status quo).
 - Collapsed → no path to invoke peek without first expanding.
 
@@ -695,9 +695,44 @@ The peek body's content is a 440px-width projection of the
 from the World panel. Per-kind glance composition lives there;
 peek doesn't restate it. Single design, two surfaces.
 
+This includes the [non-default `injection_mode` chip](../world/world.md#overview--glance-summary-read-mostly)
+that lives on Overview — it propagates to peek for free via the
+projection rule. No separate spec for the peek surface.
+
+### State-field composition — lore peek
+
+Lore has no Overview tab (per
+[`world.md → Lore — separate kind`](../world/world.md#lore--separate-kind)),
+so the entity-side projection rule doesn't apply. The lore peek
+body is a read-only projection of the **Body tab + non-default
+operational signals from Settings**, top-down at 440px width:
+
+- **Operational chip row** — renders only when there are
+  non-default signals to surface:
+  - **Injection-mode chip** when `always` or `disabled` (hidden
+    for `keyword_llm` default). Same chip shape used on entity
+    Overview.
+  - **Category chip** when set. Distinct visual treatment from
+    the injection chip — content tag, not operational signal.
+- **Body prose** — read-only render of `lore.body`. **Truncates
+  at ~10 visible lines** with `…` ellipsis; the foot link is the
+  escalation path for full read. Empty body cannot occur (per
+  [`world.md → Required body`](../world/world.md#required-body--creation--edit-invariant)).
+- **Tags chip row** — read-only mirror of the Settings `tags`
+  field.
+
+What's not on lore peek:
+
+- No `priority` — peek surfaces user-actionable signals, not
+  internal retrieval scaffolding.
+- No inline editing — peek-head's lead-character mutation is
+  character-only and doesn't apply.
+- No History — log access stays on the World panel.
+
 Peek is read-mostly. The lead-character mutation above is the only
-inline mutation surface. Deep edits route to the World panel via
-the existing `Open in World panel →` foot link.
+inline mutation surface (character-only; doesn't apply to lore or
+other non-character kinds). Deep edits route to the World panel
+via the existing `Open in World panel →` foot link.
 
 ## Screen-specific notes
 

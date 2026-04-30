@@ -690,3 +690,29 @@ design pass to choose between:
 
 Belongs to the backup design pass; this followup ensures the
 question is asked before such a path lands.
+
+#### Lore Assets
+
+Entities have an Assets tab (per
+[`world.md → Tabs — per-kind composition`](./ui/screens/world/world.md#tabs--per-kind-composition))
+backed by `entry_assets`. Lore is text-shaped — magic-system
+rules, religion descriptions, cosmology — and consumes prose at
+retrieval, not visuals. But user-facing visual aids (cosmology
+diagram, religion sigil, schematics for hard-SF systems) are
+plausible reference material a worldbuilder might want to attach
+per-entry.
+
+The lore detail-pane composition (per
+[`world.md → Lore — separate kind`](./ui/screens/world/world.md#lore--separate-kind))
+deliberately excludes an Assets tab in v1. Schema today has no
+asset-link from `lore`. If real demand surfaces — worldbuilders
+asking to attach images per-entry — design needs:
+
+- Schema link from `lore` to `entry_assets` (or a parallel table).
+- Asset tab on the lore detail-pane shape (becomes
+  `Body | Settings | Assets | History`).
+- Lore peek body treatment for asset thumbnails (if any).
+
+Distinct from the broader [Asset gallery](#asset-gallery)
+post-v1 entry, which is the shared library surface; this is
+per-entry attachment on lore specifically.

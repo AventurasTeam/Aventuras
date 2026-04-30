@@ -106,6 +106,15 @@ locked; what's deferred is the agent's concrete shape:
 - **Stackable-key normalization on `CharacterState.stackables`.** Cross-
   character keys ("gold" / "Gold" / "gold pieces") drift over time;
   the agent normalizes to canonical lowercase keys at chapter close.
+- **`lore.priority` retrieval semantics.** The schema declares the
+  field but its precise effect is not pinned. UI today (per
+  [`world.md → Settings tab — lore`](./ui/screens/world/world.md#settings-tab--lore))
+  renders `priority` editable with a working-model tooltip — "higher
+  priority preferred when retrieval is token-budget-constrained,
+  ties break by recency." Retrieval-side behavior must firm up this
+  contract or the UI tooltip diverges from runtime reality. Pairs
+  naturally with this entry because lore-mgmt + retrieval are
+  designed jointly per the closing note.
 - **Description revision suggestion-queue** — the deferred
   autonomous-vs-confirm-mode toggle for classifier-proposed
   description revisions (per the entity description authorship
@@ -278,37 +287,6 @@ Decision lands with the next pass over the World panel + Browse
 rail search-scope definition. Lean: include `traits` + `drives` +
 `agenda` immediately when implementing the new shape; defer
 `visual.*` until UX testing surfaces flooding-or-not-flooding signal.
-
-### Lore detail-pane composition
-
-The
-[per-kind detail-pane composition](./ui/screens/world/world.md#tabs--per-kind-composition)
-is spec'd for character / location / item / faction. Lore lives
-in the `lore` table (separate from `entities`) with a different
-schema, and its detail-pane composition wasn't drawn in the same
-pass — different table shape, more text-heavy, simpler than
-entities. Same philosophical shape applies (glance Overview +
-body editing tabs by semantic group), but the per-kind specifics
-need their own pass.
-
-Open questions:
-
-- **Tab skeleton** — does lore inherit the same `Overview |
-Identity | Connections | Assets | Involvements | History`
-  skeleton, or is the simpler shape better served by fewer tabs
-  (`Overview | Body | History`)? Lore has no Carrying analog; it
-  may have no Connections analog either depending on whether
-  cross-lore references exist.
-- **Body content** — lore's `title` + `body` + `category` +
-  `tags` is mostly text. The Overview glance vs Identity-edit
-  split may be overkill for a simpler 4-field shape.
-- **Per-lore peek** — does the reader peek drawer show lore
-  rows at all (today the rail surfaces lore but peek is
-  character-focused)? If yes, what does the peek body look
-  like for lore?
-
-Lands when lore detail-pane gets focused attention (likely as
-part of a wider lore polish pass).
 
 ### Next-turn suggestions — design pass
 

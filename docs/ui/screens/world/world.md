@@ -118,6 +118,17 @@ Click any region to route to the relevant edit tab. Doubles as
 the [peek-drawer body](../reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters)
 at narrower (440px) width — same content, no duplicated design.
 
+**Non-default injection-mode chip — applies to every kind.** A small
+uppercase chip (`ALWAYS INJECTED` / `DISABLED`) sits inline next to
+the status pill when `injection_mode` is non-default. Hidden for
+the `keyword_llm` default to avoid noise on the common case;
+surfaced for `always` and `disabled` because both diverge from
+default in opposite directions and are operationally consequential.
+Hover tooltip pulls from the same explanation as the Settings tab
+select; click routes to Settings. Mirrors the conditional-surface
+treatment used by `retired_reason` (visible only when
+`status === 'retired'`).
+
 **Character Overview** (top-down):
 
 - Status pill (`active` / `staged` / `retired` + `retired_reason`
@@ -298,7 +309,13 @@ drawer. No World-specific deviation.
 
 ## Per-row import
 
-`+ New entity` in the list-pane footer follows the standard
+The list-pane footer carries a kind-aware `+ New <kind>` button
+(`+ New character`, `+ New location`, `+ New item`, `+ New
+faction`, `+ New lore`) — label tracks the active list-pane
+category. Lore is not an entity; the generic "+ New entity" copy
+would mis-label the lore creation path.
+
+The button follows the standard
 [import-counterparts pattern](../../patterns/data.md#import-counterparts--file-based--vault)
 (Blank / From JSON file… / From Vault…). JSON imports validate
 against the kind's zod schema; mismatch fails with a friendly
@@ -328,7 +345,164 @@ handle it).
 ## Lore — separate kind
 
 Lore lives in the `lore` table, not `entities`. Different schema,
-different table, simpler than entities (more text-heavy). The same
-philosophical shape applies — glance Overview + body editing tabs
-by semantic group — but lore's detail-pane composition is its own
-design pass.
+different table, simpler than entities (more text-heavy, no
+lifecycle, no scene presence, no actor semantics). The
+detail-pane composition reflects the difference — fewer tabs,
+simpler body shape, no Connections / Carrying / Assets /
+Involvements analogs.
+
+### Tab skeleton
+
+```
+Body | Settings | History
+```
+
+Three tabs. Settings + History parity with entity tabs preserves
+the "this is a record-management surface, not just a content
+editor" signal across kinds. Each absent tab is structurally
+justified:
+
+- No **Overview** — lore body is small enough to glance directly;
+  no separate summary card needed.
+- No **Carrying** — no holder semantics.
+- No **Connections** — lore doesn't reference other entities;
+  cross-lore via body text + tags + search.
+- No **Assets** — parked until demand surfaces (per
+  [`parked.md → Lore Assets`](../../../parked.md#lore-assets)).
+- No **Involvements** — lore isn't an actor; doesn't participate in
+  `happening_involvements`.
+
+`Body` not `Identity`. `Identity` carries "who this is" framing
+loaded for entities (description + visual + personality); lore has
+subject matter, not identity. `Body` matches the schema field name
+(`lore.body`) and reads as "the actual content of the lore entry."
+
+### Detail head — lore
+
+Mirrors the [entity detail head pattern](#detail-head-structure):
+
+- Breadcrumb strip: kind-icon + "Lore"
+- **Title** (inline-editable with pencil) — equivalent of the entity
+  name slot. Edits dirty the save session.
+- **Recently-classified badge** — visible while the row is in the
+  fresh or fading state per
+  [`patterns/entity.md → Recently-classified row accent`](../../patterns/entity.md#recently-classified-row-accent).
+  Lore is classifier-touched at chapter close via the
+  lore-management agent (per
+  [`data-model.md → Chapters / memory system`](../../../data-model.md#chapters--memory-system));
+  the same accent rule applies.
+- **Overflow menu (⋯)**: `Export lore as JSON`, `View raw JSON`,
+  `Delete`. **No `Set as lead`** — lead is a character-only concept
+  per [`principles → Mode, lead, and narration`](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts).
+
+### Body tab — lore
+
+Two fields, no sub-sections.
+
+- **Category** — single-row input at the top of the pane. Free-form
+  text per the schema (`magic-system`, `religion`, `cosmology` are
+  illustrative, not enumerated). On focus, a popover surfaces
+  existing categories from this branch's lore as autocomplete
+  suggestions, keeping casual taxonomy consistent without forcing
+  an enum. Empty = `— uncategorized —` placeholder.
+- **Body textarea** — fills the remaining vertical space. Plain
+  text per the schema; no markdown rendering or rich-text in v1.
+  Standard textarea grow / scroll behavior. **Body is required**
+  (see [Required body](#required-body--creation--edit-invariant) below).
+
+Category lives on Body, not Settings, because category is
+content-classification (answers "what kind of lore is this") and
+pairs with the body it labels. Tags live on Settings — they
+compose with the cross-cutting search and filter scaffolding
+(per [`patterns/lists.md → search-bar-scope`](../../patterns/lists.md#search-bar-scope))
+and pair with entity tags for cross-kind parity.
+
+### Settings tab — lore
+
+Three fields, top-down:
+
+- **`injection_mode`** (enum select with explanation): `always` /
+  `keyword_llm` (default) / `disabled`. Same select primitive
+  entities use, with the same in-line explanation about how each
+  mode interacts with retrieval.
+  - `always` — force-injected into every prompt. Use sparingly
+    (token cost).
+  - `keyword_llm` — surfaced when retrieval finds keyword overlap
+    with the current scene. Default.
+  - `disabled` — never injected; lore is read-only reference
+    material for the user.
+- **`priority`** (integer input, narrow). Default `0`. Tooltip
+  explains the working model: "Higher priority is preferred when
+  retrieval is token-budget-constrained. Ties break by recency.
+  Semantics will firm up alongside the retrieval-agent design
+  pass." The tooltip is honest about the spec gap; the field is
+  editable but its precise effect is gated. Open question folded
+  into the
+  [`Lore-management agent shape`](../../../followups.md#lore-management-agent-shape)
+  followup.
+- **`tags`** (chip row with `+ add`): edit destination for tags
+  surfaced read-only on glance / search. Same shape as entity tags.
+
+What's not on lore Settings:
+
+- No `status` / `retired_reason` — lore has no lifecycle.
+- No `category` — content classification, not operational chrome
+  (lives on Body).
+
+### List sort — lore (static, two-layer)
+
+No user sort controls — rule-driven and stable, mirroring the
+entity sort philosophy at
+[`patterns/entity.md → Entity list sort order`](../../patterns/entity.md#entity-list-sort-order--static-four-layer).
+
+1. **Layer 1:** `priority` descending. Higher priority first.
+2. **Layer 2 (tiebreaker):** `title` alphabetical.
+
+Applies to both Browse rail and World list pane.
+
+Priority-as-sort-key inherits the working-model caveat from the
+priority-semantics open question. Until retrieval pins what
+priority _does_, it pins what priority _means visually_ — "this
+lore surfaces first in lists." If retrieval semantics later land
+orthogonal to ranking, the sort still makes intuitive sense
+(higher priority = "more important to the user") and doesn't need
+to change.
+
+### List filter — lore
+
+**No filter chips.** Lore has no orthogonal categorical axes that
+warrant chip-shaped filtering — no `status` lifecycle, no in-scene
+concept, free-form `category` doesn't enumerate predictably. The
+list-pane filter chip row is hidden when `Lore` is the active
+list-pane category. Same applies to the Browse rail when its scope
+filter targets lore.
+
+A future "categories as dynamic chips" surface — distinct
+`lore.category` values rendered as filter chips — is plausible at
+high lore volume but premature now. No standalone followup unless
+real volume signals demand.
+
+### Required body — creation + edit invariant
+
+A lore entry cannot exist with an empty `body`. Validation lives
+at two places:
+
+- **Body tab save** — save bar disables until body is non-empty.
+- **Creation paths** (per [Per-row import](#per-row-import) /
+  [`patterns/data.md → import-counterparts`](../../patterns/data.md#import-counterparts--file-based--vault)):
+  - **Blank** — form must enforce body-non-empty before save bar
+    enables.
+  - **From JSON file** — Zod schema marks `body` required;
+    mismatch fails the existing friendly-error path.
+  - **From Vault** — vault entries already carry populated bodies
+    (vault flow mostly deferred; verify when vault lands).
+
+### History tab — lore
+
+Same shape as the entity [History tab](#history-tab) — delta log
+filtered to `target_table = lore` and this `lore_id`. Search +
+op-filter + sort + load-older chunking all carry over. Lore
+writes (user edits + lore-management agent at chapter close) all
+flow through the delta log per the standard authorship contract,
+so the History tab surface is uniform across the kinds with no
+lore-specific deviation.
