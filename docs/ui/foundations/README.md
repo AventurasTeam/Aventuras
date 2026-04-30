@@ -46,15 +46,21 @@ contract.
    density-token policy with cut-path, interactive demo HTML.
    Files: [`tokens.md`](./tokens.md), [`theming.md`](./theming.md),
    [`theming.html`](./theming.html).
-2. **Color system + accessibility** — pending. Final color slot
-   inventory, contrast targets (WCAG AA at minimum, AAA on body
-   prose where reachable), focus / disabled / hover treatments,
-   accent-derivation specifics (mode-aware deltas, auto-flip
-   thresholds, selection-bg tinting), pattern-driven slots
-   (recently-classified accent decay per
-   [`../patterns/entity.md`](../patterns/entity.md), any future
-   patterns adding their own decay-pair slots). Lands as
-   `color.md`.
+2. **Color system + accessibility** — landed 2026-05-01
+   ([exploration record](../../explorations/2026-05-01-color-system.md)).
+   Final color slot inventory (25 slots), per-pair WCAG contrast
+   targets (AAA target + AA floor on body prose; AA across other
+   text-on-bg; 3:1 on non-text per WCAG 1.4.11; faint-signal
+   exception on the recently-classified tint). Focus / disabled /
+   hover state recipes locked at the contract level (per-platform
+   glue is implementation detail). Accent-derivation algorithm
+   with locked constants — HSL `±10` hover delta, WCAG luminance-
+   threshold auto-flip, RGB linear mix toward `--bg-base` for
+   selection. Recently-classified one-slot model with `0.5`
+   fading-tier alpha. Dev-only `pnpm themes:audit` utility for
+   per-theme contrast + derivation reporting; CI gate parked
+   until session 6 lands real palette data. File:
+   [`color.md`](./color.md).
 3. **Typography** — pending. Reading-text font choice
    (system-stack vs custom-bundled; load-bearing for the primary
    reading activity), type scale (sizes / line-heights / weights),

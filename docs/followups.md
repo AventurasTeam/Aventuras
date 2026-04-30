@@ -276,6 +276,34 @@ Lands at the start of foundations consumer-code implementation
 (Tailwind config wiring + first component reading token slots).
 Blocks consumer code; doesn't block any other design pass.
 
+### Theme-audit CI gate
+
+[`ui/foundations/color.md → Theme audit utility`](./ui/foundations/color.md#theme-audit-utility)
+ships `pnpm themes:audit` as a dev-only command — runs over the
+theme registry, prints pass/fail/warn per pair per theme, exits 0
+even on failures (never blocks). Wiring it into CI (or
+`pnpm test`) as a gate is **deferred until session 6's curated
+palettes land.** Reason: opinionated themes (Catppuccin Latte,
+Tokyo Night, etc.) fail AAA on body prose by design but are still
+desirable in the gallery — gating before we know which themes
+legitimately exempt vs which need fixing risks blocking the
+palette work the gate is supposed to support.
+
+Decisions needed at gate-wiring time:
+
+- Which contrast targets gate (likely AA floors only; AAA target
+  stays warning).
+- Per-theme exempt list shape — a `theme.audit.exempt: [...]`
+  field on the theme module, an external allow-list, or
+  per-theme tags surfaced from the `Theme` type.
+- The accent-overridable derivation sweep — does it gate, or
+  stay informational-only?
+- Whether the gate runs in pre-commit, in `pnpm test`, or as a
+  dedicated CI job.
+
+Lands when curated gallery (session 6) is complete and real
+palette data informs the gate's shape.
+
 ### Storybook design-rules pattern setup
 
 When component implementation begins, set up Storybook's tree as

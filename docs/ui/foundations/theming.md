@@ -148,35 +148,27 @@ has set `accentOverride`, the user-supplied color drives the
 accent token group. Five tokens cascade from one input:
 
 - `--accent` — direct from user input.
-- `--accent-hover` — derived: lighten/darken by a mode-aware
-  delta (darken for `mode: 'light'`, lighten for `mode: 'dark'`).
-- `--accent-fg` — derived: WCAG contrast pick. White if accent
-  is dark enough, near-black otherwise. Auto-flips to preserve
+- `--accent-hover` — derived: HSL lightness delta, mode-aware
+  (darken for `mode: 'light'`, lighten for `mode: 'dark'`).
+- `--accent-fg` — derived: WCAG contrast auto-flip. White if
+  accent is dark enough, near-black otherwise. Preserves
   readability if the user picks a low-contrast accent.
-- `--focus-ring` — likely aliased to `--accent` (final call at
-  session 2; may carry reduced opacity for outline use).
-- `--selection-bg` — derived: accent tinted toward `--bg-base`
-  (significantly lightened on light themes, darkened on dark).
+- `--focus-ring` — derived: direct passthrough from `accent`.
+- `--selection-bg` — derived: RGB linear mix of accent toward
+  `--bg-base` (mode-aware ratio).
 
 **Derivation runs in JS at theme-application time**, not via CSS
 `color-mix()`. The reason is cross-platform parity — NativeWind's
 runtime CSS-var support on native is better-tested for static
 hex values than for `color-mix()` expressions, and computing
 derived values once at apply-time produces identical output on
-web and native. The function shape is roughly:
+web and native.
 
-```ts
-deriveAccent(accent: string, mode: 'light' | 'dark', bgBase: string): {
-  hover: string
-  fg: string
-  focus: string
-  selection: string
-}
-```
-
-Session 2 (color system design) firms the deltas, contrast
-targets, and the precise auto-flip rules. The contract here:
-**one user input cascades to five accent-family tokens via
+Concrete constants (hover delta magnitude, contrast threshold,
+mix ratios) and the per-output algorithm live in
+[`color.md → Accent-derivation algorithm`](./color.md#accent-derivation-algorithm).
+The contract here: **one user input cascades to five
+accent-family tokens — one direct passthrough plus four via
 deterministic JS derivation.**
 
 **When the active theme is not accent-overridable**,

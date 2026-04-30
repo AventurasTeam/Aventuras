@@ -40,40 +40,47 @@ shadcn-style pattern; the project's stack note in
 
 ## Color slots
 
-V1 contract — final inventory firmed in session 2 (color system
-design pass). Approximate count: 18–22 slots.
+V1 contract — final inventory locked at session 2; **25 slots
+total.** Per-slot purpose, contrast targets, state treatments, and
+the accent-derivation algorithm live in [`color.md`](./color.md);
+the inventory below is the slot list at a glance.
 
-- **Backgrounds.** `--bg-base` (canvas), `--bg-raised`
+- **Backgrounds (5).** `--bg-base` (canvas), `--bg-raised`
   (cards / inputs / dialogs above canvas), `--bg-sunken` (input
   wells, code blocks, system-entry chrome), `--bg-overlay`
-  (modal / popover surfaces; usually slightly tinted vs raised).
-- **Foregrounds.** `--fg-primary` (default text), `--fg-secondary`
-  (less-emphasized text), `--fg-muted` (placeholders, disabled
-  text, low-emphasis labels), `--fg-on-accent` (text rendered on
-  accent backgrounds).
-- **Accent.** `--accent` (primary action / selection / brand),
-  `--accent-hover` (interactive hover state), `--accent-fg`
-  (text rendered on accent backgrounds; alias of
-  `--fg-on-accent` for slot symmetry, may consolidate in session
-  2). When the active theme has `accentOverridable: true` and the
-  user has customized accent, the entire accent group is
-  **derived from one input** — see
-  [`theming.md → Accent override (opt-in)`](./theming.md#accent-override-opt-in).
-- **Semantic states.** `--success`, `--warning`, `--danger`,
+  (modal / popover surfaces), `--bg-disabled` (disabled-control
+  surface).
+- **Foregrounds (4).** `--fg-primary` (default text),
+  `--fg-secondary` (less-emphasized text), `--fg-muted`
+  (placeholders, low-emphasis labels), `--fg-disabled`
+  (disabled-control text).
+- **Accent group (3).** `--accent` (primary action / brand),
+  `--accent-hover` (hover state on accent surfaces), `--accent-fg`
+  (text rendered on accent backgrounds). When the active theme
+  has `accentOverridable: true` and the user has customized
+  accent, the entire accent group plus `--focus-ring` and
+  `--selection-bg` is **derived from one input** — see
+  [`theming.md → Accent override (opt-in)`](./theming.md#accent-override-opt-in)
+  and
+  [`color.md → Accent-derivation algorithm`](./color.md#accent-derivation-algorithm).
+- **Semantic states (8).** `--success`, `--warning`, `--danger`,
   `--info`, each with its own `-fg` pair for text-on-state.
-- **Borders.** `--border` (default), `--border-strong`
+- **Borders (2).** `--border` (default), `--border-strong`
   (emphasis; hover, focus surrounds, table heads).
-- **Focus.** `--focus-ring` (ring color for keyboard focus
-  surrounds; usually a tint of `--accent`).
-- **Selection.** `--selection-bg` (text-selection background;
-  load-bearing for a reading-heavy app where users will spend
-  long sessions selecting prose).
+- **Focus (1).** `--focus-ring` — keyboard-focus indicator. Own
+  slot; not aliased to `--accent` (themes get tone control).
+- **Selection (1).** `--selection-bg` — text-selection background.
+- **Pattern-driven (1).** `--recently-classified-bg` — row tint
+  for the recently-classified pattern (per
+  [`../patterns/entity.md`](../patterns/entity.md)). Two visual
+  states (fresh + fading) render from this single slot — fading
+  is the same color at 0.5 alpha. Spec in
+  [`color.md → Recently-classified slot`](./color.md#recently-classified-slot).
 
-Patterns may add their own decay-pair slots when authored — e.g.
-`--recently-classified-bg` for the row accent in
-[`../patterns/entity.md`](../patterns/entity.md). The contract is
-open-ended; growing the slot inventory across sessions is the
-expected mode.
+The inventory is **extensible.** Future patterns may add their
+own slots under the same convention (`--<pattern>-<role>`);
+foundations records each addition's existence and the per-pattern
+semantics.
 
 ## Font-family slots
 
