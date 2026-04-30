@@ -345,14 +345,37 @@ modes enabled, wrap POV (first / third), suggestions enabled.
 
 ## APP · Appearance
 
-Theme picker, density (comfortable / compact), accent color
-preference. Final styling lands with visual identity.
+Theme picker, density toggle, conditional accent override. The
+visual identity contract that backs this surface lives in
+[`foundations/`](../../foundations/README.md) — this section
+describes the form-shaped affordance only.
 
-**Theme is a dropdown**, not a segment — built-in `light / dark /
-system` will be joined by user-installable / user-authored custom
-themes later, so cardinality grows past the segment threshold.
-Defaulting to dropdown now avoids reshaping the control when
-themes ship.
+**Theme is a dropdown**, not a segment, listing the curated
+gallery from the
+[theme registry](../../foundations/theming.md#theme-registry).
+Each entry is a palette, mode-declared (`light` / `dark`); pairing
+between modes is an authoring convention, not a system feature.
+Default lands at session 6 once the curated gallery is authored.
+Future user-authored themes (parked-until-signal per
+[`parked.md`](../../../parked.md#user-authored-themes)) extend the
+same gallery without changing the picker shape.
+
+**Density** is a `comfortable` / `compact` segment. Persists at
+[`app_settings.appearance.density`](../../foundations/theming.md#density-token-policy)
+and applies app-wide independent of theme. May be cut at session 4
+if the cross-platform implementation cost doesn't pencil — see the
+session 4 cut path.
+
+**Accent override is conditional.** Renders only when the active
+theme has
+[`accentOverridable: true`](../../foundations/theming.md#accent-override-opt-in)
+(likely Default Light / Default Dark in v1). Opinionated themes
+(Parchment, Catppuccin Mocha, Tokyo Night, etc.) hide the picker
+— their accent is part of the personality and isn't user-tweakable.
+The override persists across theme switches; switching to an
+opinionated theme silently dormants it; switching back re-applies
+it. One picker UI handles all accent-overridable themes
+uniformly.
 
 ### Show jump-to-top button
 

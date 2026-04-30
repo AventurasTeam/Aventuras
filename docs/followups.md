@@ -242,6 +242,40 @@ moved to
 
 Lands with the Select primitive's first implementation pass.
 
+### NativeWind runtime theme-swap parity validation
+
+[`ui/foundations/theming.md → Switching mechanism`](./ui/foundations/theming.md#switching-mechanism)
+asserts that theme swap on native (Expo iOS / Android) works
+without remount via NativeWind 4's runtime theming. **This is
+assumed, not verified.** The visual identity foundations design
+locked the contract on this assumption; the implementation pass
+must validate before consumer code (components reading the token
+slots) is built against it.
+
+What needs validating:
+
+- Theme-attribute swap on the document root reaches NativeWind's
+  runtime context provider on native, with token values updating
+  in already-mounted components.
+- No platform-specific perf cliff (large StyleSheet recompute on
+  every swap) that makes runtime swap unusable in practice.
+- Font-family token swap behaves equivalently to color-token swap.
+  Custom-font themes (Parchment-style, opinionated themes) work
+  on native without a re-render.
+- The `data-theme-mode` attribute is observable at the platform-
+  native CSS surface (e.g. embedded WebView styling its own
+  scrollbars).
+
+If full parity isn't achievable, the contract still works — fall
+back to remount-on-theme-swap with whatever brief flash that
+costs. Update
+[`ui/foundations/theming.md`](./ui/foundations/theming.md) and the
+HTML demo to reflect actual behavior at validation time.
+
+Lands at the start of foundations consumer-code implementation
+(Tailwind config wiring + first component reading token slots).
+Blocks consumer code; doesn't block any other design pass.
+
 ### Storybook design-rules pattern setup
 
 When component implementation begins, set up Storybook's tree as

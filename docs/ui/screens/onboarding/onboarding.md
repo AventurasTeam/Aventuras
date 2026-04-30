@@ -31,7 +31,7 @@ Cross-cutting principles that govern this surface are in
 │   are editable later in App Settings.                        │
 │                                                              │
 │   Language    [System (English) ▾]                           │
-│   Theme       [System ▾]                                     │
+│   Theme       [Default Light ▾]                              │
 │   Density     ( Comfortable ) ( Compact )                    │
 │                                                              │
 │                                                              │
@@ -86,14 +86,19 @@ Three fields, all with defaults:
   rendered as `System (<locale>)` so the user knows what they'll get.
   Same control surfaces in
   [App Settings · Language](../app-settings/app-settings.md#app--language).
-- **Theme** — picker. Defaults to `System`. **Render mode is
-  dropdown, not segment**, because Aventuras supports multiple light
-  themes and multiple dark themes (not just a binary). At wireframe
-  stage the dropdown shows placeholder entries
-  (`System` / `Light · default` / `Light · solarized` /
-  `Dark · default` / `Dark · midnight`); the actual catalog ships
-  with the visual identity session. Same control as
+- **Theme** — picker. Defaults to a curated default (final pick
+  lands at session 6 of the
+  [foundations pass](../../foundations/README.md)). **Render mode
+  is dropdown, not segment**, because Aventuras supports a curated
+  gallery of palettes — each mode-locked (`light` | `dark`) — that
+  grows past the segment threshold and will eventually be joined by
+  user-installable themes. At wireframe stage the dropdown shows
+  placeholder entries (`Default Light` / `Default Dark` /
+  `Parchment`); the actual catalog ships with session 6 of the
+  visual identity pass. Same control as
   [App Settings · Appearance](../app-settings/app-settings.md#app--appearance).
+  No "System" entry — OS dark/light follow is parked-until-signal
+  per [`parked.md`](../../../parked.md#os-darklight-follow).
 - **Density** — segment (`Comfortable` / `Compact`). Two options is
   segment-natural by the
   [Select primitive](../../patterns/forms.md#select-primitive)

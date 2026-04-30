@@ -509,6 +509,86 @@ description demand emerges.
 
 ### UX (parked)
 
+#### User-authored themes
+
+The visual identity contract (per
+[`ui/foundations/theming.md → Theme registry`](./ui/foundations/theming.md#theme-registry))
+ships v1 with a curated theme gallery only — TS modules bundled
+with the app. User-authored themes were considered and parked:
+the intended landing is **raw CSS edit, no UI fanciness** — users
+drop a `.css` file declaring the same `ColorToken` /
+`FontToken` slot values into a known directory under the OS
+app-data path; the registry parses + validates against the same
+shape; malformed themes are skipped, not crashed on.
+
+When real demand surfaces (users asking for personal palettes
+post-launch; community sharing of theme files), the work is:
+
+- Decide the exact OS app-data directory and how the registry
+  watches/loads it.
+- Validation + skip-on-malformed (skeleton in spec).
+- App Settings · Appearance: surface "imported themes" alongside
+  curated entries in the gallery; clearly distinguish source.
+- Backup / export — story exports already don't carry user
+  themes; the full DB backup carries `appearance.themeId` but
+  not the theme CSS file. User-authored themes are
+  device-portable only when manually copied.
+
+No-UI-for-authoring is a deliberate scope choice — power-user
+feature, not a v1 design surface. Parked-until-signal.
+
+#### Per-story theme override
+
+[`ui/foundations/theming.md → Persistence`](./ui/foundations/theming.md#persistence)
+stores the active theme app-wide at
+`app_settings.appearance.themeId`. Some users may want **per-story
+theme override** for narrative immersion ("dark academia" theme
+for one story, "cosmic horror" for another).
+
+Adds one optional field:
+
+```ts
+stories.settings.themeId?: string   // override-at-render; absent = app default
+```
+
+Override-at-render pattern (per
+[`ui/principles.md → Settings architecture`](./ui/principles.md#settings-architecture--split-by-location)),
+matching how `stories.settings.models` works. Story Settings
+gains an Appearance tab (or folds into an existing tab); App
+Settings · Appearance picker becomes the global default.
+
+Costs: per-story theme switching causes a brief theme-swap flash
+on story navigation; a "this story uses X theme, override?"
+status indicator may be needed; cross-story consistency in chrome
+becomes optional. Speculative until users ask.
+
+#### OS dark/light follow
+
+The visual identity foundations ship explicit-pick only — user
+selects one theme and that's what they get all day. Auto-following
+OS preference (switch from light theme to dark theme when the
+system goes dark) is not in v1.
+
+Rationale: previous version of the app didn't have it and users
+didn't ask. The "Linux desktop required" project constraint plus
+Expo's mobile target means OS-preference plumbing across macOS,
+Windows-via-Electron, Linux, iOS, Android — each with quirks —
+all to support a feature with no real demand signal.
+
+If signal surfaces, the design adds:
+
+- `app_settings.appearance.followOs?: boolean`,
+  `preferredLightThemeId?: string`,
+  `preferredDarkThemeId?: string`.
+- Settings UI: toggle + paired light/dark picker shown when toggle
+  on.
+- Platform glue per target.
+- Coexistence with explicit-pick: when `followOs` is on,
+  `themeId` becomes derived; when off, `themeId` is the explicit
+  pick.
+
+Parked-until-signal.
+
 #### Structurally-pinned indicator
 
 [`ui/principles.md → Injection / retrieval rules for prompt context`](./ui/principles.md#injection--retrieval-rules-for-prompt-context)

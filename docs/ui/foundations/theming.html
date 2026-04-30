@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Visual identity foundations (theming demo)</title>
+<style>
+  /* =========================================================
+     Review-controls bar — meta chrome, NOT themed.
+     This is the only section using fixed monochrome colors.
+     Everything else consumes the theme tokens.
+     ========================================================= */
+  .review-bar {
+    padding: 8px 16px;
+    background: #f5f0e6;
+    border-bottom: 1px solid #e3d8c0;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+    font-size: 11px;
+    font-family: system-ui, -apple-system, sans-serif;
+    color: #5a4820;
+  }
+  .review-bar .rb-label {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #7a6a40;
+    font-weight: 600;
+    font-size: 10px;
+  }
+  .review-bar .rb-group {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .review-bar .rb-group > .gl {
+    font-size: 10px;
+    color: #967;
+    margin-right: 4px;
+  }
+  .rb-btn {
+    padding: 3px 9px;
+    border: 1px solid #d8c99a;
+    border-radius: 3px;
+    background: #fff;
+    color: #5a4820;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .rb-btn.active {
+    background: #7a6a40;
+    color: #fff;
+    border-color: #7a6a40;
+  }
+  .rb-select {
+    padding: 3px 8px;
+    border: 1px solid #d8c99a;
+    border-radius: 3px;
+    background: #fff;
+    color: #5a4820;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .rb-note {
+    margin-left: auto;
+    font-size: 10px;
+    color: #967;
+    font-style: italic;
+  }
+  .screen-label {
+    padding: 8px 16px;
+    background: #eee;
+    border-bottom: 1px solid #bbb;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #888;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  .screen-label strong { color: #333; }
+
+  /* =========================================================
+     Theme tokens — semantic vars populated per active theme.
+     The whole point of this demo: surfaces below consume these,
+     never literal colors.
+     ========================================================= */
+  :root {
+    /* Default Light (default theme) */
+    --bg-base: #ffffff;
+    --bg-raised: #f8f8f8;
+    --bg-sunken: #f0f0f0;
+    --bg-overlay: #ffffff;
+    --fg-primary: #1a1a1a;
+    --fg-secondary: #555555;
+    --fg-muted: #888888;
+    --fg-on-accent: #ffffff;
+    --accent: #4a5b8e;
+    --accent-hover: #3a4978;
+    --accent-fg: var(--fg-on-accent);
+    --success: #2d7a4f;
+    --success-fg: #ffffff;
+    --warning: #b87a1a;
+    --warning-fg: #ffffff;
+    --danger: #b83a3a;
+    --danger-fg: #ffffff;
+    --info: #3a6db8;
+    --info-fg: #ffffff;
+    --border: #d8d8d8;
+    --border-strong: #a0a0a0;
+    --focus-ring: #4a5b8e;
+    --selection-bg: #c8d3eb;
+    --font-reading: Georgia, "Times New Roman", serif;
+    --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+    /* Density: comfortable (default) */
+    --row-pad-y: 12px;
+    --row-pad-x: 16px;
+    --input-pad-y: 8px;
+    --input-pad-x: 12px;
+    --button-pad-y: 8px;
+    --button-pad-x: 16px;
+    --gap-sm: 8px;
+    --gap-md: 16px;
+    --gap-lg: 24px;
+  }
+
+  [data-theme="default-dark"] {
+    --bg-base: #1a1a1a;
+    --bg-raised: #252525;
+    --bg-sunken: #0f0f0f;
+    --bg-overlay: #2a2a2a;
+    --fg-primary: #e8e8e8;
+    --fg-secondary: #b0b0b0;
+    --fg-muted: #707070;
+    --fg-on-accent: #1a1a1a;
+    --accent: #8aa0d8;
+    --accent-hover: #9ab0e8;
+    --success: #6fbe8f;
+    --success-fg: #0f1a14;
+    --warning: #e8b05a;
+    --warning-fg: #1a1408;
+    --danger: #e87a7a;
+    --danger-fg: #1a0f0f;
+    --info: #7aabe8;
+    --info-fg: #0f141a;
+    --border: #3a3a3a;
+    --border-strong: #555555;
+    --focus-ring: #8aa0d8;
+    --selection-bg: #3a4978;
+  }
+
+  [data-theme="parchment"] {
+    --bg-base: #f4ecd8;
+    --bg-raised: #faf3e0;
+    --bg-sunken: #ebe2c8;
+    --bg-overlay: #faf3e0;
+    --fg-primary: #3a2a1a;
+    --fg-secondary: #6a4a2a;
+    --fg-muted: #8a7a5a;
+    --fg-on-accent: #faf3e0;
+    --accent: #8a4a2a;
+    --accent-hover: #7a3a1a;
+    --success: #5a7a2a;
+    --warning: #aa6a1a;
+    --danger: #9a2a2a;
+    --info: #4a5a7a;
+    --border: #c8b890;
+    --border-strong: #a89870;
+    --focus-ring: #8a4a2a;
+    --selection-bg: #ebd8a8;
+    --font-reading: "Lora", Georgia, "Iowan Old Style", serif;
+  }
+
+  [data-density="compact"] {
+    --row-pad-y: 6px;
+    --row-pad-x: 12px;
+    --input-pad-y: 4px;
+    --input-pad-x: 10px;
+    --button-pad-y: 5px;
+    --button-pad-x: 12px;
+    --gap-sm: 6px;
+    --gap-md: 12px;
+    --gap-lg: 18px;
+  }
+
+  /* =========================================================
+     Layout
+     ========================================================= */
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-base);
+    color: var(--fg-primary);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.5;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  ::selection {
+    background: var(--selection-bg);
+    color: var(--fg-primary);
+  }
+  .canvas {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: var(--gap-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-lg);
+  }
+  .section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+  }
+  .section-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fg-muted);
+    font-family: var(--font-ui);
+    font-weight: 600;
+  }
+  .section-token {
+    font-size: 10px;
+    color: var(--fg-muted);
+    font-family: var(--font-mono);
+  }
+
+  /* =========================================================
+     Sample surfaces — every one consumes tokens
+     ========================================================= */
+
+  /* Body prose paragraph — exercises bg-base, fg-primary, font-reading, selection-bg */
+  .prose {
+    font-family: var(--font-reading);
+    font-size: 16px;
+    line-height: 1.7;
+    color: var(--fg-primary);
+    background: var(--bg-base);
+  }
+  .prose p { margin: 0 0 1em; }
+  .prose .lead { color: var(--fg-secondary); font-style: italic; font-size: 14px; }
+
+  /* Button row — exercises accent, accent-hover, accent-fg, focus-ring, button density */
+  .button-row {
+    display: flex;
+    gap: var(--gap-sm);
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .btn {
+    padding: var(--button-pad-y) var(--button-pad-x);
+    border-radius: 4px;
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  }
+  .btn:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-fg);
+    border-color: var(--accent);
+  }
+  .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn-secondary {
+    background: var(--bg-raised);
+    color: var(--fg-primary);
+    border-color: var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--border-strong); }
+  .btn-disabled {
+    background: var(--bg-sunken);
+    color: var(--fg-muted);
+    border-color: var(--border);
+    cursor: not-allowed;
+  }
+
+  /* Input — exercises bg-raised, border, border-strong (focus), fg-muted (placeholder) */
+  .input-row {
+    display: flex;
+    gap: var(--gap-sm);
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .input {
+    padding: var(--input-pad-y) var(--input-pad-x);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-raised);
+    color: var(--fg-primary);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    min-width: 240px;
+  }
+  .input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
+  }
+  .input::placeholder { color: var(--fg-muted); }
+
+  /* List rows — exercises fg-secondary, fg-muted, accent indicator, density */
+  .list {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .list-row {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    padding: var(--row-pad-y) var(--row-pad-x);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s ease;
+  }
+  .list-row:last-child { border-bottom: none; }
+  .list-row:hover { background: var(--bg-base); }
+  .list-row .icon {
+    width: 16px; height: 16px;
+    border-radius: 3px;
+    background: var(--bg-sunken);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--fg-secondary);
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  .list-row .name {
+    color: var(--fg-primary);
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+  .list-row .desc {
+    color: var(--fg-secondary);
+    font-size: 13px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .list-row .meta {
+    color: var(--fg-muted);
+    font-size: 12px;
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+  }
+  .list-row .accent-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  /* System-entry chrome strip — exercises bg-sunken, font-mono, fg-secondary */
+  .system-entry {
+    background: var(--bg-sunken);
+    color: var(--fg-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: var(--input-pad-y) var(--input-pad-x);
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+  .system-entry .se-label {
+    color: var(--fg-muted);
+    margin-right: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 10px;
+  }
+
+  /* Semantic-state row — exercises success/warning/danger/info */
+  .semantic-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--gap-sm);
+  }
+  .pill {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-ui);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pill.success { background: var(--success); color: var(--success-fg); }
+  .pill.warning { background: var(--warning); color: var(--warning-fg); }
+  .pill.danger { background: var(--danger); color: var(--danger-fg); }
+  .pill.info { background: var(--info); color: var(--info-fg); }
+
+  /* Token surface display — small chip showing the active token value */
+  .token-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: var(--gap-sm);
+  }
+  .token-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--fg-secondary);
+  }
+  .token-chip .swatch {
+    width: 16px; height: 16px;
+    border-radius: 3px;
+    border: 1px solid var(--border-strong);
+    flex-shrink: 0;
+  }
+
+  /* Mode indicator (top corner of canvas) */
+  .mode-indicator {
+    font-size: 11px;
+    color: var(--fg-muted);
+    font-family: var(--font-mono);
+    text-align: right;
+  }
+</style>
+</head>
+<body>
+
+<div class="screen-label">
+  <strong>Foundations</strong> · Theming demo (placeholder palettes — session 6 authors the real gallery)
+</div>
+
+<div class="review-bar">
+  <span class="rb-label">Theme</span>
+  <select class="rb-select" id="theme-select">
+    <option value="default-light">Default Light</option>
+    <option value="default-dark">Default Dark</option>
+    <option value="parchment">Parchment</option>
+  </select>
+
+  <span class="rb-label" style="margin-left: 16px;">Density</span>
+  <div class="rb-group" id="density-group">
+    <button class="rb-btn active" data-density="comfortable">Comfortable</button>
+    <button class="rb-btn" data-density="compact">Compact</button>
+  </div>
+
+  <span class="rb-note">Live CSS-var swap. Try selecting prose to see <code>--selection-bg</code>.</span>
+</div>
+
+<div class="canvas">
+
+  <div class="mode-indicator" id="mode-indicator">data-theme-mode = "light"</div>
+
+  <div class="section">
+    <div class="section-label">Body prose</div>
+    <div class="section-token">--bg-base · --fg-primary · --font-reading · --selection-bg</div>
+    <div class="prose">
+      <p class="lead">
+        Aria stepped into the inn, the firelight catching her shoulders before her eyes had
+        time to adjust. The room smelled of woodsmoke and old beer, and somewhere a lute was
+        being tuned — badly, but with conviction.
+      </p>
+      <p>
+        She crossed to the bar, boots sounding on the warped boards, and signaled the keeper.
+        He was a heavy-shouldered man with a beard the color of soot, and he didn't smile when
+        he turned to her — but he didn't scowl either, which was as much welcome as she was
+        likely to get. <strong>"Room for the night,"</strong> she said, sliding two coins across
+        the counter. <em>"And a meal, if there's one to be had."</em>
+      </p>
+      <p>
+        The keeper considered the coins, then her, then the coins again. He took them.
+        Highlight a passage to see <code style="font-family: var(--font-mono); background: var(--bg-sunken); padding: 1px 4px; border-radius: 2px;">--selection-bg</code>
+        track the active theme.
+      </p>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Buttons</div>
+    <div class="section-token">--accent · --accent-hover · --accent-fg · --focus-ring</div>
+    <div class="button-row">
+      <button class="btn btn-primary">Primary action</button>
+      <button class="btn btn-secondary">Secondary</button>
+      <button class="btn btn-disabled" disabled>Disabled</button>
+      <span style="font-size: 11px; color: var(--fg-muted); font-family: var(--font-mono);">
+        ↑ tab into a button to see --focus-ring
+      </span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Input</div>
+    <div class="section-token">--bg-raised · --border · --fg-muted (placeholder) · --focus-ring</div>
+    <div class="input-row">
+      <input class="input" type="text" placeholder="Search entities, lore, threads…">
+      <input class="input" type="text" value="Pre-filled value">
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">List rows</div>
+    <div class="section-token">--fg-secondary · --fg-muted · --accent (indicator) · density-aware padding</div>
+    <div class="list">
+      <div class="list-row">
+        <span class="accent-dot"></span>
+        <span class="icon">◉</span>
+        <span class="name">Aria</span>
+        <span class="desc">Lead character, formerly a soldier of the Eastern garrison</span>
+        <span class="meta">in scene</span>
+      </div>
+      <div class="list-row">
+        <span class="icon">◇</span>
+        <span class="name">The Crooked Crown</span>
+        <span class="desc">A coastal tavern frequented by mercenaries and fish merchants</span>
+        <span class="meta">location</span>
+      </div>
+      <div class="list-row">
+        <span class="icon">▲</span>
+        <span class="name">Vex</span>
+        <span class="desc">A faction of exiled scholars, increasingly desperate</span>
+        <span class="meta">staged</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">System entry chrome</div>
+    <div class="section-token">--bg-sunken · --font-mono · --fg-secondary</div>
+    <div class="system-entry">
+      <span class="se-label">system</span>
+      Generation cancelled. 2 entries reverted via reverse-replay of action_id <code>tx-9c4e</code>.
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Semantic states</div>
+    <div class="section-token">--success · --warning · --danger · --info (each with -fg pair)</div>
+    <div class="semantic-row">
+      <span class="pill success">✓ Saved</span>
+      <span class="pill warning">⚠ Profile error</span>
+      <span class="pill danger">✕ Generation failed</span>
+      <span class="pill info">ⓘ 2 entries pending</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Token surfaces (visible swap proof)</div>
+    <div class="section-token">snapshot of currently-bound theme tokens</div>
+    <div class="token-grid">
+      <div class="token-chip"><span class="swatch" style="background: var(--bg-base);"></span> --bg-base</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--bg-raised);"></span> --bg-raised</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--bg-sunken);"></span> --bg-sunken</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--bg-overlay);"></span> --bg-overlay</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--fg-primary);"></span> --fg-primary</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--fg-secondary);"></span> --fg-secondary</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--fg-muted);"></span> --fg-muted</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--fg-on-accent);"></span> --fg-on-accent</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--accent);"></span> --accent</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--accent-hover);"></span> --accent-hover</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--accent-fg);"></span> --accent-fg</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--success);"></span> --success</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--warning);"></span> --warning</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--danger);"></span> --danger</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--info);"></span> --info</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--border);"></span> --border</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--border-strong);"></span> --border-strong</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--focus-ring);"></span> --focus-ring</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--selection-bg);"></span> --selection-bg</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const root = document.documentElement;
+  const themeSelect = document.getElementById('theme-select');
+  const densityGroup = document.getElementById('density-group');
+  const modeIndicator = document.getElementById('mode-indicator');
+
+  // Theme mode declarations — mirrors what each Theme module declares.
+  const themeModes = {
+    'default-light': 'light',
+    'default-dark': 'dark',
+    'parchment': 'light',
+  };
+
+  function applyTheme(themeId) {
+    if (themeId === 'default-light') {
+      root.removeAttribute('data-theme');
+    } else {
+      root.setAttribute('data-theme', themeId);
+    }
+    const mode = themeModes[themeId] || 'light';
+    root.setAttribute('data-theme-mode', mode);
+    modeIndicator.textContent = `data-theme-mode = "${mode}"`;
+  }
+
+  function applyDensity(density) {
+    if (density === 'comfortable') {
+      root.removeAttribute('data-density');
+    } else {
+      root.setAttribute('data-density', density);
+    }
+  }
+
+  themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
+
+  densityGroup.querySelectorAll('.rb-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      densityGroup.querySelectorAll('.rb-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyDensity(btn.dataset.density);
+    });
+  });
+
+  // Initial state
+  applyTheme('default-light');
+  applyDensity('comfortable');
+</script>
+
+</body>
+</html>
