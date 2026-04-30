@@ -1,16 +1,16 @@
 # Aventuras
 
-A local-first AI-collaborative writing app. You write fiction with
-an AI co-author against a typed world model that evolves alongside
-the prose — characters, locations, items, factions, lore, plot
-threads, and event history all tracked structurally as the story
+An AI-collaborative writing app. You write fiction with
+an AI co-author against backed by an advanced memory system
+that ensures characters, locations, items, factions, lore, plot
+threads, and event history are all tracked as the story
 unfolds. Branch the narrative freely. Roll back any change. All
 data lives on your machine.
 
 Cross-platform via a single Expo app: mobile (iOS / Android)
 through Expo Go, desktop (Linux / macOS / Windows) through
 Electron wrapping the web build. No accounts, no cloud, no
-environment variables — everything in local SQLite.
+environment variables — everything in local database file.
 
 ## Status
 
