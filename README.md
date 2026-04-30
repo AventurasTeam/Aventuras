@@ -14,7 +14,7 @@ environment variables; everything in local database file.
 
 > **Note on history.** The previous iteration of this project
 > lives on the `legacy/master` branch. The `main` branch is a
-> ground-up rewrite — same problem space, different architecture.
+> ground-up rewrite taking lessons learned. Same idea, different architecture.
 > Old issues, branches, and history remain reachable via
 > `legacy/master`.
 
@@ -29,8 +29,8 @@ phase:
   remark, lefthook, Vitest, Playwright story tests, CI).
 - A handful of design-system primitives have been scaffolded
   (`components/ui/*` with Storybook stories).
-- The writing-app domain itself — stories, entries, the
-  classifier pipeline, world-state retrieval, the AI collaborator —
+- The writing-app domain itself, stories, entries, the
+  classifier pipeline, world-state retrieval, the AI collaborator,
   has not yet been built.
 
 This README describes the project's intent. Documentation
