@@ -209,14 +209,32 @@ reflects the current plan and updates as work progresses.
    deep links, splash screen config, web-target concerns.
    Files: [`platform.md`](./platform.md),
    [`platform.html`](./platform.html).
-7. **Per-screen passes** — pending. ~10 surfaces, each upgrading
-   its existing HTML to single-canonical responsive (viewport
-   toggle, 3-tier reflow). Reconciles any pre-foundations
-   `## Mobile` sections.
+7. **Per-screen retrofits (grouped)** — pending start.
+   ~13 surfaces upgrade to render the responsive contract
+   (viewport toggle, container-query reflow, mobile expression
+   in per-screen `.md` docs, reconciliation of pre-foundations
+   `## Mobile` sections). **Grouped by surface family** to balance
+   commit focus against ceremony cost — per-screen sessions are
+   too ceremonial for the volume; one big session is unreviewable.
+   Groups (each its own commit, own exploration record):
+   - **A — Entry flow** (pending): story-list, wizard, onboarding.
+   - **B — Reading flow** (pending): reader-composer,
+     branch-navigator, rollback-confirm.
+   - **C — In-story master-detail** (pending): world, plot,
+     chapter-timeline.
+   - **D — Settings + power-user** (pending): story-settings,
+     app-settings, vault calendars, prompt-pack editor.
 
-After session 6, mobile foundations is feature-complete for v1.
-Session 7 is the consumer pass that mechanically applies the
-contract to every surface.
+   Cross-cutting pattern docs (`patterns/icon-actions.md`,
+   `save-sessions.md`, `calendar-picker.md`, `data.md`,
+   `lists.md`, `forms.md`, `entity.md`) get touched as needed
+   during per-screen passes; minor edits only, not separate
+   sessions.
+
+After session 6, the substrate is feature-complete for v1.
+Session 7's grouped consumer pass mechanically applies the
+contract to every surface; once all four groups land, mobile
+foundations work is fully done.
 
 ## Wireframe convention
 
