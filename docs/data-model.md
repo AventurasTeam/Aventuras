@@ -4,9 +4,6 @@ Living design doc for the v2 schema. The diagram below is the source of
 truth as we iterate; once we commit, it'll be mirrored by the drizzle
 `schema.ts` and this doc becomes the "why" alongside it.
 
-The old app's schema (at `/home/failerko/_LLM/Aventura/Aventura/src-tauri/migrations/`)
-is reference material only, not a template.
-
 ---
 
 ## Diagram
