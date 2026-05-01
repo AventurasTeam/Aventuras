@@ -25,8 +25,8 @@ Used by:
   matching the app default)
 - [Story list pin star](../screens/story-list/story-list.md#story-card--text-first)
   (☆/★ pin toggle inline before each story-card title — applies
-  the visibility rule via the existing `~25% opacity, reveals on
-hover` styling)
+  the visibility rule via existing muted-opacity, brighten-on-hover
+  styling)
 
 Future row-shaped surfaces with per-row actions follow the same
 pattern.
