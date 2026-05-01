@@ -55,6 +55,16 @@ and exploration-record link.
   toggle (Reader, World, Plot) crossed with viewport toggle, plus
   a master-detail "show detail" toggle to demonstrate the phone
   collapse on World / Plot.
+- [`touch.md`](./touch.md) — touch grammar: minimal-translation
+  philosophy, hover replacement (always-visible-muted via the
+  generalized icon-actions rule), gesture vocabulary (no
+  long-press, no swipe-on-row, no pull-to-refresh), save bar
+  hide-on-keyboard, status pill tap to popover, chip-strip
+  ~16 px safe zone for iOS swipe-back, tap-to-tooltip on inert
+  truncated chrome text, tooltip and keyboard-shortcut scope.
+- [`touch.html`](./touch.html) — interactive demo: hover-vs-touch
+  toggle on icon-actions, status-pill tap-to-popover, save-bar
+  hide-on-keyboard, tap-to-tooltip on a truncated label.
 
 ## Sessions
 
@@ -134,11 +144,28 @@ reflects the current plan and updates as work progresses.
    transitions out of phone (session 7 implementation guidance).
    Files: [`collapse.md`](./collapse.md),
    [`collapse.html`](./collapse.html).
-5. **Touch grammar** — pending. Hover-brighten replacements,
-   hover-affordance translation on entity rows, peek drawer →
-   bottom sheet decision, save-bar placement on small screens,
-   drag / long-press / swipe vocabulary, what desktop interactions
-   don't translate at all.
+5. **Touch grammar** — landed 2026-05-01
+   ([exploration record](../../../explorations/2026-05-01-mobile-touch.md)).
+   **Minimal-translation philosophy** — touch is a subset of
+   desktop interactions, not a parallel rich-gesture vocabulary.
+   Hover-bound affordances translate to **always-visible-muted**
+   via the generalized
+   [icon-actions visibility rule](../../patterns/icon-actions.md).
+   No long-press for actions, no swipe-on-row, no pull-to-refresh
+   (open to additive triggers post-v1 if usage signal surfaces).
+   Drag uses explicit handles, not long-press-to-grab. Save bar
+   on phone **hides while keyboard is open**, reappears on field
+   blur (navigate-away guard remains active throughout). Status
+   pill on phone is icon-only, tap reveals phase plus cancel in a
+   Popover (not Sheet — content fits the tiny-popover threshold).
+   Chip-strip ~16 px left padding doubles as iOS-swipe-back safe
+   zone. **Tap-to-tooltip on inert chrome text** (story title,
+   current breadcrumb segment when truncated) — narrowly scoped to
+   text not tappable for navigation. Tooltips and keyboard
+   shortcuts are desktop-only. Bundled small **breadcrumb
+   tappability amendment** to principles.md (parent segments
+   tappable for navigation, current segment inert).
+   Files: [`touch.md`](./touch.md), [`touch.html`](./touch.html).
 6. **Platform** — pending. iOS notch / Android nav bar / status
    bar safe areas, swipe-back gesture, system back, mobile-web
    browser chrome (URL bar collapse), keyboard avoidance for the

@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Mobile foundations (touch grammar)</title>
+<style>
+  /* Monochrome wireframe palette per docs/conventions.md → Wireframe authoring. */
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-pane-alt: #f4f4f4;
+    --bg-strip: #f7f7f7;
+    --accent: #5a5a5a;
+    --scrim: rgba(0, 0, 0, 0.42);
+  }
+
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* review bar */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+  kbd { font-family: monospace; background: #fff; padding: 1px 5px; border: 1px solid #d8c99a; border-radius: 3px; font-size: 10px; color: #5a4820; }
+
+  .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .screen-label strong { color: var(--ink); }
+
+  .stage { flex: 1; padding: 24px; display: flex; justify-content: center; box-sizing: border-box; }
+  .stage-wrap { display: flex; flex-direction: column; gap: 8px; align-items: center; width: 100%; max-width: 760px; }
+
+  .panel {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--bg-region);
+    overflow: hidden;
+    margin-bottom: 16px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .panel-header {
+    padding: 8px 14px;
+    background: var(--bg-strip);
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-muted);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .panel-header strong { color: var(--ink); font-weight: 600; letter-spacing: 0; text-transform: none; font-size: 13px; }
+  .panel-body { padding: 14px; position: relative; }
+
+  /* === Hover translation demo: icon-actions row. === */
+  .row-demo {
+    border: 1px solid var(--line-soft);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .ia-row {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .ia-row:last-child { border-bottom: 0; }
+  .ia-row .row-label { flex: 1; color: var(--ink); font-size: 13px; }
+  .ia-row .row-actions { display: flex; gap: 6px; }
+  .ia-icon {
+    width: 24px; height: 24px;
+    border: 1px dashed var(--line-soft);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-faint);
+    font-size: 12px;
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+  /* Desktop mode: icons brighten on row hover. */
+  body[data-mode="desktop"] .ia-row:hover .ia-icon { color: var(--ink); }
+  /* Touch mode: icons stay muted (load-bearing affordance). */
+  body[data-mode="touch"] .ia-row:hover .ia-icon { color: var(--ink-faint); }
+
+  /* === Status pill demo. === */
+  .pill-host {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .status-pill {
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg-region);
+    color: var(--ink-muted);
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    position: relative;
+  }
+  .status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: blink 1.4s infinite; }
+  @keyframes blink { 50% { opacity: 0.4; } }
+  body[data-mode="desktop"] .status-pill .label { display: inline; }
+  body[data-mode="touch"] .status-pill .label { display: none; }
+  body[data-mode="touch"] .status-pill { padding: 4px 6px; }
+  .pill-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 200px;
+    background: var(--bg-region);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 12px;
+    z-index: 6;
+    display: none;
+    font-size: 12px;
+  }
+  .pill-popover.show { display: block; }
+  .pill-popover .phase { color: var(--ink); font-weight: 500; margin-bottom: 6px; }
+  .pill-popover .cancel-btn {
+    padding: 4px 12px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: var(--bg-region);
+    color: var(--ink);
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  /* === Save bar demo. === */
+  .detail-route {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    height: 320px;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg-region);
+    display: flex;
+    flex-direction: column;
+  }
+  .detail-topbar {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-region);
+    flex-shrink: 0;
+  }
+  .detail-topbar .icon { width: 24px; height: 24px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 12px; }
+  .detail-topbar .crumb { font-weight: 600; color: var(--ink); font-size: 13px; flex: 1; }
+  .detail-content {
+    flex: 1;
+    padding: 14px;
+    overflow-y: auto;
+  }
+  .detail-content label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-muted);
+    margin-bottom: 4px;
+  }
+  .detail-content input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--bg-region);
+    color: var(--ink);
+    font-size: 13px;
+    font-family: inherit;
+    margin-bottom: 12px;
+  }
+  .save-bar {
+    padding: 8px 12px;
+    background: var(--bg-strip);
+    border-top: 1px solid var(--line-soft);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  /* Hidden state removes the bar from layout entirely so its
+     ~48px slot is reclaimed for content. The "slide-down"
+     animation polish lands at session 7 implementation. */
+  .save-bar.hidden { display: none; }
+  .save-bar .count { flex: 1; font-size: 12px; color: var(--ink-muted); }
+  .save-bar button {
+    padding: 5px 12px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: var(--bg-region);
+    color: var(--ink);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .save-bar button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .keyboard {
+    height: 130px;
+    background: var(--bg-pane-alt);
+    border-top: 1px solid var(--line);
+    color: var(--ink-faint);
+    font-size: 11px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .keyboard.show { display: flex; }
+
+  /* === Tap-to-tooltip on truncated text demo. === */
+  .truncate-host {
+    border: 1px solid var(--line-soft);
+    padding: 8px 12px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    position: relative;
+  }
+  .truncate-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    color: var(--ink);
+  }
+  .truncate-label:hover { text-decoration: underline; text-decoration-style: dotted; }
+  .truncate-popover {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    background: var(--bg-region);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--ink);
+    z-index: 5;
+    display: none;
+    max-width: 90%;
+    white-space: normal;
+  }
+  .truncate-popover.show { display: block; }
+
+  .demo-note {
+    margin: 16px auto 24px;
+    padding: 12px 16px;
+    max-width: 760px;
+    border: 1px dashed var(--line);
+    border-radius: 4px;
+    background: var(--bg-region);
+    font-size: 12px;
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+  .demo-note strong { color: var(--ink); }
+  .demo-note code { background: var(--bg); padding: 1px 5px; border-radius: 2px; font-size: 11px; }
+</style>
+</head>
+<body data-mode="touch">
+  <div class="review-bar">
+    <div class="rb-group" role="group" aria-label="Mode">
+      <span class="rb-label">Input mode</span>
+      <button class="rb-btn" data-mode="desktop">Desktop hover <kbd>D</kbd></button>
+      <button class="rb-btn active" data-mode="touch">Touch <kbd>T</kbd></button>
+    </div>
+    <div class="rb-group" role="group" aria-label="Keyboard">
+      <span class="rb-label">Keyboard</span>
+      <button class="rb-btn" id="kb-toggle">Keyboard closed</button>
+    </div>
+    <div class="rb-note">Session 5 — touch grammar across hover translation, status pill, save bar, tap-to-tooltip.</div>
+  </div>
+
+  <div class="screen-label"><strong>foundations / mobile</strong> — touch grammar reference</div>
+
+  <div class="stage">
+    <div class="stage-wrap">
+
+      <!-- Hover translation -->
+      <div class="panel">
+        <div class="panel-header"><strong>Hover translation</strong> · icon-actions on entity rows</div>
+        <div class="panel-body">
+          <div class="row-demo">
+            <div class="ia-row">
+              <div class="row-label">Kael Vex Reborn</div>
+              <div class="row-actions">
+                <div class="ia-icon" title="Edit">✎</div>
+                <div class="ia-icon" title="Open in panel">↗</div>
+                <div class="ia-icon" title="More">⋯</div>
+              </div>
+            </div>
+            <div class="ia-row">
+              <div class="row-label">Aria Stormcloak</div>
+              <div class="row-actions">
+                <div class="ia-icon">✎</div>
+                <div class="ia-icon">↗</div>
+                <div class="ia-icon">⋯</div>
+              </div>
+            </div>
+            <div class="ia-row">
+              <div class="row-label">Marek the Wandering</div>
+              <div class="row-actions">
+                <div class="ia-icon">✎</div>
+                <div class="ia-icon">↗</div>
+                <div class="ia-icon">⋯</div>
+              </div>
+            </div>
+          </div>
+          <div style="font-size: 11px; color: var(--ink-muted);">
+            Toggle <strong>Input mode</strong> in the review bar. <strong>Desktop hover</strong>: hover a row and the icons brighten. <strong>Touch</strong>: icons stay muted (no hover state); the muted default IS the load-bearing affordance.
+          </div>
+        </div>
+      </div>
+
+      <!-- Status pill tap -->
+      <div class="panel">
+        <div class="panel-header"><strong>Status pill tap</strong> · phase + cancel popover (phone)</div>
+        <div class="panel-body">
+          <div class="pill-host">
+            <div class="status-pill" id="status-pill">
+              <span class="dot"></span>
+              <span class="label">generating narrative…</span>
+              <div class="pill-popover" id="pill-popover">
+                <div class="phase">Phase: generating narrative…</div>
+                <button class="cancel-btn">Cancel pipeline</button>
+              </div>
+            </div>
+          </div>
+          <div style="font-size: 11px; color: var(--ink-muted);">
+            On phone (touch mode), the pill renders icon-only — tap it to reveal the phase + cancel popover. On desktop, the pill text renders inline; same popover affordance on tap-to-cancel. Popover, not Sheet — content is tiny.
+          </div>
+        </div>
+      </div>
+
+      <!-- Save bar with keyboard -->
+      <div class="panel">
+        <div class="panel-header"><strong>Save bar with keyboard</strong> · phone detail-route (World character edit)</div>
+        <div class="panel-body">
+          <div class="detail-route">
+            <div class="detail-topbar">
+              <div class="icon" title="Back to list">←</div>
+              <div class="crumb">World / Characters / Kael Vex</div>
+              <div class="icon">⛭</div>
+              <div class="icon">⚲</div>
+            </div>
+            <div class="detail-content">
+              <label>Name</label>
+              <input value="Kael Vex Reborn" />
+              <label>Description</label>
+              <input value="A wandering swordsman with a haunted past." />
+              <label>Notes</label>
+              <input value="(scroll for more fields)" />
+            </div>
+            <div class="save-bar" id="save-bar">
+              <div class="count">2 unsaved</div>
+              <button>Discard</button>
+              <button class="primary">Save</button>
+            </div>
+            <div class="keyboard" id="keyboard">[soft keyboard]</div>
+          </div>
+          <div style="font-size: 11px; color: var(--ink-muted); margin-top: 8px;">
+            Toggle <strong>Keyboard</strong> in the review bar. With keyboard closed: save bar visible at bottom. With keyboard open: save bar hides (slides down off-screen) to preserve content space. Navigate-away guard remains active throughout.
+          </div>
+        </div>
+      </div>
+
+      <!-- Tap-to-tooltip on truncated text -->
+      <div class="panel">
+        <div class="panel-header"><strong>Tap-to-tooltip on truncated chrome text</strong> · top-bar story title</div>
+        <div class="panel-body">
+          <div class="truncate-host">
+            <div class="truncate-label" id="trunc-label" data-full="Aria's Descent of the Crown's Bargain and the Pale Tower">
+              Aria's Descent of the Crown's Bargain and the Pale Tower
+            </div>
+            <div class="truncate-popover" id="trunc-popover">Aria's Descent of the Crown's Bargain and the Pale Tower</div>
+          </div>
+          <div style="font-size: 11px; color: var(--ink-muted);">
+            Tap the truncated label to see the full text in a popover. Applies only to inert chrome text (story title, current breadcrumb segment) — not to navigation links (parent breadcrumb segments) or row labels.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="demo-note">
+    <strong>What this demonstrates.</strong> Four touch-grammar
+    behaviors: hover-translation on icon-actions, status-pill
+    tap-to-popover (icon-only on phone), save-bar hide-on-keyboard,
+    and tap-to-tooltip on inert truncated chrome text.
+    <br><br>
+    <strong>What this does not pin.</strong> Platform-specific
+    keyboard handling (RN <code>KeyboardAvoidingView</code> modes,
+    iOS interactive-dismiss vs Android adjust-resize) — session 6.
+    Sheet drag-dismiss threshold per platform — session 6.
+    Accessibility specifics (screen-reader announcements) —
+    session 6. Per-screen wireframe retrofits — session 7.
+    <br><br>
+    Press <kbd>D</kbd> / <kbd>T</kbd> to toggle input mode,
+    <kbd>K</kbd> to toggle the soft keyboard.
+  </div>
+
+<script>
+  (function () {
+    var MODE_KEY = 'aventuras-wireframe-touch-mode';
+    var KB_KEY = 'aventuras-wireframe-touch-kb';
+    var modeButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-mode]'));
+    var kbToggle = document.getElementById('kb-toggle');
+    var saveBar = document.getElementById('save-bar');
+    var keyboard = document.getElementById('keyboard');
+    var statusPill = document.getElementById('status-pill');
+    var pillPopover = document.getElementById('pill-popover');
+    var truncLabel = document.getElementById('trunc-label');
+    var truncPopover = document.getElementById('trunc-popover');
+
+    function applyMode(mode) {
+      var btn = modeButtons.filter(function (b) { return b.dataset.mode === mode; })[0];
+      if (!btn) { btn = modeButtons[1]; mode = 'touch'; }
+      modeButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+      document.body.dataset.mode = mode;
+      try { localStorage.setItem(MODE_KEY, mode); } catch (e) { /* no-op */ }
+    }
+
+    var kbOpen = false;
+    function applyKb(open) {
+      kbOpen = !!open;
+      keyboard.classList.toggle('show', kbOpen);
+      saveBar.classList.toggle('hidden', kbOpen);
+      kbToggle.textContent = kbOpen ? 'Keyboard open' : 'Keyboard closed';
+      kbToggle.classList.toggle('active', kbOpen);
+      try { localStorage.setItem(KB_KEY, kbOpen ? '1' : '0'); } catch (e) { /* no-op */ }
+    }
+
+    modeButtons.forEach(function (b) { b.addEventListener('click', function () { applyMode(b.dataset.mode); }); });
+    kbToggle.addEventListener('click', function () { applyKb(!kbOpen); });
+
+    // Status pill: tap toggles popover
+    statusPill.addEventListener('click', function (e) {
+      e.stopPropagation();
+      pillPopover.classList.toggle('show');
+    });
+    document.addEventListener('click', function () { pillPopover.classList.remove('show'); });
+    pillPopover.addEventListener('click', function (e) { e.stopPropagation(); });
+
+    // Truncated text: tap reveals popover (iff truncated)
+    function checkTruncation() {
+      // Show the affordance only when the text actually overflows.
+      var truncated = truncLabel.scrollWidth > truncLabel.clientWidth;
+      truncLabel.style.cursor = truncated ? 'pointer' : 'default';
+      truncLabel.dataset.truncated = truncated ? '1' : '0';
+    }
+    truncLabel.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (truncLabel.dataset.truncated === '1') {
+        truncPopover.classList.toggle('show');
+      }
+    });
+    document.addEventListener('click', function () { truncPopover.classList.remove('show'); });
+    truncPopover.addEventListener('click', function (e) { e.stopPropagation(); });
+    window.addEventListener('resize', checkTruncation);
+
+    document.addEventListener('keydown', function (e) {
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (e.key === 'd' || e.key === 'D') applyMode('desktop');
+      else if (e.key === 't' || e.key === 'T') applyMode('touch');
+      else if (e.key === 'k' || e.key === 'K') applyKb(!kbOpen);
+      else if (e.key === 'Escape') {
+        pillPopover.classList.remove('show');
+        truncPopover.classList.remove('show');
+      }
+    });
+
+    var savedMode;
+    try { savedMode = localStorage.getItem(MODE_KEY); } catch (e) { savedMode = null; }
+    applyMode(savedMode || 'touch');
+
+    var savedKb;
+    try { savedKb = localStorage.getItem(KB_KEY); } catch (e) { savedKb = null; }
+    applyKb(savedKb === '1');
+
+    setTimeout(checkTruncation, 50);
+  })();
+</script>
+</body>
+</html>

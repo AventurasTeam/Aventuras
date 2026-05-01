@@ -197,6 +197,38 @@ navigation is captured by the rail or the list itself.
 Any action beyond what these tiers and rules permit lives in the
 Actions menu or the screen-specific chrome.
 
+### Breadcrumb tappability
+
+Both the top-bar breadcrumb and the master-detail sub-header are
+**tappable for navigation**. Each parent segment in the path is a
+link to that ancestor; tapping clears any subsequent state and
+lands on the parent.
+
+- **Top-bar breadcrumb segments.** `Aria's Descent / World` —
+  tapping `Aria's Descent` returns to the reader (story root);
+  tapping `World` is a no-op when already on World, otherwise
+  navigates to the World list state.
+- **Sub-header segments** (master-detail surfaces). `Characters /
+Kael Vex` — tapping `Characters` clears the row selection
+  (returns to "no character selected"; on phone, equivalent to
+  popping the detail full-screen route per
+  [the collapse rule](./foundations/mobile/collapse.md#world--kind-selector--list--detail-master-detail)).
+- **Current segment is inert.** No-op on tap. Visual treatment
+  emphasizes the segment (bold, full-color) as the "you are here"
+  marker. If the current segment's text is truncated, tap reveals
+  the full text in a transient popover per the
+  [tap-to-tooltip rule on inert chrome text](./foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text).
+
+The rule applies on every tier (desktop, tablet, phone). Same
+expectation across platforms; standard UX convention. Tapping a
+parent breadcrumb segment is a chrome-resident shortcut to the
+back-arrow-plus-filter-selection equivalent path.
+
+Stack-aware Return interaction: tapping a breadcrumb segment is
+equivalent to popping the navigation stack repeatedly until that
+segment is the current location. The stack updates coherently; no
+orphan-state issues.
+
 ---
 
 ## Stack-aware Return
