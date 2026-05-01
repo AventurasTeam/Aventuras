@@ -53,10 +53,9 @@ chrome elements competing for one row:
 At 569 px the strip is uncomfortable; at a real phone (390 CSS
 px wide) it would either truncate to illegibility, line-break
 unpredictably, or squish glyphs together. The eight-element
-contract is the desktop reader's full chrome (universal essentials
-
-- universal in-story + reader-only chips, per the
-  [2026-04-28 in-story top-bar amendment](./2026-04-28-in-story-top-bar-and-settings-routing.md)).
+contract is the desktop reader's full chrome (universal essentials,
+universal in-story, reader-only chips — per the
+[2026-04-28 in-story top-bar amendment](./2026-04-28-in-story-top-bar-and-settings-routing.md)).
 
 This isn't a contract problem — the contract is right. It's an
 expression problem at narrow widths.
@@ -120,8 +119,8 @@ D-as-drawer also got dismissed under adversarial review.
   status pill + ⛭ + ⚲ + ←).
 - Reader-only chip strip below the top bar (chapter, time,
   branch). Always shown when on reader; absent on sub-screens.
-- Cross-surface nav uses the existing desktop model (Actions menu
-  - rail-as-collapsed-by-session-4 + peek-drawer flow).
+- Cross-surface nav uses the existing desktop model (Actions menu,
+  rail-as-collapsed-by-session-4, peek-drawer flow).
 - Tablet inherits desktop verbatim.
 - Title truncates with ellipsis if it overflows; tap reveals the
   full title in a small popover (for overflow only — not a
