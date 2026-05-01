@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Mobile foundations (layout primitives)</title>
+<style>
+  /* Monochrome wireframe palette per docs/conventions.md → Wireframe authoring. */
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-pane-alt: #f4f4f4;
+    --bg-strip: #f7f7f7;
+    --accent: #5a5a5a;
+    --scrim: rgba(0, 0, 0, 0.42);
+  }
+
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* review bar */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+  kbd { font-family: monospace; background: #fff; padding: 1px 5px; border: 1px solid #d8c99a; border-radius: 3px; font-size: 10px; color: #5a4820; }
+
+  .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .screen-label strong { color: var(--ink); }
+
+  .stage { flex: 1; padding: 24px; display: flex; justify-content: center; box-sizing: border-box; }
+  .stage-wrap { display: flex; flex-direction: column; gap: 8px; align-items: center; width: 100%; }
+  .stage-meta { font-size: 11px; color: var(--ink-muted); font-family: monospace; }
+  .stage-meta strong { color: var(--ink); }
+
+  .viewport {
+    container-type: inline-size;
+    background: var(--bg-region);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    width: 100%;
+    max-width: var(--vp-width, 1280px);
+    transition: max-width 0.25s ease;
+    overflow: hidden;
+    position: relative;
+    height: 560px;
+  }
+
+  /* Parent surface — what's behind the primitive. */
+  .parent-surface {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .parent-topbar {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg-region);
+  }
+  .parent-topbar .crumb { font-weight: 600; color: var(--ink); font-size: 13px; }
+  .parent-topbar .icon-btn { width: 26px; height: 26px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 12px; cursor: pointer; }
+  .parent-topbar .spacer { flex: 1; }
+  .parent-topbar .trigger {
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--bg-region);
+    color: var(--ink);
+    font-size: 12px;
+    cursor: pointer;
+    position: relative;
+  }
+  .parent-topbar .trigger.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .parent-body {
+    flex: 1;
+    padding: 14px;
+    color: var(--ink-muted);
+    font-size: 12px;
+    overflow: hidden;
+  }
+  .parent-body h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); font-weight: 600; }
+  .parent-body p { margin: 0 0 4px; }
+
+  /* Scrim */
+  .scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+    display: none;
+  }
+  .scrim.show { display: block; }
+
+  /* Popover — anchored to trigger element. */
+  .popover {
+    position: absolute;
+    top: 50px;
+    right: 14px;
+    width: 240px;
+    background: var(--bg-region);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    z-index: 6;
+    display: none;
+  }
+  .popover.show { display: block; }
+  .popover-row {
+    padding: 8px 12px;
+    color: var(--ink);
+    font-size: 12px;
+    border-bottom: 1px solid var(--line-soft);
+    cursor: pointer;
+  }
+  .popover-row:last-child { border-bottom: 0; }
+  .popover-row:hover { background: var(--bg-pane-alt); }
+
+  /* Modal — centered, scrim. */
+  .modal {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--bg-region);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 20px;
+    z-index: 8;
+    width: min(380px, calc(100% - 32px));
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .modal.show { display: flex; }
+  .modal h4 { margin: 0; font-size: 14px; color: var(--ink); }
+  .modal p { margin: 0; color: var(--ink-muted); font-size: 12px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .modal-actions button {
+    padding: 6px 14px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--bg-region);
+    color: var(--ink);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .modal-actions button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  /* Sheet — bottom or right anchored. */
+  .sheet {
+    position: absolute;
+    background: var(--bg-region);
+    border: 1px solid var(--line);
+    z-index: 7;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sheet.show { display: flex; }
+  .sheet-handle {
+    width: 32px;
+    height: 4px;
+    background: var(--ink-faint);
+    border-radius: 2px;
+    margin: 8px auto;
+    flex-shrink: 0;
+  }
+  .sheet-content {
+    flex: 1;
+    padding: 4px 16px 16px;
+    overflow-y: auto;
+  }
+  .sheet-content h4 { margin: 0 0 8px; font-size: 13px; color: var(--ink); }
+  .sheet-content p { margin: 0 0 6px; color: var(--ink-muted); font-size: 12px; }
+  .sheet-content .row {
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--line-soft);
+    color: var(--ink);
+    font-size: 12px;
+  }
+
+  /* Sheet anchor + height — phone (default base). */
+  .sheet { left: 0; right: 0; bottom: 0; border-radius: 12px 12px 0 0; }
+  .sheet[data-height="short"] { height: 30%; }
+  .sheet[data-height="medium"] { height: 60%; }
+  .sheet[data-height="tall"] { height: 92%; }
+
+  /* Sheet anchor — desktop / tablet (≥ 640): right-anchored ~440px wide. */
+  @container (min-width: 640px) {
+    .sheet { left: auto; right: 0; bottom: 0; top: 0; width: 440px; height: auto !important; border-radius: 12px 0 0 12px; }
+    .sheet-handle { display: none; }
+  }
+
+  /* Full-screen route — covers entire viewport, no scrim. */
+  .fs-route {
+    position: absolute;
+    inset: 0;
+    background: var(--bg-region);
+    z-index: 9;
+    display: none;
+    flex-direction: column;
+  }
+  .fs-route.show { display: flex; }
+  .fs-route .topbar {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .fs-route .topbar .back-btn {
+    width: 26px; height: 26px;
+    border: 1px dashed var(--line);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink); font-size: 14px; cursor: pointer;
+  }
+  .fs-route .topbar .crumb { font-weight: 600; color: var(--ink); font-size: 13px; }
+  .fs-route .body { flex: 1; padding: 14px; color: var(--ink-muted); font-size: 12px; }
+  .fs-route .body h4 { margin: 0 0 8px; font-size: 13px; color: var(--ink); }
+  .fs-route .body p { margin: 0 0 6px; }
+
+  /* Tier-aware notes — shown only in the demo's note panel. */
+  .demo-note {
+    margin: 16px auto 24px;
+    padding: 12px 16px;
+    max-width: 760px;
+    border: 1px dashed var(--line);
+    border-radius: 4px;
+    background: var(--bg-region);
+    font-size: 12px;
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+  .demo-note strong { color: var(--ink); }
+  .demo-note code { background: var(--bg); padding: 1px 5px; border-radius: 2px; font-size: 11px; }
+  .demo-note ul { margin: 6px 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+  <div class="review-bar">
+    <div class="rb-group" role="group" aria-label="Viewport tier">
+      <span class="rb-label">Viewport</span>
+      <button class="rb-btn" data-vp="phone" data-width="390">Phone <kbd>1</kbd></button>
+      <button class="rb-btn" data-vp="tablet" data-width="768">Tablet <kbd>2</kbd></button>
+      <button class="rb-btn active" data-vp="desktop" data-width="1280">Desktop <kbd>3</kbd></button>
+    </div>
+    <div class="rb-group" role="group" aria-label="Primitive">
+      <span class="rb-label">Primitive</span>
+      <button class="rb-btn" data-prim="none">None</button>
+      <button class="rb-btn" data-prim="popover">Popover <kbd>P</kbd></button>
+      <button class="rb-btn" data-prim="modal">Modal <kbd>M</kbd></button>
+      <button class="rb-btn" data-prim="sheet-short">Sheet sh.</button>
+      <button class="rb-btn" data-prim="sheet-medium">Sheet med.</button>
+      <button class="rb-btn active" data-prim="sheet-tall">Sheet tall <kbd>S</kbd></button>
+      <button class="rb-btn" data-prim="route">Route <kbd>R</kbd></button>
+    </div>
+    <div class="rb-note">Session 3 — primitive primitives across tiers.</div>
+  </div>
+
+  <div class="screen-label"><strong>foundations / mobile</strong> — layout primitives reference</div>
+
+  <div class="stage">
+    <div class="stage-wrap">
+      <div class="stage-meta">
+        Container width: <strong id="vp-width-readout">1280 px</strong> · tier: <strong id="vp-tier-readout">desktop</strong> · primitive: <strong id="prim-readout">sheet-tall</strong>
+      </div>
+
+      <div class="viewport" id="viewport">
+        <!-- Parent surface — always rendered behind the primitive. -->
+        <div class="parent-surface">
+          <div class="parent-topbar">
+            <div class="icon-btn">≡</div>
+            <div class="crumb">Parent surface</div>
+            <div class="spacer"></div>
+            <button class="trigger" id="trigger" data-trigger>Open primitive</button>
+          </div>
+          <div class="parent-body">
+            <h4>Parent body</h4>
+            <p>The surface that's "behind" the primitive when one is active.</p>
+            <p>Popover and Modal: parent stays interactive (modal blocks input via scrim, popover allows tap-outside).</p>
+            <p>Sheet: parent stays alive behind the sheet — drag-down or tap-outside to dismiss.</p>
+            <p>Full-screen route: parent enters the navigation stack; route is a destination, ← returns.</p>
+          </div>
+        </div>
+
+        <!-- Scrim — shared between Modal and Sheet. -->
+        <div class="scrim" id="scrim"></div>
+
+        <!-- Popover — anchored to trigger button. -->
+        <div class="popover" id="popover">
+          <div class="popover-row">Open World</div>
+          <div class="popover-row">Open Plot</div>
+          <div class="popover-row">Open Chapter Timeline</div>
+          <div class="popover-row">Open Story Settings</div>
+          <div class="popover-row">Open App Settings</div>
+        </div>
+
+        <!-- Modal — centered, with scrim. -->
+        <div class="modal" id="modal">
+          <h4>Confirm rollback</h4>
+          <p>Roll back 5 entries and 12 world-state changes from chapter 3?</p>
+          <div class="modal-actions">
+            <button data-dismiss>Cancel</button>
+            <button class="primary" data-dismiss>Roll back</button>
+          </div>
+        </div>
+
+        <!-- Sheet — bottom on phone, right on desktop/tablet. Height varies. -->
+        <div class="sheet" id="sheet" data-height="tall">
+          <div class="sheet-handle"></div>
+          <div class="sheet-content">
+            <h4 id="sheet-title">Peek drawer (entity overview)</h4>
+            <p>Bottom-anchored on phone (tall ~95% — parent visible at top edge); right-anchored ~440px on desktop and tablet.</p>
+            <div class="row">Kael Vex — character</div>
+            <div class="row">Identity · Carrying · Connections</div>
+            <div class="row">Settings · Assets · Involvements</div>
+            <div class="row">History · Recent activity</div>
+            <div class="row">Open in World panel →</div>
+          </div>
+        </div>
+
+        <!-- Full-screen route — covers viewport. -->
+        <div class="fs-route" id="fs-route">
+          <div class="topbar">
+            <div class="back-btn" data-dismiss>←</div>
+            <div class="crumb">Story Settings · General</div>
+          </div>
+          <div class="body">
+            <h4>Full-screen route</h4>
+            <p>Navigable destination with own back affordance. No swipe-dismiss.</p>
+            <p>Used for surfaces with internal navigation (Story Settings categories), multi-step flows (wizard, onboarding), or any context where accidental dismissal would be costly.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-note">
+    <strong>What this demonstrates.</strong> Each primitive's
+    rendering across viewport tiers. Switch primitives via the
+    review-bar to see Popover anchored to the trigger, Modal
+    centered, Sheet adapting anchor (bottom on phone, right on
+    desktop/tablet) and respecting height variants on phone, and
+    Full-screen route covering the viewport with its own back
+    affordance.
+    <br><br>
+    <strong>Try at each tier:</strong>
+    <ul>
+      <li>Sheet (tall) on phone covers ~92% with parent visible at
+      top edge — drag-down dismiss; on desktop becomes the
+      right-anchored 440px peek drawer.</li>
+      <li>Popover anchors to the "Open primitive" button at the
+      top-right; same expression at every tier.</li>
+      <li>Modal stays centered at every tier — same expression
+      across desktop, tablet, phone.</li>
+    </ul>
+    <strong>What this does not pin.</strong> Drag dismiss
+    threshold per platform (iOS / Android), gesture velocity feel
+    — session 5 (touch grammar) and session 6 (platform).
+    Rail's mobile fate (session 4 — collapse rule). Real palette
+    rendering — wireframes stay monochrome.
+  </div>
+
+<script>
+  (function () {
+    var STORAGE_KEY = 'aventuras-wireframe-viewport';
+    var PRIM_KEY = 'aventuras-wireframe-layout-prim';
+    var viewport = document.getElementById('viewport');
+    var widthReadout = document.getElementById('vp-width-readout');
+    var tierReadout = document.getElementById('vp-tier-readout');
+    var primReadout = document.getElementById('prim-readout');
+    var vpButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-vp]'));
+    var primButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-prim]'));
+    var trigger = document.getElementById('trigger');
+    var scrim = document.getElementById('scrim');
+    var popover = document.getElementById('popover');
+    var modal = document.getElementById('modal');
+    var sheet = document.getElementById('sheet');
+    var sheetTitle = document.getElementById('sheet-title');
+    var fsRoute = document.getElementById('fs-route');
+
+    function tierFor(width) {
+      if (width < 640) return 'phone';
+      if (width < 1024) return 'tablet';
+      return 'desktop';
+    }
+
+    function applyVp(vp) {
+      var btn = vpButtons.filter(function (b) { return b.dataset.vp === vp; })[0];
+      if (!btn) { btn = vpButtons[2]; vp = 'desktop'; }
+      var width = parseInt(btn.dataset.width, 10);
+      vpButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+      viewport.style.setProperty('--vp-width', width + 'px');
+      widthReadout.textContent = width + ' px';
+      tierReadout.textContent = tierFor(width);
+      try { localStorage.setItem(STORAGE_KEY, vp); } catch (e) { /* no-op */ }
+    }
+
+    function hideAll() {
+      [popover, modal, sheet, fsRoute].forEach(function (el) { el.classList.remove('show'); });
+      scrim.classList.remove('show');
+      trigger.classList.remove('active');
+    }
+
+    function applyPrim(prim) {
+      hideAll();
+      var btn = primButtons.filter(function (b) { return b.dataset.prim === prim; })[0];
+      if (!btn) { btn = primButtons[5]; prim = 'sheet-tall'; }
+      primButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+      primReadout.textContent = prim;
+
+      if (prim === 'popover') {
+        popover.classList.add('show');
+        trigger.classList.add('active');
+      } else if (prim === 'modal') {
+        scrim.classList.add('show');
+        modal.classList.add('show');
+      } else if (prim.indexOf('sheet') === 0) {
+        scrim.classList.add('show');
+        sheet.dataset.height = prim.replace('sheet-', '');
+        var titleMap = {
+          'short': 'Actions menu',
+          'medium': 'Calendar picker',
+          'tall': 'Peek drawer (entity overview)'
+        };
+        sheetTitle.textContent = titleMap[sheet.dataset.height] || 'Sheet';
+        sheet.classList.add('show');
+      } else if (prim === 'route') {
+        fsRoute.classList.add('show');
+      }
+
+      try { localStorage.setItem(PRIM_KEY, prim); } catch (e) { /* no-op */ }
+    }
+
+    vpButtons.forEach(function (b) { b.addEventListener('click', function () { applyVp(b.dataset.vp); }); });
+    primButtons.forEach(function (b) { b.addEventListener('click', function () { applyPrim(b.dataset.prim); }); });
+
+    trigger.addEventListener('click', function () {
+      // Toggle popover via the trigger — natural interaction.
+      if (popover.classList.contains('show')) {
+        applyPrim('none');
+      } else {
+        applyPrim('popover');
+      }
+    });
+
+    // Tap-outside dismiss for popover/sheet (not modal — modal requires explicit action).
+    document.addEventListener('click', function (e) {
+      if (popover.classList.contains('show') && !popover.contains(e.target) && e.target !== trigger) {
+        applyPrim('none');
+      }
+    });
+    scrim.addEventListener('click', function () {
+      if (sheet.classList.contains('show')) {
+        applyPrim('none');
+      }
+      // Modal stays — tap-outside is gated by the modal's own actions.
+    });
+    Array.prototype.slice.call(document.querySelectorAll('[data-dismiss]')).forEach(function (b) {
+      b.addEventListener('click', function () { applyPrim('none'); });
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (e.key === '1') applyVp('phone');
+      else if (e.key === '2') applyVp('tablet');
+      else if (e.key === '3') applyVp('desktop');
+      else if (e.key === 'p' || e.key === 'P') applyPrim('popover');
+      else if (e.key === 'm' || e.key === 'M') applyPrim('modal');
+      else if (e.key === 's' || e.key === 'S') applyPrim('sheet-tall');
+      else if (e.key === 'r' || e.key === 'R') applyPrim('route');
+      else if (e.key === 'Escape') applyPrim('none');
+    });
+
+    var savedVp;
+    try { savedVp = localStorage.getItem(STORAGE_KEY); } catch (e) { savedVp = null; }
+    applyVp(savedVp || 'desktop');
+
+    var savedPrim;
+    try { savedPrim = localStorage.getItem(PRIM_KEY); } catch (e) { savedPrim = null; }
+    applyPrim(savedPrim || 'sheet-tall');
+  })();
+</script>
+</body>
+</html>

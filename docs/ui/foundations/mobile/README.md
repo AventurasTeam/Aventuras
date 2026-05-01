@@ -34,6 +34,14 @@ and exploration-record link.
   chrome shape across viewport tiers and three representative
   surfaces (reader, World sub-screen, story-list app-level), with
   status-pill toggle.
+- [`layout.md`](./layout.md) — layout primitives: four-primitive
+  vocabulary (Popover, Modal, Sheet, Full-screen route), decision
+  tree for picking a primitive, desktop-to-mobile mapping rules,
+  stacking rules, sheet behavior (anchors, heights, drag dismissal),
+  per-surface primitive bindings table for session-7 retrofits.
+- [`layout.html`](./layout.html) — interactive demo of each
+  primitive across viewport tiers (popover, modal, sheet at three
+  heights, full-screen route).
 
 ## Sessions
 
@@ -73,10 +81,25 @@ reflects the current plan and updates as work progresses.
    transient popover (overflow-only, no persistency). Files:
    [`navigation.md`](./navigation.md),
    [`navigation.html`](./navigation.html).
-3. **Layout primitives** — pending. Container conventions, the
-   pane / sheet / drawer / modal vocabulary, full-screen route vs
-   overlay rules. The "compose from these" tokens for every
-   per-screen mobile design.
+3. **Layout primitives** — landed 2026-05-01
+   ([exploration record](../../../explorations/2026-05-01-mobile-layout.md)).
+   Four-primitive vocabulary: **Popover** (anchored, transient,
+   tiny content), **Modal** (centered, scrim, focus-demanding),
+   **Sheet** (edge-anchored sliding panel with anchor / height
+   variants), **Full-screen route** (navigable destination with
+   internal nav). Sheet consolidates the previous `drawer` /
+   `bottom sheet` / `right-anchored drawer` terms — peek drawer
+   becomes a named usage of Sheet (right ~440px desktop, bottom
+   tall ~95% phone — iOS page-sheet pattern preserves overlay
+   feel via swipe-dismiss). Decision tree keys on
+   focus-demanding vs browse-and-pick vs rich-detail vs
+   navigable-destination. Desktop-to-mobile mappings: rich
+   popovers become bottom sheets on phone; tiny popovers stay
+   anchored; modals stay modal; long modals (rare) become routes
+   on phone. Pre-foundations naming preserved (existing
+   `bottom drawer` references unify in session 7). No new tokens
+   minted; depth metaphor / padding / radii inherit from spacing.md.
+   Files: [`layout.md`](./layout.md), [`layout.html`](./layout.html).
 4. **Collapse rule** — pending. Universal rule for desktop's 2-
    and 3-pane surfaces becoming tablet 2-pane → phone 1-pane.
    Phone-landscape disposition (height-aware vs width-aware).
