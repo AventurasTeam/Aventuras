@@ -173,12 +173,12 @@
   .peek-head .crumb { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
   .peek-head .name { font-size: 16px; font-weight: 600; margin-top: 2px; }
   .peek-close { font-size: 20px; color: var(--ink-faint); cursor: pointer; line-height: 1; padding: 0 4px; }
-  /* phone-tier ← Back at sheet head — replaces × (which is desktop chrome).
+  /* phone-tier ← back at sheet head — replaces × (which is desktop chrome).
      Returns to rail row-list state inside the sheet rather than dismissing.
-     Hidden by default; phone @container override reveals it. */
-  .peek-back-mobile { display: none; align-items: center; gap: 4px; padding: 4px 8px; margin: 0 -4px 0 -8px; font-size: 13px; color: var(--ink); cursor: pointer; border-radius: 4px; user-select: none; }
+     Hidden by default; phone @container override reveals it. Icon-only —
+     the arrow is the universal "back" affordance, no text label needed. */
+  .peek-back-mobile { display: none; align-items: center; justify-content: center; width: 32px; height: 32px; font-size: 18px; color: var(--ink); cursor: pointer; border-radius: 4px; user-select: none; flex-shrink: 0; }
   .peek-back-mobile:hover { background: var(--bg-highlight); }
-  .peek-back-mobile .arrow { font-size: 14px; line-height: 1; }
   .peek-body { flex: 1; overflow: auto; padding: 14px 16px; }
   .peek-field { margin-bottom: 14px; }
   .peek-field .label { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; display: flex; justify-content: space-between; align-items: center; }
@@ -438,11 +438,16 @@
     aside.right { display: none; }
     /* surface the phone chip strip below the top-bar */
     .phone-chip-strip { display: flex; }
-    /* peek head shows ← Back instead of × on phone — sheets dismiss via handle
+    /* peek head shows ← back instead of × on phone — sheets dismiss via handle
        / backdrop, so the head's left-side back navigates within the sheet
-       (return to rail row-list state) rather than dismissing. Desktop X stays. */
+       (return to rail row-list state) rather than dismissing. Desktop × stays. */
     .peek-close { display: none; }
     .peek-back-mobile { display: inline-flex; }
+    /* peek-head is space-between on desktop (meta left, × right). On phone the
+       × is hidden, so space-between leaves a dead gap between back-arrow and
+       meta. Switch to flex-start with a tighter gap so meta sits close after
+       the arrow, like an iOS nav header. */
+    .peek-head { justify-content: flex-start; gap: 8px; padding: 8px 12px 10px; }
     /* peek-overlay on phone is a bottom Sheet (tall ~95%) per layout.md mapping —
        overrides the desktop right-anchored 440 px expression. Top edge of the
        parent surface remains visible (~5% from the top) so the sheet reads as
@@ -983,11 +988,10 @@
 
   <div class="peek-overlay" id="peek-overlay">
     <div class="peek-head">
-      <!-- ← Back is phone-tier only — returns to rail row-list state inside the sheet
-           rather than dismissing (the handle / backdrop dismiss the whole sheet). -->
-      <span class="peek-back-mobile" id="peek-back-mobile" title="Back to Browse">
-        <span class="arrow">&larr;</span> Browse
-      </span>
+      <!-- ← back is phone-tier only — returns to rail row-list state inside the sheet
+           rather than dismissing (the handle / backdrop dismiss the whole sheet).
+           Icon-only; the arrow is the universal back affordance. -->
+      <span class="peek-back-mobile" id="peek-back-mobile" title="Back to Browse" aria-label="Back to Browse">&larr;</span>
       <div>
         <div class="crumb" id="peek-crumb">Character &middot; active &middot; in scene</div>
         <div class="name-row">
