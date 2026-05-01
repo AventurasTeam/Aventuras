@@ -1386,16 +1386,27 @@
         /* Time-anchor cells stack on narrow tiers — desktop's 1fr 1fr
            grid pushes content past the cell on tablet, clips off-screen
            on phone via the parent's overflow:hidden. Single column
-           prevents the squeeze. */
+           prevents the squeeze. Inputs fill the cell and wrap rather
+           than clipping with ellipsis (cell content is short enough
+           and wrapping reads more honestly than truncation). */
         .anchor-group {
           grid-template-columns: 1fr;
         }
         .anchor-cell .input-select,
         .anchor-cell .input-text {
+          width: 100%;
           min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+          white-space: normal;
+          overflow-wrap: anywhere;
+        }
+
+        /* Field labels word-wrap on long type-hints (monospace strings
+           with /, _, · don't break naturally). Prevents the label
+           column from overflowing into adjacent UI on narrow tiers. */
+        .field-label,
+        .field-label .type-hint {
+          overflow-wrap: anywhere;
+          word-break: break-word;
         }
 
         /* History row compression — change column gets ellipsis to
@@ -1464,12 +1475,17 @@
         }
 
         /* History row stacks vertically on phone — each cell on its
-           own line for full-width change text. */
+           own line for full-width change text. Header row hidden —
+           column labels read redundant when each row's cells are
+           self-explanatory in stack form. */
         .history-row {
           display: flex;
           flex-direction: column;
           gap: 4px;
           padding: 10px 12px;
+        }
+        .history-row.header {
+          display: none;
         }
         .history-row > *:last-child {
           white-space: normal;

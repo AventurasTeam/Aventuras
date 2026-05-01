@@ -325,6 +325,10 @@
     /* History row compression — change column gets ellipsis */
     .history-row { grid-template-columns: 110px 70px 1fr; gap: 8px; }
     .history-row > *:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Field labels word-wrap on long type-hints (monospace strings
+       with /, _, · don't break naturally). Prevents label column from
+       overflowing into adjacent content on narrow tiers. */
+    .field-label, .field-label .type-hint { overflow-wrap: anywhere; word-break: break-word; }
     /* Overview portrait stacks below content on tablet+phone (220 px
        floating right eats too much detail-pane width on narrow tiers).
        Phone shrinks further to 100 px, tablet keeps 140 px. */
@@ -360,8 +364,11 @@
 
     /* History row stacks vertically — when / op / change each on its
        own line. Tablet's compression rule already applies; phone
-       overrides the grid into a flex column for full-width change text. */
+       overrides the grid into a flex column for full-width change text.
+       Header row hidden on phone — column labels are redundant when
+       each row's cells are self-explanatory in stack form. */
     .history-row { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; }
+    .history-row.header { display: none; }
     .history-row > *:last-child { white-space: normal; overflow: visible; text-overflow: clip; }
     .history-ts { font-size: 10px; }
     .history-op { align-self: flex-start; }
