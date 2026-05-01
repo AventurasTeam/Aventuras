@@ -363,15 +363,16 @@
     .overview-row .portrait-slot { width: 100px !important; height: 100px !important; }
 
     /* History row stacks vertically — when / op / change each on its
-       own line. Tablet's compression rule already applies; phone
-       overrides the grid into a flex column for full-width change text.
-       Header row hidden on phone — column labels are redundant when
-       each row's cells are self-explanatory in stack form. */
-    .history-row { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; }
+       own line, all left-aligned. Tablet's compression rule already
+       applies; phone overrides the grid into a flex column.
+       Header row hidden — column labels are redundant when each row's
+       cells are self-explanatory in stack form. align-items:flex-start
+       overrides the base grid's align-items:center, which would have
+       horizontally-centered cells in flex-column mode. */
+    .history-row { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px 12px; }
     .history-row.header { display: none; }
     .history-row > *:last-child { white-space: normal; overflow: visible; text-overflow: clip; }
     .history-ts { font-size: 10px; }
-    .history-op { align-self: flex-start; }
 
     /* JSON overlay drawer reflows to bottom-anchored Sheet (tall ~95%) */
     .json-drawer { width: 100%; height: 95%; top: auto; bottom: 0; left: 0; right: 0; border-left: none; border-top: 1px solid var(--line); border-top-left-radius: 12px; border-top-right-radius: 12px; box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18); }

@@ -1475,12 +1475,15 @@
         }
 
         /* History row stacks vertically on phone — each cell on its
-           own line for full-width change text. Header row hidden —
-           column labels read redundant when each row's cells are
-           self-explanatory in stack form. */
+           own line, all left-aligned. Header row hidden — column
+           labels read redundant when each row's cells are
+           self-explanatory in stack form. align-items:flex-start
+           overrides the base grid's align-items:center which would
+           horizontally-center cells in flex-column mode. */
         .history-row {
           display: flex;
           flex-direction: column;
+          align-items: flex-start;
           gap: 4px;
           padding: 10px 12px;
         }
@@ -1495,8 +1498,13 @@
         .history-ts {
           font-size: 10px;
         }
-        .history-op {
-          align-self: flex-start;
+
+        /* Field-row label column shrinks 180 → 120 px on phone (~30%
+           reduction) matching world.html. Gives the input column —
+           and the time-anchor stacked cells — more breathing room. */
+        .field-row {
+          grid-template-columns: 120px 1fr;
+          gap: 10px;
         }
 
         /* JSON overlay drawer reflows to bottom-anchored Sheet (tall ~95%) */
