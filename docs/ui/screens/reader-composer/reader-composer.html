@@ -161,8 +161,12 @@
   .rail-collapse-chev:hover { color: var(--ink); }
 
   /* peek drawer */
-  .peek-overlay { position: absolute; top: 0; right: 0; bottom: 0; width: 440px; background: var(--bg-region); border-left: 1px solid var(--line); box-shadow: -4px 0 12px rgba(0,0,0,0.06); display: none; flex-direction: column; z-index: 10; }
+  .peek-overlay { position: absolute; top: 0; right: 0; bottom: 0; width: 440px; background: var(--bg-region); border-left: 1px solid var(--line); box-shadow: -4px 0 12px rgba(0,0,0,0.06); display: none; flex-direction: column; z-index: 41; }
   .peek-overlay.open { display: flex; }
+  /* peek backdrop — only used at phone tier where peek is a bottom Sheet
+     and needs a scrim per layout.md. Hidden everywhere by default; phone
+     @container override below shows it when peek is open. Tap to dismiss. */
+  .peek-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.35); z-index: 40; display: none; cursor: pointer; }
   .peek-head { padding: 12px 16px 10px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .peek-head .crumb { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
   .peek-head .name { font-size: 16px; font-weight: 600; margin-top: 2px; }
@@ -456,6 +460,7 @@
       border-top: 1px solid var(--line);
       border-radius: 12px 12px 0 0;
       box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
+      z-index: 41;
     }
     /* drag handle hint at the top edge of the bottom-anchored sheet */
     .peek-overlay::before {
@@ -468,6 +473,10 @@
       margin: 8px auto 0;
       flex-shrink: 0;
     }
+    /* phone-tier scrim behind the peek sheet — matches Sheet primitive contract
+       (per layout.md → Sheet "Scrim. Draggable. Dismissible by tap-outside").
+       Visible only when peek is open at phone tier. */
+    .layout:has(.peek-overlay.open) .peek-backdrop { display: block; }
   }
 
   /* Tablet tier — 640-1023 px container — desktop chrome density. */
@@ -969,6 +978,9 @@
     </div>
   </aside>
 
+  <!-- peek backdrop — phone tier only (CSS-gated). Tap dismisses peek. -->
+  <div class="peek-backdrop" id="peek-backdrop"></div>
+
   <div class="peek-overlay" id="peek-overlay">
     <div class="peek-head">
       <div>
@@ -1301,6 +1313,8 @@
     b.addEventListener('click', () => setPeek(b.dataset.peek, 'Kael'));
   });
   peekClose.addEventListener('click', () => setPeek('closed'));
+  const peekBackdrop = document.getElementById('peek-backdrop');
+  if (peekBackdrop) peekBackdrop.addEventListener('click', () => setPeek('closed'));
   document.addEventListener('keydown', e => { if (e.key === 'Escape') setPeek('closed'); });
 
   railList.querySelectorAll('.entity-row').forEach(row => {
