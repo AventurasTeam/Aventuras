@@ -21,12 +21,12 @@ its status + exploration-record link.
 - [`theming.md`](./theming.md) — theme data shape, registry
   pattern, switching mechanism (CSS vars at root + NativeWind
   runtime), persistence in `app_settings.appearance`, accent
-  override (opt-in), density-token policy, demo reference.
-- [`theming.html`](./theming.html) — interactive demo: theme +
-  density swap with three placeholder palettes (Default Light,
-  Default Dark, Parchment). Replaces visual identity with a
-  working architecture proof; specific palettes are not the
-  curated gallery.
+  override (opt-in), demo reference.
+- [`theming.html`](./theming.html) — interactive demo: theme
+  swap with three placeholder palettes (Default Light, Default
+  Dark, Parchment). Replaces visual identity with a working
+  architecture proof; specific palettes are not the curated
+  gallery.
 
 ## Sessions
 
@@ -43,7 +43,8 @@ contract.
    pattern, switching mechanism (CSS vars at root + NativeWind
    runtime), persistence in `app_settings.appearance`,
    accent-override opt-in (per-theme flag + JS-side derivation),
-   density-token policy with cut-path, interactive demo HTML.
+   density-token policy with cut-path (subsequently cut at
+   session 4), interactive demo HTML.
    Files: [`tokens.md`](./tokens.md), [`theming.md`](./theming.md),
    [`theming.html`](./theming.html).
 2. **Color system + accessibility** — landed 2026-05-01
@@ -75,17 +76,26 @@ contract.
    `xl`); applies to reader entry content only. `--font-display`
    slot evaluated and **skipped** for v1. File:
    [`typography.md`](./typography.md).
-4. **Density / spacing / radii / depth metaphor** — pending. Base
-   spacing unit, density posture (the comfortable / compact
-   variants on component-internal padding tokens), radii
-   vocabulary (`--radius-sm` / `-md` / `-lg` / `-full`), the
-   "flat, nothing flashy" cashing out as borders + tinted fills as
-   the depth metaphor (no shadows, or shadows only on overlay
-   surfaces — TBD). **Density toggle ship-or-cut decision lands
-   here** per the cut-path in
-   [`theming.md → Density-token policy`](./theming.md#density-token-policy).
-   Lands as `density.md` (and possibly `radii.md` / `spacing.md`
-   if the topic fans out further).
+4. **Spacing / radii / depth metaphor** — landed 2026-05-01
+   ([exploration record](../../explorations/2026-05-01-spacing.md)).
+   4 px Tailwind-aligned base unit; spacing handled primarily via
+   Tailwind utilities (no minted semantic gap tokens); six
+   component-internal padding tokens (`--row-pad-y` / `-x`,
+   `--input-pad-y` / `-x`, `--button-pad-y` / `-x`) at single
+   values for cross-component consistency. Tap-target on native
+   handled via `hitSlop`; visible-size contract preserved. Four
+   radii tokens — `--radius-sm` (4 px), `--radius-md` (8 px),
+   `--radius-lg` (12 px), `--radius-full` (9999 px) —
+   structurally locked, not themeable. **Depth metaphor: pure
+   flat** — zero shadow tokens; modals = `--bg-overlay` +
+   `--border-strong` + fixed mode-dependent scrim
+   (`rgba(0, 0, 0, 0.4)` light / `0.6` dark); popovers =
+   `--bg-overlay` + `--border` (no scrim). **Density toggle
+   cut for v1** — single comfortable posture for both mobile +
+   desktop; `app_settings.appearance.density` removed from
+   persistence shape; UI control removed; re-addable later
+   without contract changes if mobile demand surfaces. File:
+   [`spacing.md`](./spacing.md).
 5. **Iconography + motion** — pending. Icon set choice (Lucide is
    the obvious default; alternatives evaluated), stroke weight,
    sizing scale, top-bar glyph vocabulary (App Settings ⚙ vs Story

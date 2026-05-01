@@ -12,10 +12,12 @@ Tokens fall into three classes by who/what varies them:
   tokens (every theme overrides) and font-family tokens (most
   themes inherit defaults; opinionated themes override).
 - **User-orthogonal.** Vary per user setting, independent of
-  theme. Today: density-aware spacing tokens.
+  theme. Today: reader font-size scale (`--reader-font-scale`,
+  per [`typography.md → Reader font-size setting`](./typography.md#reader-font-size-setting)).
 - **Structurally locked.** Constant across themes and user
-  settings. Type scale (sizes / weights / line-heights), radii,
-  motion durations + easing, iconography sizing, z-index strata.
+  settings. Type scale (sizes / weights / line-heights),
+  component-internal padding, radii, motion durations + easing,
+  iconography sizing, z-index strata.
 
 The classification governs which authoring surface owns the value
 and what migrates when when a theme or user setting changes.
@@ -116,8 +118,13 @@ relevant session:
   `--font-weight-*` tokens at 400 / 500 / 600 / 700). Final scale
   locked at session 3 — see
   [`typography.md → Type scale + weights`](./typography.md#type-scale--weights).
+- **Component-internal padding** (`--row-pad-y` / `-x`,
+  `--input-pad-y` / `-x`, `--button-pad-y` / `-x`). Single
+  values, locked at session 4 — see
+  [`spacing.md → Component-internal padding tokens`](./spacing.md#component-internal-padding-tokens).
 - **Radii** (`--radius-sm`, `--radius-md`, `--radius-lg`,
-  `--radius-full`). Session 4.
+  `--radius-full`). Locked at session 4 — see
+  [`spacing.md → Radii vocabulary`](./spacing.md#radii-vocabulary).
 - **Motion** (`--duration-fast`, `--duration-base`,
   `--duration-slow`, `--easing-standard`, `--easing-emphasis`).
   Session 5.
@@ -127,12 +134,10 @@ relevant session:
   popover, modal, toast). Session 1 reserves the names; values
   refine as components are built.
 
-## Density-aware spacing
-
-The user-orthogonal class. Density toggle (per
-[`theming.md → Density-token policy`](./theming.md#density-token-policy))
-selects between `comfortable` and `compact` variants on
-component-internal padding tokens — `--row-pad-y`, `--row-pad-x`,
-`--input-pad-y`, `--input-pad-x`, `--button-pad-y`,
-`--button-pad-x`, `--gap-sm`, `--gap-md`, `--gap-lg`. Final
-slot list and values firmed at session 4.
+The general spacing scale uses Tailwind's utility-first model
+(`gap-N` / `p-N` / etc.) rather than minted semantic tokens — see
+[`spacing.md → Spacing usage — utilities first`](./spacing.md#spacing-usage--utilities-first)
+for the rationale. The depth metaphor is **pure flat** — zero
+shadow tokens; surfaces communicate elevation via color delta +
+borders + a fixed backdrop scrim. See
+[`spacing.md → Depth metaphor`](./spacing.md#depth-metaphor).

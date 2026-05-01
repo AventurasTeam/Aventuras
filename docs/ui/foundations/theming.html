@@ -113,16 +113,13 @@
     --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
     --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-    /* Density: comfortable (default) */
-    --row-pad-y: 12px;
-    --row-pad-x: 16px;
+    /* Component-internal padding — single values (density toggle cut at session 4) */
+    --row-pad-y: 10px;
+    --row-pad-x: 12px;
     --input-pad-y: 8px;
     --input-pad-x: 12px;
     --button-pad-y: 8px;
-    --button-pad-x: 16px;
-    --gap-sm: 8px;
-    --gap-md: 16px;
-    --gap-lg: 24px;
+    --button-pad-x: 14px;
   }
 
   [data-theme="default-dark"] {
@@ -170,18 +167,6 @@
     --focus-ring: #8a4a2a;
     --selection-bg: #ebd8a8;
     --font-reading: "Lora", Georgia, "Iowan Old Style", serif;
-  }
-
-  [data-density="compact"] {
-    --row-pad-y: 6px;
-    --row-pad-x: 12px;
-    --input-pad-y: 4px;
-    --input-pad-x: 10px;
-    --button-pad-y: 5px;
-    --button-pad-x: 12px;
-    --gap-sm: 6px;
-    --gap-md: 12px;
-    --gap-lg: 18px;
   }
 
   /* =========================================================
@@ -243,7 +228,7 @@
   .prose p { margin: 0 0 1em; }
   .prose .lead { color: var(--fg-secondary); font-style: italic; font-size: 14px; }
 
-  /* Button row — exercises accent, accent-hover, accent-fg, focus-ring, button density */
+  /* Button row — exercises accent, accent-hover, accent-fg, focus-ring */
   .button-row {
     display: flex;
     gap: var(--gap-sm);
@@ -307,7 +292,7 @@
   }
   .input::placeholder { color: var(--fg-muted); }
 
-  /* List rows — exercises fg-secondary, fg-muted, accent indicator, density */
+  /* List rows — exercises fg-secondary, fg-muted, accent indicator */
   .list {
     display: flex;
     flex-direction: column;
@@ -452,12 +437,6 @@
     <option value="parchment">Parchment</option>
   </select>
 
-  <span class="rb-label" style="margin-left: 16px;">Density</span>
-  <div class="rb-group" id="density-group">
-    <button class="rb-btn active" data-density="comfortable">Comfortable</button>
-    <button class="rb-btn" data-density="compact">Compact</button>
-  </div>
-
   <span class="rb-note">Live CSS-var swap. Try selecting prose to see <code>--selection-bg</code>.</span>
 </div>
 
@@ -513,7 +492,7 @@
 
   <div class="section">
     <div class="section-label">List rows</div>
-    <div class="section-token">--fg-secondary · --fg-muted · --accent (indicator) · density-aware padding</div>
+    <div class="section-token">--fg-secondary · --fg-muted · --accent (indicator)</div>
     <div class="list">
       <div class="list-row">
         <span class="accent-dot"></span>
@@ -588,7 +567,6 @@
 <script>
   const root = document.documentElement;
   const themeSelect = document.getElementById('theme-select');
-  const densityGroup = document.getElementById('density-group');
   const modeIndicator = document.getElementById('mode-indicator');
 
   // Theme mode declarations — mirrors what each Theme module declares.
@@ -609,27 +587,10 @@
     modeIndicator.textContent = `data-theme-mode = "${mode}"`;
   }
 
-  function applyDensity(density) {
-    if (density === 'comfortable') {
-      root.removeAttribute('data-density');
-    } else {
-      root.setAttribute('data-density', density);
-    }
-  }
-
   themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
-
-  densityGroup.querySelectorAll('.rb-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      densityGroup.querySelectorAll('.rb-btn').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      applyDensity(btn.dataset.density);
-    });
-  });
 
   // Initial state
   applyTheme('default-light');
-  applyDensity('comfortable');
 </script>
 
 </body>

@@ -197,9 +197,8 @@ relaxation that breathes Lora's slightly tighter cap heights.
 
 User-orthogonal axis (per the
 [token-class taxonomy](./tokens.md#three-classes)): varies per
-user, theme-independent, parallels density. Lives because the
-reader is the long-form reading activity and individual eyesight
-varies widely.
+user, theme-independent. Lives because the reader is the
+long-form reading activity and individual eyesight varies widely.
 
 ### Persistence
 
@@ -209,7 +208,6 @@ varies widely.
 ```ts
 app_settings.appearance: {
   themeId: string
-  density: 'comfortable' | 'compact'
   readerFontScale: 'sm' | 'md' | 'lg' | 'xl'   // reader prose scaling
   accentOverride?: string
 }
@@ -281,11 +279,11 @@ explicit at component level.
 
 [`App Settings · Appearance`](../screens/app-settings/app-settings.md#app--appearance)
 gains a stepped picker for reader font size. Order on the
-Appearance panel: **Theme → Density → Reader font size →
+Appearance panel: **Theme → Reader font size →
 (conditional) Accent override.** Control shape: 4-state segmented
-control labeled `S` / `M` / `L` / `XL` — same UI pattern density
-uses. Live preview is the reader itself; the Settings panel doesn't
-embed a sample paragraph.
+control labeled `S` / `M` / `L` / `XL`. Live preview is the
+reader itself; the Settings panel doesn't embed a sample
+paragraph.
 
 ## Implementation notes
 

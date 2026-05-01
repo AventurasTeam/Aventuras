@@ -32,7 +32,6 @@ Cross-cutting principles that govern this surface are in
 │                                                              │
 │   Language    [System (English) ▾]                           │
 │   Theme       [Default Light ▾]                              │
-│   Density     ( Comfortable ) ( Compact )                    │
 │                                                              │
 │                                                              │
 │                                                              │
@@ -99,13 +98,8 @@ Three fields, all with defaults:
   [App Settings · Appearance](../app-settings/app-settings.md#app--appearance).
   No "System" entry — OS dark/light follow is parked-until-signal
   per [`parked.md`](../../../parked.md#os-darklight-follow).
-- **Density** — segment (`Comfortable` / `Compact`). Two options is
-  segment-natural by the
-  [Select primitive](../../patterns/forms.md#select-primitive)
-  rule. Defaults to `Comfortable`.
-
-`Next →` advances to Step 2 and writes the three values into
-`app_settings`.
+  `Next →` advances to Step 2 and writes the two values into
+  `app_settings`.
 
 ## Step 2 — Pick your provider
 

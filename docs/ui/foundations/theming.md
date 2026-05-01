@@ -8,7 +8,7 @@ lives.
 
 **Wireframe:** [`theming.html`](./theming.html) — interactive
 demo with three placeholder palettes (Default Light, Default
-Dark, Parchment) and the density toggle.
+Dark, Parchment).
 
 ## Theme data shape
 
@@ -110,7 +110,6 @@ carries:
 ```ts
 app_settings.appearance: {
   themeId: string                                 // into the theme registry
-  density: 'comfortable' | 'compact'              // user-orthogonal toggle
   readerFontScale: 'sm' | 'md' | 'lg' | 'xl'      // user-orthogonal reader prose scale — see typography.md
   accentOverride?: string                         // hex; honored only when active theme has accentOverridable: true
 }
@@ -124,9 +123,9 @@ write through immediately.
 ### First-launch defaults
 
 Default `themeId` is one of the curated gallery's entries (TBD at
-session 6). Default `density` is `'comfortable'`. Default
-`readerFontScale` is `'md'` (multiplier `1.0`). The implementation
-seeds `appearance` to these defaults on first boot or after a wipe.
+session 6). Default `readerFontScale` is `'md'` (multiplier
+`1.0`). The implementation seeds `appearance` to these defaults
+on first boot or after a wipe.
 
 ### Backup / restore + invalid `themeId`
 
@@ -136,12 +135,11 @@ corrupted backup can yield an `appearance.themeId` that doesn't
 resolve in the local registry, or a malformed `appearance` blob
 overall.
 
-**Behavior:** silently fall back to first-launch defaults
-(default `themeId` + `'comfortable'` density) for the entire
-`appearance` object whenever it is malformed or contains a
-`themeId` that the registry cannot resolve. No toast, no banner.
-The user is treated as if the appearance setting hadn't been
-chosen yet.
+**Behavior:** silently fall back to first-launch defaults for
+the entire `appearance` object whenever it is malformed or
+contains a `themeId` that the registry cannot resolve. No toast,
+no banner. The user is treated as if the appearance setting
+hadn't been chosen yet.
 
 ## Accent override (opt-in)
 
@@ -196,36 +194,18 @@ switching back to Default Light / Dark restores it. The override
 remains in `app_settings.appearance` regardless of whether it's
 currently being honored.
 
-## Density-token policy
-
-Density toggle (`comfortable` / `compact`) persists at
-`app_settings.appearance.density`. Density-aware spacing tokens
-carry two variants tied to the toggle (per
-[`tokens.md → Density-aware spacing`](./tokens.md#density-aware-spacing)).
-
-Final slot list and values are session 4's problem (the dedicated
-density / spacing design pass). Session 1 commits the architecture:
-two-level support, per-component-padding scope.
-
-**Cut path.** If session 4 decides density-as-toggle isn't worth
-the cross-platform implementation cost, density variants collapse
-to one set, the toggle UI is removed from
-[`App Settings · Appearance`](../screens/app-settings/app-settings.md#app--appearance),
-and `appearance.density` is dropped from the persistence shape.
-Session 1 doesn't lock anything that prevents the cut.
-
 ## Demo
 
 [`theming.html`](./theming.html) renders the contract end-to-end:
 
-- Review-controls bar with theme dropdown + density toggle.
+- Review-controls bar with theme dropdown.
 - Three placeholder palettes (Default Light, Default Dark,
   Parchment) — clearly temporary; the curated gallery lands at
   session 6.
 - Sample surfaces consuming token slots: body prose paragraph,
   button row (primary / secondary / disabled + focus ring), input
-  field, list rows with accent indicator + density-aware padding,
-  system-entry chrome strip, semantic-state pills.
+  field, list rows with accent indicator, system-entry chrome
+  strip, semantic-state pills.
 - Visible token snapshot grid — swatches re-render on theme swap,
   proving the runtime cascade is live.
 

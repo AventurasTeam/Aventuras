@@ -345,7 +345,7 @@ modes enabled, wrap POV (first / third), suggestions enabled.
 
 ## APP · Appearance
 
-Theme picker, density toggle, conditional accent override. The
+Theme picker, reader font size, conditional accent override. The
 visual identity contract that backs this surface lives in
 [`foundations/`](../../foundations/README.md) — this section
 describes the form-shaped affordance only.
@@ -359,12 +359,6 @@ Default lands at session 6 once the curated gallery is authored.
 Future user-authored themes (parked-until-signal per
 [`parked.md`](../../../parked.md#user-authored-themes)) extend the
 same gallery without changing the picker shape.
-
-**Density** is a `comfortable` / `compact` segment. Persists at
-[`app_settings.appearance.density`](../../foundations/theming.md#density-token-policy)
-and applies app-wide independent of theme. May be cut at session 4
-if the cross-platform implementation cost doesn't pencil — see the
-session 4 cut path.
 
 **Reader font size** is a 4-state `S` / `M` / `L` / `XL` segment.
 Persists at
@@ -456,7 +450,7 @@ First-launch UX (no provider keys, no profiles configured) lives in
 the dedicated [Onboarding](../onboarding/onboarding.md) wireframe.
 App Settings is the edit surface for users who already know what
 they want; Onboarding is the hand-hold for first-time setup. They
-share form components (Theme / Language / Density widgets in Step 1
+share form components (Theme / Language widgets in Step 1
 are literally the same controls as the App / Appearance + Language
 tabs); Onboarding's chrome is different (linear flow vs random-
 access tabs).

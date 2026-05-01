@@ -22,11 +22,10 @@ rationale, and decisions live alongside.
   imports). Cross-cutting like principles, but visual-spec rather
   than philosophy.
 - **[foundations/](./foundations/README.md)** — visual identity
-  contract: token slots (color, font-family, density, structural),
-  theme data shape, switching mechanism, persistence,
-  accent-override opt-in. Multi-session pass; session 1
-  (architecture) lands. Tokens consumed by patterns and screens
-  alike.
+  contract: token slots (color, font-family, structural,
+  user-orthogonal), theme data shape, switching mechanism,
+  persistence, accent-override opt-in. Multi-session pass; sessions
+  1–4 landed. Tokens consumed by patterns and screens alike.
 - **[../followups.md](../followups.md)** — active outstanding
   items (current milestone) across data-model, architecture, and
   UX. See [`../parked.md`](../parked.md) for items deferred beyond
