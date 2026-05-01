@@ -38,7 +38,7 @@
   .vp-stage-wrap { display: flex; flex-direction: column; gap: 6px; align-items: center; width: 100%; min-height: 0; flex: 1; }
   .vp-stage-meta { font-size: 11px; color: var(--ink-muted); font-family: monospace; }
   .vp-stage-meta strong { color: var(--ink); }
-  .viewport { container-type: inline-size; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; width: 100%; max-width: var(--vp-width, 1280px); transition: max-width 0.25s ease; overflow: hidden; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .viewport { container-type: inline-size; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; width: 100%; max-width: var(--vp-width, 1280px); transition: max-width 0.25s ease; overflow: hidden; display: flex; flex-direction: column; flex: 1; min-height: 0; position: relative; }
 
   /* phone chip strip — surfaces below the top-bar at phone tier; chapter / time / branch chips
      migrate here from the top-bar per navigation.md → Reader chip strip. */
@@ -306,6 +306,7 @@
 
   /* reasoning icon in meta line + expandable body */
   .bubble-meta { display: inline-flex; align-items: center; gap: 6px; }
+  .bubble-glyph { font-size: 13px; line-height: 1; opacity: 0.65; flex-shrink: 0; }
   .reasoning-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; font-size: 12px; cursor: pointer; opacity: 0.65; transition: opacity 0.15s, background 0.15s; line-height: 1; }
   .reasoning-icon:hover { opacity: 1; background: var(--bg-highlight); }
   .reasoning-icon.pulsing { animation: reasoning-pulse 1.6s infinite; opacity: 1; }
@@ -725,7 +726,7 @@
         <div class="bubble">
           <div class="bubble-kind">
             <span class="bubble-meta">
-              AI reply
+              <span class="bubble-glyph" title="Narrative" aria-label="Narrative">&#128218;</span>
               <span class="reasoning-icon" data-reasoning-toggle title="Show reasoning trace">&#129504;</span>
               <span class="tok-display" title="reply tok / reasoning tok">1.8k / 3.2k</span>
             </span>
@@ -774,7 +775,7 @@
         <div class="bubble streaming" id="streaming-bubble">
           <div class="bubble-kind">
             <span class="bubble-meta">
-              AI reply
+              <span class="bubble-glyph" title="Narrative" aria-label="Narrative">&#128218;</span>
               <span class="reasoning-icon pulsing" id="streaming-brain" data-reasoning-toggle title="Reasoning in progress &mdash; click to show">&#129504;</span>
               <span class="tok-display" id="streaming-toks">&mdash; / 0.8k &rarr;</span>
             </span>

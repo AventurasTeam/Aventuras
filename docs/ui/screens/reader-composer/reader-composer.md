@@ -280,8 +280,13 @@ the new calendar doesn't support) lives in
 Meta line is intentionally minimal. No model name — users don't care
 per-entry. Format:
 
-`AI reply  [🧠]  <reply-tok> / <reasoning-tok>`
+`📚  [🧠]  <reply-tok> / <reasoning-tok>`
 
+- **Narrative glyph** (📚 placeholder, finalized in visual identity).
+  Replaces a text "AI reply" label so the meta row stays compact at
+  narrow widths and doesn't compete with the per-entry action cluster
+  for horizontal space. Symbolizes the narrative voice / narrator
+  rather than the AI provider.
 - **Brain icon** (🧠 placeholder). Clickable — toggles an italic,
   muted, left-bordered reasoning body expansion **above** the content
   (chronological order: think, then speak). Absent when the provider
