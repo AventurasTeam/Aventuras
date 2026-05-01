@@ -59,8 +59,9 @@ Respect platform reduced-motion preferences:
 
 - **Web / Electron** — `@media (prefers-reduced-motion: reduce)`
   query.
-- **Native (Expo)** — `AccessibilityInfo.isReduceMotionEnabled()`
-  - change subscription.
+- **Native (Expo)** —
+  `AccessibilityInfo.isReduceMotionEnabled()` plus a change
+  subscription for live updates.
 
 When reduced motion is active, the **transform vs opacity
 distinction** drives behavior:
