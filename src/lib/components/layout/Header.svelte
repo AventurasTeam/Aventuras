@@ -25,6 +25,7 @@
     FileJson,
     FileText,
     ChevronDown,
+    ChevronUp,
     Bug,
     ImageIcon,
     MessageSquare,
@@ -32,6 +33,12 @@
   } from 'lucide-svelte'
 
   let showExportMenu = $state(false)
+  let showMobileMenu = $state(false)
+
+  function goToLibrary() {
+    story.closeStory()
+    ui.setActivePanel('library')
+  }
 
   // Subscribe to image generation events
   onMount(() => {
@@ -155,12 +162,34 @@
   }
 </script>
 
+{#snippet importExportMenuItems()}
+  <DropdownMenu.Label>Import</DropdownMenu.Label>
+  <DropdownMenu.Item onclick={() => ui.openSTChatImport()}>
+    <MessageSquare class="text-muted-foreground h-4 w-4" />
+    SillyTavern Chat (.jsonl)
+  </DropdownMenu.Item>
+  <DropdownMenu.Separator />
+  <DropdownMenu.Label>Export</DropdownMenu.Label>
+  <DropdownMenu.Item onclick={exportAventuras}>
+    <FileJson class="text-accent-400 h-4 w-4" />
+    Aventuras (.avt)
+  </DropdownMenu.Item>
+  <DropdownMenu.Item onclick={exportMarkdown}>
+    <FileText class="h-4 w-4 text-blue-400" />
+    Markdown (.md)
+  </DropdownMenu.Item>
+  <DropdownMenu.Item onclick={exportText}>
+    <FileText class="text-muted-foreground h-4 w-4" />
+    Plain Text (.txt)
+  </DropdownMenu.Item>
+{/snippet}
+
 <header
   class="bg-card relative z-10 flex h-12 items-center justify-between border-b px-1 sm:h-14 sm:px-4"
 >
   <!-- Left side: Story title -->
-  <div class="flex min-w-0 items-center">
-    <div class="flex items-center gap-3 px-2.5 sm:px-1">
+  <div class="flex min-w-0 flex-1 items-center">
+    <div class="flex min-w-0 items-center gap-3 px-2.5 sm:px-1">
       <div
         class="bg-primary h-7 w-7 flex-shrink-0"
         style="mask-image: url('/logo.png'); mask-size: contain; mask-repeat: no-repeat; mask-position: center; -webkit-mask-image: url('/logo.png'); -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center;"
@@ -170,7 +199,7 @@
       {#if story.currentStory}
         <div class="flex min-w-0 items-center gap-2">
           <span
-            class="text-foreground max-w-40 truncate text-sm font-semibold sm:max-w-none sm:translate-y-[-1.5px] sm:text-base"
+            class="text-foreground truncate text-sm font-semibold sm:translate-y-[-1.5px] sm:text-base"
           >
             {story.currentStory.title}
           </span>
@@ -192,11 +221,8 @@
     </div>
   </div>
 
-  <!-- Center spacer -->
-  <div class="flex-1"></div>
-
   <!-- Right side: Export and Settings -->
-  <div class="flex items-center [&_[data-button-label]]:max-lg:!hidden">
+  <div class="flex flex-shrink-0 items-center [&_[data-button-label]]:max-lg:!hidden">
     <div class="flex items-center gap-2">
       {#if ui.isGenerating}
         <div class="text-accent-400 hidden items-center gap-1.5 text-sm sm:flex">
@@ -227,17 +253,16 @@
 
     <!-- Back to Library Button (right side) -->
     {#if story.currentStory}
-      <Button
-        icon={Library}
-        label="Library"
-        variant="text"
-        class="text-muted-foreground hover:text-primary min-h-11 min-w-11"
-        onclick={() => {
-          story.closeStory()
-          ui.setActivePanel('library')
-        }}
-        title="Return to Library"
-      />
+      <div class="hidden sm:block">
+        <Button
+          icon={Library}
+          label="Library"
+          variant="text"
+          class="text-muted-foreground hover:text-primary min-h-11 min-w-11"
+          onclick={goToLibrary}
+          title="Return to Library"
+        />
+      </div>
     {/if}
 
     {#if story.currentStory}
@@ -252,48 +277,66 @@
       />
 
       <!-- Import / Export Menu -->
-      <DropdownMenu.Root bind:open={showExportMenu}>
-        <DropdownMenu.Trigger>
-          {#snippet child({ props })}
-            <Button
-              {...props}
-              icon={ArrowUpDown}
-              label="Import/Export"
-              endIcon={ChevronDown}
-              variant="text"
-              class="text-muted-foreground hover:text-primary min-h-[44px] min-w-[44px]"
-              title="Import / Export story"
-            />
-          {/snippet}
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end">
-          <DropdownMenu.Label>Import</DropdownMenu.Label>
-          <DropdownMenu.Item
-            onclick={() => {
-              showExportMenu = false
-              ui.openSTChatImport()
-            }}
+      <div class="hidden sm:block">
+        <DropdownMenu.Root bind:open={showExportMenu}>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <Button
+                {...props}
+                icon={ArrowUpDown}
+                label="Import/Export"
+                endIcon={ChevronDown}
+                variant="text"
+                class="text-muted-foreground hover:text-primary min-h-11 min-w-11"
+                title="Import / Export story"
+              />
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end">
+            {@render importExportMenuItems()}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      </div>
+    {/if}
+
+    <!-- Mobile-only menu: Library, Import/Export, Settings -->
+    <DropdownMenu.Root bind:open={showMobileMenu}>
+      <DropdownMenu.Trigger>
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            variant="text"
+            class="text-muted-foreground hover:text-primary min-h-11 min-w-11 sm:hidden"
+            title="Menu"
+            aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
           >
-            <MessageSquare class="text-muted-foreground h-4 w-4" />
-            SillyTavern Chat (.jsonl)
+            {#if showMobileMenu}
+              <ChevronUp class="h-5 w-5" />
+            {:else}
+              <ChevronDown class="h-5 w-5" />
+            {/if}
+          </Button>
+        {/snippet}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end">
+        {#if story.currentStory}
+          <DropdownMenu.Item onclick={goToLibrary}>
+            <Library class="text-muted-foreground h-4 w-4" />
+            Library
           </DropdownMenu.Item>
           <DropdownMenu.Separator />
-          <DropdownMenu.Label>Export</DropdownMenu.Label>
-          <DropdownMenu.Item onclick={() => exportAventuras()}>
-            <FileJson class="text-accent-400 h-4 w-4" />
-            Aventuras (.avt)
-          </DropdownMenu.Item>
-          <DropdownMenu.Item onclick={() => exportMarkdown()}>
-            <FileText class="h-4 w-4 text-blue-400" />
-            Markdown (.md)
-          </DropdownMenu.Item>
-          <DropdownMenu.Item onclick={() => exportText()}>
-            <FileText class="text-muted-foreground h-4 w-4" />
-            Plain Text (.txt)
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
-    {/if}
+          {@render importExportMenuItems()}
+          <DropdownMenu.Separator />
+        {/if}
+        <DropdownMenu.Item onclick={() => ui.openSettings()}>
+          <Settings class="text-muted-foreground h-4 w-4" />
+          Settings
+          {#if settings.hasGenerationConfigIssues}
+            <AlertTriangle class="ml-auto h-3.5 w-3.5 text-amber-500" />
+          {/if}
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
 
     {#if story.currentStory && story.lorebookEntries.length > 0}
       <Button
@@ -330,7 +373,7 @@
       </Button>
     {/if}
 
-    <div class="relative">
+    <div class="relative hidden sm:block">
       <Button
         icon={Settings}
         label="Settings"
