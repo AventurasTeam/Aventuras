@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Mobile foundations (platform — safe areas, status bar)</title>
+<style>
+  /* Monochrome wireframe palette per docs/conventions.md → Wireframe authoring. */
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-pane-alt: #f4f4f4;
+    --bg-strip: #f7f7f7;
+    --safe-zone: rgba(0, 0, 0, 0.08);
+    --safe-zone-line: rgba(0, 0, 0, 0.25);
+  }
+
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* review bar */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+  kbd { font-family: monospace; background: #fff; padding: 1px 5px; border: 1px solid #d8c99a; border-radius: 3px; font-size: 10px; color: #5a4820; }
+
+  .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .screen-label strong { color: var(--ink); }
+
+  .stage { flex: 1; padding: 24px; display: flex; justify-content: center; gap: 24px; box-sizing: border-box; flex-wrap: wrap; }
+
+  /* Phone outline shell — visualizes safe areas. */
+  .phone-shell {
+    position: relative;
+    width: 280px;
+    height: 580px;
+    border: 4px solid var(--ink);
+    border-radius: 32px;
+    background: var(--bg-region);
+    overflow: hidden;
+    box-shadow: 0 0 0 1px var(--line) inset;
+    display: flex;
+    flex-direction: column;
+  }
+  .phone-shell.dark {
+    --bg-region: #2a2a2a;
+    --ink: #e0e0e0;
+    --ink-muted: #aaa;
+    --ink-faint: #777;
+    --line: #555;
+    --line-soft: #444;
+    --bg-pane-alt: #333;
+    --bg-strip: #303030;
+    border-color: #111;
+  }
+  .phone-shell.dark { color: var(--ink); }
+
+  /* Status bar — top of phone, contains clock + indicators.
+     Style varies by active theme (light = dark icons / dark = light icons). */
+  .status-bar {
+    height: 28px;
+    padding: 4px 16px 4px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    font-family: -apple-system, "SF Pro", system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--bg-region);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+  }
+  .status-bar .time { font-weight: 600; }
+  .status-bar .indicators { display: flex; gap: 6px; }
+  .status-bar .ind { display: inline-flex; align-items: center; gap: 2px; }
+  .status-bar.with-notch::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 110px;
+    height: 24px;
+    background: #000;
+    border-radius: 0 0 14px 14px;
+  }
+  .status-bar.dynamic-island::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100px;
+    height: 24px;
+    background: #000;
+    border-radius: 14px;
+  }
+
+  /* Top bar — app chrome, sits below status bar / honors top safe area. */
+  .topbar {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-region);
+    flex-shrink: 0;
+  }
+  .topbar .icon {
+    width: 28px; height: 28px;
+    border: 1px dashed var(--line);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink); font-size: 13px;
+  }
+  .topbar .crumb {
+    flex: 1; font-weight: 600; color: var(--ink); font-size: 13px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* Body — content area. */
+  .body {
+    flex: 1;
+    padding: 12px 14px;
+    color: var(--ink-muted);
+    font-size: 11.5px;
+    overflow-y: auto;
+    background: var(--bg-region);
+  }
+  .body h4 { margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); font-weight: 600; }
+  .body p { margin: 0 0 6px; }
+
+  /* Bottom safe area visualization — home indicator on iOS, nav buttons on Android. */
+  .bottom-area {
+    flex-shrink: 0;
+    padding: 6px 16px;
+    border-top: 1px solid var(--line-soft);
+    background: var(--bg-region);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    position: relative;
+    color: var(--ink-faint);
+    font-size: 10px;
+  }
+  .bottom-area.ios::after {
+    content: "";
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 5px;
+    background: var(--ink);
+    border-radius: 3px;
+  }
+  .bottom-area.android-gesture::after {
+    content: "";
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80px;
+    height: 4px;
+    background: var(--ink-muted);
+    border-radius: 2px;
+  }
+  .bottom-area.android-buttons {
+    height: 36px;
+  }
+  .bottom-area.android-buttons::after {
+    content: "◁  ○  □";
+    color: var(--ink-muted);
+    font-size: 13px;
+    letter-spacing: 14px;
+    position: absolute;
+    bottom: 8px;
+  }
+
+  /* Safe-area highlight overlay — when active, shows the regions
+     interactive content must NOT enter. */
+  .safe-highlight {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: none;
+    z-index: 5;
+  }
+  .safe-highlight.show { display: block; }
+  .safe-highlight .top-zone {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 28px;
+    background: var(--safe-zone);
+    border-bottom: 2px dashed var(--safe-zone-line);
+  }
+  .safe-highlight.with-notch .top-zone { height: 24px; }
+  .safe-highlight .bottom-zone {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 28px;
+    background: var(--safe-zone);
+    border-top: 2px dashed var(--safe-zone-line);
+  }
+  .safe-highlight .bottom-zone.android-buttons { height: 36px; }
+  .safe-highlight .label {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.85);
+    padding: 2px 6px;
+    border: 1px solid var(--safe-zone-line);
+    border-radius: 3px;
+    font-size: 9px;
+    color: var(--ink);
+    font-family: monospace;
+    text-transform: uppercase;
+  }
+  .safe-highlight .label-top { top: 4px; left: 50%; transform: translateX(-50%); }
+  .safe-highlight .label-bottom { bottom: 4px; left: 50%; transform: translateX(-50%); }
+
+  .phone-meta {
+    margin-top: 10px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--ink-muted);
+    font-family: monospace;
+  }
+  .phone-meta strong { color: var(--ink); }
+
+  .phone-wrap { display: flex; flex-direction: column; align-items: center; }
+
+  .demo-note {
+    margin: 16px auto 24px;
+    padding: 12px 16px;
+    max-width: 760px;
+    border: 1px dashed var(--line);
+    border-radius: 4px;
+    background: var(--bg-region);
+    font-size: 12px;
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+  .demo-note strong { color: var(--ink); }
+  .demo-note code { background: var(--bg); padding: 1px 5px; border-radius: 2px; font-size: 11px; }
+  .demo-note ul { margin: 6px 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+  <div class="review-bar">
+    <div class="rb-group" role="group" aria-label="Platform">
+      <span class="rb-label">Platform</span>
+      <button class="rb-btn active" data-platform="ios-notch">iOS notch <kbd>1</kbd></button>
+      <button class="rb-btn" data-platform="ios-island">iOS island <kbd>2</kbd></button>
+      <button class="rb-btn" data-platform="android-gesture">Android gesture <kbd>3</kbd></button>
+      <button class="rb-btn" data-platform="android-buttons">Android buttons <kbd>4</kbd></button>
+    </div>
+    <div class="rb-group" role="group" aria-label="Theme">
+      <span class="rb-label">Theme mode</span>
+      <button class="rb-btn active" data-theme="light">Light <kbd>L</kbd></button>
+      <button class="rb-btn" data-theme="dark">Dark <kbd>D</kbd></button>
+    </div>
+    <div class="rb-group" role="group" aria-label="Safe areas">
+      <span class="rb-label">Safe areas</span>
+      <button class="rb-btn" id="safe-toggle">Hidden <kbd>S</kbd></button>
+    </div>
+    <div class="rb-note">Session 6 — platform safe areas + status-bar style.</div>
+  </div>
+
+  <div class="screen-label"><strong>foundations / mobile</strong> — platform reference</div>
+
+  <div class="stage">
+    <div class="phone-wrap">
+      <div class="phone-shell" id="phone-a">
+        <div class="status-bar" id="status-bar-a">
+          <span class="time">9:41</span>
+          <span class="indicators">
+            <span class="ind">5G</span>
+            <span class="ind">100%</span>
+          </span>
+        </div>
+        <div class="topbar">
+          <div class="icon">←</div>
+          <div class="crumb" id="crumb-a">Aria's Descent / World</div>
+          <div class="icon">⛭</div>
+          <div class="icon">⚲</div>
+        </div>
+        <div class="body">
+          <h4>Surface body</h4>
+          <p>Top bar respects the top safe area (paddingTop: insets.top).</p>
+          <p>Body content extends edge-to-edge horizontally; the visible scroll-bottom respects the bottom safe area (paddingBottom: insets.bottom).</p>
+          <p>Toggle <strong>Safe areas</strong> to highlight reserved regions.</p>
+          <p>Toggle <strong>Theme mode</strong> to see status-bar style switch (dark icons on light theme; light icons on dark theme).</p>
+        </div>
+        <div class="bottom-area" id="bottom-area-a"></div>
+        <div class="safe-highlight" id="safe-highlight-a">
+          <div class="top-zone"></div>
+          <div class="label label-top">SAFE TOP</div>
+          <div class="bottom-zone"></div>
+          <div class="label label-bottom">SAFE BOTTOM</div>
+        </div>
+      </div>
+      <div class="phone-meta">
+        Platform: <strong id="platform-readout">iOS notch</strong> · Theme: <strong id="theme-readout">light</strong> · Status-bar style: <strong id="bar-style-readout">dark-content</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-note">
+    <strong>What this demonstrates.</strong> Safe-area regions on
+    iOS (notch + home indicator) and Android (gesture-mode home
+    bar / button-mode nav bar), and status-bar style binding to
+    the active theme mode.
+    <br><br>
+    <strong>Toggle Safe areas</strong> to see the reserved regions
+    (top and bottom). Interactive elements (top bar, save bar,
+    sheet content) sit inside the safe zones; background may
+    extend edge-to-edge. RN's
+    <code>react-native-safe-area-context</code> provides the
+    inset values via the <code>useSafeAreaInsets()</code> hook.
+    <br><br>
+    <strong>Status-bar style.</strong> Light themes →
+    <code>dark-content</code> (dark icons against light
+    background). Dark themes → <code>light-content</code> (light
+    icons against dark background). Switches on theme change via
+    RN's <code>StatusBar.setBarStyle</code>.
+    <br><br>
+    <strong>What this does not pin.</strong> Per-screen
+    accessibility labels and focus order — session 7 retrofits.
+    Haptic feedback specifics — post-v1 polish.
+  </div>
+
+<script>
+  (function () {
+    var PLATFORM_KEY = 'aventuras-wireframe-platform';
+    var THEME_KEY = 'aventuras-wireframe-platform-theme';
+    var SAFE_KEY = 'aventuras-wireframe-platform-safe';
+
+    var phone = document.getElementById('phone-a');
+    var statusBar = document.getElementById('status-bar-a');
+    var bottomArea = document.getElementById('bottom-area-a');
+    var safeHighlight = document.getElementById('safe-highlight-a');
+    var platformReadout = document.getElementById('platform-readout');
+    var themeReadout = document.getElementById('theme-readout');
+    var barStyleReadout = document.getElementById('bar-style-readout');
+    var safeToggle = document.getElementById('safe-toggle');
+    var platformButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-platform]'));
+    var themeButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-theme]'));
+
+    var labels = {
+      'ios-notch': 'iOS notch',
+      'ios-island': 'iOS island',
+      'android-gesture': 'Android gesture',
+      'android-buttons': 'Android buttons'
+    };
+
+    function applyPlatform(p) {
+      var btn = platformButtons.filter(function (b) { return b.dataset.platform === p; })[0];
+      if (!btn) { btn = platformButtons[0]; p = 'ios-notch'; }
+      platformButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+      platformReadout.textContent = labels[p];
+
+      // Status bar styling: notch / island / android.
+      statusBar.classList.remove('with-notch', 'dynamic-island');
+      if (p === 'ios-notch') statusBar.classList.add('with-notch');
+      else if (p === 'ios-island') statusBar.classList.add('dynamic-island');
+
+      // Bottom area: ios home indicator / android gesture / android buttons.
+      bottomArea.classList.remove('ios', 'android-gesture', 'android-buttons');
+      if (p === 'ios-notch' || p === 'ios-island') bottomArea.classList.add('ios');
+      else if (p === 'android-gesture') bottomArea.classList.add('android-gesture');
+      else if (p === 'android-buttons') bottomArea.classList.add('android-buttons');
+
+      // Safe-highlight bottom-zone matches the bottom area visual.
+      var bottomZone = safeHighlight.querySelector('.bottom-zone');
+      bottomZone.classList.toggle('android-buttons', p === 'android-buttons');
+
+      // Top zone: keep as default 28px on all unless we want to differentiate.
+      safeHighlight.classList.toggle('with-notch', p === 'ios-notch' || p === 'ios-island');
+
+      try { localStorage.setItem(PLATFORM_KEY, p); } catch (e) { /* no-op */ }
+    }
+
+    function applyTheme(t) {
+      var btn = themeButtons.filter(function (b) { return b.dataset.theme === t; })[0];
+      if (!btn) { btn = themeButtons[0]; t = 'light'; }
+      themeButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+      themeReadout.textContent = t;
+      barStyleReadout.textContent = t === 'light' ? 'dark-content' : 'light-content';
+      phone.classList.toggle('dark', t === 'dark');
+      try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* no-op */ }
+    }
+
+    var safeOn = false;
+    function applySafe(on) {
+      safeOn = !!on;
+      safeHighlight.classList.toggle('show', safeOn);
+      safeToggle.textContent = safeOn ? 'Highlighted' : 'Hidden';
+      safeToggle.classList.toggle('active', safeOn);
+      try { localStorage.setItem(SAFE_KEY, safeOn ? '1' : '0'); } catch (e) { /* no-op */ }
+    }
+
+    platformButtons.forEach(function (b) { b.addEventListener('click', function () { applyPlatform(b.dataset.platform); }); });
+    themeButtons.forEach(function (b) { b.addEventListener('click', function () { applyTheme(b.dataset.theme); }); });
+    safeToggle.addEventListener('click', function () { applySafe(!safeOn); });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (e.key === '1') applyPlatform('ios-notch');
+      else if (e.key === '2') applyPlatform('ios-island');
+      else if (e.key === '3') applyPlatform('android-gesture');
+      else if (e.key === '4') applyPlatform('android-buttons');
+      else if (e.key === 'l' || e.key === 'L') applyTheme('light');
+      else if (e.key === 'd' || e.key === 'D') applyTheme('dark');
+      else if (e.key === 's' || e.key === 'S') applySafe(!safeOn);
+    });
+
+    var savedPlatform;
+    try { savedPlatform = localStorage.getItem(PLATFORM_KEY); } catch (e) { savedPlatform = null; }
+    applyPlatform(savedPlatform || 'ios-notch');
+
+    var savedTheme;
+    try { savedTheme = localStorage.getItem(THEME_KEY); } catch (e) { savedTheme = null; }
+    applyTheme(savedTheme || 'light');
+
+    var savedSafe;
+    try { savedSafe = localStorage.getItem(SAFE_KEY); } catch (e) { savedSafe = null; }
+    applySafe(savedSafe === '1');
+  })();
+</script>
+</body>
+</html>

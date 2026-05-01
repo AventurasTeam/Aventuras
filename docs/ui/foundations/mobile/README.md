@@ -65,6 +65,20 @@ and exploration-record link.
 - [`touch.html`](./touch.html) — interactive demo: hover-vs-touch
   toggle on icon-actions, status-pill tap-to-popover, save-bar
   hide-on-keyboard, tap-to-tooltip on a truncated label.
+- [`platform.md`](./platform.md) — platform contract: target
+  scoping (Expo iOS / Android, Electron desktop; mobile-web NOT
+  a target), safe-area handling via
+  `react-native-safe-area-context`, OS back integration
+  (Android `BackHandler`, iOS swipe-back) bound to stack-aware
+  Return, keyboard avoidance via `KeyboardAvoidingView`, sheet
+  drag-dismiss thresholds per platform, Galaxy Fold reflow,
+  accessibility (VoiceOver / TalkBack labeling, focus traps,
+  dynamic-type, status-pill phase announcements), status-bar
+  style binding to active theme.
+- [`platform.html`](./platform.html) — interactive demo: phone
+  outline showing safe-area regions across iOS notch / iOS
+  Dynamic Island / Android gesture-mode / Android button-mode,
+  with theme-mode toggle showing status-bar style switch.
 
 ## Sessions
 
@@ -166,10 +180,35 @@ reflects the current plan and updates as work progresses.
    tappability amendment** to principles.md (parent segments
    tappable for navigation, current segment inert).
    Files: [`touch.md`](./touch.md), [`touch.html`](./touch.html).
-6. **Platform** — pending. iOS notch / Android nav bar / status
-   bar safe areas, swipe-back gesture, system back, mobile-web
-   browser chrome (URL bar collapse), keyboard avoidance for the
-   composer.
+6. **Platform** — landed 2026-05-01
+   ([exploration record](../../../explorations/2026-05-01-mobile-platform.md)).
+   **Platform targets explicit**: Expo (iOS / Android native) and
+   Electron (desktop). **Mobile-web browsers are NOT
+   a target** — the RN Web bundle exists only as Electron's
+   renderer source; no public web URL, no PWA, no
+   add-to-homescreen, no web-push. **Safe-area handling** via
+   `react-native-safe-area-context` with concrete top-bar /
+   bottom-edge / sheet / modal padding rules (iOS notch /
+   Dynamic Island / home indicator, Android status bar / nav
+   bar gesture-vs-button). **OS back integration**: Android
+   `BackHandler` and iOS swipe-back gesture both route through
+   stack-aware Return; **empty-stack-confirm is Android-relevant
+   primarily** (iOS uses OS-native exit semantics). **Keyboard
+   avoidance** via RN's `KeyboardAvoidingView` (iOS `padding`,
+   Android `height` or native `adjustResize`); save-bar
+   hide-on-keyboard from session 5 implemented via
+   `Keyboard.addListener`. **Sheet drag-dismiss thresholds**
+   adopt community-library platform-aware defaults. **Galaxy
+   Fold reflow** uses RN's `Dimensions.change` listener;
+   sheet-auto-dismiss-on-tier-transition is implementation
+   guidance. **Accessibility** rules: VoiceOver / TalkBack
+   labeling, focus traps for sheets / modals, dynamic-type
+   scaling, status-pill phase announcements via
+   `accessibilityLiveRegion`. **Status bar style** binds to the
+   active theme's `themeMode`. **Out of scope for v1**: haptics,
+   deep links, splash screen config, web-target concerns.
+   Files: [`platform.md`](./platform.md),
+   [`platform.html`](./platform.html).
 7. **Per-screen passes** — pending. ~10 surfaces, each upgrading
    its existing HTML to single-canonical responsive (viewport
    toggle, 3-tier reflow). Reconciles any pre-foundations

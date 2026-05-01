@@ -955,3 +955,40 @@ asking to attach images per-entry — design needs:
 Distinct from the broader [Asset gallery](#asset-gallery)
 post-v1 entry, which is the shared library surface; this is
 per-entry attachment on lore specifically.
+
+#### Haptic feedback on mobile actions
+
+[`ui/foundations/mobile/platform.md`](./ui/foundations/mobile/platform.md)
+explicitly scopes haptic feedback (iOS / Android haptic taps on
+button press, sheet drag, save commit, error states) out of v1.
+Could add subtle polish — sheet snap-to-position, action commit
+confirmation, error vibration — but it's not foundational and adds
+maintenance surface (haptic-strength preference, accessibility
+opt-out, platform feel differences). RN supports haptics natively
+via `expo-haptics`; the work is per-affordance: pick which actions
+get which haptic style, calibrate intensity, validate on real
+devices.
+
+Lands when user testing surfaces a concrete request for haptic
+feedback or signals that the silent default feels under-responsive.
+
+#### Deep links via URL scheme
+
+Mobile users currently reach the app's surfaces by launching it
+and navigating in-app. Deep links (`aventuras://story/<id>` or
+similar) would let external triggers — share sheets, notification
+taps, calendar reminders — open a specific story / surface
+directly. Scoped out of v1 per
+[`ui/foundations/mobile/platform.md`](./ui/foundations/mobile/platform.md);
+the local-first app has no immediate consumer beyond manual
+sharing.
+
+Lands if integrations surface real demand: e.g., a "share story
+context" affordance that drops a deep link into iOS Messages /
+Android Share, or a future calendar-reminder integration that
+deep-links into the story.
+
+The work itself is straightforward — Expo Router supports URL
+schemes natively; route mapping plus a launch-time deep-link
+handler. Schema cost is also small (URL templates per surface).
+Held parked because v1 doesn't have a consumer that benefits.
