@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Mobile foundations (navigation chrome across tiers)</title>
+<style>
+  /* Monochrome wireframe palette per docs/conventions.md → Wireframe authoring.
+     Visual-identity exemption does NOT extend to mobile foundations. */
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-pane-alt: #f4f4f4;
+    --bg-strip: #f7f7f7;
+    --accent: #5a5a5a;
+  }
+
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* review bar */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; }
+  .review-bar .rb-group > .gl { font-size: 10px; color: #967; margin-right: 4px; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+  kbd { font-family: monospace; background: #fff; padding: 1px 5px; border: 1px solid #d8c99a; border-radius: 3px; font-size: 10px; color: #5a4820; }
+
+  .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .screen-label strong { color: var(--ink); }
+
+  .stage { flex: 1; padding: 24px; display: flex; justify-content: center; box-sizing: border-box; }
+  .stage-wrap { display: flex; flex-direction: column; gap: 8px; align-items: center; width: 100%; }
+  .stage-meta { font-size: 11px; color: var(--ink-muted); font-family: monospace; }
+  .stage-meta strong { color: var(--ink); }
+
+  .viewport {
+    container-type: inline-size;
+    background: var(--bg-region);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    width: 100%;
+    max-width: var(--vp-width, 1280px);
+    transition: max-width 0.25s ease;
+    overflow: hidden;
+  }
+
+  /* ===========================================================
+     Chrome elements — shared across surfaces, scoped to the
+     active surface state.
+     =========================================================== */
+  .chrome { display: flex; flex-direction: column; }
+
+  /* Top bar — single row, icons + title.
+     Phone: slim, title truncates with ellipsis.
+     Tablet/Desktop: chips render INLINE (no chip strip below). */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--bg-region);
+    min-height: 36px;
+  }
+  .topbar .logo {
+    width: 28px; height: 28px;
+    border: 1px dashed var(--line);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink); font-weight: 600; font-size: 13px;
+    flex-shrink: 0;
+  }
+  .topbar .title {
+    font-weight: 600; color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 0 1 auto;
+    min-width: 0;
+    cursor: pointer;
+  }
+  .topbar .title:hover { text-decoration: underline; text-decoration-style: dotted; }
+  .topbar .crumb-sep { color: var(--ink-faint); margin: 0 2px; }
+  .topbar .crumb { color: var(--ink); font-weight: 500; }
+
+  /* Inline chips — tablet/desktop only. */
+  .topbar-chips {
+    display: contents; /* unset by phone scope to hide */
+  }
+  .topbar-chip {
+    padding: 2px 8px;
+    border: 1px dashed var(--line-soft);
+    border-radius: 12px;
+    color: var(--ink-muted);
+    font-size: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .topbar-spacer { flex: 1 1 auto; min-width: 12px; }
+
+  .topbar-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+  .topbar-icon {
+    width: 28px; height: 28px;
+    border: 1px dashed var(--line);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-muted); font-size: 13px;
+    cursor: pointer;
+  }
+  .topbar-pill {
+    height: 24px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    display: none;
+    align-items: center;
+    gap: 4px;
+    color: var(--ink-muted);
+    font-size: 11px;
+    background: var(--bg-region);
+  }
+  .topbar-pill.show { display: inline-flex; }
+  .topbar-pill .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: blink 1.4s infinite;
+  }
+  @keyframes blink { 50% { opacity: 0.4; } }
+
+  /* Progress strip — slim, in-story only. */
+  .progress-strip {
+    height: 3px;
+    background: var(--line-soft);
+    position: relative;
+    display: none;
+  }
+  .progress-strip.show { display: block; }
+  .progress-strip::after {
+    content: "";
+    position: absolute;
+    inset: 0 60% 0 0;
+    background: var(--accent);
+  }
+
+  /* Master-detail sub-header — World/Plot only. */
+  .sub-header {
+    padding: 6px 12px;
+    background: var(--bg-strip);
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 12px;
+    color: var(--ink-muted);
+    display: none;
+  }
+  .sub-header.show { display: block; }
+  .sub-header strong { color: var(--ink); font-weight: 500; }
+
+  /* Reader chip strip — phone reader only. */
+  .chip-strip {
+    display: none;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--bg-strip);
+    border-bottom: 1px solid var(--line-soft);
+    overflow-x: auto;
+  }
+  .chip-strip-pill {
+    padding: 3px 10px;
+    border: 1px dashed var(--line-soft);
+    border-radius: 12px;
+    color: var(--ink-muted);
+    font-size: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    background: var(--bg-region);
+    cursor: pointer;
+  }
+
+  /* ===========================================================
+     Tier scoping — chrome adapts to viewport width via container
+     queries.
+     =========================================================== */
+
+  /* Phone (default — base, no @container query): chip strip
+     visible on reader, top-bar chips hidden. Title slot shrinks. */
+  .topbar .topbar-chips { display: none !important; }
+  [data-surface="reader"] .chip-strip { display: flex; }
+  .topbar .title { max-width: 140px; }
+
+  /* Tablet (≥ 640): chips inline in top-bar. Chip strip hidden. */
+  @container (min-width: 640px) {
+    .topbar .topbar-chips { display: contents !important; }
+    [data-surface="reader"] .chip-strip { display: none; }
+    .topbar .title { max-width: 220px; }
+  }
+
+  /* Desktop (≥ 1024): more breathing room, but chrome shape
+     same as tablet (single-row + inline chips). */
+  @container (min-width: 1024px) {
+    .topbar .title { max-width: none; }
+  }
+
+  /* ===========================================================
+     Body — generic placeholder. Each surface signals its
+     identity via labels; the body itself is empty.
+     =========================================================== */
+  .body {
+    height: 280px;
+    padding: 14px;
+    color: var(--ink-muted);
+    font-size: 12px;
+    background: var(--bg-region);
+  }
+  .body h4 {
+    margin: 0 0 6px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-muted);
+    font-weight: 600;
+  }
+  .body p { margin: 0 0 4px; }
+
+  /* Surface-toggle chrome — picks which surface the demo renders. */
+  .surface-toggle {
+    display: flex;
+    gap: 4px;
+    padding: 6px 10px;
+    background: var(--bg-strip);
+    border-bottom: 1px dashed var(--line-soft);
+  }
+  .surface-toggle .st-btn {
+    padding: 3px 9px;
+    border: 1px solid var(--line-soft);
+    border-radius: 3px;
+    background: var(--bg-region);
+    color: var(--ink);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .surface-toggle .st-btn.active {
+    background: var(--ink);
+    color: #fff;
+    border-color: var(--ink);
+  }
+
+  /* Surface-scoped visibility */
+  .surface { display: none; }
+  .surface.active { display: block; }
+
+  .demo-note {
+    margin: 16px auto 24px;
+    padding: 12px 16px;
+    max-width: 760px;
+    border: 1px dashed var(--line);
+    border-radius: 4px;
+    background: var(--bg-region);
+    font-size: 12px;
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+  .demo-note strong { color: var(--ink); }
+  .demo-note code { background: var(--bg); padding: 1px 5px; border-radius: 2px; font-size: 11px; }
+</style>
+</head>
+<body>
+  <div class="review-bar">
+    <div class="rb-group" role="group" aria-label="Viewport tier">
+      <span class="rb-label">Viewport</span>
+      <button class="rb-btn" data-vp="phone" data-width="390">Phone <kbd>1</kbd></button>
+      <button class="rb-btn" data-vp="tablet" data-width="768">Tablet <kbd>2</kbd></button>
+      <button class="rb-btn active" data-vp="desktop" data-width="1280">Desktop <kbd>3</kbd></button>
+    </div>
+    <div class="rb-group" role="group" aria-label="Surface">
+      <span class="rb-label">Surface</span>
+      <button class="rb-btn st-btn-rb active" data-surface="reader">Reader <kbd>R</kbd></button>
+      <button class="rb-btn st-btn-rb" data-surface="world">World <kbd>W</kbd></button>
+      <button class="rb-btn st-btn-rb" data-surface="story-list">Story list <kbd>S</kbd></button>
+    </div>
+    <div class="rb-group" role="group" aria-label="Status pill">
+      <span class="rb-label">Status</span>
+      <button class="rb-btn" id="pill-toggle">Idle</button>
+    </div>
+    <div class="rb-note">Session 2 — chrome shape across tiers and surfaces.</div>
+  </div>
+
+  <div class="screen-label"><strong>foundations / mobile</strong> — navigation paradigm reference</div>
+
+  <div class="stage">
+    <div class="stage-wrap">
+      <div class="stage-meta">
+        Container width: <strong id="vp-width-readout">1280 px</strong> · tier: <strong id="vp-tier-readout">desktop</strong> · surface: <strong id="surface-readout">reader</strong>
+      </div>
+
+      <div class="viewport" id="viewport">
+        <!-- ============== Reader surface ============== -->
+        <div class="surface active" data-surface="reader">
+          <div class="chrome">
+            <div class="topbar">
+              <div class="logo">A</div>
+              <span class="title" title="Aria's Descent of the Crown's Bargain">Aria's Descent of the Crown's Bargain</span>
+              <span class="topbar-chips">
+                <span class="topbar-chip">Chap 3 ▾</span>
+                <span class="topbar-chip">Day 3 dusk ▾</span>
+                <span class="topbar-chip">⎇3</span>
+              </span>
+              <div class="topbar-spacer"></div>
+              <div class="topbar-pill" data-pill><span class="dot"></span><span>generating…</span></div>
+              <div class="topbar-actions">
+                <div class="topbar-icon" title="Story Settings">⛭</div>
+                <div class="topbar-icon" title="Actions">⚲</div>
+                <div class="topbar-icon" title="Return">←</div>
+              </div>
+            </div>
+            <div class="progress-strip show"></div>
+            <div class="chip-strip">
+              <span class="chip-strip-pill">Chap 3 ▾</span>
+              <span class="chip-strip-pill">Day 3 dusk ▾</span>
+              <span class="chip-strip-pill">⎇3</span>
+            </div>
+          </div>
+          <div class="body">
+            <h4>Reader narrative + composer</h4>
+            <p>Body placeholder. The reader's content area on the active tier.</p>
+            <p>Phone: chip strip above shows chapter / time / branch chips because they migrated out of the top bar.</p>
+            <p>Tablet / desktop: the same three chips render inline in the top bar; chip strip is hidden.</p>
+          </div>
+        </div>
+
+        <!-- ============== World sub-screen ============== -->
+        <div class="surface" data-surface="world">
+          <div class="chrome">
+            <div class="topbar">
+              <div class="logo">A</div>
+              <span class="title" title="Aria's Descent / World">Aria's Descent / World</span>
+              <div class="topbar-spacer"></div>
+              <div class="topbar-pill" data-pill><span class="dot"></span><span>generating…</span></div>
+              <div class="topbar-actions">
+                <div class="topbar-icon" title="Story Settings">⛭</div>
+                <div class="topbar-icon" title="Actions">⚲</div>
+                <div class="topbar-icon" title="Return">←</div>
+              </div>
+            </div>
+            <div class="progress-strip show"></div>
+            <div class="sub-header show">Characters / <strong>Kael Vex</strong></div>
+          </div>
+          <div class="body">
+            <h4>World panel content</h4>
+            <p>Sub-screen — no chip strip. Master-detail sub-header carries in-pane location.</p>
+            <p>Top-bar breadcrumb is screen-level (story / panel) and stays stable; sub-header reflects current selection.</p>
+            <p>Same chrome shape across all tiers — no phone-specific compression here, since the breadcrumb already does the location job in a single line.</p>
+          </div>
+        </div>
+
+        <!-- ============== Story-list (app-level) ============== -->
+        <div class="surface" data-surface="story-list">
+          <div class="chrome">
+            <div class="topbar">
+              <div class="logo">A</div>
+              <span class="title">Stories</span>
+              <div class="topbar-spacer"></div>
+              <div class="topbar-actions">
+                <div class="topbar-icon" title="App Settings">⚙</div>
+                <div class="topbar-icon" title="Actions">⚲</div>
+              </div>
+            </div>
+          </div>
+          <div class="body">
+            <h4>Story list (root)</h4>
+            <p>App-level surface. <code>⚙</code> opens App Settings (gear glyph differs from in-story <code>⛭</code> per the Settings-icon scope rule).</p>
+            <p>No <code>←</code>: this is the root. Empty-stack Return triggers the existing exit-confirm dialog from principles.md → Stack-aware Return.</p>
+            <p>No progress strip: not in-story.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-note">
+    <strong>What this demonstrates.</strong> The chrome shape per
+    tier on each of three representative surfaces. Phone slims the
+    top bar and migrates reader-only chips into a strip below;
+    tablet and desktop render the chips inline. Sub-screens (World
+    here) and app-level (story-list) carry single-row top bars at
+    every tier — only the reader shows tier-specific compression.
+    <br><br>
+    <strong>What this does not pin.</strong> Drawer / sheet / modal
+    rendering for action-menu and chip popovers (session 3 — layout
+    primitives). Rail collapse on phone (session 4). Tap behavior
+    on the status pill, chip-strip swipe physics, gesture conflict
+    resolution with iOS swipe-back (session 5 — touch grammar).
+    Safe-area padding on devices with notches / nav bars (session 6).
+  </div>
+
+<script>
+  (function () {
+    var STORAGE_KEY = 'aventuras-wireframe-viewport';
+    var SURFACE_KEY = 'aventuras-wireframe-nav-surface';
+    var viewport = document.getElementById('viewport');
+    var widthReadout = document.getElementById('vp-width-readout');
+    var tierReadout = document.getElementById('vp-tier-readout');
+    var surfaceReadout = document.getElementById('surface-readout');
+    var vpButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-vp]'));
+    var surfaceButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-surface]'));
+    var surfaces = Array.prototype.slice.call(document.querySelectorAll('.surface[data-surface]'));
+    var pills = Array.prototype.slice.call(document.querySelectorAll('[data-pill]'));
+    var pillToggle = document.getElementById('pill-toggle');
+
+    function tierFor(width) {
+      if (width < 640) return 'phone';
+      if (width < 1024) return 'tablet';
+      return 'desktop';
+    }
+
+    function applyVp(vp) {
+      var btn = vpButtons.filter(function (b) { return b.dataset.vp === vp; })[0];
+      if (!btn) { btn = vpButtons[2]; vp = 'desktop'; }
+      var width = parseInt(btn.dataset.width, 10);
+      vpButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+      viewport.style.setProperty('--vp-width', width + 'px');
+      widthReadout.textContent = width + ' px';
+      tierReadout.textContent = tierFor(width);
+      try { localStorage.setItem(STORAGE_KEY, vp); } catch (e) { /* no-op */ }
+    }
+
+    function applySurface(surface) {
+      var btn = surfaceButtons.filter(function (b) { return b.dataset.surface === surface; })[0];
+      if (!btn) { btn = surfaceButtons[0]; surface = 'reader'; }
+      surfaceButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+      surfaces.forEach(function (s) { s.classList.toggle('active', s.dataset.surface === surface); });
+      surfaceReadout.textContent = surface;
+      try { localStorage.setItem(SURFACE_KEY, surface); } catch (e) { /* no-op */ }
+    }
+
+    var pillState = false;
+    function setPill(on) {
+      pillState = on;
+      pills.forEach(function (p) { p.classList.toggle('show', on); });
+      pillToggle.textContent = on ? 'Active' : 'Idle';
+      pillToggle.classList.toggle('active', on);
+    }
+
+    vpButtons.forEach(function (b) { b.addEventListener('click', function () { applyVp(b.dataset.vp); }); });
+    surfaceButtons.forEach(function (b) { b.addEventListener('click', function () { applySurface(b.dataset.surface); }); });
+    pillToggle.addEventListener('click', function () { setPill(!pillState); });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (e.key === '1') applyVp('phone');
+      else if (e.key === '2') applyVp('tablet');
+      else if (e.key === '3') applyVp('desktop');
+      else if (e.key === 'r' || e.key === 'R') applySurface('reader');
+      else if (e.key === 'w' || e.key === 'W') applySurface('world');
+      else if (e.key === 's' || e.key === 'S') applySurface('story-list');
+    });
+
+    var savedVp;
+    try { savedVp = localStorage.getItem(STORAGE_KEY); } catch (e) { savedVp = null; }
+    applyVp(savedVp || 'desktop');
+
+    var savedSurface;
+    try { savedSurface = localStorage.getItem(SURFACE_KEY); } catch (e) { savedSurface = null; }
+    applySurface(savedSurface || 'reader');
+
+    setPill(false);
+  })();
+</script>
+</body>
+</html>

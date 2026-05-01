@@ -24,6 +24,16 @@ and exploration-record link.
   viewport toggle in the review-controls bar driving a generic
   3-pane reflow across the three tiers via container queries.
   Adopted by per-screen wireframes at session 7+ retrofit.
+- [`navigation.md`](./navigation.md) — navigation paradigm: top-bar
+  shape per tier (phone slim single-row + reader-only chip strip;
+  tablet / desktop unchanged), cross-surface nav inheriting the
+  desktop model (Actions menu + rail Browse + peek-then-open),
+  stack-aware Return + settings-icon-scope inheritance from
+  principles.md, title-truncation rule on phone.
+- [`navigation.html`](./navigation.html) — interactive demo of the
+  chrome shape across viewport tiers and three representative
+  surfaces (reader, World sub-screen, story-list app-level), with
+  status-pill toggle.
 
 ## Sessions
 
@@ -45,10 +55,24 @@ reflects the current plan and updates as work progresses.
    vocabulary as it lands and session 7's per-screen retrofits
    reconcile each surface. Files: [`responsive.md`](./responsive.md),
    [`responsive.html`](./responsive.html).
-2. **Navigation paradigm** — pending. Whether the desktop top-bar
-   rule (per [`../../principles.md → Top-bar design rule`](../../principles.md#top-bar-design-rule))
-   carries to mobile or platform conventions take over per tier.
-   IA: which surfaces are tab-level vs nested. Route shapes.
+2. **Navigation paradigm** — landed 2026-05-01
+   ([exploration record](../../../explorations/2026-05-01-mobile-navigation.md)).
+   Phone gets a slim single-row top bar plus a reader-only chip
+   strip below (chapter / time / branch chips migrate vertically
+   when the row overcrowds at narrow widths); tablet inherits the
+   desktop chrome verbatim; desktop unchanged. **No new chrome
+   layer** — adversarial review rejected bottom tabs (wrong
+   category fit for chat-app analogs) and a left-side drawer
+   (redundant with the right rail's cross-surface role + iOS
+   swipe-back conflict). Cross-surface nav uses the desktop model
+   on every tier (Actions menu + rail Browse + peek-then-open).
+   Stack-aware Return and settings-icon-scope rules inherit from
+   principles.md unchanged; the empty-stack-confirm clause already
+   resolves the old-app library-back-exits pain. Title truncates
+   with ellipsis at narrow widths; tap reveals full title in a
+   transient popover (overflow-only, no persistency). Files:
+   [`navigation.md`](./navigation.md),
+   [`navigation.html`](./navigation.html).
 3. **Layout primitives** — pending. Container conventions, the
    pane / sheet / drawer / modal vocabulary, full-screen route vs
    overlay rules. The "compose from these" tokens for every
