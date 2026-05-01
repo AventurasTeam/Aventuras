@@ -395,12 +395,56 @@
     .crumb-primary { max-width: none; flex: 1; }
     /* gen-pill becomes icon-only */
     #gen-label { display: none; }
-    /* rail forced-collapsed — replicates body.rail-collapsed semantics */
-    .layout { grid-template-columns: 1fr 16px; }
-    aside.right { overflow: hidden; }
+    /* rail forced-collapsed to 28-px edge strip with a vertical "Browse" label
+       so the affordance reads as tappable. Strip-tap should open rail content
+       as a bottom Sheet per collapse.md (Sheet rendering is documented in
+       layout.md / reader-composer.md and not simulated in this wireframe). */
+    .layout { grid-template-columns: 1fr 28px; }
+    aside.right { overflow: hidden; cursor: pointer; position: relative; background: var(--bg); }
     aside.right > * { display: none; }
+    aside.right::after {
+      content: "Browse";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-90deg);
+      transform-origin: center;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--ink-muted);
+      white-space: nowrap;
+      pointer-events: none;
+    }
     /* surface the phone chip strip below the top-bar */
     .phone-chip-strip { display: flex; }
+    /* peek-overlay on phone is a bottom Sheet (tall ~95%) per layout.md mapping —
+       overrides the desktop right-anchored 440 px expression. Top edge of the
+       parent surface remains visible (~5% from the top) so the sheet reads as
+       overlay. */
+    .peek-overlay {
+      position: absolute;
+      top: 5vh;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      width: auto;
+      border-left: none;
+      border-top: 1px solid var(--line);
+      border-radius: 12px 12px 0 0;
+      box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
+    }
+    /* drag handle hint at the top edge of the bottom-anchored sheet */
+    .peek-overlay::before {
+      content: "";
+      display: block;
+      width: 36px;
+      height: 4px;
+      background: var(--line);
+      border-radius: 2px;
+      margin: 8px auto 0;
+      flex-shrink: 0;
+    }
   }
 
   /* Tablet tier — 640-1023 px container — desktop chrome density. */

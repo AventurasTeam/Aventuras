@@ -129,12 +129,16 @@
 <div class="reader-stage">
   <div class="entries-col">
 
+    <!-- This wireframe demos the rollback flow: × on any entry is the trigger.
+         Reader-default per-entry actions (edit / regen / branch) are shown in
+         reader-composer.html — they're omitted here so the rollback affordance
+         reads cleanly. -->
+
     <div class="entry">
       <span class="entry-num">45</span>
       <span class="entry-kind">user</span>
       <div class="entry-text">reach for the blade and step closer to the bar.</div>
       <div class="entry-actions">
-        <span class="entry-action" title="Edit">&#9998;</span>
         <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
       </div>
     </div>
@@ -144,9 +148,6 @@
       <span class="entry-kind">ai</span>
       <div class="entry-text">The bartender's eyes narrow as he sets the glass down. Behind him, a figure shifts in the shadowed corner.</div>
       <div class="entry-actions">
-        <span class="entry-action" title="Edit">&#9998;</span>
-        <span class="entry-action" title="Regenerate">&#8635;</span>
-        <span class="entry-action" title="Branch from this entry">&#9095;</span>
         <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
       </div>
     </div>
@@ -157,7 +158,6 @@
       <span class="entry-kind">user</span>
       <div class="entry-text">step closer to the corner table.</div>
       <div class="entry-actions">
-        <span class="entry-action" title="Edit">&#9998;</span>
         <span class="entry-action danger" id="trigger-x" title="Delete (rollback to before this entry)">&times;</span>
       </div>
     </div>
@@ -167,9 +167,6 @@
       <span class="entry-kind">ai</span>
       <div class="entry-text">A figure rises from the corner and signals the bouncer near the door. The room's volume drops a notch.</div>
       <div class="entry-actions">
-        <span class="entry-action" title="Edit">&#9998;</span>
-        <span class="entry-action" title="Regenerate">&#8635;</span>
-        <span class="entry-action" title="Branch from this entry">&#9095;</span>
         <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
       </div>
     </div>
@@ -182,7 +179,6 @@
       <span class="entry-kind">user</span>
       <div class="entry-text">check the back exit.</div>
       <div class="entry-actions">
-        <span class="entry-action" title="Edit">&#9998;</span>
         <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
       </div>
     </div>
@@ -192,9 +188,6 @@
       <span class="entry-kind">ai</span>
       <div class="entry-text">The narrow hallway smells of damp brick. Two crates block the rear door &mdash; recent, deliberate.</div>
       <div class="entry-actions">
-        <span class="entry-action" title="Edit">&#9998;</span>
-        <span class="entry-action" title="Regenerate">&#8635;</span>
-        <span class="entry-action" title="Branch from this entry">&#9095;</span>
         <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
       </div>
     </div>
