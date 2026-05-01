@@ -22,11 +22,11 @@ its status + exploration-record link.
   pattern, switching mechanism (CSS vars at root + NativeWind
   runtime), persistence in `app_settings.appearance`, accent
   override (opt-in), demo reference.
-- [`theming.html`](./theming.html) — interactive demo: theme
-  swap with three placeholder palettes (Default Light, Default
-  Dark, Parchment). Replaces visual identity with a working
-  architecture proof; specific palettes are not the curated
-  gallery.
+- [`theming.html`](./theming.html) — interactive demo: live theme
+  swap across the curated 10-theme gallery (per
+  [`themes.md`](./themes.md)). Proves both the architecture
+  (runtime CSS-var cascade) and the gallery (visible swatches
+  re-render on swap).
 - [`color.md`](./color.md) — color contract: 25-slot inventory,
   per-pair WCAG contrast targets, focus / disabled / hover state
   recipes, accent-derivation algorithm, recently-classified
@@ -46,6 +46,14 @@ its status + exploration-record link.
 - [`motion.md`](./motion.md) — motion contract: three duration
   tokens + two easing tokens, reduced-motion behavior with
   transform-vs-opacity distinction, per-use-site guidance.
+- [`themes.md`](./themes.md) — curated theme gallery: 10 palettes
+  (3 light + 7 dark) spanning two accent-overridable neutral
+  defaults, the Parchment writing-app archetype, Catppuccin
+  Latte / Mocha, Tokyo Night, Royal, Cyberpunk (color-only
+  port), Fallen Down (monospace-prose port), and Aventuras
+  Signature (icon-keyed brand theme). First-launch default,
+  authoring conventions, full per-theme slot values + audit
+  expectations.
 
 ## Sessions
 
@@ -78,8 +86,9 @@ contract.
    threshold auto-flip, RGB linear mix toward `--bg-base` for
    selection. Recently-classified one-slot model with `0.5`
    fading-tier alpha. Dev-only `pnpm themes:audit` utility for
-   per-theme contrast + derivation reporting; CI gate parked
-   until session 6 lands real palette data. File:
+   per-theme contrast + derivation reporting; CI gate followup
+   parked at session 2, gating-ripe at session 6 once the gallery
+   data informed the exempt-list shape. File:
    [`color.md`](./color.md).
 3. **Typography** — landed 2026-05-01
    ([exploration record](../../explorations/2026-05-01-typography.md)).
@@ -135,15 +144,24 @@ contract.
    motion to 1 ms, keep opacity transitions at fast duration.
    Files: [`iconography.md`](./iconography.md),
    [`motion.md`](./motion.md).
-6. **Curated theme palettes** — pending. Author each theme in the
-   v1 curated gallery (5–10+ entries, mode-locked per
-   [`theming.md → Theme data shape`](./theming.md#theme-data-shape)).
-   Pick `Default Light` and `Default Dark` (the
-   [accent-overridable](./theming.md#accent-override-opt-in) base
-   pair) and one or more opinionated themes (Parchment / Catppuccin
-   variants / Tokyo Night / etc.). Default `themeId` for first
-   launch lands here. Lands as `themes.md` (or `themes/` subdir
-   if it fans out further).
+6. **Curated theme palettes** — landed 2026-05-01
+   ([exploration record](../../explorations/2026-05-01-curated-theme-palettes.md)).
+   Final gallery: **10 themes, 3 light + 7 dark.** Two accent-
+   overridable neutral defaults (`default-light` / `default-dark`)
+   plus eight opinionated palettes — Parchment (warm-paper
+   writing-app archetype), Catppuccin Latte + Mocha (canonical
+   established pastel pair), Tokyo Night (canonical established
+   cool-saturated dark), Royal (deep purple + gold fantasy-coded),
+   Cyberpunk (neon palette, color-only port — animated CRT effects
+   dropped per the flat depth metaphor), Fallen Down (pure-black +
+   neon yellow + monospace prose; bundled VT323 font dropped),
+   and Aventuras Signature (deep navy + warm cream, keyed to the
+   app icon — two-color identity, paired inverse with Parchment).
+   First-launch default `themeId: 'default-light'`. Per-theme
+   slot values + audit expectations canonical at
+   [`themes.md`](./themes.md). Theme-audit CI gate followup
+   becomes ripe with this session's palette data; gate's own
+   design pass follows.
 
 After session 6, foundations is feature-complete for v1. Component
 implementation begins consuming the contract; per-pattern visual
@@ -157,5 +175,5 @@ wireframes are monochrome by rule because pixel-fidelity decisions
 defer to visual identity. Foundations wireframes are the
 **explicit exception** — `theming.html` and any future
 foundations wireframe demonstrate palette swap and therefore
-render real (placeholder) palettes. The exemption applies only to
+render real curated palettes. The exemption applies only to
 this directory; `screens/` wireframes stay monochrome.

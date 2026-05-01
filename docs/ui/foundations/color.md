@@ -7,9 +7,10 @@ slots take — final inventory, per-pair contrast targets, state
 treatments, accent-derivation algorithm, pattern-driven slots, and
 the dev-only audit utility.
 
-The interactive demo at [`theming.html`](./theming.html) exercises
-the slot list at session-1 fidelity; real curated palettes (with
-audit-passing values) land at session 6.
+The interactive demo at [`theming.html`](./theming.html) cycles
+the curated gallery's 10 palettes (per
+[`themes.md`](./themes.md)); each palette honors the slot
+inventory and contrast targets this file commits.
 
 ## Final slot inventory
 
@@ -422,8 +423,9 @@ per theme; **exit code 0 even on fails** (no CI gate).
 
 ### Out of scope
 
-- **CI integration.** Parked until session 6 + real palette data
-  informs the gate's shape.
+- **CI integration.** Pending its own design pass — session 6's
+  palette data is in hand and the [theme-audit CI gate followup](../../followups.md#theme-audit-ci-gate)
+  becomes ripe with that data informing the exempt-list shape.
 - **Multi-theme cross-check.** No "are these two themes
   consistent" check — themes are independent palettes.
 - **Visual regression.** Not the audit utility's job.

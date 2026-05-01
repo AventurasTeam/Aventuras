@@ -81,92 +81,278 @@
 
   /* =========================================================
      Theme tokens — semantic vars populated per active theme.
+     Values mirror the canonical curated gallery in themes.md.
      The whole point of this demo: surfaces below consume these,
      never literal colors.
      ========================================================= */
-  :root {
-    /* Default Light (default theme) */
-    --bg-base: #ffffff;
-    --bg-raised: #f8f8f8;
-    --bg-sunken: #f0f0f0;
-    --bg-overlay: #ffffff;
-    --fg-primary: #1a1a1a;
-    --fg-secondary: #555555;
-    --fg-muted: #888888;
-    --fg-on-accent: #ffffff;
-    --accent: #4a5b8e;
-    --accent-hover: #3a4978;
-    --accent-fg: var(--fg-on-accent);
-    --success: #2d7a4f;
-    --success-fg: #ffffff;
-    --warning: #b87a1a;
-    --warning-fg: #ffffff;
-    --danger: #b83a3a;
-    --danger-fg: #ffffff;
-    --info: #3a6db8;
-    --info-fg: #ffffff;
-    --border: #d8d8d8;
-    --border-strong: #a0a0a0;
-    --focus-ring: #4a5b8e;
-    --selection-bg: #c8d3eb;
-    --font-reading: Georgia, "Times New Roman", serif;
-    --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
-    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-    /* Component-internal padding — single values (density toggle cut at session 4) */
+  /* Structural tokens — always-on, theme-independent. */
+  :root {
     --row-pad-y: 10px;
     --row-pad-x: 12px;
     --input-pad-y: 8px;
     --input-pad-x: 12px;
     --button-pad-y: 8px;
     --button-pad-x: 14px;
+    --gap-sm: 8px;
+    --gap-lg: 24px;
+
+    --font-reading: Charter, "Iowan Old Style", "Source Serif Pro", Georgia, "Cambria", "Liberation Serif", "Noto Serif", serif;
+    --font-ui: system-ui, -apple-system, "Segoe UI", "Roboto", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   }
 
+  /* 1. Default Light — accent-overridable, default first-launch */
+  :root,
+  [data-theme="default-light"] {
+    --bg-base: #fdfdfd;
+    --bg-raised: #ffffff;
+    --bg-sunken: #f4f4f5;
+    --bg-overlay: #ffffff;
+    --bg-disabled: #f5f5f5;
+    --fg-primary: #0a0a0a;
+    --fg-secondary: #525252;
+    --fg-muted: #71717a;
+    --fg-disabled: #a1a1aa;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --accent-fg: #ffffff;
+    --success: #16a34a; --success-fg: #ffffff;
+    --warning: #d97706; --warning-fg: #ffffff;
+    --danger:  #dc2626; --danger-fg:  #ffffff;
+    --info:    #0284c7; --info-fg:    #ffffff;
+    --border:        #e4e4e7;
+    --border-strong: #a1a1aa;
+    --focus-ring:   #3b82f6;
+    --selection-bg: #dbeafe;
+    --recently-classified-bg: #fef3c7;
+  }
+
+  /* 2. Default Dark — accent-overridable */
   [data-theme="default-dark"] {
-    --bg-base: #1a1a1a;
-    --bg-raised: #252525;
-    --bg-sunken: #0f0f0f;
-    --bg-overlay: #2a2a2a;
-    --fg-primary: #e8e8e8;
-    --fg-secondary: #b0b0b0;
-    --fg-muted: #707070;
-    --fg-on-accent: #1a1a1a;
-    --accent: #8aa0d8;
-    --accent-hover: #9ab0e8;
-    --success: #6fbe8f;
-    --success-fg: #0f1a14;
-    --warning: #e8b05a;
-    --warning-fg: #1a1408;
-    --danger: #e87a7a;
-    --danger-fg: #1a0f0f;
-    --info: #7aabe8;
-    --info-fg: #0f141a;
-    --border: #3a3a3a;
-    --border-strong: #555555;
-    --focus-ring: #8aa0d8;
-    --selection-bg: #3a4978;
+    --bg-base: #0e0f10;
+    --bg-raised: #18191b;
+    --bg-sunken: #08090a;
+    --bg-overlay: #1c1d1f;
+    --bg-disabled: #1c1d1f;
+    --fg-primary: #f5f5f5;
+    --fg-secondary: #a1a1aa;
+    --fg-muted: #71717a;
+    --fg-disabled: #52525b;
+    --accent: #3b82f6;
+    --accent-hover: #60a5fa;
+    --accent-fg: #ffffff;
+    --success: #22c55e; --success-fg: #052e16;
+    --warning: #f59e0b; --warning-fg: #422006;
+    --danger:  #ef4444; --danger-fg:  #450a0a;
+    --info:    #38bdf8; --info-fg:    #0c1d3a;
+    --border:        #27272a;
+    --border-strong: #3f3f46;
+    --focus-ring:   #3b82f6;
+    --selection-bg: #1e3a8a;
+    --recently-classified-bg: #422006;
   }
 
+  /* 3. Parchment */
   [data-theme="parchment"] {
-    --bg-base: #f4ecd8;
-    --bg-raised: #faf3e0;
-    --bg-sunken: #ebe2c8;
-    --bg-overlay: #faf3e0;
-    --fg-primary: #3a2a1a;
-    --fg-secondary: #6a4a2a;
-    --fg-muted: #8a7a5a;
-    --fg-on-accent: #faf3e0;
-    --accent: #8a4a2a;
-    --accent-hover: #7a3a1a;
-    --success: #5a7a2a;
-    --warning: #aa6a1a;
-    --danger: #9a2a2a;
-    --info: #4a5a7a;
-    --border: #c8b890;
-    --border-strong: #a89870;
-    --focus-ring: #8a4a2a;
-    --selection-bg: #ebd8a8;
-    --font-reading: "Lora", Georgia, "Iowan Old Style", serif;
+    --bg-base: #f5e6c4;
+    --bg-raised: #f9ecd2;
+    --bg-sunken: #ecdcb4;
+    --bg-overlay: #fbf2dd;
+    --bg-disabled: #e8d8b0;
+    --fg-primary: #3a2818;
+    --fg-secondary: #5a3e2a;
+    --fg-muted: #8b6f55;
+    --fg-disabled: #b89876;
+    --accent: #8b3a14;
+    --accent-hover: #6f2e0f;
+    --accent-fg: #f5e6c4;
+    --success: #4a6b2e; --success-fg: #f5e6c4;
+    --warning: #b8560e; --warning-fg: #f5e6c4;
+    --danger:  #8b1d1d; --danger-fg:  #f5e6c4;
+    --info:    #1e5e7e; --info-fg:    #f5e6c4;
+    --border:        #d4c099;
+    --border-strong: #b89876;
+    --focus-ring:   #8b3a14;
+    --selection-bg: #e8d8a8;
+    --recently-classified-bg: #f0d68a;
+    --font-reading: "Charter", "Iowan Old Style", "Source Serif Pro", Georgia, "Cambria", "Liberation Serif", "Noto Serif", serif;
+  }
+
+  /* 4. Catppuccin Latte */
+  [data-theme="catppuccin-latte"] {
+    --bg-base: #eff1f5;
+    --bg-raised: #e6e9ef;
+    --bg-sunken: #ccd0da;
+    --bg-overlay: #dce0e8;
+    --bg-disabled: #ccd0da;
+    --fg-primary: #4c4f69;
+    --fg-secondary: #6c6f85;
+    --fg-muted: #8c8fa1;
+    --fg-disabled: #9ca0b0;
+    --accent: #1e66f5;
+    --accent-hover: #1852c4;
+    --accent-fg: #eff1f5;
+    --success: #40a02b; --success-fg: #eff1f5;
+    --warning: #df8e1d; --warning-fg: #eff1f5;
+    --danger:  #d20f39; --danger-fg:  #eff1f5;
+    --info:    #04a5e5; --info-fg:    #eff1f5;
+    --border:        #bcc0cc;
+    --border-strong: #acb0be;
+    --focus-ring:   #1e66f5;
+    --selection-bg: #b9cbf7;
+    --recently-classified-bg: #fff5d6;
+  }
+
+  /* 5. Catppuccin Mocha — Mauve accent */
+  [data-theme="catppuccin-mocha"] {
+    --bg-base: #1e1e2e;
+    --bg-raised: #313244;
+    --bg-sunken: #181825;
+    --bg-overlay: #45475a;
+    --bg-disabled: #313244;
+    --fg-primary: #cdd6f4;
+    --fg-secondary: #bac2de;
+    --fg-muted: #a6adc8;
+    --fg-disabled: #7f849c;
+    --accent: #cba6f7;
+    --accent-hover: #d8b8ff;
+    --accent-fg: #1e1e2e;
+    --success: #a6e3a1; --success-fg: #1e1e2e;
+    --warning: #f9e2af; --warning-fg: #1e1e2e;
+    --danger:  #f38ba8; --danger-fg:  #1e1e2e;
+    --info:    #89dceb; --info-fg:    #1e1e2e;
+    --border:        #45475a;
+    --border-strong: #585b70;
+    --focus-ring:   #cba6f7;
+    --selection-bg: #45475a;
+    --recently-classified-bg: #4a3d2a;
+  }
+
+  /* 6. Tokyo Night */
+  [data-theme="tokyo-night"] {
+    --bg-base: #1a1b26;
+    --bg-raised: #24283b;
+    --bg-sunken: #16161e;
+    --bg-overlay: #2e3247;
+    --bg-disabled: #24283b;
+    --fg-primary: #c0caf5;
+    --fg-secondary: #a9b1d6;
+    --fg-muted: #565f89;
+    --fg-disabled: #3b415a;
+    --accent: #7aa2f7;
+    --accent-hover: #9eb9f8;
+    --accent-fg: #1a1b26;
+    --success: #9ece6a; --success-fg: #1a1b26;
+    --warning: #e0af68; --warning-fg: #1a1b26;
+    --danger:  #f7768e; --danger-fg:  #1a1b26;
+    --info:    #7dcfff; --info-fg:    #1a1b26;
+    --border:        #3b415a;
+    --border-strong: #565f89;
+    --focus-ring:   #7aa2f7;
+    --selection-bg: #3d4775;
+    --recently-classified-bg: #3b2e4a;
+  }
+
+  /* 7. Royal */
+  [data-theme="royal"] {
+    --bg-base: #14081f;
+    --bg-raised: #1f0e2e;
+    --bg-sunken: #0a0314;
+    --bg-overlay: #2a1742;
+    --bg-disabled: #1f0e2e;
+    --fg-primary: #f3e8ff;
+    --fg-secondary: #d8b4fe;
+    --fg-muted: #a78bfa;
+    --fg-disabled: #6b46a8;
+    --accent: #fbbf24;
+    --accent-hover: #f59e0b;
+    --accent-fg: #14081f;
+    --success: #84cc16; --success-fg: #14081f;
+    --warning: #f97316; --warning-fg: #14081f;
+    --danger:  #ec4899; --danger-fg:  #14081f;
+    --info:    #a78bfa; --info-fg:    #14081f;
+    --border:        #3d2057;
+    --border-strong: #5b3681;
+    --focus-ring:   #fbbf24;
+    --selection-bg: #4b2c75;
+    --recently-classified-bg: #4a3a0a;
+  }
+
+  /* 8. Cyberpunk — color-only port */
+  [data-theme="cyberpunk"] {
+    --bg-base: #0d1326;
+    --bg-raised: #142036;
+    --bg-sunken: #0b1426;
+    --bg-overlay: #1a2a47;
+    --bg-disabled: #142036;
+    --fg-primary: #e0f7fa;
+    --fg-secondary: #94a3b8;
+    --fg-muted: #64748b;
+    --fg-disabled: #475569;
+    --accent: #00f0ff;
+    --accent-hover: #5eead4;
+    --accent-fg: #0a0a0a;
+    --success: #00ff88; --success-fg: #0a0a0a;
+    --warning: #faff00; --warning-fg: #0a0a0a;
+    --danger:  #ff00ff; --danger-fg:  #0a0a0a;
+    --info:    #00f0ff; --info-fg:    #0a0a0a;
+    --border:        #1a2a47;
+    --border-strong: #2a4068;
+    --focus-ring:   #faff00;
+    --selection-bg: #1a4d5e;
+    --recently-classified-bg: #2a4868;
+  }
+
+  /* 9. Fallen Down — monospace prose */
+  [data-theme="fallen-down"] {
+    --bg-base: #000000;
+    --bg-raised: #0a0a0a;
+    --bg-sunken: #000000;
+    --bg-overlay: #1a1a1a;
+    --bg-disabled: #0a0a0a;
+    --fg-primary: #ffffff;
+    --fg-secondary: #c0c0c0;
+    --fg-muted: #808080;
+    --fg-disabled: #404040;
+    --accent: #ffff00;
+    --accent-hover: #ffff80;
+    --accent-fg: #000000;
+    --success: #00ff00; --success-fg: #000000;
+    --warning: #ffa500; --warning-fg: #000000;
+    --danger:  #ff0000; --danger-fg:  #000000;
+    --info:    #00ffff; --info-fg:    #000000;
+    --border:        #404040;
+    --border-strong: #ffffff;
+    --focus-ring:   #ffff00;
+    --selection-bg: #4a4a00;
+    --recently-classified-bg: #1a1a00;
+    --font-reading: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+
+  /* 10. Aventuras Signature — icon-keyed brand theme */
+  [data-theme="aventuras-signature"] {
+    --bg-base: #0e2240;
+    --bg-raised: #152a4a;
+    --bg-sunken: #091830;
+    --bg-overlay: #1a3354;
+    --bg-disabled: #142a44;
+    --fg-primary: #d4c9a8;
+    --fg-secondary: #b8ad8c;
+    --fg-muted: #8a8068;
+    --fg-disabled: #5a5444;
+    --accent: #d4c9a8;
+    --accent-hover: #c0b594;
+    --accent-fg: #0e2240;
+    --success: #a3b88c; --success-fg: #0e2240;
+    --warning: #d4a85a; --warning-fg: #0e2240;
+    --danger:  #d49494; --danger-fg:  #0e2240;
+    --info:    #94b8d4; --info-fg:    #0e2240;
+    --border:        #2a3d5e;
+    --border-strong: #3d527a;
+    --focus-ring:   #d4c9a8;
+    --selection-bg: #2a3d5e;
+    --recently-classified-bg: #2a4068;
   }
 
   /* =========================================================
@@ -426,18 +612,31 @@
 <body>
 
 <div class="screen-label">
-  <strong>Foundations</strong> · Theming demo (placeholder palettes — session 6 authors the real gallery)
+  <strong>Foundations</strong> · Theming demo · curated 10-theme gallery
 </div>
 
 <div class="review-bar">
   <span class="rb-label">Theme</span>
   <select class="rb-select" id="theme-select">
-    <option value="default-light">Default Light</option>
-    <option value="default-dark">Default Dark</option>
-    <option value="parchment">Parchment</option>
+    <optgroup label="Default (accent-overridable)">
+      <option value="default-light">Default Light</option>
+      <option value="default-dark">Default Dark</option>
+    </optgroup>
+    <optgroup label="Original">
+      <option value="parchment">Parchment</option>
+      <option value="royal">Royal</option>
+      <option value="cyberpunk">Cyberpunk</option>
+      <option value="fallen-down">Fallen Down</option>
+      <option value="aventuras-signature">Aventuras Signature</option>
+    </optgroup>
+    <optgroup label="Established">
+      <option value="catppuccin-latte">Catppuccin Latte</option>
+      <option value="catppuccin-mocha">Catppuccin Mocha</option>
+      <option value="tokyo-night">Tokyo Night</option>
+    </optgroup>
   </select>
 
-  <span class="rb-note">Live CSS-var swap. Try selecting prose to see <code>--selection-bg</code>.</span>
+  <span class="rb-note">Live CSS-var swap across all 10 curated palettes. Try selecting prose to see <code>--selection-bg</code>.</span>
 </div>
 
 <div class="canvas">
@@ -544,10 +743,11 @@
       <div class="token-chip"><span class="swatch" style="background: var(--bg-raised);"></span> --bg-raised</div>
       <div class="token-chip"><span class="swatch" style="background: var(--bg-sunken);"></span> --bg-sunken</div>
       <div class="token-chip"><span class="swatch" style="background: var(--bg-overlay);"></span> --bg-overlay</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--bg-disabled);"></span> --bg-disabled</div>
       <div class="token-chip"><span class="swatch" style="background: var(--fg-primary);"></span> --fg-primary</div>
       <div class="token-chip"><span class="swatch" style="background: var(--fg-secondary);"></span> --fg-secondary</div>
       <div class="token-chip"><span class="swatch" style="background: var(--fg-muted);"></span> --fg-muted</div>
-      <div class="token-chip"><span class="swatch" style="background: var(--fg-on-accent);"></span> --fg-on-accent</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--fg-disabled);"></span> --fg-disabled</div>
       <div class="token-chip"><span class="swatch" style="background: var(--accent);"></span> --accent</div>
       <div class="token-chip"><span class="swatch" style="background: var(--accent-hover);"></span> --accent-hover</div>
       <div class="token-chip"><span class="swatch" style="background: var(--accent-fg);"></span> --accent-fg</div>
@@ -559,6 +759,7 @@
       <div class="token-chip"><span class="swatch" style="background: var(--border-strong);"></span> --border-strong</div>
       <div class="token-chip"><span class="swatch" style="background: var(--focus-ring);"></span> --focus-ring</div>
       <div class="token-chip"><span class="swatch" style="background: var(--selection-bg);"></span> --selection-bg</div>
+      <div class="token-chip"><span class="swatch" style="background: var(--recently-classified-bg);"></span> --recently-classified-bg</div>
     </div>
   </div>
 
@@ -571,17 +772,20 @@
 
   // Theme mode declarations — mirrors what each Theme module declares.
   const themeModes = {
-    'default-light': 'light',
-    'default-dark': 'dark',
-    'parchment': 'light',
+    'default-light':       'light',
+    'default-dark':        'dark',
+    'parchment':           'light',
+    'catppuccin-latte':    'light',
+    'catppuccin-mocha':    'dark',
+    'tokyo-night':         'dark',
+    'royal':               'dark',
+    'cyberpunk':           'dark',
+    'fallen-down':         'dark',
+    'aventuras-signature': 'dark',
   };
 
   function applyTheme(themeId) {
-    if (themeId === 'default-light') {
-      root.removeAttribute('data-theme');
-    } else {
-      root.setAttribute('data-theme', themeId);
-    }
+    root.setAttribute('data-theme', themeId);
     const mode = themeModes[themeId] || 'light';
     root.setAttribute('data-theme-mode', mode);
     modeIndicator.textContent = `data-theme-mode = "${mode}"`;

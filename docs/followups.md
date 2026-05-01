@@ -282,12 +282,13 @@ Blocks consumer code; doesn't block any other design pass.
 ships `pnpm themes:audit` as a dev-only command — runs over the
 theme registry, prints pass/fail/warn per pair per theme, exits 0
 even on failures (never blocks). Wiring it into CI (or
-`pnpm test`) as a gate is **deferred until session 6's curated
-palettes land.** Reason: opinionated themes (Catppuccin Latte,
-Tokyo Night, etc.) fail AAA on body prose by design but are still
-desirable in the gallery — gating before we know which themes
-legitimately exempt vs which need fixing risks blocking the
-palette work the gate is supposed to support.
+`pnpm test`) as a gate is **ripe for design** now that session 6
+landed the curated gallery (per
+[`ui/foundations/themes.md`](./ui/foundations/themes.md)). Real
+palette data informs the exempt-list shape: Catppuccin Latte and
+Catppuccin Mocha fail or sit close to AAA on body prose by
+canonical design and need to be marked exempt before the gate
+fires; other themes clear AAA with margin and don't.
 
 Decisions needed at gate-wiring time:
 
@@ -301,8 +302,8 @@ Decisions needed at gate-wiring time:
 - Whether the gate runs in pre-commit, in `pnpm test`, or as a
   dedicated CI job.
 
-Lands when curated gallery (session 6) is complete and real
-palette data informs the gate's shape.
+Lands at the gate's own design pass — session 6's palette data
+is in hand, ready to inform the exempt-list shape.
 
 ### Storybook design-rules pattern setup
 

@@ -7,8 +7,8 @@ theme reaches a rendered surface, where the user's selection
 lives.
 
 **Wireframe:** [`theming.html`](./theming.html) — interactive
-demo with three placeholder palettes (Default Light, Default
-Dark, Parchment).
+demo cycling the curated gallery's 10 themes (per
+[`themes.md`](./themes.md)).
 
 ## Theme data shape
 
@@ -71,12 +71,16 @@ UI language.
 The two surfaces map intuitively:
 
 - **Established-system themes** — Catppuccin Latte, Catppuccin
-  Mocha, Tokyo Night, Solarized Dark, Gruvbox, Nord — omit
-  `nameKey`. Their identity is the proper noun; localization
-  would damage recognition.
+  Mocha, Tokyo Night, plus opinionated originals with proper-noun
+  identity (Royal, Cyberpunk, Fallen Down) — omit `nameKey`.
+  Their identity is the name; localization would damage
+  recognition.
 - **Descriptive themes** — Default Light, Default Dark, Parchment,
-  Slate Dark — declare `nameKey` (e.g.
+  Aventuras Signature — declare `nameKey` (e.g.
   `'foundations.themes.defaultLight'`) so i18next can localize.
+
+The full `nameKey` policy across the curated gallery is canonical
+in [`themes.md → Gallery roster`](./themes.md#gallery-roster).
 
 ## Switching mechanism
 
@@ -122,10 +126,13 @@ write through immediately.
 
 ### First-launch defaults
 
-Default `themeId` is one of the curated gallery's entries (TBD at
-session 6). Default `readerFontScale` is `'md'` (multiplier
-`1.0`). The implementation seeds `appearance` to these defaults
-on first boot or after a wipe.
+Default `themeId` is `'default-light'` (per
+[`themes.md → First-launch default`](./themes.md#first-launch-default)).
+Safest cross-platform first impression — light theme on first
+boot doesn't presume a preference the user hasn't expressed.
+Default `readerFontScale` is `'md'` (multiplier `1.0`). The
+implementation seeds `appearance` to these defaults on first
+boot or after a wipe.
 
 ### Backup / restore + invalid `themeId`
 
@@ -198,19 +205,18 @@ currently being honored.
 
 [`theming.html`](./theming.html) renders the contract end-to-end:
 
-- Review-controls bar with theme dropdown.
-- Three placeholder palettes (Default Light, Default Dark,
-  Parchment) — clearly temporary; the curated gallery lands at
-  session 6.
+- Review-controls bar with theme dropdown listing all 10
+  curated themes per [`themes.md`](./themes.md).
 - Sample surfaces consuming token slots: body prose paragraph,
   button row (primary / secondary / disabled + focus ring), input
   field, list rows with accent indicator, system-entry chrome
   strip, semantic-state pills.
 - Visible token snapshot grid — swatches re-render on theme swap,
-  proving the runtime cascade is live.
+  proving the runtime cascade is live across all curated palettes.
 
-The demo's job is **proving the architecture**, not proving any
-specific palette. Vanilla JS, no framework, no build — same
-conventions as the rest of the project's wireframes (with the
-[foundations wireframe-exemption](./README.md#wireframe-convention-exemption)
+The demo proves both the **architecture** (runtime swap, slot
+cascade, derivation) and the **concrete gallery** (the 10
+palettes themes.md commits). Vanilla JS, no framework, no build —
+same conventions as the rest of the project's wireframes (with
+the [foundations wireframe-exemption](./README.md#wireframe-convention-exemption)
 on monochrome).

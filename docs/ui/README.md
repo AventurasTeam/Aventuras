@@ -24,8 +24,9 @@ rationale, and decisions live alongside.
 - **[foundations/](./foundations/README.md)** — visual identity
   contract: token slots (color, font-family, structural,
   user-orthogonal), theme data shape, switching mechanism,
-  persistence, accent-override opt-in. Multi-session pass; sessions
-  1–4 landed. Tokens consumed by patterns and screens alike.
+  persistence, accent-override opt-in, curated 10-theme gallery.
+  Multi-session pass — feature-complete for v1 across sessions
+  1–6. Tokens consumed by patterns and screens alike.
 - **[../followups.md](../followups.md)** — active outstanding
   items (current milestone) across data-model, architecture, and
   UX. See [`../parked.md`](../parked.md) for items deferred beyond
