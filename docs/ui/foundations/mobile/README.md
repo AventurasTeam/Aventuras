@@ -263,7 +263,7 @@ reflects the current plan and updates as work progresses.
      **Substantive substrate touch**: detail-pane tab navigation
      reroutes through the existing Select primitive when the
      desktop Tab strip overflows — Tab strip on desktop always
-     and tablet when count ≤ 4; Select segment on phone when
+     and tablet when count ≤ 3; Select segment on phone when
      count ≤ 2; Select dropdown otherwise (Sheet short on phone,
      anchored Popover on tablet). [`forms.md`](../../patterns/forms.md#select-primitive)
      amended to retire the dangling "responsive pass finalizes"

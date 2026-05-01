@@ -287,7 +287,10 @@ inherit unchanged.
   mobile cardinality cutoff per
   [`patterns/forms.md → Select primitive`](../../patterns/forms.md#select-primitive)).
   Happenings (4 tabs: Overview / Involvements / Awareness / History)
-  → Tab strip on desktop and tablet, Select dropdown on phone. The
+  → Tab strip on desktop, Select dropdown on tablet and phone (4 > 3,
+  the tablet cardinality cutoff — wireframe review showed Involvements
+  / Awareness count chips wrapping vertically at iPad portrait detail
+  pane width). The
   consumer's decision is binary (Tab strip vs Select primitive);
   Select's cascade picks segment vs dropdown.
 - **List-pane filter chips** (Threads: All / Active / Pending /

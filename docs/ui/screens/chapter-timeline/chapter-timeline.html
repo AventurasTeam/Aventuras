@@ -113,6 +113,7 @@
 
   /* per-card actions */
   .card-actions { display: flex; gap: 8px; align-items: center; padding-top: 6px; border-top: 1px dashed var(--line-soft); margin-top: 14px; }
+  .card-action-more { display: none; }
   .card-action { padding: 5px 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); color: var(--ink); font-size: 12px; cursor: pointer; font-family: inherit; }
   .card-action:hover { background: var(--bg); border-color: var(--ink-muted); }
   .card-action.danger { color: var(--warn); border-color: var(--line-soft); margin-left: auto; }
@@ -215,8 +216,23 @@
 
     .card-head { padding: 10px 12px; }
     .card-body { padding: 12px; }
-    .card-actions { flex-wrap: wrap; gap: 6px; }
-    .card-actions .btn { flex: 1 1 auto; min-width: 0; }
+    /* Phone tier: keep Jump as the primary affordance, tuck Regenerate +
+       Delete behind a ⋯ overflow trigger that opens a Sheet (short) per
+       layout.md → Surface bindings. Avoids the 2-row wrap that read as
+       cluttered and gave Delete the same weight as Jump. */
+    .card-actions { gap: 8px; }
+    .card-action-jump { flex: 1 1 auto; min-width: 0; }
+    .card-action-regen, .card-action-delete { display: none; }
+    .card-action-more {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 32px;
+      padding: 0;
+      flex-shrink: 0;
+      letter-spacing: 0.1em;
+    }
 
     /* in-card save bar tightens horizontally */
     .save-bar { padding: 10px 12px; flex-wrap: wrap; gap: 6px; }
@@ -370,9 +386,14 @@
         </div>
 
         <div class="card-actions">
-          <button class="card-action">Jump to chapter &rarr;</button>
-          <button class="card-action">Regenerate summary</button>
-          <button class="card-action danger">Delete&hellip;</button>
+          <button class="card-action card-action-jump">Jump to chapter &rarr;</button>
+          <button class="card-action card-action-regen">Regenerate summary</button>
+          <button class="card-action danger card-action-delete">Delete&hellip;</button>
+          <!-- Phone-tier overflow trigger — primary action (Jump) stays
+               full-label; Regenerate + Delete tuck behind ⋯ which opens
+               a Sheet (short) per layout.md → Surface bindings. Visual
+               placeholder; sheet content is the two destructive actions. -->
+          <button class="card-action card-action-more" title="More actions">&middot;&middot;&middot;</button>
         </div>
 
         <div class="card-save-bar">

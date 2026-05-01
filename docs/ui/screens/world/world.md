@@ -527,7 +527,7 @@ overflows.
   [`mobile/touch.md`](../../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text)).
 - **Detail-pane tab navigation reroutes on narrow widths.** Tab
   strip is the desktop primitive; on tablet detail panes that
-  can't fit the full strip (count > 4 — character at 8, location /
+  can't fit the full strip (count > 3 — character at 8, location /
   item / faction at 7), and on phone always, the tab list hands
   off to the Select primitive's render-mode cascade per
   [`patterns/forms.md → Select primitive`](../../patterns/forms.md#select-primitive).

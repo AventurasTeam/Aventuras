@@ -305,13 +305,14 @@
      re-routes via the Select primitive's dropdown render mode
      (visual swap from <nav.tabs> to .tab-picker chip).
      Tablet tier (640-1023 px) keeps the 2-pane layout but the
-     tab strip overflows on entity kinds with > 4 tabs (character
+     tab strip overflows on entity kinds with > 3 tabs (character
      8, location/item/faction 7) — same Select-primitive swap
      fires there, just rendered as anchored Popover not Sheet.
-     Threshold of 4 set by user wireframe review (5 left
-     happenings borderline; 4 fits cleanly).
+     Threshold tightened across two review passes (5 → 4 → 3) as
+     count chips on tabs surfaced overflow that raw label widths
+     missed.
      ========================================================= */
-  /* Tablet + phone: tab strip swap when kind has > 4 tabs.
+  /* Tablet + phone: tab strip swap when kind has > 3 tabs.
      Demo's `data-kind="entity"` (character) has 8 tabs → swap.
      Demo's `data-kind="lore"` has 3 tabs → keep strip on tablet. */
   @container (max-width: 1023px) {
@@ -321,6 +322,14 @@
     .history-controls { flex-wrap: wrap; }
     .history-search { flex: 1 1 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .history-op-filter, .history-sort { flex-wrap: wrap; }
+    /* History row compression — change column gets ellipsis */
+    .history-row { grid-template-columns: 110px 70px 1fr; gap: 8px; }
+    .history-row > *:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Overview portrait stacks below content on tablet+phone (220 px
+       floating right eats too much detail-pane width on narrow tiers).
+       Phone shrinks further to 100 px, tablet keeps 140 px. */
+    .overview-row { flex-direction: column !important; gap: 14px !important; }
+    .overview-row .portrait-slot { width: 140px !important; height: 140px !important; align-self: flex-start; }
   }
   @container (max-width: 639px) {
     /* slim top-bar */
@@ -346,11 +355,16 @@
        to the input. 180 → 120 px frees up real estate for the field content. */
     .field-row { grid-template-columns: 120px 1fr; gap: 10px; }
 
-    /* Overview portrait slot: stack below content on phone instead of
-       eating ~56% of horizontal width. Matches peek-panel shape:
-       compact header + content first, portrait inline-smaller below. */
-    .overview-row { flex-direction: column !important; gap: 14px !important; }
-    .overview-row .portrait-slot { width: 100px !important; height: 100px !important; align-self: flex-start; }
+    /* Overview portrait shrinks further on phone (tablet keeps 140 px). */
+    .overview-row .portrait-slot { width: 100px !important; height: 100px !important; }
+
+    /* History row stacks vertically — when / op / change each on its
+       own line. Tablet's compression rule already applies; phone
+       overrides the grid into a flex column for full-width change text. */
+    .history-row { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; }
+    .history-row > *:last-child { white-space: normal; overflow: visible; text-overflow: clip; }
+    .history-ts { font-size: 10px; }
+    .history-op { align-self: flex-start; }
 
     /* JSON overlay drawer reflows to bottom-anchored Sheet (tall ~95%) */
     .json-drawer { width: 100%; height: 95%; top: auto; bottom: 0; left: 0; right: 0; border-left: none; border-top: 1px solid var(--line); border-top-left-radius: 12px; border-top-right-radius: 12px; box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18); }

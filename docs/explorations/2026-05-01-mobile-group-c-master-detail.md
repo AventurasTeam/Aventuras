@@ -51,35 +51,36 @@ beyond this group.
 **Three render forms** the detail-pane's tab navigation can take:
 
 1. **Tab strip** — the desktop primitive. Used on desktop at every
-   count, and on tablet when count ≤ 4.
+   count, and on tablet when count ≤ 3.
 2. **Select segment** ("button-type" — bordered horizontal button
    group). Used on phone when count ≤ 2 — the Select primitive's
    auto-derivation cascade picks this mode at low cardinality on
    mobile per [`forms.md`](../ui/patterns/forms.md#select-primitive).
 3. **Select dropdown** — collapsed picker chip. Used on phone when
-   count ≥ 3, and on tablet when count > 4.
+   count ≥ 3, and on tablet when count > 3.
 
 **The consumer's decision is binary.** Either render Tab strip
-(desktop always; tablet when count ≤ 4), or hand the tab list to
+(desktop always; tablet when count ≤ 3), or hand the tab list to
 the Select primitive and let its cascade pick segment vs dropdown.
 No new logic inside Select; no new primitive.
 
 **Per-tier rule** (collapsing the three forms):
 
-| Tier    | Tab count ≤ 2  | Tab count 3–4   | Tab count > 4   |
+| Tier    | Tab count ≤ 2  | Tab count = 3   | Tab count > 3   |
 | ------- | -------------- | --------------- | --------------- |
 | Desktop | Tab strip      | Tab strip       | Tab strip       |
 | Tablet  | Tab strip      | Tab strip       | Select dropdown |
 | Phone   | Select segment | Select dropdown | Select dropdown |
 
-**Threshold of 4 on tablet** comes from wireframe review at iPad
-portrait (768 px → ~430 px detail pane): 4 tabs at ~96 px each fit
-cleanly; 5+ tabs overflow. Falls between 4 (happenings) and 7
-(location / item / faction), so no kind sits on the boundary
-zone. Initial draft used 5 — review showed even 4 was borderline,
-but no v1 kind has 5 or 6 tabs so per-kind outcomes are
-unchanged. **Threshold of 2 on phone** is the Select primitive's
-existing mobile-cardinality cutoff, applied unchanged.
+**Threshold of 3 on tablet** comes from wireframe review at iPad
+portrait (768 px → ~430 px detail pane). 4-tab happenings with
+involvements / awareness count chips wrapped vertically at that
+width during review, so the threshold tightened from an initial
+draft of 5 (everything fits) → 4 (4 borderline) → 3 (4 overflows
+in practice). The 3 threshold falls between lore (3, fits) and
+happenings (4, doesn't), so no kind sits on the boundary zone.
+**Threshold of 2 on phone** is the Select primitive's existing
+mobile-cardinality cutoff, applied unchanged.
 
 **Per-kind matrix** (verifying the rule lands right):
 
@@ -87,7 +88,7 @@ existing mobile-cardinality cutoff, applied unchanged.
 | ---------------- | ---- | --------- | --------------- | --------------- |
 | Threads          | 2    | Tab strip | Tab strip       | Select segment  |
 | Lore             | 3    | Tab strip | Tab strip       | Select dropdown |
-| Happenings       | 4    | Tab strip | Tab strip       | Select dropdown |
+| Happenings       | 4    | Tab strip | Select dropdown | Select dropdown |
 | Loc/Item/Faction | 7    | Tab strip | Select dropdown | Select dropdown |
 | Character        | 8    | Tab strip | Select dropdown | Select dropdown |
 
@@ -208,7 +209,8 @@ chip-row layout uses `flex-wrap`.
 History): Tab strip on desktop and tablet, Select segment on phone
 (2 ≤ 2, mobile cascade hits segment mode). Happenings (4 tabs:
 Overview / Involvements / Awareness / History): Tab strip on
-desktop and tablet, Select dropdown on phone.
+desktop, Select dropdown on tablet and phone (4 > 3, the tablet
+cardinality cutoff).
 
 **Common-knowledge interaction.** Toggling `common_knowledge` on
 the Overview tab makes the Awareness tab body a notice ("Common
@@ -279,15 +281,17 @@ from the timeline with an expanded card unsaved.
 
 ## Adversarial pass
 
-**Load-bearing assumption.** The 4-tab tablet threshold assumes
+**Load-bearing assumption.** The 3-tab tablet threshold assumes
 label widths cluster around ~80–96 px each ("Overview", "Identity",
 "Carrying", "Connections", "Settings", "Assets", "Involvements",
-"History"). Verified by counting label char widths — longest is
-"Involvements" (12 chars, ~96 px at the detail-pane font scale).
-4 × 96 = 384 px; iPad portrait detail pane (~430 px after 340 px
-list pane) fits 4 cleanly, 5 overflows. Wireframe review at the
-narrow tablet width confirmed 4 as the practical maximum. If a
-future kind has 5 short labels (3-4 chars each), the strip might
+"History"), plus optional count chips on tabs that surface row
+totals (Involvements 7, Connections 3, etc). Wireframe review at
+iPad portrait (~430 px detail pane) showed 4-tab happenings with
+its count chips wrapping vertically inside each tab — the strip
+overflows in practice even though raw label widths theoretically
+add up. Threshold tightened from 5 (initial) → 4 (review pass 1)
+→ 3 (review pass 2). 3 cleanly excludes happenings (4 tabs). If
+a future kind has 4 short labels with no counts, the strip might
 still fit on tablet; rule errs on the side of dropdown, which is
 consistent and acceptable.
 
@@ -362,7 +366,7 @@ C's mobile retrofit; nothing to remove. None introduced.
 
 - **Tablet detail-pane width at the boundary.** iPad portrait
   (768 px) gives detail pane ~430 px; iPad landscape (1024 px) is
-  desktop tier. The 4-threshold lands characters/locations/items/
+  desktop tier. The 3-threshold lands characters/locations/items/
   factions on dropdown on iPad portrait, which is the right call;
   iPad landscape gets the full strip (desktop tier). No surprises
   at the device-class boundary.
@@ -389,7 +393,7 @@ C's mobile retrofit; nothing to remove. None introduced.
 - **Assumed.** Tab label widths cluster around 80–96 px per label
   at detail-pane font scale (font scale per `typography.md`
   inferred from existing wireframe sizing). If real implementation
-  font scale differs and labels render wider, the 4-threshold rule
+  font scale differs and labels render wider, the 3-threshold rule
   may misroute one kind; the misroute would be benign (Select
   dropdown when strip would have fit, not the reverse).
 

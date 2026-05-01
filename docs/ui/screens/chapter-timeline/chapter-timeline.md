@@ -355,10 +355,17 @@ end-entry picker in-flow inside it.
   20 px); collapsed-card metadata line
   (`<time range> · <token count> · <theme>`) wraps when content
   exceeds the line.
-- **Per-card action row** (`[Jump to chapter →] [Regenerate summary]
-[Delete…]`) wraps to multi-row on phone via `flex-wrap`. Three
-  buttons stack vertically at the narrowest widths if labels can't
-  fit horizontally; intermediate widths fit two-up.
+- **Per-card action row** collapses on phone to one primary button
+  plus a `⋯` overflow trigger. `[Jump to chapter →]` keeps its full
+  label as the primary affordance (navigation, non-destructive,
+  most-used). `Regenerate summary` and `Delete…` tuck behind the
+  `⋯` chip, which opens a Sheet (short) on phone per
+  [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
+  Same pattern as the
+  [World detail-head's `⋯` overflow menu](../world/world.md#detail-head-structure);
+  both destructive actions retain their existing confirmation flows
+  inside the Sheet. Desktop and tablet keep all three buttons
+  inline (the row fits naturally).
 - **In-card save bar** appears at the card's bottom edge when
   dirty per
   [`patterns/save-sessions.md`](../../patterns/save-sessions.md).

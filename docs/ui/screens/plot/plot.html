@@ -1360,16 +1360,64 @@
          docs/ui/foundations/mobile/collapse.md → Plot; tab-strip
          re-routes via the Select primitive on phone (segment for
          threads at 2 tabs, dropdown for happenings at 4 tabs).
-         Plot's tab counts (2, 4) sit at or below the threshold
-         of 4, so tablet keeps the strip — no tablet tab swap.
+         Tablet tier (640-1023 px) — happenings (4 tabs) sits
+         above the threshold of 3 and swaps to Select dropdown;
+         threads (2 tabs) keeps the strip. Wired below via the
+         kind-aware swap on body[data-side="happenings"].
          ========================================================= */
-      /* Tablet + phone: shared bug-fix rules (history-controls,
-         search-bar shrink-safety). Threshold 4 means tablet
-         tab strip stays. */
+      /* Tablet + phone: shared bug-fix rules (history-controls reflow,
+         time-anchor stack, history-row column compression). Threshold 3
+         means happenings (4 tabs) goes to dropdown on tablet — wired
+         below via the kind-aware swap. */
       @container (max-width: 1023px) {
         .history-controls { flex-wrap: wrap; }
-        .history-search { flex: 1 1 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .history-op-filter, .history-sort { flex-wrap: wrap; }
+        .history-search {
+          flex: 1 1 100%;
+          min-width: 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .history-op-filter,
+        .history-sort {
+          flex-wrap: wrap;
+        }
+
+        /* Time-anchor cells stack on narrow tiers — desktop's 1fr 1fr
+           grid pushes content past the cell on tablet, clips off-screen
+           on phone via the parent's overflow:hidden. Single column
+           prevents the squeeze. */
+        .anchor-group {
+          grid-template-columns: 1fr;
+        }
+        .anchor-cell .input-select,
+        .anchor-cell .input-text {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        /* History row compression — change column gets ellipsis to
+           prevent overflow at narrow widths. */
+        .history-row {
+          grid-template-columns: 110px 70px 1fr;
+          gap: 8px;
+        }
+        .history-row > *:last-child {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        /* Tab strip overflow: happenings (4 tabs) → dropdown on tablet. */
+        body[data-side="happenings"] nav.tabs {
+          display: none;
+        }
+        body[data-side="happenings"] .tab-picker {
+          display: block;
+        }
       }
       @container (max-width: 639px) {
         /* slim top-bar */
@@ -1413,6 +1461,26 @@
         }
         .tab-picker {
           display: block;
+        }
+
+        /* History row stacks vertically on phone — each cell on its
+           own line for full-width change text. */
+        .history-row {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          padding: 10px 12px;
+        }
+        .history-row > *:last-child {
+          white-space: normal;
+          overflow: visible;
+          text-overflow: clip;
+        }
+        .history-ts {
+          font-size: 10px;
+        }
+        .history-op {
+          align-self: flex-start;
         }
 
         /* JSON overlay drawer reflows to bottom-anchored Sheet (tall ~95%) */
