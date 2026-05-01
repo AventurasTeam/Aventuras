@@ -209,7 +209,7 @@ reflects the current plan and updates as work progresses.
    deep links, splash screen config, web-target concerns.
    Files: [`platform.md`](./platform.md),
    [`platform.html`](./platform.html).
-7. **Per-screen retrofits (grouped)** — pending start.
+7. **Per-screen retrofits (grouped)** — in progress.
    ~13 surfaces upgrade to render the responsive contract
    (viewport toggle, container-query reflow, mobile expression
    in per-screen `.md` docs, reconciliation of pre-foundations
@@ -217,7 +217,24 @@ reflects the current plan and updates as work progresses.
    commit focus against ceremony cost — per-screen sessions are
    too ceremonial for the volume; one big session is unreviewable.
    Groups (each its own commit, own exploration record):
-   - **A — Entry flow** (pending): story-list, wizard, onboarding.
+   - **A — Entry flow** — landed 2026-05-01
+     ([exploration record](../../../explorations/2026-05-01-mobile-group-a-entry-flow.md)).
+     story-list, wizard, onboarding gain a `## Mobile expression`
+     section citing the substrate contracts; their wireframes
+     pick up the foundations viewport toggle and container-query
+     reflow. story-list's grid is already `auto-fill minmax`-
+     responsive (no shape change); ⋯ menu rebinds to Sheet
+     (short) on phone per the layout binding table. wizard's
+     step-pill row scrolls horizontally on phone (preserves
+     named-pill semantics over dot-only compression);
+     calendar-pickrow's two-column `1fr 1fr` stacks vertically;
+     AI-assist popover becomes Sheet (medium) on phone; footer
+     hides while keyboard is open (extending the save-bar
+     contract from session 5 — the bottom-edge button row shape
+     is identical even though the wizard isn't a save-sessions
+     surface). onboarding's centered card → full-bleed on phone
+     (no max-width / shadow / radius); padding compresses across
+     header / body / footer.
    - **B — Reading flow** (pending): reader-composer,
      branch-navigator, rollback-confirm.
    - **C — In-story master-detail** (pending): world, plot,

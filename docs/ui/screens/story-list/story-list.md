@@ -254,6 +254,59 @@ The toolbar (search / filter / sort) hides in empty state — nothing
 to search/filter. The `+ New story` header button also hides since
 the centered CTA carries that role more prominently.
 
+## Mobile expression
+
+Renders per the
+[mobile foundations contracts](../../foundations/mobile/README.md).
+Single-pane surface — no master-detail collapse rule applies.
+Tablet inherits desktop verbatim per
+[navigation.md → Tablet](../../foundations/mobile/navigation.md#tablet-6401023-px);
+phone-tier specifics below.
+
+- **Top-bar (root).** Logo on the left, no Return — root surface
+  per
+  [universal essentials](../../principles.md#universal-essentials).
+  `[A] Aventuras` compresses on phone (smaller icon, smaller title
+  font); right group keeps `⚲` (Actions) and `⚙` (App settings)
+  per
+  [navigation.md → Phone](../../foundations/mobile/navigation.md#phone--640-px).
+- **List header row.** On phone, `[Import story…]` and
+  `[+ New story]` wrap below the `Stories · N total` title; the
+  two buttons stack horizontally beneath, or to two rows at 360 px
+  if the row still overflows. No FAB; minimal-translation per
+  [touch.md](../../foundations/mobile/touch.md).
+- **Toolbar.** Search row, filter chips, sort picker — already
+  `flex-wrap` on the surface; phone reflow lets each row break
+  naturally. No behavior change.
+- **Card grid.** `auto-fill minmax(280px, 1fr)` is already
+  responsive (1 column phone, 2 tablet, 3–4 desktop). The retrofit
+  wires container-query reflow; the existing grid CSS needs no
+  shape change.
+- **Pin star.** Already implements
+  [always-visible-muted](../../patterns/icon-actions.md#visibility--always-rendered-muted-default-brighten-on-hover)
+  (`opacity: 0.25` default, brighten on hover / focus on desktop).
+  Touch users see the muted star without any hover state — exactly
+  the canonical pattern per
+  [touch.md → Hover translation](../../foundations/mobile/touch.md#hover-translation).
+- **`⋯` overflow menu.** Popover on desktop and tablet,
+  **Sheet (short, bottom-anchored)** on phone per
+  [layout.md → Surface bindings](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
+  Same content (Archive / Edit info / Duplicate / Export / Delete);
+  different primitive.
+- **Search-help icon popover.** Stays Popover all tiers — tiny
+  content fits the popover threshold per
+  [layout.md → Decision tree](../../foundations/mobile/layout.md#decision-tree).
+- **Empty state.** Centered welcome card scales — illustration
+  shrinks, copy retains line length, CTA stays full-width on phone
+  for tap-target clarity.
+- **Cards stay tappable, never tap-to-tooltip.** Card titles
+  truncate but the card opens the story on tap; per
+  [touch.md → Tap-to-tooltip on inert chrome text](../../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text)
+  list rows and cards are explicitly out of scope.
+
+Design rationale and adversarial findings in
+[`explorations/2026-05-01-mobile-group-a-entry-flow.md`](../../../explorations/2026-05-01-mobile-group-a-entry-flow.md).
+
 ## Data-model dependencies
 
 Card identity fields — `tags`, `cover_asset_id`, `accent_color`,

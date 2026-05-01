@@ -311,6 +311,52 @@ live in
 Onboarding is the trigger driver; the story list is the host
 surface.
 
+## Mobile expression
+
+Renders per the
+[mobile foundations contracts](../../foundations/mobile/README.md).
+Full-screen route on every tier per
+[layout.md → Surface bindings](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces);
+the wizard IS the chrome at first launch, so no universal top-bar
+applies. Tablet inherits desktop verbatim per
+[navigation.md → Tablet](../../foundations/mobile/navigation.md#tablet-6401023-px);
+phone-tier specifics below.
+
+- **Centered card → full-bleed on phone.** Desktop and tablet
+  frame a 560-px-wide centered card on a dim backdrop. On phone
+  the card fills the viewport — no max-width, no margin, no
+  shadow, no border-radius. The dim backdrop is invisible because
+  the card covers the screen.
+- **Header padding.** `28px 36px` → `16px 20px` on phone.
+- **Body padding.** `28px 36px` → `16px 20px`.
+- **Footer padding.** `14px 24px` → `12px 16px`.
+- **Form rows** (Step 1: `[110px label] [control]` grid). Stays —
+  labels are short (`Language`, `Theme`); 110 px label alongside
+  ~218 px control fits at 360 px width without reflow.
+- **Provider cards** (Step 2). Already vertical
+  (`flex-direction: column`); naturally phone-friendly. No reflow.
+- **Step 3 native variant.** `[API key input][Test]` row — input
+  flexes, test button shrinks padding. Helper link wraps below.
+- **Step 3 OAI-compat variant.** Endpoint URL input on its own
+  row, `[API key][Test]` on the next, warning callout below. All
+  fit under normal flex behavior.
+- **Footer.** `[Skip for now] [foot-spacer] [Back] [Next/Finish]`
+  stays horizontal on phone; "Skip for now" is short, padding
+  compresses.
+- **Provider exit-link** (`Set up Anthropic / OpenAI / Google →`)
+  wraps onto two lines on phone. Acceptable.
+- **Status bar style** binds to the active theme's `themeMode` per
+  [platform.md → Status bar style](../../foundations/mobile/platform.md#status-bar-style);
+  Step 1's theme pick takes effect for the rest of onboarding once
+  committed.
+- **Safe areas.** Card edges honor `insets.top` and
+  `insets.bottom` per
+  [platform.md → Safe areas](../../foundations/mobile/platform.md#safe-areas)
+  — content doesn't slide under the notch / home indicator.
+
+Design rationale and adversarial findings in
+[`explorations/2026-05-01-mobile-group-a-entry-flow.md`](../../../explorations/2026-05-01-mobile-group-a-entry-flow.md).
+
 ## Data-model touchpoints
 
 Schema-side changes settled in this pass:

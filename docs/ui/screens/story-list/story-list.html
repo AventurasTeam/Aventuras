@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Wireframe — Story list (landing) (desktop)</title>
+<title>Wireframe — Story list (landing)</title>
 <style>
   :root {
     --ink: #333;
@@ -29,20 +29,29 @@
   .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
   .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
   .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+  kbd { font-family: monospace; background: #fff; padding: 1px 5px; border: 1px solid #d8c99a; border-radius: 3px; font-size: 10px; color: #5a4820; }
 
-  /* top bar — app-level (lean: no story context) */
-  header.topbar { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
-  .logo { width: 32px; height: 32px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--ink-muted); flex-shrink: 0; }
-  .app-title { font-size: 16px; font-weight: 600; color: var(--ink); }
-  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-  .icon-btn { width: 32px; height: 32px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 14px; cursor: pointer; }
+  /* viewport stage — container width drives reflow inside via @container queries.
+     Mechanism per docs/ui/foundations/mobile/responsive.html. */
+  .stage { flex: 1; padding: 16px; background: var(--bg); display: flex; justify-content: center; box-sizing: border-box; }
+  .stage-wrap { display: flex; flex-direction: column; gap: 8px; align-items: center; width: 100%; }
+  .stage-meta { font-size: 11px; color: var(--ink-muted); font-family: monospace; }
+  .stage-meta strong { color: var(--ink); }
+  .viewport { container-type: inline-size; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; width: 100%; max-width: var(--vp-width, 1280px); transition: max-width 0.25s ease; overflow: hidden; }
 
-  /* main content wrapper */
-  .main { flex: 1; padding: 24px 32px 40px; max-width: 1400px; margin: 0 auto; width: 100%; box-sizing: border-box; }
-  .list-header { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; margin-bottom: 16px; }
-  .list-title { font-size: 22px; font-weight: 600; color: var(--ink); }
-  .list-title .count { font-size: 12px; color: var(--ink-faint); font-weight: 400; margin-left: 10px; }
-  .header-actions { display: flex; gap: 8px; align-items: center; }
+  /* top bar — app-level (lean: no story context). Phone-tier defaults; tier overrides below. */
+  header.topbar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
+  .logo { width: 26px; height: 26px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--ink-muted); flex-shrink: 0; }
+  .app-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .icon-btn { width: 28px; height: 28px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 13px; cursor: pointer; }
+
+  /* main content wrapper — phone-tier defaults */
+  .main { flex: 1; padding: 16px 16px 32px; max-width: 1400px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+  .list-header { display: flex; flex-direction: column; align-items: stretch; gap: 12px; margin-bottom: 16px; }
+  .list-title { font-size: 18px; font-weight: 600; color: var(--ink); }
+  .list-title .count { font-size: 12px; color: var(--ink-faint); font-weight: 400; margin-left: 8px; }
+  .header-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .new-story-btn { padding: 8px 18px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: #fff; font-weight: 600; font-size: 13px; cursor: pointer; }
   .import-btn { padding: 8px 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-weight: 500; font-size: 13px; cursor: pointer; }
   .import-btn:hover { border-color: var(--ink); }
@@ -114,16 +123,46 @@
   .stories-view.empty .list-title .count { display: none; }
   .empty-title { font-size: 22px; font-weight: 600; color: var(--ink); }
   .empty-sub { font-size: 14px; color: var(--ink-muted); max-width: 480px; line-height: 1.55; }
-  .empty-cta { padding: 12px 24px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 8px; }
-  .empty-visual { width: 140px; height: 140px; border: 1px dashed var(--line); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--ink-faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; background: var(--bg-region); margin-bottom: 12px; }
+  .empty-cta { padding: 12px 24px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 8px; width: 100%; max-width: 360px; }
+  .empty-visual { width: 100px; height: 100px; border: 1px dashed var(--line); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--ink-faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; background: var(--bg-region); margin-bottom: 8px; }
+
+  /* =========================================================
+     Tier overrides — container queries on .viewport.
+     Phone tier (default base above) maps to < 640 px container.
+     ========================================================= */
+
+  /* Tablet (≥ 640 px container) — recover desktop chrome density. */
+  @container (min-width: 640px) {
+    header.topbar { padding: 12px 20px; gap: 16px; }
+    .logo { width: 32px; height: 32px; font-size: 12px; }
+    .app-title { font-size: 16px; }
+    .icon-btn { width: 32px; height: 32px; font-size: 14px; }
+    .topbar-right { gap: 8px; }
+    .main { padding: 20px 24px 32px; }
+    .list-header { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 24px; }
+    .list-title { font-size: 22px; }
+    .list-title .count { margin-left: 10px; }
+    .empty-visual { width: 140px; height: 140px; }
+    .empty-cta { width: auto; max-width: none; }
+  }
+
+  /* Desktop (≥ 1024 px container) — full padding. */
+  @container (min-width: 1024px) {
+    .main { padding: 24px 32px 40px; }
+  }
 </style>
 </head>
 <body>
 
-<div class="screen-label"><strong>Wireframe:</strong> Story list (landing) &mdash; desktop (&ge; 1024px) &mdash; low-fi, interactive</div>
+<div class="screen-label"><strong>Wireframe:</strong> Story list (landing) &mdash; responsive across phone / tablet / desktop</div>
 
 <div class="review-bar">
-  <span class="rb-label">Review controls</span>
+  <div class="rb-group" role="group" aria-label="Viewport tier">
+    <span class="rb-label">Viewport</span>
+    <button class="rb-btn" data-vp="phone" data-width="390">Phone <kbd>1</kbd></button>
+    <button class="rb-btn" data-vp="tablet" data-width="768">Tablet <kbd>2</kbd></button>
+    <button class="rb-btn active" data-vp="desktop" data-width="1280">Desktop <kbd>3</kbd></button>
+  </div>
   <div class="rb-group">
     <span class="gl">state:</span>
     <button class="rb-btn active" data-state="populated">populated</button>
@@ -148,6 +187,13 @@
   </div>
   <span class="rb-note">click a card to "open" (no-op in wireframe)</span>
 </div>
+
+<div class="stage">
+  <div class="stage-wrap">
+    <div class="stage-meta">
+      Container width: <strong id="vp-width-readout">1280 px</strong> &middot; tier: <strong id="vp-tier-readout">desktop</strong>
+    </div>
+    <div class="viewport" id="viewport">
 
 <!-- Top bar — app-level chrome (no story context) -->
 <header class="topbar">
@@ -325,8 +371,47 @@
   </div>
 </div>
 
+    </div><!-- /.viewport -->
+  </div><!-- /.stage-wrap -->
+</div><!-- /.stage -->
+
 <script>
 (function() {
+  // Viewport toggle — sets max-width on .viewport, updates readouts,
+  // persists choice in localStorage, accepts 1/2/3 keyboard shortcuts.
+  // Pattern lifted verbatim from foundations/mobile/responsive.html.
+  var STORAGE_KEY = 'aventuras-wireframe-viewport';
+  var viewport = document.getElementById('viewport');
+  var widthReadout = document.getElementById('vp-width-readout');
+  var tierReadout = document.getElementById('vp-tier-readout');
+  var vpButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-vp]'));
+
+  function tierFor(width) {
+    if (width < 640) return 'phone';
+    if (width < 1024) return 'tablet';
+    return 'desktop';
+  }
+  function applyVp(vp) {
+    var btn = vpButtons.filter(function (b) { return b.dataset.vp === vp; })[0];
+    if (!btn) { btn = vpButtons[2]; vp = 'desktop'; }
+    var width = parseInt(btn.dataset.width, 10);
+    vpButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+    viewport.style.setProperty('--vp-width', width + 'px');
+    widthReadout.textContent = width + ' px';
+    tierReadout.textContent = tierFor(width);
+    try { localStorage.setItem(STORAGE_KEY, vp); } catch (e) { /* no-op */ }
+  }
+  vpButtons.forEach(function (b) { b.addEventListener('click', function () { applyVp(b.dataset.vp); }); });
+  document.addEventListener('keydown', function (e) {
+    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    if (e.key === '1') applyVp('phone');
+    else if (e.key === '2') applyVp('tablet');
+    else if (e.key === '3') applyVp('desktop');
+  });
+  var saved;
+  try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) { saved = null; }
+  applyVp(saved || 'desktop');
+
   const view = document.getElementById('stories-view');
   const count = document.getElementById('story-count');
 

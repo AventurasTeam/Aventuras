@@ -792,6 +792,77 @@ setting/lore/cast/opening).
   change, status flip to staged, row deletion). Same toast copy
   ("Lead unset — ...") on each.
 
+## Mobile expression
+
+Renders per the
+[mobile foundations contracts](../../foundations/mobile/README.md).
+Full-screen route on every tier per
+[layout.md → Surface bindings](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces);
+wizard chrome IS the action vocabulary, so the universal top-bar
+(`Actions`, Settings gear, story breadcrumb) doesn't apply at any
+tier. Tablet inherits desktop verbatim per
+[navigation.md → Tablet](../../foundations/mobile/navigation.md#tablet-6401023-px);
+phone-tier specifics below.
+
+- **Top-bar grid.** `[← Cancel]` left, `New story · step N of 5`
+  centered, empty right slot. Three-column grid stays at every
+  width; padding and font compress on phone. The button text
+  "← Cancel" stays explicit (vs icon-only `[←]`) so the user
+  distinguishes "cancel wizard" from "go back one step."
+- **Step indicator pills.** Five named pills overflow at 390 px
+  width; on phone the row **scrolls horizontally**, with the
+  active pill auto-scrolled into view. Names give spatial sense
+  (per [Step indicator](#step-indicator)) — compressing to dots-
+  only would erase that affordance. Backward-jump still works via
+  tap on a `done` pill within the scroll.
+- **Step body padding.** `32px 48px` desktop → `16px 16px` phone.
+- **Calendar pickrow** (the `1fr 1fr` picker alongside always-
+  visible summary panel) **stacks vertically** on phone — picker
+  on top, summary panel below, both full-width.
+- **Calendar origin-row** already `flex-wrap`; tier-derived inputs
+  wrap to multiple rows on phone naturally.
+- **Cast / lore inline editor.** `100px 1fr auto` grid keeps three
+  columns — labels are short and the input column flexes. Disclosure
+  (`▼ Visual`, `▼ More options`) keeps content compact by default.
+- **Footer.** `[Save as draft] [← Back] [Next →]` stays horizontal
+  on phone with reduced padding.
+- **Footer hides while keyboard is open.** Same shape as the save-
+  bar contract per
+  [touch.md → Save bar on phone](../../foundations/mobile/touch.md#save-bar-on-phone)
+  — bottom-edge button row competing with composer real estate
+  hides on `keyboardDidShow`, reappears on `keyboardDidHide`. The
+  auto-save session (per
+  [Save / cancel / draft semantics](#save--cancel--draft-semantics))
+  preserves state independently; navigate-away protection survives
+  the hidden footer.
+- **Keyboard avoidance.** `KeyboardAvoidingView` per
+  [platform.md → Keyboard avoidance](../../foundations/mobile/platform.md#keyboard-avoidance)
+  reflows step-body content above the keyboard while a textarea is
+  focused.
+- **AI-assist popover** (the `✨` guidance and result surfaces per
+  [AI-assist pattern](#ai-assist-pattern)) becomes **Sheet (bottom,
+  medium ~50–60 %)** on phone per
+  [layout.md → Mapping](../../foundations/mobile/layout.md#mapping--desktop-to-mobile).
+  Guidance input, prose / list / chips result, action row all
+  inside the sheet. Refine flow: result sheet dismisses, refine
+  sheet replaces (Sheet over Sheet not allowed per
+  [layout.md → Stacking](../../foundations/mobile/layout.md#stacking)).
+- **Replace-confirm modal** stays Modal all tiers per the layout
+  binding table.
+- **Calendar swap warnings** stay Modal all tiers per
+  [`patterns/calendar-picker.md`](../../patterns/calendar-picker.md)
+  and the layout binding table.
+- **Safe areas.** Top-bar honors `insets.top`; footer honors
+  `insets.bottom` per
+  [platform.md → Safe areas](../../foundations/mobile/platform.md#safe-areas).
+- **OS back as Cancel.** Android `BackHandler` and iOS swipe-back
+  both fire the wizard's `← Cancel` semantics (preserve session,
+  return to story-list) per
+  [platform.md → OS back integration](../../foundations/mobile/platform.md#os-back-integration).
+
+Design rationale and adversarial findings in
+[`explorations/2026-05-01-mobile-group-a-entry-flow.md`](../../../explorations/2026-05-01-mobile-group-a-entry-flow.md).
+
 ## Data-model touchpoints
 
 - Wizard's atomic transaction populates `stories`, `branches`,

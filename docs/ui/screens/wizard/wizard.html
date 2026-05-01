@@ -36,19 +36,28 @@
   .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
   .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
   .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+  kbd { font-family: monospace; background: #fff; padding: 1px 5px; border: 1px solid #d8c99a; border-radius: 3px; font-size: 10px; color: #5a4820; }
 
-  /* full-page wizard chrome */
-  .wizard-page { flex: 1; display: flex; flex-direction: column; background: var(--bg); }
+  /* viewport stage — container width drives reflow inside via @container queries.
+     Mechanism per docs/ui/foundations/mobile/responsive.html. */
+  .stage { flex: 1; padding: 16px; background: var(--bg); display: flex; justify-content: center; box-sizing: border-box; }
+  .stage-wrap { display: flex; flex-direction: column; gap: 8px; align-items: center; width: 100%; }
+  .stage-meta { font-size: 11px; color: var(--ink-muted); font-family: monospace; }
+  .stage-meta strong { color: var(--ink); }
+  .viewport { container-type: inline-size; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; width: 100%; max-width: var(--vp-width, 1280px); transition: max-width 0.25s ease; overflow: hidden; }
 
-  .top-bar { padding: 10px 24px; background: var(--bg-region); border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; }
-  .top-bar .cancel-btn { justify-self: start; padding: 5px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 12px; cursor: pointer; }
+  /* full-page wizard chrome — phone-tier defaults; tier overrides at the bottom of the stylesheet. */
+  .wizard-page { display: flex; flex-direction: column; background: var(--bg); min-height: 640px; }
+
+  .top-bar { padding: 8px 12px; background: var(--bg-region); border-bottom: 1px solid var(--line); display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; }
+  .top-bar .cancel-btn { justify-self: start; padding: 5px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 12px; cursor: pointer; white-space: nowrap; }
   .top-bar .cancel-btn:hover { background: var(--bg-faint); }
-  .top-bar .center-title { justify-self: center; font-size: 13px; font-weight: 600; color: var(--ink); }
-  .top-bar .center-title .step-count { color: var(--ink-muted); font-weight: normal; margin-left: 8px; }
+  .top-bar .center-title { justify-self: center; font-size: 12px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .top-bar .center-title .step-count { color: var(--ink-muted); font-weight: normal; margin-left: 6px; }
 
-  /* step indicator pills */
-  .step-pills { padding: 12px 24px; background: var(--bg-region); border-bottom: 1px solid var(--line-soft); display: flex; gap: 8px; align-items: center; justify-content: center; }
-  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--line-soft); border-radius: 16px; background: var(--bg-region); color: var(--ink-muted); font-size: 12px; cursor: not-allowed; }
+  /* step indicator pills — phone tier scrolls horizontally; tier override re-centers at ≥640. */
+  .step-pills { padding: 10px 12px; background: var(--bg-region); border-bottom: 1px solid var(--line-soft); display: flex; gap: 6px; align-items: center; overflow-x: auto; scrollbar-width: thin; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--line-soft); border-radius: 16px; background: var(--bg-region); color: var(--ink-muted); font-size: 12px; cursor: not-allowed; flex-shrink: 0; }
   .pill.active { background: var(--ink); color: #fff; border-color: var(--ink); cursor: default; }
   .pill.done { background: var(--bg-region); color: var(--ink); border-color: var(--line); cursor: pointer; }
   .pill.done:hover { background: var(--bg-faint); }
@@ -56,20 +65,20 @@
   .pill.active .dot { background: #fff; border-color: #fff; }
   .pill.done .dot { background: var(--ink); border-color: var(--ink); }
 
-  /* step body */
-  .step-body { flex: 1; padding: 32px 48px; max-width: 880px; margin: 0 auto; width: 100%; box-sizing: border-box; overflow-y: auto; }
-  .step-heading { font-size: 22px; font-weight: 600; color: var(--ink); margin: 0 0 4px; }
-  .step-intro { font-size: 13px; color: var(--ink-muted); margin: 0 0 28px; line-height: 1.5; }
+  /* step body — phone-tier defaults */
+  .step-body { flex: 1; padding: 16px; max-width: 880px; margin: 0 auto; width: 100%; box-sizing: border-box; overflow-y: auto; }
+  .step-heading { font-size: 18px; font-weight: 600; color: var(--ink); margin: 0 0 4px; }
+  .step-intro { font-size: 12px; color: var(--ink-muted); margin: 0 0 20px; line-height: 1.5; }
   .step-section { margin-bottom: 32px; }
   .section-rule { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
   .section-rule .rule-line { flex: 1; height: 1px; background: var(--line-soft); }
   .section-rule .rule-label { font-size: 12px; font-weight: 600; color: var(--ink); text-transform: uppercase; letter-spacing: 0.08em; }
   .section-rule .rule-actions { display: inline-flex; gap: 8px; }
 
-  /* footer */
-  .footer { padding: 14px 24px; background: var(--bg-region); border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .footer .right-group { display: flex; gap: 8px; align-items: center; }
-  .footer .btn { padding: 7px 16px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 13px; cursor: pointer; }
+  /* footer — phone-tier defaults */
+  .footer { padding: 10px 12px; background: var(--bg-region); border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .footer .right-group { display: flex; gap: 6px; align-items: center; }
+  .footer .btn { padding: 6px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 12px; cursor: pointer; white-space: nowrap; }
   .footer .btn:hover { background: var(--bg-faint); }
   .footer .btn-primary { background: var(--ink); color: #fff; border-color: var(--ink); }
   .footer .btn-primary:hover { background: #444; }
@@ -106,8 +115,8 @@
   .notice.warn { background: var(--warn-bg); border-left-color: var(--warn); color: #7a5820; }
   .notice.warn::before { content: "⚠ "; color: var(--warn); }
 
-  /* calendar step */
-  .calendar-pickrow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  /* calendar step — phone-tier stacks; tablet+ recovers two-column layout */
+  .calendar-pickrow { display: grid; grid-template-columns: 1fr; gap: 12px; }
   .summary-panel { padding: 14px; background: var(--bg-faint); border: 1px solid var(--line-soft); border-radius: 4px; font-size: 12px; }
   .summary-panel .sp-title { font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
   .summary-panel .sp-chip { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 6px; background: var(--bg-region); border: 1px solid var(--line-soft); border-radius: 3px; color: var(--ink-muted); }
@@ -195,12 +204,49 @@
   .add-menu { position: absolute; top: 100%; right: 0; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; padding: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); z-index: 5; }
   .add-menu .add-menu-item { padding: 4px 10px; font-size: 12px; color: var(--ink); cursor: pointer; border-radius: 3px; white-space: nowrap; }
   .add-menu .add-menu-item:hover { background: var(--bg-faint); }
+
+  /* footer keyboard-hide — phone-only behavior per touch.md → Save bar on phone.
+     Demo: review-bar toggle drives .footer-hidden on .wizard-page. */
+  .wizard-page.footer-hidden .footer { display: none; }
+
+  /* =========================================================
+     Tier overrides — container queries on .viewport.
+     Phone tier (< 640 px) is the base above. Tablet recovers
+     desktop chrome density; desktop adds extra padding.
+     ========================================================= */
+
+  /* Tablet (≥ 640 px container) */
+  @container (min-width: 640px) {
+    .top-bar { padding: 10px 24px; grid-template-columns: 1fr auto 1fr; gap: 16px; }
+    .top-bar .cancel-btn { padding: 5px 12px; }
+    .top-bar .center-title { font-size: 13px; }
+    .top-bar .center-title .step-count { margin-left: 8px; }
+    .step-pills { padding: 12px 24px; gap: 8px; justify-content: center; overflow-x: visible; }
+    .step-body { padding: 28px 32px; }
+    .step-heading { font-size: 22px; }
+    .step-intro { font-size: 13px; margin: 0 0 28px; }
+    .calendar-pickrow { grid-template-columns: 1fr 1fr; gap: 16px; }
+    .footer { padding: 14px 24px; gap: 12px; }
+    .footer .right-group { gap: 8px; }
+    .footer .btn { padding: 7px 16px; font-size: 13px; }
+  }
+
+  /* Desktop (≥ 1024 px container) — extra step-body breathing room. */
+  @container (min-width: 1024px) {
+    .step-body { padding: 32px 48px; }
+  }
 </style>
 </head>
 <body>
-<div class="screen-label"><strong>Story creation wizard</strong> — full-page replacement, 5 steps</div>
+<div class="screen-label"><strong>Story creation wizard</strong> — full-page replacement, 5 steps, responsive across phone / tablet / desktop</div>
 
 <div class="review-bar">
+  <div class="rb-group" role="group" aria-label="Viewport tier">
+    <span class="rb-label">Viewport</span>
+    <button class="rb-btn" data-vp="phone" data-width="390">Phone <kbd>1</kbd></button>
+    <button class="rb-btn" data-vp="tablet" data-width="768">Tablet <kbd>2</kbd></button>
+    <button class="rb-btn active" data-vp="desktop" data-width="1280">Desktop <kbd>3</kbd></button>
+  </div>
   <span class="rb-label">Step</span>
   <div class="rb-group" id="step-switcher">
     <button class="rb-btn active" data-step="1">1 · Frame</button>
@@ -229,10 +275,21 @@
     <button class="rb-btn" data-overlay="ai-chips-result">chips result</button>
     <button class="rb-btn" data-overlay="replace-confirm">replace confirm</button>
   </div>
+  <span class="rb-label">Keyboard</span>
+  <div class="rb-group" id="kbd-switcher">
+    <button class="rb-btn active" data-kbd="closed">closed</button>
+    <button class="rb-btn" data-kbd="open">open (footer hides on phone)</button>
+  </div>
   <span class="rb-note">Wireframe — chrome + per-step composition only; pixel polish in visual identity pass</span>
 </div>
 
-<div class="wizard-page">
+<div class="stage">
+  <div class="stage-wrap">
+    <div class="stage-meta">
+      Container width: <strong id="vp-width-readout">1280 px</strong> &middot; tier: <strong id="vp-tier-readout">desktop</strong>
+    </div>
+    <div class="viewport" id="viewport">
+<div class="wizard-page" id="wizard-page">
   <!-- top bar -->
   <div class="top-bar">
     <button class="cancel-btn">← Cancel</button>
@@ -781,7 +838,54 @@
   </div>
 </div>
 
+    </div><!-- /.viewport -->
+  </div><!-- /.stage-wrap -->
+</div><!-- /.stage -->
+
 <script>
+  // Viewport toggle — sets max-width on .viewport, persists choice, accepts 1/2/3.
+  // Pattern lifted from foundations/mobile/responsive.html.
+  (function () {
+    var STORAGE_KEY = 'aventuras-wireframe-viewport';
+    var viewport = document.getElementById('viewport');
+    var widthReadout = document.getElementById('vp-width-readout');
+    var tierReadout = document.getElementById('vp-tier-readout');
+    var vpButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-vp]'));
+    function tierFor(width) { return width < 640 ? 'phone' : (width < 1024 ? 'tablet' : 'desktop'); }
+    function applyVp(vp) {
+      var btn = vpButtons.filter(function (b) { return b.dataset.vp === vp; })[0];
+      if (!btn) { btn = vpButtons[2]; vp = 'desktop'; }
+      var width = parseInt(btn.dataset.width, 10);
+      vpButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+      viewport.style.setProperty('--vp-width', width + 'px');
+      widthReadout.textContent = width + ' px';
+      tierReadout.textContent = tierFor(width);
+      try { localStorage.setItem(STORAGE_KEY, vp); } catch (e) { /* no-op */ }
+    }
+    vpButtons.forEach(function (b) { b.addEventListener('click', function () { applyVp(b.dataset.vp); }); });
+    document.addEventListener('keydown', function (e) {
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (e.key === '1') applyVp('phone');
+      else if (e.key === '2') applyVp('tablet');
+      else if (e.key === '3') applyVp('desktop');
+    });
+    var saved;
+    try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) { saved = null; }
+    applyVp(saved || 'desktop');
+  })();
+
+  // Keyboard-open toggle — drives .footer-hidden on the wizard-page to demo
+  // the phone-only "footer hides while keyboard is open" behavior.
+  (function () {
+    var wizardPage = document.getElementById('wizard-page');
+    var btns = Array.prototype.slice.call(document.querySelectorAll('#kbd-switcher .rb-btn'));
+    function applyKbd(state) {
+      btns.forEach(function (b) { b.classList.toggle('active', b.dataset.kbd === state); });
+      wizardPage.classList.toggle('footer-hidden', state === 'open');
+    }
+    btns.forEach(function (b) { b.addEventListener('click', function () { applyKbd(b.dataset.kbd); }); });
+  })();
+
   // step switcher
   const stepBtns = document.querySelectorAll('#step-switcher .rb-btn');
   const stepPanes = document.querySelectorAll('.step-pane');
