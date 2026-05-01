@@ -336,6 +336,57 @@ chip ▾, time chip, branch chip) is absent — Chapter Timeline is
 already the chapter management surface, so the chapter chip in
 particular would be redundant.
 
+## Mobile expression
+
+Single-pane card list — no master-detail collapse applies per
+[`mobile/collapse.md → Single-pane surfaces`](../../foundations/mobile/collapse.md#single-pane-surfaces--no-collapse).
+Phone reflows naturally: card padding compresses, per-card action
+row wraps, chapter-close modal stays Modal at every tier with the
+end-entry picker in-flow inside it.
+
+- **Top-bar shape on phone** per
+  [`mobile/navigation.md → Phone`](../../foundations/mobile/navigation.md#phone--640-px):
+  slim single-row `[←] [<title> / Chapters] [pill] [⛭] [⚲]`.
+  Reader-only chips (chapter, time, branch) absent — chapter-timeline
+  is itself the chapter management surface, so the chapter chip
+  would be redundant per the existing top-bar note.
+- **Card list** stacks vertically as on desktop. Card padding
+  compresses on phone (~12 px side-padding instead of desktop's
+  20 px); collapsed-card metadata line
+  (`<time range> · <token count> · <theme>`) wraps when content
+  exceeds the line.
+- **Per-card action row** (`[Jump to chapter →] [Regenerate summary]
+[Delete…]`) wraps to multi-row on phone via `flex-wrap`. Three
+  buttons stack vertically at the narrowest widths if labels can't
+  fit horizontally; intermediate widths fit two-up.
+- **In-card save bar** appears at the card's bottom edge when
+  dirty per
+  [`patterns/save-sessions.md`](../../patterns/save-sessions.md).
+  Hides while the keyboard is open per
+  [`mobile/touch.md → Save bar on phone`](../../foundations/mobile/touch.md#save-bar-on-phone),
+  reappears on field blur. Navigate-away guard stays active.
+- **In-progress chapter card** (specialized last card; no DB row
+  yet). `[Close chapter…]` button full-width on phone for
+  tap-target clarity. Token-progress bar reflows naturally.
+- **Chapter-close modal** stays Modal at every tier per
+  [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
+  Modal width caps at viewport-minus-padding on phone per the modal
+  contract. End-entry picker dropdown opens **in-flow** within the
+  modal — the modal grows vertically, scrolls if the picker would
+  push content past viewport height. No Modal-over-Sheet stacking
+  introduced; the surface stack stays flat per
+  [`mobile/layout.md → Stacking`](../../foundations/mobile/layout.md#stacking).
+- **Entry-row anatomy** (start row, picker trigger, dropdown
+  items) unchanged on phone. Single-line `text-overflow: ellipsis`
+  handles narrow widths; time chip right-aligned.
+- **Empty state** (`Chapters · 0 closed + 1 in progress`) renders
+  identically; only the in-progress card surfaces.
+- **Stack-aware Return** binds chrome `←`, Android `BackHandler`,
+  iOS swipe-back to existing pop-one-level semantics per
+  [`mobile/navigation.md → Stack-aware Return`](../../foundations/mobile/navigation.md#stack-aware-return-on-mobile).
+  Dirty card guard fires when navigating away with an expanded
+  card unsaved.
+
 ## Screen-specific open questions
 
 - **Re-run compaction / lore-mgmt for a closed chapter.** The

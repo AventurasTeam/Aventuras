@@ -253,8 +253,22 @@ reflects the current plan and updates as work progresses.
      `## Mobile` heading renamed; modal stays Modal at every
      tier; hover-preview is desktop-only. Five inbound anchor
      refs to the renamed headings updated in the same commit.
-   - **C — In-story master-detail** (pending): world, plot,
-     chapter-timeline.
+   - **C — In-story master-detail** — landed 2026-05-01
+     ([exploration record](../../../explorations/2026-05-01-mobile-group-c-master-detail.md)).
+     world, plot, chapter-timeline gain `## Mobile expression`
+     sections and viewport-toggle wireframes. World and Plot
+     follow the master-detail collapse contract (list-first on
+     phone, detail as full-screen route, back returns to list);
+     chapter-timeline is single-pane and reflows naturally.
+     **Substantive substrate touch**: detail-pane tab navigation
+     reroutes through the existing Select primitive when the
+     desktop Tab strip overflows — Tab strip on desktop always
+     and tablet when count ≤ 5; Select segment on phone when
+     count ≤ 2; Select dropdown otherwise (Sheet short on phone,
+     anchored Popover on tablet). [`forms.md`](../../patterns/forms.md#select-primitive)
+     amended to retire the dangling "responsive pass finalizes"
+     note and pin phone-tier dropdown surface bindings; World
+     and Plot added to its Used-by list.
    - **D — Settings + power-user** (pending): story-settings,
      app-settings, vault calendars, prompt-pack editor.
 

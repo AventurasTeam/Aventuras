@@ -36,6 +36,15 @@
   .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
   .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
   .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+  kbd { font-family: monospace; background: #fff; padding: 1px 5px; border: 1px solid #d8c99a; border-radius: 3px; font-size: 10px; color: #5a4820; }
+
+  /* viewport stage — container width drives reflow inside via @container queries.
+     Mechanism per docs/ui/foundations/mobile/responsive.html. */
+  .vp-stage { flex: 1; padding: 12px; background: var(--bg); display: flex; justify-content: center; box-sizing: border-box; min-height: 0; }
+  .vp-stage-wrap { display: flex; flex-direction: column; gap: 6px; align-items: center; width: 100%; min-height: 0; flex: 1; }
+  .vp-stage-meta { font-size: 11px; color: var(--ink-muted); font-family: monospace; }
+  .vp-stage-meta strong { color: var(--ink); }
+  .viewport { container-type: inline-size; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; width: 100%; max-width: var(--vp-width, 1280px); transition: max-width 0.25s ease; overflow: hidden; display: flex; flex-direction: column; flex: 1; min-height: 0; position: relative; }
 
   /* top-bar — universal essentials + universal in-story chrome (pill, progress strip) */
   .topbar { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
@@ -143,7 +152,7 @@
   body[data-empty="yes"] .chapter-card:not(.in-progress) { display: none; }
 
   /* modal */
-  .modal-backdrop { position: fixed; inset: 0; background: var(--bg-dim); z-index: 6; display: none; align-items: center; justify-content: center; }
+  .modal-backdrop { position: absolute; inset: 0; background: var(--bg-dim); z-index: 6; display: none; align-items: center; justify-content: center; }
   body[data-modal="close"] .modal-backdrop { display: flex; }
   .modal { width: 480px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); overflow: hidden; }
   .modal-head { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; }
@@ -186,14 +195,50 @@
   .modal-foot { padding: 14px 24px; border-top: 1px solid var(--line-soft); display: flex; justify-content: flex-end; gap: 10px; background: #fcfcfc; }
   .modal-foot .btn { padding: 7px 18px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 13px; cursor: pointer; font-family: inherit; }
   .modal-foot .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
+
+  /* =========================================================
+     Tier overrides — container queries on .viewport.
+     Single-pane surface per docs/ui/foundations/mobile/collapse.md
+     → Single-pane surfaces. Phone reflow tightens chrome and
+     wraps the per-card action row; chapter-close modal stays
+     Modal at every tier per layout.md → Surface bindings.
+     ========================================================= */
+  @container (max-width: 639px) {
+    .topbar { padding: 8px 12px; gap: 8px; }
+    .topbar-right { gap: 6px; }
+
+    .timeline { padding: 12px 12px 24px; }
+    .header-row { padding: 0 4px; }
+
+    .card-head { padding: 10px 12px; }
+    .card-body { padding: 12px; }
+    .card-actions { flex-wrap: wrap; gap: 6px; }
+    .card-actions .btn { flex: 1 1 auto; min-width: 0; }
+
+    /* in-card save bar tightens horizontally */
+    .save-bar { padding: 10px 12px; flex-wrap: wrap; gap: 6px; }
+
+    /* in-progress card */
+    .ip-actions .btn { width: 100%; }
+
+    /* chapter-close modal — Modal at every tier; reflow narrow */
+    .modal { width: 100%; max-width: calc(100% - 24px); margin: 0 12px; max-height: 85vh; overflow-y: auto; }
+    .modal-foot { padding: 12px 16px; flex-wrap: wrap; }
+    .modal-foot .btn { flex: 1 1 auto; }
+  }
 </style>
 </head>
 <body data-card-state="expanded" data-empty="no" data-modal="hidden" data-progress="safe" data-picker="closed" data-gen-state="idle">
 
-<div class="screen-label"><strong>Wireframe:</strong> Chapter Timeline &mdash; desktop, low-fi, interactive</div>
+<div class="screen-label"><strong>Wireframe:</strong> Chapter Timeline &mdash; responsive across phone / tablet / desktop &mdash; low-fi, interactive</div>
 
 <div class="review-bar">
-  <span class="rb-label">Review controls</span>
+  <div class="rb-group" role="group" aria-label="Viewport tier">
+    <span class="rb-label">Viewport</span>
+    <button class="rb-btn" data-vp="phone" data-width="390">Phone <kbd>1</kbd></button>
+    <button class="rb-btn" data-vp="tablet" data-width="768">Tablet <kbd>2</kbd></button>
+    <button class="rb-btn active" data-vp="desktop" data-width="1280">Desktop <kbd>3</kbd></button>
+  </div>
   <div class="rb-group">
     <span class="gl">card 2 state:</span>
     <button class="rb-btn" data-card-state="collapsed">collapsed</button>
@@ -226,8 +271,15 @@
     <button class="rb-btn active" data-gen-state="idle">idle</button>
     <button class="rb-btn" data-gen-state="in-flight">in-flight</button>
   </div>
-  <span class="rb-note">flip controls to inspect each state</span>
+  <span class="rb-note">flip controls to inspect each state &middot; flip viewport via 1/2/3</span>
 </div>
+
+<div class="vp-stage">
+  <div class="vp-stage-wrap">
+    <div class="vp-stage-meta">
+      Container width: <strong id="vp-width-readout">1280 px</strong> &middot; tier: <strong id="vp-tier-readout">desktop</strong>
+    </div>
+    <div class="viewport" id="viewport">
 
 <header class="topbar">
   <div class="logo">A</div>
@@ -468,6 +520,43 @@
     </div>
   </div>
 </div>
+
+    </div><!-- /.viewport -->
+  </div><!-- /.vp-stage-wrap -->
+</div><!-- /.vp-stage -->
+
+<script>
+  // Viewport toggle — sets max-width on .viewport, persists choice, accepts 1/2/3.
+  // Pattern lifted from foundations/mobile/responsive.html.
+  (function () {
+    var STORAGE_KEY = 'aventuras-wireframe-viewport';
+    var viewport = document.getElementById('viewport');
+    var widthReadout = document.getElementById('vp-width-readout');
+    var tierReadout = document.getElementById('vp-tier-readout');
+    var vpButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-vp]'));
+    function tierFor(width) { return width < 640 ? 'phone' : (width < 1024 ? 'tablet' : 'desktop'); }
+    function applyVp(vp) {
+      var btn = vpButtons.filter(function (b) { return b.dataset.vp === vp; })[0];
+      if (!btn) { btn = vpButtons[2]; vp = 'desktop'; }
+      var width = parseInt(btn.dataset.width, 10);
+      vpButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+      viewport.style.setProperty('--vp-width', width + 'px');
+      widthReadout.textContent = width + ' px';
+      tierReadout.textContent = tierFor(width);
+      try { localStorage.setItem(STORAGE_KEY, vp); } catch (e) { /* no-op */ }
+    }
+    vpButtons.forEach(function (b) { b.addEventListener('click', function () { applyVp(b.dataset.vp); }); });
+    document.addEventListener('keydown', function (e) {
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (e.key === '1') applyVp('phone');
+      else if (e.key === '2') applyVp('tablet');
+      else if (e.key === '3') applyVp('desktop');
+    });
+    var saved;
+    try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) { saved = null; }
+    applyVp(saved || 'desktop');
+  })();
+</script>
 
 <script>
   const body = document.body;

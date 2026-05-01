@@ -501,3 +501,83 @@ writes (user edits + lore-management agent at chapter close) all
 flow through the delta log per the standard authorship contract,
 so the History tab surface is uniform across the kinds with no
 lore-specific deviation.
+
+## Mobile expression
+
+Phone forces master-detail collapse: list-first by default, detail
+opens as a full-screen route within the World surface, back returns
+to list. Tablet inherits the desktop 2-pane layout cramped at the
+narrow end (~430 px detail pane on iPad portrait); detail-pane tab
+nav reroutes to the Select primitive when the desktop tab strip
+overflows.
+
+- **Master-detail collapse on phone** per
+  [`mobile/collapse.md → World`](../../foundations/mobile/collapse.md#world--kind-selector--list--detail-master-detail).
+  List visible by default; row tap navigates to detail as a
+  full-screen route (back-on-left returns to list state). The
+  master-detail sub-header (`Characters / Kael Vex`) sits below
+  the slim phone top bar at the route level.
+- **Top-bar shape on phone** per
+  [`mobile/navigation.md → Phone`](../../foundations/mobile/navigation.md#phone--640-px):
+  slim single-row `[←] [<title> / World] [pill] [⛭] [⚲]`. List
+  state breadcrumb is `<title> / World`; detail-route extends to
+  `<title> / World / <kind>` (parent segments tappable per the
+  breadcrumb-tappability amendment, current segment inert with
+  tap-to-tooltip on truncation per
+  [`mobile/touch.md`](../../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text)).
+- **Detail-pane tab navigation reroutes on narrow widths.** Tab
+  strip is the desktop primitive; on tablet detail panes that
+  can't fit the full strip (count > 5 — character at 8, location /
+  item / faction at 7), and on phone always, the tab list hands
+  off to the Select primitive's render-mode cascade per
+  [`patterns/forms.md → Select primitive`](../../patterns/forms.md#select-primitive).
+  The cascade picks segment mode for ≤ 2 options on phone, dropdown
+  otherwise. Phone-tier dropdown opens via Sheet (short) per
+  [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces);
+  tablet-tier dropdown opens via anchored Popover. Same data,
+  different primitive — analogous to the Reader rail's tier-aware
+  swap. Lore (3 tabs): Tab strip on desktop and tablet, Select
+  dropdown on phone (3 > 2, the mobile cardinality cutoff).
+- **List-pane category dropdown** (`[Characters ▾]`) is already a
+  custom Select component (not a native `<select>`); on phone the
+  dropdown render mode opens via Sheet (short) per the same binding
+  as the tab dropdown. Five flat categories — fits the short-Sheet
+  threshold cleanly.
+- **List-pane chrome** stacks vertically on phone — search input
+  one row, filter chips wrapping below via the existing
+  `flex-wrap` rule. No layout change.
+- **Detail-head overflow menu (`⋯`)** binds to Popover on desktop /
+  tablet, Sheet (short) on phone per
+  [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
+  Same content (`Set as lead` / `Export entity as JSON` /
+  `View raw JSON` / `Delete entity`). Lore detail-head omits
+  `Set as lead` (per the existing per-kind note); rule otherwise
+  identical.
+- **Per-row import affordance** (`+ New <kind>` button) sits at
+  list-pane foot, full-width on phone for tap-target clarity. The
+  import-counterparts dropdown (`Blank` / `From JSON file…` /
+  `From Vault…`) opens as Sheet (short) on phone per the layout
+  binding for popover-style menus.
+- **Raw JSON viewer** inherits the binding-table mapping: Sheet
+  (right ~440 px) on desktop, Sheet (bottom, tall ~95 %) on phone
+  per [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
+- **Save bar on phone** stays at the bottom edge of the
+  detail-route's scroll region per
+  [`patterns/save-sessions.md`](../../patterns/save-sessions.md);
+  hides while the keyboard is open per
+  [`mobile/touch.md → Save bar on phone`](../../foundations/mobile/touch.md#save-bar-on-phone),
+  reappears on field blur. Navigate-away guard stays active
+  throughout including during keyboard-open.
+- **Stack-aware Return** binds the chrome `←`, Android
+  `BackHandler`, and iOS swipe-back to the existing pop-one-level
+  semantics per
+  [`mobile/navigation.md → Stack-aware Return`](../../foundations/mobile/navigation.md#stack-aware-return-on-mobile).
+  List ↔ detail navigation is a sub-stack within the World
+  surface; back from detail routes to list, not to the prior
+  top-level surface. Dirty-state save-session guard fires before
+  the back action per
+  [`patterns/save-sessions.md`](../../patterns/save-sessions.md).
+- **Phone landscape** (~700–900 px) lands in tablet tier per the
+  [responsive contract](../../foundations/mobile/responsive.md).
+  2-pane (list ~340 px, detail ~360–560 px); cramped but usable.
+  Tab-strip overflow rule applies per the tablet column.

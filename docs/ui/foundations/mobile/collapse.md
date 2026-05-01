@@ -234,9 +234,13 @@ contract clause.
   detail row-tap, peek's "Open in panel" tap — session 5
   (touch grammar).
 - **Per-screen retrofits** of the existing wireframes (reader,
-  world, plot, etc.) to render the responsive collapse — session 7. The current wireframes show desktop layout only; tap-and-see
-  the phone collapse via the [collapse.html demo](./collapse.html)
-  for now.
+  world, plot, etc.) to render the responsive collapse — session 7.
+  Groups A / B / C have landed; the per-screen wireframes for those
+  surfaces now carry their own viewport toggle and container-query
+  reflow. The [collapse.html demo](./collapse.html) remains useful
+  as the foundations-level reference, and applies to Group D's
+  surfaces (story-settings, app-settings, vault calendars,
+  prompt-pack editor) until those retrofits land.
 - **Open-sheet auto-dismiss on reflow** is implementation
   guidance, not a contract clause — session 7 picks the exact
   behavior.

@@ -94,6 +94,93 @@
         color: #967;
         font-style: italic;
       }
+      kbd {
+        font-family: monospace;
+        background: #fff;
+        padding: 1px 5px;
+        border: 1px solid #d8c99a;
+        border-radius: 3px;
+        font-size: 10px;
+        color: #5a4820;
+      }
+
+      /* viewport stage — container width drives reflow inside via @container queries.
+         Mechanism per docs/ui/foundations/mobile/responsive.html. */
+      .vp-stage {
+        flex: 1;
+        padding: 12px;
+        background: var(--bg);
+        display: flex;
+        justify-content: center;
+        box-sizing: border-box;
+        min-height: 0;
+      }
+      .vp-stage-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: center;
+        width: 100%;
+        min-height: 0;
+        flex: 1;
+      }
+      .vp-stage-meta {
+        font-size: 11px;
+        color: var(--ink-muted);
+        font-family: monospace;
+      }
+      .vp-stage-meta strong {
+        color: var(--ink);
+      }
+      .viewport {
+        container-type: inline-size;
+        background: var(--bg-region);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        width: 100%;
+        max-width: var(--vp-width, 1280px);
+        transition: max-width 0.25s ease;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        position: relative;
+      }
+
+      /* tab-picker — phone-tier responsive substitute for the tab strip.
+         See docs/ui/screens/world/world.html for the same pattern; Plot's
+         counts are 2 (threads → segment on phone) and 4 (happenings →
+         dropdown on phone). The visual demo below shows the dropdown chip;
+         segment mode for threads sits inline as a normal Select segment
+         already and needs no separate substitute. */
+      .tab-picker {
+        display: none;
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--line-soft);
+      }
+      .tab-picker .tab-picker-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 14px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: var(--bg-region);
+        font-size: 13px;
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .tab-picker .tab-picker-chip .chev {
+        color: var(--ink-faint);
+        font-size: 11px;
+      }
+      .tab-picker .tab-picker-hint {
+        margin-left: 10px;
+        font-size: 11px;
+        color: var(--ink-faint);
+        font-style: italic;
+      }
 
       header.topbar {
         display: flex;
@@ -1156,7 +1243,7 @@
 
       /* JSON viewer drawer — right-anchored overlay */
       .json-overlay {
-        position: fixed;
+        position: absolute;
         inset: 0;
         background: rgba(0, 0, 0, 0.18);
         display: none;
@@ -1267,15 +1354,100 @@
       [data-ck='off'] .ck-notice {
         display: none;
       }
+      /* =========================================================
+         Tier overrides — container queries on .viewport.
+         Phone tier (< 640 px) collapses the master-detail per
+         docs/ui/foundations/mobile/collapse.md → Plot; tab-strip
+         re-routes via the Select primitive on phone (segment for
+         threads at 2 tabs, dropdown for happenings at 4 tabs).
+         ========================================================= */
+      @container (max-width: 639px) {
+        /* slim top-bar */
+        header.topbar {
+          padding: 8px 12px;
+          gap: 8px;
+        }
+        .topbar .crumb-primary {
+          font-size: 13px;
+        }
+        .topbar-right {
+          gap: 6px;
+        }
+        .gen-status > span:not(.dot) {
+          display: none;
+        }
+        .gen-status {
+          padding: 3px 6px;
+        }
+
+        .sub-head {
+          padding: 8px 12px;
+        }
+
+        /* master-detail collapses to single column; one pane visible at a time */
+        .md-layout {
+          grid-template-columns: 1fr;
+        }
+        body[data-md-state="list"] .detail-pane {
+          display: none;
+        }
+        body[data-md-state="detail"] .list-pane {
+          display: none;
+        }
+
+        /* tab strip → Select dropdown chip (phone visual swap; threads at
+           2 tabs would actually render as Select segment inline — visual
+           parity to the dropdown chip is acceptable for the demo). */
+        nav.tabs {
+          display: none;
+        }
+        .tab-picker {
+          display: block;
+        }
+
+        /* JSON overlay drawer reflows to bottom-anchored Sheet (tall ~95%) */
+        .json-drawer {
+          width: 100%;
+          height: 95%;
+          top: auto;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          border-left: none;
+          border-top: 1px solid var(--line);
+          border-top-left-radius: 12px;
+          border-top-right-radius: 12px;
+          box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+        }
+        .json-drawer::before {
+          content: "";
+          display: block;
+          width: 36px;
+          height: 4px;
+          background: var(--line);
+          border-radius: 2px;
+          margin: 8px auto 0;
+        }
+      }
     </style>
   </head>
-  <body data-side="threads" data-ck="off" data-list-state="populated">
+  <body data-side="threads" data-ck="off" data-list-state="populated" data-md-state="detail">
     <div class="screen-label">
-      <strong>Wireframe:</strong> Plot &mdash; threads + happenings &mdash; desktop (&ge; 1024px) &mdash; low-fi, interactive
+      <strong>Wireframe:</strong> Plot &mdash; threads + happenings &mdash; responsive across phone / tablet / desktop &mdash; low-fi, interactive
     </div>
 
     <div class="review-bar">
-      <span class="rb-label">Review controls</span>
+      <div class="rb-group" role="group" aria-label="Viewport tier">
+        <span class="rb-label">Viewport</span>
+        <button class="rb-btn" data-vp="phone" data-width="390">Phone <kbd>1</kbd></button>
+        <button class="rb-btn" data-vp="tablet" data-width="768">Tablet <kbd>2</kbd></button>
+        <button class="rb-btn active" data-vp="desktop" data-width="1280">Desktop <kbd>3</kbd></button>
+      </div>
+      <div class="rb-group">
+        <span class="gl">md state (phone only):</span>
+        <button class="rb-btn" data-md-state="list">list</button>
+        <button class="rb-btn active" data-md-state="detail">detail</button>
+      </div>
       <div class="rb-group">
         <span class="gl">side:</span>
         <button class="rb-btn active" data-side-btn="threads">Threads</button>
@@ -1313,8 +1485,15 @@
         <button class="rb-btn active" data-tab-empty="populated">populated</button>
         <button class="rb-btn" data-tab-empty="empty">empty</button>
       </div>
-      <span class="rb-note">click a row · tab · ⓘ help · + new menu</span>
+      <span class="rb-note">click a row · tab · ⓘ help · + new menu &middot; flip viewport via 1/2/3</span>
     </div>
+
+    <div class="vp-stage">
+      <div class="vp-stage-wrap">
+        <div class="vp-stage-meta">
+          Container width: <strong id="vp-width-readout">1280 px</strong> &middot; tier: <strong id="vp-tier-readout">desktop</strong>
+        </div>
+        <div class="viewport" id="viewport">
 
     <header class="topbar">
       <div class="logo">A</div>
@@ -1616,6 +1795,17 @@
           <span class="tab happenings-only" data-tab="awareness">Awareness <span class="tab-count">4</span></span>
           <span class="tab" data-tab="history">History</span>
         </nav>
+        <!-- Phone-tier tab navigation: Select primitive's dropdown render mode.
+             Threads (2 tabs) would render as Select segment inline; happenings
+             (4 tabs) renders as dropdown chip → Sheet (short). Visual demo
+             below uses the dropdown chip for both for parity. -->
+        <div class="tab-picker">
+          <span class="tab-picker-chip" id="tab-picker-chip">
+            <span id="tab-picker-label">Overview</span>
+            <span class="chev">&#9662;</span>
+          </span>
+          <span class="tab-picker-hint">tap → Sheet (short) with full tab list</span>
+        </div>
 
         <!-- OVERVIEW — THREADS -->
         <div class="tab-panel threads-only active" data-panel="overview" data-side-panel="threads">
@@ -2044,7 +2234,51 @@
       </div>
     </div>
 
+        </div><!-- /.viewport -->
+      </div><!-- /.vp-stage-wrap -->
+    </div><!-- /.vp-stage -->
+
     <script>
+      // Viewport toggle — sets max-width on .viewport, persists choice, accepts 1/2/3.
+      // Pattern lifted from foundations/mobile/responsive.html.
+      (function () {
+        var STORAGE_KEY = 'aventuras-wireframe-viewport';
+        var viewport = document.getElementById('viewport');
+        var widthReadout = document.getElementById('vp-width-readout');
+        var tierReadout = document.getElementById('vp-tier-readout');
+        var vpButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-vp]'));
+        function tierFor(width) { return width < 640 ? 'phone' : (width < 1024 ? 'tablet' : 'desktop'); }
+        function applyVp(vp) {
+          var btn = vpButtons.filter(function (b) { return b.dataset.vp === vp; })[0];
+          if (!btn) { btn = vpButtons[2]; vp = 'desktop'; }
+          var width = parseInt(btn.dataset.width, 10);
+          vpButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+          viewport.style.setProperty('--vp-width', width + 'px');
+          widthReadout.textContent = width + ' px';
+          tierReadout.textContent = tierFor(width);
+          try { localStorage.setItem(STORAGE_KEY, vp); } catch (e) { /* no-op */ }
+        }
+        vpButtons.forEach(function (b) { b.addEventListener('click', function () { applyVp(b.dataset.vp); }); });
+        document.addEventListener('keydown', function (e) {
+          if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+          if (e.key === '1') applyVp('phone');
+          else if (e.key === '2') applyVp('tablet');
+          else if (e.key === '3') applyVp('desktop');
+        });
+        var saved;
+        try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) { saved = null; }
+        applyVp(saved || 'desktop');
+
+        document.querySelectorAll('.rb-btn[data-md-state]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            document.body.dataset.mdState = b.dataset.mdState;
+            document.querySelectorAll('.rb-btn[data-md-state]').forEach(function (x) {
+              x.classList.toggle('active', x === b);
+            });
+          });
+        });
+      })();
+
       (function () {
         const body = document.body;
 
@@ -2066,6 +2300,11 @@
             p.classList.toggle('active', matchTab);
           });
           document.querySelectorAll('[data-rb-tab]').forEach((b) => b.classList.toggle('active', b.dataset.rbTab === tabId));
+          const pickerLabel = document.getElementById('tab-picker-label');
+          if (pickerLabel) {
+            const activeTab = document.querySelector('.tab.active');
+            pickerLabel.textContent = activeTab ? activeTab.firstChild.textContent.trim() : tabId;
+          }
         }
 
         function setCk(state) {

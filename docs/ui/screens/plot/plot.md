@@ -253,6 +253,70 @@ below the top bar carries the in-pane selection
 `[Threads|Happenings] / <selected name>`, updating as the user
 clicks list rows.
 
+## Mobile expression
+
+Phone forces master-detail collapse: list-first, detail as a
+full-screen route within the Plot surface, back returns to list.
+Tablet inherits the desktop 2-pane layout. Detail-pane tab nav
+reroutes through the Select primitive on phone (and on tablet for
+kinds whose tab strip would overflow); the top-level Threads /
+Happenings segment toggle and the kind-specific filter chips
+inherit unchanged.
+
+- **Master-detail collapse on phone** per
+  [`mobile/collapse.md → Plot`](../../foundations/mobile/collapse.md#plot--thread--happening-list--detail).
+  Same shape as World: list visible by default, row tap navigates
+  to detail as a full-screen route, back-on-left returns to list.
+  The master-detail sub-header (`Threads / Crown's bargain` or
+  `Happenings / The summons`) sits below the phone top bar at the
+  route level.
+- **Top-bar shape on phone** per
+  [`mobile/navigation.md → Phone`](../../foundations/mobile/navigation.md#phone--640-px):
+  slim single-row `[←] [<title> / Plot] [pill] [⛭] [⚲]`. List
+  state breadcrumb is `<title> / Plot`; detail-route extends to
+  `<title> / Plot / <Threads|Happenings>`.
+- **Threads / Happenings segment toggle** sits at the top of the
+  list pane and uses the Select primitive's segment render mode at
+  every tier — 2-cell stretch via `flex: 1 1 0` per the
+  Group A wizard fix. Drives both list-pane content and detail-pane
+  tab composition; switching with a dirty detail fires the
+  navigate-away guard.
+- **Detail-pane tab navigation reroutes on narrow widths.** Threads
+  (2 tabs: Overview / History) → Tab strip on desktop and tablet,
+  Select segment on phone (the cascade hits segment mode at 2 ≤ 2
+  mobile cardinality cutoff per
+  [`patterns/forms.md → Select primitive`](../../patterns/forms.md#select-primitive)).
+  Happenings (4 tabs: Overview / Involvements / Awareness / History)
+  → Tab strip on desktop and tablet, Select dropdown on phone. The
+  consumer's decision is binary (Tab strip vs Select primitive);
+  Select's cascade picks segment vs dropdown.
+- **List-pane filter chips** (Threads: All / Active / Pending /
+  Resolved / Failed; Happenings: All / This chapter / Common
+  knowledge / Out-of-narrative) wrap as needed on phone via the
+  existing `flex-wrap` rule.
+- **Common-knowledge interaction.** Toggling `common_knowledge` on
+  Overview makes the Awareness tab body a notice ("Common knowledge
+  — every character is aware of this"); same content shape on every
+  tier. On phone the tab switch goes through the Select dropdown,
+  but the notice and add-affordance behavior is identical to
+  desktop.
+- **Per-row indicators** (recently-classified left-edge accent,
+  common-knowledge ⊙ icon, status pill on threads) all stay
+  always-visible per
+  [`patterns/icon-actions.md`](../../patterns/icon-actions.md);
+  unchanged on phone.
+- **Detail-head overflow menu (`⋯`)** binds to Popover on desktop /
+  tablet, Sheet (short) on phone per
+  [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
+  Save bar, raw JSON viewer, and stack-aware Return inherit the
+  same shape as the
+  [World panel's mobile expression](../world/world.md#mobile-expression);
+  no Plot-specific deviation.
+- **Phone landscape** (~700–900 px) lands in tablet tier per the
+  [responsive contract](../../foundations/mobile/responsive.md);
+  2-pane cramped but usable, tab-strip overflow rule applies per
+  the tablet column.
+
 ## Screen-specific open questions
 
 - **Recently-classified decay rule** — currently "fades over 1-2

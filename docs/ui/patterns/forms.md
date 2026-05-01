@@ -22,6 +22,13 @@ Used by:
   (Select primitive in initial setup flow)
 - [Vault calendars](../screens/vault/calendars/calendars.md)
   (Select primitive in the calendar editor)
+- [World](../screens/world/world.md#mobile-expression)
+  (Select primitive on the list-pane category dropdown and as the
+  detail-pane tab navigation when the desktop tab strip overflows
+  on narrow tiers)
+- [Plot](../screens/plot/plot.md#mobile-expression)
+  (Select primitive on the Threads / Happenings segment toggle and
+  as the detail-pane tab navigation on phone)
 
 ---
 
@@ -46,7 +53,7 @@ One primitive, three render modes. Component used everywhere a
 ```
 1. Explicit `mode` prop → use as-is.
 2. Any option has a description field → radio.
-3. Else if option count ≤ 3 (≤ 2 on mobile, deferred) → segment.
+3. Else if option count ≤ 3 (≤ 2 on mobile) → segment.
 4. Else → dropdown.
 ```
 
@@ -54,8 +61,24 @@ Trigger for radio is **content shape**; trigger for segment vs
 dropdown is **cardinality**. Independent axes.
 
 **Cardinality threshold of 3** is the default for desktop; **bumps
-to 2 on mobile** where horizontal real estate is tighter. Mobile
-threshold finalizes with the responsive pass.
+to 2 on mobile** where horizontal real estate is tighter. Pinned
+in [`mobile/foundations` Group C](../../explorations/2026-05-01-mobile-group-c-master-detail.md#tab-strip-overflow-rule)
+alongside the tab-strip overflow rule.
+
+**Phone-tier dropdown surface.** When the cascade picks `dropdown`
+on phone, the trigger renders inline (chip / pill / select-shaped
+button) and **opens via Sheet** per
+[`mobile/layout.md → Surface bindings`](../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces):
+
+- **Sheet (short)** for flat lists of short labels (tab pickers,
+  category dropdowns, actions menus).
+- **Sheet (medium)** for grouped or rich-row lists (model picker,
+  calendar picker — content carries headers, descriptions, or
+  search-within).
+
+Tablet keeps the desktop anchored Popover — no edge-clipping risk
+at tablet widths. Segment and radio render modes are unchanged at
+every tier (segment is inline; radio is vertical list).
 
 ### Chrome carve-out
 
