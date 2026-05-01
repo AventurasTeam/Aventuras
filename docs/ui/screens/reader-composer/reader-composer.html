@@ -376,6 +376,28 @@
   .error-entry { display: none; }
   .error-entry.visible { display: block; }
 
+  /* rail-as-Sheet on phone — preview only fires inside the .viewport when tier
+     is phone. Tap the rail strip to open; tap backdrop / drag handle to dismiss. */
+  .rail-sheet-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.35); display: none; z-index: 50; }
+  .rail-sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 60%; background: var(--bg-region); border-top: 1px solid var(--line); border-radius: 12px 12px 0 0; box-shadow: 0 -4px 16px rgba(0,0,0,0.10); display: none; flex-direction: column; z-index: 51; }
+  .viewport.rail-sheet-open .rail-sheet-backdrop { display: block; }
+  .viewport.rail-sheet-open .rail-sheet { display: flex; }
+  .rail-sheet .sheet-handle { width: 36px; height: 4px; background: var(--line); border-radius: 2px; margin: 8px auto 8px; flex-shrink: 0; cursor: pointer; }
+  .rail-sheet .sheet-head { padding: 4px 16px 10px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: baseline; gap: 8px; flex-shrink: 0; }
+  .rail-sheet .sheet-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .rail-sheet .sheet-cat { font-size: 11px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .rail-sheet .sheet-controls { padding: 10px 16px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; border-bottom: 1px solid var(--line-soft); }
+  .rail-sheet .sheet-search { padding: 6px 10px; border: 1px solid var(--line-soft); border-radius: 4px; font-size: 12px; color: var(--ink-faint); background: var(--bg); font-style: italic; }
+  .rail-sheet .sheet-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .rail-sheet .sheet-chip { padding: 3px 10px; border: 1px solid var(--line-soft); border-radius: 999px; font-size: 11px; color: var(--ink-muted); }
+  .rail-sheet .sheet-chip.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .rail-sheet .sheet-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+  .rail-sheet .sheet-row { padding: 10px 16px; border-bottom: 1px solid var(--line-soft); display: flex; gap: 8px; align-items: center; cursor: pointer; }
+  .rail-sheet .sheet-row:hover { background: var(--bg-highlight); }
+  .rail-sheet .sheet-row .kind { font-size: 14px; flex-shrink: 0; }
+  .rail-sheet .sheet-row .name { font-size: 13px; color: var(--ink); flex: 1; }
+  .rail-sheet .sheet-foot { padding: 10px 16px; border-top: 1px solid var(--line-soft); flex-shrink: 0; font-size: 11px; color: var(--ink-muted); text-align: center; cursor: pointer; }
+
   /* =========================================================
      Tier overrides — container queries on .viewport.
      Phone tier (< 640 px) collapses chrome per the foundations
@@ -1060,6 +1082,37 @@
 
 </div>
 
+  <!-- Rail-as-Sheet preview (phone-tier only). The strip-tap-opens-as-Sheet
+       behavior per collapse.md; this placeholder mirrors the rail's vocabulary
+       (category dropdown / filter chips / search / row list / Import footer)
+       so reviewers can see the phone-tier expression directly. -->
+  <div class="rail-sheet-backdrop" id="rail-sheet-backdrop"></div>
+  <div class="rail-sheet" id="rail-sheet" role="dialog" aria-label="Browse rail (Sheet)">
+    <div class="sheet-handle" id="rail-sheet-handle" title="Drag down to dismiss"></div>
+    <div class="sheet-head">
+      <span class="sheet-cat">Browse &middot;</span>
+      <span class="sheet-title">Characters</span>
+    </div>
+    <div class="sheet-controls">
+      <div class="sheet-search">&#9906; Search characters&hellip;</div>
+      <div class="sheet-chips">
+        <span class="sheet-chip active">All</span>
+        <span class="sheet-chip">Lead</span>
+        <span class="sheet-chip">Recent</span>
+        <span class="sheet-chip">Pinned</span>
+      </div>
+    </div>
+    <div class="sheet-list">
+      <div class="sheet-row"><span class="kind">&#128100;</span><span class="name">Aria Stoneheart</span></div>
+      <div class="sheet-row"><span class="kind">&#128100;</span><span class="name">Iron Cross</span></div>
+      <div class="sheet-row"><span class="kind">&#128100;</span><span class="name">Old Jorin</span></div>
+      <div class="sheet-row"><span class="kind">&#128205;</span><span class="name">Mornstone Keep</span></div>
+      <div class="sheet-row"><span class="kind">&#128205;</span><span class="name">The Iron Tankard</span></div>
+      <div class="sheet-row"><span class="kind">&#127963;</span><span class="name">The Iron Brotherhood</span></div>
+    </div>
+    <div class="sheet-foot">+ Import from Vault</div>
+  </div>
+
     </div><!-- /.viewport -->
   </div><!-- /.vp-stage-wrap -->
 </div><!-- /.vp-stage -->
@@ -1581,8 +1634,34 @@
       setRail('collapsed');
     });
   }
+  // Rail strip behavior is tier-aware per collapse.md:
+  //   desktop / tablet → tap restores the rail in place.
+  //   phone           → tap opens rail content as a bottom Sheet (this wireframe
+  //                     ships a placeholder so the phone expression is reviewable).
+  const viewportEl = document.getElementById('viewport');
+  const railSheetBackdrop = document.getElementById('rail-sheet-backdrop');
+  const railSheetHandle = document.getElementById('rail-sheet-handle');
+  function isPhoneTier() {
+    return viewportEl.getBoundingClientRect().width < 640;
+  }
+  function setRailSheet(open) {
+    viewportEl.classList.toggle('rail-sheet-open', open);
+  }
   aside.addEventListener('click', () => {
+    if (isPhoneTier()) {
+      setRailSheet(true);
+      return;
+    }
     if (document.body.classList.contains('rail-collapsed')) setRail('open');
+  });
+  if (railSheetBackdrop) railSheetBackdrop.addEventListener('click', () => setRailSheet(false));
+  if (railSheetHandle) railSheetHandle.addEventListener('click', () => setRailSheet(false));
+  // Auto-dismiss the sheet if the reviewer flips out of phone tier (matches
+  // session 4 collapse.md → "open sheets dismiss on tier transition").
+  document.querySelectorAll('.rb-btn[data-vp]').forEach(b => {
+    b.addEventListener('click', () => {
+      if (b.dataset.vp !== 'phone') setRailSheet(false);
+    });
   });
   document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === '\\') {
