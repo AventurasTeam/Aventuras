@@ -49,7 +49,7 @@ Reader (phone) — non-root, back on the left:
   ├─────────────────────────────────────────────────────┤
   │ ▰▰▰▰▱▱▱▱▱▱▱                                          │  ← progress strip (~3 px)
   ├─────────────────────────────────────────────────────┤
-  │ [Chap 3 ▾]  [Day 3 dusk ▾]  [⎇3]                    │  ← chip strip (~36 px)
+  │ [Chap 3 ▾]  [Day 3 dusk ▾]  [⎇3]      [☰ Browse]    │  ← chip strip (~36 px)
   ├─────────────────────────────────────────────────────┤
   │                                                       │
   │  reader narrative + composer                          │
@@ -104,34 +104,46 @@ Unchanged. Existing chrome per
 ## Reader chip strip (phone-only)
 
 The reader's three reader-only chips migrate from inline-in-top-bar
-(desktop) to a slim strip below the top bar (phone). Same
-semantics, vertical layout instead of horizontal.
+(desktop) to a slim strip below the top bar (phone), and the
+strip carries one extra right-anchored action chip for opening
+the Browse rail (which has no in-place affordance on phone — see
+[`./collapse.md → Reader / composer`](./collapse.md#reader--composer-narrative--rail--narrative--rail-strip)).
+
+Layout: `[Chapter ▾] [<time chip>] [⎇N] ··· [☰ Browse]`.
 
 - **Always shown** when on the reader. No toggle, no persistency.
   Cost is ~36 px vertical; the chips carry context users actively
   reference while reading (chapter for jumps, time for in-world
   date awareness, branch for branch awareness).
+- **State chips on the left, action chip on the right.** Chapter,
+  time, and branch are state-at-a-glance reflectors of the
+  current entry. Browse is an action affordance — opens the rail
+  content as a bottom Sheet. The visual separation
+  (`margin-left: auto` on Browse) telegraphs the difference;
+  state chips group together, action chip stands apart.
 - **Absent on sub-screens.** Sub-screens have either the
   master-detail sub-header (World, Plot) or the breadcrumb
   inline in the top bar (Story Settings, Chapter Timeline) —
   neither needs the chip strip.
-- **Horizontally scrollable when overflowing.** All three chips
-  expanded with full labels (`Day 3 dusk`, full chapter title)
-  may overflow at 360-wide screens. Strip becomes horizontally
-  scrollable as fallback. Per existing branch-chip rule, single-
-  branch stories omit `[⎇]` from the strip — usually leaves
-  enough room for chapter + time without scroll.
+- **Horizontally scrollable when overflowing.** All four chips
+  expanded with full labels may overflow at 360-wide screens.
+  Strip becomes horizontally scrollable as fallback. Per existing
+  branch-chip rule, single-branch stories omit `[⎇]` from the
+  strip — usually leaves enough room.
 - **Strip starts a few pixels in from the screen edge.** Avoids
   conflict with iOS's swipe-from-left-edge back gesture; visual
   padding doubles as gesture safe-zone. Exact pixel offset is
   session 5 (touch grammar) territory.
 - **Empty state.** If the story has no chapters yet (or the
   chapter / time chips would render empty), the strip is hidden
-  entirely. Saves vertical space.
+  entirely. The Browse chip is also hidden in this state since
+  the rail has nothing to surface on a brand-new story.
 
-The desktop equivalent — chips inline in the top bar — is
-unchanged. Tablet inherits the desktop expression. **Phone is the
-only tier with the strip.**
+The desktop equivalent — chips inline in the top bar plus the
+right-edge rail strip — is unchanged. Tablet inherits the desktop
+expression. **Phone is the only tier with the strip and the only
+tier where Browse is reached via a chip rather than the right-
+edge strip.**
 
 ## Title truncation on phone
 

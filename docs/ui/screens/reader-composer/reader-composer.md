@@ -761,10 +761,13 @@ specifics below.
   popover per
   [touch.md → Tap-to-tooltip on inert chrome text](../../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text).
 - **Reader chip strip (phone-only).** Below the top-bar:
-  `[Chapter ▾] [<time chip>] [⎇N]`. Horizontally scrollable when
-  overflowing; ~16 px left padding doubles as iOS swipe-back safe
-  zone per
+  `[Chapter ▾] [<time chip>] [⎇N] ········· [☰ Browse]`.
+  Horizontally scrollable when overflowing; ~16 px left padding
+  doubles as iOS swipe-back safe zone per
   [touch.md → Chip-strip safe zone](../../foundations/mobile/touch.md#chip-strip-safe-zone).
+  The Browse chip is **right-anchored** within the strip — it's
+  an action affordance (opens the rail content as a Sheet), not a
+  state chip; the visual separation telegraphs the difference.
 - **Chapter chip popover** binds to **Sheet (medium, bottom)** on
   phone per
   [layout.md → Surface bindings](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces)
@@ -780,24 +783,33 @@ specifics below.
   phase plus cancel in a Popover anchored to the pill per
   [touch.md → Status pill on phone](../../foundations/mobile/touch.md#status-pill-on-phone).
   Same cancel-pipeline flow as desktop.
-- **Browse rail forced-collapsed to edge strip on phone** — phone
-  width is a strict subset of the existing viewport-forced-
-  collapse threshold (~900 px). The strip-tap on phone is
-  **tier-aware** per
+- **Browse rail not visible in-place on phone.** Phone width is a
+  strict subset of the existing viewport-forced-collapse threshold
+  (~900 px), and the right-edge strip — a desktop-shaped folded-
+  rail affordance — translates poorly to phone (right-edge trigger
+  → bottom-anchored sheet creates a directional mismatch). On
+  phone the rail column is hidden; **the `[☰ Browse]` chip in
+  the chip strip is the trigger** — bottom-anchored chip opens
+  the rail's content as a bottom Sheet. Tier-aware per
   [collapse.md → Reader / composer](../../foundations/mobile/collapse.md#reader--composer-narrative--rail--narrative--rail-strip):
-  desktop / tablet expand the rail in place; **phone opens the
-  rail's content as a Sheet (bottom, medium initial)**. Would-be
-  in-place expansion would squeeze the narrative to nothing at
-  390 px.
+  desktop / tablet keep the right-edge strip and expand the rail
+  in place; **phone uses the chip and a Sheet (bottom, medium
+  initial)**.
 - **Rail-as-sheet contents.** Full rail vocabulary — category
   dropdown, filter chips, search, row list, Import affordance.
   Tap a row inside the sheet → sheet swaps to peek view (height
   may grow to tall ~85–95 % per the
   [Peek drawer mapping](../../foundations/mobile/layout.md#mapping--desktop-to-mobile)).
-  Sheet's own back affordance returns row-list state. Peek's
-  `Open in panel →` link dismisses the sheet and routes to World
-  / Plot per the cross-surface nav model. Drag-down dismisses
-  entirely regardless of state.
+  Single sheet, content state-swap; not Sheet over Sheet (which
+  is disallowed per
+  [layout.md → Stacking](../../foundations/mobile/layout.md#stacking)).
+  In peek state, the sheet head shows **`← Browse`** at the
+  top-left — replaces the desktop `×` (which is desktop chrome;
+  sheets dismiss via handle / backdrop, not an X). Tap returns
+  to row-list state. Peek's `Open in panel →` link dismisses the
+  sheet and routes to World / Plot per the cross-surface nav
+  model. Drag-down on the handle, or backdrop tap, dismisses the
+  whole sheet regardless of state.
 - **Peek-rail mutual exclusion** (per
   [Peek drawer — peek implies rail open](#peek-drawer--peek-implies-rail-open))
   holds on phone — peek is reachable only via row-tap inside the

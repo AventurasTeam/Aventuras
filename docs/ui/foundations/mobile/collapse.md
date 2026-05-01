@@ -57,36 +57,52 @@ Phone (< 640 px):
 
 - **Narrative and composer fill the screen width.** No 2-pane
   layout on phone.
-- **Rail is always collapsed to edge strip** on phone — the
-  existing viewport-forced-collapse rule (active below ~900 px)
-  produces this outcome. Phone is a strict subset of the existing
-  forced-collapsed range.
-- **Strip tap on phone opens the rail's content as a bottom
-  Sheet** (per [layout primitives → Sheet](./layout.md#sheet)).
+- **Rail is not visible in-place on phone.** Phone width is a
+  strict subset of the existing viewport-forced-collapse range
+  (~900 px). The right-edge strip — a desktop folded-rail
+  affordance — is dropped on phone; right-edge trigger plus a
+  bottom-anchored sheet creates a directional mismatch the strip
+  was carrying as vestigial desktop chrome. The rail column hides
+  entirely.
+- **Browse trigger lives in the reader chip strip on phone** as a
+  right-anchored `[☰ Browse]` chip per
+  [`navigation.md → Reader chip strip`](./navigation.md#reader-chip-strip-phone-only).
+  Bottom-anchored chip plus a bottom-anchored sheet — direction
+  matches.
+- **Tap the Browse chip on phone → opens the rail's content as
+  a bottom Sheet** (per [layout primitives → Sheet](./layout.md#sheet)).
   Initial Sheet height: medium (~50–60% per layout.md). Sheet
   contains the rail's full vocabulary — category dropdown, filter
   chips, search, row list, Import affordance — same content as
   desktop rail.
 - **Tap a row inside the sheet → sheet swaps to peek view.**
-  Same internal navigation as the desktop peek drawer. Sheet
-  height may grow to tall (~85–95%) when peek loads. Sheet's
-  own back affordance returns to the row-list state.
+  Same internal navigation as the desktop peek drawer, but a
+  single sheet element morphs content (not Sheet over Sheet,
+  which is disallowed per [`./layout.md → Stacking`](./layout.md#stacking)).
+  Sheet height may grow to tall (~85–95%) when peek loads.
+- **In peek state, sheet head shows `← Browse` at the top-left**
+  in place of the desktop `×`. Tap returns to row-list state. The
+  desktop X is desktop chrome — sheets on phone dismiss via the
+  handle (drag-down) or backdrop (tap-outside) per the Sheet
+  primitive contract; the head's left affordance is internal
+  navigation, not dismissal.
 - **Peek's "Open in panel →" link** dismisses the sheet and
   routes to World / Plot per the cross-surface nav model
   (per [navigation.md → Cross-surface navigation](./navigation.md#cross-surface-navigation-model)).
   On phone, the destination opens at its detail-route state with
   the row pre-selected (skipping the list-first state on first
   mount).
-- **Drag-down dismiss on the rail-sheet** closes the sheet
-  entirely regardless of state (row-list or peek). Single-step
-  dismiss; the sheet's internal back is for going from peek
-  back to row-list state, not for staged dismissal.
+- **Drag-down handle and backdrop tap** dismiss the whole sheet
+  regardless of state (row-list or peek). The sheet's `← Browse`
+  internal back is for going from peek back to row-list, not for
+  staged dismissal.
 - **Save-session quick-edit exception** carries through — in-sheet
   peek edits commit on field blur per
   [`patterns/save-sessions.md → Quick-edit exception — peek drawer`](../../patterns/save-sessions.md#quick-edit-exception--peek-drawer).
 
-The strip-tap behavior is **tier-aware**: in-place expand on
-desktop+tablet, sheet on phone. Same trigger, different action,
+The Browse trigger is **tier-aware**: right-edge strip with
+in-place expand on desktop+tablet, chip-strip Browse chip with
+bottom Sheet on phone. Different trigger, different action,
 appropriate to the tier's available real estate.
 
 ### World — kind selector + list + detail (master-detail)

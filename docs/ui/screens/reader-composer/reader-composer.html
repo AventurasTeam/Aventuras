@@ -41,10 +41,12 @@
   .viewport { container-type: inline-size; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; width: 100%; max-width: var(--vp-width, 1280px); transition: max-width 0.25s ease; overflow: hidden; display: flex; flex-direction: column; flex: 1; min-height: 0; position: relative; }
 
   /* phone chip strip — surfaces below the top-bar at phone tier; chapter / time / branch chips
-     migrate here from the top-bar per navigation.md → Reader chip strip. */
+     migrate here from the top-bar per navigation.md → Reader chip strip. The Browse chip
+     is right-anchored (margin-left:auto) — opens the rail content as a bottom Sheet on phone. */
   .phone-chip-strip { display: none; padding: 6px 16px; gap: 8px; align-items: center; background: var(--bg-region); border-bottom: 1px solid var(--line-soft); overflow-x: auto; scrollbar-width: thin; }
   .phone-chip-strip .chip { padding: 4px 10px; border: 1px solid var(--line-soft); border-radius: 14px; background: var(--bg); color: var(--ink); font-size: 11px; cursor: pointer; white-space: nowrap; flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; }
   .phone-chip-strip .chip .chev { font-size: 9px; color: var(--ink-faint); }
+  .phone-chip-strip .chip.browse { margin-left: auto; }
 
   /* top bar */
   header.topbar { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
@@ -171,6 +173,12 @@
   .peek-head .crumb { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
   .peek-head .name { font-size: 16px; font-weight: 600; margin-top: 2px; }
   .peek-close { font-size: 20px; color: var(--ink-faint); cursor: pointer; line-height: 1; padding: 0 4px; }
+  /* phone-tier ← Back at sheet head — replaces × (which is desktop chrome).
+     Returns to rail row-list state inside the sheet rather than dismissing.
+     Hidden by default; phone @container override reveals it. */
+  .peek-back-mobile { display: none; align-items: center; gap: 4px; padding: 4px 8px; margin: 0 -4px 0 -8px; font-size: 13px; color: var(--ink); cursor: pointer; border-radius: 4px; user-select: none; }
+  .peek-back-mobile:hover { background: var(--bg-highlight); }
+  .peek-back-mobile .arrow { font-size: 14px; line-height: 1; }
   .peek-body { flex: 1; overflow: auto; padding: 14px 16px; }
   .peek-field { margin-bottom: 14px; }
   .peek-field .label { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; display: flex; justify-content: space-between; align-items: center; }
@@ -422,29 +430,19 @@
     .crumb-primary { max-width: none; flex: 1; }
     /* gen-pill becomes icon-only */
     #gen-label { display: none; }
-    /* rail forced-collapsed to 28-px edge strip with a vertical "Browse" label
-       so the affordance reads as tappable. Strip-tap should open rail content
-       as a bottom Sheet per collapse.md (Sheet rendering is documented in
-       layout.md / reader-composer.md and not simulated in this wireframe). */
-    .layout { grid-template-columns: 1fr 28px; }
-    aside.right { overflow: hidden; cursor: pointer; position: relative; background: var(--bg); }
-    aside.right > * { display: none; }
-    aside.right::after {
-      content: "Browse";
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%) rotate(-90deg);
-      transform-origin: center;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--ink-muted);
-      white-space: nowrap;
-      pointer-events: none;
-    }
+    /* rail not present in-place on phone — accessed via the Browse chip in the
+       phone chip strip below the top-bar. No right-edge strip; Browse is
+       bottom-anchored visually (chip in strip, sheet from bottom) so trigger
+       and destination match direction. */
+    .layout { grid-template-columns: 1fr 0; }
+    aside.right { display: none; }
     /* surface the phone chip strip below the top-bar */
     .phone-chip-strip { display: flex; }
+    /* peek head shows ← Back instead of × on phone — sheets dismiss via handle
+       / backdrop, so the head's left-side back navigates within the sheet
+       (return to rail row-list state) rather than dismissing. Desktop X stays. */
+    .peek-close { display: none; }
+    .peek-back-mobile { display: inline-flex; }
     /* peek-overlay on phone is a bottom Sheet (tall ~95%) per layout.md mapping —
        overrides the desktop right-anchored 440 px expression. Top edge of the
        parent surface remains visible (~5% from the top) so the sheet reads as
@@ -692,12 +690,14 @@
   <div class="fill" style="width: 35%"></div>
 </div>
 
-<!-- Phone-only chip strip — surfaces the chapter / time / branch chips below the top-bar
-     at phone tier per navigation.md → Reader chip strip. Display toggles via @container query. -->
+<!-- Phone-only chip strip — chapter / time / branch chips per navigation.md, plus a
+     right-anchored Browse chip that opens the rail content as a bottom Sheet on phone.
+     Display toggles via @container query. -->
 <div class="phone-chip-strip" aria-label="Reader chip strip (phone)">
   <span class="chip">Chapter 3 <span class="chev">&#9662;</span></span>
   <span class="chip">&#9201; Day 3, dusk <span class="chev">&#9662;</span></span>
   <span class="chip">&#x2387;3</span>
+  <span class="chip browse" id="phone-browse-chip" title="Open Browse (rail) as Sheet">&#9776; Browse</span>
 </div>
 
 <!-- Chapter-close banner — sticky below chrome during chapter-close transaction -->
@@ -983,6 +983,11 @@
 
   <div class="peek-overlay" id="peek-overlay">
     <div class="peek-head">
+      <!-- ← Back is phone-tier only — returns to rail row-list state inside the sheet
+           rather than dismissing (the handle / backdrop dismiss the whole sheet). -->
+      <span class="peek-back-mobile" id="peek-back-mobile" title="Back to Browse">
+        <span class="arrow">&larr;</span> Browse
+      </span>
       <div>
         <div class="crumb" id="peek-crumb">Character &middot; active &middot; in scene</div>
         <div class="name-row">
@@ -1315,6 +1320,16 @@
   peekClose.addEventListener('click', () => setPeek('closed'));
   const peekBackdrop = document.getElementById('peek-backdrop');
   if (peekBackdrop) peekBackdrop.addEventListener('click', () => setPeek('closed'));
+  // ← Back at sheet head (phone only): close peek and reopen the rail sheet,
+  // simulating the single-sheet state swap (peek view → row-list view).
+  // On desktop the affordance is hidden by CSS; this handler stays harmless.
+  const peekBackMobile = document.getElementById('peek-back-mobile');
+  if (peekBackMobile) {
+    peekBackMobile.addEventListener('click', () => {
+      setPeek('closed');
+      if (isPhoneTier()) setRailSheet(true);
+    });
+  }
   document.addEventListener('keydown', e => { if (e.key === 'Escape') setPeek('closed'); });
 
   railList.querySelectorAll('.entity-row').forEach(row => {
@@ -1649,26 +1664,29 @@
       setRail('collapsed');
     });
   }
-  // Rail strip behavior is tier-aware per collapse.md:
-  //   desktop / tablet → tap restores the rail in place.
-  //   phone           → tap opens rail content as a bottom Sheet (this wireframe
-  //                     ships a placeholder so the phone expression is reviewable).
+  // Browse rail trigger is tier-aware:
+  //   desktop / tablet → existing rail-collapsed strip-tap restores rail in place.
+  //   phone           → Browse chip in the phone chip strip opens rail content as
+  //                     a bottom Sheet (rail itself is hidden on phone — no right-edge
+  //                     strip; bottom-anchored chip → bottom-anchored sheet, direction
+  //                     matches).
   const viewportEl = document.getElementById('viewport');
   const railSheetBackdrop = document.getElementById('rail-sheet-backdrop');
   const railSheetHandle = document.getElementById('rail-sheet-handle');
+  const phoneBrowseChip = document.getElementById('phone-browse-chip');
   function isPhoneTier() {
     return viewportEl.getBoundingClientRect().width < 640;
   }
   function setRailSheet(open) {
     viewportEl.classList.toggle('rail-sheet-open', open);
   }
+  // Desktop / tablet: aside click expands collapsed rail (existing behavior).
+  // Phone has aside hidden via @container; this handler is a no-op there.
   aside.addEventListener('click', () => {
-    if (isPhoneTier()) {
-      setRailSheet(true);
-      return;
-    }
     if (document.body.classList.contains('rail-collapsed')) setRail('open');
   });
+  // Phone: Browse chip opens the rail-as-Sheet.
+  if (phoneBrowseChip) phoneBrowseChip.addEventListener('click', () => setRailSheet(true));
   if (railSheetBackdrop) railSheetBackdrop.addEventListener('click', () => setRailSheet(false));
   if (railSheetHandle) railSheetHandle.addEventListener('click', () => setRailSheet(false));
   // Auto-dismiss the sheet if the reviewer flips out of phone tier (matches
