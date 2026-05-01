@@ -98,16 +98,19 @@
   .icon-btn:hover { background: var(--bg-faint); }
   .sparkle { color: var(--accent); font-weight: 600; }
 
-  /* segment + dropdown */
-  .segment { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
-  .segment .seg { padding: 8px 16px; font-size: 12px; color: var(--ink-muted); background: var(--bg-region); cursor: pointer; border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 110px; }
+  /* segment + dropdown — phone-tier defaults: full-width segment with shrinkable cells.
+     Tablet override below restores the inline-flex / min-width-110 desktop expression. */
+  .segment { display: flex; width: 100%; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; box-sizing: border-box; }
+  .segment .seg { flex: 1 1 0; min-width: 0; padding: 8px 10px; font-size: 12px; color: var(--ink-muted); background: var(--bg-region); cursor: pointer; border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .segment .seg:last-child { border-right: none; }
   .segment .seg.active { background: var(--ink); color: #fff; }
   .segment .seg .seg-main { font-weight: 600; font-size: 13px; }
-  .segment .seg .seg-sub { font-size: 10px; color: inherit; opacity: 0.75; }
+  .segment .seg .seg-sub { font-size: 10px; color: inherit; opacity: 0.75; text-align: center; }
 
-  .select { padding: 6px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); font-size: 12px; color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 120px; }
-  .select::after { content: "▾"; font-size: 10px; color: var(--ink-muted); }
+  /* .select is shrink-safe — `width:100%` (used inline on the calendar picker) flexes inside
+     a min-width:0 grid column without overflowing into the adjacent summary panel. */
+  .select { padding: 6px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); font-size: 12px; color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; max-width: 100%; box-sizing: border-box; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .select::after { content: "▾"; font-size: 10px; color: var(--ink-muted); flex-shrink: 0; }
 
   /* notice chips */
   .notice { padding: 10px 12px; background: var(--bg-faint); border-left: 3px solid var(--line); font-size: 12px; color: var(--ink); border-radius: 0 4px 4px 0; margin-top: 14px; }
@@ -115,9 +118,12 @@
   .notice.warn { background: var(--warn-bg); border-left-color: var(--warn); color: #7a5820; }
   .notice.warn::before { content: "⚠ "; color: var(--warn); }
 
-  /* calendar step — phone-tier stacks; tablet+ recovers two-column layout */
+  /* calendar step — phone-tier stacks; tablet+ recovers two-column layout.
+     min-width:0 on direct children allows the .select to shrink to fit the column
+     instead of pushing past it (grid items default to min-width:auto = content-min). */
   .calendar-pickrow { display: grid; grid-template-columns: 1fr; gap: 12px; }
-  .summary-panel { padding: 14px; background: var(--bg-faint); border: 1px solid var(--line-soft); border-radius: 4px; font-size: 12px; }
+  .calendar-pickrow > * { min-width: 0; }
+  .summary-panel { padding: 14px; background: var(--bg-faint); border: 1px solid var(--line-soft); border-radius: 4px; font-size: 12px; min-width: 0; }
   .summary-panel .sp-title { font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
   .summary-panel .sp-chip { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 6px; background: var(--bg-region); border: 1px solid var(--line-soft); border-radius: 3px; color: var(--ink-muted); }
   .summary-panel .sp-row { display: flex; justify-content: space-between; padding: 2px 0; color: var(--ink-muted); }
@@ -229,6 +235,10 @@
     .footer { padding: 14px 24px; gap: 12px; }
     .footer .right-group { gap: 8px; }
     .footer .btn { padding: 7px 16px; font-size: 13px; }
+
+    /* Tablet+ recovers desktop segment expression: inline-flex with content-sized cells. */
+    .segment { display: inline-flex; width: auto; }
+    .segment .seg { flex: 0 0 auto; min-width: 110px; padding: 8px 16px; }
   }
 
   /* Desktop (≥ 1024 px container) — extra step-body breathing room. */

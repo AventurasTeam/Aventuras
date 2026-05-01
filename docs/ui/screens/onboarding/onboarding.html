@@ -106,8 +106,9 @@
   .helper-link a:hover { color: var(--ink); }
   .config-warn { padding: 10px 12px; background: var(--warn-bg); border-left: 3px solid var(--warn); font-size: 11px; color: #7a5820; line-height: 1.5; margin-top: 16px; border-radius: 0 4px 4px 0; }
 
-  /* footer — phone-tier defaults */
-  .wizard-foot { padding: 12px 16px; border-top: 1px solid var(--line-soft); display: flex; align-items: center; gap: 8px; background: #fcfcfc; }
+  /* footer — phone-tier defaults. margin-top:auto pins the foot to the bottom
+     of the full-bleed wizard card regardless of body content height. */
+  .wizard-foot { padding: 12px 16px; border-top: 1px solid var(--line-soft); display: flex; align-items: center; gap: 8px; background: #fcfcfc; margin-top: auto; }
   .skip-link { font-size: 12px; color: var(--ink-muted); border-bottom: 1px dashed var(--line); padding-bottom: 1px; cursor: pointer; text-decoration: none; }
   .skip-link:hover { color: var(--ink); }
   .foot-spacer { flex: 1; }
@@ -136,7 +137,7 @@
     .wizard { max-width: 560px; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); flex: 0 1 auto; }
     .wizard-head { padding: 28px 36px 12px; }
     .wizard-body { padding: 28px 36px; }
-    .wizard-foot { padding: 14px 24px; gap: 10px; }
+    .wizard-foot { padding: 14px 24px; gap: 10px; margin-top: 0; }
   }
 </style>
 </head>
