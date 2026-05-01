@@ -308,6 +308,7 @@
             variant="text"
             class="text-muted-foreground hover:text-primary min-h-11 min-w-11 sm:hidden"
             title="Menu"
+            aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
           >
             {#if showMobileMenu}
               <ChevronUp class="h-5 w-5" />
