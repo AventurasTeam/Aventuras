@@ -4,9 +4,9 @@
 
 Two related surfaces for the [branch model](../../../../data-model.md#branch-model):
 
-- The **navigator** itself — an anchored popover (desktop) or
-  bottom drawer (mobile) for switching between existing branches
-  and lightweight management (rename, delete).
+- The **navigator** itself — an anchored Popover (desktop /
+  tablet) or bottom Sheet (phone) for switching between existing
+  branches and lightweight management (rename, delete).
 - The **creation modal** — triggered from the reader's per-entry
   `⎇ Branch from this entry` action; required name input.
 
@@ -280,25 +280,42 @@ When `stories.current_branch_id` is the only branch in the story:
   per-entry `⎇` action. Creating a second branch causes the chip
   to appear on next render.
 
-## Mobile — bottom drawer
+## Mobile expression
 
-The popover renders as a bottom drawer instead of an anchored
-popover:
+Renders per the
+[mobile foundations contracts](../../../foundations/mobile/README.md).
+Tablet inherits desktop verbatim per
+[navigation.md → Tablet](../../../foundations/mobile/navigation.md#tablet-6401023-px)
+— anchored Popover, no change. Phone-tier specifics below.
 
-- Slides up from the bottom edge of the viewport.
-- Full viewport width, capped to ~480px.
-- **Grab handle** at the top edge as the dismissal cue — no
-  separate close button. Drag-down on the handle or tap-on-
-  backdrop dismisses. The handle is the typical drawer
-  affordance; an X would be visual redundancy.
-- Same content + same per-row layout. Action icons follow the
-  [icon-actions pattern](../../../patterns/icon-actions.md) on
-  mobile too (the desktop-vs-touch differences are inside the
-  pattern doc, not duplicated here).
-- Inline rename + delete confirm work identically.
+- **Popover → Sheet (short, bottom-anchored)** on phone per
+  [layout.md → Surface bindings](../../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
+  Slides up from the bottom edge; full-width edge-to-edge (no
+  width cap — bottom Sheets on phone are full-width per the
+  layout contract).
+- **Drag handle** at the top edge as the dismissal cue per
+  [layout.md → Sheet behavior](../../../foundations/mobile/layout.md#sheet-behavior--additional-rules).
+  Drag-down past ~40 % of sheet height dismisses; tap-on-backdrop
+  also dismisses. No separate close button — the handle is the
+  primitive's standard affordance.
+- **Same content, same per-row layout** as the desktop popover.
+  Row action icons follow
+  [`patterns/icon-actions.md`](../../../patterns/icon-actions.md);
+  the touch hover-replacement (always-visible-muted, no
+  brighten-on-touch) lives in the pattern doc, not duplicated
+  here.
+- **Inline rename and delete-confirm** work identically across
+  tiers.
+- **Stack-aware Return.** Android `BackHandler` and iOS
+  swipe-back dismiss the sheet (not the parent reader) per
+  [navigation.md → Stack-aware Return on mobile](../../../foundations/mobile/navigation.md#stack-aware-return-on-mobile).
 
-The creation modal is unchanged on mobile — modals already work
-the same way.
+The **creation modal** is unchanged on mobile — Modal stays Modal
+on every tier per
+[layout.md → Modal](../../../foundations/mobile/layout.md#modal).
+
+Design rationale and adversarial findings in
+[`explorations/2026-05-01-mobile-group-b-reading-flow.md`](../../../../explorations/2026-05-01-mobile-group-b-reading-flow.md).
 
 ## Empty state
 

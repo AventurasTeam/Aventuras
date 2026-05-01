@@ -204,9 +204,9 @@ mechanically apply the contract.
 Two per-screen docs already carry partial mobile sections that
 pre-date this contract:
 
-- [`../ui/screens/reader-composer/branch-navigator/branch-navigator.md → Mobile — bottom drawer`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#mobile--bottom-drawer)
+- [`../ui/screens/reader-composer/branch-navigator/branch-navigator.md → Mobile — bottom drawer`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#mobile-expression)
   — full bottom-drawer spec for the branch-navigator popover.
-- [`../ui/screens/reader-composer/rollback-confirm/rollback-confirm.md → Mobile`](../ui/screens/reader-composer/rollback-confirm/rollback-confirm.md#mobile)
+- [`../ui/screens/reader-composer/rollback-confirm/rollback-confirm.md → Mobile`](../ui/screens/reader-composer/rollback-confirm/rollback-confirm.md#mobile-expression)
   — modal renders identically; hover-preview is desktop-only.
 
 Stance: **interim, reviewable.** They constitute pre-foundations

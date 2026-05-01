@@ -20,9 +20,10 @@ This file is session 3 of the mobile-foundations multi-session pass
   primitive with anchor variants (right, bottom) and height
   variants (short, medium, tall). The existing project term
   `peek drawer` becomes a named usage of Sheet rather than its
-  own primitive; the existing `bottom drawer` (in
-  `branch-navigator.md`) is the same primitive as a bottom-anchored
-  Sheet.
+  own primitive; the pre-foundations `bottom drawer` term in
+  `branch-navigator.md` was reconciled to Sheet (bottom, short)
+  vocabulary in Group B (session 7) — same primitive, foundations
+  vocabulary.
 - **Decision tree for picking a primitive** keys on the
   user-intent question: focus-demanding vs browse-and-pick vs
   rich-detail vs navigable-destination.
@@ -240,23 +241,23 @@ on tablet inheriting desktop chrome).
 Reference table for session-7 retrofits. Each existing surface
 binds to one primitive:
 
-| Surface                          | Primitive (desktop) | Primitive (phone)         | Notes                                                             |
-| -------------------------------- | ------------------- | ------------------------- | ----------------------------------------------------------------- |
-| Chapter chip popover (reader)    | Popover             | Sheet (medium)            | Multi-row content; exceeds tiny limit                             |
-| Time-chip popover                | Popover             | Popover                   | Tiny content                                                      |
-| Actions menu (`⚲`)               | Popover             | Sheet (short)             | Edge-clipping risk on phone → Sheet                               |
-| Branch chip popover (`⎇`)        | Popover             | Sheet (short)             | Pre-foundations spec calls phone "bottom drawer" — same primitive |
-| Branch creation                  | Modal               | Modal                     | Pre-foundations: "creation modal is unchanged on mobile"          |
-| Rollback confirm                 | Modal               | Modal                     | Pre-foundations: "modal renders identically on mobile"            |
-| Calendar swap warnings           | Modal               | Modal                     | Per `patterns/calendar-picker.md`                                 |
-| Calendar picker                  | Popover             | Sheet (medium)            | Rich content (preset rows, summary panel)                         |
-| Model picker dropdown            | Popover             | Sheet (medium)            | Per `app-settings.md` "popover-rendered, virtualized list"        |
-| Help / search-help popovers      | Popover             | Popover                   | Tiny content                                                      |
-| Peek drawer                      | Sheet (right ~440)  | Sheet (bottom, tall ~95%) | Project-specific named usage                                      |
-| Raw JSON viewer                  | Sheet (right ~440)  | Sheet (bottom, tall ~95%) | Matches peek drawer pattern                                       |
-| Story Settings (from in-story)   | Regular surface     | Full-screen route         | Has internal navigation (categories)                              |
-| Wizard, onboarding               | Full-screen route   | Full-screen route         | Multi-step; no swipe-dismiss                                      |
-| Save-session navigate-away guard | Modal               | Modal                     | Standard modal usage                                              |
+| Surface                          | Primitive (desktop) | Primitive (phone)         | Notes                                                      |
+| -------------------------------- | ------------------- | ------------------------- | ---------------------------------------------------------- |
+| Chapter chip popover (reader)    | Popover             | Sheet (medium)            | Multi-row content; exceeds tiny limit                      |
+| Time-chip popover                | Popover             | Popover                   | Tiny content                                               |
+| Actions menu (`⚲`)               | Popover             | Sheet (short)             | Edge-clipping risk on phone → Sheet                        |
+| Branch chip popover (`⎇`)        | Popover             | Sheet (short)             | Was "bottom drawer" pre-foundations; reconciled in Group B |
+| Branch creation                  | Modal               | Modal                     | Pre-foundations: "creation modal is unchanged on mobile"   |
+| Rollback confirm                 | Modal               | Modal                     | Pre-foundations: "modal renders identically on mobile"     |
+| Calendar swap warnings           | Modal               | Modal                     | Per `patterns/calendar-picker.md`                          |
+| Calendar picker                  | Popover             | Sheet (medium)            | Rich content (preset rows, summary panel)                  |
+| Model picker dropdown            | Popover             | Sheet (medium)            | Per `app-settings.md` "popover-rendered, virtualized list" |
+| Help / search-help popovers      | Popover             | Popover                   | Tiny content                                               |
+| Peek drawer                      | Sheet (right ~440)  | Sheet (bottom, tall ~95%) | Project-specific named usage                               |
+| Raw JSON viewer                  | Sheet (right ~440)  | Sheet (bottom, tall ~95%) | Matches peek drawer pattern                                |
+| Story Settings (from in-story)   | Regular surface     | Full-screen route         | Has internal navigation (categories)                       |
+| Wizard, onboarding               | Full-screen route   | Full-screen route         | Multi-step; no swipe-dismiss                               |
+| Save-session navigate-away guard | Modal               | Modal                     | Standard modal usage                                       |
 
 This table is documentation for retrofits, not a runtime spec —
 session 7's per-screen passes cite these bindings.
@@ -273,12 +274,10 @@ Existing project terms are preserved where they're load-bearing:
   remain valid.
 - **`modal`** — kept as the primitive name. Existing references
   remain valid.
-- **`bottom drawer`** — used in
-  [`../../screens/reader-composer/branch-navigator/branch-navigator.md → Mobile — bottom drawer`](../../screens/reader-composer/branch-navigator/branch-navigator.md#mobile--bottom-drawer)
-  and elsewhere — refers to the same primitive as a bottom-anchored
-  Sheet. Per-screen prose stays "bottom drawer"; session 7's
-  per-screen retrofits unify to "Sheet (bottom)" naming when each
-  surface is touched. No sweep this session.
+- **`bottom drawer`** — was used in
+  [`branch-navigator.md`](../../screens/reader-composer/branch-navigator/branch-navigator.md#mobile-expression)
+  pre-foundations; reconciled to "Sheet (bottom, short)" in
+  Group B (session 7) — same primitive, foundations vocabulary.
 - **`right-anchored drawer`** — used in
   [`../../patterns/data.md`](../../patterns/data.md) for the raw
   JSON viewer — refers to the same primitive as a right-anchored

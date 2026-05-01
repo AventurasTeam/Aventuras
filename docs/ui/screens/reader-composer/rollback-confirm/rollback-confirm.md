@@ -124,13 +124,33 @@ and 5 will return to in-progress`).
   consent. Adding text snippets would inflate the modal and risk
   drifting from what's actually rolled back.
 
-## Mobile
+## Mobile expression
 
-Modal renders identically on mobile (modals already cross-platform per
-[branch creation modal mobile note](../branch-navigator/branch-navigator.md#mobile--bottom-drawer)).
-Hover-preview is desktop-only; touch has no hover state. Tap-and-hold
-as a fallback is deferred — same treatment as the icon-actions
-mobile rule (touch sits at muted default, taps trigger directly).
+Renders per the
+[mobile foundations contracts](../../../foundations/mobile/README.md).
+**Modal stays Modal on every tier** per
+[layout.md → Modal](../../../foundations/mobile/layout.md#modal)
+— same expression on phone, tablet, and desktop. The cross-
+reference framing (modals are tier-stable in this app) holds the
+same way the
+[branch creation modal](../branch-navigator/branch-navigator.md#mobile-expression)
+does. Tablet inherits desktop verbatim per
+[navigation.md → Tablet](../../../foundations/mobile/navigation.md#tablet-6401023-px).
+
+**Hover-preview is desktop-only** — touch has no hover state per
+[touch.md → Hover translation](../../../foundations/mobile/touch.md#hover-translation),
+and rollback-row hover-preview is explicitly listed as
+"desktop-only; no touch fallback (taps trigger)" in the touch
+contract's translation table. Tap-and-hold as a fallback isn't
+adopted: it would conflict with OS-reserved long-press for
+selection / accessibility per
+[touch.md → Gesture vocabulary](../../../foundations/mobile/touch.md#gesture-vocabulary)
+("No long-press for actions"). Touch users tap a row directly to
+trigger rollback; the modal's confirm step is the consent
+mechanism rather than the hover-preview.
+
+Design rationale and adversarial findings in
+[`explorations/2026-05-01-mobile-group-b-reading-flow.md`](../../../../explorations/2026-05-01-mobile-group-b-reading-flow.md).
 
 ## Edge cases
 

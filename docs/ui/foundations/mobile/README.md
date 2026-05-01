@@ -236,8 +236,23 @@ reflects the current plan and updates as work progresses.
      surface). onboarding's centered card → full-bleed on phone
      (no max-width / shadow / radius); padding compresses across
      header / body / footer.
-   - **B — Reading flow** (pending): reader-composer,
-     branch-navigator, rollback-confirm.
+   - **B — Reading flow** — landed 2026-05-01
+     ([exploration record](../../../explorations/2026-05-01-mobile-group-b-reading-flow.md)).
+     reader-composer, branch-navigator, rollback-confirm gain
+     `## Mobile expression` sections and viewport-toggle wireframes.
+     reader-composer is the substantive surface — phone-tier
+     forced-collapse to 1-pane (rail to edge strip), strip-tap
+     opens the rail content as a bottom Sheet (medium initial,
+     grows to tall on peek), reader chip strip below the top-bar,
+     status-pill icon-only with tap-to-popover, composer
+     keyboard-avoidance per platform.md. branch-navigator's
+     pre-foundations `## Mobile — bottom drawer` section
+     reconciled to `## Mobile expression` using Sheet (short)
+     vocabulary; the 480 px width cap dropped (bottom Sheets are
+     full-width on phone). rollback-confirm's pre-foundations
+     `## Mobile` heading renamed; modal stays Modal at every
+     tier; hover-preview is desktop-only. Five inbound anchor
+     refs to the renamed headings updated in the same commit.
    - **C — In-story master-detail** (pending): world, plot,
      chapter-timeline.
    - **D — Settings + power-user** (pending): story-settings,

@@ -129,28 +129,28 @@ but aren't required to — a navigation-paradigm demo demonstrating
 how a tab-bar moves at one tier might not need to demonstrate the
 other two tiers, and the toggle would be visual noise.
 
-## Pre-foundations mobile content — stance
+## Pre-foundations mobile content — reconciled in session 7
 
-Two per-screen docs already carry partial mobile sections that
-pre-date this contract:
+Two per-screen docs carried partial mobile sections that pre-dated
+this contract; both reconciled to `## Mobile expression` sections
+in session 7's grouped consumer pass:
 
-- [`../../screens/reader-composer/branch-navigator/branch-navigator.md → Mobile — bottom drawer`](../../screens/reader-composer/branch-navigator/branch-navigator.md#mobile--bottom-drawer)
-  — full bottom-drawer spec for the branch-navigator popover.
-- [`../../screens/reader-composer/rollback-confirm/rollback-confirm.md → Mobile`](../../screens/reader-composer/rollback-confirm/rollback-confirm.md#mobile)
-  — modal renders identically; hover-preview is desktop-only.
+- [`../../screens/reader-composer/branch-navigator/branch-navigator.md → Mobile expression`](../../screens/reader-composer/branch-navigator/branch-navigator.md#mobile-expression)
+  — was `Mobile — bottom drawer` pre-foundations; rewritten to
+  Sheet (short, bottom) vocabulary in Group B
+  ([exploration record](../../../explorations/2026-05-01-mobile-group-b-reading-flow.md)).
+- [`../../screens/reader-composer/rollback-confirm/rollback-confirm.md → Mobile expression`](../../screens/reader-composer/rollback-confirm/rollback-confirm.md#mobile-expression)
+  — was `Mobile` pre-foundations; renamed and prose updated to
+  cite the substrate explicitly. Same Group B commit.
 
-**Stance: interim, reviewable.** They constitute pre-foundations
-decisions taken in service of single per-screen designs; the mobile
-contract owns the global vocabulary they should compose from.
-Sessions 2–6 may revise the underlying primitives (session 3 might
-mint a "sheet" primitive that the bottom-drawer spec then cites
-instead of redefining itself); session 7's per-screen retrofits do
-the reconciliation per surface. Session 1 does not delete or rewrite
-them; the contract is forward-only.
-
-The same stance applies to scattered mobile prose elsewhere in the
-docs (`../../screens/reader-composer/reader-composer.md` line 170
+The reader-composer's scattered inline mentions
+(`../../screens/reader-composer/reader-composer.md` line 170
 "same affordance on desktop and mobile",
-[`../iconography.md`](../iconography.md) reference to "375 px mobile
-viewports", further mobile mentions in `branch-navigator.md`). No
-sweep this session; sessions 2–6 promote vocabulary as it lands.
+[`../iconography.md`](../iconography.md) reference to "375 px
+mobile viewports") remain in place — they're now load-bearing
+under the substrate the foundations contract supplies. Group B
+added a new `## Mobile expression` section to reader-composer
+that consumes the substrate directly; the inline mentions stay
+as historical phrasing the substrate now backs. The forward-only
+stance from session 1 carried through cleanly — no rewrites of
+landed substrate were needed.

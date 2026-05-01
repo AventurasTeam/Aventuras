@@ -734,6 +734,99 @@ inline mutation surface (character-only; doesn't apply to lore or
 other non-character kinds). Deep edits route to the World panel
 via the existing `Open in World panel →` foot link.
 
+## Mobile expression
+
+Renders per the
+[mobile foundations contracts](../../foundations/mobile/README.md).
+Reader is a 2-pane surface that collapses to 1-pane on phone per
+[`collapse.md → Reader / composer`](../../foundations/mobile/collapse.md#reader--composer-narrative--rail--narrative--rail-strip).
+Tablet inherits desktop verbatim per
+[navigation.md → Tablet](../../foundations/mobile/navigation.md#tablet-6401023-px);
+the existing rail viewport-forced-collapse threshold (~900 px per
+[State model](#state-model--manual--viewport-decoupled)) covers
+phone-landscape and iPad-portrait, so iPad-portrait already gets
+the strip-collapsed rail without a phone-specific rule. Phone-tier
+specifics below.
+
+- **Top-bar shape.** Slim single-row plus reader-only chip strip
+  per
+  [navigation.md → Phone top-bar](../../foundations/mobile/navigation.md#phone--640-px).
+  Layout: `[←] [story-title…] [status-pill] [⛭] [⚲]`. Story title
+  truncates with ellipsis; tap reveals the full title in a transient
+  popover per
+  [touch.md → Tap-to-tooltip on inert chrome text](../../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text).
+- **Reader chip strip (phone-only).** Below the top-bar:
+  `[Chapter ▾] [<time chip>] [⎇N]`. Horizontally scrollable when
+  overflowing; ~16 px left padding doubles as iOS swipe-back safe
+  zone per
+  [touch.md → Chip-strip safe zone](../../foundations/mobile/touch.md#chip-strip-safe-zone).
+- **Chapter chip popover** binds to **Sheet (medium, bottom)** on
+  phone per
+  [layout.md → Surface bindings](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces)
+  — multi-row content (chapter list, progress bar, manage-chapters
+  link) exceeds the tiny-popover threshold.
+- **Time chip popover** stays Popover all tiers — tiny content
+  (era label and `Flip era…` action).
+- **Branch chip popover** binds to **Sheet (short, bottom)** on
+  phone; primitive specced in
+  [branch-navigator → Mobile expression](./branch-navigator/branch-navigator.md#mobile-expression).
+- **Status pill on phone** is icon-only (the desktop label
+  `reasoning…` doesn't fit narrow chrome). Tap reveals current
+  phase plus cancel in a Popover anchored to the pill per
+  [touch.md → Status pill on phone](../../foundations/mobile/touch.md#status-pill-on-phone).
+  Same cancel-pipeline flow as desktop.
+- **Browse rail forced-collapsed to edge strip on phone** — phone
+  width is a strict subset of the existing viewport-forced-
+  collapse threshold (~900 px). The strip-tap on phone is
+  **tier-aware** per
+  [collapse.md → Reader / composer](../../foundations/mobile/collapse.md#reader--composer-narrative--rail--narrative--rail-strip):
+  desktop / tablet expand the rail in place; **phone opens the
+  rail's content as a Sheet (bottom, medium initial)**. Would-be
+  in-place expansion would squeeze the narrative to nothing at
+  390 px.
+- **Rail-as-sheet contents.** Full rail vocabulary — category
+  dropdown, filter chips, search, row list, Import affordance.
+  Tap a row inside the sheet → sheet swaps to peek view (height
+  may grow to tall ~85–95 % per the
+  [Peek drawer mapping](../../foundations/mobile/layout.md#mapping--desktop-to-mobile)).
+  Sheet's own back affordance returns row-list state. Peek's
+  `Open in panel →` link dismisses the sheet and routes to World
+  / Plot per the cross-surface nav model. Drag-down dismisses
+  entirely regardless of state.
+- **Peek-rail mutual exclusion** (per
+  [Peek drawer — peek implies rail open](#peek-drawer--peek-implies-rail-open))
+  holds on phone — peek is reachable only via row-tap inside the
+  rail-as-sheet, never independently. The desktop "collapse
+  closes peek" rule maps to "drag-down dismisses sheet
+  regardless of state."
+- **Composer keyboard handling.** `KeyboardAvoidingView` per
+  [platform.md → Keyboard avoidance](../../foundations/mobile/platform.md#keyboard-avoidance)
+  reflows narrative and composer above the soft keyboard. The
+  narrative scroll view shrinks; latest entry stays at the top of
+  the visible scroll region per the existing scroll-behavior
+  rule. Composer textarea sits directly above the keyboard; send
+  button and mode picker remain visible. Suggestion panel moves
+  up with the composer (it's content, not chrome).
+- **Per-entry action icons** stay always-visible-muted per the
+  [icon-actions visibility rule](../../patterns/icon-actions.md#visibility--always-rendered-muted-default-brighten-on-hover);
+  no tier-specific change. Touch users see the icons at the muted
+  default; taps trigger normally.
+- **Modals stay Modal all tiers** — branch creation, rollback
+  confirm, era flip, chapter close. Per the layout binding table.
+- **Stack-aware Return.** The chrome `←`, Android `BackHandler`,
+  and iOS swipe-back all bind to stack-aware Return per
+  [navigation.md → Stack-aware Return on mobile](../../foundations/mobile/navigation.md#stack-aware-return-on-mobile).
+  Empty-stack-confirm is Android-relevant primarily per
+  [platform.md → OS back integration](../../foundations/mobile/platform.md#os-back-integration).
+- **Safe areas.** Top-bar honors `insets.top`; composer and send
+  button area honor `insets.bottom`; narrative scroll extends
+  edge-to-edge but its visible end-of-scroll respects the bottom
+  inset per
+  [platform.md → Safe areas](../../foundations/mobile/platform.md#safe-areas).
+
+Design rationale and adversarial findings in
+[`explorations/2026-05-01-mobile-group-b-reading-flow.md`](../../../explorations/2026-05-01-mobile-group-b-reading-flow.md).
+
 ## Screen-specific notes
 
 - Title max-width capped at 320px with ellipsis + tooltip; keeps long

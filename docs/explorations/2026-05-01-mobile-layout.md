@@ -56,7 +56,7 @@ canonical docs:
   this width). Has a save-session quick-edit exception per
   [`patterns/save-sessions.md → Quick-edit exception — peek drawer`](../ui/patterns/save-sessions.md#quick-edit-exception--peek-drawer).
 - **bottom drawer** — branch-navigator's mobile expression per
-  [`branch-navigator.md → Mobile — bottom drawer`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#mobile--bottom-drawer).
+  [`branch-navigator.md → Mobile — bottom drawer`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#mobile-expression).
 - **modal** — rollback-confirm, branch creation, calendar swap
   warnings. Centered, scrim, focused interaction.
 - **right-anchored drawer** — raw JSON viewer per

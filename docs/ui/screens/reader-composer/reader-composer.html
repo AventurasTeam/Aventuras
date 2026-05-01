@@ -30,6 +30,21 @@
   .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
   .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
   .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+  kbd { font-family: monospace; background: #fff; padding: 1px 5px; border: 1px solid #d8c99a; border-radius: 3px; font-size: 10px; color: #5a4820; }
+
+  /* viewport stage — container width drives reflow inside via @container queries.
+     Mechanism per docs/ui/foundations/mobile/responsive.html. */
+  .vp-stage { flex: 1; padding: 12px; background: var(--bg); display: flex; justify-content: center; box-sizing: border-box; min-height: 0; }
+  .vp-stage-wrap { display: flex; flex-direction: column; gap: 6px; align-items: center; width: 100%; min-height: 0; flex: 1; }
+  .vp-stage-meta { font-size: 11px; color: var(--ink-muted); font-family: monospace; }
+  .vp-stage-meta strong { color: var(--ink); }
+  .viewport { container-type: inline-size; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; width: 100%; max-width: var(--vp-width, 1280px); transition: max-width 0.25s ease; overflow: hidden; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+  /* phone chip strip — surfaces below the top-bar at phone tier; chapter / time / branch chips
+     migrate here from the top-bar per navigation.md → Reader chip strip. */
+  .phone-chip-strip { display: none; padding: 6px 16px; gap: 8px; align-items: center; background: var(--bg-region); border-bottom: 1px solid var(--line-soft); overflow-x: auto; scrollbar-width: thin; }
+  .phone-chip-strip .chip { padding: 4px 10px; border: 1px solid var(--line-soft); border-radius: 14px; background: var(--bg); color: var(--ink); font-size: 11px; cursor: pointer; white-space: nowrap; flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; }
+  .phone-chip-strip .chip .chev { font-size: 9px; color: var(--ink-faint); }
 
   /* top bar */
   header.topbar { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
@@ -360,15 +375,54 @@
   /* error entry visibility */
   .error-entry { display: none; }
   .error-entry.visible { display: block; }
+
+  /* =========================================================
+     Tier overrides — container queries on .viewport.
+     Phone tier (< 640 px) collapses chrome per the foundations
+     contract: chapter / time / branch chips migrate from the
+     top-bar to a phone-only chip strip below; rail force-
+     collapsed to edge strip; gen-pill text label hidden.
+     Tablet (640-1023 px) inherits desktop chrome verbatim.
+     ========================================================= */
+
+  /* Phone tier — < 640 px container */
+  @container (max-width: 639px) {
+    /* simplify top-bar — chips move to chip-strip below */
+    .crumb-sep { display: none; }
+    .crumb-chapter { display: none; }
+    .crumb-time { display: none; }
+    #branch-chip { display: none; }
+    .crumb-primary { max-width: none; flex: 1; }
+    /* gen-pill becomes icon-only */
+    #gen-label { display: none; }
+    /* rail forced-collapsed — replicates body.rail-collapsed semantics */
+    .layout { grid-template-columns: 1fr 16px; }
+    aside.right { overflow: hidden; }
+    aside.right > * { display: none; }
+    /* surface the phone chip strip below the top-bar */
+    .phone-chip-strip { display: flex; }
+  }
+
+  /* Tablet tier — 640-1023 px container — desktop chrome density. */
+  @container (min-width: 640px) and (max-width: 1023px) {
+    /* nothing tier-specific — tablet inherits desktop layout. The existing
+       rail viewport-forced-collapse rule (~900 px) is honored at runtime by
+       the rail-state JS independently of this container query. */
+  }
 </style>
 </head>
 <body>
 
-<div class="screen-label"><strong>Wireframe:</strong> Reader / Composer &mdash; desktop (&ge; 1024px) &mdash; low-fi, interactive</div>
+<div class="screen-label"><strong>Wireframe:</strong> Reader / Composer &mdash; responsive across phone / tablet / desktop</div>
 
 <!-- Review controls -->
 <div class="review-bar">
-  <span class="rb-label">Review controls</span>
+  <div class="rb-group" role="group" aria-label="Viewport tier">
+    <span class="rb-label">Viewport</span>
+    <button class="rb-btn" data-vp="phone" data-width="390">Phone <kbd>1</kbd></button>
+    <button class="rb-btn" data-vp="tablet" data-width="768">Tablet <kbd>2</kbd></button>
+    <button class="rb-btn active" data-vp="desktop" data-width="1280">Desktop <kbd>3</kbd></button>
+  </div>
 
   <div class="rb-group">
     <span class="gl">gen:</span>
@@ -485,6 +539,13 @@
   <span class="rb-note">also: click a Browse row · <kbd>Esc</kbd> closes peek · <kbd>Ctrl</kbd>+<kbd>\</kbd> toggles rail</span>
 </div>
 
+<div class="vp-stage">
+  <div class="vp-stage-wrap">
+    <div class="vp-stage-meta">
+      Container width: <strong id="vp-width-readout">1280 px</strong> &middot; tier: <strong id="vp-tier-readout">desktop</strong>
+    </div>
+    <div class="viewport" id="viewport">
+
 <!-- Top bar -->
 <header class="topbar">
   <div class="logo">A</div>
@@ -553,6 +614,14 @@
 <!-- Chapter progress strip — passive chrome, always visible -->
 <div class="topbar-progress" data-label="Chapter 3 · 8,420 / 24,000 tok">
   <div class="fill" style="width: 35%"></div>
+</div>
+
+<!-- Phone-only chip strip — surfaces the chapter / time / branch chips below the top-bar
+     at phone tier per navigation.md → Reader chip strip. Display toggles via @container query. -->
+<div class="phone-chip-strip" aria-label="Reader chip strip (phone)">
+  <span class="chip">Chapter 3 <span class="chev">&#9662;</span></span>
+  <span class="chip">&#9201; Day 3, dusk <span class="chev">&#9662;</span></span>
+  <span class="chip">&#x2387;3</span>
 </div>
 
 <!-- Chapter-close banner — sticky below chrome during chapter-close transaction -->
@@ -947,7 +1016,12 @@
 
 </div>
 
-<!-- Flip-era modal — triggered from time-chip popover, Actions menu, or per-entry icon -->
+    </div><!-- /.viewport -->
+  </div><!-- /.vp-stage-wrap -->
+</div><!-- /.vp-stage -->
+
+<!-- Flip-era modal — triggered from time-chip popover, Actions menu, or per-entry icon.
+     Sits outside .viewport so position:fixed centers against the document, not the container. -->
 <div class="flip-era-modal" id="flip-era-modal">
   <div class="dialog">
     <div class="dialog-head">
@@ -973,6 +1047,37 @@
 </div>
 
 <script>
+(function () {
+  // Viewport toggle — sets max-width on .viewport, persists choice, accepts 1/2/3.
+  // Pattern lifted from foundations/mobile/responsive.html.
+  var STORAGE_KEY = 'aventuras-wireframe-viewport';
+  var viewport = document.getElementById('viewport');
+  var widthReadout = document.getElementById('vp-width-readout');
+  var tierReadout = document.getElementById('vp-tier-readout');
+  var vpButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-vp]'));
+  function tierFor(width) { return width < 640 ? 'phone' : (width < 1024 ? 'tablet' : 'desktop'); }
+  function applyVp(vp) {
+    var btn = vpButtons.filter(function (b) { return b.dataset.vp === vp; })[0];
+    if (!btn) { btn = vpButtons[2]; vp = 'desktop'; }
+    var width = parseInt(btn.dataset.width, 10);
+    vpButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+    viewport.style.setProperty('--vp-width', width + 'px');
+    widthReadout.textContent = width + ' px';
+    tierReadout.textContent = tierFor(width);
+    try { localStorage.setItem(STORAGE_KEY, vp); } catch (e) { /* no-op */ }
+  }
+  vpButtons.forEach(function (b) { b.addEventListener('click', function () { applyVp(b.dataset.vp); }); });
+  document.addEventListener('keydown', function (e) {
+    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    if (e.key === '1') applyVp('phone');
+    else if (e.key === '2') applyVp('tablet');
+    else if (e.key === '3') applyVp('desktop');
+  });
+  var saved;
+  try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) { saved = null; }
+  applyVp(saved || 'desktop');
+})();
+
 (function() {
   // gen state → status pill + streaming entry + composer send/cancel + chapter-close banner
   const genStatus = document.getElementById('gen-pill');

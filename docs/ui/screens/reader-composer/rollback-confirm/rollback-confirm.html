@@ -33,9 +33,18 @@
   .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
   .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
   .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+  kbd { font-family: monospace; background: #fff; padding: 1px 5px; border: 1px solid #d8c99a; border-radius: 3px; font-size: 10px; color: #5a4820; }
+
+  /* viewport stage — modal stays modal at every tier per layout.md → Modal.
+     Container query is here for consistency with the foundations toggle pattern. */
+  .vp-stage { flex: 1; padding: 12px; background: var(--bg); display: flex; justify-content: center; box-sizing: border-box; min-height: 0; }
+  .vp-stage-wrap { display: flex; flex-direction: column; gap: 6px; align-items: center; width: 100%; min-height: 0; flex: 1; }
+  .vp-stage-meta { font-size: 11px; color: var(--ink-muted); font-family: monospace; }
+  .vp-stage-meta strong { color: var(--ink); }
+  .viewport { container-type: inline-size; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; width: 100%; max-width: var(--vp-width, 1280px); transition: max-width 0.25s ease; overflow: hidden; display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
   /* simulated reader stage */
-  .reader-stage { flex: 1; background: var(--bg); position: relative; padding: 24px 0; overflow: hidden; }
+  .reader-stage { flex: 1; background: var(--bg); position: relative; padding: 24px 0; overflow: hidden; min-height: 480px; }
   .entries-col { max-width: 720px; margin: 0 auto; padding: 0 24px; }
 
   /* faux entries */
@@ -87,14 +96,19 @@
 </head>
 <body data-state="idle" data-cross="single">
 
-<div class="screen-label"><strong>Wireframe:</strong> Rollback confirmation &mdash; sub-screen of reader-composer, low-fi, interactive</div>
+<div class="screen-label"><strong>Wireframe:</strong> Rollback confirmation &mdash; sub-screen of reader-composer, responsive across phone / tablet / desktop</div>
 
 <div class="review-bar">
-  <span class="rb-label">Review controls</span>
+  <div class="rb-group" role="group" aria-label="Viewport tier">
+    <span class="rb-label">Viewport</span>
+    <button class="rb-btn" data-vp="phone" data-width="390">Phone <kbd>1</kbd></button>
+    <button class="rb-btn" data-vp="tablet" data-width="768">Tablet <kbd>2</kbd></button>
+    <button class="rb-btn active" data-vp="desktop" data-width="1280">Desktop <kbd>3</kbd></button>
+  </div>
   <div class="rb-group">
     <span class="gl">state:</span>
     <button class="rb-btn active" data-state="idle">idle</button>
-    <button class="rb-btn" data-state="hover-preview">hover preview</button>
+    <button class="rb-btn" data-state="hover-preview">hover preview (desktop only)</button>
     <button class="rb-btn" data-state="confirm-modal">confirm modal</button>
   </div>
   <div class="rb-group">
@@ -104,6 +118,13 @@
   </div>
   <span class="rb-note">flip controls to inspect each state</span>
 </div>
+
+<div class="vp-stage">
+  <div class="vp-stage-wrap">
+    <div class="vp-stage-meta">
+      Container width: <strong id="vp-width-readout">1280 px</strong> &middot; tier: <strong id="vp-tier-readout">desktop</strong>
+    </div>
+    <div class="viewport" id="viewport">
 
 <div class="reader-stage">
   <div class="entries-col">
@@ -206,7 +227,42 @@
 
 </div>
 
+    </div><!-- /.viewport -->
+  </div><!-- /.vp-stage-wrap -->
+</div><!-- /.vp-stage -->
+
 <script>
+  // Viewport toggle — modal stays modal at every tier per layout.md → Modal.
+  // Pattern lifted from foundations/mobile/responsive.html.
+  (function () {
+    var STORAGE_KEY = 'aventuras-wireframe-viewport';
+    var viewport = document.getElementById('viewport');
+    var widthReadout = document.getElementById('vp-width-readout');
+    var tierReadout = document.getElementById('vp-tier-readout');
+    var vpButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-vp]'));
+    function tierFor(width) { return width < 640 ? 'phone' : (width < 1024 ? 'tablet' : 'desktop'); }
+    function applyVp(vp) {
+      var btn = vpButtons.filter(function (b) { return b.dataset.vp === vp; })[0];
+      if (!btn) { btn = vpButtons[2]; vp = 'desktop'; }
+      var width = parseInt(btn.dataset.width, 10);
+      vpButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+      viewport.style.setProperty('--vp-width', width + 'px');
+      widthReadout.textContent = width + ' px';
+      tierReadout.textContent = tierFor(width);
+      try { localStorage.setItem(STORAGE_KEY, vp); } catch (e) { /* no-op */ }
+    }
+    vpButtons.forEach(function (b) { b.addEventListener('click', function () { applyVp(b.dataset.vp); }); });
+    document.addEventListener('keydown', function (e) {
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (e.key === '1') applyVp('phone');
+      else if (e.key === '2') applyVp('tablet');
+      else if (e.key === '3') applyVp('desktop');
+    });
+    var saved;
+    try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) { saved = null; }
+    applyVp(saved || 'desktop');
+  })();
+
   const body = document.body;
 
   function setState(state) {
