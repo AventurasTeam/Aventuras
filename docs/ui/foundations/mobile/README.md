@@ -42,6 +42,19 @@ and exploration-record link.
 - [`layout.html`](./layout.html) — interactive demo of each
   primitive across viewport tiers (popover, modal, sheet at three
   heights, full-screen route).
+- [`collapse.md`](./collapse.md) — collapse rule for multi-pane
+  surfaces. Universe is small (only Reader, World, Plot are
+  multi-pane in v1, all 2-pane). Master-detail (World, Plot)
+  collapses list-first on phone (tap row to detail-route, back to
+  list). Reader collapses to narrative-only; rail-strip-tap on
+  phone opens the rail's content as a bottom Sheet (tier-aware
+  divergence from desktop's in-place expand). Phone landscape
+  stays width-only per the responsive contract. State preserved
+  across reflow (Galaxy Fold, browser resize, orientation).
+- [`collapse.html`](./collapse.html) — interactive demo: surface
+  toggle (Reader, World, Plot) crossed with viewport toggle, plus
+  a master-detail "show detail" toggle to demonstrate the phone
+  collapse on World / Plot.
 
 ## Sessions
 
@@ -100,11 +113,27 @@ reflects the current plan and updates as work progresses.
    `bottom drawer` references unify in session 7). No new tokens
    minted; depth metaphor / padding / radii inherit from spacing.md.
    Files: [`layout.md`](./layout.md), [`layout.html`](./layout.html).
-4. **Collapse rule** — pending. Universal rule for desktop's 2-
-   and 3-pane surfaces becoming tablet 2-pane → phone 1-pane.
-   Phone-landscape disposition (height-aware vs width-aware).
-   Reader / composer (3-pane) is the canary; world / plot
-   (2-pane) follow.
+4. **Collapse rule** — landed 2026-05-01
+   ([exploration record](../../../explorations/2026-05-01-mobile-collapse.md)).
+   Universe is smaller than the original plan sketched: only
+   Reader, World, and Plot are multi-pane in v1, all 2-pane (no
+   3-pane surfaces exist). Master-detail (World, Plot) collapses
+   list-first on phone — tap row to detail-route (full-screen
+   route within the surface, back-on-left returns to list).
+   Reader collapses to narrative-only on phone; rail forced-
+   collapsed to 28-px edge strip per the existing
+   [side-rail collapse spec](../../screens/reader-composer/reader-composer.md#browse-rail--collapse--expand).
+   **Tier-aware strip-tap behavior**: in-place expand on
+   tablet+desktop, opens rail content as a bottom Sheet on phone
+   (since in-place expand would squeeze the narrative to nothing
+   at 390 px). Phone landscape stays width-only per session 1's
+   responsive contract — height-aware override deferred until
+   user testing surfaces complaints. State survives reflow
+   natively (Galaxy Fold unfold/fold, browser resize,
+   orientation, iOS Slide Over) — open sheets dismiss on tier
+   transitions out of phone (session 7 implementation guidance).
+   Files: [`collapse.md`](./collapse.md),
+   [`collapse.html`](./collapse.html).
 5. **Touch grammar** — pending. Hover-brighten replacements,
    hover-affordance translation on entity rows, peek drawer →
    bottom sheet decision, save-bar placement on small screens,

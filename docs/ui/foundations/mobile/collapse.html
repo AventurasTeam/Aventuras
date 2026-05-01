@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Mobile foundations (collapse rule)</title>
+<style>
+  /* Monochrome wireframe palette per docs/conventions.md → Wireframe authoring. */
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-pane-alt: #f4f4f4;
+    --bg-strip: #f7f7f7;
+    --accent: #5a5a5a;
+    --scrim: rgba(0, 0, 0, 0.42);
+  }
+
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* review bar */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+  kbd { font-family: monospace; background: #fff; padding: 1px 5px; border: 1px solid #d8c99a; border-radius: 3px; font-size: 10px; color: #5a4820; }
+
+  .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .screen-label strong { color: var(--ink); }
+
+  .stage { flex: 1; padding: 24px; display: flex; justify-content: center; box-sizing: border-box; }
+  .stage-wrap { display: flex; flex-direction: column; gap: 8px; align-items: center; width: 100%; }
+  .stage-meta { font-size: 11px; color: var(--ink-muted); font-family: monospace; }
+  .stage-meta strong { color: var(--ink); }
+
+  .viewport {
+    container-type: inline-size;
+    background: var(--bg-region);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    width: 100%;
+    max-width: var(--vp-width, 1280px);
+    transition: max-width 0.25s ease;
+    overflow: hidden;
+    height: 520px;
+    position: relative;
+  }
+
+  /* Top bar — slim, just to anchor the surface visually. */
+  .topbar {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg-region);
+    flex-shrink: 0;
+  }
+  .topbar .leftslot {
+    width: 28px; height: 28px;
+    border: 1px dashed var(--line);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink); font-weight: 600; font-size: 13px;
+  }
+  .topbar .crumb { font-weight: 600; color: var(--ink); font-size: 13px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar .icon { width: 26px; height: 26px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 12px; cursor: pointer; }
+
+  /* Sub-header — master-detail in-pane breadcrumb (World, Plot only). */
+  .sub-header {
+    padding: 6px 12px;
+    background: var(--bg-strip);
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 12px;
+    color: var(--ink-muted);
+    flex-shrink: 0;
+  }
+  .sub-header strong { color: var(--ink); }
+
+  /* Surface body wrapper — flex column. */
+  .surface {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+  }
+  .surface.active { display: flex; }
+
+  /* ===========================================================
+     Reader surface — narrative + rail.
+     =========================================================== */
+  .reader-body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 28px;
+    overflow: hidden;
+  }
+  .reader-narrative {
+    padding: 14px;
+    overflow-y: auto;
+    color: var(--ink);
+    font-size: 12px;
+  }
+  .reader-narrative h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); font-weight: 600; }
+  .reader-narrative p { margin: 0 0 6px; color: var(--ink-muted); }
+  .reader-rail-strip {
+    background: var(--bg-pane-alt);
+    border-left: 1px solid var(--line-soft);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-faint);
+    font-size: 11px;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    letter-spacing: 0.1em;
+  }
+  .reader-rail-strip:hover { color: var(--ink-muted); background: #ececec; }
+  .reader-rail-full {
+    display: none;
+    background: var(--bg-pane-alt);
+    border-left: 1px solid var(--line-soft);
+    padding: 14px;
+    overflow-y: auto;
+  }
+  .reader-rail-full h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); font-weight: 600; }
+  .reader-rail-full .row {
+    padding: 6px 8px;
+    border-bottom: 1px dashed var(--line-soft);
+    color: var(--ink);
+    font-size: 12px;
+  }
+
+  /* Tablet (≥ 640) and Desktop (≥ 1024) — rail can be open or strip.
+     For the demo, show the rail as STRIP at tablet (forced collapsed
+     under ~900 per the existing rail spec, which iPad portrait at 820
+     trips), and OPEN at desktop. Use container queries. */
+  .reader-rail-strip { display: flex; }
+  .reader-rail-full { display: none; }
+
+  @container (min-width: 1024px) {
+    .reader-body {
+      grid-template-columns: 1fr 280px;
+    }
+    .reader-rail-strip { display: none; }
+    .reader-rail-full { display: block; }
+  }
+
+  /* ===========================================================
+     World / Plot master-detail — list + detail.
+     Phone (< 640): show list by default; tap row → detail-route.
+     Tablet/Desktop (≥ 640): show side-by-side.
+     =========================================================== */
+  .md-body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr;
+    overflow: hidden;
+    position: relative;
+  }
+  .md-list, .md-detail {
+    overflow-y: auto;
+  }
+  .md-list {
+    padding: 12px;
+    border-right: 1px solid var(--line-soft);
+    background: var(--bg-region);
+  }
+  .md-list h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); font-weight: 600; }
+  .md-row {
+    padding: 8px;
+    border-bottom: 1px dashed var(--line-soft);
+    color: var(--ink);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .md-row:hover { background: var(--bg-pane-alt); }
+  .md-row.selected { background: var(--bg-pane-alt); border-color: var(--line); }
+  .md-detail {
+    padding: 14px;
+    background: var(--bg-region);
+    color: var(--ink);
+    font-size: 12px;
+  }
+  .md-detail h4 { margin: 0 0 8px; font-size: 13px; color: var(--ink); }
+  .md-detail p { margin: 0 0 6px; color: var(--ink-muted); }
+
+  /* Phone (default — base, no @container query): only list visible by default;
+     when "row selected" state is active, the detail full-screen route covers. */
+  .md-detail { display: none; }
+  .md-list { border-right: 0; }
+
+  /* Phone "row selected" toggle: render detail as full-screen route over list.
+     Triggered by [data-detail="open"] on the surface. */
+  .surface[data-detail="open"] .md-list { display: none; }
+  .surface[data-detail="open"] .md-detail { display: block; }
+  .surface[data-detail="open"] .md-back-btn { display: flex; }
+
+  .md-back-btn {
+    display: none;
+    width: 28px; height: 28px;
+    border: 1px dashed var(--line);
+    border-radius: 4px;
+    align-items: center; justify-content: center;
+    color: var(--ink); font-size: 14px; cursor: pointer;
+  }
+
+  /* Tablet (≥ 640) and Desktop: side-by-side; both panes visible always. */
+  @container (min-width: 640px) {
+    .md-body {
+      grid-template-columns: 280px 1fr;
+    }
+    .md-list { border-right: 1px solid var(--line-soft); display: block; }
+    .md-detail { display: block; }
+    .md-back-btn { display: none !important; }
+    .surface[data-detail="open"] .md-list { display: block; }
+  }
+
+  @container (min-width: 1024px) {
+    .md-body { grid-template-columns: 340px 1fr; }
+  }
+
+  /* ===========================================================
+     Demo note.
+     =========================================================== */
+  .demo-note {
+    margin: 16px auto 24px;
+    padding: 12px 16px;
+    max-width: 760px;
+    border: 1px dashed var(--line);
+    border-radius: 4px;
+    background: var(--bg-region);
+    font-size: 12px;
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+  .demo-note strong { color: var(--ink); }
+  .demo-note code { background: var(--bg); padding: 1px 5px; border-radius: 2px; font-size: 11px; }
+</style>
+</head>
+<body>
+  <div class="review-bar">
+    <div class="rb-group" role="group" aria-label="Viewport tier">
+      <span class="rb-label">Viewport</span>
+      <button class="rb-btn" data-vp="phone" data-width="390">Phone <kbd>1</kbd></button>
+      <button class="rb-btn" data-vp="tablet" data-width="768">Tablet <kbd>2</kbd></button>
+      <button class="rb-btn active" data-vp="desktop" data-width="1280">Desktop <kbd>3</kbd></button>
+    </div>
+    <div class="rb-group" role="group" aria-label="Surface">
+      <span class="rb-label">Surface</span>
+      <button class="rb-btn active" data-surface="reader">Reader <kbd>R</kbd></button>
+      <button class="rb-btn" data-surface="world">World <kbd>W</kbd></button>
+      <button class="rb-btn" data-surface="plot">Plot <kbd>P</kbd></button>
+    </div>
+    <div class="rb-group" role="group" aria-label="Master-detail state">
+      <span class="rb-label">Detail</span>
+      <button class="rb-btn" id="detail-toggle">Show detail (phone only)</button>
+    </div>
+    <div class="rb-note">Session 4 — collapse rule across tiers.</div>
+  </div>
+
+  <div class="screen-label"><strong>foundations / mobile</strong> — collapse rule reference</div>
+
+  <div class="stage">
+    <div class="stage-wrap">
+      <div class="stage-meta">
+        Container: <strong id="vp-width-readout">1280 px</strong> · tier: <strong id="vp-tier-readout">desktop</strong> · surface: <strong id="surface-readout">reader</strong>
+      </div>
+
+      <div class="viewport" id="viewport">
+        <!-- ============== Reader surface ============== -->
+        <div class="surface active" data-surface="reader">
+          <div class="topbar">
+            <div class="leftslot" title="Return">←</div>
+            <div class="crumb">Aria's Descent</div>
+            <div class="icon">⛭</div>
+            <div class="icon">⚲</div>
+          </div>
+          <div class="reader-body">
+            <div class="reader-narrative">
+              <h4>Narrative + composer</h4>
+              <p>Primary content area. Always visible at every tier; takes full width on phone.</p>
+              <p>Phone: rail collapsed to 28-px edge strip on the right. Tap strip to open the rail's content as a bottom Sheet (per session 3 layout primitives).</p>
+              <p>Tablet (≥ 640, &lt; 1024): rail still collapsed-to-strip — the existing rail spec forces collapse below ~900 px viewport. iPad portrait (820), iPad mini (744), Galaxy Fold main (~904) all land here. Tap-strip on tablet expands the rail in place (no sheet — there's room).</p>
+              <p>Desktop (≥ 1024): rail open inline as the secondary column.</p>
+            </div>
+            <div class="reader-rail-strip" title="Tap to expand (in-place on tablet/desktop, sheet on phone)">RAIL</div>
+            <div class="reader-rail-full">
+              <h4>Browse rail</h4>
+              <div class="row">▾ Characters</div>
+              <div class="row">Kael Vex</div>
+              <div class="row">Aria Stormcloak</div>
+              <div class="row">Marek</div>
+              <div class="row">Lyra</div>
+              <div class="row">+ Import from Vault</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============== World surface (master-detail) ============== -->
+        <div class="surface" data-surface="world">
+          <div class="topbar">
+            <div class="leftslot md-back-btn" title="Back to list (phone detail-route)">←</div>
+            <div class="leftslot" title="Return">←</div>
+            <div class="crumb">Aria's Descent / World</div>
+            <div class="icon">⛭</div>
+            <div class="icon">⚲</div>
+          </div>
+          <div class="sub-header">Characters / <strong>Kael Vex</strong></div>
+          <div class="md-body">
+            <div class="md-list">
+              <h4>Characters</h4>
+              <div class="md-row selected">Kael Vex</div>
+              <div class="md-row">Aria Stormcloak</div>
+              <div class="md-row">Marek the Wandering</div>
+              <div class="md-row">Lyra Vaelsweld</div>
+              <div class="md-row">Roric Pale-eye</div>
+              <div class="md-row">Ven Calder</div>
+              <div class="md-row">+ New character</div>
+            </div>
+            <div class="md-detail">
+              <h4>Kael Vex</h4>
+              <p>Detail-route content. On phone: full-screen route over the list state (back returns to list). On tablet/desktop: side-by-side with list.</p>
+              <p>Tabs: Overview / Identity / Carrying / Connections / Settings / Assets / Involvements / History — internal nav within the detail.</p>
+              <p>Save-session navigate-away guard fires on back if dirty.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============== Plot surface (master-detail) ============== -->
+        <div class="surface" data-surface="plot">
+          <div class="topbar">
+            <div class="leftslot md-back-btn" title="Back to list (phone detail-route)">←</div>
+            <div class="leftslot" title="Return">←</div>
+            <div class="crumb">Aria's Descent / Plot</div>
+            <div class="icon">⛭</div>
+            <div class="icon">⚲</div>
+          </div>
+          <div class="sub-header">Threads / <strong>Crown's bargain</strong></div>
+          <div class="md-body">
+            <div class="md-list">
+              <h4>Threads</h4>
+              <div class="md-row selected">Crown's bargain</div>
+              <div class="md-row">The pale tower</div>
+              <div class="md-row">Marek's secret</div>
+              <div class="md-row">Vex Reborn</div>
+              <div class="md-row">Lyra's vow</div>
+              <div class="md-row">+ New thread</div>
+            </div>
+            <div class="md-detail">
+              <h4>Crown's bargain</h4>
+              <p>Thread detail. Same collapse pattern as World — list visible on phone by default, tap row to navigate into detail-route.</p>
+              <p>Linked happenings, awareness graph, classifier-written notes.</p>
+              <p>Same save-session pattern as World detail.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-note">
+    <strong>What this demonstrates.</strong> Per-surface collapse
+    across tiers. Reader stays narrative + rail-strip on phone
+    (rail-as-sheet on tap is implied; sheet itself is rendered in
+    <code>./layout.html</code>). World and Plot collapse
+    list-first on phone — toggle "Show detail" to see the
+    detail-route state. Tablet and desktop show side-by-side
+    panes.
+    <br><br>
+    <strong>Try at each tier:</strong>
+    <ul>
+      <li>Reader at phone: narrative full width, 28-px rail strip
+      on right.</li>
+      <li>Reader at tablet (e.g. iPad portrait ~768): same as
+      phone (rail forced-collapsed below ~900 per existing spec).</li>
+      <li>Reader at desktop: rail open as secondary column.</li>
+      <li>World/Plot at phone: list visible; toggle "Show detail"
+      to see detail-route state with back-on-left chrome.</li>
+      <li>World/Plot at tablet/desktop: list and detail
+      side-by-side.</li>
+    </ul>
+    <strong>What this does not pin.</strong> Sheet drag-dismiss
+    physics (session 5). Touch-grammar specifics for row tap and
+    strip tap (session 5). Open-sheet auto-dismiss on
+    Galaxy-Fold-style tier transitions (session 7
+    implementation). Per-screen wireframe retrofits (session 7).
+  </div>
+
+<script>
+  (function () {
+    var STORAGE_KEY = 'aventuras-wireframe-viewport';
+    var SURFACE_KEY = 'aventuras-wireframe-collapse-surface';
+    var DETAIL_KEY = 'aventuras-wireframe-collapse-detail';
+    var viewport = document.getElementById('viewport');
+    var widthReadout = document.getElementById('vp-width-readout');
+    var tierReadout = document.getElementById('vp-tier-readout');
+    var surfaceReadout = document.getElementById('surface-readout');
+    var vpButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-vp]'));
+    var surfaceButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-surface]'));
+    var surfaces = Array.prototype.slice.call(document.querySelectorAll('.surface[data-surface]'));
+    var detailToggle = document.getElementById('detail-toggle');
+
+    function tierFor(width) {
+      if (width < 640) return 'phone';
+      if (width < 1024) return 'tablet';
+      return 'desktop';
+    }
+
+    function applyVp(vp) {
+      var btn = vpButtons.filter(function (b) { return b.dataset.vp === vp; })[0];
+      if (!btn) { btn = vpButtons[2]; vp = 'desktop'; }
+      var width = parseInt(btn.dataset.width, 10);
+      vpButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+      viewport.style.setProperty('--vp-width', width + 'px');
+      widthReadout.textContent = width + ' px';
+      tierReadout.textContent = tierFor(width);
+      try { localStorage.setItem(STORAGE_KEY, vp); } catch (e) { /* no-op */ }
+    }
+
+    function applySurface(surface) {
+      var btn = surfaceButtons.filter(function (b) { return b.dataset.surface === surface; })[0];
+      if (!btn) { btn = surfaceButtons[0]; surface = 'reader'; }
+      surfaceButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+      surfaces.forEach(function (s) { s.classList.toggle('active', s.dataset.surface === surface); });
+      surfaceReadout.textContent = surface;
+      try { localStorage.setItem(SURFACE_KEY, surface); } catch (e) { /* no-op */ }
+    }
+
+    var detailOpen = false;
+    function applyDetail(open) {
+      detailOpen = !!open;
+      surfaces.forEach(function (s) {
+        if (s.dataset.surface === 'world' || s.dataset.surface === 'plot') {
+          if (detailOpen) s.dataset.detail = 'open';
+          else delete s.dataset.detail;
+        }
+      });
+      detailToggle.classList.toggle('active', detailOpen);
+      detailToggle.textContent = detailOpen ? 'Detail open (phone)' : 'Show detail (phone only)';
+      try { localStorage.setItem(DETAIL_KEY, detailOpen ? '1' : '0'); } catch (e) { /* no-op */ }
+    }
+
+    vpButtons.forEach(function (b) { b.addEventListener('click', function () { applyVp(b.dataset.vp); }); });
+    surfaceButtons.forEach(function (b) { b.addEventListener('click', function () { applySurface(b.dataset.surface); }); });
+    detailToggle.addEventListener('click', function () { applyDetail(!detailOpen); });
+
+    // Tap a row in the list (phone) or a back-button = toggle detail state
+    Array.prototype.slice.call(document.querySelectorAll('.md-row')).forEach(function (row) {
+      row.addEventListener('click', function () {
+        if (!row.textContent.trim().startsWith('+')) applyDetail(true);
+      });
+    });
+    Array.prototype.slice.call(document.querySelectorAll('.md-back-btn')).forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        applyDetail(false);
+      });
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (e.key === '1') applyVp('phone');
+      else if (e.key === '2') applyVp('tablet');
+      else if (e.key === '3') applyVp('desktop');
+      else if (e.key === 'r' || e.key === 'R') applySurface('reader');
+      else if (e.key === 'w' || e.key === 'W') applySurface('world');
+      else if (e.key === 'p' || e.key === 'P') applySurface('plot');
+    });
+
+    var savedVp;
+    try { savedVp = localStorage.getItem(STORAGE_KEY); } catch (e) { savedVp = null; }
+    applyVp(savedVp || 'desktop');
+
+    var savedSurface;
+    try { savedSurface = localStorage.getItem(SURFACE_KEY); } catch (e) { savedSurface = null; }
+    applySurface(savedSurface || 'reader');
+
+    var savedDetail;
+    try { savedDetail = localStorage.getItem(DETAIL_KEY); } catch (e) { savedDetail = null; }
+    applyDetail(savedDetail === '1');
+  })();
+</script>
+</body>
+</html>
