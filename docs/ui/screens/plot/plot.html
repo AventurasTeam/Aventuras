@@ -1360,7 +1360,17 @@
          docs/ui/foundations/mobile/collapse.md → Plot; tab-strip
          re-routes via the Select primitive on phone (segment for
          threads at 2 tabs, dropdown for happenings at 4 tabs).
+         Plot's tab counts (2, 4) sit at or below the threshold
+         of 4, so tablet keeps the strip — no tablet tab swap.
          ========================================================= */
+      /* Tablet + phone: shared bug-fix rules (history-controls,
+         search-bar shrink-safety). Threshold 4 means tablet
+         tab strip stays. */
+      @container (max-width: 1023px) {
+        .history-controls { flex-wrap: wrap; }
+        .history-search { flex: 1 1 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .history-op-filter, .history-sort { flex-wrap: wrap; }
+      }
       @container (max-width: 639px) {
         /* slim top-bar */
         header.topbar {

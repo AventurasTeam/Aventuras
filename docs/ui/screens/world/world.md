@@ -527,7 +527,7 @@ overflows.
   [`mobile/touch.md`](../../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text)).
 - **Detail-pane tab navigation reroutes on narrow widths.** Tab
   strip is the desktop primitive; on tablet detail panes that
-  can't fit the full strip (count > 5 — character at 8, location /
+  can't fit the full strip (count > 4 — character at 8, location /
   item / faction at 7), and on phone always, the tab list hands
   off to the Select primitive's render-mode cascade per
   [`patterns/forms.md → Select primitive`](../../patterns/forms.md#select-primitive).
@@ -561,6 +561,26 @@ overflows.
 - **Raw JSON viewer** inherits the binding-table mapping: Sheet
   (right ~440 px) on desktop, Sheet (bottom, tall ~95 %) on phone
   per [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
+- **Overview portrait reflows on phone.** The detail-head portrait
+  slot floats at 220 px upper-right on desktop and tablet; on
+  phone that eats ~56 % of the 390 px viewport, squeezing
+  description prose. Phone tier: portrait stacks below the prose
+  at ~100 px, matching the peek-drawer compact-head shape (glance
+  content first, visual reference below). Tap the portrait to
+  view it full-size per
+  [`principles.md → Tap a thumbnail to see it full-size`](../../principles.md#tap-a-thumbnail-to-see-it-full-size).
+- **Form-field labels compress on phone.** The detail-pane's
+  `.field-row` uses a 180 px label column on desktop and tablet;
+  on phone it drops to ~120 px (~30 % shrink) to give the input
+  column more breathing room. Type-hint sub-text (under each
+  label) wraps if necessary.
+- **History tab controls reflow on narrow widths.** The
+  `.history-controls` row (search input, op-filter chips, sort
+  picker) is a single horizontal row at desktop tier; on tablet
+  and phone it `flex-wrap`s, with the search input taking its own
+  full-width row first and the filter and sort chips wrapping
+  beneath. Prevents the search field from collapsing to a
+  multi-line vertical block at narrow widths.
 - **Save bar on phone** stays at the bottom edge of the
   detail-route's scroll region per
   [`patterns/save-sessions.md`](../../patterns/save-sessions.md);

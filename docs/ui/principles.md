@@ -819,3 +819,45 @@ skip threshold, onboarding is over; the banner sends them to App
 Settings, where the affordances are richer and the hand-hold isn't
 needed. Re-opening the wizard would duplicate paths and create
 state-recovery questions we don't want.
+
+---
+
+## Tap a thumbnail to see it full-size
+
+Any inline thumbnail or avatar in the app — entity portraits in
+detail-pane Overview / Identity / peek, asset thumbnails in the
+Assets tab, image-typed values in raw JSON viewer — opens a
+**full-size image preview Modal** on click / tap. Pattern is
+universal: small visual = compressed glance, click = full
+fidelity.
+
+- **Trigger:** any image rendered at < ~200 px on its longest edge.
+  Larger renderings (e.g., a hero portrait that already fills the
+  detail-pane head) don't need the affordance — the thumbnail-
+  click pattern is for "I want to see what's there at real size."
+- **Surface:** Modal at every tier per
+  [`mobile/layout.md → Modal`](./foundations/mobile/layout.md#modal).
+  Modal centers the image at its natural size up to the viewport
+  cap; supports tap-to-dismiss on the backdrop, Esc on desktop,
+  drag-down on phone (Modal-not-Sheet because the image is the
+  focus, not browse-and-pick).
+- **Cursor:** `cursor: zoom-in` on hover for desktop. Phone has
+  no hover state — tap fires directly. Discoverability rests on
+  the convention being universal across the app, plus the standard
+  per-affordance always-visible rule from
+  [`patterns/icon-actions.md`](./patterns/icon-actions.md).
+- **Edit affordances stay separate.** Click on the thumbnail =
+  view full-size (read action). Edit / replace / remove the image
+  uses the icon-actions overlay (per `icon-actions.md`) on hover
+  or always-visible-muted at touch tier. Distinct gestures: tap
+  the image itself (view) versus tap the explicit icon (edit).
+- **No additional zoom-pan inside the modal in v1.** The full-size
+  preview is "fit to viewport"; image manipulation (crop, zoom in
+  further, pan) is parked. If real demand surfaces — particularly
+  for asset images at high resolution — extending the modal to a
+  full image viewer is a follow-up, not a contract amendment.
+
+Used by entity portraits ([World detail head](./screens/world/world.md#detail-head-structure)
+and [peek-drawer](./screens/reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters)),
+asset thumbnails ([Assets tab](./screens/world/world.md#assets-involvements-history)),
+and any future surface that surfaces small images.

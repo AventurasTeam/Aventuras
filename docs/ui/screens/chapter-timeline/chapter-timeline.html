@@ -206,6 +206,9 @@
   @container (max-width: 639px) {
     .topbar { padding: 8px 12px; gap: 8px; }
     .topbar-right { gap: 6px; }
+    /* gen-status pill — icon-only on phone per touch.md → Status pill */
+    .gen-status > span:not(.dot) { display: none; }
+    .gen-status { padding: 3px 6px; }
 
     .timeline { padding: 12px 12px 24px; }
     .header-row { padding: 0 4px; }

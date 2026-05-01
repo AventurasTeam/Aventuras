@@ -304,10 +304,24 @@
      docs/ui/foundations/mobile/collapse.md → World; tab-strip
      re-routes via the Select primitive's dropdown render mode
      (visual swap from <nav.tabs> to .tab-picker chip).
-     Tablet inherits desktop verbatim except for the tab-strip
-     overflow rule (count > 5 → Select dropdown), which the
-     responsive demo represents at the phone-tier swap.
+     Tablet tier (640-1023 px) keeps the 2-pane layout but the
+     tab strip overflows on entity kinds with > 4 tabs (character
+     8, location/item/faction 7) — same Select-primitive swap
+     fires there, just rendered as anchored Popover not Sheet.
+     Threshold of 4 set by user wireframe review (5 left
+     happenings borderline; 4 fits cleanly).
      ========================================================= */
+  /* Tablet + phone: tab strip swap when kind has > 4 tabs.
+     Demo's `data-kind="entity"` (character) has 8 tabs → swap.
+     Demo's `data-kind="lore"` has 3 tabs → keep strip on tablet. */
+  @container (max-width: 1023px) {
+    body[data-kind="entity"] nav.tabs { display: none; }
+    body[data-kind="entity"] .tab-picker { display: block; }
+    /* History tab controls — flex-wrap so search row stays usable */
+    .history-controls { flex-wrap: wrap; }
+    .history-search { flex: 1 1 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .history-op-filter, .history-sort { flex-wrap: wrap; }
+  }
   @container (max-width: 639px) {
     /* slim top-bar */
     .topbar { padding: 8px 12px; gap: 8px; }
@@ -327,6 +341,16 @@
     /* tab strip → Select dropdown chip (visual placeholder for Sheet-short trigger) */
     .tabs { display: none; }
     .tab-picker { display: block; }
+
+    /* Form field rows: shrink the label column by ~30% on phone, redistribute
+       to the input. 180 → 120 px frees up real estate for the field content. */
+    .field-row { grid-template-columns: 120px 1fr; gap: 10px; }
+
+    /* Overview portrait slot: stack below content on phone instead of
+       eating ~56% of horizontal width. Matches peek-panel shape:
+       compact header + content first, portrait inline-smaller below. */
+    .overview-row { flex-direction: column !important; gap: 14px !important; }
+    .overview-row .portrait-slot { width: 100px !important; height: 100px !important; align-self: flex-start; }
 
     /* JSON overlay drawer reflows to bottom-anchored Sheet (tall ~95%) */
     .json-drawer { width: 100%; height: 95%; top: auto; bottom: 0; left: 0; right: 0; border-left: none; border-top: 1px solid var(--line); border-top-left-radius: 12px; border-top-right-radius: 12px; box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18); }
@@ -596,7 +620,7 @@
          Doubles as the peek-drawer body at 440px width. -->
     <div class="tab-panel active" data-panel="overview">
       <!-- Overview is read-mostly. Click any region routes to the relevant edit tab. -->
-      <div style="display: flex; gap: 20px; align-items: flex-start;">
+      <div class="overview-row" style="display: flex; gap: 20px; align-items: flex-start;">
         <div style="flex: 1; min-width: 0;">
           <!-- Status pill — top of card, content-state not chrome.
                Non-default injection_mode chip pairs inline when injection_mode is

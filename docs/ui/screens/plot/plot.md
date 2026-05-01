@@ -305,6 +305,11 @@ inherit unchanged.
   always-visible per
   [`patterns/icon-actions.md`](../../patterns/icon-actions.md);
   unchanged on phone.
+- **History tab controls reflow on narrow widths** identically to
+  World — search input takes its own full-width row first;
+  filter and sort chips wrap beneath. Same `flex-wrap` rule on
+  `.history-controls` per
+  [the World mobile expression](../world/world.md#mobile-expression).
 - **Detail-head overflow menu (`⋯`)** binds to Popover on desktop /
   tablet, Sheet (short) on phone per
   [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
