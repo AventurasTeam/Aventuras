@@ -100,13 +100,20 @@ at every width down to 360 px (button ~85 px alongside title ~150 px,
 padding and font on phone.
 
 **Step indicator pills.** Five named pills (Frame / Calendar / World
-/ Cast / Opening) overflow at 390 px — total ~510 px. Decision:
-**horizontal scroll** on phone; the active pill auto-scrolls into
-view. Preserves the named-pill semantics (per
+/ Cast / Opening) overflow at 390 px — total ~510 px. Initial
+decision was **horizontal scroll on phone**, preserving the named-
+pill semantics. User review on the wireframe (post-aa22abc) found
+horizontal-scrolled pills unworkable in practice — they read as
+broken rather than scrollable. Revised decision: **collapse to
+dots-only on phone** (~160 px total). The top-bar already shows
+`step N of 5` textually, so the named labels are redundant on
+narrow viewports; the active dot among five carries the spatial-
+sense affordance without horizontal-scroll friction. Backward-
+jump still works via tap on a `done` dot. The
 [`wizard.md → Step indicator`](../ui/screens/wizard/wizard.md#step-indicator)
 "Named-not-numbered: 5 steps fit comfortably; names give spatial
-sense"); compressing to dot-only would erase that affordance.
-Backward-jump still works via tap on a `done` pill.
+sense" framing applies to tablet and desktop; the phone tier is
+the exception where labels collide with the available width.
 
 **Step body padding.** `32px 48px` desktop → `16px 16px` phone.
 Container width drives the change.

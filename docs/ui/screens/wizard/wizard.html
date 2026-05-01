@@ -55,9 +55,12 @@
   .top-bar .center-title { justify-self: center; font-size: 12px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .top-bar .center-title .step-count { color: var(--ink-muted); font-weight: normal; margin-left: 6px; }
 
-  /* step indicator pills — phone tier scrolls horizontally; tier override re-centers at ≥640. */
-  .step-pills { padding: 10px 12px; background: var(--bg-region); border-bottom: 1px solid var(--line-soft); display: flex; gap: 6px; align-items: center; overflow-x: auto; scrollbar-width: thin; }
-  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--line-soft); border-radius: 16px; background: var(--bg-region); color: var(--ink-muted); font-size: 12px; cursor: not-allowed; flex-shrink: 0; }
+  /* step indicator pills — phone-tier collapses to dots-only (no labels); the
+     top-bar's `step N of 5` carries textual step context, so the named labels
+     are redundant on narrow viewports. Tablet+ override below restores labels. */
+  .step-pills { padding: 10px 12px; background: var(--bg-region); border-bottom: 1px solid var(--line-soft); display: flex; gap: 8px; align-items: center; justify-content: center; }
+  .pill { display: inline-flex; align-items: center; gap: 0; padding: 6px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--bg-region); color: var(--ink-muted); font-size: 12px; cursor: not-allowed; flex-shrink: 0; }
+  .pill .pill-label { display: none; }
   .pill.active { background: var(--ink); color: #fff; border-color: var(--ink); cursor: default; }
   .pill.done { background: var(--bg-region); color: var(--ink); border-color: var(--line); cursor: pointer; }
   .pill.done:hover { background: var(--bg-faint); }
@@ -136,9 +139,11 @@
   /* world step preset+prose */
   .preset-prose .label-row .actions { display: inline-flex; gap: 4px; }
 
-  /* lore + cast row cards */
+  /* lore + cast row cards. Right-padding is enlarged so the absolutely-positioned
+     X delete button in the top-right corner doesn't collide with the row's content
+     (title row when collapsed, inline-editor grid when editing). */
   .row-list { display: flex; flex-direction: column; gap: 8px; }
-  .row-card { padding: 10px 12px; background: var(--bg-region); border: 1px solid var(--line-soft); border-radius: 4px; cursor: pointer; position: relative; }
+  .row-card { padding: 10px 32px 10px 12px; background: var(--bg-region); border: 1px solid var(--line-soft); border-radius: 4px; cursor: pointer; position: relative; }
   .row-card:hover { border-color: var(--line); }
   .row-card.editing { border-color: var(--ink); background: var(--bg-region); cursor: default; }
   .row-card.staged { background: var(--staged-bg); }
@@ -227,7 +232,9 @@
     .top-bar .cancel-btn { padding: 5px 12px; }
     .top-bar .center-title { font-size: 13px; }
     .top-bar .center-title .step-count { margin-left: 8px; }
-    .step-pills { padding: 12px 24px; gap: 8px; justify-content: center; overflow-x: visible; }
+    .step-pills { padding: 12px 24px; gap: 8px; justify-content: center; }
+    .pill { gap: 6px; padding: 5px 12px; border-radius: 16px; }
+    .pill .pill-label { display: inline; }
     .step-body { padding: 28px 32px; }
     .step-heading { font-size: 22px; }
     .step-intro { font-size: 13px; margin: 0 0 28px; }
@@ -307,13 +314,13 @@
     <span></span>
   </div>
 
-  <!-- step indicator pills -->
+  <!-- step indicator pills. .pill-label hidden on phone (dots-only); shown at tablet+. -->
   <div class="step-pills" id="step-pills">
-    <button class="pill active" data-step="1"><span class="dot"></span>Frame</button>
-    <button class="pill" data-step="2"><span class="dot"></span>Calendar</button>
-    <button class="pill" data-step="3"><span class="dot"></span>World</button>
-    <button class="pill" data-step="4"><span class="dot"></span>Cast</button>
-    <button class="pill" data-step="5"><span class="dot"></span>Opening</button>
+    <button class="pill active" data-step="1"><span class="dot"></span><span class="pill-label">Frame</span></button>
+    <button class="pill" data-step="2"><span class="dot"></span><span class="pill-label">Calendar</span></button>
+    <button class="pill" data-step="3"><span class="dot"></span><span class="pill-label">World</span></button>
+    <button class="pill" data-step="4"><span class="dot"></span><span class="pill-label">Cast</span></button>
+    <button class="pill" data-step="5"><span class="dot"></span><span class="pill-label">Opening</span></button>
   </div>
 
   <!-- step body -->

@@ -225,8 +225,9 @@ reflects the current plan and updates as work progresses.
      reflow. story-list's grid is already `auto-fill minmax`-
      responsive (no shape change); ⋯ menu rebinds to Sheet
      (short) on phone per the layout binding table. wizard's
-     step-pill row scrolls horizontally on phone (preserves
-     named-pill semantics over dot-only compression);
+     step-pill row collapses to dots-only on phone (top-bar's
+     `step N of 5` carries textual context; pivoted from initial
+     horizontal-scroll choice after wireframe review);
      calendar-pickrow's two-column `1fr 1fr` stacks vertically;
      AI-assist popover becomes Sheet (medium) on phone; footer
      hides while keyboard is open (extending the save-bar

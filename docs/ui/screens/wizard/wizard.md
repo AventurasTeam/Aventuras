@@ -809,12 +809,13 @@ phone-tier specifics below.
   width; padding and font compress on phone. The button text
   "← Cancel" stays explicit (vs icon-only `[←]`) so the user
   distinguishes "cancel wizard" from "go back one step."
-- **Step indicator pills.** Five named pills overflow at 390 px
-  width; on phone the row **scrolls horizontally**, with the
-  active pill auto-scrolled into view. Names give spatial sense
-  (per [Step indicator](#step-indicator)) — compressing to dots-
-  only would erase that affordance. Backward-jump still works via
-  tap on a `done` pill within the scroll.
+- **Step indicator pills.** Five named pills (~510 px total)
+  overflow at 390 px width. On phone the labels hide and the row
+  **collapses to dots-only**, ~160 px total. The top-bar already
+  carries textual step context (`step N of 5`), so the named
+  labels are redundant on narrow viewports — the active dot among
+  five gives "where am I" sense without taking horizontal space.
+  Backward-jump still works via tap on a `done` dot.
 - **Step body padding.** `32px 48px` desktop → `16px 16px` phone.
 - **Calendar pickrow** (the `1fr 1fr` picker alongside always-
   visible summary panel) **stacks vertically** on phone — picker
