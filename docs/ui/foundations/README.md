@@ -1,16 +1,30 @@
 # Foundations
 
-Visual identity foundations for Aventuras. Sister to
+Foundations for Aventuras. Sister to
 [`../principles.md`](../principles.md) (philosophy + architecture-
 shaped rules) and [`../patterns/`](../patterns/README.md)
 (reusable component primitives) — the three are orthogonal: a
-pattern consumes token slots from foundations and obeys principles
-from `principles.md`; foundations carry the visual contract
+pattern consumes tokens from foundations and obeys principles from
+`principles.md`; foundations carry the underlying contracts
 themselves.
 
-Multi-session pass — see [Sessions](#sessions) below. Each
-session lands its own file(s) and updates the session list with
-its status + exploration-record link.
+Two orthogonal contracts live here:
+
+- **Visual identity** — what things look like. Token slots, theme
+  architecture, color, typography, spacing, iconography, motion,
+  curated palettes. Top-level files in this directory.
+- **Mobile / responsive** — what shape things take across form
+  factors and how they're touched. Form-factor tiers, breakpoints,
+  artifact strategy, navigation paradigm, layout primitives, touch
+  grammar, platform adaptations. Lives under
+  [`mobile/`](./mobile/README.md), tracked with its own multi-
+  session plan.
+
+Multi-session pass — see [Sessions](#sessions) below for the
+visual-identity track; mobile sessions are tracked at
+[`mobile/README.md → Sessions`](./mobile/README.md#sessions). Each
+session lands its own file(s) and updates the relevant session list
+with its status + exploration-record link.
 
 ## Files
 
@@ -54,6 +68,11 @@ its status + exploration-record link.
   Signature (icon-keyed brand theme). First-launch default,
   authoring conventions, full per-theme slot values + audit
   expectations.
+- [`mobile/`](./mobile/README.md) — mobile / responsive contract
+  (sister to visual identity, orthogonal axis). Form-factor tiers,
+  breakpoints, artifact strategy, viewport toggle pattern, plus the
+  multi-session plan that pins navigation / layout / collapse rule
+  / touch grammar / platform adaptations across subsequent passes.
 
 ## Sessions
 

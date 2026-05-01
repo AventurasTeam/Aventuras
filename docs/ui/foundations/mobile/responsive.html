@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframe — Mobile foundations (viewport toggle reference)</title>
+<style>
+  /* =========================================================
+     Palette — monochrome, per the wireframe authoring
+     convention (visual-identity exemption does NOT extend to
+     mobile foundations).
+     ========================================================= */
+  :root {
+    --ink: #333;
+    --ink-muted: #888;
+    --ink-faint: #aaa;
+    --line: #bbb;
+    --line-soft: #ddd;
+    --bg: #fafafa;
+    --bg-region: #fff;
+    --bg-pane-alt: #f4f4f4;
+  }
+
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* review bar — meta chrome, consistent with other wireframes */
+  .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+  .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; }
+  .review-bar .rb-group > .gl { font-size: 10px; color: #967; margin-right: 4px; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+  kbd { font-family: monospace; background: #fff; padding: 1px 5px; border: 1px solid #d8c99a; border-radius: 3px; font-size: 10px; color: #5a4820; }
+
+  .screen-label { padding: 8px 16px; background: #eee; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .screen-label strong { color: var(--ink); }
+
+  /* =========================================================
+     Viewport stage — the container whose width drives the
+     reflow inside. Width is set by the toggle; the surface
+     content uses @container queries to respond.
+     ========================================================= */
+  .stage {
+    flex: 1;
+    padding: 24px;
+    background: var(--bg);
+    display: flex;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+  .stage-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+  }
+  .stage-meta {
+    font-size: 11px;
+    color: var(--ink-muted);
+    font-family: monospace;
+  }
+  .stage-meta strong { color: var(--ink); }
+
+  .viewport {
+    container-type: inline-size;
+    background: var(--bg-region);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    width: 100%;
+    max-width: var(--vp-width, 1280px);
+    transition: max-width 0.25s ease;
+    overflow: hidden;
+  }
+
+  /* =========================================================
+     Generic 3-pane layout — the demo content. Three labeled
+     panes that reflow at the foundations breakpoints. Concrete
+     collapse rule lives in session 4 (collapse.md); this is
+     mechanism, not policy.
+     ========================================================= */
+  .surface {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "topbar"
+      "main";
+    height: 480px;
+  }
+  .topbar {
+    grid-area: topbar;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-region);
+  }
+  .topbar .crumb { font-weight: 600; color: var(--ink); font-size: 13px; }
+  .topbar .spacer { flex: 1; }
+  .topbar .icon { width: 26px; height: 26px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 12px; }
+  .pane {
+    padding: 14px;
+    overflow: auto;
+  }
+  .pane h4 {
+    margin: 0 0 8px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-muted);
+    font-weight: 600;
+  }
+  .pane p { margin: 0 0 6px; color: var(--ink-muted); font-size: 12px; }
+  .pane .row {
+    padding: 6px 8px;
+    border-bottom: 1px dashed var(--line-soft);
+    color: var(--ink);
+    font-size: 12px;
+  }
+  .pane .row:last-child { border-bottom: 0; }
+
+  .pane-rail { grid-area: rail; background: var(--bg-pane-alt); border-right: 1px solid var(--line-soft); }
+  .pane-main { grid-area: main; }
+  .pane-detail { grid-area: detail; background: var(--bg-pane-alt); border-left: 1px solid var(--line-soft); }
+
+  /* Phone-tier (default — base, no @container query) — single column.
+     Rail + detail are hidden in stacked-route placeholder mode; only main
+     shows. A real surface would expose them via routes / sheets, picked
+     in session 3 (layout) + session 4 (collapse). */
+  .pane-rail, .pane-detail { display: none; }
+
+  /* Tablet-tier — 2-pane: rail + main. Detail collapses to drawer placeholder. */
+  @container (min-width: 640px) {
+    .surface {
+      grid-template-columns: 220px 1fr;
+      grid-template-areas:
+        "topbar topbar"
+        "rail   main";
+    }
+    .pane-rail { display: block; }
+    .pane-detail { display: none; }
+    .topbar::after {
+      content: "+ detail-as-drawer placeholder";
+      font-size: 10px;
+      color: var(--ink-faint);
+      font-style: italic;
+    }
+  }
+
+  /* Desktop-tier — 3-pane side-by-side. */
+  @container (min-width: 1024px) {
+    .surface {
+      grid-template-columns: 220px 1fr 280px;
+      grid-template-areas:
+        "topbar topbar topbar"
+        "rail   main   detail";
+    }
+    .pane-detail { display: block; }
+    .topbar::after { content: ""; }
+  }
+
+  /* =========================================================
+     Footer note — scoped to this demo only.
+     ========================================================= */
+  .demo-note {
+    margin: 16px auto 24px;
+    padding: 12px 16px;
+    max-width: 760px;
+    border: 1px dashed var(--line);
+    border-radius: 4px;
+    background: var(--bg-region);
+    font-size: 12px;
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+  .demo-note strong { color: var(--ink); }
+</style>
+</head>
+<body>
+  <div class="review-bar">
+    <div class="rb-group" role="group" aria-label="Viewport tier">
+      <span class="rb-label">Viewport</span>
+      <button class="rb-btn" data-vp="phone" data-width="390">Phone <kbd>1</kbd></button>
+      <button class="rb-btn" data-vp="tablet" data-width="768">Tablet <kbd>2</kbd></button>
+      <button class="rb-btn active" data-vp="desktop" data-width="1280">Desktop <kbd>3</kbd></button>
+    </div>
+    <div class="rb-note">Foundations session 1 — reference for per-screen retrofits at session 7+.</div>
+  </div>
+
+  <div class="screen-label"><strong>foundations / mobile</strong> — viewport toggle reference (generic 3-pane reflow)</div>
+
+  <div class="stage">
+    <div class="stage-wrap">
+      <div class="stage-meta">
+        Container width: <strong id="vp-width-readout">1280 px</strong> · tier: <strong id="vp-tier-readout">desktop</strong>
+      </div>
+      <div class="viewport" id="viewport">
+        <div class="surface">
+          <div class="topbar">
+            <div class="icon">≡</div>
+            <div class="crumb">Sample surface</div>
+            <div class="spacer"></div>
+            <div class="icon">⚙</div>
+          </div>
+          <div class="pane pane-rail">
+            <h4>Rail</h4>
+            <div class="row">List item one</div>
+            <div class="row">List item two</div>
+            <div class="row">List item three</div>
+            <div class="row">List item four</div>
+            <div class="row">List item five</div>
+          </div>
+          <div class="pane pane-main">
+            <h4>Main</h4>
+            <p>Primary canvas. Survives at every viewport tier.</p>
+            <p>This pane carries the surface's primary content — narrative stream, detail-pane edit form, dashboard view.</p>
+            <p>At phone tier, the rail and detail panes collapse out (stacked-route placeholder); main is the only visible pane.</p>
+            <p>At tablet tier, rail joins main; detail collapses to a drawer placeholder.</p>
+            <p>At desktop tier, all three panes sit side-by-side.</p>
+          </div>
+          <div class="pane pane-detail">
+            <h4>Detail</h4>
+            <p>Tertiary pane. Visible at desktop only.</p>
+            <p>At tablet and phone tiers this content surfaces via a drawer / sheet / route — the specific pattern lands in session 3 (layout primitives).</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-note">
+    <strong>What this demonstrates.</strong> The mechanism — a viewport
+    toggle in the review-controls bar, container-query-driven reflow,
+    monochrome wireframe styling. Per-screen wireframes adopt the same
+    toggle bar at session 7+ retrofit.
+    <br><br>
+    <strong>What this does not pin.</strong> The collapse rule itself
+    (which pane goes where on tablet / phone, whether detail becomes a
+    drawer or a sheet, whether rail folds to an edge strip) — that's
+    session 4. The drawer / sheet / route vocabulary — session 3.
+    Touch interactions on the rows (long-press, swipe-to-dismiss) —
+    session 5.
+  </div>
+
+<script>
+  // Viewport toggle — sets max-width on the .viewport container,
+  // updates the readout, persists choice in localStorage, and
+  // accepts 1/2/3 keyboard shortcuts.
+  (function () {
+    var STORAGE_KEY = 'aventuras-wireframe-viewport';
+    var viewport = document.getElementById('viewport');
+    var widthReadout = document.getElementById('vp-width-readout');
+    var tierReadout = document.getElementById('vp-tier-readout');
+    var buttons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-vp]'));
+
+    function tierFor(width) {
+      if (width < 640) return 'phone';
+      if (width < 1024) return 'tablet';
+      return 'desktop';
+    }
+
+    function apply(vp) {
+      var btn = buttons.filter(function (b) { return b.dataset.vp === vp; })[0];
+      if (!btn) { btn = buttons[2]; vp = 'desktop'; }
+      var width = parseInt(btn.dataset.width, 10);
+      buttons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+      viewport.style.setProperty('--vp-width', width + 'px');
+      widthReadout.textContent = width + ' px';
+      tierReadout.textContent = tierFor(width);
+      try { localStorage.setItem(STORAGE_KEY, vp); } catch (e) { /* no-op */ }
+    }
+
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () { apply(b.dataset.vp); });
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (e.key === '1') apply('phone');
+      else if (e.key === '2') apply('tablet');
+      else if (e.key === '3') apply('desktop');
+    });
+
+    var saved;
+    try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) { saved = null; }
+    apply(saved || 'desktop');
+  })();
+</script>
+</body>
+</html>

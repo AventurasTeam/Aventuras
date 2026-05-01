@@ -73,4 +73,10 @@ rationale, and decisions live alongside.
   locked as system entries — see
   [reader-composer.md → Error surface](./screens/reader-composer/reader-composer.md#error-surface--system-entries-not-chrome-indicators))
 - Empty states for each list
-- Mobile variants for everything (deferred)
+- Mobile / responsive variants for every surface — contract +
+  multi-session plan at
+  [`foundations/mobile/`](./foundations/mobile/README.md). Per-screen
+  retrofits are a session-7+ consumer pass; surfaces with
+  pre-foundations `## Mobile` sections (branch-navigator,
+  rollback-confirm) are interim until reconciled by their per-screen
+  retrofit.

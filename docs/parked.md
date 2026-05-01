@@ -358,13 +358,6 @@ Wireframes expose component boundaries (EntryBubble, EntityRow,
 ChapterBreak, PeekDrawer, BrowseRail, etc.). Those become Storybook
 stories once visual identity lands.
 
-#### Mobile variants for every screen
-
-Every wireframe in scope today gets a mobile pass after desktop
-settles. Actions menu, peek drawer, master-detail patterns all need
-mobile adaptations (bottom sheets, full-screen takeovers, sheet-
-based navigation). Mobile is first-class, not an afterthought.
-
 ---
 
 ## Parked until signal
