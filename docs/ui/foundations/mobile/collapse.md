@@ -80,12 +80,15 @@ Phone (< 640 px):
   single sheet element morphs content (not Sheet over Sheet,
   which is disallowed per [`./layout.md → Stacking`](./layout.md#stacking)).
   Sheet height may grow to tall (~85–95%) when peek loads.
-- **In peek state, sheet head shows `← Browse` at the top-left**
-  in place of the desktop `×`. Tap returns to row-list state. The
-  desktop X is desktop chrome — sheets on phone dismiss via the
-  handle (drag-down) or backdrop (tap-outside) per the Sheet
-  primitive contract; the head's left affordance is internal
-  navigation, not dismissal.
+- **In peek state, sheet head shows an icon-only `←` back
+  affordance at the top-left** in place of the desktop `×`. Tap
+  returns to row-list state. Icon-only — the arrow is the
+  universal back affordance, no text label needed; the head uses
+  flex-start so the entity meta sits close after the arrow
+  (iOS nav-header layout). The desktop × is desktop chrome —
+  sheets on phone dismiss via the handle (drag-down) or backdrop
+  (tap-outside) per the Sheet primitive contract; the head's
+  left affordance is internal navigation, not dismissal.
 - **Peek's "Open in panel →" link** dismisses the sheet and
   routes to World / Plot per the cross-surface nav model
   (per [navigation.md → Cross-surface navigation](./navigation.md#cross-surface-navigation-model)).
@@ -93,7 +96,7 @@ Phone (< 640 px):
   the row pre-selected (skipping the list-first state on first
   mount).
 - **Drag-down handle and backdrop tap** dismiss the whole sheet
-  regardless of state (row-list or peek). The sheet's `← Browse`
+  regardless of state (row-list or peek). The sheet's `←`
   internal back is for going from peek back to row-list, not for
   staged dismissal.
 - **Save-session quick-edit exception** carries through — in-sheet

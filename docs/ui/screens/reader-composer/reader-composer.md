@@ -803,10 +803,12 @@ specifics below.
   Single sheet, content state-swap; not Sheet over Sheet (which
   is disallowed per
   [layout.md → Stacking](../../foundations/mobile/layout.md#stacking)).
-  In peek state, the sheet head shows **`← Browse`** at the
-  top-left — replaces the desktop `×` (which is desktop chrome;
-  sheets dismiss via handle / backdrop, not an X). Tap returns
-  to row-list state. Peek's `Open in panel →` link dismisses the
+  In peek state, the sheet head shows an **icon-only `←`** back
+  affordance at the top-left — replaces the desktop `×` (which
+  is desktop chrome; sheets dismiss via handle / backdrop, not
+  an X). The arrow is the universal back affordance, no text
+  label needed; the head uses flex-start so entity meta sits
+  close after the arrow. Tap returns to row-list state. Peek's `Open in panel →` link dismisses the
   sheet and routes to World / Plot per the cross-surface nav
   model. Drag-down on the handle, or backdrop tap, dismisses the
   whole sheet regardless of state.

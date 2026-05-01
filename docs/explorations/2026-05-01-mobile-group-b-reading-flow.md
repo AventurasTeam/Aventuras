@@ -101,12 +101,14 @@ tall ~85–95 % when peek loads, matching the
 Single sheet, content state-swap; not Sheet over Sheet (which is
 disallowed per
 [`layout.md → Stacking`](../ui/foundations/mobile/layout.md#stacking)).
-In peek state, the sheet head shows `← Browse` at the top-left
-in place of the desktop `×`. Tap returns to row-list. The desktop
-× is desktop chrome — sheets dismiss via handle (drag-down) or
-backdrop (tap-outside) per the Sheet primitive contract; the
-head's left affordance is internal sheet navigation, not
-dismissal. Peek's `Open in panel →` link dismisses the sheet and
+In peek state, the sheet head shows an icon-only `←` back
+affordance at the top-left in place of the desktop `×`. Tap
+returns to row-list. The arrow is the universal back affordance
+— no text label needed; the meta block sits close after it
+(flex-start nav-header layout). The desktop × is desktop chrome
+— sheets dismiss via handle (drag-down) or backdrop (tap-
+outside) per the Sheet primitive contract; the head's left
+affordance is internal sheet navigation, not dismissal. Peek's `Open in panel →` link dismisses the sheet and
 routes to World / Plot per the cross-surface nav model. Drag-down
 on the handle, or backdrop tap, dismisses the whole sheet
 regardless of state.
