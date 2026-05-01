@@ -62,9 +62,14 @@ action everywhere it appears.
 | delete        | `×`   | Delete entry (reader); delete branch (navigator); delete era flip (Story Settings · Calendar flip-list). |
 | flip era      | `📅`  | Flip era from this entry (reader, conditional on `eras !== null`).                                       |
 
-Glyphs are placeholders pending the visual identity session; the
-consistent **semantic mapping** is what matters now and what
-extends as new actions emerge.
+Glyphs above are wireframe placeholders; the consistent **semantic
+mapping** is what matters now and what extends as new actions
+emerge. Visual identity (session 5) picked the canonical Lucide
+names for this scratch table — see
+[`foundations/iconography.md → Per-entry actions`](../foundations/iconography.md#per-entry-actions).
+Wireframes continue to render the scratch glyphs above per the
+[wireframe-authoring rule](../../conventions.md#wireframe-authoring);
+the iconography table is the implementation reference.
 
 ## Disabled vs hidden
 

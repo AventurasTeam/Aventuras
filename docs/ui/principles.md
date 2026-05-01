@@ -157,8 +157,15 @@ read consistently and don't collide with row-action vocabulary in
 `⎇` (branch) MUST NOT be reused for Actions or any non-branch
 surface. The visual similarity at small sizes is real (`⚲` and `⎇`
 both read as "circle with a stroke"); reviewers who confuse them
-in mocks should treat the doc text as authoritative until visual
-identity ships final glyphs.
+in mocks should treat the doc text as authoritative.
+
+Visual identity (session 5) picked the canonical Lucide names for
+this scratch table — see
+[`foundations/iconography.md → Top-bar / chrome`](./foundations/iconography.md#top-bar--chrome).
+Wireframes continue to render the scratch glyphs above for
+visual placeholder consistency per the
+[wireframe-authoring rule](../conventions.md#wireframe-authoring);
+the iconography table is the implementation reference.
 
 ### Master-detail sub-header
 

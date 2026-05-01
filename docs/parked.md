@@ -845,18 +845,6 @@ override of selected definition fields (probably a sparse JSON on
 `branches` that overlays the story-level `definition`). Speculative;
 low priority pending real signal.
 
-#### Per-entry icon-row composition with conditional 5th icon
-
-Reader's per-entry icon row currently caps at 4 icons (edit / regen
-/ branch / delete on AI rows). The era-flip design adds a
-conditional 5th `📅 flip era` icon visible only when the active
-calendar has `eras !== null`. Visual identity should audit the
-5-icon row composition once it lands — possibly groupable with a
-per-entry overflow menu pattern (which doesn't currently exist),
-possibly fine as-is depending on glyph + spacing decisions. Not
-blocking the era-flip design; revisit at the visual identity
-session.
-
 #### Inline rename for era flips in Story Settings · Calendar
 
 The era flips list in Story Settings (per

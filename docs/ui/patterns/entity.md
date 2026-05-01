@@ -58,7 +58,7 @@ Peek drawer's footer link "Open in World panel →" routes to the panel.
 Entity kind renders as a **square glyph icon** (22×22 box), not text.
 Saves horizontal room in narrow rails; still categorical at a glance.
 
-Wireframe placeholder glyphs (real icons land with visual identity):
+Wireframe placeholder glyphs:
 
 | Kind      | Glyph |
 | --------- | ----- |
@@ -66,6 +66,13 @@ Wireframe placeholder glyphs (real icons land with visual identity):
 | location  | ⌂     |
 | item      | ◆     |
 | faction   | ⚑     |
+
+Visual identity (session 5) picked the canonical Lucide names for
+this scratch table — see
+[`foundations/iconography.md → Entity kind glyphs`](../foundations/iconography.md#entity-kind-glyphs).
+Wireframes continue to render the scratch glyphs above per the
+[wireframe-authoring rule](../../conventions.md#wireframe-authoring);
+the iconography table is the implementation reference.
 
 ---
 

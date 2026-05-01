@@ -127,9 +127,11 @@ relevant session:
   [`spacing.md → Radii vocabulary`](./spacing.md#radii-vocabulary).
 - **Motion** (`--duration-fast`, `--duration-base`,
   `--duration-slow`, `--easing-standard`, `--easing-emphasis`).
-  Session 5.
+  Locked at session 5 — see
+  [`motion.md → Motion budget tokens`](./motion.md#motion-budget-tokens).
 - **Iconography sizing** (`--icon-sm`, `--icon-md`, `--icon-lg`).
-  Session 5.
+  Locked at session 5 — see
+  [`iconography.md → Stroke weight + sizing scale`](./iconography.md#stroke-weight--sizing-scale).
 - **Z-index strata.** Fixed scale (banner, sticky-header,
   popover, modal, toast). Session 1 reserves the names; values
   refine as components are built.

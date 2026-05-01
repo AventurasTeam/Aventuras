@@ -27,6 +27,25 @@ its status + exploration-record link.
   Dark, Parchment). Replaces visual identity with a working
   architecture proof; specific palettes are not the curated
   gallery.
+- [`color.md`](./color.md) — color contract: 25-slot inventory,
+  per-pair WCAG contrast targets, focus / disabled / hover state
+  recipes, accent-derivation algorithm, recently-classified
+  pattern slot, dev-only `pnpm themes:audit` utility.
+- [`typography.md`](./typography.md) — typography contract:
+  default font stacks (system-only at v1), Tailwind-aligned
+  type scale at 16 px base, four weights, per-font leading
+  multiplier, reader font-size user setting.
+- [`spacing.md`](./spacing.md) — spatial contract: base unit +
+  Tailwind utility-first spacing, six component-internal padding
+  tokens, four radii tokens, pure-flat depth metaphor with fixed
+  scrim.
+- [`iconography.md`](./iconography.md) — iconography contract:
+  Lucide icon set, 2 px stroke + three sizing tokens, full
+  glyph vocabulary across top-bar / directional / disclosure /
+  status / per-entry / entity-kind / common-UI categories.
+- [`motion.md`](./motion.md) — motion contract: three duration
+  tokens + two easing tokens, reduced-motion behavior with
+  transform-vs-opacity distinction, per-use-site guidance.
 
 ## Sessions
 
@@ -96,16 +115,26 @@ contract.
    persistence shape; UI control removed; re-addable later
    without contract changes if mobile demand surfaces. File:
    [`spacing.md`](./spacing.md).
-5. **Iconography + motion** — pending. Icon set choice (Lucide is
-   the obvious default; alternatives evaluated), stroke weight,
-   sizing scale, top-bar glyph vocabulary (App Settings ⚙ vs Story
-   Settings glyph per
-   [`../principles.md → Top-bar design rule → Settings icon scope`](../principles.md#settings-icon-scope)),
-   per-entry icon row composition with conditional 5th icon (per
-   [`../../parked.md`](../../parked.md#per-entry-icon-row-composition-with-conditional-5th-icon)),
-   motion budget (`--duration-fast` / `-base` / `-slow`,
-   `--easing-standard` / `-emphasis`), reduced-motion behavior.
-   Lands as `iconography.md` + `motion.md` (or combined).
+5. **Iconography + motion** — landed 2026-05-01
+   ([exploration record](../../explorations/2026-05-01-iconography-motion.md)).
+   **Iconography:** Lucide as the icon set (shadcn-canonical,
+   tree-shakeable, react/RN parity); 2 px uniform stroke;
+   three sizing tokens (`--icon-sm` 16 px / `--icon-md` 20 px /
+   `--icon-lg` 24 px). Full glyph vocabulary across top-bar /
+   chrome (App Settings → `Settings`, Story Settings →
+   `SlidersVertical`, Actions menu → `MoreVertical`, etc.),
+   directional / navigational, disclosure carets, status / state
+   (incl. `X` vs `Trash2` semantic split), per-entry actions,
+   entity kind glyphs, common UI affordances. Per-entry icon row
+   composition resolved to **flat 5-icon row** when era-flip is
+   active (parked entry deleted). **Motion:** three duration
+   tokens (`--duration-fast` 150 ms / `-base` 250 ms / `-slow`
+   400 ms) + two easing tokens (Material standard +
+   ease-out emphasis). Reduced-motion behavior uses a
+   transform-vs-opacity distinction — clamp transform-based
+   motion to 1 ms, keep opacity transitions at fast duration.
+   Files: [`iconography.md`](./iconography.md),
+   [`motion.md`](./motion.md).
 6. **Curated theme palettes** — pending. Author each theme in the
    v1 curated gallery (5–10+ entries, mode-locked per
    [`theming.md → Theme data shape`](./theming.md#theme-data-shape)).

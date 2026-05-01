@@ -137,8 +137,9 @@ on the button's accent fill.
 Per-state recipes, locked at the contract level. Per-platform
 glue (web `outline` vs native `box-shadow`) is implementation
 detail; the **visual contract** is the same across surfaces.
-Hover transition timing references the motion budget (session 5
-deferral); section 3 commits which tokens swap, not the duration.
+Hover transition timing references the
+[motion budget](./motion.md#motion-budget-tokens); this section
+commits which tokens swap, not the duration.
 
 ### Focus
 
@@ -188,8 +189,9 @@ Per-surface recipe — each rule names exactly which token swaps:
 
 **Deferred.** No `--accent-active` slot. Most modern UI doesn't
 distinguish hover from active visually beyond a motion-driven tap
-pulse; if a real need surfaces, session 5 (motion) is the better
-landing pad than adding a color slot here.
+pulse; if a real need surfaces,
+[`motion.md`](./motion.md) is the better landing pad than adding
+a color slot here.
 
 ## Accent-derivation algorithm
 
