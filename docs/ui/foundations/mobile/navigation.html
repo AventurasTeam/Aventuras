@@ -302,11 +302,11 @@
       </div>
 
       <div class="viewport" id="viewport">
-        <!-- ============== Reader surface ============== -->
+        <!-- ============== Reader surface (non-root, back on left) ============== -->
         <div class="surface active" data-surface="reader">
           <div class="chrome">
             <div class="topbar">
-              <div class="logo">A</div>
+              <div class="logo" title="Return (stack-aware)">←</div>
               <span class="title" title="Aria's Descent of the Crown's Bargain">Aria's Descent of the Crown's Bargain</span>
               <span class="topbar-chips">
                 <span class="topbar-chip">Chap 3 ▾</span>
@@ -318,7 +318,6 @@
               <div class="topbar-actions">
                 <div class="topbar-icon" title="Story Settings">⛭</div>
                 <div class="topbar-icon" title="Actions">⚲</div>
-                <div class="topbar-icon" title="Return">←</div>
               </div>
             </div>
             <div class="progress-strip show"></div>
@@ -336,18 +335,17 @@
           </div>
         </div>
 
-        <!-- ============== World sub-screen ============== -->
+        <!-- ============== World sub-screen (non-root, back on left) ============== -->
         <div class="surface" data-surface="world">
           <div class="chrome">
             <div class="topbar">
-              <div class="logo">A</div>
+              <div class="logo" title="Return (stack-aware)">←</div>
               <span class="title" title="Aria's Descent / World">Aria's Descent / World</span>
               <div class="topbar-spacer"></div>
               <div class="topbar-pill" data-pill><span class="dot"></span><span>generating…</span></div>
               <div class="topbar-actions">
                 <div class="topbar-icon" title="Story Settings">⛭</div>
                 <div class="topbar-icon" title="Actions">⚲</div>
-                <div class="topbar-icon" title="Return">←</div>
               </div>
             </div>
             <div class="progress-strip show"></div>
@@ -376,8 +374,9 @@
           </div>
           <div class="body">
             <h4>Story list (root)</h4>
-            <p>App-level surface. <code>⚙</code> opens App Settings (gear glyph differs from in-story <code>⛭</code> per the Settings-icon scope rule).</p>
-            <p>No <code>←</code>: this is the root. Empty-stack Return triggers the existing exit-confirm dialog from principles.md → Stack-aware Return.</p>
+            <p>Root surface. <code>⚙</code> opens App Settings (gear glyph differs from in-story <code>⛭</code> per the Settings-icon scope rule).</p>
+            <p>Left slot carries the logo <code>[A]</code> only on root surfaces; non-root surfaces (reader, world, etc.) carry <code>[←]</code> instead. The two are mutually exclusive — same rule across all tiers.</p>
+            <p>Empty-stack Return on this surface still triggers the exit-confirm dialog from principles.md → Stack-aware Return (system back / hardware back / swipe-back).</p>
             <p>No progress strip: not in-story.</p>
           </div>
         </div>
@@ -394,12 +393,19 @@
     here) and app-level (story-list) carry single-row top bars at
     every tier — only the reader shows tier-specific compression.
     <br><br>
-    <strong>What this does not pin.</strong> Drawer / sheet / modal
-    rendering for action-menu and chip popovers (session 3 — layout
-    primitives). Rail collapse on phone (session 4). Tap behavior
-    on the status pill, chip-strip swipe physics, gesture conflict
-    resolution with iOS swipe-back (session 5 — touch grammar).
-    Safe-area padding on devices with notches / nav bars (session 6).
+    <strong>Left slot.</strong> Reader and World show <code>[←]</code>
+    in the leftmost slot (non-root, back). Story-list shows
+    <code>[A]</code> (root, logo). Mutually exclusive per the
+    universal-essentials rule; same across all tiers.
+    <br><br>
+    <strong>What this does not pin.</strong> Layout primitives
+    (popover / modal / sheet / route) for action-menu and chip
+    popovers — landed in session 3 (see
+    <code>./layout.md</code>). Rail collapse on phone (session 4).
+    Tap behavior on the status pill, chip-strip swipe physics,
+    gesture conflict resolution with iOS swipe-back (session 5 —
+    touch grammar). Safe-area padding on devices with notches /
+    nav bars (session 6).
   </div>
 
 <script>

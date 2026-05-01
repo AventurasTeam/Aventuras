@@ -43,9 +43,9 @@ strip below. Sub-screens get just the top bar (no chip strip; their
 master-detail sub-header or breadcrumb does the location job).
 
 ```
-Reader (phone):
+Reader (phone) — non-root, back on the left:
   ┌─────────────────────────────────────────────────────┐
-  │ [A] [Aria's Descent…]    [pill] [⛭] [⚲] [←]        │  ← top bar (~44 px)
+  │ [←] [Aria's Descent…]         [pill] [⛭] [⚲]        │  ← top bar (~44 px)
   ├─────────────────────────────────────────────────────┤
   │ ▰▰▰▰▱▱▱▱▱▱▱                                          │  ← progress strip (~3 px)
   ├─────────────────────────────────────────────────────┤
@@ -56,9 +56,9 @@ Reader (phone):
   │                                                       │
   └─────────────────────────────────────────────────────┘
 
-Sub-screen (World, Plot, Timeline, Story Settings, phone):
+Sub-screen (World, Plot, Timeline, Story Settings, phone) — non-root:
   ┌─────────────────────────────────────────────────────┐
-  │ [A] [Aria's Descent / World]  [pill] [⛭] [⚲] [←]   │
+  │ [←] [Aria's Descent / World]   [pill] [⛭] [⚲]       │
   ├─────────────────────────────────────────────────────┤
   │ ▰▰▰▰▱▱▱▱▱▱▱                                          │
   ├─────────────────────────────────────────────────────┤
@@ -67,13 +67,28 @@ Sub-screen (World, Plot, Timeline, Story Settings, phone):
   │ surface content                                       │
   └─────────────────────────────────────────────────────┘
 
-App-level (story-list, Vault, App Settings, phone):
+App-level non-root (Vault, App Settings, phone):
   ┌─────────────────────────────────────────────────────┐
-  │ [A] [<screen breadcrumb>]            [⚙] [⚲] [←?]   │  ← `←` absent on root
+  │ [←] [<screen breadcrumb>]                 [⚙] [⚲]   │
+  ├─────────────────────────────────────────────────────┤
+  │ surface content                                       │
+  └─────────────────────────────────────────────────────┘
+
+Root (story-list, phone) — logo on left, no back:
+  ┌─────────────────────────────────────────────────────┐
+  │ [A] [Stories]                             [⚙] [⚲]   │
   ├─────────────────────────────────────────────────────┤
   │ surface content                                       │
   └─────────────────────────────────────────────────────┘
 ```
+
+Left-slot rule per
+[`../../principles.md → Universal essentials`](../../principles.md#universal-essentials):
+the root surface (story-list) carries `[A]` (logo) in the leftmost
+slot; every non-root surface carries `[←]` (back, stack-aware) in
+that slot. Logo and back never coexist. Same rule across desktop,
+tablet, phone — the left-slot contract isn't a mobile-specific
+adaptation.
 
 ### Tablet (`640–1023 px`)
 

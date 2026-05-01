@@ -78,7 +78,13 @@ earns its slot via one of the tiers below.
 
 Render on every screen with chrome (in-story and app-level alike):
 
-- Logo
+- **Left slot** — Logo on the root surface (story list);
+  ← Return ([stack-aware](#stack-aware-return)) on every other
+  surface. The two are mutually exclusive: the root has no
+  back-target, non-root surfaces don't need the app logo for
+  identity (story title / breadcrumb carries it). Both occupy
+  the leftmost slot of the top bar; same rule across desktop,
+  tablet, phone.
 - Breadcrumb (screen-level path; see
   [Master-detail sub-header](#master-detail-sub-header) for the
   in-pane navigation case)
@@ -86,8 +92,15 @@ Render on every screen with chrome (in-story and app-level alike):
   below)
 - Settings icon (scope-determined — see
   [Settings icon scope](#settings-icon-scope))
-- ← Return ([stack-aware](#stack-aware-return)). **Absent on root-
-  level screens** (story list, which is the root).
+
+Onboarding (first-launch, transient, empty stack) is a special
+case — chromeless per
+[`screens/onboarding/onboarding.md`](./screens/onboarding/onboarding.md);
+no logo, no Return. The empty-stack-confirm clause of stack-aware
+Return still fires if the user attempts back via hardware / gesture.
+Wizard carries its own minimal chrome (`[← Cancel]` on left, step
+indicator centered, no logo) and already conforms to the left-slot
+rule.
 
 ### Universal in-story chrome
 
