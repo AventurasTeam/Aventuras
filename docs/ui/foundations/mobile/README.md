@@ -10,8 +10,7 @@ substrate; neither nests under the other.
 
 Multi-session pass — see [Sessions](#sessions) below. Each session
 lands its own file(s) and updates the session list with its status
-
-- exploration-record link.
+and exploration-record link.
 
 ## Files
 

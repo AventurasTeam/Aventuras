@@ -10,9 +10,8 @@ contract everything else hangs off.
 
 Mobile foundations operates on three form-factor tiers — desktop,
 tablet, phone — declared on a single CSS-px width axis. The tier
-vocabulary is Tailwind-aligned so component code (NativeWind 4
-
-- Tailwind 3) uses the same prefixes the docs declare.
+vocabulary is Tailwind-aligned so component code (NativeWind 4 /
+Tailwind 3) uses the same prefixes the docs declare.
 
 | Tier        | CSS px width    | Tailwind utility prefix | Real-device anchors                                                      |
 | ----------- | --------------- | ----------------------- | ------------------------------------------------------------------------ |
