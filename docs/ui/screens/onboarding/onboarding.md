@@ -98,8 +98,9 @@ Three fields, all with defaults:
   [App Settings · Appearance](../app-settings/app-settings.md#app--appearance).
   No "System" entry — OS dark/light follow is parked-until-signal
   per [`parked.md`](../../../parked.md#os-darklight-follow).
-  `Next →` advances to Step 2 and writes the two values into
-  `app_settings`.
+
+`Next →` advances to Step 2 and writes the two values into
+`app_settings`.
 
 ## Step 2 — Pick your provider
 
