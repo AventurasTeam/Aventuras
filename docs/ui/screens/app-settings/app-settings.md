@@ -463,6 +463,51 @@ Skipped Onboarding is permanent — there's no "resume the wizard"
 affordance from here; users who skipped configure the same way as
 anyone else.
 
+## Mobile expression
+
+App Settings is a two-pane navigation surface (left rail + content
+pane on desktop / tablet); on phone it collapses list-first per
+[`mobile/collapse.md → Two-pane navigation surfaces`](../../foundations/mobile/collapse.md#two-pane-navigation-surfaces-world-plot-settings).
+Same shape as
+[Story Settings](../story-settings/story-settings.md#mobile-expression);
+differences track this surface's data shape, not the mobile
+expression itself.
+
+- **Master-detail collapse on phone.** List state shows all 10
+  tabs across 3 sections (GENERATION: Providers, Profiles; STORY
+  DEFAULTS: Memory, Translation, Composer; APP: Appearance,
+  Language, Data, About, Diagnostics) as a vertical scroll list
+  with uppercase section headers as non-tappable group separators.
+  Tap → tab content as inner full-screen route; back returns to
+  list state.
+- **Top-bar shape on phone** is the app-level non-root variant per
+  [`mobile/navigation.md → Phone`](../../foundations/mobile/navigation.md#phone--640-px):
+  slim single-row `[←] [App Settings] [⚲]`. No `⛭` (this surface
+  isn't in-story; nothing for `⛭` to point to). No `⚙`
+  (self-reference per
+  [`principles.md → Settings icon scope`](../../principles.md#settings-icon-scope)).
+- **Global error banner** (per
+  [Layout](#layout)) sits above the top bar on every tier. On
+  phone the banner copy truncates with ellipsis if needed; the
+  CTA chip stays full-tap-target. Banner is app-level chrome; it
+  doesn't hide when the user enters a tab's detail route.
+- **Provider list accordion** stacks each provider's configuration
+  controls vertically inside the expanded row on phone. Form
+  fields use the same `.field-row` shrink and selects route the
+  same way as
+  [Story Settings's mobile expression](../story-settings/story-settings.md#mobile-expression).
+- **Model picker dropdown** routes to Sheet (medium) on phone per
+  the existing
+  [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces)
+  binding (rich grouped list, virtualized).
+- **Modals stay Modal** at every tier (provider configuration
+  edits, profile delete confirmations, etc.).
+- **Save bar, navigate-away guard, stack-aware Return** identical
+  to
+  [Story Settings's mobile expression](../story-settings/story-settings.md#mobile-expression).
+- **Phone landscape** (~700–900 px) lands in tablet tier; rail +
+  content side-by-side.
+
 ## Screen-specific open questions
 
 - **Reset to defaults action scope** — does "reset" wipe just one

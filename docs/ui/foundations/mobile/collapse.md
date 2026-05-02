@@ -15,10 +15,13 @@ This file is session 4 of the mobile-foundations multi-session pass
 
 ## What this contract pins
 
-- **Master-detail surfaces (World, Plot) collapse list-first** on
-  phone — the list is the default visible state; tapping a row
-  navigates into the detail as a full-screen route within the
-  surface; back returns to the list.
+- **Two-pane navigation surfaces (World, Plot, Settings) collapse
+  list-first** on phone — the list is the default visible state;
+  tapping a row navigates into the content as a full-screen route
+  within the surface; back returns to the list. Same rule across
+  all three; desktop visual primitive differs (separate panes for
+  World/Plot, left rail for Settings) but the phone collapse
+  mechanism is identical.
 - **Reader collapses to narrative-only on phone** — the rail is
   forced-collapsed to its edge strip (per the existing
   [side-rail collapse spec](../../screens/reader-composer/reader-composer.md#browse-rail--collapse--expand)),
@@ -108,57 +111,85 @@ in-place expand on desktop+tablet, chip-strip Browse chip with
 bottom Sheet on phone. Different trigger, different action,
 appropriate to the tier's available real estate.
 
-### World — kind selector + list + detail (master-detail)
+### Two-pane navigation surfaces (World, Plot, Settings)
 
-Desktop / tablet (≥ 640 px): per
-[`world.md → Layout`](../../screens/world/world.md#layout). List
-pane on left (~340 px), detail pane on right (flex). Sub-header
-above (`Characters / Kael Vex`).
+Desktop / tablet (≥ 640 px): a navigation list region on the left
+plus a content region on the right. Visual primitive differs by
+surface:
 
-Phone (< 640 px):
+- **World** — separate list pane (~340 px) + detail pane (flex)
+  with sub-header above (`Characters / Kael Vex`). Per
+  [`world.md → Layout`](../../screens/world/world.md#layout).
+- **Plot** — same separated 2-pane shape as World. Per
+  [`plot.md → Layout`](../../screens/plot/plot.md#layout).
+- **Story Settings, App Settings** — left rail (~200 px) with
+  uppercase section headers grouping tabs + content pane (flex).
+  No search / filter / footer-action chrome on the rail, but the
+  navigation function is the same: pick a row, see content. Per
+  [`story-settings.md → Layout`](../../screens/story-settings/story-settings.md#layout)
+  and
+  [`app-settings.md → Layout`](../../screens/app-settings/app-settings.md#layout).
 
-- **List-first.** Surface entry shows the list with category
-  dropdown / filter chips / search / rows. Sub-header sits above
-  the list (`Characters` — currently active filter).
-- **Tap a row → detail slides in as a full-screen route** within
-  the World surface. The detail-route's chrome includes
-  back-on-left (per
+Phone (< 640 px) — same collapse for all three surface families:
+
+- **List-first.** Surface entry shows the navigation list as the
+  default visible state. World/Plot's list shows entity rows with
+  category dropdown / filter chips / search / footer "+ New".
+  Settings's list shows the section-grouped tabs as a vertical
+  scroll list with uppercase section headers as non-tappable
+  group separators.
+- **Tap a row → content slides in as a full-screen route** within
+  the surface. The content-route's chrome includes back-on-left
+  (per
   [the top-bar amendment](../../../explorations/2026-05-01-top-bar-left-slot-scope.md))
-  which returns to the list state. Sub-header at the route-level
-  (`Characters / Kael Vex`) sits below the top bar.
-- **Detail tabs** (Overview / Identity / Carrying / Connections /
-  Settings / Assets / Involvements / History for characters,
-  fewer for other kinds) work as on desktop — internal tab nav
-  within the detail route.
+  which returns to the list state. Sub-header / breadcrumb at the
+  route level shows the selected row context
+  (`Characters / Kael Vex`, `Story Settings / Generation`).
+- **Surface-specific content shape carries over** — World/Plot
+  detail-routes have their own internal tab navigation (handled
+  by the [Group C tab-strip overflow rule](../../../explorations/2026-05-01-mobile-group-c-master-detail.md#tab-strip-overflow-rule));
+  Settings content-routes are flat form-field surfaces (no nested
+  tabs).
 - **Save-session navigate-away guard** fires on the back action
-  if the detail is dirty (per
+  if the content is dirty (per
   [`patterns/save-sessions.md`](../../patterns/save-sessions.md)).
   Confirm modal asks discard / save; same as desktop.
-- **Per-row import** affordance (per
-  [`world.md → Per-row import`](../../screens/world/world.md#per-row-import))
-  is in the list state; tap-to-import opens its modal as on
-  desktop.
+- **Per-row import** (World/Plot only) and other list-state
+  affordances open their modals as on desktop.
 - **List-first on first mount** unless the user navigated to the
-  surface from a peek's "Open in panel →" link — in which case
-  the route-stack lands on detail with the row pre-selected.
-  First back returns to list state.
+  surface from a deep link (e.g., a peek's "Open in panel →"
+  routes World/Plot directly to detail with the row pre-selected;
+  App Settings global-error-banner CTAs route directly to a
+  specific tab). First back returns to list state.
 
-### Plot — thread / happening list + detail
+### Vault home — rail-hidden phone deviation (v1)
 
-Same shape as World — 2-pane master-detail with same collapse
-pattern. Phone behavior identical to World's: list visible by
-default; tap a row → detail full-screen route; back returns to
-list; save-session guard on dirty back.
+Vault home (Layer 0+1 per
+[`calendars.md → Layout — Vault home`](../../screens/vault/calendars/calendars.md#layout--vault-home-layer-01))
+has a categories rail with one active entry (Calendars) plus
+three disabled placeholders (Packs / Scenarios / Templates — all
+deferred per the existing per-screen note). The two-pane
+navigation collapse rule above doesn't apply cleanly because the
+"list" is mostly empty navigation:
 
-The thread / happening detail content differs from World's
-character / lore detail content, but the collapse pattern doesn't.
+- **Phone (v1)**: rail hidden entirely; surface opens directly on
+  the active category's content (Calendars grid). Top-bar
+  breadcrumb reads `Vault / Calendars`.
+- **Tablet / desktop**: 2-pane (rail + grid) unchanged.
+- **When a second vault category ships**: switch to the standard
+  two-pane navigation collapse rule (rail flattens to a list,
+  tap → category content as inner route).
+
+Vault calendar detail (Layer 2) is a single-pane full canvas with
+sections stacked vertically (DETAIL HEAD / DEFINITION / LABELS /
+DISPLAY PREVIEW / SAVE BAR) — no collapse applies; phone reflows
+each section naturally.
 
 ### Single-pane surfaces — no collapse
 
-Chapter Timeline, Story Settings, Story list, Vault, App Settings,
-Onboarding, Wizard are all 1-pane. No collapse rule applies;
-phone tier just renders the same single content at narrower
-width.
+Chapter Timeline, Story list, Onboarding, Wizard are all 1-pane.
+No collapse rule applies; phone tier just renders the same single
+content at narrower width.
 
 ## Phone landscape
 

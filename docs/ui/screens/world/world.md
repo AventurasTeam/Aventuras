@@ -512,7 +512,7 @@ nav reroutes to the Select primitive when the desktop tab strip
 overflows.
 
 - **Master-detail collapse on phone** per
-  [`mobile/collapse.md → World`](../../foundations/mobile/collapse.md#world--kind-selector--list--detail-master-detail).
+  [`mobile/collapse.md → World`](../../foundations/mobile/collapse.md#two-pane-navigation-surfaces-world-plot-settings).
   List visible by default; row tap navigates to detail as a
   full-screen route (back-on-left returns to list state). The
   master-detail sub-header (`Characters / Kael Vex`) sits below

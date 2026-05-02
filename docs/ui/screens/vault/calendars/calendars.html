@@ -32,6 +32,15 @@
   .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
   .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
   .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
+  kbd { font-family: monospace; background: #fff; padding: 1px 5px; border: 1px solid #d8c99a; border-radius: 3px; font-size: 10px; color: #5a4820; }
+
+  /* viewport stage — container width drives reflow inside via @container queries.
+     Mechanism per docs/ui/foundations/mobile/responsive.html. */
+  .vp-stage { flex: 1; padding: 12px; background: var(--bg); display: flex; justify-content: center; box-sizing: border-box; min-height: 0; }
+  .vp-stage-wrap { display: flex; flex-direction: column; gap: 6px; align-items: center; width: 100%; min-height: 0; flex: 1; }
+  .vp-stage-meta { font-size: 11px; color: var(--ink-muted); font-family: monospace; }
+  .vp-stage-meta strong { color: var(--ink); }
+  .viewport { container-type: inline-size; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; width: 100%; max-width: var(--vp-width, 1280px); transition: max-width 0.25s ease; overflow: hidden; display: flex; flex-direction: column; flex: 1; min-height: 0; position: relative; }
 
   /* top bar */
   header.topbar { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
@@ -196,7 +205,7 @@
   .more-item.disabled:hover { background: transparent; }
 
   /* modals */
-  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.18); z-index: 100; align-items: center; justify-content: center; }
+  .modal-backdrop { display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.18); z-index: 100; align-items: center; justify-content: center; }
   .modal-backdrop.open { display: flex; }
   .modal { background: var(--bg-region); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); min-width: 380px; max-width: 560px; padding: 18px 22px 16px; }
   .modal h3 { font-size: 15px; font-weight: 600; margin: 0 0 12px; color: var(--ink); }
@@ -222,14 +231,56 @@
   .import-area .err.show { display: block; }
 
   .hidden { display: none !important; }
+
+  /* =========================================================
+     Tier overrides — container queries on .viewport.
+     Vault home (Layer 0+1) — phone hides the categories rail
+     for v1 (1 active, 3 deferred placeholders) per
+     docs/ui/foundations/mobile/collapse.md → Vault home.
+     Layer 2 (calendar detail) is single-pane and reflows
+     vertically.
+     ========================================================= */
+  @container (max-width: 1023px) {
+    /* field-row label column shrinks 200 → 120 px, label wraps cleanly */
+    .field-row { grid-template-columns: 120px 1fr; gap: 10px; }
+    .field-label, .field-label .hint { overflow-wrap: anywhere; word-break: break-word; }
+  }
+  @container (max-width: 639px) {
+    /* slim top-bar */
+    header.topbar { padding: 8px 12px; gap: 8px; }
+    .topbar-right { gap: 6px; }
+    .app-title { font-size: 14px; }
+
+    /* Vault home rail hidden on phone — single-pane content (Calendars).
+       The .vault-home wrapper is `display: flex` not grid, so hiding the
+       rail and letting the content stretch fills the canvas naturally. */
+    aside.category-rail { display: none; }
+
+    /* sub-header tightens */
+    .sub-header { padding: 8px 12px; flex-wrap: wrap; gap: 8px; }
+
+    /* card grid auto-fills 1 column at narrow widths (already responsive) */
+    .calendar-grid { gap: 12px; }
+
+    /* labels grid compresses to 2 columns on phone (was 4) */
+    .labels-grid, .labels-grid.three { grid-template-columns: repeat(2, 1fr); }
+
+    /* modal width compresses */
+    .modal { width: 100%; max-width: calc(100% - 24px); margin: 0 12px; max-height: 85vh; overflow-y: auto; }
+  }
 </style>
 </head>
 <body data-list-state="populated">
 
-<div class="screen-label"><strong>Wireframe:</strong> Vault calendar editor &mdash; desktop (&ge; 1024px) &mdash; low-fi, interactive</div>
+<div class="screen-label"><strong>Wireframe:</strong> Vault calendar editor &mdash; responsive across phone / tablet / desktop &mdash; low-fi, interactive</div>
 
 <div class="review-bar">
-  <span class="rb-label">Review controls</span>
+  <div class="rb-group" role="group" aria-label="Viewport tier">
+    <span class="rb-label">Viewport</span>
+    <button class="rb-btn" data-vp="phone" data-width="390">Phone <kbd>1</kbd></button>
+    <button class="rb-btn" data-vp="tablet" data-width="768">Tablet <kbd>2</kbd></button>
+    <button class="rb-btn active" data-vp="desktop" data-width="1280">Desktop <kbd>3</kbd></button>
+  </div>
   <div class="rb-group">
     <span class="gl">layer:</span>
     <button class="rb-btn active" data-layer="home">L0+1 home</button>
@@ -261,8 +312,15 @@
     <button class="rb-btn active" data-empty-btn="populated">populated</button>
     <button class="rb-btn" data-empty-btn="empty">empty</button>
   </div>
-  <span class="rb-note">Vault parent shell is placeholder; sub-wireframe per design</span>
+  <span class="rb-note">Vault parent shell is placeholder; sub-wireframe per design &middot; flip viewport via 1/2/3</span>
 </div>
+
+<div class="vp-stage">
+  <div class="vp-stage-wrap">
+    <div class="vp-stage-meta">
+      Container width: <strong id="vp-width-readout">1280 px</strong> &middot; tier: <strong id="vp-tier-readout">desktop</strong>
+    </div>
+    <div class="viewport" id="viewport">
 
 <header class="topbar">
   <div class="logo">logo</div>
@@ -633,7 +691,42 @@
   </div>
 </div>
 
+    </div><!-- /.viewport -->
+  </div><!-- /.vp-stage-wrap -->
+</div><!-- /.vp-stage -->
+
 <script>
+  // Viewport toggle — sets max-width on .viewport, persists choice, accepts 1/2/3.
+  // Pattern lifted from foundations/mobile/responsive.html.
+  (function () {
+    var STORAGE_KEY = 'aventuras-wireframe-viewport';
+    var viewport = document.getElementById('viewport');
+    var widthReadout = document.getElementById('vp-width-readout');
+    var tierReadout = document.getElementById('vp-tier-readout');
+    var vpButtons = Array.prototype.slice.call(document.querySelectorAll('.rb-btn[data-vp]'));
+    function tierFor(width) { return width < 640 ? 'phone' : (width < 1024 ? 'tablet' : 'desktop'); }
+    function applyVp(vp) {
+      var btn = vpButtons.filter(function (b) { return b.dataset.vp === vp; })[0];
+      if (!btn) { btn = vpButtons[2]; vp = 'desktop'; }
+      var width = parseInt(btn.dataset.width, 10);
+      vpButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+      viewport.style.setProperty('--vp-width', width + 'px');
+      widthReadout.textContent = width + ' px';
+      tierReadout.textContent = tierFor(width);
+      try { localStorage.setItem(STORAGE_KEY, vp); } catch (e) { /* no-op */ }
+    }
+    vpButtons.forEach(function (b) { b.addEventListener('click', function () { applyVp(b.dataset.vp); }); });
+    document.addEventListener('keydown', function (e) {
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (e.key === '1') applyVp('phone');
+      else if (e.key === '2') applyVp('tablet');
+      else if (e.key === '3') applyVp('desktop');
+    });
+    var saved;
+    try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) { saved = null; }
+    applyVp(saved || 'desktop');
+  })();
+
   // search-help popover
   const helpIcon = document.getElementById('search-help-icon');
   const helpPop = document.getElementById('search-help-popover');

@@ -29,7 +29,7 @@ session.
 | chapter-timeline | No                              | Single-pane card list, all tiers         | New `## Mobile expression`; per-card action-row wrap on phone; chapter-close modal stays Modal all tiers |
 
 Two are master-detail per
-[`collapse.md → World / Plot`](../ui/foundations/mobile/collapse.md#world--kind-selector--list--detail-master-detail);
+[`collapse.md → World / Plot`](../ui/foundations/mobile/collapse.md#two-pane-navigation-surfaces-world-plot-settings);
 chapter-timeline is single-pane per
 [`collapse.md → Single-pane surfaces`](../ui/foundations/mobile/collapse.md#single-pane-surfaces--no-collapse).
 
@@ -116,7 +116,7 @@ on phone — same data, different primitive).
 ### world
 
 **Master-detail collapse on phone** per
-[`collapse.md → World`](../ui/foundations/mobile/collapse.md#world--kind-selector--list--detail-master-detail).
+[`collapse.md → World`](../ui/foundations/mobile/collapse.md#two-pane-navigation-surfaces-world-plot-settings).
 List-first; tap row → detail full-screen route within the World
 surface; back returns to list state. Sub-header at the route level
 (`Characters / Kael Vex`) sits below the slim phone top bar.

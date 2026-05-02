@@ -264,7 +264,7 @@ Happenings segment toggle and the kind-specific filter chips
 inherit unchanged.
 
 - **Master-detail collapse on phone** per
-  [`mobile/collapse.md → Plot`](../../foundations/mobile/collapse.md#plot--thread--happening-list--detail).
+  [`mobile/collapse.md → Plot`](../../foundations/mobile/collapse.md#two-pane-navigation-surfaces-world-plot-settings).
   Same shape as World: list visible by default, row tap navigates
   to detail as a full-screen route, back-on-left returns to list.
   The master-detail sub-header (`Threads / Crown's bargain` or

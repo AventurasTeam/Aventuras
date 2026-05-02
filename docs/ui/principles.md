@@ -212,7 +212,7 @@ lands on the parent.
 Kael Vex` — tapping `Characters` clears the row selection
   (returns to "no character selected"; on phone, equivalent to
   popping the detail full-screen route per
-  [the collapse rule](./foundations/mobile/collapse.md#world--kind-selector--list--detail-master-detail)).
+  [the collapse rule](./foundations/mobile/collapse.md#two-pane-navigation-surfaces-world-plot-settings)).
 - **Current segment is inert.** No-op on tap. Visual treatment
   emphasizes the segment (bold, full-color) as the "you are here"
   marker. If the current segment's text is truncated, tap reveals

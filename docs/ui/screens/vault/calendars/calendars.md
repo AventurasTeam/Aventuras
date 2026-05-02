@@ -440,6 +440,60 @@ flow does not need to support returning to an open story (Vault is
 unreachable from inside an open story; reaching Vault requires
 leaving the story first).
 
+## Mobile expression
+
+Vault calendars has two layouts (Vault home Layer 0+1, calendar
+detail Layer 2) with different phone treatments — neither is a
+clean two-pane navigation collapse. Per
+[`mobile/collapse.md → Vault home`](../../../foundations/mobile/collapse.md#vault-home--rail-hidden-phone-deviation-v1):
+
+- **Vault home (Layer 0+1) — rail hidden on phone for v1.**
+  Desktop / tablet shows the 200 px categories rail (Calendars
+  active + Packs / Scenarios / Templates as disabled placeholders)
+  alongside the calendar card grid. On phone the rail is hidden
+  entirely; the surface opens directly on the Calendars content.
+  Top-bar breadcrumb reads `Vault / Calendars`. When a second
+  vault category ships post-v1, switch to the standard two-pane
+  navigation collapse (rail flattens to a list, tap → category
+  content as inner route).
+- **Card grid reflows naturally.** The existing
+  `grid-template-columns: repeat(auto-fill, minmax(140px, 1fr))`
+  produces 1 column at phone (< ~300 px content area), 2 at
+  tablet, 3+ at desktop. Filter chips (`All | Built-in | Custom`)
+  wrap as needed.
+- **`+ Add calendar ▾` menu** opens as Sheet (short) on phone per
+  [`mobile/layout.md → Surface bindings`](../../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
+  Three options (Clone built-in, From JSON file, From scratch
+  disabled placeholder) render as flat Sheet rows.
+- **Calendar detail (Layer 2) — single-pane reflow on phone.**
+  Full canvas with stacked sections (DETAIL HEAD / DEFINITION /
+  LABELS / DISPLAY PREVIEW / SAVE BAR) — already the desktop
+  layout, reflows naturally with narrower content widths. Top-bar
+  breadcrumb truncates with ellipsis; tap-to-tooltip reveals the
+  full path per
+  [`mobile/touch.md → Tap-to-tooltip on inert chrome text`](../../../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text).
+- **Display preview interactive controls** (date inputs, era flip)
+  use the existing `.field-row` 2-column grid; on phone the label
+  column shrinks per the rule landed in
+  [Group C](../../../../explorations/2026-05-01-mobile-group-c-master-detail.md).
+- **Selects on phone** route per the
+  [`patterns/forms.md → Select primitive`](../../../patterns/forms.md#select-primitive)
+  cascade: era picker, calendar-system identifier selectors are
+  all flat enums → Sheet (short).
+- **Modals stay Modal** at every tier (calendar swap warnings,
+  JSON import, delete-confirm).
+- **Save bar on phone** stays at the bottom edge of the Layer 2
+  canvas; hides while keyboard is open per
+  [`mobile/touch.md → Save bar on phone`](../../../foundations/mobile/touch.md#save-bar-on-phone).
+- **Stack-aware Return.** Layer 2 → Layer 1 (Vault home /
+  Calendars grid) on back. Dirty-state navigate-away guard fires
+  before back when the calendar detail is dirty. Vault is
+  unreachable from inside an open story per the existing
+  per-screen note, so there's no in-story sub-stack to traverse.
+- **Phone landscape** (~700–900 px) lands in tablet tier — Vault
+  home shows the rail again (since tablet width supports it);
+  Layer 2 stays single-pane.
+
 ## Screen-specific open questions
 
 - **Display preview origin authoring on custom calendars** —

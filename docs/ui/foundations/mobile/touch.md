@@ -102,7 +102,7 @@ The save bar (per
 [`patterns/save-sessions.md`](../../patterns/save-sessions.md))
 sits at the bottom of detail panes on desktop. On phone, the
 detail is a full-screen route per
-[`./collapse.md → World`](./collapse.md#world--kind-selector--list--detail-master-detail).
+[`./collapse.md → World`](./collapse.md#two-pane-navigation-surfaces-world-plot-settings).
 
 Behavior contract on phone:
 

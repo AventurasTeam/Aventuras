@@ -269,8 +269,24 @@ reflects the current plan and updates as work progresses.
      amended to retire the dangling "responsive pass finalizes"
      note and pin phone-tier dropdown surface bindings; World
      and Plot added to its Used-by list.
-   - **D — Settings + power-user** (pending): story-settings,
-     app-settings, vault calendars, prompt-pack editor.
+   - **D — Settings + power-user** — partial-landed 2026-05-02
+     ([exploration record](../../../explorations/2026-05-02-mobile-group-d-settings.md)).
+     Three of four surfaces — story-settings, app-settings, vault
+     calendars — gain `## Mobile expression` sections and
+     viewport-toggle wireframes. Settings (story-settings,
+     app-settings) collapse list-first on phone per the extended
+     two-pane navigation collapse rule (left rail flattens to a
+     vertical scroll list of section-grouped tabs, tap → tab
+     content as inner full-screen route). Vault calendars takes a
+     v1 deviation: rail hidden on phone since the only active
+     category is Calendars (3 placeholders deferred); switches to
+     standard list-first when a second vault category ships.
+     **Substantive substrate touch**: `collapse.md` reframes its
+     "World" section to "Two-pane navigation surfaces (World, Plot,
+     Settings)" with one shared rule; the Settings family joins
+     the master-detail collapse contract. Prompt-pack editor —
+     the fourth surface — stays pending its desktop spec; tracked
+     as a `followups.md` UX entry.
 
    Cross-cutting pattern docs (`patterns/icon-actions.md`,
    `save-sessions.md`, `calendar-picker.md`, `data.md`,

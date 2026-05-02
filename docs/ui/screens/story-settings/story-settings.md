@@ -638,6 +638,67 @@ goes back to the story list on the first ←. If the user navigates
 beyond Story Settings (e.g., forward into the reader), the one-shot
 is consumed and subsequent Returns follow the default stack pop.
 
+## Mobile expression
+
+Story Settings is a two-pane navigation surface (left rail + content
+pane on desktop / tablet); on phone it collapses list-first per
+[`mobile/collapse.md → Two-pane navigation surfaces`](../../foundations/mobile/collapse.md#two-pane-navigation-surfaces-world-plot-settings).
+Tablet keeps the desktop 2-pane layout (~200 px rail fits cleanly
+at iPad portrait detail-pane widths).
+
+- **Master-detail collapse on phone.** List state shows the
+  section/tab list (STORY: About, Generation; SETTINGS: Models,
+  Memory, Translation, Pack, Calendar, Advanced) as a vertical
+  scroll list with uppercase section headers as non-tappable group
+  separators. Tap a tab row → tab content as inner full-screen
+  route within the Story Settings surface; back returns to list
+  state. Same shape as World/Plot's master-detail collapse, just
+  with a left-rail desktop primitive instead of separated panes.
+- **Top-bar shape on phone** per
+  [`mobile/navigation.md → Phone`](../../foundations/mobile/navigation.md#phone--640-px):
+  slim single-row `[←] [<title> / Story Settings] [pill] [⚲]`.
+  List state breadcrumb is `<title> / Story Settings`; detail-route
+  extends to `<title> / Story Settings / <tab>` (parent segments
+  tappable per the breadcrumb-tappability amendment, current
+  segment inert with tap-to-tooltip on truncation per
+  [`mobile/touch.md`](../../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text)).
+  No `⛭` icon — Story Settings IS the in-story chrome target per
+  [`principles.md → Settings icon scope`](../../principles.md#settings-icon-scope).
+- **Form-field rows in detail content** use the existing
+  `.field-row` 2-column grid (label / input). On phone the label
+  column shrinks ~30 % (180 → 120 px) and the type-hint applies
+  `overflow-wrap: anywhere` to break long monospace strings,
+  matching the rule landed in
+  [Group C](../../../explorations/2026-05-01-mobile-group-c-master-detail.md)
+  for the World detail pane.
+- **Selects on phone** route per the
+  [`patterns/forms.md → Select primitive`](../../patterns/forms.md#select-primitive)
+  cascade: dropdown render mode opens via Sheet (short) for flat
+  options (most enum selects on this surface), Sheet (medium) for
+  the model picker dropdown per
+  [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
+  Segment mode unchanged (e.g., `[active|archived]` library status
+  segment on the About tab).
+- **Definitional-change confirmations** stay Modal at every tier
+  per the layout binding table.
+- **Save bar on phone** stays at the bottom edge of the
+  detail-route's scroll region per
+  [`patterns/save-sessions.md`](../../patterns/save-sessions.md);
+  hides while keyboard is open per
+  [`mobile/touch.md → Save bar on phone`](../../foundations/mobile/touch.md#save-bar-on-phone),
+  reappears on field blur. Navigate-away guard stays active
+  throughout including during keyboard-open.
+- **Stack-aware Return.** The chrome `←`, Android `BackHandler`,
+  and iOS swipe-back all bind to stack-aware Return per
+  [`mobile/navigation.md → Stack-aware Return`](../../foundations/mobile/navigation.md#stack-aware-return-on-mobile).
+  List ↔ detail navigation is a sub-stack within the Story
+  Settings surface; back from detail routes to list, not to the
+  prior in-story surface (reader / world / plot). Dirty-state
+  navigate-away guard fires before the back action.
+- **Phone landscape** (~700–900 px) lands in tablet tier per the
+  [responsive contract](../../foundations/mobile/responsive.md);
+  rail + content remains side-by-side, cramped vertically.
+
 ## Screen-specific open questions
 
 - **Accent color picker**: the current swatch row is a quick-pick.
