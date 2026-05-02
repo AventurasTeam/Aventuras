@@ -116,6 +116,32 @@ Decisions needed:
 
 ### UX (post-v1)
 
+#### Prompt-pack editor (desktop spec + mobile retrofit)
+
+The prompt-pack editor surface is post-v1. v1 ships without a
+dedicated editor surface; users live with the bundled / vault
+prompt packs and any small variable-tweak controls that surface
+inside Story Settings.
+
+When the editor lands post-v1 it needs both:
+
+- **Desktop spec** — the editor itself: layout, panes, JSON / DSL
+  shape, validation, save flow. Doesn't yet exist.
+- **Mobile expression** — `## Mobile expression` section,
+  viewport-toggle wireframe, tier reflow. Mechanical once the
+  desktop design is settled, except for one substrate question:
+  **CodeMirror fallback on RN.** CodeMirror doesn't run on React
+  Native. Phone fallback is plain textarea; full editor on
+  tablet + desktop only. How does the surface communicate the
+  feature gap — graceful banner, tier-aware toolbar, partial
+  hide?
+
+Surfaced during Group D mobile retrofit
+([exploration record](./explorations/2026-05-02-mobile-group-d-settings.md)).
+The other three Group D surfaces (story-settings, app-settings,
+vault calendars) landed; this one was always pending its desktop
+design and is now confirmed post-v1 in scope.
+
 #### Bulk operations on entities
 
 Bulk ops (multi-select, batch status change, batch tag, batch retire,

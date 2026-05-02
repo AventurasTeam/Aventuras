@@ -285,8 +285,9 @@ reflects the current plan and updates as work progresses.
      "World" section to "Two-pane navigation surfaces (World, Plot,
      Settings)" with one shared rule; the Settings family joins
      the master-detail collapse contract. Prompt-pack editor —
-     the fourth surface — stays pending its desktop spec; tracked
-     as a `followups.md` UX entry.
+     the fourth surface — is post-v1 (no desktop spec yet);
+     parked at
+     [`parked.md → UX (post-v1) → Prompt-pack editor`](../../../parked.md#prompt-pack-editor-desktop-spec--mobile-retrofit).
 
    Cross-cutting pattern docs (`patterns/icon-actions.md`,
    `save-sessions.md`, `calendar-picker.md`, `data.md`,

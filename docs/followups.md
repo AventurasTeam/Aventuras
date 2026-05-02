@@ -192,28 +192,6 @@ a small design pass — the answer probably extends
 with a curated-accent-palette section, plus a new
 `patterns/color-picker.md` for the picker primitive itself.
 
-### Prompt-pack editor mobile retrofit
-
-The mobile foundations Group D consumer pass landed
-story-settings, app-settings, and vault calendars
-([exploration record](./explorations/2026-05-02-mobile-group-d-settings.md)).
-**Prompt-pack editor remains pending** because its desktop spec
-hasn't landed yet — there's nothing to retrofit. Once the
-editor's desktop design exists, two questions need answering:
-
-- **CodeMirror fallback on RN.** CodeMirror doesn't run on
-  React Native. Phone fallback is plain textarea; full editor on
-  tablet + desktop only. How does the surface communicate the
-  feature gap — graceful banner, tier-aware toolbar, partial
-  hide?
-- **Standard mobile expression** — `## Mobile expression`
-  section, viewport-toggle wireframe, tier reflow. Mechanical
-  once the desktop design is settled.
-
-This is the only surface left in the mobile foundations consumer
-pass; the substrate (sessions 1–6) plus all other Group A–D
-surfaces are feature-complete.
-
 ### Classification awareness pattern
 
 The reader-composer's right-side rail collapses to a full-height
