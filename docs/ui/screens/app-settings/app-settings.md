@@ -492,10 +492,34 @@ expression itself.
   CTA chip stays full-tap-target. Banner is app-level chrome; it
   doesn't hide when the user enters a tab's detail route.
 - **Provider list accordion** stacks each provider's configuration
-  controls vertically inside the expanded row on phone. Form
-  fields use the same `.field-row` shrink and selects route the
-  same way as
-  [Story Settings's mobile expression](../story-settings/story-settings.md#mobile-expression).
+  controls vertically inside the expanded row on phone.
+- **Profile / provider accordion editors use a tighter label
+  column at narrow tiers.** The 120 px label rule that applies
+  to the main settings rows (per
+  [Story Settings's mobile expression](../story-settings/story-settings.md#mobile-expression))
+  shrinks further to **90 px** inside `.profile-body` and
+  `.narrative-card` on tablet and phone — these editors are
+  denser (slider + numeric input + capability annotations on
+  every row) and need the extra horizontal room. Main settings
+  rows above and beside the editors stay at 120 px.
+- **Slider numeric inputs shrink** from 80 → 50 px on tablet and
+  phone via the same `< 1024 px` @container. Slider track
+  takes the freed space (it has `flex: 1`); inputs hold 3-4
+  chars max ("0.8", "4096", "low", "60s") so 50 px fits cleanly.
+- **API key row wraps on narrow tiers.** The status text plus
+  Add/Test (or Edit/Test) action buttons sit inline when room
+  allows; below combined width the buttons drop below the status
+  text via `flex-wrap`.
+- **Chapter token threshold uses a chip-row preset+custom
+  hybrid** matching
+  [Story Settings's threshold control](../story-settings/story-settings.md#mobile-expression)
+  — Short / Balanced / Long / Custom… as `.add-chip` cells with
+  natural wrap, plus a numeric input below when `Custom…` is
+  active. Same primitive on both surfaces; sits outside Select's
+  cardinality cascade because it's a preset+numeric hybrid.
+- **Narrative profile head** is a single full-width title (no
+  subtitle); the previous "always present · cannot be deleted"
+  annotation was chrome noise that didn't earn its space.
 - **Model picker dropdown** routes to Sheet (medium) on phone per
   the existing
   [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces)

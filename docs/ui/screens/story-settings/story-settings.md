@@ -681,6 +681,32 @@ at iPad portrait detail-pane widths).
   segment on the About tab).
 - **Definitional-change confirmations** stay Modal at every tier
   per the layout binding table.
+- **Genre / tone preset+prose hybrid rows wrap on narrow tiers.**
+  The preset dropdown and label input sit side-by-side in the
+  input column when room allows; below ~440 px combined they wrap
+  to stack (preset on top, label below). The prose textarea
+  underneath always takes full input-column width.
+- **Accent color swatch row wraps on narrow tiers.** Seven
+  curated swatches plus the `+ custom` chip flow horizontally
+  via `flex-wrap` — extras drop to a second row at narrower
+  widths. The production accent-picker UI is parked per
+  [`followups.md → Accent color picker UI`](../../../followups.md#accent-color-picker-ui);
+  the wireframe's swatch row is interim until that design
+  pass lands.
+- **Chapter token threshold uses a chip-row preset+custom
+  hybrid** (Short / Balanced / Long / Custom…) — `.chip-row`
+  with `.add-chip` cells, wrapping naturally at narrow tiers.
+  Selecting `Custom…` reveals the numeric input below. Pattern
+  is shared with App Settings's matching threshold control. Sits
+  outside Select's three render modes (segment / dropdown /
+  radio) because preset-plus-numeric isn't pure cardinality —
+  per
+  [`forms.md → Select primitive`](../../patterns/forms.md#select-primitive)'s
+  preset+custom note.
+- **Diagnostics row** in the Advanced tab uses the same
+  chip-row pattern for `Export story as JSON` and
+  `View raw settings JSON` — chips wrap left-aligned on narrow
+  tiers.
 - **Save bar on phone** stays at the bottom edge of the
   detail-route's scroll region per
   [`patterns/save-sessions.md`](../../patterns/save-sessions.md);

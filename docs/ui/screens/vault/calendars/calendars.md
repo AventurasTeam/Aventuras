@@ -473,9 +473,15 @@ clean two-pane navigation collapse. Per
   full path per
   [`mobile/touch.md → Tap-to-tooltip on inert chrome text`](../../../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text).
 - **Display preview interactive controls** (date inputs, era flip)
-  use the existing `.field-row` 2-column grid; on phone the label
-  column shrinks per the rule landed in
-  [Group C](../../../../explorations/2026-05-01-mobile-group-c-master-detail.md).
+  use the existing `.field-row` 2-column grid; on tablet and
+  phone the label column shrinks to 120 px per the unified rule
+  across all 2-pane surfaces.
+- **Labels grid (Months / Weekdays) scales by tier** —
+  4 columns on desktop, 3 on tablet (Layer 2's full canvas
+  narrows on iPad portrait), 2 on phone. The `.label-input`
+  carries `min-width: 0; box-sizing: border-box; width: 100%`
+  so 1fr columns shrink to fit (without it, the input's
+  intrinsic min-width prevents collapse and the grid overflows).
 - **Selects on phone** route per the
   [`patterns/forms.md → Select primitive`](../../../patterns/forms.md#select-primitive)
   cascade: era picker, calendar-system identifier selectors are

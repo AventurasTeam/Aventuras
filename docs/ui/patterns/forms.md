@@ -109,6 +109,19 @@ line dropdowns), not "anywhere wide-ish."
   concern, not "pick a value to commit." Folding into Select as a
   `chips` render mode is a possible future move; deferred until
   enough chip-using surfaces converge.
+- **Preset+custom hybrid** — pattern used by chapter token
+  threshold on
+  [Story Settings → Memory](../screens/story-settings/story-settings.md#mobile-expression)
+  and
+  [App Settings → Memory](../screens/app-settings/app-settings.md#mobile-expression):
+  three preset chips plus a `Custom…` chip that reveals a
+  numeric input below. Doesn't fit Select's three render modes
+  cleanly (cardinality 4 would route to dropdown, but the user
+  needs to compare presets at a glance). Implemented as
+  `.chip-row` with `.add-chip` cells — wraps naturally at narrow
+  tiers. Not yet abstracted into its own primitive; if more
+  preset+custom hybrids surface (e.g., recent buffer size,
+  timeout windows), promote it to a named pattern.
 
 ### Storybook (Select)
 
