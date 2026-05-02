@@ -5,7 +5,7 @@ import { Button } from './button'
 import { Text } from './text'
 
 const meta: Meta<typeof Button> = {
-  title: 'UI/Button',
+  title: 'Primitives/Button',
   component: Button,
   parameters: {
     layout: 'centered',
