@@ -43,17 +43,6 @@ export default defineConfig({
           // (e.g. useColorScheme) parse cleanly under jsdom — RN's
           // entry has Flow annotations the bundler can't handle.
           alias: { 'react-native': 'react-native-web' },
-          extensions: [
-            '.web.tsx',
-            '.web.ts',
-            '.web.jsx',
-            '.web.js',
-            '.tsx',
-            '.ts',
-            '.jsx',
-            '.js',
-            '.json',
-          ],
         },
         test: {
           name: 'unit',
