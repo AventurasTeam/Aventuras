@@ -160,6 +160,10 @@
   .labels-block .lh .sub { font-size: 11px; color: var(--ink-faint); font-weight: 400; margin-left: 6px; }
   .labels-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 8px; }
   .labels-grid.three { grid-template-columns: repeat(3, 1fr); }
+  /* min-width: 0 on the input lets the 1fr columns shrink below the
+     input's intrinsic content width — without it the 4-column grid
+     overflows when months don't fit. */
+  .labels-grid .label-input { min-width: 0; box-sizing: border-box; width: 100%; }
   .label-input { padding: 5px 9px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 12px; color: var(--ink); font-family: inherit; }
   .label-input:focus { outline: none; border-color: var(--ink); }
   .label-input.ro { background: var(--bg-disabled); color: var(--ink-muted); border-color: var(--line-soft); cursor: default; }
@@ -244,6 +248,9 @@
     /* field-row label column shrinks 200 → 120 px, label wraps cleanly */
     .field-row { grid-template-columns: 120px 1fr; gap: 10px; }
     .field-label, .field-label .hint { overflow-wrap: anywhere; word-break: break-word; }
+    /* Labels grid drops to 3 columns at tablet (months / weekdays don't
+       fit cleanly at 4 cols when Layer 2's full canvas narrows). */
+    .labels-grid, .labels-grid.three { grid-template-columns: repeat(3, 1fr); }
   }
   @container (max-width: 639px) {
     /* slim top-bar */
