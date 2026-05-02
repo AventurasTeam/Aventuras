@@ -25,4 +25,14 @@ describe('theme registry', () => {
       expect(['light', 'dark']).toContain(theme.mode)
     }
   })
+
+  it('only default-light and default-dark are accent-overridable', () => {
+    const overridable = themes.filter((t) => t.accentOverridable).map((t) => t.id)
+    expect(overridable).toEqual(['default-light', 'default-dark'])
+  })
+
+  it('parchment and fallen-down are the only themes with font overrides', () => {
+    const withFonts = themes.filter((t) => t.fonts).map((t) => t.id)
+    expect(withFonts).toEqual(['parchment', 'fallen-down'])
+  })
 })

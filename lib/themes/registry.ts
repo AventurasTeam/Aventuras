@@ -1,6 +1,6 @@
 import type { Theme } from './types'
 
-export const themes: Theme[] = [
+export const themes: readonly Theme[] = [
   {
     id: 'default-light',
     name: 'Default Light',
