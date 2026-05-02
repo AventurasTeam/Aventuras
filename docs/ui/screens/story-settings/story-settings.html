@@ -93,8 +93,8 @@
      iPad portrait detail-pane widths cleanly).
      ========================================================= */
   @container (max-width: 1023px) {
-    /* Field-row label column shrinks 200 → 120 px on tablet+phone */
-    .field-row { grid-template-columns: 120px 1fr; gap: 10px; }
+    /* Field labels word-wrap on long type-hints (monospace strings with /, _, ·
+       don't break naturally). Tablet keeps the 180 px desktop label per world/plot. */
     .field-label, .field-label .type-hint { overflow-wrap: anywhere; word-break: break-word; }
   }
   @container (max-width: 639px) {
@@ -117,10 +117,13 @@
     /* pane content padding tightens */
     .pane-header { padding: 14px 16px 8px; }
     .pane-body { padding: 16px 16px 32px; }
+
+    /* Field-row label column shrinks 180 → 120 px on phone (matching world/plot) */
+    .field-row { grid-template-columns: 120px 1fr; gap: 10px; }
   }
 
   /* form fields */
-  .field-row { display: grid; grid-template-columns: 200px 1fr; gap: 16px; align-items: start; margin-bottom: 16px; }
+  .field-row { display: grid; grid-template-columns: 180px 1fr; gap: 14px; align-items: start; margin-bottom: 14px; }
   .field-label { font-size: 12px; color: var(--ink-muted); padding-top: 7px; font-family: ui-monospace, monospace; }
   .field-label .hint { display: block; font-size: 10px; color: var(--ink-faint); margin-top: 2px; }
   .input-text { width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 13px; color: var(--ink); font-family: inherit; }

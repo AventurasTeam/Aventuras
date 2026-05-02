@@ -77,7 +77,7 @@
       .panel-note code { background: #fff; padding: 1px 5px; border: 1px solid var(--line-soft); border-radius: 2px; font-size: 10px; }
 
       /* form fields */
-      .field-row { display: grid; grid-template-columns: 200px 1fr; gap: 14px; align-items: start; margin-bottom: 14px; }
+      .field-row { display: grid; grid-template-columns: 180px 1fr; gap: 14px; align-items: start; margin-bottom: 14px; }
       .field-label { font-size: 11px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; padding-top: 7px; font-family: ui-monospace, monospace; }
       .field-label .hint { color: var(--ink-faint); font-size: 9px; font-family: ui-monospace, monospace; display: block; margin-top: 2px; text-transform: none; letter-spacing: 0; }
 
@@ -216,9 +216,11 @@
          pane visibility. Tablet keeps the desktop 2-pane layout.
          ========================================================= */
       @container (max-width: 1023px) {
-        .field-row { grid-template-columns: 120px 1fr; gap: 10px; }
+        /* Field labels word-wrap on long type-hints. Tablet keeps the
+           180 px desktop label per world/plot — input column has room
+           at tablet widths since the rail (~240 px) is narrower than
+           World's list pane (~340 px). */
         .field-label, .field-label .hint { overflow-wrap: anywhere; word-break: break-word; }
-        .assignments-row { grid-template-columns: 120px 1fr; gap: 10px; }
       }
       @container (max-width: 639px) {
         header.topbar { padding: 8px 12px; gap: 8px; }
@@ -237,6 +239,10 @@
         .tab-panel { padding: 16px 16px 28px; }
 
         .save-bar { padding: 10px 12px; }
+
+        /* Field-row label column shrinks 180 → 120 px on phone (matching world/plot) */
+        .field-row { grid-template-columns: 120px 1fr; gap: 10px; }
+        .assignments-row { grid-template-columns: 120px 1fr; gap: 10px; }
       }
     </style>
   </head>
