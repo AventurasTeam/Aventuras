@@ -94,6 +94,9 @@
 
       /* segment selector — justify-self: start ensures it hugs content even inside grid cells (grid items default to justify-self: stretch) */
       .segment { display: inline-flex; justify-self: start; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+      .chip-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+      .add-chip { font-size: 11px; color: var(--ink-muted); cursor: pointer; padding: 3px 9px; border: 1px dashed var(--line); border-radius: 999px; }
+      .add-chip:hover { color: var(--ink); border-color: var(--ink); }
       .segment > .seg { padding: 6px 14px; font-size: 12px; color: var(--ink-muted); cursor: pointer; background: var(--bg-region); }
       .segment > .seg.active { background: var(--ink); color: #fff; }
       .segment > .seg + .seg { border-left: 1px solid var(--line); }
@@ -222,6 +225,15 @@
         .field-row { grid-template-columns: 120px 1fr; gap: 10px; }
         .assignments-row { grid-template-columns: 120px 1fr; gap: 10px; }
         .field-label, .field-label .hint { overflow-wrap: anywhere; word-break: break-word; }
+        /* Provider / profile accordion editors are denser than the main
+           settings rows — labels shrink further (90 px) to give the
+           crowded slider+input rows more horizontal room. Scoped to
+           .profile-body so the main settings rows above stay at 120 px. */
+        .profile-body .field-row { grid-template-columns: 90px 1fr; gap: 10px; }
+        /* Slider numeric input shrinks from 80 → 50 px on narrow tiers
+           (content is 3-4 chars; wider boxes felt visually heavy). The
+           slider itself takes the freed space via flex: 1. */
+        .slider-value-input { width: 50px; }
       }
       @container (max-width: 639px) {
         header.topbar { padding: 8px 12px; gap: 8px; }
@@ -371,7 +383,7 @@
               </div>
               <div class="field-row">
                 <div class="field-label">api key</div>
-                <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                   <span style="font-family: ui-monospace, monospace; font-size: 12px;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;a3f</span>
                   <span class="prov-actions" style="display: inline-flex;">
                     <span class="a">Edit</span>
@@ -536,7 +548,7 @@
                 <div class="field-label">api key
                   <span class="hint">optional &mdash; local servers</span>
                 </div>
-                <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                   <span style="font-style: italic; color: var(--ink-faint); font-size: 12px;">(empty &mdash; not required)</span>
                   <span class="prov-actions" style="display: inline-flex;">
                     <span class="a">Add key</span>
@@ -822,11 +834,16 @@
               <span class="hint">presets + numeric</span>
             </div>
             <div>
-              <div class="segment" style="margin-bottom: 8px; flex-wrap: wrap;">
-                <span class="seg">Short (8k)</span>
-                <span class="seg active">Balanced (24k)</span>
-                <span class="seg">Long (48k)</span>
-                <span class="seg">Custom</span>
+              <!-- Preset+custom hybrid uses the chip-row pattern (matches
+                   story-settings's threshold control). 4 options + custom
+                   doesn't fit Select primitive's three render modes
+                   cleanly; chips wrap naturally and read as "selectable
+                   presets". Per Group D wireframe-review unification. -->
+              <div class="chip-row" style="margin-bottom: 8px;">
+                <span class="add-chip" style="padding: 4px 12px;">Short (8k)</span>
+                <span class="add-chip" style="padding: 4px 12px; background: var(--bg-highlight); border-style: solid;">Balanced (24k)</span>
+                <span class="add-chip" style="padding: 4px 12px;">Long (48k)</span>
+                <span class="add-chip" style="padding: 4px 12px;">Custom&hellip;</span>
               </div>
               <input class="input-text" style="max-width: 120px;" value="24000" />
             </div>

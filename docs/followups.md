@@ -164,6 +164,34 @@ this section locks down.
 
 ## UX
 
+### Accent color picker UI
+
+Two surfaces consume an accent color picker — Story Settings →
+About (per-story accent) and App Settings → Appearance (app
+theme accent) — but the production UI primitive isn't pinned.
+Both wireframes currently render an ad-hoc swatch row of 7 fixed
+colors plus `+ custom`, with no spec for:
+
+- **Curated palette source.** Fixed list per
+  [`foundations/color.md`](./ui/foundations/color.md)
+  or theme-derived? Both screens probably want the same palette.
+- **Custom color UI.** Full color picker (hex / HSL fields,
+  native HTML5 `<input type="color">`, project-built widget),
+  text hex input only, or no custom path?
+- **Reset / fallback semantics.** Story Settings says "fallback:
+  mode-derived"; App Settings says "visible only when active
+  theme is accent-overridable". Different invariants — worth
+  resolving in the spec.
+
+Surfaced during Group D mobile retrofit
+([exploration record](./explorations/2026-05-02-mobile-group-d-settings.md))
+when the swatch row overflowed at narrow tiers and prompted the
+question "what's the actual production primitive here?" Lands as
+a small design pass — the answer probably extends
+[`foundations/color.md`](./ui/foundations/color.md)
+with a curated-accent-palette section, plus a new
+`patterns/color-picker.md` for the picker primitive itself.
+
 ### Prompt-pack editor mobile retrofit
 
 The mobile foundations Group D consumer pass landed
