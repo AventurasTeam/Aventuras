@@ -123,7 +123,7 @@
 
   .portrait-slot, .cover-slot { height: 110px; max-width: 380px; border: 1px dashed var(--line); border-radius: 3px; background: var(--bg-region); display: flex; align-items: center; justify-content: center; color: var(--ink-faint); font-size: 12px; font-style: italic; }
 
-  .color-swatch-row { display: flex; gap: 6px; align-items: center; }
+  .color-swatch-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .color-swatch { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--line-soft); cursor: pointer; }
   .color-swatch.active { box-shadow: 0 0 0 2px var(--ink); }
 
@@ -427,12 +427,12 @@
             <span class="hint">label + prose body<br>preset+prose hybrid</span>
           </div>
           <div style="display: flex; flex-direction: column; gap: 6px;">
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <div class="input-select" style="min-width: 200px;">
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+              <div class="input-select" style="flex: 1 1 200px; min-width: 0;">
                 <span>Noir grimdark <span style="font-size: 10px; color: var(--ink-muted); margin-left: 6px;">(preset)</span></span>
                 <span style="color: var(--ink-faint);">&#9662;</span>
               </div>
-              <input class="input-text" style="max-width: 220px;" value="Dark Fantasy" placeholder="label (overline)">
+              <input class="input-text" style="flex: 1 1 160px; min-width: 0;" value="Dark Fantasy" placeholder="label (overline)">
             </div>
             <textarea class="input-textarea" placeholder="Substantial prose injected into generation context. Selecting a preset above overwrites this with the preset's body; you can edit freely.">Dark fantasy in the late-feudal mode &mdash; small mercies in a kingdom that has run out of grace. Magic exists but is rare, transactional, and morally compromised. The prose leans cold; violence is ordinary.</textarea>
           </div>
@@ -443,12 +443,12 @@
             <span class="hint">label + prose body<br>preset+prose hybrid</span>
           </div>
           <div style="display: flex; flex-direction: column; gap: 6px;">
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <div class="input-select" style="min-width: 200px;">
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+              <div class="input-select" style="flex: 1 1 200px; min-width: 0;">
                 <span>Sparse / weighty <span style="font-size: 10px; color: var(--ink-muted); margin-left: 6px;">(preset)</span></span>
                 <span style="color: var(--ink-faint);">&#9662;</span>
               </div>
-              <input class="input-text" style="max-width: 220px;" value="Sparse / weighty" placeholder="label">
+              <input class="input-text" style="flex: 1 1 160px; min-width: 0;" value="Sparse / weighty" placeholder="label">
             </div>
             <textarea class="input-textarea" placeholder="Substantial prose injected into generation context.">Sparse, weighty prose. Present tense. Dialogue sparse and clipped. Long passages of internal monologue between sparse external action. The narrator notices light, weather, and silence.</textarea>
           </div>
