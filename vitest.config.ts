@@ -38,6 +38,12 @@ export default defineConfig({
       },
       {
         extends: true,
+        resolve: {
+          // Aliases react-native to react-native-web so RN imports
+          // (e.g. useColorScheme) parse cleanly under jsdom — RN's
+          // entry has Flow annotations the bundler can't handle.
+          alias: { 'react-native': 'react-native-web' },
+        },
         test: {
           name: 'unit',
           environment: 'node',
