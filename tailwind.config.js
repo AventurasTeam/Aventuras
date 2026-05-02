@@ -10,45 +10,72 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        border: 'hsl(var(--border))',
-        input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))',
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
-        primary: {
-          DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))',
+        bg: {
+          base: 'var(--bg-base)',
+          raised: 'var(--bg-raised)',
+          sunken: 'var(--bg-sunken)',
+          overlay: 'var(--bg-overlay)',
+          disabled: 'var(--bg-disabled)',
         },
-        secondary: {
-          DEFAULT: 'hsl(var(--secondary))',
-          foreground: 'hsl(var(--secondary-foreground))',
-        },
-        destructive: {
-          DEFAULT: 'hsl(var(--destructive))',
-          foreground: 'hsl(var(--destructive-foreground))',
-        },
-        muted: {
-          DEFAULT: 'hsl(var(--muted))',
-          foreground: 'hsl(var(--muted-foreground))',
+        fg: {
+          primary: 'var(--fg-primary)',
+          secondary: 'var(--fg-secondary)',
+          muted: 'var(--fg-muted)',
+          disabled: 'var(--fg-disabled)',
         },
         accent: {
-          DEFAULT: 'hsl(var(--accent))',
-          foreground: 'hsl(var(--accent-foreground))',
+          DEFAULT: 'var(--accent)',
+          hover: 'var(--accent-hover)',
+          fg: 'var(--accent-fg)',
         },
-        popover: {
-          DEFAULT: 'hsl(var(--popover))',
-          foreground: 'hsl(var(--popover-foreground))',
+        success: {
+          DEFAULT: 'var(--success)',
+          fg: 'var(--success-fg)',
         },
-        card: {
-          DEFAULT: 'hsl(var(--card))',
-          foreground: 'hsl(var(--card-foreground))',
+        warning: {
+          DEFAULT: 'var(--warning)',
+          fg: 'var(--warning-fg)',
         },
+        danger: {
+          DEFAULT: 'var(--danger)',
+          fg: 'var(--danger-fg)',
+        },
+        info: {
+          DEFAULT: 'var(--info)',
+          fg: 'var(--info-fg)',
+        },
+        border: {
+          DEFAULT: 'var(--border)',
+          strong: 'var(--border-strong)',
+        },
+        'focus-ring': 'var(--focus-ring)',
+        'selection-bg': 'var(--selection-bg)',
+        'recently-classified-bg': 'var(--recently-classified-bg)',
+      },
+      fontFamily: {
+        reading: 'var(--font-reading)',
+        ui: 'var(--font-ui)',
+        mono: 'var(--font-mono)',
       },
       borderRadius: {
-        xl: 'calc(var(--radius) + 4px)',
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
+        sm: 'var(--radius-sm)',
+        md: 'var(--radius-md)',
+        lg: 'var(--radius-lg)',
+        full: 'var(--radius-full)',
+      },
+      transitionDuration: {
+        fast: 'var(--duration-fast)',
+        base: 'var(--duration-base)',
+        slow: 'var(--duration-slow)',
+      },
+      transitionTimingFunction: {
+        standard: 'var(--easing-standard)',
+        emphasis: 'var(--easing-emphasis)',
+      },
+      padding: {
+        row: 'var(--row-pad-y) var(--row-pad-x)',
+        input: 'var(--input-pad-y) var(--input-pad-x)',
+        button: 'var(--button-pad-y) var(--button-pad-x)',
       },
     },
   },
