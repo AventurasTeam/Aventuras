@@ -93,8 +93,9 @@
      iPad portrait detail-pane widths cleanly).
      ========================================================= */
   @container (max-width: 1023px) {
-    /* Field labels word-wrap on long type-hints (monospace strings with /, _, ·
-       don't break naturally). Tablet keeps the 180 px desktop label per world/plot. */
+    /* Field-row label column shrinks 180 → 120 px on tablet+phone — inputs
+       need more breathing room and labels don't need equal space. */
+    .field-row { grid-template-columns: 120px 1fr; gap: 10px; }
     .field-label, .field-label .type-hint { overflow-wrap: anywhere; word-break: break-word; }
   }
   @container (max-width: 639px) {
@@ -117,9 +118,7 @@
     /* pane content padding tightens */
     .pane-header { padding: 14px 16px 8px; }
     .pane-body { padding: 16px 16px 32px; }
-
-    /* Field-row label column shrinks 180 → 120 px on phone (matching world/plot) */
-    .field-row { grid-template-columns: 120px 1fr; gap: 10px; }
+    /* Field-row label shrink already applied at <1024 px (tablet+phone). */
   }
 
   /* form fields */

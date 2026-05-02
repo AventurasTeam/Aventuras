@@ -666,12 +666,11 @@ at iPad portrait detail-pane widths).
   [`principles.md → Settings icon scope`](../../principles.md#settings-icon-scope).
 - **Form-field rows in detail content** use the same `.field-row`
   shape as the World / Plot detail panes — 180 px label column on
-  desktop and tablet, shrinking to 120 px on phone. Type-hint
-  applies `overflow-wrap: anywhere` to break long monospace
-  strings cleanly. Matches the rule landed in
-  [Group C](../../../explorations/2026-05-01-mobile-group-c-master-detail.md);
-  one shared ratio across all four 2-pane surfaces (world, plot,
-  story-settings, app-settings).
+  desktop, shrinking to 120 px on tablet and phone (inputs need
+  more breathing room and labels don't need equal space).
+  Type-hint applies `overflow-wrap: anywhere` to break long
+  monospace strings cleanly. Same ratio across all four 2-pane
+  surfaces (world, plot, story-settings, app-settings).
 - **Selects on phone** route per the
   [`patterns/forms.md → Select primitive`](../../patterns/forms.md#select-primitive)
   cascade: dropdown render mode opens via Sheet (short) for flat

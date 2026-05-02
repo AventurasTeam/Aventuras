@@ -569,11 +569,14 @@ overflows.
   content first, visual reference below). Tap the portrait to
   view it full-size per
   [`principles.md → Tap a thumbnail to see it full-size`](../../principles.md#tap-a-thumbnail-to-see-it-full-size).
-- **Form-field labels compress on phone.** The detail-pane's
-  `.field-row` uses a 180 px label column on desktop and tablet;
-  on phone it drops to ~120 px (~30 % shrink) to give the input
-  column more breathing room. Type-hint sub-text (under each
-  label) wraps if necessary.
+- **Form-field labels compress on tablet and phone.** The
+  detail-pane's `.field-row` uses a 180 px label column on
+  desktop; tablet and phone shrink to 120 px to give the input
+  column more breathing room (labels don't need equal space).
+  Type-hint sub-text (under each label) applies
+  `overflow-wrap: anywhere` so long monospace strings break
+  cleanly inside the column. Same ratio across all four 2-pane
+  surfaces (world, plot, story-settings, app-settings).
 - **History tab controls reflow on narrow widths.** The
   `.history-controls` row (search input, op-filter chips, sort
   picker) is a single horizontal row at desktop tier; on tablet

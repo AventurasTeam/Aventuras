@@ -1366,10 +1366,16 @@
          kind-aware swap on body[data-side="happenings"].
          ========================================================= */
       /* Tablet + phone: shared bug-fix rules (history-controls reflow,
-         time-anchor stack, history-row column compression). Threshold 3
-         means happenings (4 tabs) goes to dropdown on tablet — wired
-         below via the kind-aware swap. */
+         time-anchor stack, history-row column compression, field-row
+         label shrink). Threshold 3 means happenings (4 tabs) goes to
+         dropdown on tablet — wired below via the kind-aware swap. */
       @container (max-width: 1023px) {
+        /* Field-row label column shrinks 180 → 120 px on tablet+phone —
+           inputs need more breathing room and labels don't need equal space. */
+        .field-row {
+          grid-template-columns: 120px 1fr;
+          gap: 10px;
+        }
         .history-controls { flex-wrap: wrap; }
         .history-search {
           flex: 1 1 100%;
@@ -1500,13 +1506,7 @@
           font-size: 10px;
         }
 
-        /* Field-row label column shrinks 180 → 120 px on phone (~30%
-           reduction) matching world.html. Gives the input column —
-           and the time-anchor stacked cells — more breathing room. */
-        .field-row {
-          grid-template-columns: 120px 1fr;
-          gap: 10px;
-        }
+        /* Field-row label shrink already applied at <1024 px (tablet+phone). */
 
         /* JSON overlay drawer reflows to bottom-anchored Sheet (tall ~95%) */
         .json-drawer {
