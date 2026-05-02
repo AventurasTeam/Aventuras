@@ -83,43 +83,8 @@
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
 
-  /* =========================================================
-     Tier overrides — container queries on .viewport.
-     Phone tier (< 640 px) collapses the two-pane navigation per
-     docs/ui/foundations/mobile/collapse.md → Two-pane navigation
-     surfaces. Left rail flattens to a list-first sub-stack;
-     state toggle on the body controls list-vs-detail visibility.
-     Tablet keeps the desktop 2-pane layout (rail at ~240 px fits
-     iPad portrait detail-pane widths cleanly).
-     ========================================================= */
-  @container (max-width: 1023px) {
-    /* Field-row label column shrinks 180 → 120 px on tablet+phone — inputs
-       need more breathing room and labels don't need equal space. */
-    .field-row { grid-template-columns: 120px 1fr; gap: 10px; }
-    .field-label, .field-label .type-hint { overflow-wrap: anywhere; word-break: break-word; }
-  }
-  @container (max-width: 639px) {
-    /* slim top-bar */
-    header.topbar { padding: 8px 12px; gap: 8px; }
-    .topbar-right { gap: 6px; }
-    .gen-status > span:not(.dot) { display: none; }
-    .gen-status { padding: 3px 6px; }
-
-    /* settings layout collapses to single-column; rail or pane visible
-       per body[data-md-state] */
-    .settings-layout { grid-template-columns: 1fr; }
-    body[data-md-state="list"] main.pane { display: none; }
-    body[data-md-state="detail"] aside.nav { display: none; }
-
-    /* rail compresses padding for full-width touch targets */
-    aside.nav { border-right: none; }
-    .nav-item { padding: 12px 16px; }
-
-    /* pane content padding tightens */
-    .pane-header { padding: 14px 16px 8px; }
-    .pane-body { padding: 16px 16px 32px; }
-    /* Field-row label shrink already applied at <1024 px (tablet+phone). */
-  }
+  /* (Tier overrides moved to end of style block so they override
+     defaults declared below per CSS source-order.) */
 
   /* form fields */
   .field-row { display: grid; grid-template-columns: 180px 1fr; gap: 14px; align-items: start; margin-bottom: 14px; }
@@ -192,6 +157,44 @@
   /* section headings within tab */
   .tab-section { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
   .tab-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); margin-bottom: 10px; font-weight: 600; }
+
+  /* =========================================================
+     Tier overrides — container queries on .viewport. Placed at
+     end of style block so they take CSS source-order precedence
+     over the defaults declared above (.field-row in particular).
+     Phone tier (< 640 px) collapses the two-pane navigation per
+     docs/ui/foundations/mobile/collapse.md → Two-pane navigation
+     surfaces. Tablet keeps the desktop 2-pane layout but field-
+     row labels shrink to give the input column more room.
+     ========================================================= */
+  @container (max-width: 1023px) {
+    /* Field-row label column shrinks 180 → 120 px on tablet+phone — inputs
+       need more breathing room and labels don't need equal space. */
+    .field-row { grid-template-columns: 120px 1fr; gap: 10px; }
+    .field-label, .field-label .type-hint { overflow-wrap: anywhere; word-break: break-word; }
+  }
+  @container (max-width: 639px) {
+    /* slim top-bar */
+    header.topbar { padding: 8px 12px; gap: 8px; }
+    .topbar-right { gap: 6px; }
+    .gen-status > span:not(.dot) { display: none; }
+    .gen-status { padding: 3px 6px; }
+
+    /* settings layout collapses to single-column; rail or pane visible
+       per body[data-md-state] */
+    .settings-layout { grid-template-columns: 1fr; }
+    body[data-md-state="list"] main.pane { display: none; }
+    body[data-md-state="detail"] aside.nav { display: none; }
+
+    /* rail compresses padding for full-width touch targets */
+    aside.nav { border-right: none; }
+    .nav-item { padding: 12px 16px; }
+
+    /* pane content padding tightens */
+    .pane-header { padding: 14px 16px 8px; }
+    .pane-body { padding: 16px 16px 32px; }
+    /* Field-row label shrink already applied at <1024 px (tablet+phone). */
+  }
 </style>
 </head>
 <body data-md-state="detail">
