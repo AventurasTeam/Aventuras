@@ -1,106 +1,92 @@
+import { ActivityIndicator, Platform, Pressable, type PressableProps } from 'react-native'
+import { cva, type VariantProps } from 'class-variance-authority'
 import { TextClassContext } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
-import { cva, type VariantProps } from 'class-variance-authority'
-import { Platform, Pressable } from 'react-native'
 
 const buttonVariants = cva(
   cn(
-    'group shrink-0 flex-row items-center justify-center gap-2 rounded-md shadow-none',
+    'group shrink-0 flex-row items-center justify-center gap-2 rounded-md',
     Platform.select({
-      web: "focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive whitespace-nowrap outline-none transition-all focus-visible:ring-[3px] disabled:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+      web: "outline-none transition-colors disabled:pointer-events-none focus-visible:ring-2 focus-visible:ring-focus-ring [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
     }),
   ),
   {
     variants: {
       variant: {
-        default: cn(
-          'bg-primary active:bg-primary/90 shadow-sm shadow-black/5',
-          Platform.select({ web: 'hover:bg-primary/90' }),
-        ),
-        destructive: cn(
-          'bg-destructive active:bg-destructive/90 dark:bg-destructive/60 shadow-sm shadow-black/5',
-          Platform.select({
-            web: 'hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40',
-          }),
-        ),
-        outline: cn(
-          'border-border bg-background active:bg-accent dark:bg-input/30 dark:border-input dark:active:bg-input/50 border shadow-sm shadow-black/5',
-          Platform.select({
-            web: 'hover:bg-accent dark:hover:bg-input/50',
-          }),
+        primary: cn(
+          'bg-accent active:bg-accent-hover',
+          Platform.select({ web: 'hover:bg-accent-hover' }),
         ),
         secondary: cn(
-          'bg-secondary active:bg-secondary/80 shadow-sm shadow-black/5',
-          Platform.select({ web: 'hover:bg-secondary/80' }),
+          'border border-border bg-bg-base active:bg-bg-raised',
+          Platform.select({ web: 'hover:border-border-strong' }),
         ),
         ghost: cn(
-          'active:bg-accent dark:active:bg-accent/50',
-          Platform.select({ web: 'hover:bg-accent dark:hover:bg-accent/50' }),
+          'bg-transparent active:bg-bg-raised',
+          Platform.select({ web: 'hover:bg-bg-raised' }),
         ),
-        link: '',
+        destructive: cn(
+          'bg-danger active:opacity-90',
+          Platform.select({ web: 'hover:opacity-90' }),
+        ),
       },
       size: {
-        default: cn('h-10 px-4 py-2 sm:h-9', Platform.select({ web: 'has-[>svg]:px-3' })),
-        sm: cn('h-9 gap-1.5 rounded-md px-3 sm:h-8', Platform.select({ web: 'has-[>svg]:px-2.5' })),
-        lg: cn('h-11 rounded-md px-6 sm:h-10', Platform.select({ web: 'has-[>svg]:px-4' })),
-        icon: 'h-10 w-10 sm:h-9 sm:w-9',
+        sm: cn('h-8 gap-1.5 rounded-sm px-3', Platform.select({ web: 'has-[>svg]:px-2.5' })),
+        md: cn('h-10 px-4 py-2', Platform.select({ web: 'has-[>svg]:px-3' })),
+        lg: cn('h-12 rounded-lg px-6', Platform.select({ web: 'has-[>svg]:px-4' })),
+        icon: 'h-10 w-10 rounded-md',
       },
     },
-    defaultVariants: {
-      variant: 'default',
-      size: 'default',
-    },
+    defaultVariants: { variant: 'primary', size: 'md' },
   },
 )
 
 const buttonTextVariants = cva(
-  cn(
-    'text-foreground text-sm font-medium',
-    Platform.select({ web: 'pointer-events-none transition-colors' }),
-  ),
+  cn('text-sm font-medium', Platform.select({ web: 'pointer-events-none transition-colors' })),
   {
     variants: {
       variant: {
-        default: 'text-primary-foreground',
-        destructive: 'text-white',
-        outline: cn(
-          'group-active:text-accent-foreground',
-          Platform.select({ web: 'group-hover:text-accent-foreground' }),
-        ),
-        secondary: 'text-secondary-foreground',
-        ghost: 'group-active:text-accent-foreground',
-        link: cn(
-          'text-primary group-active:underline',
-          Platform.select({ web: 'underline-offset-4 hover:underline group-hover:underline' }),
-        ),
+        primary: 'text-accent-fg',
+        secondary: 'text-fg-primary',
+        ghost: 'text-fg-primary',
+        destructive: 'text-danger-fg',
       },
-      size: {
-        default: '',
-        sm: '',
-        lg: '',
-        icon: '',
-      },
+      size: { sm: '', md: '', lg: 'text-base', icon: '' },
     },
-    defaultVariants: {
-      variant: 'default',
-      size: 'default',
-    },
+    defaultVariants: { variant: 'primary', size: 'md' },
   },
 )
 
-type ButtonProps = React.ComponentProps<typeof Pressable> & VariantProps<typeof buttonVariants>
+type ButtonProps = PressableProps &
+  VariantProps<typeof buttonVariants> & {
+    loading?: boolean
+    className?: string
+  }
 
-function Button({ className, variant, size, ...props }: ButtonProps) {
+export function Button({
+  className,
+  variant,
+  size,
+  loading,
+  disabled,
+  children,
+  ...props
+}: ButtonProps) {
+  const isDisabled = disabled || loading
   return (
     <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
       <Pressable
-        className={cn(props.disabled && 'opacity-50', buttonVariants({ variant, size }), className)}
-        role="button"
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
+        disabled={isDisabled ?? undefined}
+        className={cn(isDisabled && 'opacity-50', buttonVariants({ variant, size }), className)}
         {...props}
-      />
+      >
+        {loading ? <ActivityIndicator size="small" /> : children}
+      </Pressable>
     </TextClassContext.Provider>
   )
 }
 
-export { Button, buttonTextVariants, buttonVariants }
+export { buttonVariants, buttonTextVariants }
 export type { ButtonProps }

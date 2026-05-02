@@ -61,7 +61,7 @@ export const OpenByDefault: Story = {
   render: () => (
     <Dialog defaultOpen>
       <DialogTrigger asChild>
-        <Button variant="outline">
+        <Button variant="secondary">
           <Text>Reopen</Text>
         </Button>
       </DialogTrigger>
