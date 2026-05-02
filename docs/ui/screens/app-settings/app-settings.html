@@ -228,8 +228,10 @@
         /* Provider / profile accordion editors are denser than the main
            settings rows — labels shrink further (90 px) to give the
            crowded slider+input rows more horizontal room. Scoped to
-           .profile-body so the main settings rows above stay at 120 px. */
-        .profile-body .field-row { grid-template-columns: 90px 1fr; gap: 10px; }
+           .profile-body and .narrative-card so the main settings rows
+           outside these editors stay at 120 px. */
+        .profile-body .field-row,
+        .narrative-card .field-row { grid-template-columns: 90px 1fr; gap: 10px; }
         /* Slider numeric input shrinks from 80 → 50 px on narrow tiers
            (content is 3-4 chars; wider boxes felt visually heavy). The
            slider itself takes the freed space via flex: 1. */
