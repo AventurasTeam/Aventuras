@@ -48,7 +48,7 @@ export function Switch({ className, ...props }: SwitchProps) {
       className={cn(
         'flex h-[1.15rem] w-8 shrink-0 flex-row items-center rounded-full border border-transparent',
         Platform.select({
-          web: 'focus-visible:ring-focus-ring/50 peer inline-flex outline-none transition-all focus-visible:border-accent focus-visible:ring-[3px] disabled:cursor-not-allowed',
+          web: 'focus-visible:ring-focus-ring/50 peer inline-flex cursor-pointer outline-none transition-all focus-visible:border-accent focus-visible:ring-[3px] disabled:cursor-not-allowed',
         }),
         props.checked ? 'bg-accent' : 'bg-fg-muted',
         props.disabled && 'opacity-50',

@@ -604,7 +604,7 @@ function SegmentBranch({ options, value, onValueChange, disabled, className }: S
               Platform.select({
                 web: cn(
                   !selected && 'hover:bg-bg-raised',
-                  'focus-visible:ring-focus-ring/50 outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed',
+                  'focus-visible:ring-focus-ring/50 cursor-pointer outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed',
                 ),
               }),
               optDisabled && 'opacity-50',
@@ -653,7 +653,7 @@ function RadioBranch({ options, value, onValueChange, disabled, className }: Sel
               Platform.select({
                 web: cn(
                   !selected && 'hover:bg-bg-raised',
-                  'focus-visible:ring-focus-ring/50 outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed',
+                  'focus-visible:ring-focus-ring/50 cursor-pointer outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed',
                 ),
               }),
               optDisabled && 'opacity-50',

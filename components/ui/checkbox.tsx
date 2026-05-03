@@ -21,7 +21,7 @@
 // - ACCEPTED: rn-primitives composition (Root + Indicator), the
 //   fixed `size-4` square + `rounded-[4px]` corner radius, the
 //   `hitSlop={24}` boost from the baseline (mobile tap-target),
-//   `cursor-default` + `disabled:cursor-not-allowed` on web,
+//   `disabled:cursor-not-allowed` on web,
 //   `overflow-hidden` on native (clips the indicator pill).
 // - SUBTRACTED: the baseline's `checkedClassName` /
 //   `indicatorClassName` / `iconClassName` pass-throughs. v1
@@ -55,7 +55,7 @@ export function Checkbox({ className, ...props }: CheckboxProps) {
       className={cn(
         'size-4 shrink-0 rounded-[4px] border border-border bg-bg-base',
         Platform.select({
-          web: 'focus-visible:ring-focus-ring/50 peer cursor-default outline-none transition-shadow focus-visible:border-accent focus-visible:ring-[3px] disabled:cursor-not-allowed',
+          web: 'focus-visible:ring-focus-ring/50 peer cursor-pointer outline-none transition-shadow focus-visible:border-accent focus-visible:ring-[3px] disabled:cursor-not-allowed',
           native: 'overflow-hidden',
         }),
         props.checked && 'border-accent',
