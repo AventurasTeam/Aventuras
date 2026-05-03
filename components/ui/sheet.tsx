@@ -11,18 +11,15 @@
 //   state (open / defaultOpen / onOpenChange), focus trap, scrim dismissal,
 //   Portal hosting, Trigger composition.
 // - OWNS: anchor (bottom / right) presentation, size scale (short / medium /
-//   tall) for bottom anchor, drag-handle visual, slot-token wiring
-//   (bg-overlay, border-strong, scrim color, radii on the open edge,
-//   padding), native slide animation via reanimated.
+//   tall) for bottom anchor, drag-handle visual, drag-to-dismiss gesture
+//   on native, slot-token wiring (bg-overlay, border-strong, scrim color,
+//   radii on the open edge, padding), native slide animation via reanimated.
 //
 // What's NOT here yet:
 //
 // - **Web entry / exit animations.** Match Popover's gap; pair with the
 //   post-phase-2 animation pass. Sheet appears instantly on Electron until
 //   then.
-// - **Drag-to-dismiss.** Gesture-handler wiring pairs naturally with the
-//   same post-phase-2 animation work; consumer-side dismissal still works
-//   via tap-on-scrim and Escape.
 // - **Per-theme scrim color.** Uses `bg-black/40` matching the light-mode
 //   value; dark-mode would prefer 0.6 but Aventuras doesn't currently ship
 //   a `--scrim` slot per the parked decision in
@@ -41,6 +38,7 @@ import { TextClassContext } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 import * as React from 'react'
 import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import {
   FadeIn,
   FadeOut,
@@ -48,7 +46,11 @@ import {
   SlideInRight,
   SlideOutDown,
   SlideOutRight,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
 } from 'react-native-reanimated'
+import { runOnJS } from 'react-native-worklets'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
@@ -73,8 +75,8 @@ const BOTTOM_HEIGHT_PCT: Record<SheetSize, `${number}%`> = {
 }
 
 const RIGHT_WIDTH_PX = 440
-
 const SAFE_AREA_GAP_PX = 8
+const DRAG_DISMISS_THRESHOLD_PX = 100
 
 function getNativePanelStyle(
   anchor: SheetAnchor,
@@ -123,6 +125,78 @@ function SheetContent({
   const insets = useSafeAreaInsets()
   const { height: screenHeight } = useWindowDimensions()
   const nativePanelStyle = getNativePanelStyle(anchor, size, insets.top, screenHeight)
+  const { onOpenChange } = DialogPrimitive.useRootContext()
+
+  // Drag-to-dismiss: track translation in the dismiss direction, snap back
+  // if the drag is short, close if it crosses the threshold. Only active on
+  // native — Electron has no gesture path and falls back to outside-click /
+  // Escape.
+  const dragOffset = useSharedValue(0)
+  const animatedDragStyle = useAnimatedStyle(() =>
+    isBottom
+      ? { transform: [{ translateY: dragOffset.value }] }
+      : { transform: [{ translateX: dragOffset.value }] },
+  )
+  const closeFromGesture = React.useCallback(() => onOpenChange(false), [onOpenChange])
+  const panGesture = React.useMemo(
+    () =>
+      Gesture.Pan()
+        .onUpdate((event) => {
+          'worklet'
+          const delta = isBottom ? event.translationY : event.translationX
+          // Clamp to the dismiss direction; spring resistance for the wrong
+          // direction is overkill for v1.
+          dragOffset.value = Math.max(0, delta)
+        })
+        .onEnd((event) => {
+          'worklet'
+          const delta = isBottom ? event.translationY : event.translationX
+          if (delta > DRAG_DISMISS_THRESHOLD_PX) {
+            runOnJS(closeFromGesture)()
+            return
+          }
+          dragOffset.value = withSpring(0, { damping: 18, stiffness: 220 })
+        }),
+    [isBottom, dragOffset, closeFromGesture],
+  )
+
+  const PanelInner = (
+    <NativeOnlyAnimatedView
+      entering={slideEnter}
+      exiting={slideExit}
+      style={Platform.select({ native: [nativePanelStyle, animatedDragStyle] })}
+    >
+      <TextClassContext.Provider value="text-fg-primary">
+        <DialogPrimitive.Content
+          className={cn(
+            'border border-border-strong bg-bg-overlay p-6 outline-none',
+            Platform.select({
+              web: cn(
+                'absolute z-50',
+                isBottom
+                  ? cn(
+                      'bottom-0 left-0 right-0 rounded-t-lg border-b-0',
+                      BOTTOM_HEIGHT_CLASS_WEB[size],
+                    )
+                  : 'bottom-0 right-0 top-0 w-[440px] rounded-l-lg border-r-0',
+              ),
+              default: cn(
+                'flex-1',
+                isBottom ? 'rounded-t-lg border-b-0' : 'rounded-l-lg border-r-0',
+              ),
+            }),
+            className,
+          )}
+          {...props}
+        >
+          {isBottom ? (
+            <View className="mx-auto mb-4 h-1 w-10 rounded-full bg-fg-muted opacity-40" />
+          ) : null}
+          {children}
+        </DialogPrimitive.Content>
+      </TextClassContext.Provider>
+    </NativeOnlyAnimatedView>
+  )
 
   return (
     <DialogPrimitive.Portal hostName={portalHost}>
@@ -138,41 +212,11 @@ function SheetContent({
               style={Platform.select({ native: StyleSheet.absoluteFill })}
             />
           </NativeOnlyAnimatedView>
-          <NativeOnlyAnimatedView
-            entering={slideEnter}
-            exiting={slideExit}
-            style={Platform.select({ native: nativePanelStyle })}
-          >
-            <TextClassContext.Provider value="text-fg-primary">
-              <DialogPrimitive.Content
-                className={cn(
-                  'border border-border-strong bg-bg-overlay p-6 outline-none',
-                  Platform.select({
-                    web: cn(
-                      'absolute z-50',
-                      isBottom
-                        ? cn(
-                            'bottom-0 left-0 right-0 rounded-t-lg border-b-0',
-                            BOTTOM_HEIGHT_CLASS_WEB[size],
-                          )
-                        : 'bottom-0 right-0 top-0 w-[440px] rounded-l-lg border-r-0',
-                    ),
-                    default: cn(
-                      'flex-1',
-                      isBottom ? 'rounded-t-lg border-b-0' : 'rounded-l-lg border-r-0',
-                    ),
-                  }),
-                  className,
-                )}
-                {...props}
-              >
-                {isBottom ? (
-                  <View className="mx-auto mb-4 h-1 w-10 rounded-full bg-fg-muted opacity-40" />
-                ) : null}
-                {children}
-              </DialogPrimitive.Content>
-            </TextClassContext.Provider>
-          </NativeOnlyAnimatedView>
+          {Platform.OS === 'web' ? (
+            PanelInner
+          ) : (
+            <GestureDetector gesture={panGesture}>{PanelInner}</GestureDetector>
+          )}
         </View>
       </FullWindowOverlay>
     </DialogPrimitive.Portal>
