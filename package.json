@@ -37,6 +37,7 @@
     "@react-navigation/native": "^7.1.33",
     "@rn-primitives/dialog": "^1.4.0",
     "@rn-primitives/popover": "^1.4.0",
+    "@rn-primitives/portal": "^1.4.0",
     "@rn-primitives/slot": "^1.4.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
