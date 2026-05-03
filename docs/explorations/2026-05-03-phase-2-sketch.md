@@ -64,11 +64,21 @@ autocomplete, password-style inputs, RN keyboard-handling.
 starting point — same adapt-not-rebuild pattern phase 1 used for
 Button.
 
-### Group D — choice primitives (Switch + Checkbox + Radio)
+### Group D — choice primitives (Switch + Checkbox)
 
-Boolean and discrete-choice inputs. v1 surfaces using these:
-appearance toggles (App Settings), per-story toggles (Story
-Settings), wizard steps. Same scaffold-adapt pattern.
+Boolean inputs. v1 surfaces using these: appearance toggles (App
+Settings), per-story toggles (Story Settings), wizard steps. Same
+scaffold-adapt pattern.
+
+**Standalone Radio dropped from this group.** Select's `radio`
+render mode covers every "pick one of N with descriptions" case
+in v1 wireframes; no per-screen surface uses a radio group outside
+Select. Group D's contribution to the radio pattern is internal:
+Select.radio + Select.segment retrofit to compose
+`@rn-primitives/radio-group` for arrow-key navigation, roving
+tabindex, and ARIA role wiring. If a non-description radio case
+ever surfaces (rare), extend Select rather than duplicating the
+primitive — keeps the "pick one" vocabulary single-sourced.
 
 ### Group E — visual primitives (Avatar + Icon)
 
@@ -106,8 +116,10 @@ Critical path:
    shape decision; characterizes virtualization.
 3. **Group C (Input + Textarea)** — independent of A/B. Can run in
    parallel with B if subagent-driven; else after B.
-4. **Group D (Switch + Checkbox + Radio)** — independent. Parallel
-   with C.
+4. **Group D (Switch + Checkbox)** — independent. Parallel with C.
+   Bundles a Select.radio + Select.segment retrofit to compose
+   `@rn-primitives/radio-group` (no standalone Radio primitive
+   shipped — see group description).
 5. **Group E (Icon + Avatar)** — depends on the Icon primitive
    being designed (icon-set choice + sizing contract). Independent
    of A–D otherwise.

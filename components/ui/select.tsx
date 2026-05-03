@@ -29,7 +29,15 @@
 //   composes SelectBase.Portal + SelectBase.Overlay + SelectBase.Content
 //   (with `disablePositioningStyle`) inside a bottom-anchored
 //   sheet-style shell — see the State bridge note above for why
-//   our Sheet primitive can't host this branch directly.
+//   our Sheet primitive can't host this branch directly. Radio
+//   AND segment render branches compose @rn-primitives/radio-group
+//   internally (Root + Item) so we get arrow-key navigation +
+//   roving tabindex + ARIA role wiring for free, while keeping
+//   each branch's distinct visual layout (row+description for
+//   radio; horizontal segmented cells for segment). Standalone
+//   Radio primitive deliberately not exported — Select.radio
+//   covers all wireframe consumers; if a non-description case
+//   appears, extend Select rather than duplicate the primitive.
 // - ACCEPTED: rn-primitives composition (Root, Trigger, Content,
 //   Portal, Overlay, Item, ItemText, ItemIndicator, Group, Label,
 //   Separator), focus-trap mechanics, anchor-positioning math, iOS
@@ -70,12 +78,12 @@ import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-vie
 import { Text, TextClassContext } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { cn } from '@/lib/utils'
+import * as RadioGroupBase from '@rn-primitives/radio-group'
 import * as SelectBase from '@rn-primitives/select'
 import { Check, ChevronDown, ChevronDownIcon, ChevronUpIcon } from 'lucide-react-native'
 import * as React from 'react'
 import {
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
@@ -562,12 +570,20 @@ function autoSheetSize(options: SelectOption[]): ContentSheetSize {
 
 function SegmentBranch({ options, value, onValueChange, disabled, className }: SelectProps) {
   // Outer wrapper carries the density-aware height (h-control-md);
-  // each Pressable cell stretches via flex-1 horizontally and fills
+  // each Item cell stretches via flex-1 horizontally and fills
   // vertically. Cell padding stays centered (no py-* needed since the
   // wrapper height drives vertical sizing).
+  //
+  // Same radio-group machinery as RadioBranch — Root/Item/Indicator
+  // give us arrow-key nav (Left/Right horizontal idiom in this
+  // layout) and roving tabindex. Indicator is unused visually
+  // because the segment communicates selected state via cell-bg
+  // swap (bg-accent vs active:bg-bg-raised) rather than a dot.
   return (
-    <View
-      accessibilityRole="radiogroup"
+    <RadioGroupBase.Root
+      value={value}
+      onValueChange={onValueChange}
+      disabled={disabled}
       className={cn(
         'h-control-md flex-row overflow-hidden rounded-md border border-border-strong bg-bg-base',
         className,
@@ -577,27 +593,30 @@ function SegmentBranch({ options, value, onValueChange, disabled, className }: S
         const selected = opt.value === value
         const optDisabled = disabled || opt.disabled
         return (
-          <Pressable
+          <RadioGroupBase.Item
             key={opt.value}
-            accessibilityRole="radio"
-            accessibilityState={{ selected, disabled: !!optDisabled }}
+            value={opt.value}
             disabled={optDisabled ?? undefined}
-            onPress={() => onValueChange(opt.value)}
             className={cn(
               'flex-1 items-center justify-center px-3',
               i > 0 && 'border-l border-l-border-strong',
               selected ? 'bg-accent' : 'active:bg-bg-raised',
-              Platform.select({ web: !selected && 'hover:bg-bg-raised' }),
+              Platform.select({
+                web: cn(
+                  !selected && 'hover:bg-bg-raised',
+                  'focus-visible:ring-focus-ring/50 outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed',
+                ),
+              }),
               optDisabled && 'opacity-50',
             )}
           >
             <Text size="sm" className={cn('text-center', selected && 'text-accent-fg')}>
               {opt.label}
             </Text>
-          </Pressable>
+          </RadioGroupBase.Item>
         )
       })}
-    </View>
+    </RadioGroupBase.Root>
   )
 }
 
@@ -606,22 +625,37 @@ function RadioBranch({ options, value, onValueChange, disabled, className }: Sel
   // tap-target SLA. Use density-aware row padding (--row-py-md /
   // --row-px-md) so the rows breathe more on regular/comfortable
   // and tighten on compact.
+  //
+  // Built over @rn-primitives/radio-group instead of plain
+  // Pressable rows: the upstream provides arrow-key navigation
+  // (WAI-ARIA radio-group pattern — Tab into group, then arrows
+  // to switch), roving tabindex, and ARIA role wiring. Each Item
+  // is restyled to BE the row (border, padding, layout) rather
+  // than a small radio-circle Item nested in a separate row.
   return (
-    <View accessibilityRole="radiogroup" className={cn('flex-col gap-2', className)}>
+    <RadioGroupBase.Root
+      value={value}
+      onValueChange={onValueChange}
+      disabled={disabled}
+      className={cn('flex-col gap-2', className)}
+    >
       {options.map((opt) => {
         const selected = opt.value === value
         const optDisabled = disabled || opt.disabled
         return (
-          <Pressable
+          <RadioGroupBase.Item
             key={opt.value}
-            accessibilityRole="radio"
-            accessibilityState={{ selected, disabled: !!optDisabled }}
+            value={opt.value}
             disabled={optDisabled ?? undefined}
-            onPress={() => onValueChange(opt.value)}
             className={cn(
               'flex-row items-start gap-3 rounded-md border bg-bg-base px-row-x-md py-row-y-md',
               selected ? 'border-accent' : 'border-border active:bg-bg-raised',
-              Platform.select({ web: !selected && 'hover:bg-bg-raised' }),
+              Platform.select({
+                web: cn(
+                  !selected && 'hover:bg-bg-raised',
+                  'focus-visible:ring-focus-ring/50 outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed',
+                ),
+              }),
               optDisabled && 'opacity-50',
             )}
           >
@@ -631,7 +665,7 @@ function RadioBranch({ options, value, onValueChange, disabled, className }: Sel
                 selected ? 'border-accent bg-accent' : 'border-border-strong bg-bg-base',
               )}
             >
-              {selected ? <View className="size-1.5 rounded-full bg-accent-fg" /> : null}
+              <RadioGroupBase.Indicator className="size-1.5 rounded-full bg-accent-fg" />
             </View>
             <View className="flex-1">
               <Text size="sm" className="font-medium">
@@ -643,10 +677,10 @@ function RadioBranch({ options, value, onValueChange, disabled, className }: Sel
                 </Text>
               ) : null}
             </View>
-          </Pressable>
+          </RadioGroupBase.Item>
         )
       })}
-    </View>
+    </RadioGroupBase.Root>
   )
 }
 
