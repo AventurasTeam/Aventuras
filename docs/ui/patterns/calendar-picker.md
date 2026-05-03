@@ -343,7 +343,9 @@ primitive's gate is a direct consequence of that principle.
   very-deep calendars where the row's compact preview can't show
   every tier.
 - **Mobile shape** — dropdown becomes a bottom sheet per the
-  Select primitive's responsive treatment.
+  Select primitive's responsive treatment. Sheet and Popover
+  primitive contracts (API, rn-primitives mapping, slot reshape)
+  live in [`overlays.md`](./overlays.md).
 - **Keyboard** — arrow keys navigate options; Enter selects; Esc
   closes the popover; search-bar focus on open when the search
   bar is present (see deferrals below). Inherits from Select /

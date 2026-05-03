@@ -340,9 +340,61 @@ Open questions:
   Phase 1 doesn't have any non-foundations consumers yet, so the
   pattern is unblocked but unsettled.
 
-Lands when a real animation is needed on a v1 surface (likely the
-reader's Send-button pending state, or any sheet/popover entry
-animation). Until then, MotionSamples-as-token-reference is enough.
+Lands at phase 2 Group A's Sheet implementation — Sheet's slide-in
+animation is the first v1 surface that forces resolution
+(scoped in
+[`patterns/overlays.md`](./ui/patterns/overlays.md)). Until then,
+MotionSamples-as-token-reference is enough.
+
+### Sheet keyboard handling on mobile
+
+[`patterns/overlays.md`](./ui/patterns/overlays.md) ships the
+Sheet primitive contract but defers keyboard-aware behavior. When
+a Sheet contains an Input (e.g. a search field at the top of a
+long Select list) and the on-screen keyboard opens, the
+`@rn-primitives/dialog` lifecycle layer ships no keyboard avoidance
+— the sheet either gets covered or the input scrolls out of view.
+
+Decisions needed:
+
+- **Avoidance mechanism.** `KeyboardAvoidingView` wrapping
+  `Sheet.Content` (consumer-side) vs an `avoidKeyboard` prop on
+  Sheet itself (primitive-side). Consumer-side keeps the primitive
+  small but forces every Input-hosting consumer to remember the
+  wrap; primitive-side adds API surface but localizes the concern.
+- **iOS / Android divergence.** Behavior is platform-divergent;
+  KeyboardAvoidingView's `behavior` prop (`padding` / `position`
+  / `height`) needs different values per platform.
+- **Interaction with drag-to-dismiss.** When the keyboard is up,
+  drag-to-dismiss must still work without colliding with the
+  keyboard's own gesture surface.
+
+Lands at the first Sheet implementation pass with a keyboard-
+hosting consumer (likely Select on mobile with a search bar, per
+[`calendar-picker.md → Implementation notes`](./ui/patterns/calendar-picker.md#implementation-notes)).
+
+### Sheet + Popover ARIA contract
+
+[`patterns/overlays.md`](./ui/patterns/overlays.md) defers the
+explicit accessibility contract for both primitives. Open:
+
+- **Sheet roles.** `role="dialog"` always, or `role="alertdialog"`
+  when the sheet is dismiss-blocking? Pre-existing surface bindings
+  (calendar swap, branch creation) all use Modal, not Sheet —
+  Sheet's dismiss-blocking variant is theoretical for v1.
+- **Popover roles.** `role="dialog"` with `aria-haspopup` on the
+  trigger? `role="menu"` when the popover content is action-shaped
+  (Actions menu, branch chip popover)? rn-primitives may default
+  to one shape; consumer-driven override is worth specifying.
+- **Labelling.** `aria-labelledby` pointing at a header element
+  inside the content vs `aria-label` as a string prop on the
+  primitive. Consistency across both primitives matters.
+- **Focus-return semantics.** Default is "return to trigger";
+  consumer override (e.g. focus a specific element in the parent)
+  is sometimes wanted. Whether this is a primitive prop or a
+  consumer concern.
+
+Lands at the first Sheet / Popover implementation pass.
 
 ### Theme-audit CI gate
 

@@ -80,6 +80,15 @@ Tablet keeps the desktop anchored Popover — no edge-clipping risk
 at tablet widths. Segment and radio render modes are unchanged at
 every tier (segment is inline; radio is vertical list).
 
+The underlying Sheet and Popover primitive contracts (API surface,
+rn-primitives mapping, slot reshape) live in
+[`overlays.md`](./overlays.md). Select's responsive switch between
+Sheet and Popover is a consumer-side concern; the [open shape
+decision](../../followups.md#calendar-picker-primitive--open-shape-decisions)
+on whether the switch is in-Select or via a shared
+`<ResponsiveOverlay>` helper lands with Select's implementation
+pass.
+
 ### Chrome carve-out
 
 The cardinality rule applies in the **content area** — list panes,

@@ -23,6 +23,11 @@ The split heuristic + when-to-add rules live in
   table state + no-results state.
 - [`forms.md`](./forms.md) — Select primitive (segment / dropdown /
   radio render-mode rule).
+- [`overlays.md`](./overlays.md) — Sheet and Popover primitive
+  contracts: rn-primitives mapping, API surface, slot reshape, story
+  shapes. Consumer-side decision tree (when to use Sheet vs Popover
+  vs Modal) lives in
+  [`../foundations/mobile/layout.md`](../foundations/mobile/layout.md).
 - [`calendar-picker.md`](./calendar-picker.md) — calendar-system
   selector shared across App Settings, Story Settings, and Wizard:
   rich rows, summary panel, swap warnings (origin / eras / display),
