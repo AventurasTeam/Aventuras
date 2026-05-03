@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 
 export const TextClassContext = createContext<string | undefined>(undefined)
 
-const textVariants = cva('text-fg-primary', {
+const textVariants = cva('', {
   variants: {
     variant: {
       default: 'text-fg-primary',
@@ -21,12 +21,25 @@ const textVariants = cva('text-fg-primary', {
       xl: 'text-xl',
     },
   },
-  defaultVariants: { variant: 'default', size: 'base' },
 })
 
 type TextProps = RNTextProps & VariantProps<typeof textVariants> & { className?: string }
 
 export function Text({ className, variant, size, style, ...props }: TextProps) {
   const inherited = useContext(TextClassContext)
-  return <RNText className={cn(inherited, textVariants({ variant, size }), className)} {...props} />
+  const fallbackColor = !variant && !inherited ? 'text-fg-primary' : ''
+  const fallbackSize = !size && !inherited ? 'text-base' : ''
+  return (
+    <RNText
+      className={cn(
+        fallbackColor,
+        fallbackSize,
+        inherited,
+        textVariants({ variant, size }),
+        className,
+      )}
+      style={style}
+      {...props}
+    />
+  )
 }
