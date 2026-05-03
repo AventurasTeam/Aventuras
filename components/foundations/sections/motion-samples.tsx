@@ -1,15 +1,42 @@
 import { useState } from 'react'
-import { View, Pressable } from 'react-native'
+import { Platform, Pressable, View } from 'react-native'
 import { Text } from '@/components/ui/text'
 
-const SAMPLES = [
-  { duration: 'fast', easing: 'standard', label: '--duration-fast × --easing-standard' },
-  { duration: 'base', easing: 'standard', label: '--duration-base × --easing-standard' },
-  { duration: 'slow', easing: 'standard', label: '--duration-slow × --easing-standard' },
-  { duration: 'fast', easing: 'emphasis', label: '--duration-fast × --easing-emphasis' },
-  { duration: 'base', easing: 'emphasis', label: '--duration-base × --easing-emphasis' },
-  { duration: 'slow', easing: 'emphasis', label: '--duration-slow × --easing-emphasis' },
+type Sample = {
+  label: string
+  // Pre-resolved literal class names so Tailwind's content scan
+  // compiles them — dynamic concatenation hides them from JIT.
+  motion: string
+}
+
+const SAMPLES: readonly Sample[] = [
+  {
+    label: '--duration-fast × --easing-standard',
+    motion: 'transition-transform duration-fast ease-standard',
+  },
+  {
+    label: '--duration-base × --easing-standard',
+    motion: 'transition-transform duration-base ease-standard',
+  },
+  {
+    label: '--duration-slow × --easing-standard',
+    motion: 'transition-transform duration-slow ease-standard',
+  },
+  {
+    label: '--duration-fast × --easing-emphasis',
+    motion: 'transition-transform duration-fast ease-emphasis',
+  },
+  {
+    label: '--duration-base × --easing-emphasis',
+    motion: 'transition-transform duration-base ease-emphasis',
+  },
+  {
+    label: '--duration-slow × --easing-emphasis',
+    motion: 'transition-transform duration-slow ease-emphasis',
+  },
 ] as const
+
+const ANIMATE_ON_PLATFORM = Platform.OS === 'web'
 
 export function MotionSamples() {
   const [tick, setTick] = useState(0)
@@ -21,7 +48,7 @@ export function MotionSamples() {
         onPress={() => setTick((t) => t + 1)}
       >
         <Text variant="muted" size="sm">
-          Tap to replay
+          {ANIMATE_ON_PLATFORM ? 'Tap to replay' : 'Token reference (animation: web only for now)'}
         </Text>
       </Pressable>
       <View className="flex-col gap-3">
@@ -30,11 +57,15 @@ export function MotionSamples() {
             <Text variant="muted" size="xs">
               {s.label}
             </Text>
-            <View
-              key={tick}
-              className={`h-4 w-16 rounded-sm bg-accent transition-transform duration-${s.duration} ease-${s.easing}`}
-              style={{ transform: [{ translateX: tick % 2 === 0 ? 0 : 100 }] }}
-            />
+            {ANIMATE_ON_PLATFORM ? (
+              <View
+                key={tick}
+                className={`h-4 w-16 rounded-sm bg-accent ${s.motion}`}
+                style={{ transform: [{ translateX: tick % 2 === 0 ? 0 : 100 }] }}
+              />
+            ) : (
+              <View className="h-4 w-16 rounded-sm bg-accent" />
+            )}
           </View>
         ))}
       </View>
