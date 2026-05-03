@@ -102,17 +102,6 @@ export const Variants: Story = {
   ),
 }
 
-export const Sizes: Story = {
-  render: () => (
-    <View className="w-72 flex-col gap-3 p-4">
-      <Text variant="muted" size="xs">
-        Trigger size scale applies to the dropdown render mode only.
-      </Text>
-      <Stateful initial="opt-1" mode="dropdown" options={LONG_OPTIONS} />
-    </View>
-  ),
-}
-
 export const States: Story = {
   render: () => (
     <View className="flex-col gap-4 p-4">

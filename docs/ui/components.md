@@ -155,9 +155,12 @@ Indicative shapes by primitive:
 - Input / Textarea → Default · Sizes · States · ThemeMatrix.
 - Select → Default · Variants (segment / radio / dropdown render
   modes per [`patterns/forms.md`](./patterns/forms.md#auto-derivation-cascade))
-  · Sizes · States · ThemeMatrix (partial — segment + radio
-  covered; dropdown skipped per the portal-skip rule because the
-  open content escapes per-row dataSet scoping).
+  · States · ThemeMatrix (partial — segment + radio covered;
+  dropdown skipped per the portal-skip rule because the open
+  content escapes per-row dataSet scoping). No Sizes section: the
+  `<Select>` dispatcher has no size axis. `SelectPrimitive.Trigger`
+  has a `default | sm` size prop for power consumers, but that's
+  primitive-layer internal — not exposed through the dispatcher.
 - Switch / Checkbox / Radio → Default · States · ThemeMatrix.
 - Icon → Default · Sizes · ThemeMatrix.
 - Skeleton → Default · Sizes.
