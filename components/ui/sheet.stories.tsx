@@ -5,7 +5,6 @@ import { Button } from './button'
 import { Heading } from './heading'
 import { Sheet, SheetContent, SheetTrigger } from './sheet'
 import { Text } from './text'
-import { themes } from '@/lib/themes/registry'
 
 const meta: Meta<typeof Sheet> = {
   title: 'Primitives/Sheet',
@@ -143,36 +142,10 @@ export const Sizes: Story = {
   ),
 }
 
-export const ThemeMatrix: Story = {
-  render: () => (
-    <View className="flex-col gap-6">
-      {themes.map((t) => (
-        <View
-          key={t.id}
-          // @ts-expect-error — dataSet is RN-Web only; not in RN's View type.
-          dataSet={{ theme: t.id }}
-          className="flex-col items-start gap-3 rounded-md bg-bg-base p-4"
-        >
-          <Text variant="muted" size="xs">
-            {t.name}
-          </Text>
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="secondary">
-                <Text>Open sheet</Text>
-              </Button>
-            </SheetTrigger>
-            <SheetContent anchor="bottom" size="short">
-              <View className="flex-col gap-1">
-                <Heading level={5}>{t.name}</Heading>
-                <Text variant="muted" size="sm">
-                  bg-overlay surface, border-strong slot, fg-primary text. Scrim: 40% black overlay.
-                </Text>
-              </View>
-            </SheetContent>
-          </Sheet>
-        </View>
-      ))}
-    </View>
-  ),
-}
+// No ThemeMatrix story for Sheet: the sheet content portals to document
+// body, which escapes the per-row `dataSet={{theme}}` scope used by
+// other primitives' ThemeMatrix stories. Use the Storybook toolbar's
+// global theme switcher to verify the open sheet's theming
+// (one theme at a time), or visit the native dev page at /dev/sheet
+// where the ThemePicker drives data-theme globally and portals
+// inherit correctly.

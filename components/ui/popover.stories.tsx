@@ -5,7 +5,6 @@ import { Button } from './button'
 import { Heading } from './heading'
 import { Popover, PopoverContent, PopoverTrigger } from './popover'
 import { Text } from './text'
-import { themes } from '@/lib/themes/registry'
 
 const meta: Meta<typeof Popover> = {
   title: 'Primitives/Popover',
@@ -143,36 +142,10 @@ export const RichContent: Story = {
   ),
 }
 
-export const ThemeMatrix: Story = {
-  render: () => (
-    <View className="flex-col gap-6">
-      {themes.map((t) => (
-        <View
-          key={t.id}
-          // @ts-expect-error — dataSet is RN-Web only; not in RN's View type.
-          dataSet={{ theme: t.id }}
-          className="flex-col items-start gap-3 rounded-md bg-bg-base p-4"
-        >
-          <Text variant="muted" size="xs">
-            {t.name}
-          </Text>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="secondary">
-                <Text>Open popover</Text>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent side="bottom" className="w-64">
-              <View className="flex-col gap-1">
-                <Heading level={5}>{t.name}</Heading>
-                <Text variant="muted" size="sm">
-                  bg-overlay surface, border slot, fg-primary text.
-                </Text>
-              </View>
-            </PopoverContent>
-          </Popover>
-        </View>
-      ))}
-    </View>
-  ),
-}
+// No ThemeMatrix story for Popover: the popover content portals to
+// document body, which escapes the per-row `dataSet={{theme}}` scope
+// used by other primitives' ThemeMatrix stories. Use the Storybook
+// toolbar's global theme switcher to verify the open popover's theming
+// (one theme at a time), or visit the native dev page at /dev/popover
+// where the ThemePicker drives data-theme globally and portals
+// inherit correctly.

@@ -125,6 +125,16 @@ Sections:
   primitives qualify; primitives with shallow theme coupling
   (Skeleton, with one `bg-muted` slot) can omit — a wall of
   identical pulses isn't informative.
+  **Portal-using primitives skip ThemeMatrix.** Sheet, Popover,
+  and any future Modal portal their content to document.body,
+  escaping the per-row `dataSet={{theme}}` scope. The trigger
+  themes correctly but the open content inherits Storybook's
+  global theme. For these, theme verification falls to the
+  Storybook toolbar's global theme switcher (one theme at a
+  time on web), or the dev page's `<ThemePicker />` on native
+  (where `data-theme` is set globally and portals inherit
+  correctly). Each story file carries an in-file comment
+  documenting this.
 
 Indicative shapes by primitive:
 

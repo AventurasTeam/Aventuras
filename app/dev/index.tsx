@@ -6,6 +6,10 @@ import { Text } from '@/components/ui/text'
 const ROUTES = [
   { href: '/dev/foundations', label: 'Foundations explorer' },
   { href: '/dev/button', label: 'Button' },
+  { href: '/dev/text', label: 'Text' },
+  { href: '/dev/heading', label: 'Heading' },
+  { href: '/dev/popover', label: 'Popover' },
+  { href: '/dev/sheet', label: 'Sheet' },
 ] as const
 
 export default function DevIndex() {
