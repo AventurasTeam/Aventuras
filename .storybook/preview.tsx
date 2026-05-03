@@ -50,7 +50,19 @@ const densityOptions: { value: DensitySetting; title: string }[] = [
 const preview: Preview = {
   parameters: {
     controls: { matchers: { color: /(background|color)$/i, date: /Date$/i } },
-    a11y: { test: 'todo' },
+    a11y: {
+      test: 'todo',
+      // Suppress axe rule that flags `aria-autocomplete="none"` on
+      // Select's trigger. The attribute is set by @radix-ui/react-select
+      // (which @rn-primitives/select wraps on web) and reflects an
+      // intentional WAI-ARIA semantic — radix is communicating "no
+      // autocomplete" to AT users, but axe's strict reading only
+      // allows the attribute on combobox/textbox/searchbox roles.
+      // The fix is upstream in radix; we suppress noise here.
+      config: {
+        rules: [{ id: 'aria-allowed-attr', enabled: false }],
+      },
+    },
   },
   globalTypes: {
     theme: {

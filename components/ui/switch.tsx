@@ -7,11 +7,20 @@
 //
 // - RESHAPED: color tokens (bg-primary/bg-input/bg-background/
 //   primary-foreground/foreground/focus-visible ring → bg-accent/
-//   bg-bg-sunken/bg-bg-base/accent-fg/fg-primary/focus-ring).
+//   bg-fg-muted/bg-bg-base/accent-fg/fg-primary/focus-ring).
 //   Shadow classes stripped (Aventuras flat-depth principle).
 //   Dark-mode opacity dance (`dark:bg-input/80`,
 //   `dark:bg-primary-foreground`, `dark:bg-foreground`) stripped —
 //   the theme registry handles light/dark per-theme.
+//
+// Off-track color: `bg-fg-muted` rather than `bg-bg-sunken`. The
+// bg-* tier slots all sit within ~3-5% lightness of each other on
+// most themes (intentional — those are page-surface tiers); using
+// bg-bg-sunken for the off track produced near-zero contrast
+// against the thumb (bg-bg-base) and against the surrounding page
+// across every theme. fg-muted is a mid-gray visible on both
+// light and dark surfaces — track gets crisp edges and the thumb
+// reads as a distinct affordance in both states.
 // - ACCEPTED: rn-primitives composition (Root + Thumb), the
 //   fixed track + thumb dimensions (h-[1.15rem] w-8 + size-4
 //   thumb), the translate-x-3.5 thumb shift on checked, web
@@ -41,7 +50,7 @@ export function Switch({ className, ...props }: SwitchProps) {
         Platform.select({
           web: 'focus-visible:ring-focus-ring/50 peer inline-flex outline-none transition-all focus-visible:border-accent focus-visible:ring-[3px] disabled:cursor-not-allowed',
         }),
-        props.checked ? 'bg-accent' : 'bg-bg-sunken',
+        props.checked ? 'bg-accent' : 'bg-fg-muted',
         props.disabled && 'opacity-50',
         className,
       )}
