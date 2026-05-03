@@ -103,7 +103,16 @@ export const ThemeMatrix: Story = {
   render: () => (
     <View className="flex-col gap-6">
       {themes.map((t) => (
-        <View key={t.id} data-theme={t.id} className="flex-col gap-2 rounded-md bg-bg-base p-4">
+        <View
+          key={t.id}
+          // RN-Web forwards `dataSet` to `data-*` attributes; RN's plain
+          // `data-theme` prop is silently dropped. dataSet scopes each
+          // row to its theme via the [data-theme="<id>"] CSS-var blocks
+          // in global.css, overriding the global toolbar selection.
+          // @ts-expect-error — dataSet is RN-Web only; not in RN's View type.
+          dataSet={{ theme: t.id }}
+          className="flex-col gap-2 rounded-md bg-bg-base p-4"
+        >
           <Text variant="muted" size="sm">
             {t.name}
           </Text>
