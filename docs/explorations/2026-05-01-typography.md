@@ -126,10 +126,12 @@ with existing `appearance` invariants.
   aren't on Linux / Android by default; chain falls through to
   Liberation Serif / Noto Serif / generic `serif`. Stack design
   accounts for this. Verified.
-- **NativeWind font-stack parsing.** Unverified at design pass;
-  folded into existing
-  [NativeWind runtime theme-swap parity validation](../followups.md#nativewind-runtime-theme-swap-parity-validation)
-  followup. No new followup needed.
+- **NativeWind font-stack parsing.** Phase 1 bring-up confirmed the
+  `--font-reading` slot swap fires on both platforms but the
+  resolved typeface doesn't visibly change for custom-font themes
+  whose stacks reference unbundled fonts (Parchment in particular).
+  Tracked under
+  [`followups.md → Custom-font theme support`](../followups.md#custom-font-theme-support).
 - **`--font-display` skip is honest.** Re-verified surfaces — none
   demand hero-scale typography distinct from `--text-2xl` / `-3xl`.
   Verified.

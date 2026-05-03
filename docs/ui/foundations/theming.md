@@ -96,14 +96,39 @@ scrollbars).
 The contract describes the **mechanism**; implementation picks
 the platform glue.
 
-**Implementation-validation gate.** NativeWind 4's runtime
-theme-swap parity with web is **assumed, not verified** at this
-design pass. The implementation pass MUST validate that theme
-swap on native iOS / Android / Linux Electron / Web works without
-remount (or with acceptable remount UX) before locking consumer
-code. Tracked as the
-[NativeWind runtime theme-swap parity validation](../../followups.md#nativewind-runtime-theme-swap-parity-validation)
-followup.
+**Implementation-validation findings (2026-05-03).** NativeWind 4's
+runtime theme-swap was characterized empirically during the phase 1
+foundations bring-up. Findings:
+
+- **Web (Storybook + Electron).** `data-theme="<id>"` attribute on
+  `<html>` swaps the matching `[data-theme="<id>"]` CSS-var block
+  immediately; descendants re-render with the new values. No
+  remount, no flicker. The `class="dark"` toggle drives any
+  `dark:`-prefixed Tailwind utilities. **First theme also gets a
+  `[data-theme="<id>"]` block** in addition to `:root` so per-element
+  scoping (e.g. demo galleries that nest themed regions) works for
+  every theme uniformly.
+- **Android (Expo).** Theme swap is immediate. NativeWind 4's
+  runtime context provider (a wrapper `<View style={vars(...)}>` at
+  the root) propagates new values to descendants without remount.
+  No flicker, no scroll-position loss, no perf cliff observed across
+  the 10-theme gallery.
+- **iOS.** Not yet validated separately; expected to behave like
+  Android given they share NativeWind's runtime path. Tracked as
+  followup work if iOS-specific quirks surface.
+- **`transition-*` utilities on native.** Limited support during
+  bring-up; the foundations explorer's MotionSamples gates
+  animations to web only and renders static labeled bars on native.
+  Tracked as a separate followup.
+- **Custom-font theme overrides** (e.g. Parchment's serif stack)
+  do not visibly change typeface on either web or native — the
+  `--font-reading` slot swaps but the resolved fonts in the stack
+  aren't bundled / installed. Tracked as a separate followup.
+- **`data-theme-mode` attribute.** Not currently emitted; the
+  app sets `data-theme="<id>"` and toggles `class="dark"` based on
+  the theme's `mode`. The `data-theme-mode` design (intended for
+  embedded WebViews to react to mode independently of theme id)
+  is deferred until a consumer needs it.
 
 ## Persistence
 

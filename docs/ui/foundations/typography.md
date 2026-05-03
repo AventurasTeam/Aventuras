@@ -297,16 +297,20 @@ through to the generic family keyword if no platform font resolves.
 ### Native (Expo)
 
 RN's `fontFamily` style takes a single name, not a CSS-style stack.
-NativeWind 4's runtime font-token handling needs validation —
-already covered by the existing
-[NativeWind runtime theme-swap parity validation](../../followups.md#nativewind-runtime-theme-swap-parity-validation)
-followup, which explicitly mentions "Font-family token swap behaves
-equivalently to color-token swap."
+NativeWind 4's runtime swaps the `--font-reading` slot value
+correctly during phase 1 bring-up (
+[`theming.md → Switching mechanism`](./theming.md#switching-mechanism)),
+but custom-font themes whose stacks reference unbundled fonts
+(e.g. Parchment's serif stack) fall through to the platform default
+on both web and native — the slot swap fires; the resolved typeface
+doesn't change. Tracked under
+[`followups.md → Custom-font theme support`](../../followups.md#custom-font-theme-support).
 
-If NativeWind doesn't parse stacks: implementation falls back to a
-small JS helper that picks the first system-font name available on
-the platform from the stack at theme-application. Cross-platform
-parity preserved; small implementation cost.
+If NativeWind doesn't parse stacks at all: implementation falls back
+to a small JS helper that picks the first system-font name available
+on the platform from the stack at theme-application. Cross-platform
+parity preserved; small implementation cost. Decision lands as part
+of the Custom-font theme support followup.
 
 ### Future bundled-font themes
 

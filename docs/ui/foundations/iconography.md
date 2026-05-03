@@ -290,7 +290,8 @@ is locked at 2 by convention.
 ### Native (Expo)
 
 `lucide-react-native` package. Same icon names, RN-compatible
-component shape. Per the existing
-[NativeWind runtime theme-swap parity validation](../../followups.md#nativewind-runtime-theme-swap-parity-validation)
-followup, runtime icon-color theming should validate alongside
-font + color token parity at implementation time.
+component shape. Color-token runtime parity on native was
+characterized during phase 1 foundations bring-up
+([`theming.md → Switching mechanism`](./theming.md#switching-mechanism));
+icon-color theming inherits from the same mechanism via the parent's
+`color` style and falls under the same contract.

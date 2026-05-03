@@ -270,39 +270,79 @@ moved to
 
 Lands with the Select primitive's first implementation pass.
 
-### NativeWind runtime theme-swap parity validation
+### Custom-font theme support
 
-[`ui/foundations/theming.md → Switching mechanism`](./ui/foundations/theming.md#switching-mechanism)
-asserts that theme swap on native (Expo iOS / Android) works
-without remount via NativeWind 4's runtime theming. **This is
-assumed, not verified.** The visual identity foundations design
-locked the contract on this assumption; the implementation pass
-must validate before consumer code (components reading the token
-slots) is built against it.
+Themes can declare font-family overrides in their registry entry
+(e.g. Parchment maps `--font-reading` to a serif stack); the
+runtime swap mechanism applies these overrides at theme-swap time.
+**Verified during phase 1 native bring-up: the slot swap works,
+but the resolved typeface doesn't change** because the font stacks
+declared in [`themes.md`](./ui/foundations/themes.md) reference
+fonts that aren't bundled with the app. Both web (Electron, RN-Web
+in Storybook) and Android fall through to the same system
+sans-serif default for every theme.
 
-What needs validating:
+Concretely needs:
 
-- Theme-attribute swap on the document root reaches NativeWind's
-  runtime context provider on native, with token values updating
-  in already-mounted components.
-- No platform-specific perf cliff (large StyleSheet recompute on
-  every swap) that makes runtime swap unusable in practice.
-- Font-family token swap behaves equivalently to color-token swap.
-  Custom-font themes (Parchment-style, opinionated themes) work
-  on native without a re-render.
-- The `data-theme-mode` attribute is observable at the platform-
-  native CSS surface (e.g. embedded WebView styling its own
-  scrollbars).
+- **Native font bundling.** Use `expo-font` to load the canonical
+  font files (Charter / Lora / etc. — whichever the curated themes
+  declare) at app startup. Decide whether fonts ship in the app
+  bundle or load lazily on first use of a font-overridable theme.
+- **Web font loading.** Decide whether to ship the same font files
+  via `@font-face` in `global.css` (or a separate font CSS), use a
+  CDN-hosted variant, or accept system-fallback rendering on web.
+  Has implications for first-paint cost on Electron.
+- **License + bundle-size accounting.** Charter, Lora, etc. each
+  have their own license terms and weight. Need to confirm
+  redistribution rights before bundling.
+- **Per-platform font-stack reconciliation.** A stack like
+  `Charter, "Iowan Old Style", "Source Serif", Georgia, ...` falls
+  through differently across iOS, Android, and web. May want
+  per-platform stacks in the registry rather than one stack that
+  hopes for the best.
+- **Reduced-data-mode / first-launch UX.** What does the user see
+  before custom fonts finish loading? Acceptable to render system
+  sans first then re-flow once fonts arrive?
 
-If full parity isn't achievable, the contract still works — fall
-back to remount-on-theme-swap with whatever brief flash that
-costs. Update
-[`ui/foundations/theming.md`](./ui/foundations/theming.md) and the
-HTML demo to reflect actual behavior at validation time.
+Lands when a v1 surface depends on a custom-font theme rendering
+correctly. Until then, themes that declare font overrides
+function as color-only themes — not a v1 blocker, but worth
+calling out so the gallery contract isn't misread as
+"font-customization works today."
 
-Lands at the start of foundations consumer-code implementation
-(Tailwind config wiring + first component reading token slots).
-Blocks consumer code; doesn't block any other design pass.
+### NativeWind transition-\* support on native
+
+The foundations explorer's MotionSamples section gates `transition-*`
+
+- `transform` animations to web only on phase 1 because the
+  combination triggered a `Maximum call stack` error on Android during
+  bring-up — likely an interaction between dynamic class names + the
+  NativeWind runtime fallback path, but not narrowed precisely.
+  Animations are static (a colored bar with no movement) on native.
+
+Open questions:
+
+- **Reanimated wiring.** `react-native-reanimated@4.x` is a project
+  dep; NativeWind 4's transition support on native is documented as
+  reanimated-driven. Verify whether the babel plugin is configured
+  correctly and whether NativeWind's transition path actually fires
+  worklets, or whether it falls through to a web-only code path
+  silently.
+- **Static class hoisting.** Phase 1's MotionSamples now uses
+  literal class strings (`duration-fast`, `ease-emphasis`, etc.) so
+  Tailwind's content scan compiles them. With the static names in
+  place, native should at least try the transition; characterize
+  what actually happens.
+- **Alternative animation API.** If NativeWind transitions don't
+  pan out on native, decide whether component-internal animations
+  use reanimated directly (`useSharedValue` + `useAnimatedStyle`),
+  RN's built-in `Animated` API, or a higher-level lib (moti, etc.).
+  Phase 1 doesn't have any non-foundations consumers yet, so the
+  pattern is unblocked but unsettled.
+
+Lands when a real animation is needed on a v1 surface (likely the
+reader's Send-button pending state, or any sheet/popover entry
+animation). Until then, MotionSamples-as-token-reference is enough.
 
 ### Theme-audit CI gate
 

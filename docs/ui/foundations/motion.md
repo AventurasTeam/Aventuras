@@ -147,7 +147,9 @@ constant (0 or 1) from `AccessibilityInfo.isReduceMotionEnabled()`
 at app boot and on subsequent changes; transform-based animations
 multiply their duration by this constant.
 
-Folds into the existing
-[NativeWind runtime theme-swap parity validation](../../followups.md#nativewind-runtime-theme-swap-parity-validation)
-followup — motion-token parity is validated alongside color +
-font.
+Color-token + structural-slot runtime parity was characterized
+during phase 1 foundations bring-up — see
+[`theming.md → Switching mechanism`](./theming.md#switching-mechanism)
+for the recorded findings. Motion-token runtime support on native
+is partial; the open work is tracked under
+[`followups.md → NativeWind transition-* support on native`](../../followups.md#nativewind-transition--support-on-native).

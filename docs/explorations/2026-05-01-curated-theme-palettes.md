@@ -359,10 +359,10 @@ None this session, but **two existing followups become ripe**:
   shape (Catppuccin variants are the obvious exempt candidates).
   Followup retained but its "deferred until session 6 lands"
   rationale updates to "ripe for design pass."
-- **[NativeWind runtime theme-swap parity validation](../followups.md#nativewind-runtime-theme-swap-parity-validation)** —
-  becomes load-bearing now that 10 real palettes need to swap
-  on native. No edit; the followup already names this as the
-  validation gate.
+- **NativeWind runtime theme-swap parity** — load-bearing for the
+  10-palette gallery on native. Resolved during phase 1 foundations
+  bring-up; characterization recorded in
+  [`theming.md → Switching mechanism`](../ui/foundations/theming.md#switching-mechanism).
 
 ## Parked items added
 
