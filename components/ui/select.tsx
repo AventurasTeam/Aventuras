@@ -214,9 +214,13 @@ function PhoneSheetPanel({
   }
 
   const dragOffset = useSharedValue(0)
-  const animatedDragStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: dragOffset.value }],
-  }))
+  // Explicit dep array: the worklets babel plugin auto-injects this
+  // on native but Storybook web's Vite bundler doesn't run the
+  // plugin, so we declare it manually.
+  const animatedDragStyle = useAnimatedStyle(
+    () => ({ transform: [{ translateY: dragOffset.value }] }),
+    [],
+  )
   const closeFromGesture = React.useCallback(() => onOpenChange(false), [onOpenChange])
   const panGesture = React.useMemo(
     () =>

@@ -143,10 +143,15 @@ function SheetPanel({
   // fresh dragOffset, so off-screen state from the previous drag-dismiss
   // can't leak into the next entry animation.
   const dragOffset = useSharedValue(0)
-  const animatedDragStyle = useAnimatedStyle(() =>
-    isBottom
-      ? { transform: [{ translateY: dragOffset.value }] }
-      : { transform: [{ translateX: dragOffset.value }] },
+  // Explicit dep array: the worklets babel plugin auto-injects this
+  // on native (RN babel pipeline) but Storybook web's Vite bundler
+  // doesn't run that plugin, so we declare it manually.
+  const animatedDragStyle = useAnimatedStyle(
+    () =>
+      isBottom
+        ? { transform: [{ translateY: dragOffset.value }] }
+        : { transform: [{ translateX: dragOffset.value }] },
+    [isBottom],
   )
   const closeFromGesture = React.useCallback(() => onOpenChange(false), [onOpenChange])
   const panGesture = React.useMemo(
@@ -234,12 +239,19 @@ function SheetContent({
   anchor = 'bottom',
   size = 'medium',
   portalHost,
+  title = 'Sheet',
   children,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   anchor?: SheetAnchor
   size?: SheetSize
   portalHost?: string
+  // Accessible name for the sheet. Defaults to a generic "Sheet"
+  // and renders inside a sr-only DialogPrimitive.Title on web —
+  // radix's DialogContent demands a Title for screen readers
+  // (otherwise emits "DialogContent requires a DialogTitle"). On
+  // native the warning doesn't apply; the Title is omitted there.
+  title?: string
 }) {
   const isBottom = anchor === 'bottom'
   const slideEnter = isBottom ? SlideInDown.duration(250) : SlideInRight.duration(250)
@@ -271,6 +283,9 @@ function SheetContent({
             className={className}
             {...props}
           >
+            {Platform.OS === 'web' ? (
+              <DialogPrimitive.Title className="sr-only">{title}</DialogPrimitive.Title>
+            ) : null}
             {children}
           </SheetPanel>
         </View>
