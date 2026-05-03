@@ -1,6 +1,6 @@
 // Aventuras SwitchRow pattern — the canonical cross-platform shape
-// for boolean settings. Label + optional hint on the left, Switch
-// visual indicator on the right; the WHOLE ROW is the tap target.
+// for boolean settings. Label + optional hint on the left, switch
+// indicator on the right; the WHOLE ROW is the tap target.
 //
 // Why this is a pattern, not a primitive variant:
 //
@@ -13,30 +13,37 @@
 //   old-school NSSwitch shape, no longer canonical.
 // - Click-anywhere-on-row is faster than aiming at the small
 //   switch visual on every tier — particularly important on
-//   touch where the Switch indicator is just ~24-28px tall.
+//   touch where the indicator is just ~24-28px tall.
 //
-// The standalone <Switch> primitive stays exported as a building
-// block — SwitchRow consumes it as a pointer-events-none visual
-// indicator. Future cases that genuinely need a non-row switch
-// (toolbar quick-toggle, inline status indicator) can compose
-// Switch directly.
+// Architecture:
 //
-// Tap-target plumbing: outer Pressable handles all touch + a11y
-// (role="switch", accessibilityState reflecting checked state).
-// Inner Switch is wrapped in a View with `pointerEvents="none"` so
-// taps fall through to the row Pressable rather than firing the
-// inner Switch's own onCheckedChange (we'd otherwise double-fire
-// or get nested-Pressable event ordering surprises). The inner
-// Switch's required onCheckedChange takes a no-op handler.
+// - The row's outer Pressable is the only interactive element
+//   in the tree. It owns `role="switch"`, `aria-checked`, the
+//   accessible-name wiring, and the press handler.
+// - The switch indicator is rendered via `<SwitchVisual>`, a pure
+//   presentational component (track + thumb View, no Pressable,
+//   no role). This avoids the nested-interactive a11y issue that
+//   appeared when SwitchRow rendered the full `<Switch>` (an
+//   interactive Pressable) inside its own Pressable.
+//
+// A11y contract:
+//
+// - `role="switch"` on the outer Pressable.
+// - `aria-checked` set explicitly from the `checked` prop.
+//   `accessibilityState={{ checked }}` alone doesn't always map
+//   to `aria-checked` on web via RN-Web; setting both is
+//   belt-and-suspenders.
+// - `aria-label={label}` provides the accessible name. Hint is
+//   visible-only — wiring it to `aria-describedby` would require
+//   a stable nativeID across platforms; deferred unless a11y
+//   review demands it.
 
 import * as React from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
-import { Switch } from '@/components/ui/switch'
+import { SwitchVisual } from '@/components/ui/switch-visual'
 import { Text } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
-
-const noop = () => {}
 
 type SwitchRowProps = {
   label: string
@@ -58,6 +65,8 @@ export function SwitchRow({
   return (
     <Pressable
       role="switch"
+      aria-checked={checked}
+      aria-label={label}
       accessibilityState={{ checked, disabled: !!disabled }}
       disabled={disabled}
       onPress={() => onCheckedChange(!checked)}
@@ -78,13 +87,7 @@ export function SwitchRow({
           </Text>
         ) : null}
       </View>
-      <View
-        // Block taps from reaching the inner Switch's own Pressable —
-        // the outer row Pressable owns the touch handling.
-        pointerEvents="none"
-      >
-        <Switch checked={checked} onCheckedChange={noop} disabled={disabled} />
-      </View>
+      <SwitchVisual checked={checked} disabled={disabled} />
     </Pressable>
   )
 }

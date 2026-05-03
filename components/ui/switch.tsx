@@ -1,98 +1,79 @@
-// Aventuras Switch primitive — reshaped from react-native-reusables
-// baseline (which itself wraps @rn-primitives/switch). Boolean
-// toggle for binary settings (appearance toggles, per-story
-// switches, wizard steps).
+// Aventuras Switch primitive — a Pressable wrapping the
+// SwitchVisual presentation. Building block for the SwitchRow
+// pattern; rarely used standalone (no v1 wireframe consumer
+// uses a non-row switch).
 //
-// Reshape per docs/ui/components.md sourcing rules:
+// Why we don't compose @rn-primitives/switch.Root directly:
 //
-// - RESHAPED: color tokens (bg-primary/bg-input/bg-background/
-//   primary-foreground/foreground/focus-visible ring → bg-accent/
-//   bg-fg-muted/bg-bg-base/accent-fg/fg-primary/focus-ring).
-//   Shadow classes stripped (Aventuras flat-depth principle).
-//   Dark-mode opacity dance (`dark:bg-input/80`,
-//   `dark:bg-primary-foreground`, `dark:bg-foreground`) stripped —
-//   the theme registry handles light/dark per-theme.
-// - AUGMENTED (per components.md augmentation policy): track and
-//   thumb dimensions bind to the active density. Phone defaults
-//   to regular density (44pt-tier touch targets); desktop defaults
-//   to compact (smaller, mouse-driven). The original baseline
-//   shipped one fixed size that read as miniscule on phones —
-//   touch UX guidance says hit-affordances need ≥44pt visual on
-//   touch devices, not just hitSlop.
-// - ACCEPTED: rn-primitives composition (Root + Thumb), web
-//   focus-visible ring, `disabled:cursor-not-allowed` on web,
-//   pointer-events-none on the thumb.
+// - The upstream Root IS itself a Pressable with role="switch".
+//   Composing it inside SwitchRow's outer Pressable produced
+//   nested interactive elements, which axe flags ("Do not nest
+//   interactive elements"). Even with `pointerEvents="none"` on a
+//   wrapping View, the inner element remained a `<button>` in the
+//   DOM; the rule is structural, not pointer-event-based.
+// - The upstream's value-add is small (Pressable + role +
+//   accessibilityState wiring). Replicating it in ~10 lines of our
+//   own code lets both Switch and SwitchRow place a single
+//   role="switch" Pressable at exactly the right level of the
+//   tree without nested interactives.
 //
-// Off-track color: `bg-fg-muted` rather than `bg-bg-sunken`. The
-// bg-* tier slots all sit within ~3-5% lightness of each other on
-// most themes (intentional — those are page-surface tiers); using
-// bg-bg-sunken for the off track produced near-zero contrast
-// against the thumb (bg-bg-base) and against the surrounding page
-// across every theme. fg-muted is a mid-gray visible on both
-// light and dark surfaces — track gets crisp edges and the thumb
-// reads as a distinct affordance in both states.
+// Visual reshape lives in `<SwitchVisual>`; this file owns the
+// Pressable + a11y wiring.
 //
-// Earlier reshape note claimed "Switch dimensions are intentionally
-// fixed (not density-token-driven)" with the rationale that
-// switches are symbolic affordances. That decision was wrong: on
-// touch devices a 32×18 switch is too small to tap reliably. Mobile
-// testing surfaced the gap; this revision binds dimensions to
-// density across all platforms (web + native).
+// A11y contract:
+//
+// - `role="switch"` on the Pressable.
+// - `aria-checked` set explicitly from `checked` prop. Despite
+//   `accessibilityState={{ checked }}` being the RN-native pattern,
+//   RN-Web's mapping to `aria-checked` doesn't always fire on
+//   `<Pressable role="switch">` — axe reports "Required ARIA
+//   attribute not present: aria-checked" without the explicit prop.
+//   Set both for belt-and-suspenders.
+// - `aria-label` is the consumer's responsibility. Standalone
+//   `<Switch>` has no visible label inside; consumers MUST pass
+//   `aria-label` for the control to be accessible-name-equipped.
+//   `<SwitchRow>` derives `aria-label` from its `label` prop
+//   automatically.
 
-import * as SwitchPrimitives from '@rn-primitives/switch'
-import { Platform } from 'react-native'
+import * as React from 'react'
+import { Platform, Pressable } from 'react-native'
 
-import { useDensity } from '@/lib/density/use-density'
-import type { DensityValue } from '@/lib/density/types'
+import { SwitchVisual } from '@/components/ui/switch-visual'
 import { cn } from '@/lib/utils'
 
-// Per-density visuals. Track width = thumb + 2px border + 2 × thumb-padding,
-// chosen so translate-x ≈ track-inner-width − thumb-width.
-const TRACK_CLASSES: Record<DensityValue, string> = {
-  compact: 'h-[1.15rem] w-8',
-  regular: 'h-6 w-11',
-  comfortable: 'h-7 w-12',
-}
-const THUMB_SIZE_CLASSES: Record<DensityValue, string> = {
-  compact: 'size-4',
-  regular: 'size-5',
-  comfortable: 'size-6',
-}
-const THUMB_TRANSLATE_CLASSES: Record<DensityValue, string> = {
-  compact: 'translate-x-3.5',
-  regular: 'translate-x-5',
-  comfortable: 'translate-x-5',
-}
-
-type SwitchProps = React.ComponentProps<typeof SwitchPrimitives.Root> & {
+type SwitchProps = {
+  checked: boolean
+  onCheckedChange: (checked: boolean) => void
+  disabled?: boolean
   className?: string
+  // Accessible name. Required for standalone Switch — without it,
+  // screen readers announce only "switch, on/off" with no
+  // identification. Optional in the type only because SwitchRow
+  // consumes Switch internally and supplies the label there;
+  // direct consumers should always pass this.
+  'aria-label'?: string
+  'aria-labelledby'?: string
 }
 
-export function Switch({ className, ...props }: SwitchProps) {
-  const { resolved } = useDensity()
+export function Switch({ checked, onCheckedChange, disabled, className, ...rest }: SwitchProps) {
   return (
-    <SwitchPrimitives.Root
+    <Pressable
+      role="switch"
+      aria-checked={checked}
+      accessibilityState={{ checked, disabled: !!disabled }}
+      disabled={disabled}
+      onPress={() => onCheckedChange(!checked)}
       className={cn(
-        'flex shrink-0 flex-row items-center rounded-full border border-transparent',
-        TRACK_CLASSES[resolved],
+        'rounded-full',
         Platform.select({
-          web: 'focus-visible:ring-focus-ring/50 peer inline-flex cursor-pointer outline-none transition-all focus-visible:border-accent focus-visible:ring-[3px] disabled:cursor-not-allowed',
+          web: 'focus-visible:ring-focus-ring/50 cursor-pointer outline-none transition-all focus-visible:ring-[3px] disabled:cursor-not-allowed',
         }),
-        props.checked ? 'bg-accent' : 'bg-fg-muted',
-        props.disabled && 'opacity-50',
         className,
       )}
-      {...props}
+      {...rest}
     >
-      <SwitchPrimitives.Thumb
-        className={cn(
-          'rounded-full bg-bg-base transition-transform',
-          THUMB_SIZE_CLASSES[resolved],
-          Platform.select({ web: 'pointer-events-none block ring-0' }),
-          props.checked ? THUMB_TRANSLATE_CLASSES[resolved] : 'translate-x-0',
-        )}
-      />
-    </SwitchPrimitives.Root>
+      <SwitchVisual checked={checked} disabled={disabled} />
+    </Pressable>
   )
 }
 
