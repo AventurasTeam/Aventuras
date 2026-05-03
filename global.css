@@ -429,3 +429,13 @@
     --row-px-lg: 20px;
   }
 }
+
+@layer utilities {
+  /* Tailwind v4 ships `field-sizing-content`; we're on v3.4 where
+   * it doesn't exist. Define it explicitly so Textarea's web
+   * auto-grow works. Browser support: Chromium 123+, Safari 17.5+,
+   * Firefox 127+. */
+  .field-sizing-content {
+    field-sizing: content;
+  }
+}
