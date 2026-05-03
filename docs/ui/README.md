@@ -21,6 +21,10 @@ rationale, and decisions live alongside.
   (entity rows, list rendering, Select primitive, JSON viewer,
   imports). Cross-cutting like principles, but visual-spec rather
   than philosophy.
+- **[components.md](./components.md)** — component-construction
+  conventions: react-native-reusables sourcing policy, Storybook
+  story conventions, and other meta-rules that apply across every
+  primitive and pattern shipped to Storybook.
 - **[foundations/](./foundations/README.md)** — visual identity
   contract: token slots (color, font-family, structural,
   user-orthogonal), theme data shape, switching mechanism,

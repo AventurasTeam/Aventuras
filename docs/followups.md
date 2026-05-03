@@ -375,17 +375,17 @@ is in hand, ready to inform the exempt-list shape.
 
 ### Storybook design-rules pattern setup
 
-When component implementation begins, set up Storybook's tree as
-**Foundations / Patterns / Components / Screens**. Patterns pages
-are MDX, prose-citing the corresponding
+Storybook's tree is set up as **Foundations / Primitives /
+Patterns / Screens** (phase 1). What's still pending is the
+Patterns branch — MDX pages prose-citing the corresponding
 [`docs/ui/patterns/`](./ui/patterns/README.md) file as canonical
 (per the pattern README's dual-source rule) and embedding live
 component stories beneath — render-mode demos, side-by-side
 comparisons, accessibility checks.
 
-Lands when we start building shared components (Select first,
-probably). Premature to scaffold before components exist; the live
-embedding is the whole point.
+Lands when patterns become consumers in phase 3. Premature to
+scaffold before patterns exist; the live embedding is the whole
+point.
 
 ### Search scope on state fields
 
