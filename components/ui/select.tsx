@@ -25,9 +25,11 @@
 //   ring tokens deferred to error-state design pass.
 // - AUGMENTED (per components.md augmentation policy): `<Select>`
 //   dispatcher consumes options-driven API and resolves the
-//   forms.md cascade at runtime; phone-tier dropdown branch swaps
-//   the rn-primitives Portal/Overlay/Content for our Sheet via the
-//   useRootContext bridge.
+//   forms.md cascade at runtime; phone-tier dropdown branch
+//   composes SelectBase.Portal + SelectBase.Overlay + SelectBase.Content
+//   (with `disablePositioningStyle`) inside a bottom-anchored
+//   sheet-style shell — see the State bridge note above for why
+//   our Sheet primitive can't host this branch directly.
 // - ACCEPTED: rn-primitives composition (Root, Trigger, Content,
 //   Portal, Overlay, Item, ItemText, ItemIndicator, Group, Label,
 //   Separator), focus-trap mechanics, anchor-positioning math, iOS
@@ -40,14 +42,28 @@
 // baseline `max-h-52 overflow-y-auto` plus ScrollUpButton /
 // ScrollDownButton.
 //
-// Phone-tier Sheet bridge: SelectContent reads useRootContext for
-// `{ open, onOpenChange }` and plumbs them into Sheet's controlled
-// API. SelectPrimitive.Item works inside Sheet because Item only
-// depends on Root context, not on Content.
+// Phone-tier Sheet bridge: rn-primitives select's RootContext is
+// internal — only `useRootContext` is exported. Items inside an
+// `@rn-primitives/dialog` Portal (our Sheet primitive) lose the
+// SelectBase RootContext because Dialog's Portal bridges Dialog's
+// context, not Select's. Items render → useRootContext throws
+// "Select compound components cannot be rendered outside the
+// Select component".
+//
+// Resolution: use SelectBase.Portal directly (which DOES bridge
+// SelectBase RootContext through the portal boundary) and render
+// Sheet-style chrome inside it, with SelectBase.Content marked
+// `disablePositioningStyle` so we provide our own bottom-anchored
+// layout instead of anchor-positioning math.
+//
+// Trade-off: no drag-to-dismiss on phone Select v1 — tap-outside
+// (via SelectBase.Overlay's closeOnPress) and back-press handle
+// dismissal. Drag-to-dismiss would require duplicating Sheet's
+// gesture-handler integration here, deferred until a Sheet refactor
+// exposes a portal-less shell both Sheet and Select can compose.
 
 import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
-import { Sheet, SheetContent, type SheetSize } from '@/components/ui/sheet'
 import { Text, TextClassContext } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { cn } from '@/lib/utils'
@@ -61,8 +77,10 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
+  type ViewStyle,
 } from 'react-native'
-import { FadeIn, FadeOut } from 'react-native-reanimated'
+import { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
 const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : React.Fragment
@@ -136,29 +154,80 @@ function Trigger({
   )
 }
 
-// SheetSize is a sister type to the sheetSize prop on SelectContent /
-// the dispatcher; redeclared as the optional override on the primitive
-// branch (auto-derived in the dispatcher when not supplied).
-type ContentSheetSize = SheetSize
+// Sheet-size scale — short / medium for v1. `tall` is reserved for
+// Autocomplete's future input-at-top sheet shape; Select's dropdown
+// doesn't host that pattern.
+type ContentSheetSize = 'short' | 'medium'
+
+const SHEET_HEIGHT_PCT: Record<ContentSheetSize, `${number}%`> = {
+  short: '33%',
+  medium: '60%',
+}
+
+const SAFE_AREA_GAP_PX = 8
 
 function PhoneSheetContent({
   className,
   children,
   sheetSize = 'short',
+  portalHost,
 }: {
   className?: string
   children?: React.ReactNode
   sheetSize?: ContentSheetSize
+  portalHost?: string
 }) {
-  const { open, onOpenChange } = SelectBase.useRootContext()
+  const insets = useSafeAreaInsets()
+  const { height: screenHeight } = useWindowDimensions()
+  // Cap so the panel never extends above the OS status bar / notch
+  // when there's no top-bar chrome above it.
+  const maxHeight = Math.max(screenHeight - insets.top - SAFE_AREA_GAP_PX, 0)
+  const panelStyle: ViewStyle = {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: SHEET_HEIGHT_PCT[sheetSize],
+    maxHeight,
+  }
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent anchor="bottom" size={sheetSize} className={className}>
-        <ScrollView className="flex-1">
-          <TextClassContext.Provider value="text-fg-primary">{children}</TextClassContext.Provider>
-        </ScrollView>
-      </SheetContent>
-    </Sheet>
+    <SelectBase.Portal hostName={portalHost}>
+      <FullWindowOverlay>
+        <View style={Platform.select({ native: StyleSheet.absoluteFill })} pointerEvents="box-none">
+          <NativeOnlyAnimatedView
+            entering={FadeIn.duration(200)}
+            exiting={FadeOut}
+            style={Platform.select({ native: StyleSheet.absoluteFill })}
+          >
+            <SelectBase.Overlay
+              className="absolute inset-0 bg-black/40"
+              style={Platform.select({ native: StyleSheet.absoluteFill })}
+            />
+          </NativeOnlyAnimatedView>
+          <NativeOnlyAnimatedView
+            entering={SlideInDown.duration(250)}
+            exiting={SlideOutDown}
+            style={Platform.select({ native: panelStyle })}
+          >
+            <TextClassContext.Provider value="text-fg-primary">
+              <SelectBase.Content
+                disablePositioningStyle
+                position="popper"
+                className={cn(
+                  'flex-1 rounded-t-lg border border-b-0 border-border-strong bg-bg-overlay p-6 outline-none',
+                  className,
+                )}
+              >
+                <View className="mx-auto mb-4 h-1 w-10 rounded-full bg-fg-muted opacity-40" />
+                <ScrollView className="flex-1">
+                  <SelectBase.Viewport>{children}</SelectBase.Viewport>
+                </ScrollView>
+              </SelectBase.Content>
+            </TextClassContext.Provider>
+          </NativeOnlyAnimatedView>
+        </View>
+      </FullWindowOverlay>
+    </SelectBase.Portal>
   )
 }
 

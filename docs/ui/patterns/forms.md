@@ -171,12 +171,19 @@ Highlights:
   reshaped over [`@rn-primitives/select`](https://www.npmjs.com/package/@rn-primitives/select)
   per [`components.md` reshape rules](../components.md#sourcing--react-native-reusables-as-baseline).
 - **Phone-tier Sheet bridge.** `SelectPrimitive.Content` dispatches
-  on `useTier()`: phone renders Sheet wrapping items via the
-  rn-primitives select Root context (`{ open, onOpenChange }`);
-  tablet / desktop renders the rn-primitives select Portal /
-  Overlay / Content (anchored popover, the reusables baseline).
-  Items work in either branch because they only depend on Root
-  context, not on Content.
+  on `useTier()`: phone renders sheet-style chrome (bottom-anchored
+  panel with drag handle visual, scrim, slide-in animation) inside
+  `SelectBase.Portal` + `SelectBase.Overlay`, with
+  `SelectBase.Content disablePositioningStyle` overriding the
+  baseline anchor-positioning math. The phone branch can't reuse
+  our `<Sheet>` primitive directly because Sheet's portal bridges
+  Dialog's RootContext, not Select's; items inside would throw
+  "compound components rendered outside the Select component".
+  Tablet / desktop renders the rn-primitives select Portal /
+  Overlay / Content (anchored popover, reusables baseline).
+  v1 phone Sheet dismisses via tap-outside (Overlay) and back-press;
+  drag-to-dismiss requires a future Sheet refactor that exposes a
+  portal-less shell both primitives can compose.
 - **Native scroll wrap.** Reusables baseline ships scroll-free on
   native (Viewport is a Fragment); reshape wraps it in
   `<ScrollView>` with viewport-fraction max-height. Web inherits
