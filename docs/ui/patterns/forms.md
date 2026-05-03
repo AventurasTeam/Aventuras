@@ -181,9 +181,13 @@ Highlights:
   "compound components rendered outside the Select component".
   Tablet / desktop renders the rn-primitives select Portal /
   Overlay / Content (anchored popover, reusables baseline).
-  v1 phone Sheet dismisses via tap-outside (Overlay) and back-press;
-  drag-to-dismiss requires a future Sheet refactor that exposes a
-  portal-less shell both primitives can compose.
+  Phone Sheet dismisses via tap-outside (Overlay), back-press,
+  and drag-down — the gesture pattern is duplicated locally
+  rather than shared with Sheet because the unmount-safety
+  property each pattern relies on (fresh dragOffset per open) is
+  satisfied independently by each primitive's portal returning
+  null on close. A future Sheet refactor could extract the
+  gesture+animation pattern into a shared portal-less shell.
 - **Native scroll wrap.** Reusables baseline ships scroll-free on
   native (Viewport is a Fragment); reshape wraps it in
   `<ScrollView>` with viewport-fraction max-height. Web inherits

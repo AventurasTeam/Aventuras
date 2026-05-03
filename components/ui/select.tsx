@@ -56,11 +56,13 @@
 // `disablePositioningStyle` so we provide our own bottom-anchored
 // layout instead of anchor-positioning math.
 //
-// Trade-off: no drag-to-dismiss on phone Select v1 — tap-outside
-// (via SelectBase.Overlay's closeOnPress) and back-press handle
-// dismissal. Drag-to-dismiss would require duplicating Sheet's
-// gesture-handler integration here, deferred until a Sheet refactor
-// exposes a portal-less shell both Sheet and Select can compose.
+// Drag-to-dismiss IS implemented locally here, mirroring Sheet's
+// gesture pattern. The pattern is duplicated rather than shared
+// because the unmount-safety property both rely on (fresh dragOffset
+// per open) is satisfied independently in each: SelectBase.Portal
+// returns null on close, so PhoneSheetContent unmounts and its
+// useSharedValue is reborn on the next open. A future Sheet refactor
+// could extract the gesture+animation pattern into a shared shell.
 
 import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
@@ -79,7 +81,18 @@ import {
   View,
   type ViewStyle,
 } from 'react-native'
-import { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import {
+  FadeIn,
+  FadeOut,
+  SlideInDown,
+  SlideOutDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated'
+import { runOnJS } from 'react-native-worklets'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
@@ -137,19 +150,24 @@ function Trigger({
 }) {
   return (
     <SelectBase.Trigger
+      // Tier-responsive sizing: phone + tablet get a 44px / 40px tap-
+      // target (iOS HIG / Material guidance). Desktop trims to 40 / 36
+      // via `lg:` (≥ 1024 CSS px) where mouse precision is available.
+      // Pattern is currently Select-local; broader primitive-sizing
+      // discussion is open per the followup note in select.tsx.
       className={cn(
-        'flex h-10 flex-row items-center justify-between gap-2 rounded-md border border-border bg-bg-base px-3 py-2 active:bg-bg-raised',
+        'flex h-11 flex-row items-center justify-between gap-2 rounded-md border border-border bg-bg-base px-3 py-2 active:bg-bg-raised lg:h-10',
         Platform.select({
           web: 'whitespace-nowrap outline-none transition-colors hover:border-border-strong focus-visible:ring-2 focus-visible:ring-focus-ring [&_svg]:pointer-events-none [&_svg]:shrink-0',
         }),
-        size === 'sm' && 'h-8 py-1.5',
+        size === 'sm' && 'h-10 py-1.5 lg:h-9',
         props.disabled && 'opacity-50',
         className,
       )}
       {...props}
     >
       <>{children}</>
-      <Icon as={ChevronDown} aria-hidden className="size-4 text-fg-muted" />
+      <Icon as={ChevronDown} aria-hidden className="size-5 text-fg-muted lg:size-4" size={20} />
     </SelectBase.Trigger>
   )
 }
@@ -165,6 +183,7 @@ const SHEET_HEIGHT_PCT: Record<ContentSheetSize, `${number}%`> = {
 }
 
 const SAFE_AREA_GAP_PX = 8
+const DRAG_DISMISS_THRESHOLD_PX = 100
 
 function PhoneSheetContent({
   className,
@@ -177,6 +196,7 @@ function PhoneSheetContent({
   sheetSize?: ContentSheetSize
   portalHost?: string
 }) {
+  const { onOpenChange } = SelectBase.useRootContext()
   const insets = useSafeAreaInsets()
   const { height: screenHeight } = useWindowDimensions()
   // Cap so the panel never extends above the OS status bar / notch
@@ -190,6 +210,66 @@ function PhoneSheetContent({
     height: SHEET_HEIGHT_PCT[sheetSize],
     maxHeight,
   }
+
+  // Drag-to-dismiss. Same gesture pattern Sheet uses, with the same
+  // unmount-safety property: SelectBase.Portal returns null on close,
+  // so PhoneSheetContent unmounts and the dragOffset shared value is
+  // freshly created on the next open. No persistence across cycles.
+  const dragOffset = useSharedValue(0)
+  const animatedDragStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: dragOffset.value }],
+  }))
+  const closeFromGesture = React.useCallback(() => onOpenChange(false), [onOpenChange])
+  const panGesture = React.useMemo(
+    () =>
+      Gesture.Pan()
+        .onUpdate((event) => {
+          'worklet'
+          dragOffset.value = Math.max(0, event.translationY)
+        })
+        .onEnd((event) => {
+          'worklet'
+          if (event.translationY > DRAG_DISMISS_THRESHOLD_PX) {
+            const target = screenHeight + 200
+            dragOffset.value = withTiming(target, { duration: 180 }, (finished?: boolean) => {
+              'worklet'
+              if (finished) runOnJS(closeFromGesture)()
+            })
+            return
+          }
+          dragOffset.value = withSpring(0, {
+            damping: 18,
+            stiffness: 220,
+            overshootClamping: true,
+          })
+        }),
+    [dragOffset, closeFromGesture, screenHeight],
+  )
+
+  const panel = (
+    <NativeOnlyAnimatedView
+      entering={SlideInDown.duration(250)}
+      exiting={SlideOutDown}
+      style={Platform.select({ native: [panelStyle, animatedDragStyle] })}
+    >
+      <TextClassContext.Provider value="text-fg-primary">
+        <SelectBase.Content
+          disablePositioningStyle
+          position="popper"
+          className={cn(
+            'flex-1 rounded-t-lg border border-b-0 border-border-strong bg-bg-overlay p-4 outline-none',
+            className,
+          )}
+        >
+          <View className="mx-auto mb-3 h-1 w-10 rounded-full bg-fg-muted opacity-40" />
+          <ScrollView className="flex-1">
+            <SelectBase.Viewport>{children}</SelectBase.Viewport>
+          </ScrollView>
+        </SelectBase.Content>
+      </TextClassContext.Provider>
+    </NativeOnlyAnimatedView>
+  )
+
   return (
     <SelectBase.Portal hostName={portalHost}>
       <FullWindowOverlay>
@@ -204,27 +284,11 @@ function PhoneSheetContent({
               style={Platform.select({ native: StyleSheet.absoluteFill })}
             />
           </NativeOnlyAnimatedView>
-          <NativeOnlyAnimatedView
-            entering={SlideInDown.duration(250)}
-            exiting={SlideOutDown}
-            style={Platform.select({ native: panelStyle })}
-          >
-            <TextClassContext.Provider value="text-fg-primary">
-              <SelectBase.Content
-                disablePositioningStyle
-                position="popper"
-                className={cn(
-                  'flex-1 rounded-t-lg border border-b-0 border-border-strong bg-bg-overlay p-6 outline-none',
-                  className,
-                )}
-              >
-                <View className="mx-auto mb-4 h-1 w-10 rounded-full bg-fg-muted opacity-40" />
-                <ScrollView className="flex-1">
-                  <SelectBase.Viewport>{children}</SelectBase.Viewport>
-                </ScrollView>
-              </SelectBase.Content>
-            </TextClassContext.Provider>
-          </NativeOnlyAnimatedView>
+          {Platform.OS === 'web' ? (
+            panel
+          ) : (
+            <GestureDetector gesture={panGesture}>{panel}</GestureDetector>
+          )}
         </View>
       </FullWindowOverlay>
     </SelectBase.Portal>
@@ -329,11 +393,14 @@ function Item({
   return (
     <SelectBase.Item
       className={cn(
+        // Tier-responsive sizing: phone + tablet rows use 12px vertical
+        // padding (44px+ tap target with text-base content) and base
+        // text size. Desktop tightens to 6px / sm via `lg:` prefix.
         // bg-bg-sunken (not bg-bg-raised) for hover/focus highlight:
         // overlay → raised has zero contrast on the default light
         // theme (both #ffffff), making the highlight invisible.
         // Sunken is consistently darker than overlay across themes.
-        'group relative flex w-full flex-row items-center gap-2 rounded-sm py-2 pl-2 pr-8 active:bg-bg-sunken sm:py-1.5',
+        'group relative flex w-full flex-row items-center gap-2 rounded-sm py-3 pl-3 pr-10 active:bg-bg-sunken lg:py-1.5 lg:pl-2 lg:pr-8',
         Platform.select({
           web: 'cursor-default outline-none hover:bg-bg-sunken focus:bg-bg-sunken data-[disabled]:pointer-events-none [&_svg]:pointer-events-none',
         }),
@@ -342,12 +409,12 @@ function Item({
       )}
       {...props}
     >
-      <View className="absolute right-2 flex size-3.5 items-center justify-center">
+      <View className="absolute right-3 flex size-5 items-center justify-center lg:right-2 lg:size-3.5">
         <SelectBase.ItemIndicator>
-          <Icon as={Check} className="size-4 shrink-0 text-fg-primary" />
+          <Icon as={Check} className="size-5 shrink-0 text-fg-primary lg:size-4" size={20} />
         </SelectBase.ItemIndicator>
       </View>
-      <SelectBase.ItemText className="select-none text-sm text-fg-primary" />
+      <SelectBase.ItemText className="select-none text-base text-fg-primary lg:text-sm" />
       {children as React.ReactNode}
     </SelectBase.Item>
   )
