@@ -83,6 +83,29 @@ Documented precedents:
   density; primitives stay terse and consistent. Retrofitting a
   primitive from literal sizing → density tokens is mechanical
   (className edit only, no API change).
+- **Input adornment slots + ARIA-driven error state**
+  ([`components/ui/input.tsx`](../../components/ui/input.tsx),
+  Phase 2 Group C). `leading` / `trailing` slots ship as augmented
+  API (concrete v1 consumers: search-info popover, password
+  show/hide, API-key reveal). The wrapper-vs-bare render switch
+  keeps the common case a single-node tree. Error styling
+  intentionally has **no** `state` prop — `aria-invalid={true}`
+  drives the danger border + ring, matching how form libraries
+  surface validity through ARIA. Width is also intentionally not
+  a size variant — narrow numeric Inputs use `className="w-24"`
+  rather than a `narrow` size, since width is a layout axis
+  independent of height (density). Justified in the file's header
+  comment per the
+  [Input implementation contract](./patterns/forms.md#input-primitive).
+- **Textarea height envelope + cross-platform auto-grow**
+  ([`components/ui/textarea.tsx`](../../components/ui/textarea.tsx),
+  Phase 2 Group C). `rows` / `maxRows` define a min/max height
+  envelope; web grows via `field-sizing-content`, native grows
+  via `onContentSizeChange` clamped to the same envelope. The
+  pure envelope math lives in
+  `components/ui/textarea-envelope.ts` so unit tests can import
+  without dragging in NativeWind / RN. Justified per the
+  [Textarea implementation contract](./patterns/forms.md#textarea-primitive).
 
 ## Subtraction — when removing baseline features
 
@@ -129,8 +152,9 @@ Sections:
 
 - **Default** — always. Most common usage; doubles as smoke test.
 - **Variants** — when the primitive has visual or semantic variants
-  (Button: yes; Sheet: no; Input: only if leading-icon / password
-  ship as variants rather than slots).
+  (Button: yes; Sheet: no; Input: no, since `leading` / `trailing`
+  ship as adornment slots and error state is ARIA-driven, not
+  a variant axis).
 - **Sizes** — when there's a multi-step size token axis (Button,
   Input, Icon: yes; Switch: usually single size, omit).
 - **States** — when interactive states diverge enough to warrant

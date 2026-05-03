@@ -9,23 +9,29 @@ that consume these), [`lists.md`](./lists.md), and
 Used by:
 
 - [App Settings](../screens/app-settings/app-settings.md)
-  (Select primitive across providers / profiles / story defaults)
+  (Select primitive across providers / profiles / story defaults;
+  Input primitive for the API-key field with trailing show/hide
+  eye)
 - [Story Settings](../screens/story-settings/story-settings.md#generation-tab--definitional-fields--authoring-aids)
   (Select primitive across mode / narration / generation knobs;
-  Autocomplete-with-create on the model field)
+  Autocomplete-with-create on the model field; Input + Textarea
+  for prose definition fields)
 - [Wizard](../screens/wizard/wizard.md#step-1--frame)
   (Select primitive in segment mode for mode / narration; calendar
-  picker integration cite)
+  picker integration cite; Input + Textarea for genre / tone /
+  setting fields, narrow numeric for year / day fields)
 - [Reader composer](../screens/reader-composer/reader-composer.md#per-entry-actions)
-  (Autocomplete-with-create primitive in entity / lore creation)
+  (Autocomplete-with-create primitive in entity / lore creation;
+  Input + Textarea for entity / lore detail fields)
 - [Onboarding](../screens/onboarding/onboarding.md)
   (Select primitive in initial setup flow)
 - [Vault calendars](../screens/vault/calendars/calendars.md)
-  (Select primitive in the calendar editor)
+  (Select primitive in the calendar editor; narrow numeric Inputs
+  for era year / day fields)
 - [World](../screens/world/world.md#mobile-expression)
   (Select primitive on the list-pane category dropdown and as the
   detail-pane tab navigation when the desktop tab strip overflows
-  on narrow tiers)
+  on narrow tiers; Input + Textarea for entity edits)
 - [Plot](../screens/plot/plot.md#mobile-expression)
   (Select primitive on the Threads / Happenings segment toggle and
   as the detail-pane tab navigation on phone)
@@ -195,6 +201,117 @@ Highlights:
 - **Virtualization stays deferred** to Autocomplete's
   implementation pass per the
   [virtual-list followup](../../followups.md#virtual-list-library-choice).
+
+---
+
+## Input primitive
+
+Single-line text input. The thinnest of the form primitives;
+consumers compose label and helper text externally per the
+project's compose-don't-encapsulate principle.
+
+### Input — variants
+
+- **`size`** — `sm`, `md` (default), `lg`. Resolves to the same
+  `h-control-{sm|md|lg}` density tokens as Button.
+- **`leading`** — adornment slot before the text. Typical content:
+  a non-interactive `<Icon>` (search magnifying-glass, lock).
+- **`trailing`** — adornment slot after the text. Typical content:
+  an interactive press target (password show/hide eye,
+  search-syntax info popover trigger, clear-x).
+
+There is no `narrow` size for numeric fields. Width is a layout
+decision — consumers pass `className="w-24"` (or similar) for
+year / day-number inputs. Conflating height (density) with width
+(layout) into a single variant would couple two independent
+axes.
+
+### Error state via `aria-invalid`
+
+The primitive doesn't expose a `state` prop. Error styling fires
+off `aria-invalid={true}` on the input — consumers drive validity
+through ARIA the same way form libraries surface it. Border swaps
+to `--danger`, focus ring swaps to `--danger/20`. The same pattern
+applies to Textarea below.
+
+### Adornment layout
+
+When neither slot is set the primitive renders as a bare
+`TextInput` (single-node tree, no wrapper). When either slot is
+set, the primitive wraps the `TextInput` in a row View; the
+border + focus ring move to the wrapper. On web,
+`focus-within:border-accent` fires when the inner input is
+focused; on native, an `onFocus`/`onBlur` state pair on the
+wrapper drives the same class. Consumer concerns:
+
+- **Trailing buttons own their own press affordance.** The slot
+  wrapping View has padding only; interactive children
+  (`Pressable`, `Button`) handle their own hit area and press
+  state.
+- **Trailing tap doesn't blur the input.** RN's TextInput keeps
+  focus through sibling presses by default — password-eye toggles
+  don't need `blurOnSubmit`-style workarounds.
+
+### Input — implementation contract
+
+Phase 2 Group C locked the implementation shape per
+[`docs/explorations/2026-05-03-input-textarea-primitives.md`](../../explorations/2026-05-03-input-textarea-primitives.md).
+Highlights:
+
+- **Baseline source.** `react-native-reusables` Input scaffold
+  reshaped over RN's `TextInput` per
+  [`components.md` reshape rules](../components.md#sourcing--react-native-reusables-as-baseline).
+- **NativeWind 4 variant bridges.** `placeholder:` resolves to
+  `placeholderTextColor` on RN; `aria-invalid:` honors the ARIA
+  attribute on both platforms.
+- **Selection color** uses `--accent` / `--accent-fg` (web only —
+  RN doesn't surface text-selection colors).
+
+---
+
+## Textarea primitive
+
+Multi-line text input. Same upstream primitive as Input
+(`TextInput` with `multiline`), but split for clarity and to keep
+multiline-specific props off the single-line surface.
+
+### Textarea — variants
+
+- **`rows`** — initial / minimum visible line count. Default `3`.
+- **`maxRows`** — line count past which the textarea scrolls
+  internally. Default `10`.
+- **`aria-invalid`** — same error contract as Input.
+
+There is no `size` prop; Textarea height is content-driven via
+`rows` and `maxRows`. There are no adornment slots; multiline
+content doesn't compose visually with leading / trailing icons,
+and no v1 wireframe needs it.
+
+### Auto-grow across platforms
+
+- **Web** — `field-sizing: content` (modern CSS) handles
+  content-driven height with no JS. The `min-h` / `max-h` envelope
+  bounds it.
+- **Native** — `onContentSizeChange` updates a measured-height
+  state, applied as inline `height` clamped to the
+  `[minHeight, maxHeight]` envelope derived from
+  `rows × line-height + padding × 2` and
+  `maxRows × line-height + padding × 2` respectively. Padding
+  reads from the active density's `--row-py-md` token; line-height
+  is fixed at NativeWind's `text-sm` default (20px).
+
+User-driven vertical resize (drag the corner) is web-only via
+`resize-y`. Native has no resize handle.
+
+### Textarea — implementation contract
+
+- **Baseline source.** Same as Input — `react-native-reusables`
+  scaffold reshaped over `TextInput`.
+- **Pure envelope math** lives in
+  `components/ui/textarea-envelope.ts` so the unit tests can
+  import it without dragging in NativeWind / RN / density-context.
+  Vitest's unit project has no `@/` alias; keeping the math
+  dependency-free is the cheapest path to test isolation.
 
 ---
 

@@ -11,6 +11,7 @@ const ROUTES = [
   { href: '/dev/popover', label: 'Popover' },
   { href: '/dev/sheet', label: 'Sheet' },
   { href: '/dev/select', label: 'Select' },
+  { href: '/dev/input', label: 'Input + Textarea' },
 ] as const
 
 export default function DevIndex() {
