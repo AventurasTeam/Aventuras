@@ -32,11 +32,11 @@ describe('themesToFullCss', () => {
     expect(css).toMatch(/^@tailwind base;\s*\n@tailwind components;\s*\n@tailwind utilities;/)
   })
 
-  it('emits :root for the first theme and [data-theme] for the rest', () => {
+  it('emits :root + [data-theme] for the first theme so per-element scoping works', () => {
     const css = themesToFullCss(themes)
     const rootMatches = css.match(/:root \{/g) ?? []
     const dataMatches = css.match(/\[data-theme="/g) ?? []
     expect(rootMatches.length).toBe(1)
-    expect(dataMatches.length).toBe(themes.length - 1)
+    expect(dataMatches.length).toBe(themes.length)
   })
 })
