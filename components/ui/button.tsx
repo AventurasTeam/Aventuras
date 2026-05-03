@@ -20,12 +20,17 @@ const buttonVariants = cva(
           Platform.select({ web: 'hover:bg-accent-hover' }),
         ),
         secondary: cn(
-          'border border-border bg-bg-base active:bg-bg-raised',
+          // Hover/active tint: bg-fg-muted at low opacity. Direct
+          // bg-* tier slots sit within ~1-3% of bg-base in light
+          // themes, making them invisible as hover/active states.
+          // fg-muted is mid-gray in every theme; its translucent
+          // layer renders visibly in both light and dark.
+          'border border-border bg-bg-base active:bg-fg-muted/15',
           Platform.select({ web: 'hover:border-border-strong' }),
         ),
         ghost: cn(
-          'bg-transparent active:bg-bg-raised',
-          Platform.select({ web: 'hover:bg-bg-raised' }),
+          'bg-transparent active:bg-fg-muted/15',
+          Platform.select({ web: 'hover:bg-fg-muted/10' }),
         ),
         destructive: cn(
           'bg-danger active:opacity-90',

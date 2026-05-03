@@ -165,7 +165,7 @@ function Trigger({
       // Default densities: regular on phone+tablet (44px), compact
       // on desktop (40px), with user override available.
       className={cn(
-        'flex h-control-md flex-row items-center justify-between gap-2 rounded-md border border-border bg-bg-base px-3 active:bg-bg-raised',
+        'active:bg-fg-muted/10 flex h-control-md flex-row items-center justify-between gap-2 rounded-md border border-border bg-bg-base px-3',
         Platform.select({
           web: 'whitespace-nowrap outline-none transition-colors hover:border-border-strong focus-visible:ring-2 focus-visible:ring-focus-ring [&_svg]:pointer-events-none [&_svg]:shrink-0',
         }),
@@ -578,7 +578,7 @@ function SegmentBranch({ options, value, onValueChange, disabled, className }: S
   // give us arrow-key nav (Left/Right horizontal idiom in this
   // layout) and roving tabindex. Indicator is unused visually
   // because the segment communicates selected state via cell-bg
-  // swap (bg-accent vs active:bg-bg-raised) rather than a dot.
+  // swap (bg-accent vs the hover/active fg-muted tint) rather than a dot.
   return (
     <RadioGroupBase.Root
       value={value}
@@ -600,10 +600,10 @@ function SegmentBranch({ options, value, onValueChange, disabled, className }: S
             className={cn(
               'flex-1 items-center justify-center px-3',
               i > 0 && 'border-l border-l-border-strong',
-              selected ? 'bg-accent' : 'active:bg-bg-raised',
+              selected ? 'bg-accent' : 'active:bg-fg-muted/15',
               Platform.select({
                 web: cn(
-                  !selected && 'hover:bg-bg-raised',
+                  !selected && 'hover:bg-fg-muted/10',
                   'focus-visible:ring-focus-ring/50 cursor-pointer outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed',
                 ),
               }),
@@ -649,10 +649,10 @@ function RadioBranch({ options, value, onValueChange, disabled, className }: Sel
             disabled={optDisabled ?? undefined}
             className={cn(
               'flex-row items-start gap-3 rounded-md border bg-bg-base px-row-x-md py-row-y-md',
-              selected ? 'border-accent' : 'border-border active:bg-bg-raised',
+              selected ? 'border-accent' : 'active:bg-fg-muted/15 border-border',
               Platform.select({
                 web: cn(
-                  !selected && 'hover:bg-bg-raised',
+                  !selected && 'hover:bg-fg-muted/10',
                   'focus-visible:ring-focus-ring/50 cursor-pointer outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed',
                 ),
               }),
