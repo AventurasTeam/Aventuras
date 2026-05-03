@@ -51,11 +51,19 @@ when all three hold:
 
 Documented precedents:
 
-- **Text's `headingLevel` prop** ([`components/ui/text.tsx`](../../components/ui/text.tsx))
-  adds a heading-semantics axis (drives `role="heading"` +
-  `aria-level={N}`) that the baseline didn't have. Maps to
-  standard ARIA, doesn't duplicate the existing color / size
-  axes, justified in the file's header comment.
+- **Text's orthogonal `variant` (color) + `size` axes**
+  ([`components/ui/text.tsx`](../../components/ui/text.tsx))
+  split what reusables ships as a single semantic-typography
+  variant axis into two visual axes that map onto Aventuras's
+  `--fg-*` color slots and the typography ramp. Justified in the
+  file's header comment.
+- **Heading primitive** ([`components/ui/heading.tsx`](../../components/ui/heading.tsx))
+  ships as a sibling primitive on top of Text rather than a Text
+  variant, because heading-level is a semantic axis (drives
+  `role="heading"` + `aria-level`) orthogonal to Text's visual
+  axes. Bakes in default size + weight per level matching the
+  MUI-style theme-driven typography pattern. Justified in the
+  file's header comment.
 
 ## Subtraction — when removing baseline features
 
@@ -78,15 +86,16 @@ Documented precedents:
   blockquote, code, lead, large, small) and the embedded
   `ROLE` / `ARIA_LEVEL` mapping. Replaced by orthogonal `variant`
   (color slot) + `size` (typography ramp) for visual styling and
-  the new `headingLevel` prop for heading semantics. The
-  accessibility contract is restored, not degraded.
+  the new sibling [`Heading`](../../components/ui/heading.tsx)
+  primitive for heading semantics. The accessibility contract is
+  restored, not degraded.
 
 Anti-pattern, surfaced retrospectively: phase 1 text.tsx
 originally subtracted `ROLE` / `ARIA_LEVEL` _without_ replacement,
 which was an a11y regression caught during phase 2 Group A
-implementation. The reconciliation that added `headingLevel`
-brought the file back into policy compliance and motivated
-codifying this section.
+implementation. The reconciliation that introduced the Heading
+sibling brought the file back into policy compliance and
+motivated codifying this section.
 
 ## Storybook story conventions
 

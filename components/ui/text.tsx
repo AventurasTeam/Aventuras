@@ -1,20 +1,19 @@
-// Aventuras Text primitive — color + size + heading-semantics + composition.
+// Aventuras Text primitive — color + size + composition.
 //
 // Divergence from the react-native-reusables baseline, per the augmentation
-// + subtraction policy in docs/ui/components.md:
+// + subtraction policies in docs/ui/components.md:
 //
-// - REMOVED: semantic typography variants (h1-h4, p, blockquote, code, lead,
-//   large, small) and the ROLE / ARIA_LEVEL mapping that bundled with them.
-//   Aventuras typography (docs/ui/foundations/typography.md) is size-driven;
-//   visual hero typography slots were skipped per the v1 contract. Heading
-//   accessibility is restored below via `headingLevel`.
 // - REPLACED: variant axis split into orthogonal `variant` (color slot) +
 //   `size` (typography ramp). Matches Aventuras's `--fg-*` slot system and
 //   xs/sm/base/lg/xl size scale. Maintains the upstream `defaultVariants`
 //   contract via the conditional-fallback logic below.
-// - RESTORED: `asChild` + `Slot` composition. Heading accessibility via the
-//   new `headingLevel` prop, which sets `role="heading"` + `aria-level={N}`
-//   without dictating visual styling (consumer composes size + className).
+// - REMOVED: semantic typography variants (h1-h4, p, blockquote, code, lead,
+//   large, small) and the embedded `ROLE` / `ARIA_LEVEL` mapping. Aventuras
+//   typography (docs/ui/foundations/typography.md) is size-driven; hero
+//   typography slots were skipped per the v1 contract. **Heading semantics
+//   live in the sibling [`Heading`](./heading.tsx) primitive**, not on
+//   Text — keeps Text's axes purely visual.
+// - KEPT: `asChild` + `Slot` composition.
 import { Slot } from '@rn-primitives/slot'
 import { Text as RNText, type TextProps as RNTextProps } from 'react-native'
 import { createContext, useContext } from 'react'
@@ -41,24 +40,13 @@ const textVariants = cva('', {
   },
 })
 
-type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6
-
 type TextProps = RNTextProps &
   VariantProps<typeof textVariants> & {
     className?: string
     asChild?: boolean
-    headingLevel?: HeadingLevel
   }
 
-export function Text({
-  className,
-  variant,
-  size,
-  asChild = false,
-  headingLevel,
-  style,
-  ...props
-}: TextProps) {
+export function Text({ className, variant, size, asChild = false, style, ...props }: TextProps) {
   const inherited = useContext(TextClassContext)
   const Component = asChild ? Slot : RNText
   // Conditional fallback emits the default class only when no other source
@@ -67,9 +55,6 @@ export function Text({
   // one className resolve by CSS-output order, not className order.
   const fallbackColor = !variant && !inherited ? 'text-fg-primary' : ''
   const fallbackSize = !size && !inherited ? 'text-base' : ''
-  const semanticProps = headingLevel
-    ? { role: 'heading' as const, 'aria-level': String(headingLevel) }
-    : {}
   return (
     <Component
       className={cn(
@@ -80,10 +65,9 @@ export function Text({
         className,
       )}
       style={style}
-      {...semanticProps}
       {...props}
     />
   )
 }
 
-export type { TextProps, HeadingLevel }
+export type { TextProps }

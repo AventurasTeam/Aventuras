@@ -18,10 +18,6 @@ const meta: Meta<typeof Text> = {
       control: 'select',
       options: ['xs', 'sm', 'base', 'lg', 'xl'],
     },
-    headingLevel: {
-      control: 'select',
-      options: [undefined, 1, 2, 3, 4, 5, 6],
-    },
   },
 }
 
@@ -51,35 +47,6 @@ export const Sizes: Story = {
       <Text size="base">Base (default)</Text>
       <Text size="lg">Large (lg)</Text>
       <Text size="xl">Extra large (xl)</Text>
-    </View>
-  ),
-}
-
-export const Headings: Story = {
-  render: () => (
-    <View className="flex-col items-start gap-3">
-      <Text variant="muted" size="xs">
-        headingLevel sets role=&quot;heading&quot; + aria-level. Visual styling stays orthogonal
-        (size + className).
-      </Text>
-      <Text headingLevel={1} size="xl" className="font-semibold">
-        Heading level 1
-      </Text>
-      <Text headingLevel={2} size="lg" className="font-semibold">
-        Heading level 2
-      </Text>
-      <Text headingLevel={3} size="base" className="font-semibold">
-        Heading level 3
-      </Text>
-      <Text headingLevel={4} size="base" className="font-medium">
-        Heading level 4
-      </Text>
-      <Text headingLevel={5} size="sm" className="font-medium">
-        Heading level 5
-      </Text>
-      <Text headingLevel={6} size="sm" variant="muted">
-        Heading level 6
-      </Text>
     </View>
   ),
 }
