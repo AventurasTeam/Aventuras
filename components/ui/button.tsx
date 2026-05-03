@@ -1,6 +1,8 @@
 import { ActivityIndicator, Platform, Pressable, type PressableProps } from 'react-native'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { TextClassContext } from '@/components/ui/text'
+import { useTheme } from '@/lib/themes/use-theme'
+import type { ThemeColorSlots } from '@/lib/themes/types'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
@@ -57,6 +59,15 @@ const buttonTextVariants = cva(
   },
 )
 
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive'
+
+const SPINNER_SLOT_BY_VARIANT: Record<ButtonVariant, keyof ThemeColorSlots> = {
+  primary: '--accent-fg',
+  secondary: '--fg-primary',
+  ghost: '--fg-primary',
+  destructive: '--danger-fg',
+}
+
 type ButtonProps = PressableProps &
   VariantProps<typeof buttonVariants> & {
     loading?: boolean
@@ -73,6 +84,15 @@ export function Button({
   ...props
 }: ButtonProps) {
   const isDisabled = disabled || loading
+  const { theme: activeTheme } = useTheme()
+  const spinnerSlot = SPINNER_SLOT_BY_VARIANT[(variant ?? 'primary') as ButtonVariant]
+  // Web resolves var(--*) against the nearest [data-theme] scope so per-row
+  // ThemeMatrix scoping works; native has no DOM cascade so we read from the
+  // active theme directly.
+  const spinnerColor = Platform.select({
+    web: `var(${spinnerSlot})`,
+    default: activeTheme.colors[spinnerSlot],
+  })
   return (
     <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
       <Pressable
@@ -82,7 +102,7 @@ export function Button({
         className={cn(isDisabled && 'opacity-50', buttonVariants({ variant, size }), className)}
         {...props}
       >
-        {loading ? <ActivityIndicator size="small" /> : children}
+        {loading ? <ActivityIndicator size="small" color={spinnerColor} /> : children}
       </Pressable>
     </TextClassContext.Provider>
   )
