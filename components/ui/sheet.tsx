@@ -31,6 +31,13 @@
 // because their absolute children are out of layout flow). The wrapper
 // uses `pointerEvents="box-none"` so taps fall through to the scrim and
 // panel children rather than being captured by the empty wrapper.
+//
+// Drag state lives in the SheetPanel sub-component INSIDE the Portal.
+// SheetContent itself is a sibling of SheetTrigger and never unmounts
+// between opens; only the Portal contents do. Putting `useSharedValue`
+// in SheetPanel guarantees a fresh dragOffset per open — no persistence
+// across open/close cycles, no leaked off-screen translation breaking
+// the entry layout animation on reopen.
 
 import * as DialogPrimitive from '@rn-primitives/dialog'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
@@ -108,30 +115,33 @@ function getNativePanelStyle(
   }
 }
 
-function SheetContent({
-  className,
-  anchor = 'bottom',
-  size = 'medium',
-  portalHost,
-  children,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & {
-  anchor?: SheetAnchor
-  size?: SheetSize
-  portalHost?: string
-}) {
-  const isBottom = anchor === 'bottom'
-  const slideEnter = isBottom ? SlideInDown.duration(250) : SlideInRight.duration(250)
-  const slideExit = isBottom ? SlideOutDown : SlideOutRight
-  const insets = useSafeAreaInsets()
-  const { height: screenHeight } = useWindowDimensions()
-  const nativePanelStyle = getNativePanelStyle(anchor, size, insets.top, screenHeight)
-  const { open, onOpenChange } = DialogPrimitive.useRootContext()
+type LayoutAnimation = React.ComponentProps<typeof NativeOnlyAnimatedView>['entering']
 
-  // Drag-to-dismiss: track translation in the dismiss direction, snap back
-  // if the drag is short, close if it crosses the threshold. Only active on
-  // native — Electron has no gesture path and falls back to outside-click /
-  // Escape.
+type SheetPanelProps = React.ComponentProps<typeof DialogPrimitive.Content> & {
+  isBottom: boolean
+  size: SheetSize
+  slideEnter: LayoutAnimation
+  slideExit: LayoutAnimation
+  nativePanelStyle: ViewStyle
+}
+
+function SheetPanel({
+  className,
+  children,
+  isBottom,
+  size,
+  slideEnter,
+  slideExit,
+  nativePanelStyle,
+  ...contentProps
+}: SheetPanelProps) {
+  const { onOpenChange } = DialogPrimitive.useRootContext()
+  const { height: screenHeight } = useWindowDimensions()
+
+  // Lives only while the panel is open: this component mounts when the
+  // Dialog Portal renders and unmounts when it closes. Each open gives a
+  // fresh dragOffset, so off-screen state from the previous drag-dismiss
+  // can't leak into the next entry animation.
   const dragOffset = useSharedValue(0)
   const animatedDragStyle = useAnimatedStyle(() =>
     isBottom
@@ -154,10 +164,7 @@ function SheetContent({
           const delta = isBottom ? event.translationY : event.translationX
           if (delta > DRAG_DISMISS_THRESHOLD_PX) {
             // Continue the gesture motion smoothly off-screen, then close
-            // once the panel is visually gone. The unmount-cleanup useEffect
-            // below resets dragOffset after the component is gone, so the
-            // off-screen shared-value state doesn't leak into the next
-            // mount.
+            // once the panel is visually gone.
             const target = (isBottom ? screenHeight : screenHeight) + 200
             dragOffset.value = withTiming(target, { duration: 180 }, (finished?: boolean) => {
               'worklet'
@@ -177,22 +184,7 @@ function SheetContent({
     [isBottom, dragOffset, closeFromGesture, screenHeight],
   )
 
-  // SheetContent itself never unmounts between opens — it's a sibling of
-  // SheetTrigger, both children of <Sheet> (DialogPrimitive.Root). Only
-  // the Portal contents inside SheetContent toggle on the open state.
-  // That means useSharedValue runs ONCE for SheetContent's lifetime, and
-  // dragOffset persists across open/close cycles. Drag-dismissing leaves
-  // it at the off-screen value, so the next open reads the leaked value
-  // and the panel renders off-screen on entry.
-  //
-  // Reset on every false → true transition so each open starts at rest.
-  React.useEffect(() => {
-    if (open) {
-      dragOffset.value = 0
-    }
-  }, [open, dragOffset])
-
-  const PanelInner = (
+  const inner = (
     <NativeOnlyAnimatedView
       entering={slideEnter}
       exiting={slideExit}
@@ -219,7 +211,7 @@ function SheetContent({
             }),
             className,
           )}
-          {...props}
+          {...contentProps}
         >
           {isBottom ? (
             <View className="mx-auto mb-4 h-1 w-10 rounded-full bg-fg-muted opacity-40" />
@@ -229,6 +221,32 @@ function SheetContent({
       </TextClassContext.Provider>
     </NativeOnlyAnimatedView>
   )
+
+  return Platform.OS === 'web' ? (
+    inner
+  ) : (
+    <GestureDetector gesture={panGesture}>{inner}</GestureDetector>
+  )
+}
+
+function SheetContent({
+  className,
+  anchor = 'bottom',
+  size = 'medium',
+  portalHost,
+  children,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  anchor?: SheetAnchor
+  size?: SheetSize
+  portalHost?: string
+}) {
+  const isBottom = anchor === 'bottom'
+  const slideEnter = isBottom ? SlideInDown.duration(250) : SlideInRight.duration(250)
+  const slideExit = isBottom ? SlideOutDown : SlideOutRight
+  const insets = useSafeAreaInsets()
+  const { height: screenHeight } = useWindowDimensions()
+  const nativePanelStyle = getNativePanelStyle(anchor, size, insets.top, screenHeight)
 
   return (
     <DialogPrimitive.Portal hostName={portalHost}>
@@ -244,11 +262,17 @@ function SheetContent({
               style={Platform.select({ native: StyleSheet.absoluteFill })}
             />
           </NativeOnlyAnimatedView>
-          {Platform.OS === 'web' ? (
-            PanelInner
-          ) : (
-            <GestureDetector gesture={panGesture}>{PanelInner}</GestureDetector>
-          )}
+          <SheetPanel
+            isBottom={isBottom}
+            size={size}
+            slideEnter={slideEnter}
+            slideExit={slideExit}
+            nativePanelStyle={nativePanelStyle}
+            className={className}
+            {...props}
+          >
+            {children}
+          </SheetPanel>
         </View>
       </FullWindowOverlay>
     </DialogPrimitive.Portal>
