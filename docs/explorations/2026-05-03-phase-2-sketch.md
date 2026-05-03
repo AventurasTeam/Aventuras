@@ -44,16 +44,14 @@ Already flagged in
 [`followups.md → Calendar picker primitive — open shape decisions`](../followups.md#calendar-picker-primitive--open-shape-decisions)
 as load-bearing for the calendar-picker pattern shape decision
 (does Select gain rich-row content + popover tail-actions, or does
-a sibling `Picker` primitive fork off?). Lands together with Sheet
-
-- Popover from Group A.
+a sibling `Picker` primitive fork off?). Lands together with the
+Sheet / Popover pair from Group A.
 
 This is the most complex single primitive in phase 2 — keyboard
 nav, focus trap, scroll behavior, virtualization for long lists
 ([virtual-list library choice](../followups.md#virtual-list-library-choice)
-becomes ripe here), accent / focus-ring styling, accessible name
-
-- value coupling. Lands as one focused phase 2 pass.
+becomes ripe here), accent / focus-ring styling, accessible-name /
+value coupling. Lands as one focused phase 2 pass.
 
 ### Group C — text input primitives (Input + Textarea)
 
