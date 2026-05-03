@@ -18,117 +18,96 @@
 // - AUGMENTED (per components.md augmentation policy): `size` prop
 //   resolving to density tokens; `leading` and `trailing` adornment
 //   slots that re-host the border + focus ring on a wrapper View
-//   when either is present, with focus-within (web) and onFocus/
-//   onBlur state (native) driving the focused border + ring.
-// - ACCEPTED: NativeWind 4's `placeholder:` and `aria-` variants
-//   on TextInput (bridged to placeholderTextColor / aria-invalid
-//   on RN), `field-sizing-content` on web (free auto-grow),
-//   `editable={false}` for the disabled state, plain TextInputProps
-//   pass-through.
+//   when either is present, with onFocus/onBlur state driving the
+//   focused border + ring on both web and native.
+// - ACCEPTED: NativeWind 4's `placeholder:` variant on TextInput
+//   (bridged to placeholderTextColor on RN), `editable={false}`
+//   for the disabled state, plain TextInputProps pass-through.
+// - SUBTRACTED: `flex-1` from the bare-path TextInput. The reusables
+//   baseline assumes a flex-row parent; bare Aventuras Inputs render
+//   inside arbitrary parents (often column-flex Views) where
+//   `flex: 1 1 0%` competes with the explicit height token and
+//   collapses padding. `w-full` is the correct fill mechanism for
+//   the bare case; `flex-1` stays only on the inner TextInput in
+//   the adornment path where the wrapper provides flex-row context.
+// - SUBTRACTED: reliance on the `aria-invalid:` Tailwind variant
+//   firing in CSS. RN-Web doesn't always forward arbitrary aria-*
+//   attributes from `<TextInput>` props onto the rendered
+//   `<input>`/`<textarea>`, so the attribute selector silently
+//   misses. Driving the danger border + ring from JS via the
+//   `aria-invalid` prop reading is reliable across platforms.
 
-import { cva, type VariantProps } from 'class-variance-authority'
 import * as React from 'react'
 import { Platform, TextInput, View } from 'react-native'
 
 import { cn } from '@/lib/utils'
 
-const inputBoxVariants = cva(
-  cn(
-    'flex-row items-center rounded-md border border-border bg-bg-base',
-    Platform.select({
-      web: cn(
-        'transition-[color,box-shadow] outline-none',
-        'focus-visible:border-accent focus-visible:ring-focus-ring/50 focus-visible:ring-[3px]',
-        'aria-invalid:border-danger aria-invalid:ring-danger/20',
-      ),
-    }),
-  ),
-  {
-    variants: {
-      size: {
-        sm: 'h-control-sm',
-        md: 'h-control-md',
-        lg: 'h-control-lg',
-      },
-    },
-    defaultVariants: { size: 'md' },
-  },
-)
+type InputSize = 'sm' | 'md' | 'lg'
 
-// Wrapper variant — only used when adornments are present. The
-// border + ring move from the TextInput to the wrapper; classes
-// without `aria-invalid:` on the wrapper trigger via
-// `[aria-invalid=true]` propagating through the inner TextInput's
-// aria-invalid prop, but since the attribute lives on the inner
-// element we use `:has(input[aria-invalid='true'])` on web and an
-// explicit `ariaInvalid` discriminator on native.
-const wrapperVariants = cva('flex-row items-center rounded-md border border-border bg-bg-base', {
-  variants: {
-    size: {
-      sm: 'h-control-sm',
-      md: 'h-control-md',
-      lg: 'h-control-lg',
-    },
-    focused: { true: '', false: '' },
-    invalid: { true: '', false: '' },
-  },
-  compoundVariants: [
-    // Focused, not invalid — accent border + focus ring.
-    {
-      focused: true,
-      invalid: false,
-      className: Platform.select({
-        web: 'border-accent ring-focus-ring/50 ring-[3px]',
-        default: 'border-accent',
-      }),
-    },
-    // Invalid (regardless of focus) — danger border, danger ring
-    // when focused.
-    {
-      invalid: true,
-      focused: false,
-      className: 'border-danger',
-    },
-    {
-      invalid: true,
-      focused: true,
-      className: Platform.select({
-        web: 'border-danger ring-danger/20 ring-[3px]',
-        default: 'border-danger',
-      }),
-    },
-  ],
-  defaultVariants: { size: 'md', focused: false, invalid: false },
-})
+const SIZE_HEIGHT: Record<InputSize, string> = {
+  sm: 'h-control-sm',
+  md: 'h-control-md',
+  lg: 'h-control-lg',
+}
 
-type InputBoxProps = VariantProps<typeof inputBoxVariants>
+// Border + bg + radius for the field surface. Used by both the
+// bare-path TextInput and the adornment-path wrapper View.
+const fieldSurfaceClasses = 'rounded-md border border-border bg-bg-base'
 
-type InputProps = React.ComponentProps<typeof TextInput> &
-  InputBoxProps & {
-    leading?: React.ReactNode
-    trailing?: React.ReactNode
-    className?: string
-    // RN 0.83's TextInput type doesn't include aria-invalid, but
-    // RN-Web forwards it as the HTML attribute and NativeWind 4
-    // honors it as a class variant on native. Surface explicitly so
-    // consumers can drive error state through ARIA.
-    'aria-invalid'?: boolean | 'true' | 'false'
-  }
+// Web-only focus / transition tokens. Applied to whichever element
+// owns the focused class — TextInput on the bare path, View on the
+// adornment path (the latter via NativeWind's `focus-within:`-equivalent
+// handling driven by JS state, not the CSS variant — see SUBTRACTED note
+// in the file header).
+const webTransitionClasses = 'transition-[color,box-shadow] outline-none'
 
-const baseTextInputClasses = cn(
-  'flex-1 text-sm text-fg-primary',
+// Text + placeholder styling for the TextInput element on either path.
+const textInputClasses = cn(
+  'text-sm text-fg-primary',
   Platform.select({
-    web: cn(
-      'placeholder:text-fg-muted selection:bg-accent selection:text-accent-fg',
-      'min-w-0 outline-none',
-    ),
+    web: cn('placeholder:text-fg-muted selection:bg-accent selection:text-accent-fg outline-none'),
     native: 'placeholder:text-fg-muted',
   }),
 )
 
+function focusedClasses(invalid: boolean): string {
+  return Platform.select({
+    web: invalid
+      ? 'border-danger ring-danger/20 ring-[3px]'
+      : 'border-accent ring-focus-ring/50 ring-[3px]',
+    default: invalid ? 'border-danger' : 'border-accent',
+  })!
+}
+
+function invalidClasses(): string {
+  return 'border-danger'
+}
+
+function disabledClasses(): string {
+  return cn(
+    'opacity-50',
+    Platform.select({
+      web: 'cursor-not-allowed select-none',
+    }),
+  )
+}
+
+type InputProps = React.ComponentProps<typeof TextInput> & {
+  size?: InputSize
+  leading?: React.ReactNode
+  trailing?: React.ReactNode
+  className?: string
+  // RN 0.83's TextInput type doesn't include aria-invalid; surface
+  // explicitly so consumers can drive error state through ARIA. The
+  // primitive reads this prop directly to apply the danger classes
+  // rather than relying on the attribute reaching the DOM (which
+  // RN-Web doesn't guarantee for TextInput).
+  'aria-invalid'?: boolean | 'true' | 'false'
+}
+
 export function Input({
   className,
-  size,
+  size = 'md',
   leading,
   trailing,
   editable,
@@ -138,7 +117,8 @@ export function Input({
 }: InputProps) {
   const hasAdornment = leading != null || trailing != null
   const isDisabled = editable === false
-  const ariaInvalid = props['aria-invalid'] === true || props['aria-invalid'] === 'true'
+  const ariaInvalidProp = props['aria-invalid']
+  const isInvalid = ariaInvalidProp === true || ariaInvalidProp === 'true'
 
   const [focused, setFocused] = React.useState(false)
   const handleFocus: React.ComponentProps<typeof TextInput>['onFocus'] = (event) => {
@@ -150,20 +130,28 @@ export function Input({
     onBlur?.(event)
   }
 
+  const stateClasses = cn(
+    isInvalid && invalidClasses(),
+    focused && focusedClasses(isInvalid),
+    isDisabled && disabledClasses(),
+  )
+
   if (!hasAdornment) {
-    // Bare path — TextInput owns its own border + ring + height.
-    // Single-node tree for the common case.
+    // Bare path — TextInput owns its own surface, height, padding.
+    // No flex-1 here: bare Inputs render inside arbitrary parents
+    // (often column-flex Views) where flex-1 collapses padding.
     return (
       <TextInput
         editable={editable}
         onFocus={handleFocus}
         onBlur={handleBlur}
         className={cn(
-          inputBoxVariants({ size }),
-          baseTextInputClasses,
-          'px-3',
-          isDisabled && 'opacity-50',
-          Platform.select({ web: isDisabled && 'disabled:cursor-not-allowed' }),
+          fieldSurfaceClasses,
+          SIZE_HEIGHT[size],
+          'w-full px-3',
+          textInputClasses,
+          Platform.select({ web: webTransitionClasses }),
+          stateClasses,
           className,
         )}
         {...props}
@@ -171,12 +159,16 @@ export function Input({
     )
   }
 
-  // Adornment path — wrapper View hosts the border + focus ring.
+  // Adornment path — wrapper View hosts the border + focus ring;
+  // inner TextInput fills the remaining row width via flex-1.
   return (
     <View
       className={cn(
-        wrapperVariants({ size, focused, invalid: ariaInvalid }),
-        isDisabled && 'opacity-50',
+        fieldSurfaceClasses,
+        'flex-row items-center',
+        SIZE_HEIGHT[size],
+        Platform.select({ web: webTransitionClasses }),
+        stateClasses,
         className,
       )}
     >
@@ -186,8 +178,8 @@ export function Input({
         onFocus={handleFocus}
         onBlur={handleBlur}
         className={cn(
-          baseTextInputClasses,
-          'h-full',
+          textInputClasses,
+          'h-full flex-1',
           leading == null && 'pl-3',
           trailing == null && 'pr-3',
         )}
