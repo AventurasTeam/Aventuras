@@ -557,3 +557,40 @@ Open sub-questions:
   reverted on restart" toast?
 - Interaction with chained transactions (per-turn → chapter-close):
   does recovery treat them as one unit or two?
+
+### Settings screens — adopt SwitchRow pattern
+
+Story Settings and (eventually) App Settings render their boolean
+toggles as a label + hint row with a switch on the right (per
+wireframes). Group D shipped the
+[`SwitchRow` pattern](./ui/patterns/forms.md#switchrow-pattern) as
+the canonical row-tappable shape. The screen-side rework — wiring
+the pattern into Story Settings panels, normalizing label / hint
+copy, ensuring the row spans the full panel width — lands as part
+of phase 3 settings implementation. Tracked here so it doesn't get
+lost between primitive landing (done) and screen integration
+(pending).
+
+Cross-platform: SwitchRow is the canonical shape on every tier
+(phone, tablet, desktop). Settings layouts should NOT use a
+standalone Switch with an adjacent label — that pattern is
+deprecated for v1. The
+[Switch primitive](./ui/patterns/forms.md#switch-primitive) stays
+exported as a building block for non-row cases (toolbar quick-
+toggles, inline status indicators) but no v1 wireframe needs that
+shape.
+
+### Checkbox without v1 consumer
+
+The Checkbox primitive (Phase 2 Group D) shipped without a v1
+wireframe consumer — added on speculation that a multi-select list
+or "I agree" gating shape would surface during phase 3 screen
+implementation. If phase 3 lands without a real consumer, candidate
+to park or drop (parallel to how standalone Radio was dropped from
+Group D in favor of Select.radio).
+
+Tracking surface: when reviewing each phase 3 screen, note any
+multi-select or boolean-list shape that would naturally use
+Checkbox. If the count stays at zero after all screens land, drop
+in a Phase 3 cleanup pass. If a consumer surfaces, this entry
+resolves silently — Checkbox stays.

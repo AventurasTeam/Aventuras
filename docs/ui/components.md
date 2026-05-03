@@ -124,6 +124,25 @@ Documented precedents:
   Radio primitive intentionally not exported — Select.radio covers
   every wireframe consumer; if a non-description radio case ever
   surfaces, extend Select rather than duplicate the primitive.
+- **SwitchRow as the canonical boolean-setting shape**
+  ([`components/ui/switch-row.tsx`](../../components/ui/switch-row.tsx),
+  Phase 2 Group D). The pattern, not the standalone Switch, is the
+  canonical cross-platform shape for boolean settings — same row-
+  tappable interaction on every tier, no fork between mobile and
+  desktop. Standalone Switch stays exported as a building block
+  for non-row cases. Contract + cross-platform rationale live in
+  the [SwitchRow pattern](./patterns/forms.md#switchrow-pattern).
+- **Density-bound dimensions on Switch + Checkbox**
+  ([`components/ui/switch.tsx`](../../components/ui/switch.tsx),
+  [`components/ui/checkbox.tsx`](../../components/ui/checkbox.tsx),
+  Phase 2 Group D). Track + thumb dimensions on Switch and box +
+  check-icon on Checkbox read `useDensity()` and pick from a
+  per-density map. Phone defaults to regular density (touch-
+  friendly sizes); desktop defaults to compact (mouse-tight).
+  Initial design called these "fixed, symbolic affordances" —
+  mobile testing surfaced that fixed sizes felt miniscule on
+  touch, so the decision was reversed and recorded with a
+  SUBTRACTED note in each file's header.
 
 ## Subtraction — when removing baseline features
 

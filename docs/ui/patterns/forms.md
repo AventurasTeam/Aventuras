@@ -11,12 +11,16 @@ Used by:
 - [App Settings](../screens/app-settings/app-settings.md)
   (Select primitive across providers / profiles / story defaults;
   Input primitive for the API-key field with trailing show/hide
-  eye; Switch primitive for appearance + behavior toggles)
+  eye)
 - [Story Settings](../screens/story-settings/story-settings.md#generation-tab--definitional-fields--authoring-aids)
   (Select primitive across mode / narration / generation knobs;
   Autocomplete-with-create on the model field; Input + Textarea
-  for prose definition fields; Switch primitive for per-story
+  for prose definition fields; SwitchRow pattern for per-story
   toggles)
+- [Plot](../screens/plot/plot.md#mobile-expression)
+  (Select primitive on the Threads / Happenings segment toggle and
+  as the detail-pane tab navigation on phone; SwitchRow for the
+  common-knowledge skip toggle)
 - [Wizard](../screens/wizard/wizard.md#step-1--frame)
   (Select primitive in segment mode for mode / narration; calendar
   picker integration cite; Input + Textarea for genre / tone /
@@ -33,9 +37,6 @@ Used by:
   (Select primitive on the list-pane category dropdown and as the
   detail-pane tab navigation when the desktop tab strip overflows
   on narrow tiers; Input + Textarea for entity edits)
-- [Plot](../screens/plot/plot.md#mobile-expression)
-  (Select primitive on the Threads / Happenings segment toggle and
-  as the detail-pane tab navigation on phone)
 
 ---
 
@@ -316,12 +317,61 @@ User-driven vertical resize (drag the corner) is web-only via
 
 ---
 
+## SwitchRow pattern
+
+The canonical cross-platform shape for boolean settings. Label +
+optional hint on the left, Switch indicator on the right; the
+**whole row is the tap target** on every tier. v1 wireframe
+consumers (Story Settings, Plot) all use this shape.
+
+Modern desktop OSes have converged on row-tappable toggles:
+macOS Ventura+ System Settings, Windows 11 Settings, GNOME
+Settings, and most modern web design systems (Notion, Linear,
+1Password) all click anywhere on the row. Standalone-switch-with-
+adjacent-label is the old-school NSSwitch shape, no longer
+canonical. SwitchRow ships once and renders the same on every
+platform.
+
+### SwitchRow — visual contract
+
+- **Layout.** Pressable row with `flex-row items-center gap-3`,
+  density-driven row padding (`px-row-x-md py-row-y-md`), and
+  `rounded-md`. Label + hint on the left in a flex-1 column;
+  Switch indicator on the right.
+- **Label.** Standard `<Text>` with `font-medium`.
+- **Hint.** Optional second `<Text variant="muted" size="sm">`
+  below the label.
+- **Press feedback.** `active:bg-bg-raised` on every tier;
+  `hover:bg-bg-raised` adds a desktop hover affordance.
+- **Disabled.** `opacity-50` on the entire row; row presses are
+  blocked.
+
+### SwitchRow — implementation contract
+
+- **Tap-target plumbing.** Outer Pressable owns the touch +
+  a11y (`role="switch"`, `accessibilityState={{checked, disabled}}`).
+  Inner Switch is wrapped in a View with `pointerEvents="none"` so
+  taps fall through to the row Pressable rather than firing the
+  inner Switch's own onCheckedChange. Required `onCheckedChange`
+  on the inner Switch takes a no-op handler — the inner Switch
+  is purely a visual indicator in this pattern.
+- **API.** `{ label, hint?, checked, onCheckedChange, disabled?,
+className? }`. No size prop — Switch dimensions follow density
+  through the inner Switch primitive.
+
+---
+
 ## Switch primitive
 
-Boolean toggle for binary settings. Single visual axis: on / off.
-Track + thumb dimensions bind to the active density — phone (default
-regular density) gets touch-friendly sizes; desktop (default compact)
-stays mouse-tight.
+Boolean toggle building block. Used directly in cases that don't
+fit the SwitchRow pattern (toolbar quick-toggles, inline status
+indicators) — but **none of those exist in v1 wireframes**, so
+Switch standalone is essentially infrastructure for SwitchRow
+plus future use.
+
+Track + thumb dimensions bind to the active density — phone
+(default regular density) gets touch-friendly sizes; desktop
+(default compact) stays mouse-tight.
 
 ### Switch — visual contract
 
@@ -355,10 +405,16 @@ focus-visible:ring-focus-ring/50`.
 
 ## Checkbox primitive
 
-Boolean affordance distinct from Switch — used for multi-select
-lists and "I agree" gating. v1 surfaces using it: the multi-select
-group pattern (entity bulk-edit, tag-pickers). Box dimensions also
-bind to active density; same rationale as Switch.
+Boolean affordance distinct from Switch — for multi-select lists
+and "I agree" gating shapes that don't fit a SwitchRow.
+
+> **Speculative — no v1 wireframe consumer.** Checkbox shipped
+> ahead of demand to round out the choice-primitive set. If a real
+> consumer doesn't surface during phase 3 implementation, candidate
+> for park-or-drop. Tracked in
+> [`followups.md → Checkbox without v1 consumer`](../../followups.md#checkbox-without-v1-consumer).
+
+Box dimensions bind to active density; same rationale as Switch.
 
 ### Checkbox — visual contract
 
