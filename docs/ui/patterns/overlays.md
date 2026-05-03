@@ -57,11 +57,11 @@ pass, not with the primitives.
   (open / close, focus trap, scrim, dismiss-on-outside, scroll
   lock); Sheet layers slide-in presentation, drag-to-dismiss
   gesture handling, and the drag-handle visual on top.
-- **Popover** ← `@rn-primitives/popover` (needs to be added at
-  implementation time). Popover provides anchor positioning,
-  collision detection, lifecycle, and outside-click dismiss; the
-  primitive layers token reshape and motion-driven enter / exit
-  on top.
+- **Popover** ← [`@rn-primitives/popover`](https://www.npmjs.com/package/@rn-primitives/popover)
+  (added during phase 2 Group A implementation). Popover provides
+  anchor positioning, collision detection, lifecycle, and
+  outside-click dismiss; the primitive layers token reshape and
+  motion-driven enter / exit on top.
 
 Per [`components.md` sourcing rules](../components.md#sourcing--react-native-reusables-as-baseline),
 the implementation pulls the reusables CLI scaffolds for both
