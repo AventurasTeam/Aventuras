@@ -413,13 +413,14 @@ function Item({
         // bg-bg-sunken (not bg-bg-raised) for hover/focus highlight:
         // overlay → raised has zero contrast on the default light
         // theme (both #ffffff), making the highlight invisible.
-        // Hairline separator (`border-b`) carries the at-rest
-        // "tappable row" signal where hover isn't available —
-        // iOS Settings / Mail / Notes pattern. `last:border-b-0`
-        // hides it on the final row. The separator stays in all
-        // densities; combined with smaller padding on compact, it
-        // still provides clear row structure on desktop.
-        'group relative flex w-full flex-row items-center gap-2 rounded-sm border-b border-border py-row-y-md pl-row-x-md pr-10 last:border-b-0 active:bg-bg-sunken',
+        // Hairline separator (`border-b border-b-border`) carries
+        // the at-rest "tappable row" signal — iOS Settings / Mail /
+        // Notes pattern. `border-b-border` (side-keyed color, not
+        // `border-border`) is required on native: NativeWind sets
+        // `border-bottom-color` only when the color modifier is
+        // explicitly side-scoped. `last:border-b-0` hides the rule
+        // on the final row.
+        'group relative flex w-full flex-row items-center gap-2 rounded-sm border-b border-b-border py-row-y-md pl-row-x-md pr-10 last:border-b-0 active:bg-bg-sunken',
         Platform.select({
           web: 'cursor-default outline-none hover:bg-bg-sunken focus:bg-bg-sunken data-[disabled]:pointer-events-none [&_svg]:pointer-events-none',
         }),
@@ -547,10 +548,17 @@ function autoSheetSize(options: SelectOption[]): ContentSheetSize {
 }
 
 function SegmentBranch({ options, value, onValueChange, disabled, className }: SelectProps) {
+  // Outer wrapper carries the density-aware height (h-control-md);
+  // each Pressable cell stretches via flex-1 horizontally and fills
+  // vertically. Cell padding stays centered (no py-* needed since the
+  // wrapper height drives vertical sizing).
   return (
     <View
       accessibilityRole="radiogroup"
-      className={cn('flex-row rounded-md border border-border-strong bg-bg-base', className)}
+      className={cn(
+        'h-control-md flex-row overflow-hidden rounded-md border border-border-strong bg-bg-base',
+        className,
+      )}
     >
       {options.map((opt, i) => {
         const selected = opt.value === value
@@ -563,8 +571,8 @@ function SegmentBranch({ options, value, onValueChange, disabled, className }: S
             disabled={optDisabled ?? undefined}
             onPress={() => onValueChange(opt.value)}
             className={cn(
-              'flex-1 px-3 py-2',
-              i > 0 && 'border-l border-border-strong',
+              'flex-1 items-center justify-center px-3',
+              i > 0 && 'border-l border-l-border-strong',
               selected ? 'bg-accent' : 'active:bg-bg-raised',
               Platform.select({ web: !selected && 'hover:bg-bg-raised' }),
               optDisabled && 'opacity-50',
@@ -581,6 +589,10 @@ function SegmentBranch({ options, value, onValueChange, disabled, className }: S
 }
 
 function RadioBranch({ options, value, onValueChange, disabled, className }: SelectProps) {
+  // Radio rows carry descriptions, so per-row height isn't a flat
+  // tap-target SLA. Use density-aware row padding (--row-py-md /
+  // --row-px-md) so the rows breathe more on regular/comfortable
+  // and tighten on compact.
   return (
     <View accessibilityRole="radiogroup" className={cn('flex-col gap-2', className)}>
       {options.map((opt) => {
@@ -594,7 +606,7 @@ function RadioBranch({ options, value, onValueChange, disabled, className }: Sel
             disabled={optDisabled ?? undefined}
             onPress={() => onValueChange(opt.value)}
             className={cn(
-              'flex-row items-start gap-3 rounded-md border bg-bg-base p-3',
+              'flex-row items-start gap-3 rounded-md border bg-bg-base px-row-x-md py-row-y-md',
               selected ? 'border-accent' : 'border-border active:bg-bg-raised',
               Platform.select({ web: !selected && 'hover:bg-bg-raised' }),
               optDisabled && 'opacity-50',
