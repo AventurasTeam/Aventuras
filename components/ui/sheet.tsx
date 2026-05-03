@@ -152,6 +152,12 @@ function SheetContent({
           'worklet'
           const delta = isBottom ? event.translationY : event.translationX
           if (delta > DRAG_DISMISS_THRESHOLD_PX) {
+            // Reset offset before triggering close so the exit layout
+            // animation starts from the rest position. Without this, the
+            // residual transform leaks into the next mount's layout
+            // animation and the reopened panel renders shorter than its
+            // configured size.
+            dragOffset.value = 0
             runOnJS(closeFromGesture)()
             return
           }
@@ -159,6 +165,12 @@ function SheetContent({
         }),
     [isBottom, dragOffset, closeFromGesture],
   )
+
+  // Defensive belt-and-suspenders: also reset on every mount in case any
+  // shared-value state survives the unmount cycle.
+  React.useEffect(() => {
+    dragOffset.value = 0
+  }, [dragOffset])
 
   const PanelInner = (
     <NativeOnlyAnimatedView
