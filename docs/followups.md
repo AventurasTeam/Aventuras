@@ -268,7 +268,19 @@ The popover-search threshold sub-question (parked-until-signal)
 moved to
 [`parked.md → Calendar picker search-bar threshold`](./parked.md#calendar-picker-search-bar-threshold).
 
-Lands with the Select primitive's first implementation pass.
+**Partial resolution (2026-05-03, Phase 2 Group B Select pass).**
+Select's responsive-switch question (in-Select breakpoint dispatch
+vs. shared `<ResponsiveOverlay>` helper) resolved as **in-Select
+via `useTier()` hook**. ResponsiveOverlay isn't viable for Select:
+its tablet / desktop popover branch uses `@rn-primitives/select`'s
+own Content, not our Popover primitive — a generic helper can't
+host both branches. ResponsiveOverlay defers to Phase 3 consumers
+whose popover branch IS our Popover (Actions menu, branch /
+chapter / time chip popovers). The Picker-fork-vs-Select-extension
+question for calendar picker itself stays open until calendar
+picker's design pass — calendar picker's rich rows + tail action
+still go beyond Select's contract. See
+[`forms.md → Select implementation contract`](./ui/patterns/forms.md#select--implementation-contract).
 
 ### Custom-font theme support
 

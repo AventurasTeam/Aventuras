@@ -64,6 +64,17 @@ Documented precedents:
   axes. Bakes in default size + weight per level matching the
   MUI-style theme-driven typography pattern. Justified in the
   file's header comment.
+- **Select dispatcher** (`components/ui/select.tsx`, lands with
+  Phase 2 Group B impl) ships as a high-level public layer
+  (`<Select options={...} />`) on top of the reshaped
+  `react-native-reusables` baseline (which itself wraps
+  `@rn-primitives/select`). The dispatcher resolves the
+  [forms.md auto-derivation cascade](./patterns/forms.md#auto-derivation-cascade)
+  (segment / radio / dropdown) at runtime; the reshaped baseline
+  pieces are also exported as a `SelectPrimitive.*` namespace for
+  power consumers (calendar picker, future rich-row pickers).
+  Justified in the file's header comment per the
+  [Select implementation contract](./patterns/forms.md#select--implementation-contract).
 
 ## Subtraction — when removing baseline features
 
@@ -142,9 +153,11 @@ Indicative shapes by primitive:
   ThemeMatrix.
 - Sheet / Popover → Default · States · ThemeMatrix.
 - Input / Textarea → Default · Sizes · States · ThemeMatrix.
-- Select → Default · Sizes · States · ThemeMatrix (Variants if the
-  segment / dropdown / radio render-mode rule from
-  [`patterns/forms.md`](./patterns/forms.md) ships as variants).
+- Select → Default · Variants (segment / radio / dropdown render
+  modes per [`patterns/forms.md`](./patterns/forms.md#auto-derivation-cascade))
+  · Sizes · States · ThemeMatrix (partial — segment + radio
+  covered; dropdown skipped per the portal-skip rule because the
+  open content escapes per-row dataSet scoping).
 - Switch / Checkbox / Radio → Default · States · ThemeMatrix.
 - Icon → Default · Sizes · ThemeMatrix.
 - Skeleton → Default · Sizes.

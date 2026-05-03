@@ -19,13 +19,21 @@ slot reshape policy, and Storybook story shapes.
 
 Used by:
 
-- (none yet — Group B's Select primitive is the first consumer)
+- [Select primitive](./forms.md#select-primitive) (Group B): Sheet
+  hosts the dropdown render mode on phone via the
+  `@rn-primitives/select` Root context bridge (see
+  [Select implementation contract](./forms.md#select--implementation-contract)).
+  Note: Select's tablet / desktop dropdown branch uses
+  `@rn-primitives/select`'s own Portal / Overlay / Content rather
+  than our Popover primitive — the two are sibling rn-primitives
+  packages, so Popover here is _not_ Select's tablet / desktop
+  surface.
 
 The Used-by list grows as primitives and patterns adopt the
-overlays. Initial consumers will be Select (Group B), the Actions
-menu, the Branch chip popover, the Time chip popover, the Chapter
-chip popover, the Calendar picker, the Peek drawer, the Raw JSON
-viewer, and the generation-in-flight pill expansion.
+overlays. Future consumers will include the Actions menu, the
+Branch chip popover, the Time chip popover, the Chapter chip
+popover, the Calendar picker, the Peek drawer, the Raw JSON viewer,
+and the generation-in-flight pill expansion.
 
 ---
 

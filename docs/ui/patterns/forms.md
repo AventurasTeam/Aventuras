@@ -37,7 +37,7 @@ Used by:
 One primitive, three render modes. Component used everywhere a
 "pick one of N values to commit" interaction surfaces in the app.
 
-**Render modes:**
+### Render modes
 
 - **`segment`** — horizontal bordered button group. Best for ≤3
   options, label-only.
@@ -48,7 +48,7 @@ One primitive, three render modes. Component used everywhere a
   Triggered by content shape, not cardinality — when each option
   carries a `description` the segment/dropdown can't surface.
 
-**Auto-derivation cascade:**
+### Auto-derivation cascade
 
 ```
 1. Explicit `mode` prop → use as-is.
@@ -67,27 +67,44 @@ alongside the tab-strip overflow rule.
 
 **Phone-tier dropdown surface.** When the cascade picks `dropdown`
 on phone, the trigger renders inline (chip / pill / select-shaped
-button) and **opens via Sheet** per
-[`mobile/layout.md → Surface bindings`](../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces):
+button) and **opens via Sheet** — bottom sheets are the native
+mobile pattern for value-pick from a list; web-style anchored
+popovers are absent from native mobile UIs. Native-idiom rationale
+in [`docs/explorations/2026-05-03-select-primitive.md → Why Sheet on phone, not Popover`](../../explorations/2026-05-03-select-primitive.md#why-sheet-on-phone-not-popover).
 
-- **Sheet (short)** for flat lists of short labels (tab pickers,
-  category dropdowns, actions menus).
-- **Sheet (medium)** for grouped or rich-row lists (model picker,
-  calendar picker — content carries headers, descriptions, or
-  search-within).
+Sheet size auto-derives from option shape:
+
+- **Sheet (short)** for flat lists of short labels (≤ ~6 options,
+  no `group` field, no `description`). Default for the dropdown
+  branch on phone.
+- **Sheet (medium)** for grouped lists or option counts where short
+  feels cramped (~7+ options, or any options carrying a `group`
+  field). Auto-applied; `sheetSize` prop overrides. The
+  [calendar picker pattern](./calendar-picker.md) is the canonical
+  Sheet (medium) consumer — its richer rows + tail action go
+  beyond Select's contract per the [open-shape followup](../../followups.md#calendar-picker-primitive--open-shape-decisions).
 
 Tablet keeps the desktop anchored Popover — no edge-clipping risk
 at tablet widths. Segment and radio render modes are unchanged at
 every tier (segment is inline; radio is vertical list).
 
+If a list outgrows Sheet (medium) — typeahead-shaped or genuinely
+long (200+ rows like provider model lists) — the right primitive
+is **Autocomplete**, not a richer Select. Same per-tier
+idiomatic mapping applies to Autocomplete: anchored popover on
+desktop, Sheet (tall) with input pinned at top + suggestions list
+below on phone (see
+[Autocomplete-with-create primitive](#autocomplete-with-create-primitive)).
+
 The underlying Sheet and Popover primitive contracts (API surface,
 rn-primitives mapping, slot reshape) live in
-[`overlays.md`](./overlays.md). Select's responsive switch between
-Sheet and Popover is a consumer-side concern; the [open shape
-decision](../../followups.md#calendar-picker-primitive--open-shape-decisions)
-on whether the switch is in-Select or via a shared
-`<ResponsiveOverlay>` helper lands with Select's implementation
-pass.
+[`overlays.md`](./overlays.md). The phone-tier Sheet bridge is
+implemented in-Select via `useTier()`; the
+[`<ResponsiveOverlay>` helper question](../../followups.md#calendar-picker-primitive--open-shape-decisions)
+stays parked for Phase 3 consumers (calendar picker, actions menu)
+whose popover branch uses our Popover primitive — Select's popover
+branch uses `@rn-primitives/select`'s own machinery, so a generic
+helper can't host it. See [Implementation contract](#select--implementation-contract).
 
 ### Chrome carve-out
 
@@ -140,6 +157,34 @@ implementation begins. The page cites this principle as canonical
 and embeds component stories — no prose duplication. See
 [`followups.md → Storybook design-rules pattern setup`](../../followups.md#storybook-design-rules-pattern-setup).
 
+### Select — implementation contract
+
+Phase 2 Group B locked the implementation shape per
+[`docs/explorations/2026-05-03-select-primitive.md`](../../explorations/2026-05-03-select-primitive.md).
+Highlights:
+
+- **Two-layer architecture.** Public exports are `<Select>`
+  (options-driven dispatcher resolving the cascade above) and
+  `SelectPrimitive.*` namespace (reshaped reusables baseline, used
+  by power consumers — calendar picker, future rich-row pickers).
+- **Baseline source.** `react-native-reusables` Select scaffold
+  reshaped over [`@rn-primitives/select`](https://www.npmjs.com/package/@rn-primitives/select)
+  per [`components.md` reshape rules](../components.md#sourcing--react-native-reusables-as-baseline).
+- **Phone-tier Sheet bridge.** `SelectPrimitive.Content` dispatches
+  on `useTier()`: phone renders Sheet wrapping items via the
+  rn-primitives select Root context (`{ open, onOpenChange }`);
+  tablet / desktop renders the rn-primitives select Portal /
+  Overlay / Content (anchored popover, the reusables baseline).
+  Items work in either branch because they only depend on Root
+  context, not on Content.
+- **Native scroll wrap.** Reusables baseline ships scroll-free on
+  native (Viewport is a Fragment); reshape wraps it in
+  `<ScrollView>` with viewport-fraction max-height. Web inherits
+  baseline `max-h-52` + ScrollUpButton / ScrollDownButton.
+- **Virtualization stays deferred** to Autocomplete's
+  implementation pass per the
+  [virtual-list followup](../../followups.md#virtual-list-library-choice).
+
 ---
 
 ## Autocomplete-with-create primitive
@@ -158,8 +203,17 @@ ad-hoc entity is acceptable, entry-ref pickers.
 
 - **Text input** — always present, focused on open in modal
   contexts.
-- **Dropdown** — appears below the input on focus / typing. Two
-  zones:
+- **Dropdown surface — per-tier idiomatic.** On desktop / tablet,
+  the suggestions render in an anchored popover below the input.
+  On phone, the input + suggestions render inside a bottom Sheet
+  (tall, ~95vh) with the input pinned at the top, the keyboard
+  below, and the filtered list scrolling between. Mirrors the iOS
+  Mail recipient-picker / Spotlight idiom; matches Select's
+  Sheet-on-phone shape so the two primitives stay visually
+  consistent within each tier. Phase 2 ships Select with this
+  contract; Autocomplete's own implementation pass lands later.
+- **Dropdown content** — appears below the input on focus / typing.
+  Two zones:
   - **Suggestions** (top) — entries from the source list filtered
     by the typed value (case-insensitive substring match by
     default; short lists don't need fuzzy matching). Up to ~7
