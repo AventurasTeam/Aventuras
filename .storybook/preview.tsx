@@ -1,5 +1,6 @@
 import type { Preview } from '@storybook/react-native-web-vite'
 import React from 'react'
+import { SafeAreaProvider } from 'react-native-safe-area-context'
 
 import { DensityProvider } from '@/lib/density/density-provider'
 import { useDensity } from '@/lib/density/use-density'
@@ -29,6 +30,15 @@ function DensityApplier({
 }
 
 const themeOptions = registryThemes.map((t) => ({ value: t.id, title: t.name }))
+
+// Storybook web has no real OS safe-area to read, and
+// `useSafeAreaInsets` throws without a Provider. Provide flat zero
+// metrics — the dev page on native still uses the real Provider via
+// app/_layout.tsx through expo-router defaults.
+const STORYBOOK_SAFE_AREA_METRICS = {
+  frame: { x: 0, y: 0, width: 0, height: 0 },
+  insets: { top: 0, left: 0, right: 0, bottom: 0 },
+}
 
 const densityOptions: { value: DensitySetting; title: string }[] = [
   { value: 'default', title: 'Default (per tier)' },
@@ -69,15 +79,17 @@ const preview: Preview = {
       const themeId = (context.globals.theme as string) ?? registryThemes[0].id
       const densitySetting = (context.globals.density as DensitySetting) ?? 'default'
       return (
-        <ThemeProvider>
-          <DensityProvider>
-            <ThemeApplier themeId={themeId}>
-              <DensityApplier setting={densitySetting}>
-                <Story />
-              </DensityApplier>
-            </ThemeApplier>
-          </DensityProvider>
-        </ThemeProvider>
+        <SafeAreaProvider initialMetrics={STORYBOOK_SAFE_AREA_METRICS}>
+          <ThemeProvider>
+            <DensityProvider>
+              <ThemeApplier themeId={themeId}>
+                <DensityApplier setting={densitySetting}>
+                  <Story />
+                </DensityApplier>
+              </ThemeApplier>
+            </DensityProvider>
+          </ThemeProvider>
+        </SafeAreaProvider>
       )
     },
   ],
