@@ -85,12 +85,24 @@ export const States: Story = {
 }
 
 export const AutoGrow: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Auto-grow does not render correctly under Storybook (react-native-web-vite bundler). Verify the behavior in the Electron dev page (`pnpm desktop` → /dev/input) or on a real device. Capability ships and works on Electron + native; the Storybook environment is the outlier.',
+      },
+    },
+  },
   render: () => {
     const [value, setValue] = React.useState(
       'Short start.\nType more lines and watch the textarea grow up to maxRows={6}.\n',
     )
     return (
       <View style={{ width: 360 }} className="gap-2">
+        <Text variant="muted" size="sm">
+          ⚠ Auto-grow is broken under Storybook&apos;s bundler. Verify on Electron (dev page) or
+          native. Web: `field-sizing-content`. Native: `onContentSizeChange` clamped to envelope.
+        </Text>
         <Textarea
           value={value}
           onChangeText={setValue}
@@ -98,9 +110,6 @@ export const AutoGrow: Story = {
           maxRows={6}
           placeholder="Grows from rows=2 up to maxRows=6"
         />
-        <Text variant="muted" size="sm">
-          Web: field-sizing-content. Native: onContentSizeChange clamped to envelope.
-        </Text>
       </View>
     )
   },
