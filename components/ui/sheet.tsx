@@ -40,6 +40,7 @@ import * as React from 'react'
 import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import {
+  cancelAnimation,
   FadeIn,
   FadeOut,
   SlideInDown,
@@ -154,14 +155,21 @@ function SheetContent({
           const delta = isBottom ? event.translationY : event.translationX
           if (delta > DRAG_DISMISS_THRESHOLD_PX) {
             // Continue the gesture motion smoothly off-screen, then close
-            // once visually gone. The exit layout animation still fires on
-            // close but plays on an already-off-screen panel, so it's
-            // invisible. The next mount's useEffect-on-mount + fresh
-            // useSharedValue handle the reset for the reopened panel.
+            // once the panel is visually gone. cancelAnimation + reset to 0
+            // before runOnJS(close) is critical: without it the off-screen
+            // shared-value state survives the unmount cycle and the
+            // reopened panel renders off-screen (its translateY initialises
+            // from the leaked value before useSharedValue's intent kicks
+            // in). The brief snap-to-rest before SlideOutDown plays is
+            // hidden by the exit layout animation.
             const target = (isBottom ? screenHeight : screenHeight) + 200
             dragOffset.value = withTiming(target, { duration: 180 }, (finished?: boolean) => {
               'worklet'
-              if (finished) runOnJS(closeFromGesture)()
+              if (finished) {
+                cancelAnimation(dragOffset)
+                dragOffset.value = 0
+                runOnJS(closeFromGesture)()
+              }
             })
             return
           }
