@@ -125,8 +125,12 @@ export function Textarea({
           web: cn(
             'selection:bg-accent selection:text-accent-fg placeholder:text-fg-muted',
             'outline-none transition-[color,box-shadow]',
-            // Modern web auto-grow + user vertical resize.
-            'field-sizing-content resize-y',
+            // Modern web auto-grow + user vertical resize. The
+            // arbitrary-property syntax is required because
+            // `field-sizing-content` ships in Tailwind v4 only;
+            // this project is on v3.4. Browser support: Chromium
+            // 123+, Safari 17.5+, Firefox 127+.
+            'resize-y [field-sizing:content]',
           ),
           native: 'placeholder:text-fg-muted',
         }),
