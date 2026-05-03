@@ -86,12 +86,13 @@ Three ways to express the Sheet / Popover relationship:
 - **A. Two siblings.** `<Sheet>` and `<Popover>` as independent
   components. Each has its own API matching its presentation
   contract. rn-primitives provides shared lifecycle under the hood.
-- **B. One primitive with a `mode` prop.** `<Overlay mode="sheet" |
-"popover">`. Cleaner consumer surface; mixes sheet-only and
-  popover-only props that no-op in the wrong mode.
-- **C. Hybrid.** Internal Aventuras `Overlay` shared lifecycle module
-  - thin `Sheet` / `Popover` wrappers + a `ResponsiveOverlay`
-    helper. Three exports.
+- **B. One primitive with a `mode` prop.** A single `<Overlay
+mode="sheet">` or `<Overlay mode="popover">` component. Cleaner
+  consumer surface; mixes sheet-only and popover-only props that
+  no-op in the wrong mode.
+- **C. Hybrid.** Internal Aventuras `Overlay` shared lifecycle
+  module, thin `Sheet` / `Popover` wrappers, and a
+  `ResponsiveOverlay` helper. Three exports.
 
 **Decision: A — two siblings.** Two reasons:
 
@@ -125,9 +126,9 @@ contract:
   `<X.Trigger>` and `<X.Content>` subcomponent set, mirroring rn-
   primitives convention. Controlled is the canonical entry; trigger
   is optional so consumers like Select can drive open programmatically.
-- **Animation.** Sheet slides up from the bottom edge; Popover fades
-  - scales near the anchor. Both consume motion tokens (`--duration-*`,
-    `--ease-*`).
+- **Animation.** Sheet slides up from the bottom edge; Popover
+  fades and scales near the anchor. Both consume motion tokens
+  (`--duration-*`, `--ease-*`).
 - **Drag-to-dismiss (Sheet only).** Native-only environment. The app
   ships as Expo native (mobile) and Electron (desktop) — no mobile-
   browser target ever — so `react-native-gesture-handler` is the
