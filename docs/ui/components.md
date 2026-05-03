@@ -106,6 +106,24 @@ Documented precedents:
   `components/ui/textarea-envelope.ts` so unit tests can import
   without dragging in NativeWind / RN. Justified per the
   [Textarea implementation contract](./patterns/forms.md#textarea-primitive).
+- **Checkbox ARIA-driven error state**
+  ([`components/ui/checkbox.tsx`](../../components/ui/checkbox.tsx),
+  Phase 2 Group D). Error styling reads `aria-invalid` from props
+  and applies `border-danger` from JS rather than the CSS
+  `aria-invalid:` Tailwind variant. Same reliability strategy as
+  Input + Textarea — RN-Web doesn't always forward arbitrary
+  aria-\* attributes from rn-primitives wrappers to the rendered
+  element. Justified per the
+  [Checkbox implementation contract](./patterns/forms.md#checkbox-primitive).
+- **Select.radio + Select.segment compose @rn-primitives/radio-group**
+  ([`components/ui/select.tsx`](../../components/ui/select.tsx),
+  Phase 2 Group D retrofit). Radio + segment render branches that
+  were previously hand-rolled with bare Pressable rows now use
+  `@rn-primitives/radio-group` (Root + Item) for arrow-key
+  navigation, roving tabindex, and ARIA role wiring. Standalone
+  Radio primitive intentionally not exported — Select.radio covers
+  every wireframe consumer; if a non-description radio case ever
+  surfaces, extend Select rather than duplicate the primitive.
 
 ## Subtraction — when removing baseline features
 

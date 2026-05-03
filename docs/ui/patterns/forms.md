@@ -11,11 +11,12 @@ Used by:
 - [App Settings](../screens/app-settings/app-settings.md)
   (Select primitive across providers / profiles / story defaults;
   Input primitive for the API-key field with trailing show/hide
-  eye)
+  eye; Switch primitive for appearance + behavior toggles)
 - [Story Settings](../screens/story-settings/story-settings.md#generation-tab--definitional-fields--authoring-aids)
   (Select primitive across mode / narration / generation knobs;
   Autocomplete-with-create on the model field; Input + Textarea
-  for prose definition fields)
+  for prose definition fields; Switch primitive for per-story
+  toggles)
 - [Wizard](../screens/wizard/wizard.md#step-1--frame)
   (Select primitive in segment mode for mode / narration; calendar
   picker integration cite; Input + Textarea for genre / tone /
@@ -312,6 +313,67 @@ User-driven vertical resize (drag the corner) is web-only via
   import it without dragging in NativeWind / RN / density-context.
   Vitest's unit project has no `@/` alias; keeping the math
   dependency-free is the cheapest path to test isolation.
+
+---
+
+## Switch primitive
+
+Boolean toggle for binary settings. Single visual axis: on / off.
+No size prop — Switch dimensions are intentionally fixed (not
+density-token-driven). Switches are symbolic affordances whose
+perceived size stays constant across densities; the label adjacent
+to a Switch (consumer-composed) does follow density.
+
+### Switch — visual contract
+
+- **Track.** `bg-bg-sunken` when off; `bg-accent` when on. Always
+  rounded-full; `border border-transparent` reserves layout space
+  for the focus ring without shifting the layout.
+- **Thumb.** Always `bg-bg-base` (provides contrast on both track
+  states across light + dark themes). Translates from
+  `translate-x-0` (off) to `translate-x-3.5` (on).
+- **Disabled.** `opacity-50` on the entire control.
+- **Web focus ring.** Standard `focus-visible:border-accent
+focus-visible:ring-focus-ring/50`.
+
+### Switch — implementation contract
+
+- **Baseline source.** `react-native-reusables` Switch scaffold
+  reshaped over `@rn-primitives/switch` (Root + Thumb).
+- **Required props.** `checked`, `onCheckedChange`. Storybook
+  static states pass a no-op handler.
+
+---
+
+## Checkbox primitive
+
+Boolean affordance distinct from Switch — used for multi-select
+lists and "I agree" gating. v1 surfaces using it: the multi-select
+group pattern (entity bulk-edit, tag-pickers).
+
+### Checkbox — visual contract
+
+- **Box.** `size-4` square with `rounded-[4px]`, `border
+border-border bg-bg-base`. Border swaps to `border-accent`
+  when checked, `border-danger` when invalid.
+- **Indicator.** Filled `bg-accent` rectangle inside, with a
+  `Check` icon in `text-accent-fg`. Indicator is rendered only
+  when checked.
+- **Hit slop.** `hitSlop={24}` on native — boosts the tap-target
+  past the 16px visual without growing the box.
+- **Disabled.** `opacity-50`.
+- **Web focus ring.** Standard `focus-visible:border-accent
+focus-visible:ring-focus-ring/50`.
+
+### Checkbox — implementation contract
+
+- **Baseline source.** `react-native-reusables` Checkbox scaffold
+  reshaped over `@rn-primitives/checkbox` (Root + Indicator).
+- **Error styling driven from JS** via `aria-invalid` prop reading
+  rather than the CSS `aria-invalid:` Tailwind variant. Same
+  reliability strategy as Input + Textarea — RN-Web doesn't
+  always forward arbitrary aria-\* attributes from rn-primitives
+  wrappers, so the CSS attribute selector silently misses.
 
 ---
 

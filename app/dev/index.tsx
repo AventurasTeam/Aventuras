@@ -12,6 +12,7 @@ const ROUTES = [
   { href: '/dev/sheet', label: 'Sheet' },
   { href: '/dev/select', label: 'Select' },
   { href: '/dev/input', label: 'Input + Textarea' },
+  { href: '/dev/choice', label: 'Switch + Checkbox' },
 ] as const
 
 export default function DevIndex() {
