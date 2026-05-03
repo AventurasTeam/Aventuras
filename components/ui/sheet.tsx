@@ -126,7 +126,7 @@ function SheetContent({
   const insets = useSafeAreaInsets()
   const { height: screenHeight } = useWindowDimensions()
   const nativePanelStyle = getNativePanelStyle(anchor, size, insets.top, screenHeight)
-  const { onOpenChange } = DialogPrimitive.useRootContext()
+  const { open, onOpenChange } = DialogPrimitive.useRootContext()
 
   // Drag-to-dismiss: track translation in the dismiss direction, snap back
   // if the drag is short, close if it crosses the threshold. Only active on
@@ -177,17 +177,20 @@ function SheetContent({
     [isBottom, dragOffset, closeFromGesture, screenHeight],
   )
 
-  // Reset dragOffset at unmount-cleanup time so the off-screen value from
-  // a drag-dismiss doesn't leak into the next mount. Doing the reset on
-  // unmount (rather than before close) avoids the visible snap-to-rest
-  // flicker that would otherwise show up between the timing animation
-  // ending and the layout exit animation taking over.
+  // SheetContent itself never unmounts between opens — it's a sibling of
+  // SheetTrigger, both children of <Sheet> (DialogPrimitive.Root). Only
+  // the Portal contents inside SheetContent toggle on the open state.
+  // That means useSharedValue runs ONCE for SheetContent's lifetime, and
+  // dragOffset persists across open/close cycles. Drag-dismissing leaves
+  // it at the off-screen value, so the next open reads the leaked value
+  // and the panel renders off-screen on entry.
+  //
+  // Reset on every false → true transition so each open starts at rest.
   React.useEffect(() => {
-    dragOffset.value = 0
-    return () => {
+    if (open) {
       dragOffset.value = 0
     }
-  }, [dragOffset])
+  }, [open, dragOffset])
 
   const PanelInner = (
     <NativeOnlyAnimatedView
