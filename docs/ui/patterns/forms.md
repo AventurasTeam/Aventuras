@@ -319,19 +319,24 @@ User-driven vertical resize (drag the corner) is web-only via
 ## Switch primitive
 
 Boolean toggle for binary settings. Single visual axis: on / off.
-No size prop — Switch dimensions are intentionally fixed (not
-density-token-driven). Switches are symbolic affordances whose
-perceived size stays constant across densities; the label adjacent
-to a Switch (consumer-composed) does follow density.
+Track + thumb dimensions bind to the active density — phone (default
+regular density) gets touch-friendly sizes; desktop (default compact)
+stays mouse-tight.
 
 ### Switch — visual contract
 
-- **Track.** `bg-bg-sunken` when off; `bg-accent` when on. Always
-  rounded-full; `border border-transparent` reserves layout space
-  for the focus ring without shifting the layout.
+| Density     | Track                        | Thumb         | On-state translate     |
+| ----------- | ---------------------------- | ------------- | ---------------------- |
+| compact     | `h-[1.15rem] w-8` (~18 × 32) | `size-4` (16) | `translate-x-3.5` (14) |
+| regular     | h-6 w-11 (24 × 44)           | size-5 (20)   | translate-x-5 (20)     |
+| comfortable | h-7 w-12 (28 × 48)           | size-6 (24)   | translate-x-5 (20)     |
+
+- **Track.** `bg-fg-muted` when off; `bg-accent` when on.
+  Always rounded-full; `border border-transparent` reserves
+  layout space for the focus ring without shifting the layout.
 - **Thumb.** Always `bg-bg-base` (provides contrast on both track
   states across light + dark themes). Translates from
-  `translate-x-0` (off) to `translate-x-3.5` (on).
+  `translate-x-0` (off) to the per-density on-state value above.
 - **Disabled.** `opacity-50` on the entire control.
 - **Web focus ring.** Standard `focus-visible:border-accent
 focus-visible:ring-focus-ring/50`.
@@ -342,6 +347,9 @@ focus-visible:ring-focus-ring/50`.
   reshaped over `@rn-primitives/switch` (Root + Thumb).
 - **Required props.** `checked`, `onCheckedChange`. Storybook
   static states pass a no-op handler.
+- **Density binding** happens in-component via `useDensity()`;
+  no external prop. Consumers see one `<Switch>` API; the visual
+  scales with the user's chosen density.
 
 ---
 
@@ -349,18 +357,25 @@ focus-visible:ring-focus-ring/50`.
 
 Boolean affordance distinct from Switch — used for multi-select
 lists and "I agree" gating. v1 surfaces using it: the multi-select
-group pattern (entity bulk-edit, tag-pickers).
+group pattern (entity bulk-edit, tag-pickers). Box dimensions also
+bind to active density; same rationale as Switch.
 
 ### Checkbox — visual contract
 
-- **Box.** `size-4` square with `rounded-[4px]`, `border
-border-border bg-bg-base`. Border swaps to `border-accent`
-  when checked, `border-danger` when invalid.
+| Density     | Box         | Check icon |
+| ----------- | ----------- | ---------- |
+| compact     | size-4 (16) | 12         |
+| regular     | size-5 (20) | 14         |
+| comfortable | size-6 (24) | 16         |
+
+- **Box.** Density-driven square with `rounded-[4px]`,
+  `border border-border bg-bg-base`. Border swaps to
+  `border-accent` when checked, `border-danger` when invalid.
 - **Indicator.** Filled `bg-accent` rectangle inside, with a
   `Check` icon in `text-accent-fg`. Indicator is rendered only
   when checked.
-- **Hit slop.** `hitSlop={24}` on native — boosts the tap-target
-  past the 16px visual without growing the box.
+- **Hit slop.** `hitSlop={24}` retained from the baseline —
+  still useful for the compact density on phone.
 - **Disabled.** `opacity-50`.
 - **Web focus ring.** Standard `focus-visible:border-accent
 focus-visible:ring-focus-ring/50`.
@@ -374,6 +389,8 @@ focus-visible:ring-focus-ring/50`.
   reliability strategy as Input + Textarea — RN-Web doesn't
   always forward arbitrary aria-\* attributes from rn-primitives
   wrappers, so the CSS attribute selector silently misses.
+- **Density binding** happens in-component via `useDensity()`;
+  same single-API pattern as Switch.
 
 ---
 

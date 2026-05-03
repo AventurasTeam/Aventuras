@@ -12,17 +12,20 @@
 //   (Aventuras flat-depth principle). Dark-mode opacity dance
 //   (`dark:bg-input/30`, `dark:aria-invalid:ring-destructive/40`)
 //   stripped — the theme registry handles light/dark per-theme.
-// - AUGMENTED (per components.md augmentation policy): error
-//   styling driven from JS via `aria-invalid` prop reading rather
-//   than the CSS `aria-invalid:` Tailwind variant. RN-Web doesn't
-//   reliably forward arbitrary aria-* attributes from rn-primitives
-//   wrappers, so the attribute selector silently misses; matches
-//   Input + Textarea's reliability strategy.
+// - AUGMENTED (per components.md augmentation policy): box dimensions
+//   bind to the active density. Same rationale as Switch — phone
+//   defaults to regular density (touch-friendly box), desktop to
+//   compact (smaller, mouse-driven). Error styling driven from JS
+//   via `aria-invalid` prop reading rather than the CSS
+//   `aria-invalid:` Tailwind variant — RN-Web doesn't reliably
+//   forward arbitrary aria-* attributes from rn-primitives wrappers,
+//   so the attribute selector silently misses; matches Input +
+//   Textarea's reliability strategy.
 // - ACCEPTED: rn-primitives composition (Root + Indicator), the
-//   fixed `size-4` square + `rounded-[4px]` corner radius, the
-//   `hitSlop={24}` boost from the baseline (mobile tap-target),
-//   `disabled:cursor-not-allowed` on web,
-//   `overflow-hidden` on native (clips the indicator pill).
+//   `rounded-[4px]` corner radius, `hitSlop={24}` boost from the
+//   baseline (still useful for the compact density on mobile),
+//   `disabled:cursor-not-allowed` on web, `overflow-hidden` on
+//   native (clips the indicator pill).
 // - SUBTRACTED: the baseline's `checkedClassName` /
 //   `indicatorClassName` / `iconClassName` pass-throughs. v1
 //   doesn't need per-checkbox style overrides; consumers pass
@@ -34,9 +37,22 @@ import { Check } from 'lucide-react-native'
 import { Platform } from 'react-native'
 
 import { Icon } from '@/components/ui/icon'
+import { useDensity } from '@/lib/density/use-density'
+import type { DensityValue } from '@/lib/density/types'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_HIT_SLOP = 24
+
+const BOX_SIZE_CLASSES: Record<DensityValue, string> = {
+  compact: 'size-4',
+  regular: 'size-5',
+  comfortable: 'size-6',
+}
+const CHECK_ICON_SIZE: Record<DensityValue, number> = {
+  compact: 12,
+  regular: 14,
+  comfortable: 16,
+}
 
 type CheckboxProps = React.ComponentProps<typeof CheckboxPrimitive.Root> & {
   className?: string
@@ -48,12 +64,14 @@ type CheckboxProps = React.ComponentProps<typeof CheckboxPrimitive.Root> & {
 }
 
 export function Checkbox({ className, ...props }: CheckboxProps) {
+  const { resolved } = useDensity()
   const ariaInvalidProp = props['aria-invalid']
   const isInvalid = ariaInvalidProp === true || ariaInvalidProp === 'true'
   return (
     <CheckboxPrimitive.Root
       className={cn(
-        'size-4 shrink-0 rounded-[4px] border border-border bg-bg-base',
+        'shrink-0 rounded-[4px] border border-border bg-bg-base',
+        BOX_SIZE_CLASSES[resolved],
         Platform.select({
           web: 'focus-visible:ring-focus-ring/50 peer cursor-pointer outline-none transition-shadow focus-visible:border-accent focus-visible:ring-[3px] disabled:cursor-not-allowed',
           native: 'overflow-hidden',
@@ -69,7 +87,7 @@ export function Checkbox({ className, ...props }: CheckboxProps) {
       <CheckboxPrimitive.Indicator className="h-full w-full items-center justify-center bg-accent">
         <Icon
           as={Check}
-          size={12}
+          size={CHECK_ICON_SIZE[resolved]}
           strokeWidth={Platform.OS === 'web' ? 2.5 : 3.5}
           className="text-accent-fg"
         />
