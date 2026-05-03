@@ -263,7 +263,19 @@ function SheetContent({
   return (
     <DialogPrimitive.Portal hostName={portalHost}>
       <FullWindowOverlay>
-        <View style={Platform.select({ native: StyleSheet.absoluteFill })} pointerEvents="box-none">
+        <View
+          // On web RN-Web's View defaults to position:relative with
+          // content-size; absolute children inside collapse because
+          // the View itself takes no viewport space. Use `fixed
+          // inset-0` (web-only NativeWind class) so the wrapper
+          // fills the viewport, giving the Overlay scrim and the
+          // SheetPanel a full-screen positioning ancestor. Native
+          // continues to use StyleSheet.absoluteFill via inline
+          // style.
+          className={Platform.OS === 'web' ? 'fixed inset-0' : ''}
+          style={Platform.select({ native: StyleSheet.absoluteFill })}
+          pointerEvents="box-none"
+        >
           <NativeOnlyAnimatedView
             entering={FadeIn.duration(200)}
             exiting={FadeOut}

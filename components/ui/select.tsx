@@ -293,7 +293,16 @@ function PhoneSheetContent({
   return (
     <SelectBase.Portal hostName={portalHost}>
       <FullWindowOverlay>
-        <View style={Platform.select({ native: StyleSheet.absoluteFill })} pointerEvents="box-none">
+        <View
+          // Web wrapper needs `fixed inset-0` so absolute children
+          // (Overlay scrim, panel) have a full-viewport positioning
+          // ancestor. RN-Web View defaults to position:relative with
+          // content-size; without explicit fill, absolute children
+          // collapse. Native continues with StyleSheet.absoluteFill.
+          className={Platform.OS === 'web' ? 'fixed inset-0' : ''}
+          style={Platform.select({ native: StyleSheet.absoluteFill })}
+          pointerEvents="box-none"
+        >
           <NativeOnlyAnimatedView
             entering={FadeIn.duration(200)}
             exiting={FadeOut}
