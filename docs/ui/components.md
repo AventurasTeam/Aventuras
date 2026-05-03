@@ -34,6 +34,60 @@ For primitives without a reusables analogue, build from
 `@rn-primitives/*` directly (or a different upstream) using the
 same slot-first reshape discipline.
 
+## Augmentation — when adding API beyond baseline
+
+Reshape covers renaming or re-tokenizing existing baseline API.
+Adding new API surface goes beyond reshape and is allowed only
+when all three hold:
+
+- **Maps onto Aventuras's slot or token system.** New variants /
+  props express our domain vocabulary (color slots, size scale,
+  semantic axes), not generic shorthand for arbitrary classNames.
+- **Doesn't duplicate baseline API.** No parallel mechanism for
+  the same concern (e.g., don't add a `bold` prop when className
+  `font-bold` already works).
+- **Documented in-file.** A header comment in the primitive's
+  `.tsx` names what was augmented and why, citing this section.
+
+Documented precedents:
+
+- **Text's `headingLevel` prop** ([`components/ui/text.tsx`](../../components/ui/text.tsx))
+  adds a heading-semantics axis (drives `role="heading"` +
+  `aria-level={N}`) that the baseline didn't have. Maps to
+  standard ARIA, doesn't duplicate the existing color / size
+  axes, justified in the file's header comment.
+
+## Subtraction — when removing baseline features
+
+Removing or replacing baseline features is allowed only when all
+three hold:
+
+- **Replaced by an Aventuras-native equivalent.** The capability
+  isn't lost — it's expressed via a different mechanism that
+  better fits the project's vocabulary.
+- **Accessibility and composition contracts aren't degraded.**
+  Roles, ARIA properties, and rn-primitives lifecycle delegation
+  (focus trap, scroll lock, dismiss-on-outside) are invariants;
+  removing them without replacement is not allowed.
+- **Documented in-file.** Same header-comment rule as
+  augmentation.
+
+Documented precedents:
+
+- **Text dropped reusables' typography variants** (h1-h4, p,
+  blockquote, code, lead, large, small) and the embedded
+  `ROLE` / `ARIA_LEVEL` mapping. Replaced by orthogonal `variant`
+  (color slot) + `size` (typography ramp) for visual styling and
+  the new `headingLevel` prop for heading semantics. The
+  accessibility contract is restored, not degraded.
+
+Anti-pattern, surfaced retrospectively: phase 1 text.tsx
+originally subtracted `ROLE` / `ARIA_LEVEL` _without_ replacement,
+which was an a11y regression caught during phase 2 Group A
+implementation. The reconciliation that added `headingLevel`
+brought the file back into policy compliance and motivated
+codifying this section.
+
 ## Storybook story conventions
 
 Each primitive's stories are **axes-driven**, not template-driven.
@@ -79,6 +133,45 @@ Indicative shapes by primitive:
 
 Patterns get the same treatment when they reach Storybook in
 phase 3.
+
+## Testing — verification surfaces per primitive
+
+Two surfaces; each covers what the other doesn't:
+
+- **Storybook stories** — visual and composition behavior. Variants
+  across themes, sizes, prop combinations, accessibility states.
+  Catches token-resolution bugs, layout regressions, theme-divergent
+  rendering. **Mandatory for every primitive shipped.**
+- **Vitest** — Aventuras-specific runtime logic. The third category
+  of code in a reshaped primitive's file: domain logic that's neither
+  thin rn-primitives wrapping nor variant-to-className mapping.
+  Examples: Button's `SPINNER_SLOT_BY_VARIANT` resolution with
+  native-vs-web theme-color reading, custom hooks composing focus
+  management with save-session guards, drag-to-dismiss threshold
+  math we own (vs. gesture-handler defaults).
+
+What stays untested deliberately:
+
+- **Variant → className wiring.** Fragile against token renames,
+  low-value (wrong color or class shows up immediately in Storybook
+  ThemeMatrix).
+- **rn-primitives behavior we delegate to.** Already battle-tested
+  upstream — focus trap, scroll lock, dismiss-on-outside, anchor
+  positioning.
+- **Composition glue.** Forwarding children, spreading props,
+  context-providing wrappers — visible in Storybook the moment a
+  consumer uses them.
+
+Existing Vitest scope (in [`lib/`](../../lib/)) matches the
+third-category boundary: theme registry shape, color contrast
+math, CSS generator output, theme-hook state machine, themes-audit
+logic. No tests in
+[`components/ui/`](../../components/ui/) at the close of phase 1
+because Button and Text are mostly thin wrappers; phase 2's
+overlay primitives expect the same. Tests land when an
+Aventuras-runtime fragment emerges that warrants one (Button's
+spinner-color resolution is a candidate to backfill if it ever
+breaks).
 
 ## Future additions
 
