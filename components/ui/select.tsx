@@ -76,18 +76,33 @@ const Group = SelectBase.Group
 
 function Value({
   className,
-  ...props
-}: React.ComponentProps<typeof SelectBase.Value> & { className?: string }) {
+  placeholder,
+  children,
+}: {
+  className?: string
+  placeholder?: string
+  children?: React.ReactNode
+}) {
+  // The reusables baseline wraps rn-primitives Value (which on web
+  // delegates to radix's Select.Value via Slot) with className. The
+  // Slot/Radix indirection swallows our color className on web in
+  // some configurations, leaving the trigger label rendering with
+  // RN's default text color (black) — invisible on dark themes.
+  // Bypassing rn-primitives Value with our themed Text guarantees
+  // the color slot resolves correctly. We read selection state from
+  // SelectBase.useRootContext directly.
   const { value } = SelectBase.useRootContext()
+  const display = value?.label ?? children ?? placeholder ?? ''
+  const empty = !value
   return (
-    <SelectBase.Value
-      className={cn(
-        'line-clamp-1 flex flex-row items-center gap-2 text-sm text-fg-primary',
-        !value && 'text-fg-muted',
-        className,
-      )}
-      {...props}
-    />
+    <Text
+      size="sm"
+      variant={empty ? 'muted' : 'default'}
+      className={cn('flex-1', className)}
+      numberOfLines={1}
+    >
+      {display}
+    </Text>
   )
 }
 
@@ -105,9 +120,9 @@ function Trigger({
   return (
     <SelectBase.Trigger
       className={cn(
-        'flex h-10 flex-row items-center justify-between gap-2 rounded-md border border-border-strong bg-bg-base px-3 py-2',
+        'flex h-10 flex-row items-center justify-between gap-2 rounded-md border border-border bg-bg-base px-3 py-2 active:bg-bg-raised',
         Platform.select({
-          web: 'whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-focus-ring [&_svg]:pointer-events-none [&_svg]:shrink-0',
+          web: 'whitespace-nowrap outline-none transition-colors hover:border-border-strong focus-visible:ring-2 focus-visible:ring-focus-ring [&_svg]:pointer-events-none [&_svg]:shrink-0',
         }),
         size === 'sm' && 'h-8 py-1.5',
         props.disabled && 'opacity-50',
@@ -245,9 +260,13 @@ function Item({
   return (
     <SelectBase.Item
       className={cn(
-        'group relative flex w-full flex-row items-center gap-2 rounded-sm py-2 pl-2 pr-8 active:bg-bg-raised sm:py-1.5',
+        // bg-bg-sunken (not bg-bg-raised) for hover/focus highlight:
+        // overlay → raised has zero contrast on the default light
+        // theme (both #ffffff), making the highlight invisible.
+        // Sunken is consistently darker than overlay across themes.
+        'group relative flex w-full flex-row items-center gap-2 rounded-sm py-2 pl-2 pr-8 active:bg-bg-sunken sm:py-1.5',
         Platform.select({
-          web: 'cursor-default outline-none focus:bg-bg-raised data-[disabled]:pointer-events-none [&_svg]:pointer-events-none',
+          web: 'cursor-default outline-none hover:bg-bg-sunken focus:bg-bg-sunken data-[disabled]:pointer-events-none [&_svg]:pointer-events-none',
         }),
         props.disabled && 'opacity-50',
         className,
@@ -472,7 +491,7 @@ function DropdownBranch({
       disabled={disabled}
     >
       <Trigger className={className}>
-        <Value placeholder={placeholder ?? ''}>{selected?.label ?? placeholder ?? ''}</Value>
+        <Value placeholder={placeholder} />
       </Trigger>
       <Content sheetSize={resolvedSheetSize}>
         <Group>
