@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { ScrollView, View } from 'react-native'
 
+import { DensityPicker } from '@/components/foundations/sections/density-picker'
 import { ThemePicker } from '@/components/foundations/sections/theme-picker'
 import { Heading } from '@/components/ui/heading'
 import { Select, type SelectOption } from '@/components/ui/select'
@@ -62,6 +63,7 @@ export default function SelectDevRoute() {
   return (
     <ScrollView className="flex-1 bg-bg-base">
       <ThemePicker />
+      <DensityPicker />
       <View className="flex-col gap-6 p-4">
         <View>
           <Heading level={3}>Default — auto-derive cascade</Heading>

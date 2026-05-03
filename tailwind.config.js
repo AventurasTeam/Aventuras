@@ -72,10 +72,33 @@ module.exports = {
         standard: 'var(--easing-standard)',
         emphasis: 'var(--easing-emphasis)',
       },
+      // Density-aware sizing tokens. Heights for fixed-height
+      // controls (Trigger, Button, Input); padding for rows. Each
+      // resolves to a CSS var swapped by [data-density="X"] on web
+      // and by NativeWind vars() on native. See
+      // docs/ui/foundations/spacing.md → Density toggle.
+      height: {
+        'control-xs': 'var(--control-h-xs)',
+        'control-sm': 'var(--control-h-sm)',
+        'control-md': 'var(--control-h-md)',
+        'control-lg': 'var(--control-h-lg)',
+      },
+      // Mirror as widths for square (icon-button-shaped) controls.
+      width: {
+        'control-xs': 'var(--control-h-xs)',
+        'control-sm': 'var(--control-h-sm)',
+        'control-md': 'var(--control-h-md)',
+        'control-lg': 'var(--control-h-lg)',
+      },
       padding: {
-        row: 'var(--row-pad-y) var(--row-pad-x)',
-        input: 'var(--input-pad-y) var(--input-pad-x)',
-        button: 'var(--button-pad-y) var(--button-pad-x)',
+        'row-y-xs': 'var(--row-py-xs)',
+        'row-y-sm': 'var(--row-py-sm)',
+        'row-y-md': 'var(--row-py-md)',
+        'row-y-lg': 'var(--row-py-lg)',
+        'row-x-xs': 'var(--row-px-xs)',
+        'row-x-sm': 'var(--row-px-sm)',
+        'row-x-md': 'var(--row-px-md)',
+        'row-x-lg': 'var(--row-px-lg)',
       },
     },
   },

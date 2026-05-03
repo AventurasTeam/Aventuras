@@ -33,10 +33,13 @@ const buttonVariants = cva(
         ),
       },
       size: {
-        sm: cn('h-8 gap-1.5 rounded-sm px-3', Platform.select({ web: 'has-[>svg]:px-2.5' })),
-        md: cn('h-10 px-4 py-2', Platform.select({ web: 'has-[>svg]:px-3' })),
-        lg: cn('h-12 rounded-lg px-6', Platform.select({ web: 'has-[>svg]:px-4' })),
-        icon: 'h-10 w-10 rounded-md',
+        sm: cn(
+          'h-control-sm gap-1.5 rounded-sm px-3',
+          Platform.select({ web: 'has-[>svg]:px-2.5' }),
+        ),
+        md: cn('h-control-md px-4', Platform.select({ web: 'has-[>svg]:px-3' })),
+        lg: cn('h-control-lg rounded-lg px-6', Platform.select({ web: 'has-[>svg]:px-4' })),
+        icon: 'h-control-md w-control-md rounded-md',
       },
     },
     defaultVariants: { variant: 'primary', size: 'md' },

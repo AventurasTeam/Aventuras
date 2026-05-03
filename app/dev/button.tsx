@@ -1,4 +1,5 @@
 import { ScrollView, View } from 'react-native'
+import { DensityPicker } from '@/components/foundations/sections/density-picker'
 import { ThemePicker } from '@/components/foundations/sections/theme-picker'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
@@ -7,6 +8,7 @@ export default function ButtonDevRoute() {
   return (
     <ScrollView className="flex-1 bg-bg-base">
       <ThemePicker />
+      <DensityPicker />
       <View className="flex-col gap-6 p-4">
         <View>
           <Text size="lg">Variants</Text>

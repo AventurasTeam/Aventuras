@@ -151,24 +151,24 @@ function Trigger({
 }) {
   return (
     <SelectBase.Trigger
-      // Tier-responsive sizing: phone + tablet get a 44px / 40px tap-
-      // target (iOS HIG / Material guidance). Desktop trims to 40 / 36
-      // via `lg:` (≥ 1024 CSS px) where mouse precision is available.
-      // Pattern is currently Select-local; broader primitive-sizing
-      // discussion is open per the followup note in select.tsx.
+      // Density-aware sizing: h-control-md / h-control-sm tokens
+      // resolve per active density (compact / regular / comfortable)
+      // per docs/ui/foundations/spacing.md → Density toggle.
+      // Default densities: regular on phone+tablet (44px), compact
+      // on desktop (40px), with user override available.
       className={cn(
-        'flex h-11 flex-row items-center justify-between gap-2 rounded-md border border-border bg-bg-base px-3 py-2 active:bg-bg-raised lg:h-10',
+        'flex h-control-md flex-row items-center justify-between gap-2 rounded-md border border-border bg-bg-base px-3 active:bg-bg-raised',
         Platform.select({
           web: 'whitespace-nowrap outline-none transition-colors hover:border-border-strong focus-visible:ring-2 focus-visible:ring-focus-ring [&_svg]:pointer-events-none [&_svg]:shrink-0',
         }),
-        size === 'sm' && 'h-10 py-1.5 lg:h-9',
+        size === 'sm' && 'h-control-sm',
         props.disabled && 'opacity-50',
         className,
       )}
       {...props}
     >
       <>{children}</>
-      <Icon as={ChevronDown} aria-hidden className="size-5 text-fg-muted lg:size-4" size={20} />
+      <Icon as={ChevronDown} aria-hidden className="size-5 text-fg-muted" size={20} />
     </SelectBase.Trigger>
   )
 }
@@ -407,19 +407,19 @@ function Item({
   return (
     <SelectBase.Item
       className={cn(
-        // Tier-responsive sizing: phone + tablet rows use 12px vertical
-        // padding (44px+ tap target with text-base content) and base
-        // text size. Desktop tightens to 6px / sm via `lg:` prefix.
+        // Density-aware sizing: py-row-y-md / pl-row-x-md tokens
+        // resolve per active density (compact / regular / comfortable)
+        // per docs/ui/foundations/spacing.md → Density toggle.
         // bg-bg-sunken (not bg-bg-raised) for hover/focus highlight:
         // overlay → raised has zero contrast on the default light
         // theme (both #ffffff), making the highlight invisible.
-        // Sunken is consistently darker than overlay across themes.
-        // Hairline separator (`border-b`) carries the at-rest "this
-        // row is tappable" signal on phone where there's no hover —
-        // iOS Settings / Mail / Notes pattern. Last row in the list
-        // hides its border via `last:border-b-0`. On desktop the
-        // hover state covers affordance, but separators don't hurt.
-        'group relative flex w-full flex-row items-center gap-2 border-b border-border py-3 pl-3 pr-10 last:border-b-0 active:bg-bg-sunken lg:rounded-sm lg:border-b-0 lg:py-1.5 lg:pl-2 lg:pr-8',
+        // Hairline separator (`border-b`) carries the at-rest
+        // "tappable row" signal where hover isn't available —
+        // iOS Settings / Mail / Notes pattern. `last:border-b-0`
+        // hides it on the final row. The separator stays in all
+        // densities; combined with smaller padding on compact, it
+        // still provides clear row structure on desktop.
+        'group relative flex w-full flex-row items-center gap-2 rounded-sm border-b border-border py-row-y-md pl-row-x-md pr-10 last:border-b-0 active:bg-bg-sunken',
         Platform.select({
           web: 'cursor-default outline-none hover:bg-bg-sunken focus:bg-bg-sunken data-[disabled]:pointer-events-none [&_svg]:pointer-events-none',
         }),
@@ -428,12 +428,12 @@ function Item({
       )}
       {...props}
     >
-      <View className="absolute right-3 flex size-5 items-center justify-center lg:right-2 lg:size-3.5">
+      <View className="absolute right-3 flex size-5 items-center justify-center">
         <SelectBase.ItemIndicator>
-          <Icon as={Check} className="size-5 shrink-0 text-fg-primary lg:size-4" size={20} />
+          <Icon as={Check} className="size-5 shrink-0 text-fg-primary" size={20} />
         </SelectBase.ItemIndicator>
       </View>
-      <SelectBase.ItemText className="select-none text-base text-fg-primary lg:text-sm" />
+      <SelectBase.ItemText className="select-none text-base text-fg-primary" />
       {children as React.ReactNode}
     </SelectBase.Item>
   )
