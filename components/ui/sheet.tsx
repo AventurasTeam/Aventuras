@@ -27,13 +27,20 @@
 //   value; dark-mode would prefer 0.6 but Aventuras doesn't currently ship
 //   a `--scrim` slot per the parked decision in
 //   docs/ui/foundations/spacing.md.
+//
+// Native layout note: an outer absoluteFill wrapper inside the Portal is
+// required so the absolute scrim and panel have a sized positioned
+// ancestor on RN (the Animated.View wrappers alone collapse to 0×0
+// because their absolute children are out of layout flow). The wrapper
+// uses `pointerEvents="box-none"` so taps fall through to the scrim and
+// panel children rather than being captured by the empty wrapper.
 
 import * as DialogPrimitive from '@rn-primitives/dialog'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { TextClassContext } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 import * as React from 'react'
-import { Platform, StyleSheet, View } from 'react-native'
+import { Platform, StyleSheet, View, type ViewStyle } from 'react-native'
 import {
   FadeIn,
   FadeOut,
@@ -52,10 +59,37 @@ const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : React.Fr
 type SheetAnchor = 'bottom' | 'right'
 type SheetSize = 'short' | 'medium' | 'tall'
 
-const BOTTOM_HEIGHT_BY_SIZE: Record<SheetSize, string> = {
+const BOTTOM_HEIGHT_CLASS_WEB: Record<SheetSize, string> = {
   short: 'h-[33vh]',
   medium: 'h-[60vh]',
   tall: 'h-[95vh]',
+}
+
+const BOTTOM_HEIGHT_PCT: Record<SheetSize, `${number}%`> = {
+  short: '33%',
+  medium: '60%',
+  tall: '95%',
+}
+
+const RIGHT_WIDTH_PX = 440
+
+function getNativePanelStyle(anchor: SheetAnchor, size: SheetSize): ViewStyle {
+  if (anchor === 'bottom') {
+    return {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: BOTTOM_HEIGHT_PCT[size],
+    }
+  }
+  return {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    right: 0,
+    width: RIGHT_WIDTH_PX,
+  }
 }
 
 function SheetContent({
@@ -73,38 +107,58 @@ function SheetContent({
   const isBottom = anchor === 'bottom'
   const slideEnter = isBottom ? SlideInDown.duration(250) : SlideInRight.duration(250)
   const slideExit = isBottom ? SlideOutDown : SlideOutRight
+  const nativePanelStyle = getNativePanelStyle(anchor, size)
 
   return (
     <DialogPrimitive.Portal hostName={portalHost}>
       <FullWindowOverlay>
-        <NativeOnlyAnimatedView entering={FadeIn.duration(200)} exiting={FadeOut}>
-          <DialogPrimitive.Overlay
-            className="absolute inset-0 bg-black/40"
+        <View style={Platform.select({ native: StyleSheet.absoluteFill })} pointerEvents="box-none">
+          <NativeOnlyAnimatedView
+            entering={FadeIn.duration(200)}
+            exiting={FadeOut}
             style={Platform.select({ native: StyleSheet.absoluteFill })}
-          />
-        </NativeOnlyAnimatedView>
-        <NativeOnlyAnimatedView entering={slideEnter} exiting={slideExit}>
-          <TextClassContext.Provider value="text-fg-primary">
-            <DialogPrimitive.Content
-              className={cn(
-                'absolute z-50 border border-border-strong bg-bg-overlay p-6 outline-none',
-                isBottom
-                  ? cn(
-                      'bottom-0 left-0 right-0 rounded-t-lg border-b-0',
-                      BOTTOM_HEIGHT_BY_SIZE[size],
-                    )
-                  : 'bottom-0 right-0 top-0 w-[440px] rounded-l-lg border-r-0',
-                className,
-              )}
-              {...props}
-            >
-              {isBottom ? (
-                <View className="bg-fg-muted/40 mx-auto mb-4 h-1 w-10 rounded-full" />
-              ) : null}
-              {children}
-            </DialogPrimitive.Content>
-          </TextClassContext.Provider>
-        </NativeOnlyAnimatedView>
+          >
+            <DialogPrimitive.Overlay
+              className="absolute inset-0 bg-black/40"
+              style={Platform.select({ native: StyleSheet.absoluteFill })}
+            />
+          </NativeOnlyAnimatedView>
+          <NativeOnlyAnimatedView
+            entering={slideEnter}
+            exiting={slideExit}
+            style={Platform.select({ native: nativePanelStyle })}
+          >
+            <TextClassContext.Provider value="text-fg-primary">
+              <DialogPrimitive.Content
+                className={cn(
+                  'border border-border-strong bg-bg-overlay p-6 outline-none',
+                  Platform.select({
+                    web: cn(
+                      'absolute z-50',
+                      isBottom
+                        ? cn(
+                            'bottom-0 left-0 right-0 rounded-t-lg border-b-0',
+                            BOTTOM_HEIGHT_CLASS_WEB[size],
+                          )
+                        : 'bottom-0 right-0 top-0 w-[440px] rounded-l-lg border-r-0',
+                    ),
+                    default: cn(
+                      'flex-1',
+                      isBottom ? 'rounded-t-lg border-b-0' : 'rounded-l-lg border-r-0',
+                    ),
+                  }),
+                  className,
+                )}
+                {...props}
+              >
+                {isBottom ? (
+                  <View className="mx-auto mb-4 h-1 w-10 rounded-full bg-fg-muted opacity-40" />
+                ) : null}
+                {children}
+              </DialogPrimitive.Content>
+            </TextClassContext.Provider>
+          </NativeOnlyAnimatedView>
+        </View>
       </FullWindowOverlay>
     </DialogPrimitive.Portal>
   )
