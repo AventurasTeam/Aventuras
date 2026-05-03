@@ -49,6 +49,7 @@ import {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated'
 import { runOnJS } from 'react-native-worklets'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -152,22 +153,33 @@ function SheetContent({
           'worklet'
           const delta = isBottom ? event.translationY : event.translationX
           if (delta > DRAG_DISMISS_THRESHOLD_PX) {
-            // Reset offset before triggering close so the exit layout
-            // animation starts from the rest position. Without this, the
-            // residual transform leaks into the next mount's layout
-            // animation and the reopened panel renders shorter than its
-            // configured size.
-            dragOffset.value = 0
-            runOnJS(closeFromGesture)()
+            // Continue the gesture motion smoothly off-screen, then close
+            // once visually gone. The exit layout animation still fires on
+            // close but plays on an already-off-screen panel, so it's
+            // invisible. The next mount's useEffect-on-mount + fresh
+            // useSharedValue handle the reset for the reopened panel.
+            const target = (isBottom ? screenHeight : screenHeight) + 200
+            dragOffset.value = withTiming(target, { duration: 180 }, (finished?: boolean) => {
+              'worklet'
+              if (finished) runOnJS(closeFromGesture)()
+            })
             return
           }
-          dragOffset.value = withSpring(0, { damping: 18, stiffness: 220 })
+          // overshootClamping prevents the spring from oscillating past 0,
+          // which would raise the panel above its rest position and expose
+          // the system nav-bar area below it.
+          dragOffset.value = withSpring(0, {
+            damping: 18,
+            stiffness: 220,
+            overshootClamping: true,
+          })
         }),
-    [isBottom, dragOffset, closeFromGesture],
+    [isBottom, dragOffset, closeFromGesture, screenHeight],
   )
 
-  // Defensive belt-and-suspenders: also reset on every mount in case any
-  // shared-value state survives the unmount cycle.
+  // Belt-and-suspenders: reset on every mount in case any shared-value
+  // state survives the unmount cycle. Combined with the smooth dismiss
+  // above, the next-open panel always renders at its configured size.
   React.useEffect(() => {
     dragOffset.value = 0
   }, [dragOffset])
