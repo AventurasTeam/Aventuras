@@ -380,6 +380,23 @@ opinionated theme silently dormants it; switching back re-applies
 it. One picker UI handles all accent-overridable themes
 uniformly.
 
+**Density picker.** Four options: `Default` (recommended,
+sentinel that resolves per tier — compact on desktop, regular on
+phone+tablet), `Compact`, `Regular`, `Comfortable`. Persists at
+[`app_settings.appearance.density`](../../../data-model.md). The
+contract — values, sizing tokens, resolution mechanism — lives
+in [`spacing.md → Density toggle`](../../foundations/spacing.md#density-toggle).
+The same control surfaces in
+[Onboarding Step 1](../onboarding/onboarding.md#step-1--app-basics);
+Appearance lets users adjust post-onboarding.
+
+Density isn't an accessibility setting per se — font scaling
+(reader font size) and contrast targets handle those concerns
+elsewhere. `Comfortable` density helps users with motor
+difficulties (larger tap targets) but isn't a substitute for
+proper a11y affordances; OS-level accessibility settings (text
+size, bold text, reduced motion) still apply on top.
+
 ### Show jump-to-top button
 
 Boolean toggle, default **off**. Controls whether the floating

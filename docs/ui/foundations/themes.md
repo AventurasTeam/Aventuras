@@ -38,6 +38,18 @@ immediately. After first launch, the choice persists in
 `app_settings.appearance.themeId` per
 [`theming.md → Persistence`](./theming.md#persistence).
 
+### Cascade — theme and density compose orthogonally
+
+Theme CSS scopes by `[data-theme="<id>"]` and density CSS scopes
+by `[data-density="<value>"]`; the two cascades are independent
+and compose freely. The CSS generator emits one `[data-theme]`
+block per theme + one `[data-density]` block per density value,
+and any `[data-theme]` ancestor combined with any `[data-density]`
+ancestor resolves the full token surface (theme provides color
+slots; density provides sizing slots). See
+[`spacing.md → Density toggle`](./spacing.md#density-toggle) for
+density tokens + resolution mechanism.
+
 ### Translation policy
 
 Per [`theming.md → Translation of theme names`](./theming.md#translation-of-theme-names):

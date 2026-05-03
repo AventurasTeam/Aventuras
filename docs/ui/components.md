@@ -75,6 +75,14 @@ Documented precedents:
   power consumers (calendar picker, future rich-row pickers).
   Justified in the file's header comment per the
   [Select implementation contract](./patterns/forms.md#select--implementation-contract).
+- **Density-aware sizing tokens** are baseline contract, not
+  augmentation, but worth pinning here: primitives consume
+  `h-control-md`, `py-row-y-md`, etc. (per
+  [`spacing.md → Density toggle`](./foundations/spacing.md#density-toggle))
+  rather than literal `h-10` / `py-2`. The token swaps per active
+  density; primitives stay terse and consistent. Retrofitting a
+  primitive from literal sizing → density tokens is mechanical
+  (className edit only, no API change).
 
 ## Subtraction — when removing baseline features
 
@@ -168,6 +176,23 @@ Indicative shapes by primitive:
 
 Patterns get the same treatment when they reach Storybook in
 phase 3.
+
+### Density coverage
+
+Primitives that consume density-aware tokens (per
+[`spacing.md → Density toggle`](./foundations/spacing.md#density-toggle))
+get a **Density** story — one row per `compact` / `regular` /
+`comfortable` value. Storybook's toolbar gains a global Density
+dropdown (sister to the Theme dropdown) for ad-hoc swapping
+during development.
+
+The Density story is **separate from ThemeMatrix** — both axes
+matter, but a 3 × 10 = 30-cell matrix is overkill. Per-axis
+isolation suffices: ThemeMatrix tests theme-divergent slots at a
+single density; Density story tests sizing-divergent slots at a
+single theme. The toolbar density+theme dropdowns let
+maintainers switch axes interactively when they need a
+combination not in the rendered stories.
 
 ## Testing — verification surfaces per primitive
 

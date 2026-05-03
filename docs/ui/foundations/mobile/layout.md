@@ -220,9 +220,9 @@ on tablet inheriting desktop chrome).
 
 ## Container conventions
 
-- **Padding** — `--row-pad-y` / `-x` for sheet rows, `--input-pad-y`
-  / `-x` for sheet inputs (per
-  [`../spacing.md → Component-internal padding`](../spacing.md)).
+- **Padding** — `--row-py-*` / `--row-px-*` for sheet rows,
+  `--control-h-*` for sheet inputs (per
+  [`../spacing.md → Component-internal sizing tokens — density-aware`](../spacing.md#component-internal-sizing-tokens--density-aware)).
 - **Radii** — Sheet top corners use `--radius-lg` (12px) when
   bottom-anchored. Modal corners use `--radius-md` (8px) all
   around. Sheet right-anchored on desktop uses `--radius-lg` on
@@ -234,7 +234,7 @@ on tablet inheriting desktop chrome).
   `--bg-overlay` plus `--border` (no scrim).
 - **Tap-target / hit area** — drag handles inherit native
   tap-target conventions per
-  [`../spacing.md → Tap-target on native — hitSlop recipe`](../spacing.md#tap-target-on-native--hitslop-recipe).
+  [`../spacing.md → Tap-target on native`](../spacing.md#tap-target-on-native).
 
 ## Surface bindings — existing app surfaces
 

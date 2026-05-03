@@ -5,7 +5,8 @@ The spatial contract for v1. Sister to [`tokens.md`](./tokens.md)
 and [`typography.md`](./typography.md). This file commits the
 base unit + spacing scale, component-internal padding tokens,
 radii vocabulary, depth metaphor (how surfaces communicate
-elevation), and the density toggle's cut record.
+elevation), and the density toggle (three-density user setting,
+reinstated post-cut by Phase 2 Group B).
 
 ## Base unit + spacing scale
 
@@ -24,60 +25,85 @@ Tailwind scale via utilities** — `gap-2` (8 px), `p-4` (16 px),
 `mt-6` (24 px), etc. These cover the long tail of layout work
 without minting tokens.
 
-Token-minted spacing is reserved for **component-internal padding
-that needs cross-component consistency.** A list row's vertical
-padding should be the same in the reader's Browse rail, the
-World panel's list pane, the Plot panel — minting a token
-(`--row-pad-y`) gives one source of truth that changes in one
-place.
+Token-minted spacing is reserved for **component-internal
+sizing that needs cross-component consistency.** A list row's
+vertical padding should be the same in the reader's Browse rail,
+the World panel's list pane, the Plot panel — minting a token
+(`--row-py-md`) gives one source of truth that changes in one
+place. The token is also density-aware (per
+[Density toggle](#density-toggle) below) — the value swaps with
+active density, but every consumer reads from the same slot.
 
-### Component-internal padding tokens
+### Component-internal sizing tokens — density-aware
 
-Single values (no density variants — the density toggle was cut
-at this session; see [Density toggle — cut](#density-toggle--cut)
-below):
+Density-aware tokens carry **three variants** keyed off the active
+density (`compact` | `regular` | `comfortable`); see
+[Density toggle](#density-toggle) below for resolution + tier
+defaults. Two classes:
 
-| Token            | Value | Use                                 |
-| ---------------- | ----- | ----------------------------------- |
-| `--row-pad-y`    | 10 px | list / table row vertical padding   |
-| `--row-pad-x`    | 12 px | list / table row horizontal padding |
-| `--input-pad-y`  | 8 px  | form input vertical padding         |
-| `--input-pad-x`  | 12 px | form input horizontal padding       |
-| `--button-pad-y` | 8 px  | button vertical padding             |
-| `--button-pad-x` | 14 px | button horizontal padding           |
+**Height-driven tokens** for fixed-height controls (Trigger,
+Button, Input — anything where a tap-target SLA matters):
 
-Six tokens. Calibrated for ~14–16 px text (UI body / labels at
-the locked type scale); comfortable on desktop without cramping
-mobile.
+| Token            | compact | regular | comfortable | Use                   |
+| ---------------- | ------- | ------- | ----------- | --------------------- |
+| `--control-h-xs` | 32 px   | 36 px   | 40 px       | dense chrome controls |
+| `--control-h-sm` | 36 px   | 40 px   | 44 px       | compact form controls |
+| `--control-h-md` | 40 px   | 44 px   | 48 px       | default form controls |
+| `--control-h-lg` | 44 px   | 48 px   | 56 px       | hero CTAs             |
 
-### Tap-target on native — `hitSlop` recipe
+**Padding-driven tokens** for rows (list rows, item rows, where
+content varies and row height emerges from content + padding):
 
-Buttons at `--button-pad-y: 8 px` + `--text-sm` 20 px line-height
-= **36 px visible height**. iOS HIG calls for 44 × 44 pt minimum
-tap-target; Android Material guidelines call for 48 dp. The
-contract specifies **visible** size; native components expand the
-**tap zone** beyond the visible boundary via RN's `hitSlop` prop
-(or equivalent padding-around-pressable on web). A 36 px button
-with 4 px `hitSlop` on each side renders 36 px visually but
-registers a 44 px touch zone — meets iOS HIG without enlarging
-the visible button.
+| Token         | compact | regular | comfortable | Use                        |
+| ------------- | ------- | ------- | ----------- | -------------------------- |
+| `--row-py-xs` | 4 px    | 8 px    | 10 px       | dense rows                 |
+| `--row-py-sm` | 6 px    | 10 px   | 12 px       | compact rows               |
+| `--row-py-md` | 6 px    | 12 px   | 16 px       | default rows               |
+| `--row-py-lg` | 8 px    | 16 px   | 20 px       | spacious rows              |
+| `--row-px-xs` | 6 px    | 8 px    | 10 px       | dense rows (horizontal)    |
+| `--row-px-sm` | 8 px    | 10 px   | 12 px       | compact rows (horizontal)  |
+| `--row-px-md` | 8 px    | 12 px   | 16 px       | default rows (horizontal)  |
+| `--row-px-lg` | 12 px   | 16 px   | 20 px       | spacious rows (horizontal) |
 
-Same recipe applies to `--row-pad-y` (40 px row height) and
-`--input-pad-y` (36 px input height) — `hitSlop` on native
-expands tap zones; no contract changes.
+Why hybrid: controls with a tap-target SLA need explicit height
+enforcement; pure padding math doesn't guarantee final pixel
+height once font-rendering and border quirks creep in. Rows
+have variable content (single-line label, label + description)
+so a fixed row height would either crop content or waste space;
+padding scales with density and the row absorbs whatever content
+height results.
 
-This is implementation-pattern guidance, not a contract slot.
-Components that pressable-wrap their visible contents are
-responsible for declaring `hitSlop`; the design contract
-guarantees the visible-size baseline.
+Tailwind utility shorthand exposed via `tailwind.config.js`
+(`h-control-md`, `py-row-y-md` etc.) — primitives use the
+utility once; density shifts swap the underlying CSS var on web
+and the lookup-table value on native.
+
+### Tap-target on native
+
+The `regular` density (mobile default) sets `--control-h-md` to
+44 px, which meets iOS HIG's 44 pt minimum without `hitSlop`
+gymnastics. `comfortable` density bumps to 48 px (also meets
+Android Material's 48 dp guidance). `compact` density at 40 px
+sits below HIG, but it's the **desktop default** where mouse
+precision settles the question; phone users on `compact` are
+explicitly opting below HIG (a deliberate user choice).
+
+`hitSlop` is no longer the primary mechanism for HIG compliance
+post-density-reinstatement — visible size handles it on the
+default densities for each tier. Components may still use
+`hitSlop` for sub-`xs`-sized affordances (icon-only icon buttons
+at `--control-h-xs`, etc.) where visible size is intentionally
+small.
 
 ### Spacing — what this commits
 
-- Six component-internal padding tokens, single values each.
+- Density-aware sizing tokens (height-driven for controls,
+  padding-driven for rows) carrying three variants per token
+  (`compact` / `regular` / `comfortable`).
 - 4 px base unit, Tailwind-aligned.
 - Tailwind utilities (`gap-N`, `p-N`, etc.) for the long tail of
-  spacing — no semantic spacing-scale tokens minted.
-- No density variants. Final list for v1.
+  spacing — no semantic spacing-scale tokens minted beyond the
+  density-aware ones above.
 
 ## Radii vocabulary
 
@@ -206,34 +232,78 @@ change.
 - Fixed mode-dependent scrim values: `rgba(0, 0, 0, 0.4)` light /
   `rgba(0, 0, 0, 0.6)` dark.
 
-## Density toggle — cut
+## Density toggle
 
-Density (`comfortable` / `compact` toggle on
-`app_settings.appearance.density`) was reserved at session 1 with
-an explicit cut-path; session 4 evaluates and cuts.
+Three densities — `compact` / `regular` / `comfortable` — drive
+the sizing tokens above. User-controllable via
+`app_settings.appearance.density` with a sentinel `'default'`
+value selecting per-tier defaults:
 
-**Decision: single density posture for v1.** Component-internal
-padding tokens (above) carry single values calibrated for both
-mobile and desktop. No user setting; no UI control; no token
-variants.
+| Tier          | Default density              |
+| ------------- | ---------------------------- |
+| Desktop       | `compact` (40 px control-md) |
+| Phone, tablet | `regular` (44 px control-md) |
 
-### Rationale
+The toggle is **universal** — all three values selectable on
+every tier. Defaults differ per tier; user override applies the
+chosen value regardless of tier. A phone user can pick `compact`
+(below HIG, deliberate); a desktop user can pick `comfortable`
+(chunky on desktop but enabling for accessibility).
 
-- Marginal value real but not pressing. Compact-mode hasn't been
-  load-bearing in any wireframe across reader, world, plot,
-  story-list, app/story settings, wizard, or onboarding.
-- Cost: 2× visual-test footprint across every UI pass; Storybook
-  stories per mode; ongoing QA tax against an axis of variation
-  that doesn't directly serve the reading-heavy core.
-- v1 scope is aggressive; every axis of variation is friction.
-- Re-adding later is a one-field migration if mobile demand
-  surfaces post-v1 — same shape as session 2's accent-override
-  addition (one field, one UI control, mechanical PR).
+### Resolution
 
-### Re-adding path
+```
+density = (settings.appearance.density === 'default')
+  ? (tier === 'desktop' ? 'compact' : 'regular')
+  : settings.appearance.density
+```
 
-Not tracked as a parked entry — re-adding is reversible by the
-standard "if mobile users ask for compact density post-v1"
-signal. The work is mechanical: one field on
-`app_settings.appearance`, two-variant padding tokens, one UI
-control. No design needs deferring; the door is closed for now.
+The sentinel `'default'` lets us change tier-default rules later
+without migrating user data — anyone who hadn't explicitly picked
+a density picks up the new default automatically.
+
+**Web (Storybook + Electron):** root element gets
+`data-density="compact|regular|comfortable"` from a Provider.
+CSS vars defined per `[data-density="X"]` block; theme cascade
+(via `[data-theme]`) is independent and composes orthogonally.
+
+**Native (Expo):** `useDensity()` hook returns the resolved
+density string; primitives map to literal token values via a
+`densityTokens[density]` lookup table.
+
+### Surfaces
+
+User-facing toggle surfaces in two places:
+
+- **Onboarding Step 1** as a third field alongside Language and
+  Theme.
+- **App Settings → Appearance** for post-onboarding adjustment.
+
+Both controls render via Select (cascade-driven). Labels:
+"Default" (recommended), "Compact", "Regular", "Comfortable".
+Subtitle for "Default" explains the rule: "Compact on desktop,
+Regular on phone and tablet."
+
+### History — cut + reinstatement
+
+Density was originally reserved at session 1 of the visual
+identity foundations work, then **cut** at session 4. The cut
+rationale at the time: compact-mode wasn't load-bearing in any
+wireframe; 2× visual-test footprint felt unaffordable for v1
+scope; "if mobile users ask for compact density post-v1" was
+listed as the signal for reinstatement.
+
+**Reinstated at Phase 2 Group B (2026-05-03)** for a different
+reason than the original signal anticipated: phone-tier sizing
+forced the variation onto us anyway (44 pt iOS HIG minimum on
+phone vs. denser desktop sizing). Once tier-responsive sizing
+became necessary, exposing it as a user-controlled toggle with
+tier-default fallback added marginal cost — settings field +
+UI control — over the variation we'd already need to test.
+Promoting "tier-responsive" to "density-as-toggle" gave users
+override flexibility (accessibility on desktop, density on
+mobile) for that marginal cost.
+
+The original cut record's "mechanical PR" estimate held — the
+reinstatement landed as one design-pass exploration + one
+canonical-doc integration commit + one implementation commit.

@@ -32,7 +32,7 @@ Cross-cutting principles that govern this surface are in
 │                                                              │
 │   Language    [System (English) ▾]                           │
 │   Theme       [Default Light ▾]                              │
-│                                                              │
+│   Density     [Default ▾]                                    │
 │                                                              │
 │                                                              │
 │                                                              │
@@ -98,9 +98,20 @@ Three fields, all with defaults:
   [App Settings · Appearance](../app-settings/app-settings.md#app--appearance).
   No "System" entry — OS dark/light follow is parked-until-signal
   per [`parked.md`](../../../parked.md#os-darklight-follow).
+- **Density** — picker. Defaults to `'default'` (sentinel
+  resolving to `regular` on phone+tablet, `compact` on desktop
+  per [`spacing.md → Density toggle`](../../foundations/spacing.md#density-toggle)).
+  Four options: `Default` (recommended, with subtitle "Compact on
+  desktop, Regular on phone and tablet"), `Compact`, `Regular`,
+  `Comfortable`. Cascade picks dropdown render mode (4 options
+  with descriptions on `Default` triggers radio; the other three
+  flatten — final render mode resolves at impl per
+  [forms.md cascade](../../patterns/forms.md#auto-derivation-cascade)).
+  Same control surfaces in
+  [App Settings · Appearance](../app-settings/app-settings.md#app--appearance).
 
-`Next →` advances to Step 2 and writes the two values into
-`app_settings`.
+`Next →` advances to Step 2 and writes the three values into
+`app_settings.appearance`.
 
 ## Step 2 — Pick your provider
 

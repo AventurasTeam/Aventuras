@@ -118,10 +118,13 @@ relevant session:
   `--font-weight-*` tokens at 400 / 500 / 600 / 700). Final scale
   locked at session 3 — see
   [`typography.md → Type scale + weights`](./typography.md#type-scale--weights).
-- **Component-internal padding** (`--row-pad-y` / `-x`,
-  `--input-pad-y` / `-x`, `--button-pad-y` / `-x`). Single
-  values, locked at session 4 — see
-  [`spacing.md → Component-internal padding tokens`](./spacing.md#component-internal-padding-tokens).
+- **Component-internal sizing — density-aware** (height-driven
+  `--control-h-xs` / `-sm` / `-md` / `-lg` plus padding-driven
+  `--row-py-xs` / `-sm` / `-md` / `-lg` and matching `--row-px-*`).
+  Each token carries three variants keyed off active density
+  (`compact` / `regular` / `comfortable`); locked at session 4
+  cut, reinstated by Phase 2 Group B Select work — see
+  [`spacing.md → Component-internal sizing tokens — density-aware`](./spacing.md#component-internal-sizing-tokens--density-aware).
 - **Radii** (`--radius-sm`, `--radius-md`, `--radius-lg`,
   `--radius-full`). Locked at session 4 — see
   [`spacing.md → Radii vocabulary`](./spacing.md#radii-vocabulary).

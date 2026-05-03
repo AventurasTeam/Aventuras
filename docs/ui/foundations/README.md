@@ -89,8 +89,9 @@ contract.
    pattern, switching mechanism (CSS vars at root + NativeWind
    runtime), persistence in `app_settings.appearance`,
    accent-override opt-in (per-theme flag + JS-side derivation),
-   density-token policy with cut-path (subsequently cut at
-   session 4), interactive demo HTML.
+   density-token policy with cut-path (cut at session 4,
+   reinstated 2026-05-03 by Phase 2 Group B), interactive demo
+   HTML.
    Files: [`tokens.md`](./tokens.md), [`theming.md`](./theming.md),
    [`theming.html`](./theming.html).
 2. **Color system + accessibility** — landed 2026-05-01
@@ -126,23 +127,27 @@ contract.
 4. **Spacing / radii / depth metaphor** — landed 2026-05-01
    ([exploration record](../../explorations/2026-05-01-spacing.md)).
    4 px Tailwind-aligned base unit; spacing handled primarily via
-   Tailwind utilities (no minted semantic gap tokens); six
-   component-internal padding tokens (`--row-pad-y` / `-x`,
-   `--input-pad-y` / `-x`, `--button-pad-y` / `-x`) at single
-   values for cross-component consistency. Tap-target on native
-   handled via `hitSlop`; visible-size contract preserved. Four
+   Tailwind utilities (no minted semantic gap tokens). Four
    radii tokens — `--radius-sm` (4 px), `--radius-md` (8 px),
    `--radius-lg` (12 px), `--radius-full` (9999 px) —
    structurally locked, not themeable. **Depth metaphor: pure
    flat** — zero shadow tokens; modals = `--bg-overlay` +
    `--border-strong` + fixed mode-dependent scrim
    (`rgba(0, 0, 0, 0.4)` light / `0.6` dark); popovers =
-   `--bg-overlay` + `--border` (no scrim). **Density toggle
-   cut for v1** — single comfortable posture for both mobile +
-   desktop; `app_settings.appearance.density` removed from
-   persistence shape; UI control removed; re-addable later
-   without contract changes if mobile demand surfaces. File:
-   [`spacing.md`](./spacing.md).
+   `--bg-overlay` + `--border` (no scrim). **Density toggle**
+   cut for v1 at this session, reinstated 2026-05-03 by Phase 2
+   Group B Select implementation
+   ([exploration record](../../explorations/2026-05-03-density-toggle.md)).
+   Component-internal sizing now lives in density-aware tokens
+   (`--control-h-*` height-driven for fixed-height controls,
+   `--row-py-*` / `--row-px-*` padding-driven for rows), each
+   with three variants keyed off active density (compact /
+   regular / comfortable). User toggle at
+   `app_settings.appearance.density` with sentinel `'default'`
+   resolving per tier (compact on desktop, regular on phone +
+   tablet). Tap-target compliance follows from default densities
+   (44 px control-md on regular meets iOS HIG); `hitSlop` reserved
+   for sub-`xs` affordances only. File: [`spacing.md`](./spacing.md).
 5. **Iconography + motion** — landed 2026-05-01
    ([exploration record](../../explorations/2026-05-01-iconography-motion.md)).
    **Iconography:** Lucide as the icon set (shadcn-canonical,
