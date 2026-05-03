@@ -138,24 +138,31 @@ Sheet-only specifics:
 ## Popover — API surface
 
 ```
-<Popover open onOpenChange modal>
-  <Popover.Trigger asChild>...</Popover.Trigger>
-  <Popover.Content side align>{children}</Popover.Content>
+<Popover onOpenChange>
+  <PopoverTrigger asChild>...</PopoverTrigger>
+  <PopoverContent side align sideOffset>{children}</PopoverContent>
 </Popover>
 ```
 
+Three flat exports (`Popover`, `PopoverTrigger`, `PopoverContent`)
+matching the react-native-reusables / shadcn convention; same flat
+shape as Aventuras's other primitives. No compound `Popover.Trigger`
+namespace.
+
 **Props:**
 
-- `open: boolean` / `onOpenChange: (open) => void` — controlled
-  state. Uncontrolled `defaultOpen` supported.
-- `modal: boolean` (default `false`) — when `true`, focus trap
-  engages and outside content becomes inert. Default `false`
-  matches the Select use case (non-modal dropdown over live
-  content).
-- `<Popover.Content side align>` — `side: 'top' | 'right' |
-'bottom' | 'left'` and `align: 'start' | 'center' | 'end'`,
-  forwarded to rn-primitives. Sensible defaults (`bottom` /
-  `start`) cover the dominant trigger-anchored case.
+- `onOpenChange?: (open: boolean) => void` — fires on every state
+  change. **No `open` / `defaultOpen` controlled API**:
+  `@rn-primitives/popover@1.4.0` exposes uncontrolled state only;
+  the trigger toggles internally. Programmatic control requires a
+  consumer-side wrapper using `useRootContext` from inside the
+  tree, which is out of scope for v1 — defer until a real consumer
+  needs it.
+- `<PopoverContent side align>` — `side: 'top' | 'bottom'` and
+  `align: 'start' | 'center' | 'end'`, forwarded to rn-primitives.
+  No `'left'` / `'right'` side: rn-primitives popover positions on
+  the vertical axis only. `sideOffset` (number, default `4`)
+  fine-tunes the gap between trigger and content.
 
 **Anatomy:**
 
