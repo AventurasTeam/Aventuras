@@ -57,12 +57,13 @@
 // layout instead of anchor-positioning math.
 //
 // Drag-to-dismiss IS implemented locally here, mirroring Sheet's
-// gesture pattern. The pattern is duplicated rather than shared
-// because the unmount-safety property both rely on (fresh dragOffset
-// per open) is satisfied independently in each: SelectBase.Portal
-// returns null on close, so PhoneSheetContent unmounts and its
-// useSharedValue is reborn on the next open. A future Sheet refactor
-// could extract the gesture+animation pattern into a shared shell.
+// gesture pattern AND its sub-component split. The state (dragOffset
+// useSharedValue) lives in PhoneSheetPanel, which is rendered as a
+// CHILD of SelectBase.Portal — Portal returns null on close, so
+// PhoneSheetPanel unmounts and the useSharedValue is reborn on the
+// next open. PhoneSheetContent (the wrapper that hosts Portal +
+// scrim) stays mounted; only the panel sub-component cycles. Same
+// architectural fix as Sheet's SheetPanel split.
 
 import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
@@ -185,22 +186,23 @@ const SHEET_HEIGHT_PCT: Record<ContentSheetSize, `${number}%`> = {
 const SAFE_AREA_GAP_PX = 8
 const DRAG_DISMISS_THRESHOLD_PX = 100
 
-function PhoneSheetContent({
+// PhoneSheetPanel lives INSIDE SelectBase.Portal so it mounts /
+// unmounts with each open. dragOffset is a fresh useSharedValue(0)
+// per mount — no off-screen translation leaks from a previous
+// drag-dismiss into the next entry animation. Same architectural
+// fix as Sheet's SheetPanel split.
+function PhoneSheetPanel({
   className,
   children,
-  sheetSize = 'short',
-  portalHost,
+  sheetSize,
 }: {
   className?: string
   children?: React.ReactNode
-  sheetSize?: ContentSheetSize
-  portalHost?: string
+  sheetSize: ContentSheetSize
 }) {
   const { onOpenChange } = SelectBase.useRootContext()
   const insets = useSafeAreaInsets()
   const { height: screenHeight } = useWindowDimensions()
-  // Cap so the panel never extends above the OS status bar / notch
-  // when there's no top-bar chrome above it.
   const maxHeight = Math.max(screenHeight - insets.top - SAFE_AREA_GAP_PX, 0)
   const panelStyle: ViewStyle = {
     position: 'absolute',
@@ -211,10 +213,6 @@ function PhoneSheetContent({
     maxHeight,
   }
 
-  // Drag-to-dismiss. Same gesture pattern Sheet uses, with the same
-  // unmount-safety property: SelectBase.Portal returns null on close,
-  // so PhoneSheetContent unmounts and the dragOffset shared value is
-  // freshly created on the next open. No persistence across cycles.
   const dragOffset = useSharedValue(0)
   const animatedDragStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: dragOffset.value }],
@@ -270,6 +268,24 @@ function PhoneSheetContent({
     </NativeOnlyAnimatedView>
   )
 
+  return Platform.OS === 'web' ? (
+    panel
+  ) : (
+    <GestureDetector gesture={panGesture}>{panel}</GestureDetector>
+  )
+}
+
+function PhoneSheetContent({
+  className,
+  children,
+  sheetSize = 'short',
+  portalHost,
+}: {
+  className?: string
+  children?: React.ReactNode
+  sheetSize?: ContentSheetSize
+  portalHost?: string
+}) {
   return (
     <SelectBase.Portal hostName={portalHost}>
       <FullWindowOverlay>
@@ -284,11 +300,9 @@ function PhoneSheetContent({
               style={Platform.select({ native: StyleSheet.absoluteFill })}
             />
           </NativeOnlyAnimatedView>
-          {Platform.OS === 'web' ? (
-            panel
-          ) : (
-            <GestureDetector gesture={panGesture}>{panel}</GestureDetector>
-          )}
+          <PhoneSheetPanel className={className} sheetSize={sheetSize}>
+            {children}
+          </PhoneSheetPanel>
         </View>
       </FullWindowOverlay>
     </SelectBase.Portal>
