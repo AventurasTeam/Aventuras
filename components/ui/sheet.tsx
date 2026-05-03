@@ -40,7 +40,7 @@ import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-vie
 import { TextClassContext } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 import * as React from 'react'
-import { Platform, StyleSheet, View, type ViewStyle } from 'react-native'
+import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
 import {
   FadeIn,
   FadeOut,
@@ -49,6 +49,7 @@ import {
   SlideOutDown,
   SlideOutRight,
 } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
 const Sheet = DialogPrimitive.Root
@@ -73,7 +74,18 @@ const BOTTOM_HEIGHT_PCT: Record<SheetSize, `${number}%`> = {
 
 const RIGHT_WIDTH_PX = 440
 
-function getNativePanelStyle(anchor: SheetAnchor, size: SheetSize): ViewStyle {
+const SAFE_AREA_GAP_PX = 8
+
+function getNativePanelStyle(
+  anchor: SheetAnchor,
+  size: SheetSize,
+  insetTop: number,
+  screenHeight: number,
+): ViewStyle {
+  // Cap the panel so it never extends above the OS status bar / notch.
+  // Aventuras has no top-bar chrome yet, so without this clamp the dev
+  // pages render the sheet as if the screen extends edge-to-edge.
+  const maxHeight = Math.max(screenHeight - insetTop - SAFE_AREA_GAP_PX, 0)
   if (anchor === 'bottom') {
     return {
       position: 'absolute',
@@ -81,11 +93,12 @@ function getNativePanelStyle(anchor: SheetAnchor, size: SheetSize): ViewStyle {
       left: 0,
       right: 0,
       height: BOTTOM_HEIGHT_PCT[size],
+      maxHeight,
     }
   }
   return {
     position: 'absolute',
-    top: 0,
+    top: insetTop + SAFE_AREA_GAP_PX,
     bottom: 0,
     right: 0,
     width: RIGHT_WIDTH_PX,
@@ -107,7 +120,9 @@ function SheetContent({
   const isBottom = anchor === 'bottom'
   const slideEnter = isBottom ? SlideInDown.duration(250) : SlideInRight.duration(250)
   const slideExit = isBottom ? SlideOutDown : SlideOutRight
-  const nativePanelStyle = getNativePanelStyle(anchor, size)
+  const insets = useSafeAreaInsets()
+  const { height: screenHeight } = useWindowDimensions()
+  const nativePanelStyle = getNativePanelStyle(anchor, size, insets.top, screenHeight)
 
   return (
     <DialogPrimitive.Portal hostName={portalHost}>
