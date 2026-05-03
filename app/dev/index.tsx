@@ -10,6 +10,7 @@ const ROUTES = [
   { href: '/dev/heading', label: 'Heading' },
   { href: '/dev/popover', label: 'Popover' },
   { href: '/dev/sheet', label: 'Sheet' },
+  { href: '/dev/select', label: 'Select' },
 ] as const
 
 export default function DevIndex() {
