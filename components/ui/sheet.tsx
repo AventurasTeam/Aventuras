@@ -40,7 +40,6 @@ import * as React from 'react'
 import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import {
-  cancelAnimation,
   FadeIn,
   FadeOut,
   SlideInDown,
@@ -155,21 +154,14 @@ function SheetContent({
           const delta = isBottom ? event.translationY : event.translationX
           if (delta > DRAG_DISMISS_THRESHOLD_PX) {
             // Continue the gesture motion smoothly off-screen, then close
-            // once the panel is visually gone. cancelAnimation + reset to 0
-            // before runOnJS(close) is critical: without it the off-screen
-            // shared-value state survives the unmount cycle and the
-            // reopened panel renders off-screen (its translateY initialises
-            // from the leaked value before useSharedValue's intent kicks
-            // in). The brief snap-to-rest before SlideOutDown plays is
-            // hidden by the exit layout animation.
+            // once the panel is visually gone. The unmount-cleanup useEffect
+            // below resets dragOffset after the component is gone, so the
+            // off-screen shared-value state doesn't leak into the next
+            // mount.
             const target = (isBottom ? screenHeight : screenHeight) + 200
             dragOffset.value = withTiming(target, { duration: 180 }, (finished?: boolean) => {
               'worklet'
-              if (finished) {
-                cancelAnimation(dragOffset)
-                dragOffset.value = 0
-                runOnJS(closeFromGesture)()
-              }
+              if (finished) runOnJS(closeFromGesture)()
             })
             return
           }
@@ -185,11 +177,16 @@ function SheetContent({
     [isBottom, dragOffset, closeFromGesture, screenHeight],
   )
 
-  // Belt-and-suspenders: reset on every mount in case any shared-value
-  // state survives the unmount cycle. Combined with the smooth dismiss
-  // above, the next-open panel always renders at its configured size.
+  // Reset dragOffset at unmount-cleanup time so the off-screen value from
+  // a drag-dismiss doesn't leak into the next mount. Doing the reset on
+  // unmount (rather than before close) avoids the visible snap-to-rest
+  // flicker that would otherwise show up between the timing animation
+  // ending and the layout exit animation taking over.
   React.useEffect(() => {
     dragOffset.value = 0
+    return () => {
+      dragOffset.value = 0
+    }
   }, [dragOffset])
 
   const PanelInner = (
