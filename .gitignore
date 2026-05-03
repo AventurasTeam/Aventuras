@@ -27,6 +27,7 @@ yarn-debug.*
 yarn-error.*
 debug-storybook.log
 logs
+_tmp
 
 # macOS
 .DS_Store
