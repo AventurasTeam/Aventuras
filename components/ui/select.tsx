@@ -414,7 +414,12 @@ function Item({
         // overlay → raised has zero contrast on the default light
         // theme (both #ffffff), making the highlight invisible.
         // Sunken is consistently darker than overlay across themes.
-        'group relative flex w-full flex-row items-center gap-2 rounded-sm py-3 pl-3 pr-10 active:bg-bg-sunken lg:py-1.5 lg:pl-2 lg:pr-8',
+        // Hairline separator (`border-b`) carries the at-rest "this
+        // row is tappable" signal on phone where there's no hover —
+        // iOS Settings / Mail / Notes pattern. Last row in the list
+        // hides its border via `last:border-b-0`. On desktop the
+        // hover state covers affordance, but separators don't hurt.
+        'group relative flex w-full flex-row items-center gap-2 border-b border-border py-3 pl-3 pr-10 last:border-b-0 active:bg-bg-sunken lg:rounded-sm lg:border-b-0 lg:py-1.5 lg:pl-2 lg:pr-8',
         Platform.select({
           web: 'cursor-default outline-none hover:bg-bg-sunken focus:bg-bg-sunken data-[disabled]:pointer-events-none [&_svg]:pointer-events-none',
         }),
