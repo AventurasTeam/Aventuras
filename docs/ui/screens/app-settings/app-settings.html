@@ -101,6 +101,20 @@
       .segment > .seg.active { background: var(--ink); color: #fff; }
       .segment > .seg + .seg { border-left: 1px solid var(--line); }
 
+      /* SwitchRow pattern — canonical shape for boolean settings. Full-width
+         row with label + optional hint on the left, switch indicator on the
+         right; whole row tappable on every tier. Per
+         forms.md → SwitchRow pattern. Replaces segment-as-boolean for
+         on/off settings. */
+      .switch-row { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 10px 0; margin-bottom: 4px; }
+      .switch-row-text { flex: 1; min-width: 0; }
+      .switch-row-label { font-size: 14px; color: var(--ink); font-weight: 500; }
+      .switch-row-hint { font-size: 12px; color: var(--ink-muted); margin-top: 2px; line-height: 1.5; }
+      .toggle { width: 34px; height: 18px; background: var(--line-soft); border-radius: 9px; position: relative; cursor: pointer; flex-shrink: 0; margin-top: 2px; }
+      .toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: #fff; border-radius: 50%; transition: left 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+      .toggle.on { background: var(--ok); }
+      .toggle.on::after { left: 18px; }
+
       /* model select with capability badges (badges right-aligned) */
       .model-select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 13px; color: var(--ink); display: flex; align-items: center; gap: 8px; cursor: pointer; }
       .model-select .caps { margin-left: auto; display: inline-flex; gap: 4px; }
@@ -922,11 +936,12 @@
               <input class="input-text" style="max-width: 120px;" value="24000" />
             </div>
           </div>
-          <div class="field-row">
-            <div class="field-label">auto-close chapters
-              <span class="hint">off &rarr; user closes manually; threshold color-warning still applies</span>
+          <div class="switch-row" role="switch" aria-checked="true">
+            <div class="switch-row-text">
+              <div class="switch-row-label">auto-close chapters</div>
+              <div class="switch-row-hint">off &rarr; user closes manually; threshold color-warning still applies</div>
             </div>
-            <div class="segment"><span class="seg">off</span><span class="seg active">on</span></div>
+            <span class="toggle on"></span>
           </div>
           <div class="field-row">
             <div class="field-label">recent buffer
@@ -947,11 +962,12 @@
           <div class="tab-title">Translation <span style="font-size: 12px; color: var(--ink-muted); font-weight: 400;">&middot; story default</span></div>
           <div class="tab-subtitle">Defaults copied into new stories. Display-only invariant: translations never feed back into prompts.</div>
 
-          <div class="field-row">
-            <div class="field-label">enabled
-              <span class="hint">master toggle</span>
+          <div class="switch-row" role="switch" aria-checked="false">
+            <div class="switch-row-text">
+              <div class="switch-row-label">enabled</div>
+              <div class="switch-row-hint">master toggle</div>
             </div>
-            <div class="segment"><span class="seg active">off</span><span class="seg">on</span></div>
+            <span class="toggle"></span>
           </div>
           <div class="field-row">
             <div class="field-label">target language
@@ -1023,9 +1039,11 @@
           <div class="tab-title">Composer prefs <span style="font-size: 12px; color: var(--ink-muted); font-weight: 400;">&middot; story default</span></div>
           <div class="tab-subtitle">Defaults for new stories. Mirrors Story Settings · Generation · Authoring aids.</div>
 
-          <div class="field-row">
-            <div class="field-label">composer modes</div>
-            <div class="segment"><span class="seg">off</span><span class="seg active">on</span></div>
+          <div class="switch-row" role="switch" aria-checked="true">
+            <div class="switch-row-text">
+              <div class="switch-row-label">composer modes</div>
+            </div>
+            <span class="toggle on"></span>
           </div>
           <div class="field-row">
             <div class="field-label">wrap POV
@@ -1033,11 +1051,12 @@
             </div>
             <div class="segment"><span class="seg active">first-person</span><span class="seg">third-person</span></div>
           </div>
-          <div class="field-row">
-            <div class="field-label">suggestions
-              <span class="hint">next-turn pane</span>
+          <div class="switch-row" role="switch" aria-checked="true">
+            <div class="switch-row-text">
+              <div class="switch-row-label">suggestions</div>
+              <div class="switch-row-hint">next-turn pane</div>
             </div>
-            <div class="segment"><span class="seg">off</span><span class="seg active">on</span></div>
+            <span class="toggle on"></span>
           </div>
         </div>
 
@@ -1154,11 +1173,12 @@
             Heavier observability tooling (global delta-log browser with filters by source / target_table / action_id) is planned as its own panel — see <code>followups.md</code>.
           </div>
 
-          <div class="field-row">
-            <div class="field-label">debug logging
-              <span class="hint">verbose pipeline events</span>
+          <div class="switch-row" role="switch" aria-checked="false">
+            <div class="switch-row-text">
+              <div class="switch-row-label">debug logging</div>
+              <div class="switch-row-hint">verbose pipeline events</div>
             </div>
-            <div class="segment"><span class="seg active">off</span><span class="seg">on</span></div>
+            <span class="toggle"></span>
           </div>
           <div class="field-row">
             <div class="field-label">view logs</div>

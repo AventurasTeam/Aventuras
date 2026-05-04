@@ -92,7 +92,11 @@
   .field-label .hint { display: block; font-size: 10px; color: var(--ink-faint); margin-top: 2px; }
   .input-text { width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 13px; color: var(--ink); font-family: inherit; }
   .input-textarea { width: 100%; box-sizing: border-box; min-height: 80px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 13px; color: var(--ink); line-height: 1.55; font-family: inherit; resize: vertical; }
-  .input-select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 13px; color: var(--ink); display: flex; justify-content: space-between; align-items: center; cursor: pointer; max-width: 380px; }
+  /* Inputs / Selects fill their form-row column by default at every tier
+     per forms.md → Form rows → Input width within form rows. Per-field
+     narrowing for numeric / short-value fields stays opt-in via inline
+     style on the consumer (year / day / token-count / chapter-N). */
+  .input-select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 13px; color: var(--ink); display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
   .input-select.default-sentinel { color: var(--ink-muted); font-style: italic; background: var(--bg); border-style: dashed; }
   .input-select.default-sentinel .default-tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); font-style: normal; margin-right: 6px; }
   .placeholder-text { color: var(--ink-faint); font-style: italic; font-size: 12px; }
@@ -122,10 +126,21 @@
   .radio-opt.active .radio-dot::after { content: ""; position: absolute; top: 2px; left: 2px; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
 
   .toggle-row { display: inline-flex; align-items: center; gap: 8px; padding-top: 4px; }
-  .toggle { width: 34px; height: 18px; background: var(--line-soft); border-radius: 9px; position: relative; cursor: pointer; }
+  .toggle { width: 34px; height: 18px; background: var(--line-soft); border-radius: 9px; position: relative; cursor: pointer; flex-shrink: 0; }
   .toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: #fff; border-radius: 50%; transition: left 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
   .toggle.on { background: var(--ok); }
   .toggle.on::after { left: 18px; }
+
+  /* SwitchRow pattern — canonical shape for boolean settings. Full-width
+     row with label + optional hint on the left, switch indicator on the
+     right; whole row tappable on every tier. Per
+     forms.md → SwitchRow pattern. Replaces the older field-row + toggle-row
+     idiom and segment-as-boolean idioms. */
+  .switch-row { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 10px 0; margin-bottom: 4px; }
+  .switch-row-text { flex: 1; min-width: 0; }
+  .switch-row-label { font-size: 14px; color: var(--ink); font-weight: 500; }
+  .switch-row-hint { font-size: 12px; color: var(--ink-muted); margin-top: 2px; line-height: 1.5; }
+  .switch-row > .toggle { margin-top: 2px; }
 
   .portrait-slot, .cover-slot { height: 110px; max-width: 380px; border: 1px dashed var(--line); border-radius: 3px; background: var(--bg-region); display: flex; align-items: center; justify-content: center; color: var(--ink-faint); font-size: 12px; font-style: italic; }
 
@@ -539,11 +554,12 @@
           </div>
         </div>
 
-        <div class="field-row">
-          <div class="field-label">composer modes
-            <span class="hint">Do / Say / Think / Free picker in the composer</span>
+        <div class="switch-row" role="switch" aria-checked="true">
+          <div class="switch-row-text">
+            <div class="switch-row-label">composer modes</div>
+            <div class="switch-row-hint">Do / Say / Think / Free picker in the composer</div>
           </div>
-          <div class="toggle-row"><span class="toggle on"></span><span style="font-size: 12px; color: var(--ink-muted);">on</span></div>
+          <span class="toggle on"></span>
         </div>
 
         <div class="field-row">
@@ -556,11 +572,12 @@
           </div>
         </div>
 
-        <div class="field-row">
-          <div class="field-label">suggestions
-            <span class="hint">next-turn suggestion panel below the entries</span>
+        <div class="switch-row" role="switch" aria-checked="true">
+          <div class="switch-row-text">
+            <div class="switch-row-label">suggestions</div>
+            <div class="switch-row-hint">next-turn suggestion panel below the entries</div>
           </div>
-          <div class="toggle-row"><span class="toggle on"></span><span style="font-size: 12px; color: var(--ink-muted);">on</span></div>
+          <span class="toggle on"></span>
         </div>
       </div>
 
@@ -641,11 +658,12 @@
           </div>
         </div>
 
-        <div class="field-row">
-          <div class="field-label">auto-close chapters
-            <span class="hint">off &rarr; user closes chapters manually; threshold color-warning still applies</span>
+        <div class="switch-row" role="switch" aria-checked="true">
+          <div class="switch-row-text">
+            <div class="switch-row-label">auto-close chapters</div>
+            <div class="switch-row-hint">off &rarr; user closes chapters manually; threshold color-warning still applies</div>
           </div>
-          <div class="toggle-row"><span class="toggle on"></span><span style="font-size: 12px; color: var(--ink-muted);">on</span></div>
+          <span class="toggle on"></span>
         </div>
 
         <div class="tab-section">
@@ -676,11 +694,12 @@
           <b>Translations are display-only.</b> They're rendered alongside the source in the UI; they do <i>not</i> feed back into prompts or LLM context. The source is canonical.
         </div>
 
-        <div class="field-row">
-          <div class="field-label">enable translation
-            <span class="hint">master toggle; target + granular toggles disable when off</span>
+        <div class="switch-row" role="switch" aria-checked="true">
+          <div class="switch-row-text">
+            <div class="switch-row-label">enable translation</div>
+            <div class="switch-row-hint">master toggle; target + granular toggles disable when off</div>
           </div>
-          <div class="toggle-row"><span class="toggle on"></span><span style="font-size: 12px; color: var(--ink-muted);">on</span></div>
+          <span class="toggle on"></span>
         </div>
 
         <div class="field-row">
@@ -697,41 +716,47 @@
           <div class="tab-section-title">What to translate</div>
         </div>
 
-        <div class="field-row">
-          <div class="field-label">narrative content
-            <span class="hint">the AI's reply text</span>
+        <div class="switch-row" role="switch" aria-checked="true">
+          <div class="switch-row-text">
+            <div class="switch-row-label">narrative content</div>
+            <div class="switch-row-hint">the AI's reply text</div>
           </div>
-          <div class="toggle-row"><span class="toggle on"></span></div>
+          <span class="toggle on"></span>
         </div>
-        <div class="field-row">
-          <div class="field-label">user action text
-            <span class="hint">so the LLM-facing log stays monolingual even when the UI shows your native tongue</span>
+        <div class="switch-row" role="switch" aria-checked="true">
+          <div class="switch-row-text">
+            <div class="switch-row-label">user action text</div>
+            <div class="switch-row-hint">so the LLM-facing log stays monolingual even when the UI shows your native tongue</div>
           </div>
-          <div class="toggle-row"><span class="toggle on"></span></div>
+          <span class="toggle on"></span>
         </div>
-        <div class="field-row">
-          <div class="field-label">entity fields
-            <span class="hint">names, descriptions, kind-specific state fields</span>
+        <div class="switch-row" role="switch" aria-checked="true">
+          <div class="switch-row-text">
+            <div class="switch-row-label">entity fields</div>
+            <div class="switch-row-hint">names, descriptions, kind-specific state fields</div>
           </div>
-          <div class="toggle-row"><span class="toggle on"></span></div>
+          <span class="toggle on"></span>
         </div>
-        <div class="field-row">
-          <div class="field-label">lore bodies
-            <span class="hint">title + body of each lore row</span>
+        <div class="switch-row" role="switch" aria-checked="true">
+          <div class="switch-row-text">
+            <div class="switch-row-label">lore bodies</div>
+            <div class="switch-row-hint">title + body of each lore row</div>
           </div>
-          <div class="toggle-row"><span class="toggle on"></span></div>
+          <span class="toggle on"></span>
         </div>
-        <div class="field-row">
-          <div class="field-label">threads + happenings
-            <span class="hint">titles and descriptions</span>
+        <div class="switch-row" role="switch" aria-checked="false">
+          <div class="switch-row-text">
+            <div class="switch-row-label">threads + happenings</div>
+            <div class="switch-row-hint">titles and descriptions</div>
           </div>
-          <div class="toggle-row"><span class="toggle"></span></div>
+          <span class="toggle"></span>
         </div>
-        <div class="field-row">
-          <div class="field-label">chapter summaries
-            <span class="hint">title + summary generated at chapter close</span>
+        <div class="switch-row" role="switch" aria-checked="false">
+          <div class="switch-row-text">
+            <div class="switch-row-label">chapter summaries</div>
+            <div class="switch-row-hint">title + summary generated at chapter close</div>
           </div>
-          <div class="toggle-row"><span class="toggle"></span></div>
+          <span class="toggle"></span>
         </div>
       </div>
 
@@ -783,11 +808,12 @@
             <span class="seg">Heavy</span>
           </div>
         </div>
-        <div class="field-row">
-          <div class="field-label">allowExplicit
-            <span class="hint">bool &middot; pack var</span>
+        <div class="switch-row" role="switch" aria-checked="false">
+          <div class="switch-row-text">
+            <div class="switch-row-label">allowExplicit</div>
+            <div class="switch-row-hint">bool &middot; pack var</div>
           </div>
-          <div class="toggle-row"><span class="toggle"></span></div>
+          <span class="toggle"></span>
         </div>
 
         <div class="field-row" style="margin-top: 8px;">

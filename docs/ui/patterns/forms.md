@@ -105,6 +105,31 @@ When stacked:
 When 2-col (`≥ 640 px` container), the existing desktop aesthetic
 is preserved unchanged.
 
+### Input width within form rows
+
+Form-row inputs — Input, Textarea, Select trigger (dropdown
+mode), Select segment — span the full content width of their
+form column / row by default at every tier. No primitive-level
+width cap. Stacked containers see inputs at full row width;
+2-col containers see inputs at full input-column width
+(form-row's `1fr` column). Segment Selects stretch
+(`justify-self: stretch`) inside the row rather than hugging
+content (`justify-self: start`) — the desktop "hug" idiom is the
+exception, not the default.
+
+Per-field narrowing for numeric or short-value inputs (year /
+day / token-count / chapter-N) stays opt-in via consumer
+styling per
+[Input — variants](#input--variants) (`className="w-24"` etc.).
+The narrowing is a per-field layout decision, not a primitive
+default.
+
+This rule unifies world / plot / story-settings / app-settings /
+vault-calendar form rendering. Earlier wireframes inconsistently
+applied `max-width: 380px` style caps on Select triggers for
+visual balance on desktop — those caps drop; inputs fill their
+column.
+
 ### Inline-row exceptions
 
 Rows that stay inline regardless of container width (the row's
@@ -442,7 +467,25 @@ User-driven vertical resize (drag the corner) is web-only via
 The canonical cross-platform shape for boolean settings. Label +
 optional hint on the left, Switch indicator on the right; the
 **whole row is the tap target** on every tier. v1 wireframe
-consumers (Story Settings, Plot) all use this shape.
+consumers (Story Settings, App Settings, Plot) all use this shape.
+
+**Two anti-patterns this replaces** in older wireframes — both
+swept during the
+[mobile settings revisit](../../explorations/2026-05-04-mobile-settings-revisit.md):
+
+- **Standalone Switch + adjacent label inside a 2-col field-row.**
+  The label sat in `.field-label`, the switch sat in the
+  `.toggle-row` input slot. Reading left-to-right made the label
+  feel like form-field chrome; the tap target was switch-only, not
+  row. SwitchRow lifts the label out of the field-row, makes the
+  whole row tappable.
+- **Segment Select with `[off | on]` for boolean settings.**
+  Segment is for cardinality ≥ 2 with semantically meaningful
+  options; using it for boolean on/off makes the user pick between
+  two values when one toggle suffices. SwitchRow is the right
+  primitive for boolean. Multi-state tri-state cases
+  (`[auto | force on | force off]`) and semantic two-option picks
+  (`[first-person | third-person]`) stay segment.
 
 Modern desktop OSes have converged on row-tappable toggles:
 macOS Ventura+ System Settings, Windows 11 Settings, GNOME

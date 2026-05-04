@@ -562,16 +562,20 @@ Open sub-questions:
 
 ### Settings screens — adopt SwitchRow pattern
 
-Story Settings and (eventually) App Settings render their boolean
-toggles as a label + hint row with a switch on the right (per
-wireframes). Group D shipped the
+Story Settings and App Settings render their boolean toggles as a
+label + hint row with a switch on the right (per wireframes —
+both swept during the
+[mobile settings revisit](./explorations/2026-05-04-mobile-settings-revisit.md)
+to use SwitchRow consistently, replacing the older standalone-
+toggle-with-adjacent-label and `[off | on]` segment-as-boolean
+idioms). Group D shipped the
 [`SwitchRow` pattern](./ui/patterns/forms.md#switchrow-pattern) as
 the canonical row-tappable shape. The screen-side rework — wiring
-the pattern into Story Settings panels, normalizing label / hint
-copy, ensuring the row spans the full panel width — lands as part
-of phase 3 settings implementation. Tracked here so it doesn't get
-lost between primitive landing (done) and screen integration
-(pending).
+the pattern into Story Settings and App Settings panels,
+normalizing label / hint copy, ensuring the row spans the full
+panel width — lands as part of phase 3 settings implementation.
+Tracked here so it doesn't get lost between primitive landing
+(done) and screen integration (pending).
 
 Cross-platform: SwitchRow is the canonical shape on every tier
 (phone, tablet, desktop). Settings layouts should NOT use a
