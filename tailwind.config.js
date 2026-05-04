@@ -51,6 +51,14 @@ module.exports = {
         'focus-ring': 'var(--focus-ring)',
         'selection-bg': 'var(--selection-bg)',
         'recently-classified-bg': 'var(--recently-classified-bg)',
+        // State-layer tints (hover / press). Resolved at runtime
+        // via color-mix on --fg-primary. See global.css for
+        // rationale — sidesteps the Tailwind alpha-modifier limit
+        // on var()-based colors.
+        tint: {
+          hover: 'var(--tint-hover)',
+          press: 'var(--tint-press)',
+        },
       },
       fontFamily: {
         reading: 'var(--font-reading)',

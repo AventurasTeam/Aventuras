@@ -131,7 +131,7 @@ export const themes: readonly Theme[] = [
       '--info': '#04a5e5',
       '--info-fg': '#eff1f5',
       '--border': '#bcc0cc',
-      '--border-strong': '#acb0be',
+      '--border-strong': '#9ca0b0',
       '--focus-ring': '#1e66f5',
       '--selection-bg': '#b9cbf7',
       '--recently-classified-bg': '#fff5d6',

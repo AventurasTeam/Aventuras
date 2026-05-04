@@ -46,6 +46,25 @@
       'Noto Serif', serif;
     --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+    /* State-layer tints, theme-aware via fg-primary. Each theme
+     * sets --fg-primary to its on-surface text color (near-black
+     * in light themes, near-white in dark themes); color-mix
+     * resolves these to a low-alpha overlay that darkens light
+     * surfaces and lightens dark surfaces — correct hover/press
+     * direction in either mode. Magnitudes match Material 3's
+     * state-layer spec (8% hover, 14% press, give or take).
+     *
+     * Why two CSS-var slots instead of `bg-fg-primary/8` Tailwind
+     * opacity: our color tokens use `var(--fg-primary)` without
+     * the `<alpha-value>` placeholder, so Tailwind's alpha
+     * modifier silently emits no rule on those colors. Defining
+     * the tint as a first-class slot via color-mix sidesteps that
+     * — and `bg-tint-hover` / `bg-tint-press` work as ordinary
+     * Tailwind colors, including with the `hover:` / `active:`
+     * variants. */
+    --tint-hover: color-mix(in srgb, var(--fg-primary) 8%, transparent);
+    --tint-press: color-mix(in srgb, var(--fg-primary) 14%, transparent);
   }
 }
 

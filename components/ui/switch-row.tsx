@@ -72,14 +72,12 @@ export function SwitchRow({
       onPress={() => onCheckedChange(!checked)}
       className={cn(
         'flex-row items-center gap-3 rounded-md px-row-x-md py-row-y-md',
-        // Hover/active tint: bg-fg-muted at low opacity. Direct
-        // bg-* tier slots (raised / sunken) sit within ~1-3% of
-        // bg-base in light themes, making them invisible as hover
-        // states. fg-muted is mid-gray in every theme — its
-        // translucent layer darkens light surfaces and lightens
-        // dark surfaces in the right direction for hover/active.
-        'active:bg-fg-muted/15',
-        Platform.select({ web: 'hover:bg-fg-muted/10 cursor-pointer' }),
+        // Hover/active state-layer via --tint-hover / --tint-press
+        // (color-mix on --fg-primary, defined in global.css).
+        // Direct bg-* tier slots sit within ~1-3% of bg-base in
+        // light themes — invisible as state feedback.
+        'active:bg-tint-press',
+        Platform.select({ web: 'cursor-pointer hover:bg-tint-hover' }),
         disabled && 'opacity-50',
         Platform.select({ web: disabled && 'cursor-not-allowed' }),
         className,
