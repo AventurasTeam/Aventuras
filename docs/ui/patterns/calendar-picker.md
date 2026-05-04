@@ -288,6 +288,10 @@ template. Sample render before/after gives a concrete preview.
 
 ### Combined modal shape
 
+Rendered via the [AlertDialog primitive](./alert-dialog.md) with
+the W1 / W2 / W3 sub-warning blocks composed between header and
+footer.
+
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  Switch calendar to Stardate?                             │

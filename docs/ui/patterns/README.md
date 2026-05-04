@@ -41,6 +41,10 @@ The split heuristic + when-to-add rules live in
 - [`accordion.md`](./accordion.md) — collapsible content sections.
   Strip default, card via className composition; multi-open default;
   chevron -90°→0° rotation on expand.
+- [`alert-dialog.md`](./alert-dialog.md) — blocking consent gate.
+  Modal-on-every-tier; rich content via composition; destructive
+  CTA via Button variant (asChild). Distinct from Sheet (navigation
+  surface) — AlertDialog is for "are you sure?" gates.
 - [`calendar-picker.md`](./calendar-picker.md) — calendar-system
   selector shared across App Settings, Story Settings, and Wizard:
   rich rows, summary panel, swap warnings (origin / eras / display),

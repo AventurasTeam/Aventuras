@@ -4,8 +4,14 @@ Sheet and Popover — the two transient floating-overlay primitives
 shipped in phase 2 Group A of Storybook bring-up. Sister to
 [`forms.md`](./forms.md) (Select consumes both) and to
 [`calendar-picker.md`](./calendar-picker.md) (calendar-picker
-consumes both via Select). Modal lands later as a third primitive
-sister to these two; this file gains a Modal section once it ships.
+consumes both via Select), and
+[`alert-dialog.md`](./alert-dialog.md) (the consent-gate
+counterpart — modal-shaped, but a sibling primitive on
+`@rn-primitives/alert-dialog`). A generic Modal primitive (for
+non-consent surfaces — long-form modals, complex flows that need
+more than AlertDialog's gap-4 shape) may land later as a third
+primitive sister to Sheet and Popover; this file would gain a
+Modal section then.
 
 **Canonical decision-tree, behavior rules, and surface bindings live
 in [`../foundations/mobile/layout.md`](../foundations/mobile/layout.md)**
@@ -78,8 +84,11 @@ variant API, and accessibility surface; structural defaults
 (rn-primitives composition, lifecycle wiring, anchor positioning
 math) are accepted as-is.
 
-The future Modal primitive shares `@rn-primitives/dialog` with
-Sheet — different presentation, same lifecycle source.
+A future generic Modal primitive (if added beyond AlertDialog's
+consent-gate shape) would share `@rn-primitives/dialog` with Sheet
+— different presentation, same lifecycle source. AlertDialog
+itself uses sibling `@rn-primitives/alert-dialog`, distinct from
+both.
 
 ## Sheet — API surface
 

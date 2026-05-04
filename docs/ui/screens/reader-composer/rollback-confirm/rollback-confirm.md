@@ -41,12 +41,10 @@ carries the absolute count.
 
 ### Confirmation modal — post-click
 
-Clicking the `×` opens a modal centered over the reader. Backdrop
-dim per the standard modal pattern (see
-[branch creation modal](../branch-navigator/branch-navigator.md#branch-creation--modal)
-for the canonical shape). The hover-preview accent disappears once
-the modal opens — the modal carries the consequence in numeric form,
-not visual:
+Clicking the `×` opens an
+[AlertDialog](../../../patterns/alert-dialog.md) centered over the
+reader. The hover-preview accent disappears once the modal opens —
+the modal carries the consequence in numeric form, not visual:
 
 ```
 ┌──── Delete from entry 47? ──────────── × ─┐

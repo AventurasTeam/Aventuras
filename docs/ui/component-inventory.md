@@ -50,16 +50,14 @@ Text. Plus the `NativeOnlyAnimatedView` utility wrapper.
 | Chip               | [chips.md → Chip](./patterns/chips.md#chip--square-toggleable)                                           | Square (4px radius), toggleable filter / state indicator. `selected` + `onPress` props.                            |
 | Tag                | [chips.md → Tag](./patterns/chips.md#tag--pill-labeled-content)                                          | Pill (full radius), labeled content. `removable` / `tone` (soft) / `dashed` (add affordance) props.                |
 | Accordion          | [accordion.md](./patterns/accordion.md)                                                                  | Strip default; card composition via className. `type="multiple"` default. Chevron -90°→0° on expand.               |
+| AlertDialog        | [alert-dialog.md](./patterns/alert-dialog.md)                                                            | Modal-on-every-tier consent gate. Rich content via composition. Destructive via Button variant (asChild).          |
 
 ### Primitives — needs design
 
-Baseline column names the react-native-reusables source per
-[components.md → Sourcing](./components.md#sourcing--react-native-reusables-as-baseline);
-empty means from-scratch.
-
-| Primitive   | Baseline       | Used by                                                  | Open question                                                                                               |
-| ----------- | -------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| AlertDialog | `alert-dialog` | Rollback confirm, delete confirms, calendar swap-warning | Severity variants, DANGER-CTA placement + copy contract, sheet-anchor on phone vs popover-style on desktop. |
+_Empty — all primitives have specs._ As new primitive needs surface,
+add rows here with the baseline column naming the react-native-reusables
+source per [components.md → Sourcing](./components.md#sourcing--react-native-reusables-as-baseline)
+(or `_none_` for from-scratch).
 
 ### Primitives — deferred
 

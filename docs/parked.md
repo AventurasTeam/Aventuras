@@ -1056,6 +1056,19 @@ too short in practice — e.g., users report missing the message
 while skimming — implement as a per-toast `Date.now()` pause /
 resume on the timer.
 
+### AlertDialog scroll-on-overflow
+
+[`ui/patterns/alert-dialog.md`](./ui/patterns/alert-dialog.md)
+ships v1 without scroll handling on the dialog body. v1 consumers
+(rollback confirm, calendar swap-warning, branch / entity delete
+confirms) all carry bounded content. If a future call-site needs
+unbounded content (e.g. very long impact lists, large preview
+blocks), add `max-h` + `overflow-auto` to the dialog body region
+between header and footer.
+
+Surface again when a use case forces it; until then the centered
+modal stays bounded by content.
+
 ### Filter chip pill→square wireframe consolidation
 
 [`ui/patterns/chips.md`](./ui/patterns/chips.md) splits Chip
