@@ -30,14 +30,19 @@ export function Chip({ selected = false, onPress, disabled, className, children 
     // doesn't cascade through TextClassContext).
     'group flex-row items-center justify-center rounded-sm border px-3 py-1',
     selected ? 'border-fg-primary bg-fg-primary' : 'border-border-strong bg-bg-base',
-    // State-layer hover/press matching SwitchRow / Tag — minted
-    // `--tint-hover` / `--tint-press` slots are the project's
-    // canonical way to signal tappability across surfaces.
-    interactive && 'active:bg-tint-press',
+    // Hover/press: state-layer tint on the unselected (neutral)
+    // bg, opacity reduction on the selected (filled) bg. The
+    // state-layer pattern relies on the tint replacing a
+    // neutral background — applying it to a filled surface
+    // visually inverts (tint is light over light fg-primary,
+    // dark over dark, etc.). Opacity is the project's
+    // filled-surface hover convention; matches Button's
+    // `destructive` variant.
+    interactive && (selected ? 'active:opacity-90' : 'active:bg-tint-press'),
     Platform.select({
       web: cn(
         interactive && 'cursor-pointer outline-none transition-colors',
-        interactive && 'hover:bg-tint-hover',
+        interactive && (selected ? 'hover:opacity-90' : 'hover:bg-tint-hover'),
         interactive && 'focus-visible:ring-2 focus-visible:ring-focus-ring',
         disabled && 'cursor-not-allowed pointer-events-none',
       ),
