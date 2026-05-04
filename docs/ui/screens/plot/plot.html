@@ -818,6 +818,39 @@
         font-size: 12px;
         color: var(--ink);
       }
+      /* SwitchRow pattern — full-width row with optional leading visual,
+         label + dynamic hint on the left, switch indicator on the right;
+         whole row tappable on every tier. Per
+         forms.md → SwitchRow pattern. Supports richer adornments (leading
+         icon, state-conditional hint text) beyond the bare label+hint+
+         switch shape. */
+      .switch-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        cursor: pointer;
+        padding: 10px 0;
+        margin-bottom: 4px;
+      }
+      .switch-row-text {
+        flex: 1;
+        min-width: 0;
+      }
+      .switch-row-label {
+        font-size: 14px;
+        color: var(--ink);
+        font-weight: 500;
+      }
+      .switch-row-hint {
+        font-size: 12px;
+        color: var(--ink-muted);
+        margin-top: 2px;
+        line-height: 1.5;
+      }
+      .switch-row > .ck-icon,
+      .switch-row > .toggle-pill {
+        margin-top: 2px;
+      }
       .toggle-pill {
         width: 30px;
         height: 16px;
@@ -2060,16 +2093,16 @@
             </div>
           </div>
 
-          <div class="field-row">
-            <div class="field-label">
-              common_knowledge
-              <span class="type-hint">bool &middot; awareness skip</span>
+          <div class="switch-row" role="switch" aria-checked="false">
+            <span class="ck-icon" id="ck-icon-detail" title="common knowledge">⊙</span>
+            <div class="switch-row-text">
+              <div class="switch-row-label">common_knowledge</div>
+              <div class="switch-row-hint">
+                <span data-ck-text="off">bool &middot; awareness skip</span>
+                <span data-ck-text="on" style="display: none">on &mdash; awareness rows are skipped</span>
+              </div>
             </div>
-            <div class="toggle-row">
-              <span class="ck-icon" id="ck-icon-detail" title="common knowledge">⊙</span>
-              <span class="toggle-pill" id="ck-toggle"></span>
-              <span><span data-ck-text="off">off</span><span data-ck-text="on" style="display: none">on &mdash; awareness rows are skipped</span></span>
-            </div>
+            <span class="toggle-pill" id="ck-toggle"></span>
           </div>
 
           <div class="field-row">

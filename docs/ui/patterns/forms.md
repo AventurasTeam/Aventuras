@@ -117,18 +117,28 @@ width cap. Stacked containers see inputs at full row width;
 content (`justify-self: start`) — the desktop "hug" idiom is the
 exception, not the default.
 
-Per-field narrowing for numeric or short-value inputs (year /
-day / token-count / chapter-N) stays opt-in via consumer
-styling per
-[Input — variants](#input--variants) (`className="w-24"` etc.).
-The narrowing is a per-field layout decision, not a primitive
-default.
+**Per-field narrowing is opt-in for desktop visual balance only,
+and DOES NOT carry to narrow containers.** Wizard year / day
+inputs cap their width on desktop because the surrounding form
+expects compact compositions; a similar narrow cap on chapter-
+token-threshold or recent-buffer numeric inputs in settings is
+sometimes tempting on desktop but should NOT propagate down. On
+narrow containers, full-width is preferred over per-field caps —
+consistency with the form's vertical rhythm beats per-field
+horizontal optimization. Implementation: don't pin per-field
+widths via inline `style="max-width: ..."` (which beats
+`@container` overrides via CSS specificity); use a class the
+narrow-container rule can override, or accept full-width on
+every tier as the simpler choice.
 
 This rule unifies world / plot / story-settings / app-settings /
 vault-calendar form rendering. Earlier wireframes inconsistently
-applied `max-width: 380px` style caps on Select triggers for
-visual balance on desktop — those caps drop; inputs fill their
-column.
+applied `max-width: 380px` (and 260 / 280 / 320) caps on Select
+triggers and select-style numeric inputs for desktop visual
+balance — those caps drop; inputs fill their column. Settings
+numerics like `chapter token threshold` and `recent buffer` are
+full-width on every tier; the user types a 3-5 char value into a
+field that's the same width as its label-row neighbors.
 
 ### Inline-row exceptions
 
