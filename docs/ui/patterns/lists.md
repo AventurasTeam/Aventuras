@@ -132,7 +132,7 @@ authoritative version; this is the cross-cutting summary:
 
 | Surface                 | Searches                                                                                                                                                |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Story list              | `title`, `description`, `definition.genre.label`, `tags`, `author_notes`                                                                                |
+| Story list              | `title`, `description`, `definition.genre.label`, `tags`                                                                                                |
 | Reader Browse rail      | category-aware (entity: `name`/`description`/`tags`; lore: `title`/`body`/`category`/`tags`; thread/happening: `title`/`description`/`category`/`tags`) |
 | World panel list        | category-aware (same as Browse rail equivalents)                                                                                                        |
 | Plot panel — threads    | `title`, `description`, `category`, `tags`                                                                                                              |

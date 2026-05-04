@@ -38,7 +38,6 @@ erDiagram
         text accent_color "optional hex/HSL; falls back to mode-derived"
         text status "draft | active | archived (lifecycle; mutually exclusive)"
         integer favorite "0 | 1; orthogonal to status"
-        text author_notes "private; distinct from description"
         integer last_opened_at "distinct from updated_at; drives last-opened sort"
         json definition "definitional content (what the story IS); see 'Story settings shape' decision"
         json settings "operational config (how it generates); see 'Story settings shape' decision"
@@ -668,8 +667,10 @@ queries.
 - `favorite integer` — 0 or 1. Orthogonal to `status` — any status
   can be favorited. Inline star toggle on the library card. Naming
   parallels the per-row `favorite` flag on `vault_calendars`.
-- `author_notes text` — private per-story note slot, distinct from
-  `description` (public one-liner). Nullable.
+- `description text` — freeform user-text slot for the story's
+  blurb / log line / running notes. Shown on library cards
+  (3-line ellipsis). Not injected into any LLM prompt; purely
+  the user's own context surface.
 - `last_opened_at integer` — distinct from `updated_at` (which
   reflects any write). Touched when the user navigates into the
   story; drives the default `last-opened` sort on the library.

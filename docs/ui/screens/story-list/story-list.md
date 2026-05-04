@@ -59,7 +59,7 @@ landing from anywhere else, but we're already here).
 
 - **Search** — single input, left-anchored, takes available width up
   to ~360px. Scope: `title`, `description`, `definition.genre.label`,
-  `tags`, `author_notes`. Affordances per the
+  `tags`. Affordances per the
   [search-bar-scope pattern](../../patterns/lists.md#search-bar-scope).
 - **Filter chips** — single-select: `All` / `Favorited` / `Archived`.
   `All` hides archived by default (they only appear when the
@@ -310,7 +310,7 @@ Design rationale and adversarial findings in
 ## Data-model dependencies
 
 Card identity fields — `tags`, `cover_asset_id`, `accent_color`,
-`status`, `favorite`, `author_notes`, `last_opened_at` — live as
+`status`, `favorite`, `last_opened_at` — live as
 columns on the `stories` table. The genre overline sources from
 `definition.genre.label` (a JSON path into the `stories.definition`
 column, not a top-level column). Schema authority and rationale in

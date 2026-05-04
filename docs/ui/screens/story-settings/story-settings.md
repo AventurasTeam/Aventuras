@@ -40,12 +40,11 @@ Cross-cutting principles that govern this screen are in
 │               │ title: Aria's Descent                       │
 │ SETTINGS      │ description: [textarea]                     │
 │ · Models      │ tags: [chips] +                             │
-│ · Memory      │ author notes: [textarea]                    │
-│ · Translation │ ─ Appearance                                │
-│ · Pack        │ cover, accent color                         │
-│ · Calendar    │ ─ Library                                   │
-│ · Advanced    │ status: [Active|Archived]                   │
-│               │ ★ favorite                                  │
+│ · Memory      │ ─ Appearance                                │
+│ · Translation │ cover, accent color                         │
+│ · Pack        │ ─ Library                                   │
+│ · Calendar    │ status: [Active|Archived]                   │
+│ · Advanced    │ ★ favorite                                  │
 │               │                                             │
 │               ├────────────────────────────────────────────┤
 │               │ save bar (when dirty)                       │
@@ -90,9 +89,11 @@ card `⋯ → Edit info` routes to `About` directly.
 
 **Story section** (definitional — set during wizard, editable after):
 
-- **About** — title, description, tags, author notes (private),
-  cover, accent color, library status (`active` / `archived` — segment
-  per [Select primitive rule](../../patterns/forms.md#select-primitive)),
+- **About** — title, description (freeform user-text — blurb /
+  notes / log line, shown on library cards; not injected into any
+  LLM prompt), tags, cover, accent color, library status
+  (`active` / `archived` — segment per
+  [Select primitive rule](../../patterns/forms.md#select-primitive)),
   favorite (orthogonal SwitchRow with a leading star icon — own row,
   not nested in the status row; matches the inline-favorite pattern on
   story-list cards). Library-shaped metadata only — story-shaping
