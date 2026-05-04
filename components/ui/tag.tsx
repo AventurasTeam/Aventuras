@@ -47,7 +47,7 @@ export function Tag({
     // `group` hooks the Pressable so the label can hover-lift via
     // group-hover through TextClassContext (direct hover: doesn't
     // cascade to inherited text colors).
-    'group flex-row items-center gap-1 rounded-full border px-2.5 py-0.5',
+    'group flex-row items-center gap-1 rounded-full border px-row-x-xs py-row-y-xs',
     'border-border-strong',
     tone === 'soft' ? 'bg-bg-region' : 'bg-bg-base',
     dashed && 'border-dashed',

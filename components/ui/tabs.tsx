@@ -47,7 +47,7 @@ function TabsTrigger({ className, count, children, ...props }: TabsTriggerProps)
           Platform.OS === 'web' && props.disabled ? ({ pointerEvents: 'none' } as never) : undefined
         }
         className={cn(
-          'group flex-row items-center gap-1 border-b-2 pb-2 pt-1',
+          'group flex-row items-center gap-1 border-b-2 py-row-y-sm',
           active ? 'border-fg-primary' : 'border-transparent',
           Platform.select({
             web: cn(

@@ -87,7 +87,7 @@ function AccordionTrigger({
         <AccordionPrimitive.Trigger {...props} asChild>
           <Trigger
             className={cn(
-              'flex-row items-start justify-between gap-4 rounded-md py-4 disabled:opacity-50',
+              'flex-row items-start justify-between gap-4 rounded-md py-row-y-lg disabled:opacity-50',
               Platform.select({
                 web: cn(
                   'flex flex-1 cursor-pointer outline-none transition-colors',
@@ -139,7 +139,7 @@ function AccordionContent({
       >
         <Animated.View
           exiting={Platform.select({ native: FadeOutUp.duration(200) })}
-          className={cn('pb-4', className)}
+          className={cn('pb-row-y-lg', className)}
         >
           {children}
         </Animated.View>

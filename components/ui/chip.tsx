@@ -28,7 +28,7 @@ export function Chip({ selected = false, onPress, disabled, className, children 
     // `group` hooks the wrapper so group-hover can lift the
     // label color on inactive interactive chips (direct hover:
     // doesn't cascade through TextClassContext).
-    'group flex-row items-center justify-center rounded-sm border px-3 py-1',
+    'group flex-row items-center justify-center rounded-sm border px-row-x-sm py-row-y-xs',
     selected ? 'border-fg-primary bg-fg-primary' : 'border-border-strong bg-bg-base',
     // Hover/press: state-layer tint on the unselected (neutral)
     // bg, opacity reduction on the selected (filled) bg. The
