@@ -35,6 +35,7 @@
     "@react-navigation/bottom-tabs": "^7.15.5",
     "@react-navigation/elements": "^2.9.14",
     "@react-navigation/native": "^7.1.33",
+    "@rn-primitives/avatar": "^1.4.0",
     "@rn-primitives/checkbox": "^1.4.0",
     "@rn-primitives/dialog": "^1.4.0",
     "@rn-primitives/popover": "^1.4.0",

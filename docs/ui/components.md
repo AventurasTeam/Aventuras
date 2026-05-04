@@ -143,6 +143,44 @@ Documented precedents:
   mobile testing surfaced that fixed sizes felt miniscule on
   touch, so the decision was reversed and recorded with a
   SUBTRACTED note in each file's header.
+- **Icon variant-prop sizing API + cssInterop color pipe**
+  ([`components/ui/icon.tsx`](../../components/ui/icon.tsx),
+  Phase 2 Group E). `size` accepts the iconography sizing tokens
+  (`'sm' | 'md' | 'lg'` → 16/20/24 per
+  [`iconography.md → Sizing scale`](./foundations/iconography.md#sizing-scale))
+  with a numeric escape hatch for the rare non-canonical case.
+  Replaces the partial Icon's NativeWind `size-N`-via-cssInterop
+  path; callsites previously passed `size={20} className="size-5"`
+  redundantly, all converted to `size="md"`. cssInterop on the
+  underlying Lucide component pipes `style.color` → `color` prop on
+  native, so `text-fg-muted` etc. apply (Lucide-RN's default
+  `currentColor` only inherits via CSS, which RN doesn't have).
+  `strokeWidth` defaults to 2 per the locked stroke contract.
+- **Avatar size scale tied to v1 wireframe use sites**
+  ([`components/ui/avatar.tsx`](../../components/ui/avatar.tsx),
+  Phase 2 Group E). Reshaped from the react-native-reusables
+  baseline (a single fixed `size-8` Radix-style triad). Sizes:
+  `xs` (24 px, members-here mini-rows), `sm` (40 px, default row
+  leading), `md` (96 px, compact peek head + mobile portrait
+  reflow per
+  [`world.md → Mobile expression`](./screens/world/world.md#mobile-expression)),
+  `lg` (220 px, desktop overview hero portrait). Convenience shape
+  takes inline `src` + `fallback` since most v1 sites render
+  image-with-fallback; compositional `AvatarRoot / AvatarImage /
+AvatarFallback` exports stay available for custom layouts.
+  Fallback uses `bg-bg-sunken` + `border-border` for shape
+  definition. Two slots ruled out along the way: `bg-bg-sunken`
+  alone is invisible on themes where sunken sits within ~1-3 % of
+  `bg-base` (cyberpunk, fallen-down, parchment, catppuccin-latte);
+  `bg-fg-muted` (Switch's off-track slot) is visible everywhere
+  but takes on theme tint where `fg-muted` is colored rather than
+  achromatic — Royal goes purple, Aventuras Signature goes gold,
+  Parchment goes brown — too prominent for a large avatar circle.
+  `border-border` is calibrated by the registry to be visible
+  against `bg-base` in every theme (it's the separator slot), so
+  it crisps up the shape independent of fill contrast. Fallback
+  content (initials, kind glyph) inherits `text-fg-secondary` via
+  `TextClassContext` for a quiet-disc reading.
 
 ## Subtraction — when removing baseline features
 

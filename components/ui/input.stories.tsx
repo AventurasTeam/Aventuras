@@ -79,7 +79,7 @@ export const AdornmentLeading: Story = {
     <View style={{ width: 320 }}>
       <Input
         placeholder="Search…"
-        leading={<Icon as={Search} size={16} className="text-fg-muted" />}
+        leading={<Icon as={Search} size="sm" className="text-fg-muted" />}
       />
     </View>
   ),
@@ -99,7 +99,7 @@ export const AdornmentTrailing: Story = {
               onPress={() => setSecure((s) => !s)}
               accessibilityLabel={secure ? 'Show value' : 'Hide value'}
             >
-              <Icon as={secure ? EyeOff : Eye} size={16} className="text-fg-muted" />
+              <Icon as={secure ? EyeOff : Eye} size="sm" className="text-fg-muted" />
             </Pressable>
           }
         />
@@ -113,7 +113,7 @@ export const AdornmentBoth: Story = {
     <View style={{ width: 320 }}>
       <Input
         placeholder="Search fields…"
-        leading={<Icon as={Search} size={16} className="text-fg-muted" />}
+        leading={<Icon as={Search} size="sm" className="text-fg-muted" />}
         trailing={
           <Pressable accessibilityLabel="Search syntax help">
             <Text size="sm" variant="muted">
@@ -143,7 +143,7 @@ export const ThemeMatrix: Story = {
           <Input placeholder="Default" />
           <Input
             placeholder="Search…"
-            leading={<Icon as={Search} size={16} className="text-fg-muted" />}
+            leading={<Icon as={Search} size="sm" className="text-fg-muted" />}
           />
           <Input aria-invalid value="invalid@" />
         </View>

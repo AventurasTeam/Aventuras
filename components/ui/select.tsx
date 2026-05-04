@@ -176,7 +176,7 @@ function Trigger({
       {...props}
     >
       <>{children}</>
-      <Icon as={ChevronDown} aria-hidden className="size-5 text-fg-muted" size={20} />
+      <Icon as={ChevronDown} aria-hidden size="md" className="text-fg-muted" />
     </SelectBase.Trigger>
   )
 }
@@ -452,7 +452,7 @@ function Item({
     >
       <View className="absolute right-3 flex size-5 items-center justify-center">
         <SelectBase.ItemIndicator>
-          <Icon as={Check} className="size-5 shrink-0 text-fg-primary" size={20} />
+          <Icon as={Check} size="md" className="shrink-0" />
         </SelectBase.ItemIndicator>
       </View>
       <SelectBase.ItemText className="select-none text-base text-fg-primary" />
@@ -486,7 +486,7 @@ function ScrollUpButton({
       className={cn('flex cursor-default items-center justify-center py-1', className)}
       {...props}
     >
-      <Icon as={ChevronUpIcon} className="size-4" />
+      <Icon as={ChevronUpIcon} size="sm" />
     </SelectBase.ScrollUpButton>
   )
 }
@@ -501,7 +501,7 @@ function ScrollDownButton({
       className={cn('flex cursor-default items-center justify-center py-1', className)}
       {...props}
     >
-      <Icon as={ChevronDownIcon} className="size-4" />
+      <Icon as={ChevronDownIcon} size="sm" />
     </SelectBase.ScrollDownButton>
   )
 }
