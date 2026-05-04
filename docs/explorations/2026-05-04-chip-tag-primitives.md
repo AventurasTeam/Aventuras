@@ -9,8 +9,7 @@ fundamental of corner radius:
   entity refs, add-affordance).
 
 Context: [`component-inventory.md → Primitives — needs design`](../ui/component-inventory.md#primitives--needs-design).
-Both reshape from the rn-reusables `badge` baseline at
-[`components/ui/badge.tsx`](../../components/ui/badge.tsx).
+Both reshape from the rn-reusables `badge` baseline.
 
 ## Why two primitives, not one
 
