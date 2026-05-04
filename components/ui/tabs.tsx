@@ -36,21 +36,34 @@ function TabsTrigger({ className, count, children, ...props }: TabsTriggerProps)
   const active = props.value === value
   return (
     <TextClassContext.Provider
-      value={cn('text-sm', active ? 'text-fg-primary font-medium' : 'text-fg-muted')}
+      value={cn(
+        'text-sm',
+        active ? 'text-fg-primary font-medium' : 'text-fg-muted',
+        // group-hover lifts the inactive label color on web —
+        // direct hover: on the Pressable doesn't cascade through
+        // the inherited TextClassContext, so we hook the Pressable
+        // as a `group` and target the text via group-hover here.
+        !active && Platform.select({ web: 'transition-colors group-hover:text-fg-primary' }),
+      )}
     >
       <TabsPrimitive.Trigger
         className={cn(
-          'flex-row items-center gap-1 border-b-2 pb-2 pt-1',
+          'group flex-row items-center gap-1 border-b-2 pb-2 pt-1',
           active ? 'border-fg-primary' : 'border-transparent',
           Platform.select({
             web: cn(
               'cursor-pointer outline-none transition-colors',
               'focus-visible:ring-2 focus-visible:ring-focus-ring',
-              !active && 'hover:text-fg-primary',
             ),
           }),
           props.disabled && 'opacity-50',
-          Platform.select({ web: props.disabled && 'cursor-not-allowed' }),
+          // pointer-events-none kills clicks on the rendered <div>
+          // (radix Tabs.Trigger asChilds a Pressable that becomes
+          // a <div> on web — native `<button disabled>` semantics
+          // don't apply, so we have to gate clicks ourselves).
+          Platform.select({
+            web: props.disabled && 'pointer-events-none cursor-not-allowed',
+          }),
           className,
         )}
         {...props}

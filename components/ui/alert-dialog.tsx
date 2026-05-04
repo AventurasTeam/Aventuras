@@ -110,13 +110,19 @@ function AlertDialogDescription({
   )
 }
 
-// Default action — primary Button styling. Consumers override via
-// `asChild` to swap in a destructive (or any other variant)
-// Button when needed.
+// Default action — primary Button styling. When the consumer uses
+// `asChild` to swap in a Button directly, defer all styling +
+// text-color cascade to that Button (otherwise the wrapper's
+// default buttonVariants() fights with the Button's variant
+// classes via Slot's className merge, mangling the visual).
 function AlertDialogAction({
   className,
+  asChild,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Action>) {
+  if (asChild) {
+    return <AlertDialogPrimitive.Action asChild {...props} />
+  }
   return (
     <TextClassContext.Provider value={buttonTextVariants({ className })}>
       <AlertDialogPrimitive.Action className={cn(buttonVariants(), className)} {...props} />
@@ -124,12 +130,16 @@ function AlertDialogAction({
   )
 }
 
-// Cancel — secondary Button styling (bordered, neutral). Project's
-// equivalent of the baseline's `outline` variant.
+// Cancel — secondary Button styling (bordered, neutral). Same
+// asChild behavior as Action: defer to the consumer's Button.
 function AlertDialogCancel({
   className,
+  asChild,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) {
+  if (asChild) {
+    return <AlertDialogPrimitive.Cancel asChild {...props} />
+  }
   return (
     <TextClassContext.Provider value={buttonTextVariants({ className, variant: 'secondary' })}>
       <AlertDialogPrimitive.Cancel

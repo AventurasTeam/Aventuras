@@ -25,29 +25,33 @@ type ChipProps = {
 export function Chip({ selected = false, onPress, disabled, className, children }: ChipProps) {
   const interactive = onPress != null
   const baseClass = cn(
-    'flex-row items-center justify-center rounded-sm border px-3 py-1',
-    selected
-      ? 'border-fg-primary bg-fg-primary'
-      : cn(
-          'border-border-strong bg-bg-base',
-          interactive && Platform.select({ web: 'hover:text-fg-primary' }),
-        ),
+    // `group` hooks the wrapper so group-hover can lift the
+    // label color on inactive interactive chips (direct hover:
+    // doesn't cascade through TextClassContext).
+    'group flex-row items-center justify-center rounded-sm border px-3 py-1',
+    selected ? 'border-fg-primary bg-fg-primary' : 'border-border-strong bg-bg-base',
     Platform.select({
       web: cn(
         interactive && 'cursor-pointer outline-none transition-colors',
         interactive && 'focus-visible:ring-2 focus-visible:ring-focus-ring',
-        disabled && 'cursor-not-allowed',
+        disabled && 'cursor-not-allowed pointer-events-none',
       ),
     }),
     disabled && 'opacity-50',
     className,
   )
 
-  const textClass = cn('text-xs font-medium', selected ? 'text-bg-base' : 'text-fg-muted')
+  const textClass = cn(
+    'text-xs font-medium',
+    selected ? 'text-bg-base' : 'text-fg-muted',
+    !selected &&
+      interactive &&
+      Platform.select({ web: 'transition-colors group-hover:text-fg-primary' }),
+  )
 
   const content =
     typeof children === 'string' ? (
-      <Text size="xs" className={cn('font-medium', selected ? 'text-bg-base' : 'text-fg-muted')}>
+      <Text size="xs" className={textClass}>
         {children}
       </Text>
     ) : (

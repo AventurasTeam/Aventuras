@@ -12,7 +12,7 @@ import { themes } from '@/lib/themes/registry'
 const meta: Meta<typeof Toaster> = {
   title: 'Primitives/Toast',
   component: Toaster,
-  parameters: { layout: 'fullscreen' },
+  parameters: { layout: 'centered' },
   tags: ['autodocs'],
 }
 
@@ -20,7 +20,10 @@ export default meta
 type Story = StoryObj<typeof Toaster>
 
 // Live store-backed Toaster — fire toasts via the imperative API.
+// Needs fullscreen so the Toaster's top-anchored portal has a real
+// viewport to render against.
 export const Live: Story = {
+  parameters: { layout: 'fullscreen' },
   render: () => (
     <View className="min-h-screen items-center justify-center gap-3 p-6">
       <Text size="sm" variant="muted">
@@ -81,6 +84,7 @@ export const MultiLine: Story = {
 }
 
 export const QueueStack: Story = {
+  parameters: { layout: 'fullscreen' },
   render: () => {
     React.useEffect(() => {
       toastStore.__reset()
