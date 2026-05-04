@@ -102,7 +102,7 @@ underneath; no additional substrate needed.
 
 ## Storybook
 
-`Patterns/Tabs` with stories: basic 3-tab strip, with-counts (4
+`Primitives/Tabs` with stories: basic 3-tab strip, with-counts (4
 tabs, mixed presence), disabled tab, ThemeMatrix per-theme contrast,
 KindKitchenSink (8-tab character detail-pane simulation to verify
 strip handles realistic counts at desktop tier).

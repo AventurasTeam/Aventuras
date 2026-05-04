@@ -83,4 +83,4 @@ Four parts, scaffolded from the baseline at [`components/ui/accordion.tsx`](../.
 
 ## Storybook
 
-`Patterns/Accordion` — basic strip, multiple-open default, single-open toggle (`type="single"`), card-style composition example, disabled item, ThemeMatrix.
+`Primitives/Accordion` — basic strip, multiple-open default, single-open toggle (`type="single"`), card-style composition example, disabled item, ThemeMatrix.

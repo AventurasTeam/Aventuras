@@ -8,8 +8,7 @@ radius:
 - **Tag** — pill (full radius). Labeled content (tags, entity
   refs, add-affordance).
 
-Both reshape from the rn-reusables `badge` baseline at
-[`components/ui/badge.tsx`](../../../components/ui/badge.tsx). The
+Both reshape from the rn-reusables `badge` baseline. The
 baseline's `default / secondary / destructive / outline` variant
 enum mixed visual fundamentals with purpose; this split drops it
 in favor of two purpose-shaped primitives that each carry a tight
@@ -99,10 +98,10 @@ uniformly.
 
 ## Storybook
 
-`Patterns/Chip` — basic / selected toggle / disabled / static
+`Primitives/Chip` — basic / selected toggle / disabled / static
 indicator / 5-option filter row / ThemeMatrix.
 
-`Patterns/Tag` — basic / removable / soft tone / dashed (add) /
+`Primitives/Tag` — basic / removable / soft tone / dashed (add) /
 disabled / clickable / mixed-row (multiple tags wrapping with
 flex-wrap).
 

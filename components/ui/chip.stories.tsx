@@ -7,7 +7,7 @@ import { Text } from './text'
 import { themes } from '@/lib/themes/registry'
 
 const meta: Meta<typeof Chip> = {
-  title: 'Patterns/Chip',
+  title: 'Primitives/Chip',
   component: Chip,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],

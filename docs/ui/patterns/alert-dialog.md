@@ -89,4 +89,4 @@ No `tone` / `severity` prop on AlertDialog itself — the variant axis would dup
 
 ## Storybook
 
-`Patterns/AlertDialog` — basic two-button, destructive (rollback shape with impact list), structured sub-warnings (calendar swap-warning shape), long-content informational, ThemeMatrix.
+`Primitives/AlertDialog` — basic two-button, destructive (rollback shape with impact list), structured sub-warnings (calendar swap-warning shape), long-content informational, ThemeMatrix.

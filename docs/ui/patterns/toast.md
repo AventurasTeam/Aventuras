@@ -180,7 +180,7 @@ and refine concrete values per primitive as they ship.
 
 ## Storybook
 
-`Patterns/Toast` with stories: severity matrix (success / error /
+`Primitives/Toast` with stories: severity matrix (success / error /
 info), single-line / multi-line, queue 3-stack, swipe-dismiss
 (native-only verification), ThemeMatrix per-theme severity
 contrast.

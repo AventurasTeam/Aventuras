@@ -7,7 +7,7 @@ import { Text } from './text'
 import { themes } from '@/lib/themes/registry'
 
 const meta: Meta<typeof Tabs> = {
-  title: 'Patterns/Tabs',
+  title: 'Primitives/Tabs',
   component: Tabs,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],

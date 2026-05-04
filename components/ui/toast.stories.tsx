@@ -10,7 +10,7 @@ import { toastStore, type ToastItem } from '@/lib/toast/store'
 import { themes } from '@/lib/themes/registry'
 
 const meta: Meta<typeof Toaster> = {
-  title: 'Patterns/Toast',
+  title: 'Primitives/Toast',
   component: Toaster,
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],

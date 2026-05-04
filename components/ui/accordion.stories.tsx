@@ -7,7 +7,7 @@ import { Text } from './text'
 import { themes } from '@/lib/themes/registry'
 
 const meta: Meta<typeof Accordion> = {
-  title: 'Patterns/Accordion',
+  title: 'Primitives/Accordion',
   component: Accordion,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],

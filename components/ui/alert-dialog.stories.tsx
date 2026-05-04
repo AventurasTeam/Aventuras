@@ -18,7 +18,7 @@ import { Text } from './text'
 import { themes } from '@/lib/themes/registry'
 
 const meta: Meta<typeof AlertDialog> = {
-  title: 'Patterns/AlertDialog',
+  title: 'Primitives/AlertDialog',
   component: AlertDialog,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],
