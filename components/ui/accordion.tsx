@@ -82,7 +82,7 @@ function AccordionTrigger({
   )
 
   return (
-    <TextClassContext.Provider value="text-left text-sm font-medium">
+    <TextClassContext.Provider value="text-left text-sm font-medium text-fg-primary">
       <AccordionPrimitive.Header>
         <AccordionPrimitive.Trigger {...props} asChild>
           <Trigger
@@ -123,7 +123,7 @@ function AccordionContent({
 }: React.ComponentProps<typeof AccordionPrimitive.Content>) {
   const { isExpanded } = AccordionPrimitive.useItemContext()
   return (
-    <TextClassContext.Provider value="text-sm">
+    <TextClassContext.Provider value="text-sm text-fg-primary">
       <AccordionPrimitive.Content
         className={cn(
           'overflow-hidden',
