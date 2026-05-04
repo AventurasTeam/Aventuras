@@ -59,8 +59,25 @@
      * across modes, but in practice dark-on-light overlays read
      * fainter than light-on-dark at equivalent alpha (perceptual
      * mismatch — bright surfaces are less tolerant of low-alpha
-     * darkening). The :root default below is dark-mode-tuned;
-     * light-mode bumps land on the per-theme override block.
+     * darkening). Light-mode magnitudes step up from 8/14 to 12/20.
+     *
+     * Critical: --tint-hover / --tint-press must be redeclared on
+     * EVERY [data-theme="<id>"] block, not just on :root. CSS
+     * resolves var() inside a custom property at the declaring
+     * element's computed-value time, then inherits the resolved
+     * color. If a single :root declaration baked var(--fg-primary)
+     * against the global theme's fg, scoped overrides (e.g. a
+     * ThemeMatrix story cell tagged with a different data-theme)
+     * would inherit the frozen color and lose the per-cell tint —
+     * a dark cell inside a light global root would render a
+     * dark-on-dark hover overlay (invisible). Re-declaring the
+     * color-mix expression on each theme block forces the cell
+     * wrapper to recompute against its own --fg-primary.
+     *
+     * The :root values are a safe fallback for the brief pre-mount
+     * frame before useTheme sets data-theme on <html>; they match
+     * the registry's first theme (default-light, mode: light) and
+     * use the light magnitudes accordingly.
      *
      * Why CSS-var slots instead of Tailwind alpha modifier
      * (`bg-fg-primary/8`): our color tokens use `var(--fg-primary)`
@@ -69,18 +86,6 @@
      * Defining the tint as a first-class slot via color-mix
      * sidesteps that — `bg-tint-hover` / `bg-tint-press` work as
      * ordinary Tailwind colors with `hover:` / `active:` variants. */
-    --tint-hover: color-mix(in srgb, var(--fg-primary) 8%, transparent);
-    --tint-press: color-mix(in srgb, var(--fg-primary) 14%, transparent);
-  }
-
-  /* Light themes get a stronger tint — dark-on-light state layers
-   * read perceptually fainter than light-on-dark at the same alpha,
-   * so the magnitudes step up from 8/14 to 12/20. Update both the
-   * registry's `mode: 'light'` set and this selector list when a
-   * new light theme lands. */
-  [data-theme='default-light'],
-  [data-theme='parchment'],
-  [data-theme='catppuccin-latte'] {
     --tint-hover: color-mix(in srgb, var(--fg-primary) 12%, transparent);
     --tint-press: color-mix(in srgb, var(--fg-primary) 20%, transparent);
   }
@@ -116,6 +121,8 @@
   }
 
   [data-theme='default-light'] {
+    --tint-hover: color-mix(in srgb, var(--fg-primary) 12%, transparent);
+    --tint-press: color-mix(in srgb, var(--fg-primary) 20%, transparent);
     --bg-base: #fdfdfd;
     --bg-raised: #ffffff;
     --bg-sunken: #f4f4f5;
@@ -144,6 +151,8 @@
   }
 
   [data-theme='default-dark'] {
+    --tint-hover: color-mix(in srgb, var(--fg-primary) 8%, transparent);
+    --tint-press: color-mix(in srgb, var(--fg-primary) 14%, transparent);
     --bg-base: #0e0f10;
     --bg-raised: #18191b;
     --bg-sunken: #08090a;
@@ -172,6 +181,8 @@
   }
 
   [data-theme='parchment'] {
+    --tint-hover: color-mix(in srgb, var(--fg-primary) 12%, transparent);
+    --tint-press: color-mix(in srgb, var(--fg-primary) 20%, transparent);
     --bg-base: #f5e6c4;
     --bg-raised: #f9ecd2;
     --bg-sunken: #ecdcb4;
@@ -203,6 +214,8 @@
   }
 
   [data-theme='catppuccin-latte'] {
+    --tint-hover: color-mix(in srgb, var(--fg-primary) 12%, transparent);
+    --tint-press: color-mix(in srgb, var(--fg-primary) 20%, transparent);
     --bg-base: #eff1f5;
     --bg-raised: #e6e9ef;
     --bg-sunken: #ccd0da;
@@ -231,6 +244,8 @@
   }
 
   [data-theme='catppuccin-mocha'] {
+    --tint-hover: color-mix(in srgb, var(--fg-primary) 8%, transparent);
+    --tint-press: color-mix(in srgb, var(--fg-primary) 14%, transparent);
     --bg-base: #1e1e2e;
     --bg-raised: #313244;
     --bg-sunken: #181825;
@@ -259,6 +274,8 @@
   }
 
   [data-theme='tokyo-night'] {
+    --tint-hover: color-mix(in srgb, var(--fg-primary) 8%, transparent);
+    --tint-press: color-mix(in srgb, var(--fg-primary) 14%, transparent);
     --bg-base: #1a1b26;
     --bg-raised: #24283b;
     --bg-sunken: #16161e;
@@ -287,6 +304,8 @@
   }
 
   [data-theme='royal'] {
+    --tint-hover: color-mix(in srgb, var(--fg-primary) 8%, transparent);
+    --tint-press: color-mix(in srgb, var(--fg-primary) 14%, transparent);
     --bg-base: #14081f;
     --bg-raised: #1f0e2e;
     --bg-sunken: #0a0314;
@@ -315,6 +334,8 @@
   }
 
   [data-theme='cyberpunk'] {
+    --tint-hover: color-mix(in srgb, var(--fg-primary) 8%, transparent);
+    --tint-press: color-mix(in srgb, var(--fg-primary) 14%, transparent);
     --bg-base: #0d1326;
     --bg-raised: #142036;
     --bg-sunken: #0b1426;
@@ -343,6 +364,8 @@
   }
 
   [data-theme='fallen-down'] {
+    --tint-hover: color-mix(in srgb, var(--fg-primary) 8%, transparent);
+    --tint-press: color-mix(in srgb, var(--fg-primary) 14%, transparent);
     --bg-base: #000000;
     --bg-raised: #0a0a0a;
     --bg-sunken: #000000;
@@ -374,6 +397,8 @@
   }
 
   [data-theme='aventuras-signature'] {
+    --tint-hover: color-mix(in srgb, var(--fg-primary) 8%, transparent);
+    --tint-press: color-mix(in srgb, var(--fg-primary) 14%, transparent);
     --bg-base: #0e2240;
     --bg-raised: #152a4a;
     --bg-sunken: #091830;
