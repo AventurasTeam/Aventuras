@@ -47,6 +47,19 @@ function TabsTrigger({ className, count, children, ...props }: TabsTriggerProps)
       )}
     >
       <TabsPrimitive.Trigger
+        // Inline `pointerEvents` on disabled web triggers — the
+        // rn-primitives Trigger2 wrapper drops `disabled` before
+        // forwarding to radix Tabs.Trigger, so radix's own
+        // onClick (which fires onValueChange) doesn't see the
+        // disabled state and runs anyway. Pressable.disabled
+        // blocks its own onPress but not the radix-side onClick
+        // attached via Slot. Inline `pointer-events: none` is
+        // the foolproof gate at the DOM level — kills both.
+        // className-side `pointer-events-none` doesn't work
+        // reliably here (NativeWind/inline-style ordering).
+        style={
+          Platform.OS === 'web' && props.disabled ? ({ pointerEvents: 'none' } as never) : undefined
+        }
         className={cn(
           'group flex-row items-center gap-1 border-b-2 pb-2 pt-1',
           active ? 'border-fg-primary' : 'border-transparent',
@@ -57,13 +70,7 @@ function TabsTrigger({ className, count, children, ...props }: TabsTriggerProps)
             ),
           }),
           props.disabled && 'opacity-50',
-          // pointer-events-none kills clicks on the rendered <div>
-          // (radix Tabs.Trigger asChilds a Pressable that becomes
-          // a <div> on web — native `<button disabled>` semantics
-          // don't apply, so we have to gate clicks ourselves).
-          Platform.select({
-            web: props.disabled && 'pointer-events-none cursor-not-allowed',
-          }),
+          Platform.select({ web: props.disabled && 'cursor-not-allowed' }),
           className,
         )}
         {...props}
