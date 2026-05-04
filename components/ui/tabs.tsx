@@ -69,8 +69,12 @@ function TabsTrigger({ className, count, children, ...props }: TabsTriggerProps)
               'focus-visible:ring-2 focus-visible:ring-focus-ring',
             ),
           }),
+          // No `cursor-not-allowed` — `pointer-events: none` (set
+          // inline above) prevents hover state, which means CSS
+          // `cursor` doesn't apply either. Matches Button's
+          // `disabled:pointer-events-none` precedent. Visual
+          // disabled cue is `opacity-50`.
           props.disabled && 'opacity-50',
-          Platform.select({ web: props.disabled && 'cursor-not-allowed' }),
           className,
         )}
         {...props}
