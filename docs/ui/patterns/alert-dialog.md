@@ -44,7 +44,7 @@ Reasoning: AlertDialog's semantics (blocking, ceremonial, Esc cancels, bounded c
 
     <AlertDialogFooter>
       <AlertDialogCancel asChild>
-        <Button variant="outline">Cancel</Button>
+        <Button variant="secondary">Cancel</Button>
       </AlertDialogCancel>
       <AlertDialogAction asChild>
         <Button variant="destructive">Delete entries</Button>
@@ -71,7 +71,7 @@ The destructive variant lives on Button, not AlertDialog. Use the radix `asChild
 </AlertDialogAction>
 ```
 
-Default (non-destructive) actions use the same pattern with `variant="default"` (or no override — Button's default is the primary CTA shape). `AlertDialogCancel` defaults to outline; consumers can override the same way.
+Default (non-destructive) actions use the same pattern with `variant="primary"` (Button's default). `AlertDialogCancel` defaults to `secondary` (the project's bordered/neutral variant — equivalent to the baseline's `outline`); consumers override via the same asChild pattern when needed.
 
 No `tone` / `severity` prop on AlertDialog itself — the variant axis would duplicate Button's, and the asChild composition is idiomatic across rn-primitives.
 
@@ -79,7 +79,7 @@ No `tone` / `severity` prop on AlertDialog itself — the variant axis would dup
 
 - **Title ends with `?`** — consent-gate signal. `Delete from entry <N>?`, `Switch calendar to <name>?`.
 - **Body** — one-sentence framing + optional impact list (bulleted) or structured sub-warning blocks.
-- **Buttons** — `Cancel` (left, outline) + verb-shaped action (right, destructive or default). Verbs: `Delete entries`, `Switch calendar`, `Delete branch`. Avoid generic `OK` / `Confirm`.
+- **Buttons** — `Cancel` (left, `secondary` Button variant) + verb-shaped action (right, `destructive` or `primary`). Verbs: `Delete entries`, `Switch calendar`, `Delete branch`. Avoid generic `OK` / `Confirm`.
 - **Esc + click-outside = Cancel.** Radix default. Don't override.
 
 ## Animation
