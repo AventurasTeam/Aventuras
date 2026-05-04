@@ -1,31 +1,8 @@
-// SwitchVisual — pure visual track + thumb for a boolean toggle.
-// Density-bound dimensions, no event handling, no role / a11y
-// state. Composed by both the interactive `<Switch>` primitive and
-// the `<SwitchRow>` pattern; extracting the visual lets each owner
-// place its OWN single Pressable with the role="switch" semantics
-// at exactly the right level of the tree, avoiding the
-// nested-interactives a11y warning that appeared when SwitchRow
-// rendered the full `<Switch>` (an interactive Pressable) inside
-// its own Pressable.
-//
-// Visual contract (per density):
-//
-// - compact: track h-[1.15rem] w-8 (~18×32), thumb size-4 (16),
-//   on-translate-x-3.5 (14)
-// - regular: track h-6 w-11 (24×44), thumb size-5 (20),
-//   on-translate-x-5 (20)
-// - comfortable: track h-7 w-12 (28×48), thumb size-6 (24),
-//   on-translate-x-5 (20)
-//
-// Track color: bg-fg-muted (off) / bg-accent (on). Thumb stays
-// bg-bg-base on both states (contrast against both surfaces in
-// light + dark themes via the registry).
-
 import * as React from 'react'
 import { Platform, View } from 'react-native'
 
-import { useDensity } from '@/lib/density/use-density'
 import type { DensityValue } from '@/lib/density/types'
+import { useDensity } from '@/lib/density/use-density'
 import { cn } from '@/lib/utils'
 
 const TRACK_CLASSES: Record<DensityValue, string> = {

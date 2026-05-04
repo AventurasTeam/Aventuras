@@ -1,78 +1,3 @@
-// Aventuras Select primitive — reshaped from react-native-reusables
-// baseline (which itself wraps @rn-primitives/select). Implements the
-// contract in docs/explorations/2026-05-03-select-primitive.md and
-// the canonical pattern in docs/ui/patterns/forms.md.
-//
-// Two layers exported:
-// - `<Select>` — options-driven dispatcher resolving the
-//   forms.md auto-derivation cascade (segment / radio / dropdown).
-// - `SelectPrimitive` namespace — reshaped baseline pieces (Root,
-//   Trigger, Value, Content, Item, Group, Label, Separator, ItemText,
-//   ItemIndicator, ScrollUpButton, ScrollDownButton, Viewport,
-//   useRootContext). Used by power consumers (calendar picker,
-//   future rich-row pickers) when the dispatcher's API doesn't fit.
-//
-// Reshape per docs/ui/components.md sourcing rules:
-//
-// - RESHAPED: color tokens (popover/popover-foreground/background/
-//   border-input/foreground/muted-foreground/accent/accent-foreground/
-//   border → bg-bg-overlay/text-fg-primary/bg-bg-base/border-border-strong/
-//   text-fg-primary/text-fg-muted/bg-bg-raised/text-fg-primary/border-border).
-//   Shadow classes stripped (Aventuras flat-depth principle). Web
-//   entry/exit animations stripped pending the NativeWind transition
-//   followup. Dark-mode opacity tweaks (dark:bg-input/30 etc.) stripped
-//   — the theme registry handles light/dark per-theme. aria-invalid
-//   ring tokens deferred to error-state design pass.
-// - AUGMENTED (per components.md augmentation policy): `<Select>`
-//   dispatcher consumes options-driven API and resolves the
-//   forms.md cascade at runtime; phone-tier dropdown branch
-//   composes SelectBase.Portal + SelectBase.Overlay + SelectBase.Content
-//   (with `disablePositioningStyle`) inside a bottom-anchored
-//   sheet-style shell — see the State bridge note above for why
-//   our Sheet primitive can't host this branch directly. Radio
-//   AND segment render branches compose @rn-primitives/radio-group
-//   internally (Root + Item) so we get arrow-key navigation +
-//   roving tabindex + ARIA role wiring for free, while keeping
-//   each branch's distinct visual layout (row+description for
-//   radio; horizontal segmented cells for segment). Standalone
-//   Radio primitive deliberately not exported — Select.radio
-//   covers all wireframe consumers; if a non-description case
-//   appears, extend Select rather than duplicate the primitive.
-// - ACCEPTED: rn-primitives composition (Root, Trigger, Content,
-//   Portal, Overlay, Item, ItemText, ItemIndicator, Group, Label,
-//   Separator), focus-trap mechanics, anchor-positioning math, iOS
-//   FullWindowOverlay z-index handling, ScrollUp/Down buttons.
-// - SUBTRACTED: nothing material; baseline maps cleanly.
-//
-// Native scroll wrap: rn-primitives Viewport is a Fragment; on the
-// dropdown render mode's tablet/desktop branch we wrap it in a
-// ScrollView with viewport-fraction max-height. Web inherits the
-// baseline `max-h-52 overflow-y-auto` plus ScrollUpButton /
-// ScrollDownButton.
-//
-// Phone-tier Sheet bridge: rn-primitives select's RootContext is
-// internal — only `useRootContext` is exported. Items inside an
-// `@rn-primitives/dialog` Portal (our Sheet primitive) lose the
-// SelectBase RootContext because Dialog's Portal bridges Dialog's
-// context, not Select's. Items render → useRootContext throws
-// "Select compound components cannot be rendered outside the
-// Select component".
-//
-// Resolution: use SelectBase.Portal directly (which DOES bridge
-// SelectBase RootContext through the portal boundary) and render
-// Sheet-style chrome inside it, with SelectBase.Content marked
-// `disablePositioningStyle` so we provide our own bottom-anchored
-// layout instead of anchor-positioning math.
-//
-// Drag-to-dismiss IS implemented locally here, mirroring Sheet's
-// gesture pattern AND its sub-component split. The state (dragOffset
-// useSharedValue) lives in PhoneSheetPanel, which is rendered as a
-// CHILD of SelectBase.Portal — Portal returns null on close, so
-// PhoneSheetPanel unmounts and the useSharedValue is reborn on the
-// next open. PhoneSheetContent (the wrapper that hosts Portal +
-// scrim) stays mounted; only the panel sub-component cycles. Same
-// architectural fix as Sheet's SheetPanel split.
-
 import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { Text, TextClassContext } from '@/components/ui/text'
@@ -101,15 +26,11 @@ import {
   withSpring,
   withTiming,
 } from 'react-native-reanimated'
-import { runOnJS } from 'react-native-worklets'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
+import { runOnJS } from 'react-native-worklets'
 
 const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : React.Fragment
-
-// ---------------------------------------------------------------------------
-// SelectPrimitive namespace — reshaped baseline pieces.
-// ---------------------------------------------------------------------------
 
 const Root = SelectBase.Root
 const Group = SelectBase.Group
@@ -123,14 +44,6 @@ function Value({
   placeholder?: string
   children?: React.ReactNode
 }) {
-  // The reusables baseline wraps rn-primitives Value (which on web
-  // delegates to radix's Select.Value via Slot) with className. The
-  // Slot/Radix indirection swallows our color className on web in
-  // some configurations, leaving the trigger label rendering with
-  // RN's default text color (black) — invisible on dark themes.
-  // Bypassing rn-primitives Value with our themed Text guarantees
-  // the color slot resolves correctly. We read selection state from
-  // SelectBase.useRootContext directly.
   const { value } = SelectBase.useRootContext()
   const display = value?.label ?? children ?? placeholder ?? ''
   const empty = !value
@@ -159,11 +72,6 @@ function Trigger({
 }) {
   return (
     <SelectBase.Trigger
-      // Density-aware sizing: h-control-md / h-control-sm tokens
-      // resolve per active density (compact / regular / comfortable)
-      // per docs/ui/foundations/spacing.md → Density toggle.
-      // Default densities: regular on phone+tablet (44px), compact
-      // on desktop (40px), with user override available.
       className={cn(
         'flex h-control-md flex-row items-center justify-between gap-2 rounded-md border border-border bg-bg-base px-3 active:bg-tint-hover',
         Platform.select({
@@ -181,9 +89,6 @@ function Trigger({
   )
 }
 
-// Sheet-size scale — short / medium for v1. `tall` is reserved for
-// Autocomplete's future input-at-top sheet shape; Select's dropdown
-// doesn't host that pattern.
 type ContentSheetSize = 'short' | 'medium'
 
 const SHEET_HEIGHT_PCT: Record<ContentSheetSize, `${number}%`> = {
@@ -194,11 +99,6 @@ const SHEET_HEIGHT_PCT: Record<ContentSheetSize, `${number}%`> = {
 const SAFE_AREA_GAP_PX = 8
 const DRAG_DISMISS_THRESHOLD_PX = 100
 
-// PhoneSheetPanel lives INSIDE SelectBase.Portal so it mounts /
-// unmounts with each open. dragOffset is a fresh useSharedValue(0)
-// per mount — no off-screen translation leaks from a previous
-// drag-dismiss into the next entry animation. Same architectural
-// fix as Sheet's SheetPanel split.
 function PhoneSheetPanel({
   className,
   children,
@@ -222,9 +122,6 @@ function PhoneSheetPanel({
   }
 
   const dragOffset = useSharedValue(0)
-  // Explicit dep array: the worklets babel plugin auto-injects this
-  // on native but Storybook web's Vite bundler doesn't run the
-  // plugin, so we declare it manually.
   const animatedDragStyle = useAnimatedStyle(
     () => ({ transform: [{ translateY: dragOffset.value }] }),
     [],
@@ -302,11 +199,6 @@ function PhoneSheetContent({
     <SelectBase.Portal hostName={portalHost}>
       <FullWindowOverlay>
         <View
-          // Web wrapper needs `fixed inset-0` so absolute children
-          // (Overlay scrim, panel) have a full-viewport positioning
-          // ancestor. RN-Web View defaults to position:relative with
-          // content-size; without explicit fill, absolute children
-          // collapse. Native continues with StyleSheet.absoluteFill.
           className={Platform.OS === 'web' ? 'fixed inset-0' : ''}
           style={Platform.select({ native: StyleSheet.absoluteFill })}
           pointerEvents="box-none"
@@ -341,9 +233,6 @@ function PopoverContent({
   portalHost?: string
 }) {
   const { height: screenHeight } = useWindowDimensions()
-  // Native viewport gets a ScrollView clamp so long lists scroll instead
-  // of overflowing offscreen. ~50% of screen height is comfortable on
-  // tablet without crowding any keyboard area.
   const nativeMaxHeight = Math.floor(screenHeight * 0.5)
   return (
     <SelectBase.Portal hostName={portalHost}>
@@ -428,19 +317,6 @@ function Item({
   return (
     <SelectBase.Item
       className={cn(
-        // Density-aware sizing: py-row-y-md / pl-row-x-md tokens
-        // resolve per active density (compact / regular / comfortable)
-        // per docs/ui/foundations/spacing.md → Density toggle.
-        // bg-bg-sunken (not bg-bg-raised) for hover/focus highlight:
-        // overlay → raised has zero contrast on the default light
-        // theme (both #ffffff), making the highlight invisible.
-        // Hairline separator (`border-b border-b-border`) carries
-        // the at-rest "tappable row" signal — iOS Settings / Mail /
-        // Notes pattern. `border-b-border` (side-keyed color, not
-        // `border-border`) is required on native: NativeWind sets
-        // `border-bottom-color` only when the color modifier is
-        // explicitly side-scoped. `last:border-b-0` hides the rule
-        // on the final row.
         'group relative flex w-full flex-row items-center gap-2 rounded-sm border-b border-b-border py-row-y-md pl-row-x-md pr-10 last:border-b-0 active:bg-bg-sunken',
         Platform.select({
           web: 'cursor-default outline-none hover:bg-bg-sunken focus:bg-bg-sunken data-[disabled]:pointer-events-none [&_svg]:pointer-events-none',
@@ -474,8 +350,6 @@ function Separator({ className, ...props }: React.ComponentProps<typeof SelectBa
   )
 }
 
-// Web-only — null on native, where rn-primitives delegates scroll to
-// our ScrollView wrapper above.
 function ScrollUpButton({
   className,
   ...props
@@ -523,10 +397,6 @@ export const SelectPrimitive = {
   useRootContext: SelectBase.useRootContext,
 }
 
-// ---------------------------------------------------------------------------
-// Dispatcher — options-driven, resolves the forms.md cascade at runtime.
-// ---------------------------------------------------------------------------
-
 export type SelectOption = {
   value: string
   label: string
@@ -569,16 +439,6 @@ function autoSheetSize(options: SelectOption[]): ContentSheetSize {
 }
 
 function SegmentBranch({ options, value, onValueChange, disabled, className }: SelectProps) {
-  // Outer wrapper carries the density-aware height (h-control-md);
-  // each Item cell stretches via flex-1 horizontally and fills
-  // vertically. Cell padding stays centered (no py-* needed since the
-  // wrapper height drives vertical sizing).
-  //
-  // Same radio-group machinery as RadioBranch — Root/Item/Indicator
-  // give us arrow-key nav (Left/Right horizontal idiom in this
-  // layout) and roving tabindex. Indicator is unused visually
-  // because the segment communicates selected state via cell-bg
-  // swap (bg-accent vs the hover/active fg-muted tint) rather than a dot.
   return (
     <RadioGroupBase.Root
       value={value}
@@ -621,17 +481,6 @@ function SegmentBranch({ options, value, onValueChange, disabled, className }: S
 }
 
 function RadioBranch({ options, value, onValueChange, disabled, className }: SelectProps) {
-  // Radio rows carry descriptions, so per-row height isn't a flat
-  // tap-target SLA. Use density-aware row padding (--row-py-md /
-  // --row-px-md) so the rows breathe more on regular/comfortable
-  // and tighten on compact.
-  //
-  // Built over @rn-primitives/radio-group instead of plain
-  // Pressable rows: the upstream provides arrow-key navigation
-  // (WAI-ARIA radio-group pattern — Tab into group, then arrows
-  // to switch), roving tabindex, and ARIA role wiring. Each Item
-  // is restyled to BE the row (border, padding, layout) rather
-  // than a small radio-circle Item nested in a separate row.
   return (
     <RadioGroupBase.Root
       value={value}

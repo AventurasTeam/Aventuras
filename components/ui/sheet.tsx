@@ -1,48 +1,7 @@
-// Aventuras Sheet primitive — built directly from @rn-primitives/dialog.
-//
-// react-native-reusables doesn't ship a Sheet component (verified via CLI),
-// so this primitive is built from the rn-primitives layer using the same
-// slot-first reshape discipline as the Popover scaffold per
-// docs/ui/components.md. Implements the contract in patterns/overlays.md.
-//
-// What this primitive owns vs. delegates:
-//
-// - DELEGATES to @rn-primitives/dialog: open/close lifecycle, controlled
-//   state (open / defaultOpen / onOpenChange), focus trap, scrim dismissal,
-//   Portal hosting, Trigger composition.
-// - OWNS: anchor (bottom / right) presentation, size scale (short / medium /
-//   tall) for bottom anchor, drag-handle visual, drag-to-dismiss gesture
-//   on native, slot-token wiring (bg-overlay, border-strong, scrim color,
-//   radii on the open edge, padding), native slide animation via reanimated.
-//
-// What's NOT here yet:
-//
-// - **Web entry / exit animations.** Match Popover's gap; pair with the
-//   post-phase-2 animation pass. Sheet appears instantly on Electron until
-//   then.
-// - **Per-theme scrim color.** Uses `bg-black/40` matching the light-mode
-//   value; dark-mode would prefer 0.6 but Aventuras doesn't currently ship
-//   a `--scrim` slot per the parked decision in
-//   docs/ui/foundations/spacing.md.
-//
-// Native layout note: an outer absoluteFill wrapper inside the Portal is
-// required so the absolute scrim and panel have a sized positioned
-// ancestor on RN (the Animated.View wrappers alone collapse to 0×0
-// because their absolute children are out of layout flow). The wrapper
-// uses `pointerEvents="box-none"` so taps fall through to the scrim and
-// panel children rather than being captured by the empty wrapper.
-//
-// Drag state lives in the SheetPanel sub-component INSIDE the Portal.
-// SheetContent itself is a sibling of SheetTrigger and never unmounts
-// between opens; only the Portal contents do. Putting `useSharedValue`
-// in SheetPanel guarantees a fresh dragOffset per open — no persistence
-// across open/close cycles, no leaked off-screen translation breaking
-// the entry layout animation on reopen.
-
-import * as DialogPrimitive from '@rn-primitives/dialog'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { TextClassContext } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
+import * as DialogPrimitive from '@rn-primitives/dialog'
 import * as React from 'react'
 import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
@@ -58,9 +17,9 @@ import {
   withSpring,
   withTiming,
 } from 'react-native-reanimated'
-import { runOnJS } from 'react-native-worklets'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
+import { runOnJS } from 'react-native-worklets'
 
 const Sheet = DialogPrimitive.Root
 const SheetTrigger = DialogPrimitive.Trigger
@@ -93,8 +52,6 @@ function getNativePanelStyle(
   screenHeight: number,
 ): ViewStyle {
   // Cap the panel so it never extends above the OS status bar / notch.
-  // Aventuras has no top-bar chrome yet, so without this clamp the dev
-  // pages render the sheet as if the screen extends edge-to-edge.
   const maxHeight = Math.max(screenHeight - insetTop - SAFE_AREA_GAP_PX, 0)
   if (anchor === 'bottom') {
     return {
@@ -138,14 +95,7 @@ function SheetPanel({
   const { onOpenChange } = DialogPrimitive.useRootContext()
   const { height: screenHeight } = useWindowDimensions()
 
-  // Lives only while the panel is open: this component mounts when the
-  // Dialog Portal renders and unmounts when it closes. Each open gives a
-  // fresh dragOffset, so off-screen state from the previous drag-dismiss
-  // can't leak into the next entry animation.
   const dragOffset = useSharedValue(0)
-  // Explicit dep array: the worklets babel plugin auto-injects this
-  // on native (RN babel pipeline) but Storybook web's Vite bundler
-  // doesn't run that plugin, so we declare it manually.
   const animatedDragStyle = useAnimatedStyle(
     () =>
       isBottom
@@ -246,11 +196,6 @@ function SheetContent({
   anchor?: SheetAnchor
   size?: SheetSize
   portalHost?: string
-  // Accessible name for the sheet. Defaults to a generic "Sheet"
-  // and renders inside a sr-only DialogPrimitive.Title on web —
-  // radix's DialogContent demands a Title for screen readers
-  // (otherwise emits "DialogContent requires a DialogTitle"). On
-  // native the warning doesn't apply; the Title is omitted there.
   title?: string
 }) {
   const isBottom = anchor === 'bottom'
@@ -264,14 +209,6 @@ function SheetContent({
     <DialogPrimitive.Portal hostName={portalHost}>
       <FullWindowOverlay>
         <View
-          // On web RN-Web's View defaults to position:relative with
-          // content-size; absolute children inside collapse because
-          // the View itself takes no viewport space. Use `fixed
-          // inset-0` (web-only NativeWind class) so the wrapper
-          // fills the viewport, giving the Overlay scrim and the
-          // SheetPanel a full-screen positioning ancestor. Native
-          // continues to use StyleSheet.absoluteFill via inline
-          // style.
           className={Platform.OS === 'web' ? 'fixed inset-0' : ''}
           style={Platform.select({ native: StyleSheet.absoluteFill })}
           pointerEvents="box-none"

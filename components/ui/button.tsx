@@ -1,9 +1,9 @@
-import { Platform, Pressable, type PressableProps } from 'react-native'
-import { cva, type VariantProps } from 'class-variance-authority'
 import { Spinner } from '@/components/ui/spinner'
 import { TextClassContext } from '@/components/ui/text'
 import type { ThemeColorSlots } from '@/lib/themes/types'
 import { cn } from '@/lib/utils'
+import { cva, type VariantProps } from 'class-variance-authority'
+import { Platform, Pressable, type PressableProps } from 'react-native'
 
 const buttonVariants = cva(
   cn(
@@ -20,10 +20,6 @@ const buttonVariants = cva(
           Platform.select({ web: 'hover:bg-accent-hover' }),
         ),
         secondary: cn(
-          // Hover/active state-layer via --tint-hover / --tint-press
-          // (defined in global.css as color-mix on --fg-primary;
-          // resolves to a low-alpha overlay that darkens light
-          // themes and lightens dark themes — visible in both).
           'border border-border bg-bg-base active:bg-tint-press',
           Platform.select({ web: 'hover:border-border-strong' }),
         ),
@@ -107,5 +103,5 @@ export function Button({
   )
 }
 
-export { buttonVariants, buttonTextVariants }
+export { buttonTextVariants, buttonVariants }
 export type { ButtonProps }
