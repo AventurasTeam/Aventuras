@@ -155,6 +155,13 @@ export const ThemeMatrix: Story = {
           <View className="flex-col gap-3">
             <Stateful initial="two" mode="segment" options={SHORT_OPTIONS} />
             <Stateful initial="collaborate" mode="radio" options={RADIO_OPTIONS} />
+            {/* Dropdown trigger only — open content portals to
+                document.body and escapes the per-row dataSet scope.
+                The trigger itself IS scoped, so border + hover
+                contrast across themes can be validated here. The
+                open-popover content theming is verified via the
+                Storybook toolbar theme switcher instead. */}
+            <Stateful initial="opt-3" mode="dropdown" options={LONG_OPTIONS} />
           </View>
         </View>
       ))}
