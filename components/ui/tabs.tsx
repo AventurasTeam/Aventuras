@@ -81,7 +81,14 @@ function TabsTrigger({ className, count, children, ...props }: TabsTriggerProps)
       >
         {typeof children === 'string' ? <Text>{children}</Text> : children}
         {count != null ? (
-          <Text size="xs" variant="muted">
+          // No `variant="muted"` — that'd hard-code muted color
+          // and ignore the inherited TextClassContext, leaving
+          // the count grey even on the active tab. Letting the
+          // count inherit means it picks up text-fg-primary +
+          // font-medium when active, text-fg-muted otherwise.
+          // `font-normal` keeps the count lighter than the label
+          // so the size+weight differentiation reads.
+          <Text size="xs" className="font-normal">
             {count}
           </Text>
         ) : null}
