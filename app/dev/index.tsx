@@ -14,6 +14,7 @@ const ROUTES = [
   { href: '/dev/input', label: 'Input + Textarea' },
   { href: '/dev/choice', label: 'Switch + Checkbox' },
   { href: '/dev/visual', label: 'Icon + Avatar' },
+  { href: '/dev/loading', label: 'Spinner + Skeleton' },
 ] as const
 
 export default function DevIndex() {

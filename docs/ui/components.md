@@ -181,6 +181,38 @@ AvatarFallback` exports stay available for custom layouts.
   it crisps up the shape independent of fill contrast. Fallback
   content (initials, kind glyph) inherits `text-fg-secondary` via
   `TextClassContext` for a quiet-disc reading.
+- **Spinner per-platform dispatch + slot-driven color**
+  ([`components/ui/spinner.tsx`](../../components/ui/spinner.tsx),
+  Phase 2 Group F). Web renders an SVG ring with `animate-spin` +
+  `currentColor`; native delegates to RN's `<ActivityIndicator>`.
+  Same dispatch shape as Sheet/Popover via `NativeOnlyAnimatedView`
+  — the cross-cutting "NativeWind transition-\* on native"
+  followup stays open because per-platform routes side-step it.
+  Color is driven by a typed `colorSlot` prop (defaulting
+  `--fg-primary`) rather than className: native's
+  ActivityIndicator can't pick up `text-*` via CSS cascade (no
+  DOM on RN) and there's no cssInterop hook into its `color`
+  prop, so a className-color contract would silently no-op on
+  native. Slot-based API keeps both platforms symmetric.
+  Retrofit: Button's loading branch swapped from inline
+  `<ActivityIndicator>` + manual `var(--*)`/`activeTheme.colors`
+  plumbing to `<Spinner colorSlot={spinnerSlot} />`; the
+  variant→slot table stays in Button.
+- **Skeleton per-platform animation + className-driven dimensions**
+  ([`components/ui/skeleton.tsx`](../../components/ui/skeleton.tsx),
+  Phase 2 Group F). Web uses Tailwind's `animate-pulse` (CSS
+  keyframes 1 → 0.5 → 1 over 2 s); native uses a reanimated
+  `withRepeat` + `withTiming` opacity loop matching the same
+  cadence. The web/native branch split happens at module
+  boundary (the native branch lives in a sub-component so
+  reanimated's worklet imports don't run on RN-Web). Dimensions
+  are className-driven, not variant-prop — skeleton blocks
+  compose to mimic real loading layouts (avatar-sized circles,
+  line-of-text bars, multi-line stacks), and a fixed variant set
+  would force consumers to compose multiple atoms anyway.
+  Background uses `bg-fg-muted` (theme-tint acceptable here —
+  the pulse animation carries the loading semantic regardless of
+  color), same precedent as Switch's off-track.
 
 ## Subtraction — when removing baseline features
 

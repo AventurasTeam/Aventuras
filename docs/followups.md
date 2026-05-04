@@ -332,31 +332,33 @@ The foundations explorer's MotionSamples section gates `transition-*`
   NativeWind runtime fallback path, but not narrowed precisely.
   Animations are static (a colored bar with no movement) on native.
 
-Open questions:
+**Animation-API decision settled** (phase 2 Groups A + F):
+component-internal animations use **reanimated directly**
+(`useSharedValue` + `useAnimatedStyle` + `withRepeat` /
+`withTiming`) rather than depending on NativeWind transitions on
+native. Sheet's slide-in (Group A) and Skeleton's pulse (Group F)
+both ship via [`NativeOnlyAnimatedView`](../components/ui/native-only-animated-view.tsx)
+with web/native branches that emit CSS keyframes on web and
+reanimated worklets on native. Spinner (Group F) uses a similar
+per-platform dispatch (CSS `animate-spin` on web, RN
+`<ActivityIndicator>` on native — battle-tested platform shape
+beats wiring a custom rotation worklet for one consumer).
 
-- **Reanimated wiring.** `react-native-reanimated@4.x` is a project
-  dep; NativeWind 4's transition support on native is documented as
-  reanimated-driven. Verify whether the babel plugin is configured
-  correctly and whether NativeWind's transition path actually fires
-  worklets, or whether it falls through to a web-only code path
-  silently.
-- **Static class hoisting.** Phase 1's MotionSamples now uses
-  literal class strings (`duration-fast`, `ease-emphasis`, etc.) so
-  Tailwind's content scan compiles them. With the static names in
-  place, native should at least try the transition; characterize
-  what actually happens.
-- **Alternative animation API.** If NativeWind transitions don't
-  pan out on native, decide whether component-internal animations
-  use reanimated directly (`useSharedValue` + `useAnimatedStyle`),
-  RN's built-in `Animated` API, or a higher-level lib (moti, etc.).
-  Phase 1 doesn't have any non-foundations consumers yet, so the
-  pattern is unblocked but unsettled.
+Open characterization (low priority — primitives ship without it):
 
-Lands at phase 2 Group A's Sheet implementation — Sheet's slide-in
-animation is the first v1 surface that forces resolution
-(scoped in
-[`patterns/overlays.md`](./ui/patterns/overlays.md)). Until then,
-MotionSamples-as-token-reference is enough.
+- **Whether NativeWind's transition path actually fires on
+  native.** With static class names hoisted in MotionSamples,
+  reanimated babel-plugin in place, and reanimated 4 as a dep,
+  the transition should at least attempt to fire. Useful to
+  characterize: confirm whether transitions are silently no-op'd
+  or genuinely run on native, and whether the `Maximum call
+stack` blocker is fixed in current NativeWind / reanimated
+  versions. Outcome would unblock terser declarative styling
+  (`transition-colors duration-fast`) on a few state-feedback
+  surfaces — but doesn't unblock anything v1 needs.
+
+The MotionSamples web-gating remains in place until that
+characterization runs.
 
 ### Sheet keyboard handling on mobile
 
