@@ -130,6 +130,10 @@ module.exports = {
           from: { transform: 'translateX(100%)' },
           to: { transform: 'translateX(0)' },
         },
+        'slide-in-from-top': {
+          from: { transform: 'translateY(-100%)' },
+          to: { transform: 'translateY(0)' },
+        },
         // Radix exposes the measured Accordion content height via
         // --radix-accordion-content-height. Native side animates
         // via reanimated LinearTransition; web reads the var here.
@@ -146,6 +150,7 @@ module.exports = {
         'fade-in': 'fade-in 200ms var(--easing-standard)',
         'slide-in-from-bottom': 'slide-in-from-bottom 250ms var(--easing-standard)',
         'slide-in-from-right': 'slide-in-from-right 250ms var(--easing-standard)',
+        'slide-in-from-top': 'slide-in-from-top 250ms var(--easing-standard)',
         'accordion-down': 'accordion-down 200ms var(--easing-standard)',
         'accordion-up': 'accordion-up 200ms var(--easing-standard)',
       },
