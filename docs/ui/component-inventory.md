@@ -49,6 +49,7 @@ Text. Plus the `NativeOnlyAnimatedView` utility wrapper.
 | TabBar             | [tabs.md](./patterns/tabs.md)                                                                            | Underline style, optional per-tab count. Strip-only — substitutes to Select on narrow tiers per Group C rule.      |
 | Chip               | [chips.md → Chip](./patterns/chips.md#chip--square-toggleable)                                           | Square (4px radius), toggleable filter / state indicator. `selected` + `onPress` props.                            |
 | Tag                | [chips.md → Tag](./patterns/chips.md#tag--pill-labeled-content)                                          | Pill (full radius), labeled content. `removable` / `tone` (soft) / `dashed` (add affordance) props.                |
+| Accordion          | [accordion.md](./patterns/accordion.md)                                                                  | Strip default; card composition via className. `type="multiple"` default. Chevron -90°→0° on expand.               |
 
 ### Primitives — needs design
 
@@ -56,10 +57,9 @@ Baseline column names the react-native-reusables source per
 [components.md → Sourcing](./components.md#sourcing--react-native-reusables-as-baseline);
 empty means from-scratch.
 
-| Primitive   | Baseline       | Used by                                                                           | Open question                                                                                                   |
-| ----------- | -------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| AlertDialog | `alert-dialog` | Rollback confirm, delete confirms, calendar swap-warning                          | Severity variants, DANGER-CTA placement + copy contract, sheet-anchor on phone vs popover-style on desktop.     |
-| Accordion   | `accordion`    | Reader Browse rail grouping, App Settings sections, Story Settings caption groups | Single vs multi-open per surface, header chevron behavior, animation contract, rn-primitives passthrough rules. |
+| Primitive   | Baseline       | Used by                                                  | Open question                                                                                               |
+| ----------- | -------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| AlertDialog | `alert-dialog` | Rollback confirm, delete confirms, calendar swap-warning | Severity variants, DANGER-CTA placement + copy contract, sheet-anchor on phone vs popover-style on desktop. |
 
 ### Primitives — deferred
 

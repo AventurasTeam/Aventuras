@@ -38,6 +38,9 @@ The split heuristic + when-to-add rules live in
 - [`chips.md`](./chips.md) — Chip (square, toggleable filter / state)
   - Tag (pill, labeled content) primitives split along corner
     radius as the visual fundamental.
+- [`accordion.md`](./accordion.md) — collapsible content sections.
+  Strip default, card via className composition; multi-open default;
+  chevron -90°→0° rotation on expand.
 - [`calendar-picker.md`](./calendar-picker.md) — calendar-system
   selector shared across App Settings, Story Settings, and Wizard:
   rich rows, summary panel, swap warnings (origin / eras / display),

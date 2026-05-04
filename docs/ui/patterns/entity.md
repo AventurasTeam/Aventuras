@@ -148,9 +148,9 @@ v1; single-select keeps the UI simple.
 
 ### Accordion grouping on "All" view
 
-When `All` is active, rows group under accordion headers keyed on a
-**per-surface tier**, with click-to-collapse. Each header shows
-name + count + chevron.
+When `All` is active, rows group under [Accordion](./accordion.md)
+headers keyed on a **per-surface tier**, with click-to-collapse.
+Each header shows name + count + chevron.
 
 **Per-surface keys** (each per-screen doc names its own keys + which
 tier defaults expanded):

@@ -240,8 +240,10 @@ Fields:
 ### Agent profiles
 
 User-creatable, named, with description. Listed as a collapsible
-accordion. Each profile carries the same fields as Narrative plus
-`structured output` (auto / force on / force off):
+[Accordion](../../patterns/accordion.md) (card-style composition —
+each profile is its own bordered card). Each profile carries the
+same fields as Narrative plus `structured output` (auto / force on
+/ force off):
 
 - **`auto`** uses capability data: model supports → force-on; model
   doesn't → force-off; data unavailable → force-off (conservative).
