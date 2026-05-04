@@ -44,7 +44,8 @@ Cross-cutting principles that govern this screen are in
 │ · Translation │ ─ Appearance                                │
 │ · Pack        │ cover, accent color                         │
 │ · Calendar    │ ─ Library                                   │
-│ · Advanced    │ status: [Active|Archived] · ★ pinned        │
+│ · Advanced    │ status: [Active|Archived]                   │
+│               │ ★ favorite                                  │
 │               │                                             │
 │               ├────────────────────────────────────────────┤
 │               │ save bar (when dirty)                       │
@@ -92,7 +93,8 @@ card `⋯ → Edit info` routes to `About` directly.
 - **About** — title, description, tags, author notes (private),
   cover, accent color, library status (`active` / `archived` — segment
   per [Select primitive rule](../../patterns/forms.md#select-primitive)),
-  pin (orthogonal star toggle; matches the inline-pin pattern on
+  favorite (orthogonal SwitchRow with a leading star icon — own row,
+  not nested in the status row; matches the inline-favorite pattern on
   story-list cards). Library-shaped metadata only — story-shaping
   content (genre / tone / setting) lives on the Generation tab.
 - **Generation** — mode (adventure/creative), lead character,

@@ -96,10 +96,10 @@
 
   .story-title-row { display: flex; align-items: flex-start; gap: 6px; margin-top: 2px; padding-right: 28px; }
   .story-title { font-size: 15px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; }
-  .story-title .pin-star { font-size: 14px; line-height: 1; flex-shrink: 0; cursor: pointer; padding: 2px; border-radius: 3px; color: var(--ink-faint); opacity: 0.25; transition: opacity 0.15s, color 0.15s; }
-  .story-title .pin-star:hover { opacity: 1; color: var(--ink); background: var(--bg-highlight); }
-  .story-title .pin-star.pinned { color: #c89a20; opacity: 1; }
-  .story-title .pin-star.pinned:hover { color: #a87810; background: #fbf3dc; }
+  .story-title .favorite-star { font-size: 14px; line-height: 1; flex-shrink: 0; cursor: pointer; padding: 2px; border-radius: 3px; color: var(--ink-faint); opacity: 0.25; transition: opacity 0.15s, color 0.15s; }
+  .story-title .favorite-star:hover { opacity: 1; color: var(--ink); background: var(--bg-highlight); }
+  .story-title .favorite-star.on { color: #c89a20; opacity: 1; }
+  .story-title .favorite-star.on:hover { color: #a87810; background: #fbf3dc; }
   .story-title .status-badge { font-size: 9px; color: var(--ink-faint); background: var(--bg); border: 1px solid var(--line-soft); padding: 1px 6px; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; margin-left: 6px; flex-shrink: 0; }
   .story-title .status-badge.draft { color: #7a6020; background: #fbf3dc; border-color: #e8d890; }
   /* overflow menu anchored to top-right corner of the card, not in the title row */
@@ -171,7 +171,7 @@
   <div class="rb-group">
     <span class="gl">filter:</span>
     <button class="rb-btn active" data-filter="all">all</button>
-    <button class="rb-btn" data-filter="pinned">pinned</button>
+    <button class="rb-btn" data-filter="favorited">favorited</button>
     <button class="rb-btn" data-filter="archived">archived</button>
   </div>
   <div class="rb-group">
@@ -235,7 +235,7 @@
     </div>
     <div class="filter-chips" id="filter-chips">
       <span class="filter-chip active" data-chip="all">All</span>
-      <span class="filter-chip" data-chip="pinned">Pinned</span>
+      <span class="filter-chip" data-chip="favorited">Favorited</span>
       <span class="filter-chip" data-chip="archived">Archived</span>
     </div>
     <div class="sort-picker" id="sort-picker">
@@ -246,14 +246,14 @@
   <div class="stories-view" id="stories-view">
 
     <div class="stories">
-      <!-- Pinned first (Layer 0), then last-opened. Mode-derived left accent; genre as overline. -->
-      <div class="story-card adv" data-pinned>
+      <!-- Favorited first (Layer 0), then last-opened. Mode-derived left accent; genre as overline. -->
+      <div class="story-card adv" data-favorited>
         <div class="story-accent"></div>
         <span class="story-menu" title="More options">&#8943;</span>
         <div class="story-body">
           <div class="story-overline">Dark Fantasy</div>
           <div class="story-title-row">
-            <span class="story-title"><span class="pin-star pinned" title="Unpin">&#9733;</span>Aria's Descent</span>
+            <span class="story-title"><span class="favorite-star on" title="Unfavorite">&#9733;</span>Aria's Descent</span>
           </div>
           <div class="story-meta">
             <span>Adventure</span>
@@ -272,7 +272,7 @@
         <div class="story-body">
           <div class="story-overline">Science Fiction</div>
           <div class="story-title-row">
-            <span class="story-title"><span class="pin-star" title="Pin">&#9734;</span>The Iron Circuit</span>
+            <span class="story-title"><span class="favorite-star" title="Favorite">&#9734;</span>The Iron Circuit</span>
           </div>
           <div class="story-meta">
             <span>Creative</span>
@@ -291,7 +291,7 @@
         <div class="story-body">
           <div class="story-overline">Medieval Mystery</div>
           <div class="story-title-row">
-            <span class="story-title"><span class="pin-star" title="Pin">&#9734;</span>Mornstone Chronicle</span>
+            <span class="story-title"><span class="favorite-star" title="Favorite">&#9734;</span>Mornstone Chronicle</span>
           </div>
           <div class="story-meta">
             <span>Adventure</span>
@@ -310,7 +310,7 @@
         <div class="story-body">
           <div class="story-overline">Folk Horror</div>
           <div class="story-title-row">
-            <span class="story-title"><span class="pin-star" title="Pin">&#9734;</span>Brine Tale</span>
+            <span class="story-title"><span class="favorite-star" title="Favorite">&#9734;</span>Brine Tale</span>
           </div>
           <div class="story-meta">
             <span>Creative</span>
@@ -329,7 +329,7 @@
         <div class="story-body">
           <div class="story-overline">Genre not set</div>
           <div class="story-title-row">
-            <span class="story-title"><span class="pin-star" title="Pin">&#9734;</span>Untitled draft<span class="status-badge draft">Draft</span></span>
+            <span class="story-title"><span class="favorite-star" title="Favorite">&#9734;</span>Untitled draft<span class="status-badge draft">Draft</span></span>
           </div>
           <div class="story-meta">
             <span>Adventure</span>
@@ -346,7 +346,7 @@
         <div class="story-body">
           <div class="story-overline">Philosophical Fantasy</div>
           <div class="story-title-row">
-            <span class="story-title"><span class="pin-star" title="Pin">&#9734;</span>The Hollow Year<span class="status-badge">Archived</span></span>
+            <span class="story-title"><span class="favorite-star" title="Favorite">&#9734;</span>The Hollow Year<span class="status-badge">Archived</span></span>
           </div>
           <div class="story-meta">
             <span>Adventure</span>
@@ -423,10 +423,10 @@
 
   function setFilter(f) {
     document.querySelectorAll('.story-card').forEach(c => {
-      const pinned = c.hasAttribute('data-pinned');
+      const favorited = c.hasAttribute('data-favorited');
       const archived = c.classList.contains('archived');
       let show = true;
-      if (f === 'pinned') show = pinned;
+      if (f === 'favorited') show = favorited;
       if (f === 'archived') show = archived;
       if (f === 'all') show = !archived; // archived hidden in "all" by default
       c.style.display = show ? '' : 'none';
@@ -463,13 +463,13 @@
   // set initial count with "all" filter applied (archived hidden)
   setFilter('all');
 
-  // inline pin toggle — clicking the star flips pinned state
-  document.querySelectorAll('.pin-star').forEach(s => {
+  // inline favorite toggle — clicking the star flips favorited state
+  document.querySelectorAll('.favorite-star').forEach(s => {
     s.addEventListener('click', e => {
       e.stopPropagation();
-      s.classList.toggle('pinned');
-      s.setAttribute('title', s.classList.contains('pinned') ? 'Unpin' : 'Pin');
-      s.innerHTML = s.classList.contains('pinned') ? '&#9733;' : '&#9734;';
+      s.classList.toggle('on');
+      s.setAttribute('title', s.classList.contains('on') ? 'Unfavorite' : 'Favorite');
+      s.innerHTML = s.classList.contains('on') ? '&#9733;' : '&#9734;';
     });
   });
 })();

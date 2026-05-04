@@ -37,7 +37,7 @@ erDiagram
         text cover_asset_id FK "optional; references assets"
         text accent_color "optional hex/HSL; falls back to mode-derived"
         text status "draft | active | archived (lifecycle; mutually exclusive)"
-        integer pinned "0 | 1; orthogonal to status"
+        integer favorite "0 | 1; orthogonal to status"
         text author_notes "private; distinct from description"
         integer last_opened_at "distinct from updated_at; drives last-opened sort"
         json definition "definitional content (what the story IS); see 'Story settings shape' decision"
@@ -665,17 +665,18 @@ queries.
   - `active ↔ archived` toggle via overflow menu.
   - Drafts cannot be archived (archive action is gated on
     `status='active'`); they can only be completed or deleted.
-- `pinned integer` — 0 or 1. Orthogonal to `status` — any status can
-  be pinned. Inline star toggle on the library card.
+- `favorite integer` — 0 or 1. Orthogonal to `status` — any status
+  can be favorited. Inline star toggle on the library card. Naming
+  parallels the per-row `favorite` flag on `vault_calendars`.
 - `author_notes text` — private per-story note slot, distinct from
   `description` (public one-liner). Nullable.
 - `last_opened_at integer` — distinct from `updated_at` (which
   reflects any write). Touched when the user navigates into the
   story; drives the default `last-opened` sort on the library.
 
-**Library sort invariant:** `pinned DESC, <chosen_sort_key>` — pinned
-stories always float to the top within any filter. Mirrors the Layer
-0 rule for lead-character sort on entity lists.
+**Library sort invariant:** `favorite DESC, <chosen_sort_key>` —
+favorited stories always float to the top within any filter. Mirrors
+the Layer 0 rule for lead-character sort on entity lists.
 
 ### Story settings shape
 
@@ -1025,7 +1026,7 @@ calendar pickers; sorts favorited rows above non-favorited ones.
 Built-ins live in code so they have no row to carry the flag —
 favoriting a built-in requires cloning it first (the resulting
 `vault_calendars` row is the favoritable artifact). Acceptable
-constraint: the workflow that prompts a "I want this pinned" is
+constraint: the workflow that prompts a "I want this favorited" is
 also the workflow that prompts "I want to tweak its label or
 displayFormat," so the clone step has independent value.
 
@@ -1393,7 +1394,7 @@ like portraits from polluting every unrelated update.
 **Delta scope: narrative state only.** Deltas cover the core narrative
 tables (`story_entries` row-level changes, `entities` narrative fields,
 `lore`, `threads`, `happenings` and their links, `chapters`, `entry_assets`).
-UI-only fields (`pinned`, `sort_order`, `ui_color`, etc.) bypass the log
+UI-only fields (`favorite`, `sort_order`, `ui_color`, etc.) bypass the log
 — rollback doesn't revert them, because they aren't story content. The
 write layer enforces this distinction: mutations to narrative fields
 write a delta + row update in one transaction; mutations to UI fields

@@ -110,9 +110,8 @@
   .segment > .seg { padding: 6px 14px; font-size: 12px; color: var(--ink-muted); cursor: pointer; background: var(--bg-region); }
   .segment > .seg.active { background: var(--ink); color: #fff; }
   .segment > .seg + .seg { border-left: 1px solid var(--line); }
-  .pin-toggle-row { display: inline-flex; align-items: center; gap: 8px; margin-left: 16px; font-size: 12px; color: var(--ink-muted); }
-  .pin-star { font-size: 16px; color: var(--ink-faint); cursor: pointer; }
-  .pin-star.on { color: #d8b04a; }
+  .favorite-star { font-size: 18px; color: var(--ink-faint); cursor: pointer; flex-shrink: 0; line-height: 1; margin-top: 2px; }
+  .favorite-star.on { color: #d8b04a; }
   .radio-row { display: flex; flex-direction: column; gap: 10px; padding-top: 6px; }
   /* Real component stacks label + description vertically next to the
      radio dot, every tier — same shape on desktop and phone per
@@ -452,16 +451,19 @@
           <div class="field-label">status
             <span class="hint">lifecycle &mdash; mutually exclusive</span>
           </div>
-          <div>
-            <div class="segment" title="2 options &middot; segment per the Select primitive rule">
-              <span class="seg active">Active</span>
-              <span class="seg">Archived</span>
-            </div>
-            <div class="pin-toggle-row" title="Pin is orthogonal to status &mdash; any status can be pinned">
-              <span class="pin-star on">&#9733;</span>
-              <span>pinned</span>
-            </div>
+          <div class="segment" title="2 options &middot; segment per the Select primitive rule">
+            <span class="seg active">Active</span>
+            <span class="seg">Archived</span>
           </div>
+        </div>
+
+        <div class="switch-row" role="switch" aria-checked="true" title="Favorite is orthogonal to status &mdash; any status can be favorited">
+          <span class="pin-star on">&#9733;</span>
+          <div class="switch-row-text">
+            <div class="switch-row-label">favorite</div>
+            <div class="switch-row-hint">shown at top of story list</div>
+          </div>
+          <span class="toggle on"></span>
         </div>
       </div>
 

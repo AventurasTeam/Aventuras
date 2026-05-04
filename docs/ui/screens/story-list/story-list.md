@@ -24,7 +24,7 @@ Cross-cutting principles that govern this screen are in
 │ [logo] Aventuras                       [Actions][⚙]         │ ← lean top bar (no story context)
 ├─────────────────────────────────────────────────────────────┤
 │ Stories · 6 total                          [+ New story]    │
-│ ⌕ Search                [All][Pinned][Archived]  sort: ▾   │
+│ ⌕ Search              [All][Favorited][Archived]  sort: ▾   │
 ├─────────────────────────────────────────────────────────────┤
 │ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐       │
 │ │[cover]⭐│ │[cover]   │ │[cover]   │ │[cover]   │       │ ← grid
@@ -61,14 +61,14 @@ landing from anywhere else, but we're already here).
   to ~360px. Scope: `title`, `description`, `definition.genre.label`,
   `tags`, `author_notes`. Affordances per the
   [search-bar-scope pattern](../../patterns/lists.md#search-bar-scope).
-- **Filter chips** — single-select: `All` / `Pinned` / `Archived`.
+- **Filter chips** — single-select: `All` / `Favorited` / `Archived`.
   `All` hides archived by default (they only appear when the
-  `Archived` filter is active). `Pinned` shows only pinned.
+  `Archived` filter is active). `Favorited` shows only favorites.
 - **Sort dropdown** — `last-opened` (default) / `created` / `title`.
   Single-select. Lean picker on the right.
 
-**Sort invariant:** within any filter, **pinned stories are pinned
-to the top**, matching the Layer 0 rule from the
+**Sort invariant:** within any filter, **favorited stories float to
+the top**, matching the Layer 0 rule from the
 [entity-list sort pattern](../../patterns/entity.md#entity-list-sort-order--static-four-layer).
 Everything else sorts by the chosen key.
 
@@ -98,13 +98,13 @@ viewport.
   set as the label (typically a preset display name; user-editable).
   For drafts with no genre label yet, shows a muted "Genre not set"
   placeholder.
-- **Title row** — title (bold), with a **pin star inline before
-  the title** that's a clickable toggle: outline + muted for
-  unpinned (~25% opacity, reveals on hover), filled gold for
-  pinned. Clicking flips the state. Pin is the only menu action
-  promoted to inline chrome because it's frequent enough to earn
-  a dedicated affordance. `Draft` or `Archived` status badges
-  appear inline after the title when applicable.
+- **Title row** — title (bold), with a **favorite star inline
+  before the title** that's a clickable toggle: outline + muted
+  for non-favorited (~25% opacity, reveals on hover), filled gold
+  for favorited. Clicking flips the state. Favorite is the only
+  menu action promoted to inline chrome because it's frequent
+  enough to earn a dedicated affordance. `Draft` or `Archived`
+  status badges appear inline after the title when applicable.
 - **Overflow menu (⋯)** — anchored to the **card's top-right
   corner** (absolute-positioned), out of the title row so titles
   don't compete with it. Click opens a menu with:
@@ -118,7 +118,7 @@ viewport.
   - **Export** — per-story JSON export (distinct from full
     backup, per data-model decision)
   - **Delete** — destructive, confirmation required, shown last
-    Pin/Unpin is NOT in this menu — it's the inline star toggle.
+    Favorite/Unfavorite is NOT in this menu — it's the inline star toggle.
     All items also reachable via the global Actions menu.
 - **Meta row** — mode name (written out: "Adventure" / "Creative"),
   current chapter (for active stories), last-opened relative time.
@@ -136,7 +136,7 @@ viewport.
 **Click behavior:**
 
 - Click card body → open the story (route to Reader).
-- Click ⋯ → open the per-story overflow menu (pin, archive,
+- Click ⋯ → open the per-story overflow menu (favorite, archive,
   duplicate, export, delete, "add cover image…").
 
 ## Drafts — wizard session + explicit draft
@@ -282,7 +282,7 @@ phone-tier specifics below.
   responsive (1 column phone, 2 tablet, 3–4 desktop). The retrofit
   wires container-query reflow; the existing grid CSS needs no
   shape change.
-- **Pin star.** Already implements
+- **Favorite star.** Already implements
   [always-visible-muted](../../patterns/icon-actions.md#visibility--always-rendered-muted-default-brighten-on-hover)
   (`opacity: 0.25` default, brighten on hover / focus on desktop).
   Touch users see the muted star without any hover state — exactly
@@ -310,7 +310,7 @@ Design rationale and adversarial findings in
 ## Data-model dependencies
 
 Card identity fields — `tags`, `cover_asset_id`, `accent_color`,
-`status`, `pinned`, `author_notes`, `last_opened_at` — live as
+`status`, `favorite`, `author_notes`, `last_opened_at` — live as
 columns on the `stories` table. The genre overline sources from
 `definition.genre.label` (a JSON path into the `stories.definition`
 column, not a top-level column). Schema authority and rationale in
