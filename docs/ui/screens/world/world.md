@@ -93,8 +93,11 @@ power-user/debug territory. One consistent pattern: ⋯ menus are where
 
 ## Tabs — per-kind composition
 
-All four entity kinds share the same tab skeleton. Tabs distribute
-fields by **semantic purpose**, not by JS shape — implemented as
+All four entity kinds share the same tab skeleton, rendered via the
+[Tabs primitive](../../patterns/tabs.md) on tiers where the strip
+fits and substituted to the Select primitive on narrower tiers.
+Tabs distribute fields by **semantic purpose**, not by JS shape —
+implemented as
 [hand-written per-kind detail-pane components](../../patterns/entity.md#entity-detail-pane-composition):
 `CharacterDetailPane`, `LocationDetailPane`, `ItemDetailPane`,
 `FactionDetailPane`. Schema is the validation contract; UI owns

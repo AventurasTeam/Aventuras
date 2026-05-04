@@ -32,6 +32,9 @@ The split heuristic + when-to-add rules live in
   primitive. Severity variants, queue cap, swipe-up dismiss + ×,
   cross-platform animation dispatch. Banners (the persistent
   counterpart) stay surface-specific.
+- [`tabs.md`](./tabs.md) — horizontal segmented navigation
+  primitive (underline style, optional per-tab count). Strip-only;
+  consumers substitute Select at narrow tiers per the Group C rule.
 - [`calendar-picker.md`](./calendar-picker.md) — calendar-system
   selector shared across App Settings, Story Settings, and Wizard:
   rich rows, summary panel, swap warnings (origin / eras / display),

@@ -59,8 +59,8 @@ panel:
 - `MasterDetailShell` — top bar, list pane, detail pane, save bar
 - `ListPane` — search, filter chips, scrollable rows (row rendering
   composable per kind)
-- `DetailPane` — breadcrumb, name + ⋯ menu, tab strip, scrollable
-  content
+- `DetailPane` — breadcrumb, name + ⋯ menu,
+  [tab strip](../../patterns/tabs.md), scrollable content
 - `SaveBar` — dirty-only footer (Cmd/Ctrl-S)
 - Form generation — zod-driven typed forms, same pattern as World
 
