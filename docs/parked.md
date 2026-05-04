@@ -1018,3 +1018,25 @@ The work itself is straightforward — Expo Router supports URL
 schemes natively; route mapping plus a launch-time deep-link
 handler. Schema cost is also small (URL templates per surface).
 Held parked because v1 doesn't have a consumer that benefits.
+
+### Two-stage touch feedback (light hover + stronger press)
+
+Some mobile apps (Discord noted) ship a two-stage feedback on
+touch: a light "hover-like" highlight that fires on touch-down,
+followed by a more prominent press highlight if the finger
+lingers / commits. Distinct from RN's single-stage Pressable
+model where `pressed=true` from touch-down through release at
+one intensity.
+
+Implementing it would require either:
+
+- Two timed states inside Pressable (onPressIn → light tint;
+  setTimeout → stronger tint), with cancel logic if released
+  early.
+- Or a custom press tracker via PanResponder / Gesture.LongPress
+  that surfaces the intermediate phase.
+
+Useful polish; not blocking v1. Surface again if a consumer ships
+something where the distinction would matter (e.g., a
+context-menu trigger where touch-down should feel different from
+commit-press).
