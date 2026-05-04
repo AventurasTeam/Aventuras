@@ -297,6 +297,11 @@ inherit unchanged.
   Resolved / Failed; Happenings: All / This chapter / Common
   knowledge / Out-of-narrative) wrap as needed on phone via the
   existing `flex-wrap` rule.
+- **Detail-pane form fields** (thread / happening Overview tabs)
+  follow the
+  [stacked-on-narrow-container rule](../../patterns/forms.md#form-rows--stacked-on-narrow-container)
+  — same substrate as world, story-settings, app-settings, vault
+  calendars.
 - **Common-knowledge interaction.** Toggling `common_knowledge` on
   Overview makes the Awareness tab body a notice ("Common knowledge
   — every character is aware of this"); same content shape on every

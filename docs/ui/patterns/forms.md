@@ -40,6 +40,126 @@ Used by:
 
 ---
 
+## Form rows — stacked-on-narrow-container
+
+Cross-cutting layout rule for the row wrapper that hosts a
+label / hint / input triple in any of the surfaces above.
+Independent of which input primitive sits inside.
+
+### Container-keyed layout
+
+A form row renders as:
+
+- **Two-column grid** (label-left, input-right) when its **form
+  container** is `≥ 640 px` wide. Existing desktop preferences-pane
+  aesthetic — uppercase 11 px monospace label, 180 px label column
+  on desktop, 120 px on the tablet-narrow band (`640 px ≤ container
+< 1024 px`).
+- **Stacked single-column block** (label-above, input-below) when
+  the form container is `< 640 px` wide. Applies regardless of
+  viewport tier.
+
+The rule keys on the **form wrapper's** width, not on the viewport
+tier. This separates two concerns:
+
+- Viewport size drives the master-detail split (list ↔ detail as
+  separate phone screens vs. side-by-side rail+content on
+  tablet+desktop) — pinned by
+  [`mobile/collapse.md → Two-pane navigation surfaces`](../foundations/mobile/collapse.md#two-pane-navigation-surfaces-world-plot-settings).
+- Container size drives the form-row layout inside whichever
+  detail surface the user is looking at.
+
+Effect across tiers:
+
+| Tier             | Detail container width     | Form-row layout |
+| ---------------- | -------------------------- | --------------- |
+| Phone            | ~360-430 px (full-bleed)   | stacked         |
+| Tablet portrait  | ~544-620 px (rail visible) | stacked         |
+| Tablet landscape | ~820 px                    | 2-col           |
+| Desktop          | ~920 px (form max-width)   | 2-col           |
+
+Tablet portrait detail panes are mobile-narrow once the rail
+takes its 200 px share — the container rule picks the right shape
+automatically. A user resizing a desktop window narrow, or
+splitting the screen vertically, also gets stacked rows when the
+form container drops below the threshold.
+
+### Stacked-row visual treatment
+
+When stacked:
+
+- **Label** — sits on its own line above the input. Sentence-case,
+  `--font-ui` system sans, 14 px / `text-sm`, `font-medium`,
+  `--fg-primary`. Drops the uppercase / monospace / letter-spacing
+  chrome the desktop pane carries.
+- **Hint** — sits beneath the label, above the input. Sentence-case
+  sans, 12 px / `text-xs`, `--fg-secondary`. No monospace.
+- **Input** — consumes the full content width of the form
+  container. Control height inherits from the active density
+  (regular default on phone = 44 px, meeting Apple's tap-target
+  floor; see also
+  [`mobile/touch.md → Touch-target floor on phone`](../foundations/mobile/touch.md#touch-target-floor-on-phone)).
+- **Spacing** — ~6 px between label and input, ~16 px between
+  rows.
+
+When 2-col (`≥ 640 px` container), the existing desktop aesthetic
+is preserved unchanged.
+
+### Inline-row exceptions
+
+Rows that stay inline regardless of container width (the row's
+own primitive owns the layout):
+
+- **[`SwitchRow`](#switchrow-pattern)** — label + optional hint
+  on the left, switch on the right. Whole row tappable. Already
+  mobile-native by design.
+- **Slider row** — `[—————O—————] [42]`. Slider track + numeric
+  input stay inline with each other. The label above them follows
+  the stacked rule on narrow containers.
+- **Segment selector row** — segment is the input. Label above on
+  narrow containers, segment below as a single inline strip.
+- **Select (radio mode)** — option list is already a vertically
+  stacked tappable card list. Label above the list on narrow
+  containers; the list's option rows render label and description
+  **stacked vertically** next to the radio dot at every tier (not
+  side-by-side).
+- **Select (dropdown / segment mode)** — trigger is one line;
+  composes naturally with the stacked rule.
+
+### Tighter accordion-body label scope
+
+Group D pinned a 90 px label-column override scoped to
+`.profile-body .field-row` and `.narrative-card .field-row` for
+the densest provider / profile / narrative editors (per
+[`2026-05-02-mobile-group-d-settings.md`](../../explorations/2026-05-02-mobile-group-d-settings.md)).
+With the container rule, this override only meaningfully applies on
+**wide containers** (`640 px ≤ container < 1024 px`); on narrow
+containers the stacked rule subsumes the column entirely. Net: 90
+px override active on tablet landscape and desktop accordion-body
+editors only.
+
+### Implementation note
+
+- **Web.** CSS Container Queries (Baseline since 2023) match the
+  rule directly: declare the form wrapper as `container-type:
+inline-size`, write `@container (max-width: 639px)` to apply the
+  stacked variant. NativeWind 4 supports container queries on web.
+- **Native.** No native container-query primitive in RN. Two
+  options:
+  - **Width-measurement hook.** A `useFormWidth()` hook reading
+    `onLayout` of the form wrapper and toggling a stacked class.
+    First-paint flicker possible on initial mount.
+  - **Tier-driven approximation.** Toggle stacked when
+    `useTier() === 'phone' || (useTier() === 'tablet' &&
+railVisible)`. Misses the rare "narrow desktop window" case but
+    has no measurement cost. Acceptable starting point for v1
+    surfaces.
+
+Pick per-consumer; the contract is the visual rule, not the
+mechanism.
+
+---
+
 ## Select primitive
 
 One primitive, three render modes. Component used everywhere a

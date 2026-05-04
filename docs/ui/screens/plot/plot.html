@@ -1481,6 +1481,31 @@
           display: block;
         }
 
+        /* Form rows stack: label above, input full-width below. Per
+           forms.md → Form rows — stacked-on-narrow-container. Wireframe
+           approximates by keying on viewport width; production keys on
+           form-container width (so tablet portrait detail panes stack too). */
+        .field-row {
+          display: block;
+          grid-template-columns: none;
+          margin-bottom: 16px;
+        }
+        .field-label {
+          font-family: inherit;
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--ink);
+          text-transform: none;
+          letter-spacing: normal;
+          padding-top: 0;
+          padding-bottom: 6px;
+        }
+        .field-label .type-hint {
+          font-family: inherit;
+          font-size: 12px;
+          color: var(--ink-muted);
+        }
+
         /* History row stacks vertically on phone — each cell on its
            own line, all left-aligned. Header row hidden — column
            labels read redundant when each row's cells are

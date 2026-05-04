@@ -246,13 +246,90 @@
         body[data-md-state="list"] .settings-pane { display: none; }
         body[data-md-state="detail"] .settings-rail { display: none; }
 
+        /* List-state nav rows: 44 px tap-target floor, sentence-case sans
+           label at 16 px / text-base, chevron-right glyph, no left-bar
+           accent (active state lives only on tablet+desktop). Per
+           app-settings.md → Mobile expression and forms.md → Form rows. */
         .settings-rail { border-right: none; padding: 8px 0; }
-        .nav-item { padding: 12px 16px 12px 22px; }
+        .rail-section { margin-bottom: 8px; }
+        .rail-section + .rail-section { margin-top: 24px; }
+        .rail-section-title {
+          font-size: 12px;
+          text-transform: none;
+          letter-spacing: normal;
+          color: var(--ink-muted);
+          font-weight: 500;
+          padding: 0 16px 8px;
+        }
+        .nav-item {
+          min-height: 44px;
+          padding: 12px 16px;
+          font-size: 16px;
+          font-weight: 500;
+          color: var(--ink);
+          border-left-color: transparent !important;
+          background: transparent !important;
+          display: flex;
+          align-items: center;
+        }
+        .nav-item.active {
+          color: var(--ink);
+          background: transparent !important;
+          border-left-color: transparent !important;
+          font-weight: 500;
+        }
+        .nav-item::after {
+          content: "›";
+          margin-left: auto;
+          color: var(--ink-faint);
+          font-size: 18px;
+          line-height: 1;
+        }
+        .nav-item .nav-hint {
+          display: block;
+          font-size: 13px;
+          color: var(--ink-muted);
+          margin-left: 0;
+          margin-top: 2px;
+          font-weight: 400;
+        }
 
         .tab-panel { padding: 16px 16px 28px; }
 
+        /* Form rows stack: label above, input full-width below. Sentence-case
+           sans label drops the desktop preferences-pane uppercase monospace
+           chrome. Per forms.md → Form rows — stacked-on-narrow-container.
+           Wireframe approximates the rule by keying on viewport width;
+           production keys on form-container width (so tablet portrait
+           detail panes stack too). */
+        .field-row, .assignments-row {
+          display: block;
+          grid-template-columns: none;
+          margin-bottom: 16px;
+        }
+        .profile-body .field-row,
+        .narrative-card .field-row {
+          grid-template-columns: none;
+        }
+        .field-label {
+          font-family: inherit;
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--ink);
+          text-transform: none;
+          letter-spacing: normal;
+          padding-top: 0;
+          padding-bottom: 6px;
+        }
+        .field-label .hint {
+          font-family: inherit;
+          font-size: 12px;
+          color: var(--ink-muted);
+          margin-top: 2px;
+        }
+        .input-text, .input-textarea, .input-select { width: 100%; box-sizing: border-box; }
+
         .save-bar { padding: 10px 12px; }
-        /* Field-row + assignments-row label shrink already applied at <1024 px. */
       }
     </style>
   </head>

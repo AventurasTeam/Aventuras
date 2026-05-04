@@ -24,6 +24,11 @@ This file is session 5 of the mobile-foundations multi-session pass
   pull-to-refresh.** Gesture vocabulary stays small.
 - **Save bar on phone hides while keyboard is open**, reappears on
   field blur. Navigate-away guard remains active throughout.
+- **Touch-target floor on phone is 44 px**, enforced as
+  `min-height` on phone-tier interactive rows independent of the
+  user's density override. Form-row layout for narrow containers
+  is pinned in
+  [`patterns/forms.md → Form rows — stacked-on-narrow-container`](../../patterns/forms.md#form-rows--stacked-on-narrow-container).
 - **Tap-to-tooltip on truncated inert chrome text** (story title,
   current breadcrumb segment) — narrowly scoped.
 - **Status pill on phone** taps to a Popover with phase plus
@@ -137,6 +142,37 @@ The platform mechanism (RN's `KeyboardAvoidingView` modes, iOS
 interactive-dismiss vs Android adjust-resize) is **session 6
 (platform)** territory — this file pins the behavior contract;
 session 6 pins the implementation when it lands.
+
+## Touch-target floor on phone
+
+Apple's HIG and Material's spec both pin the interactive-target
+floor at 44 pt / 48 dp respectively. Phone-tier surfaces ride the
+floor as the platform default — pinning above the floor is a
+user-override choice (Appearance → Density → comfortable), not a
+substrate baseline.
+
+The contract:
+
+- **44 px hard `min-height` on phone-tier interactive rows** —
+  list-state nav rows, SwitchRow, any tappable list row — applied
+  at the row wrapper independent of the user's density override.
+  A user who sets density to compact on phone still gets a 44 px
+  tappable surface; the inner padding shrinks but the row floor
+  doesn't drop below 44 px.
+- **Form input controls on phone** likewise enforce a 44 px floor
+  via `--control-h-md` at regular density (the phone default) plus
+  a defensive floor at the input wrapper. Compact override
+  squeezes inner padding but not below the 44 px floor.
+- **Tablet+desktop respect the user's density override fully**.
+  Smaller controls there are still touchable on tablet,
+  mouse-actionable on desktop.
+
+Form-row layout itself (label-above-input vs label-left-of-input)
+is keyed on form-container width, not viewport tier — see
+[`patterns/forms.md → Form rows — stacked-on-narrow-container`](../../patterns/forms.md#form-rows--stacked-on-narrow-container).
+The two rules compose: the row's outer min-height enforces the tap
+target; the row's inner layout adapts to the form container's
+width.
 
 ## Status pill on phone
 

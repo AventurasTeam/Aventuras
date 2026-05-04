@@ -649,11 +649,24 @@ at iPad portrait detail-pane widths).
 - **Master-detail collapse on phone.** List state shows the
   section/tab list (STORY: About, Generation; SETTINGS: Models,
   Memory, Translation, Pack, Calendar, Advanced) as a vertical
-  scroll list with uppercase section headers as non-tappable group
-  separators. Tap a tab row → tab content as inner full-screen
+  scroll list. Tap a tab row → tab content as inner full-screen
   route within the Story Settings surface; back returns to list
   state. Same shape as World/Plot's master-detail collapse, just
   with a left-rail desktop primitive instead of separated panes.
+- **List-state nav rows on phone** ride the 44 px tap-target
+  floor (per
+  [`mobile/touch.md → Touch-target floor on phone`](../../foundations/mobile/touch.md#touch-target-floor-on-phone)).
+  Label is sentence-case sans 16 px / `text-base` `font-medium`
+  in `--fg-primary` ink (not muted). A chevron-right glyph at
+  the row's right edge signals drill-down. Optional secondary
+  line surfaces a current-value hint where one obviously exists
+  — `Calendar → Earth (Gregorian)`; multi-setting tabs (Models,
+  Memory, Translation, Pack, Advanced, About, Generation) omit.
+  No left-bar accent on phone — active state lives only on
+  tablet+desktop where the rail persists. Group separators
+  (`Story`, `Settings`) render as sentence-case caption text,
+  `text-xs` `--fg-secondary`, with ~24 px gap above each header
+  and ~8 px below.
 - **Top-bar shape on phone** per
   [`mobile/navigation.md → Phone`](../../foundations/mobile/navigation.md#phone--640-px):
   slim single-row `[←] [<title> / Story Settings] [pill] [⚲]`.
@@ -664,13 +677,20 @@ at iPad portrait detail-pane widths).
   [`mobile/touch.md`](../../foundations/mobile/touch.md#tap-to-tooltip-on-inert-chrome-text)).
   No `⛭` icon — Story Settings IS the in-story chrome target per
   [`principles.md → Settings icon scope`](../../principles.md#settings-icon-scope).
-- **Form-field rows in detail content** use the same `.field-row`
-  shape as the World / Plot detail panes — 180 px label column on
-  desktop, shrinking to 120 px on tablet and phone (inputs need
-  more breathing room and labels don't need equal space).
-  Type-hint applies `overflow-wrap: anywhere` to break long
-  monospace strings cleanly. Same ratio across all four 2-pane
-  surfaces (world, plot, story-settings, app-settings).
+- **Form-field rows** follow the
+  [stacked-on-narrow-container rule](../../patterns/forms.md#form-rows--stacked-on-narrow-container)
+  — 2-col grid (180 px label-left / 1fr input-right, uppercase
+  monospace label) when the form container is `≥ 640 px`,
+  stacked single-column block (sentence-case sans label above,
+  full-width input below) when the form container is `< 640 px`.
+  On phone the form container is full-bleed (~360-430 px) so
+  rows stack; tablet portrait detail panes (~544-620 px after
+  the rail) also fall below the threshold and stack; tablet
+  landscape (~820 px detail pane) and desktop (~920 px form
+  max-width) stay 2-col. Type-hint applies `overflow-wrap:
+anywhere` to break long monospace strings cleanly when 2-col
+  is active. Substrate consumed by all five form-row surfaces
+  (story-settings, app-settings, world, plot, vault calendars).
 - **Selects on phone** route per the
   [`patterns/forms.md → Select primitive`](../../patterns/forms.md#select-primitive)
   cascade: dropdown render mode opens via Sheet (short) for flat
@@ -723,7 +743,11 @@ at iPad portrait detail-pane widths).
   navigate-away guard fires before the back action.
 - **Phone landscape** (~700–900 px) lands in tablet tier per the
   [responsive contract](../../foundations/mobile/responsive.md);
-  rail + content remains side-by-side, cramped vertically.
+  rail + content remains side-by-side, cramped vertically. Form
+  container width is ~500-700 px after the rail; the
+  stacked-on-narrow-container rule keys on that container width
+  rather than the tier classification, so most landscape phone
+  detail panes still stack form rows naturally.
 
 ## Screen-specific open questions
 

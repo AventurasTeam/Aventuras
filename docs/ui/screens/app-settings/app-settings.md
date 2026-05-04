@@ -493,10 +493,19 @@ expression itself.
 - **Master-detail collapse on phone.** List state shows all 10
   tabs across 3 sections (GENERATION: Providers, Profiles; STORY
   DEFAULTS: Memory, Translation, Composer; APP: Appearance,
-  Language, Data, About, Diagnostics) as a vertical scroll list
-  with uppercase section headers as non-tappable group separators.
+  Language, Data, About, Diagnostics) as a vertical scroll list.
   Tap → tab content as inner full-screen route; back returns to
   list state.
+- **List-state nav rows on phone** follow the same shape as
+  [Story Settings's mobile expression](../story-settings/story-settings.md#mobile-expression)
+  — 44 px tap-target floor, sentence-case sans 16 px label,
+  chevron-right glyph, no left-bar accent on phone, sentence-case
+  caption group separators. Surface-specific secondary-line
+  candidates: `Appearance → <theme name>`, `Language → <code>`,
+  `Calendar → <calendar name>` (App Settings's calendar tab is
+  app-default; Story Settings overrides per story). Multi-setting
+  tabs (Providers, Profiles, Memory, Translation, Composer, Data,
+  About, Diagnostics) omit secondary.
 - **Top-bar shape on phone** is the app-level non-root variant per
   [`mobile/navigation.md → Phone`](../../foundations/mobile/navigation.md#phone--640-px):
   slim single-row `[←] [App Settings] [⚲]`. No `⛭` (this surface
@@ -510,15 +519,21 @@ expression itself.
   doesn't hide when the user enters a tab's detail route.
 - **Provider list accordion** stacks each provider's configuration
   controls vertically inside the expanded row on phone.
+- **Form rows** follow the
+  [stacked-on-narrow-container rule](../../patterns/forms.md#form-rows--stacked-on-narrow-container)
+  shared with
+  [Story Settings's mobile expression](../story-settings/story-settings.md#mobile-expression)
+  — stacked on narrow containers (phone, tablet portrait detail
+  pane), 2-col on wider containers (tablet landscape, desktop).
 - **Profile / provider accordion editors use a tighter label
-  column at narrow tiers.** The 120 px label rule that applies
-  to the main settings rows (per
-  [Story Settings's mobile expression](../story-settings/story-settings.md#mobile-expression))
-  shrinks further to **90 px** inside `.profile-body` and
-  `.narrative-card` on tablet and phone — these editors are
-  denser (slider + numeric input + capability annotations on
-  every row) and need the extra horizontal room. Main settings
-  rows above and beside the editors stay at 120 px.
+  column on wide containers.** The 90 px override scoped to
+  `.profile-body` and `.narrative-card` applies only when the
+  form container is `≥ 640 px` — these editors are denser
+  (slider + numeric input + capability annotations on every row)
+  and need the extra horizontal room. On narrow containers the
+  stacked rule subsumes the override (no label column to shrink);
+  on wide containers, main settings rows beside the editors stay
+  at 120 px.
 - **Slider numeric inputs shrink** from 80 → 50 px on tablet and
   phone via the same `< 1024 px` @container. Slider track
   takes the freed space (it has `flex: 1`); inputs hold 3-4

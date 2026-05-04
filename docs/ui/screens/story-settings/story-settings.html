@@ -109,9 +109,15 @@
   .pin-toggle-row { display: inline-flex; align-items: center; gap: 8px; margin-left: 16px; font-size: 12px; color: var(--ink-muted); }
   .pin-star { font-size: 16px; color: var(--ink-faint); cursor: pointer; }
   .pin-star.on { color: #d8b04a; }
-  .radio-row { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; }
-  .radio-opt { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
-  .radio-dot { width: 12px; height: 12px; border: 1px solid var(--line); border-radius: 50%; display: inline-block; position: relative; }
+  .radio-row { display: flex; flex-direction: column; gap: 10px; padding-top: 6px; }
+  /* Real component stacks label + description vertically next to the
+     radio dot, every tier — same shape on desktop and phone per
+     forms.md → Form rows → Inline-row exceptions → Select (radio mode). */
+  .radio-opt { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; padding: 4px 0; }
+  .radio-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .radio-label { font-size: 13px; color: var(--ink); }
+  .radio-desc { font-size: 11px; color: var(--ink-faint); line-height: 1.45; }
+  .radio-dot { width: 12px; height: 12px; border: 1px solid var(--line); border-radius: 50%; display: inline-block; position: relative; flex-shrink: 0; margin-top: 4px; }
   .radio-opt.active .radio-dot { border-color: var(--ink); }
   .radio-opt.active .radio-dot::after { content: ""; position: absolute; top: 2px; left: 2px; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
 
@@ -186,14 +192,79 @@
     body[data-md-state="list"] main.pane { display: none; }
     body[data-md-state="detail"] aside.nav { display: none; }
 
-    /* rail compresses padding for full-width touch targets */
+    /* List-state nav rows: 44 px tap-target floor, sentence-case sans
+       label at 16 px / text-base, chevron-right glyph, no left-bar
+       accent (active state lives only on tablet+desktop). Per
+       story-settings.md → Mobile expression and forms.md → Form rows. */
     aside.nav { border-right: none; }
-    .nav-item { padding: 12px 16px; }
+    .nav-section { padding: 8px 0 4px; }
+    .nav-section:first-child { padding-top: 8px; }
+    .nav-section + .nav-section { padding-top: 24px; }
+    .nav-section-label {
+      font-size: 12px;
+      text-transform: none;
+      letter-spacing: normal;
+      color: var(--ink-muted);
+      font-weight: 500;
+      padding: 0 16px 8px;
+    }
+    .nav-item {
+      min-height: 44px;
+      padding: 12px 16px;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--ink);
+      border-left-color: transparent !important;
+      background: transparent !important;
+      position: relative;
+    }
+    .nav-item::after {
+      content: "›";
+      margin-left: auto;
+      color: var(--ink-faint);
+      font-size: 18px;
+      line-height: 1;
+    }
+    .nav-item .nav-hint {
+      display: block;
+      font-size: 13px;
+      color: var(--ink-muted);
+      margin-top: 2px;
+      margin-left: 0;
+    }
 
     /* pane content padding tightens */
     .pane-header { padding: 14px 16px 8px; }
     .pane-body { padding: 16px 16px 32px; }
-    /* Field-row label shrink already applied at <1024 px (tablet+phone). */
+
+    /* Form rows stack: label above, input full-width below. Sentence-case
+       sans label drops the desktop preferences-pane uppercase monospace
+       chrome. Per forms.md → Form rows — stacked-on-narrow-container.
+       Wireframe approximates the rule by keying on viewport width;
+       production keys on form-container width (so tablet portrait
+       detail panes stack too). */
+    .field-row {
+      display: block;
+      grid-template-columns: none;
+      margin-bottom: 16px;
+    }
+    .field-label {
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--ink);
+      text-transform: none;
+      letter-spacing: normal;
+      padding-top: 0;
+      padding-bottom: 6px;
+    }
+    .field-label .hint {
+      font-family: inherit;
+      font-size: 12px;
+      color: var(--ink-muted);
+      margin-top: 2px;
+    }
+    .input-text, .input-textarea, .input-select { max-width: none; width: 100%; box-sizing: border-box; }
   }
 </style>
 </head>
@@ -388,8 +459,8 @@
             <span class="hint">adventure = you play a character<br>creative = you direct the story</span>
           </div>
           <div class="radio-row">
-            <div class="radio-opt active"><span class="radio-dot"></span>Adventure <span style="font-size: 10px; color: var(--ink-faint); margin-left: 4px;">you play a character; AI narrates around your actions</span></div>
-            <div class="radio-opt"><span class="radio-dot"></span>Creative <span style="font-size: 10px; color: var(--ink-faint); margin-left: 4px;">you direct the story; AI fills the prose</span></div>
+            <div class="radio-opt active"><span class="radio-dot"></span><div class="radio-text"><div class="radio-label">Adventure</div><div class="radio-desc">you play a character; AI narrates around your actions</div></div></div>
+            <div class="radio-opt"><span class="radio-dot"></span><div class="radio-text"><div class="radio-label">Creative</div><div class="radio-desc">you direct the story; AI fills the prose</div></div></div>
           </div>
         </div>
 
@@ -408,9 +479,9 @@
             <span class="hint">person the AI writes in; shapes composer mode wrapping</span>
           </div>
           <div class="radio-row">
-            <div class="radio-opt active"><span class="radio-dot"></span>First-person <span style="font-size: 10px; color: var(--ink-faint); margin-left: 4px;">"I reach&hellip;"</span></div>
-            <div class="radio-opt"><span class="radio-dot"></span>Second-person <span style="font-size: 10px; color: var(--ink-faint); margin-left: 4px;">"You reach&hellip;"</span></div>
-            <div class="radio-opt"><span class="radio-dot"></span>Third-person <span style="font-size: 10px; color: var(--ink-faint); margin-left: 4px;">"Aria reaches&hellip;"</span></div>
+            <div class="radio-opt active"><span class="radio-dot"></span><div class="radio-text"><div class="radio-label">First-person</div><div class="radio-desc">&ldquo;I reach&hellip;&rdquo;</div></div></div>
+            <div class="radio-opt"><span class="radio-dot"></span><div class="radio-text"><div class="radio-label">Second-person</div><div class="radio-desc">&ldquo;You reach&hellip;&rdquo;</div></div></div>
+            <div class="radio-opt"><span class="radio-dot"></span><div class="radio-text"><div class="radio-label">Third-person</div><div class="radio-desc">&ldquo;Aria reaches&hellip;&rdquo;</div></div></div>
           </div>
         </div>
 
@@ -480,8 +551,8 @@
             <span class="hint">person the modes wrap in; independent of narration<br>disabled when modes are off</span>
           </div>
           <div class="radio-row">
-            <div class="radio-opt active"><span class="radio-dot"></span>First-person <span style="font-size: 10px; color: var(--ink-faint); margin-left: 4px;">"I reach..."</span></div>
-            <div class="radio-opt"><span class="radio-dot"></span>Third-person <span style="font-size: 10px; color: var(--ink-faint); margin-left: 4px;">"Aria reaches..."</span></div>
+            <div class="radio-opt active"><span class="radio-dot"></span><div class="radio-text"><div class="radio-label">First-person</div><div class="radio-desc">&ldquo;I reach&hellip;&rdquo;</div></div></div>
+            <div class="radio-opt"><span class="radio-dot"></span><div class="radio-text"><div class="radio-label">Third-person</div><div class="radio-desc">&ldquo;Aria reaches&hellip;&rdquo;</div></div></div>
           </div>
         </div>
 

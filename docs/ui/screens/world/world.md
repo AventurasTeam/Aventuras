@@ -569,14 +569,17 @@ overflows.
   content first, visual reference below). Tap the portrait to
   view it full-size per
   [`principles.md → Tap a thumbnail to see it full-size`](../../principles.md#tap-a-thumbnail-to-see-it-full-size).
-- **Form-field labels compress on tablet and phone.** The
-  detail-pane's `.field-row` uses a 180 px label column on
-  desktop; tablet and phone shrink to 120 px to give the input
-  column more breathing room (labels don't need equal space).
-  Type-hint sub-text (under each label) applies
+- **Form-field rows** follow the
+  [stacked-on-narrow-container rule](../../patterns/forms.md#form-rows--stacked-on-narrow-container)
+  shared with story-settings, app-settings, plot, and vault
+  calendars — 2-col grid (180 px label-left / 1fr input-right,
+  uppercase monospace label) when the form container is
+  `≥ 640 px`, stacked single-column block (sentence-case sans
+  label above, full-width input below) when the form container
+  is `< 640 px`. Phone and tablet portrait detail panes stack;
+  tablet landscape and desktop stay 2-col. Type-hint applies
   `overflow-wrap: anywhere` so long monospace strings break
-  cleanly inside the column. Same ratio across all four 2-pane
-  surfaces (world, plot, story-settings, app-settings).
+  cleanly when 2-col is active.
 - **History tab controls reflow on narrow widths.** The
   `.history-controls` row (search input, op-filter chips, sort
   picker) is a single horizontal row at desktop tier; on tablet
