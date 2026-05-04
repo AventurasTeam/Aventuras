@@ -44,27 +44,34 @@ export function Tag({
 }: TagProps) {
   const interactive = onPress != null
   const baseClass = cn(
-    'flex-row items-center gap-1 rounded-full border px-2.5 py-0.5',
+    // `group` hooks the Pressable so the label can hover-lift via
+    // group-hover through TextClassContext (direct hover: doesn't
+    // cascade to inherited text colors).
+    'group flex-row items-center gap-1 rounded-full border px-2.5 py-0.5',
     'border-border-strong',
     tone === 'soft' ? 'bg-bg-region' : 'bg-bg-base',
     dashed && 'border-dashed',
+    interactive && 'active:bg-tint-press',
     Platform.select({
       web: cn(
         interactive && 'cursor-pointer outline-none transition-colors',
-        interactive && 'hover:text-fg-primary',
+        interactive && 'hover:bg-tint-hover',
         interactive && 'focus-visible:ring-2 focus-visible:ring-focus-ring',
-        disabled && 'cursor-not-allowed',
+        disabled && 'cursor-not-allowed pointer-events-none',
       ),
     }),
     disabled && 'opacity-50',
     className,
   )
 
-  const labelClass = 'text-xs text-fg-muted'
+  const labelClass = cn(
+    'text-xs text-fg-muted',
+    interactive && Platform.select({ web: 'transition-colors group-hover:text-fg-primary' }),
+  )
 
   const label =
     typeof children === 'string' ? (
-      <Text size="xs" variant="muted">
+      <Text size="xs" className={labelClass}>
         {children}
       </Text>
     ) : (
@@ -79,17 +86,26 @@ export function Tag({
       onPress={onRemove}
       disabled={disabled}
       // Keep × reachable as its own touch target without bloating
-      // the chip body. min-w/min-h-touch-floor provides the 44px
-      // tap area on phone via hitSlop without affecting layout.
+      // the chip body. hitSlop provides the 44px tap area on phone
+      // without affecting layout.
       hitSlop={8}
+      // `group/x` scopes a separate group so the × hover doesn't
+      // bleed into the body's group-hover (and vice versa).
       className={cn(
-        '-mr-1 ml-0.5 size-5 items-center justify-center rounded-full',
+        'group/x -mr-1 ml-0.5 size-5 items-center justify-center rounded-full',
         Platform.select({
-          web: 'cursor-pointer text-fg-muted outline-none hover:text-fg-primary focus-visible:ring-2 focus-visible:ring-focus-ring',
+          web: 'cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
         }),
       )}
     >
-      <Icon as={X} size={12} className="text-fg-muted" />
+      <Icon
+        as={X}
+        size={12}
+        className={cn(
+          'text-fg-muted',
+          Platform.select({ web: 'transition-colors group-hover/x:text-fg-primary' }),
+        )}
+      />
     </Pressable>
   ) : null
 

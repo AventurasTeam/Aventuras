@@ -83,7 +83,7 @@ export const CardComposition: Story = {
       <Accordion type="multiple" defaultValue={['narrative']}>
         <AccordionItem
           value="narrative"
-          className="bg-bg-region rounded-md border border-b-0 border-border px-4"
+          className="bg-bg-region rounded-md border border-border px-4"
         >
           <AccordionTrigger>
             <View>
@@ -99,7 +99,7 @@ export const CardComposition: Story = {
         </AccordionItem>
         <AccordionItem
           value="fast"
-          className="bg-bg-region mt-3 rounded-md border border-b-0 border-border px-4"
+          className="bg-bg-region mt-3 rounded-md border border-border px-4"
         >
           <AccordionTrigger>
             <View>

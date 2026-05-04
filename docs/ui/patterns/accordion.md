@@ -23,15 +23,12 @@ Two visual flavors land via composition, not a primitive variant:
 Card chrome is purely visual — adding a variant would mix presentation with behavior. Consumers wanting card style pass:
 
 ```tsx
-<AccordionItem
-  className="bg-bg-region mb-3.5 rounded-md border border-b-0 border-border"
-  value={profile.id}
->
+<AccordionItem className="bg-bg-region mb-3.5 rounded-md border border-border" value={profile.id}>
   ...
 </AccordionItem>
 ```
 
-`border-b-0` overrides the baseline's strip-joining bottom-border; the explicit border + radius + bg-region make it card-shaped. That four-class incantation is the canonical card form.
+The explicit `border` + `rounded-md` + `bg-bg-region` make each item card-shaped; the baseline's `border-b border-border` doubles up with consumer-side `border` to produce a uniform 1px outline on all four sides. `mb-3.5` provides the gap between cards.
 
 ## Single vs multi-open
 

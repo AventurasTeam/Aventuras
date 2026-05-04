@@ -31,7 +31,9 @@ export const Basic: Story = {
   render: () => (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="secondary">Open dialog</Button>
+        <Button variant="secondary">
+          <Text>Open dialog</Text>
+        </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -42,10 +44,14 @@ export const Basic: Story = {
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
-            <Button variant="secondary">Cancel</Button>
+            <Button variant="secondary">
+              <Text>Cancel</Text>
+            </Button>
           </AlertDialogCancel>
           <AlertDialogAction asChild>
-            <Button variant="primary">Continue</Button>
+            <Button variant="primary">
+              <Text>Continue</Text>
+            </Button>
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -58,7 +64,9 @@ export const RollbackShape: Story = {
   render: () => (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="secondary">Trigger rollback</Button>
+        <Button variant="secondary">
+          <Text>Trigger rollback</Text>
+        </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -72,10 +80,14 @@ export const RollbackShape: Story = {
         </View>
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
-            <Button variant="secondary">Cancel</Button>
+            <Button variant="secondary">
+              <Text>Cancel</Text>
+            </Button>
           </AlertDialogCancel>
           <AlertDialogAction asChild>
-            <Button variant="destructive">Delete entries</Button>
+            <Button variant="destructive">
+              <Text>Delete entries</Text>
+            </Button>
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -89,7 +101,9 @@ export const SwapWarningShape: Story = {
   render: () => (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="secondary">Switch calendar</Button>
+        <Button variant="secondary">
+          <Text>Switch calendar</Text>
+        </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -126,10 +140,14 @@ export const SwapWarningShape: Story = {
         </View>
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
-            <Button variant="secondary">Cancel</Button>
+            <Button variant="secondary">
+              <Text>Cancel</Text>
+            </Button>
           </AlertDialogCancel>
           <AlertDialogAction asChild>
-            <Button variant="primary">Switch calendar</Button>
+            <Button variant="primary">
+              <Text>Switch calendar</Text>
+            </Button>
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -153,7 +171,9 @@ export const ThemeMatrix: Story = {
           </Text>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="secondary">Open</Button>
+              <Button variant="secondary">
+                <Text>Open</Text>
+              </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -162,10 +182,14 @@ export const ThemeMatrix: Story = {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel asChild>
-                  <Button variant="secondary">Cancel</Button>
+                  <Button variant="secondary">
+                    <Text>Cancel</Text>
+                  </Button>
                 </AlertDialogCancel>
                 <AlertDialogAction asChild>
-                  <Button variant="destructive">Delete branch</Button>
+                  <Button variant="destructive">
+                    <Text>Delete branch</Text>
+                  </Button>
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

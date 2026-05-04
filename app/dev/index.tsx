@@ -15,6 +15,11 @@ const ROUTES = [
   { href: '/dev/choice', label: 'Switch + Checkbox' },
   { href: '/dev/visual', label: 'Icon + Avatar' },
   { href: '/dev/loading', label: 'Spinner + Skeleton' },
+  { href: '/dev/tabs', label: 'Tabs' },
+  { href: '/dev/chip-tag', label: 'Chip + Tag' },
+  { href: '/dev/accordion', label: 'Accordion' },
+  { href: '/dev/alert-dialog', label: 'AlertDialog' },
+  { href: '/dev/toast', label: 'Toast' },
 ] as const
 
 export default function DevIndex() {
