@@ -471,8 +471,8 @@ cast roster is known but only some enter the opening scene.
 - **Lead requires `status='active'`.** A staged character can't
   be the protagonist. `⭐ Set as lead` button hidden on
   staged-character rows. Marking the current lead as staged
-  auto-unmarks lead with toast: `Lead unset — staged characters
-can't be lead.`
+  auto-unmarks lead with a [toast](../../patterns/toast.md):
+  `Lead unset — staged characters can't be lead.`
 - **Lead-required gate tightens** — "at least one **active**
   character marked as lead." Staged characters don't satisfy.
 - **Opening generation enum-list filters to active.** Wizard-assist's
@@ -789,8 +789,8 @@ setting/lore/cast/opening).
 - **Replace-on-existing on genre/tone.** Confirm modal fires when
   preset OR AI-suggest accept would overwrite non-empty content.
 - **Lead unset cascade.** Multiple paths can unmark lead (kind
-  change, status flip to staged, row deletion). Same toast copy
-  ("Lead unset — ...") on each.
+  change, status flip to staged, row deletion). Same
+  [toast](../../patterns/toast.md) copy ("Lead unset — ...") on each.
 
 ## Mobile expression
 

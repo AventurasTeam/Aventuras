@@ -28,6 +28,10 @@ The split heuristic + when-to-add rules live in
   shapes. Consumer-side decision tree (when to use Sheet vs Popover
   vs Modal) lives in
   [`../foundations/mobile/layout.md`](../foundations/mobile/layout.md).
+- [`toast.md`](./toast.md) — top-anchored ephemeral notification
+  primitive. Severity variants, queue cap, swipe-up dismiss + ×,
+  cross-platform animation dispatch. Banners (the persistent
+  counterpart) stay surface-specific.
 - [`calendar-picker.md`](./calendar-picker.md) — calendar-system
   selector shared across App Settings, Story Settings, and Wizard:
   rich rows, summary panel, swap warnings (origin / eras / display),

@@ -200,7 +200,8 @@ setup and fix later in Settings.` **Does not block `Finish`** —
 3. Auto-fetches the model catalog (background, non-blocking).
 4. Seeds the [silent profile/assignment defaults](#what-gets-seeded-silently).
 5. Marks `onboarding_completed_at`.
-6. Routes to **Story list**. Brief toast confirms:
+6. Routes to **Story list**. Brief [toast](../../patterns/toast.md)
+   confirms:
    `<Provider> connected. Default model: <auto-pick>. Change anytime in Settings.`
 
 ### OpenAI-compatible

@@ -96,6 +96,13 @@ positioning is a cross-cutting change worth its own pass if it
 becomes friction in practice; v1 stays consistent across surfaces
 with the non-sticky pattern.
 
+**Save success → toast.** On a successful save the bar disappears
+and a `toast.success` fires (`Saved.` or surface-specific copy).
+The bar disappearing is feedback, but a top-anchored success toast
+reinforces the signal — useful on long-form surfaces where the
+save bar is far from the user's gaze. See
+[`toast.md`](./toast.md) for the primitive contract.
+
 ---
 
 ## Navigate-away guard — global intercept

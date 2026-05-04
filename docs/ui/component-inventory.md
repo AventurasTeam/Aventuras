@@ -45,15 +45,20 @@ Text. Plus the `NativeOnlyAnimatedView` utility wrapper.
 | IconAction         | [icon-actions.md](./patterns/icon-actions.md)                                                            | Always-visible-muted, hover-brightens. Used on every row-shaped surface.                                           |
 | SaveBar + NavGuard | [save-sessions.md → Save bar](./patterns/save-sessions.md#save-bar--the-visible-ui), Navigate-away guard | Bar = composition; NavGuard = hook + global handler.                                                               |
 | KindIcon           | [iconography.md → Entity kind glyphs](./foundations/iconography.md#entity-kind-glyphs)                   | 22×22 box, glyph from the canonical table. Trivial.                                                                |
+| Toast              | [toast.md](./patterns/toast.md)                                                                          | Top-center, severity variants, swipe-up dismiss + ×, queue cap 3. Custom (no rn-reusables baseline).               |
 
 ### Primitives — needs design
 
-| Primitive | Used by                                                                                | Open question                                                                                                     |
-| --------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Chip      | Story List filters, Plot filters, Browse rail filters, tag chips on entities           | Toggle vs static, on/off contrast, border vs filled, stack-vs-flow on narrow container.                           |
-| Accordion | Reader Browse rail grouping, App Settings sections, Story Settings caption groups      | Single vs multi-open per surface, header chevron behavior, animation contract, rn-primitives passthrough rules.   |
-| TabBar    | World, Plot, entity-detail panes (Overview / Identity / Connections / Settings / etc.) | Underline vs pill style, overflow behavior on phone, optional counts in labels, scroll vs wrap.                   |
-| Toast     | Save success, error feedback, undo handle                                              | Placement, queue, severity, dismiss timing. Fully undocumented. Save-sessions doc references but doesn't spec it. |
+Baseline column names the react-native-reusables source per
+[components.md → Sourcing](./components.md#sourcing--react-native-reusables-as-baseline);
+empty means from-scratch.
+
+| Primitive   | Baseline       | Used by                                                                                | Open question                                                                                                                           |
+| ----------- | -------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| AlertDialog | `alert-dialog` | Rollback confirm, delete confirms, calendar swap-warning                               | Severity variants, DANGER-CTA placement + copy contract, sheet-anchor on phone vs popover-style on desktop.                             |
+| Accordion   | `accordion`    | Reader Browse rail grouping, App Settings sections, Story Settings caption groups      | Single vs multi-open per surface, header chevron behavior, animation contract, rn-primitives passthrough rules.                         |
+| Chip        | `badge`        | Story List filters, Plot filters, Browse rail filters, tag chips on entities           | Toggle vs static, on/off contrast, border vs filled, stack-vs-flow on narrow container. Baseline is static-only — toggle is grafted on. |
+| TabBar      | `tabs`         | World, Plot, entity-detail panes (Overview / Identity / Connections / Settings / etc.) | Underline vs pill style, overflow behavior on phone, optional counts in labels, scroll vs wrap.                                         |
 
 ### Primitives — deferred
 
@@ -78,14 +83,13 @@ the first compound lands).
 
 ### Compounds — needs design
 
-| Compound      | Surfaces                                                         | Open question                                                                                                                     |
-| ------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| EntryCard     | Reader composer narrative                                        | Variable-height entries, expandable reasoning body, scroll-anchor on above-viewport mutations. Non-trivial.                       |
-| StoryCard     | Story List grid                                                  | Title + blurb (3-line) + favorite star + overflow menu — borderline whether the wireframe is enough.                              |
-| DeltaLogRow   | History tabs across World / Plot / future global delta-log       | Field-path strings, op label, change-summary text. Different shape from entity rows.                                              |
-| ConfirmDialog | Rollback, delete, calendar swap-warning                          | Sheet vs Popover, severity variants, DANGER-CTA placement, copy contract.                                                         |
-| Toolbar       | List-pane tops on World / Plot / Story List / Reader Browse rail | Search + filter chips + sort + ⓘ + kind-selector. Cross-surface ordering, overflow behavior.                                      |
-| TagInput      | Story tags, entity tags                                          | Concrete instance of Autocomplete-with-create — likely a config rather than a separate compound. Resolve once Autocomplete lands. |
+| Compound    | Surfaces                                                         | Open question                                                                                                                     |
+| ----------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| EntryCard   | Reader composer narrative                                        | Variable-height entries, expandable reasoning body, scroll-anchor on above-viewport mutations. Non-trivial.                       |
+| StoryCard   | Story List grid                                                  | Title + blurb (3-line) + favorite star + overflow menu — borderline whether the wireframe is enough.                              |
+| DeltaLogRow | History tabs across World / Plot / future global delta-log       | Field-path strings, op label, change-summary text. Different shape from entity rows.                                              |
+| Toolbar     | List-pane tops on World / Plot / Story List / Reader Browse rail | Search + filter chips + sort + ⓘ + kind-selector. Cross-surface ordering, overflow behavior.                                      |
+| TagInput    | Story tags, entity tags                                          | Concrete instance of Autocomplete-with-create — likely a config rather than a separate compound. Resolve once Autocomplete lands. |
 
 ## Layout shells
 

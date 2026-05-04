@@ -1040,3 +1040,31 @@ Useful polish; not blocking v1. Surface again if a consumer ships
 something where the distinction would matter (e.g., a
 context-menu trigger where touch-down should feel different from
 commit-press).
+
+### Toast — auto-timer pause on hover / touch
+
+The Toast primitive ([`ui/patterns/toast.md`](./ui/patterns/toast.md))
+auto-dismisses after per-severity durations (3s success / 5s info /
+7s error) without pausing on user attention. A common refinement
+holds the timer while the toast is hovered (web) or held under a
+finger (native), resuming when the pointer / finger leaves.
+
+Skipped for v1: the always-visible × close button gives users an
+escape hatch on every toast, and the per-severity durations were
+chosen to be readable without pause. If error toasts (7s) prove
+too short in practice — e.g., users report missing the message
+while skimming — implement as a per-toast `Date.now()` pause /
+resume on the timer.
+
+### Toast — visibility-API tab pause (web)
+
+The web Toast timer keeps running while the browser tab is hidden,
+so a user returning to a tab after several minutes may find no
+visible toasts even though they fired moments before the
+backgrounding. The standard mitigation pauses the timer on
+`document.visibilitychange` (hidden) and resumes on visible.
+
+Skipped for v1: backgrounding mid-action is uncommon for the
+documented call-sites (save success, onboarding completion, wizard
+lead-unset). Surface again if users report missed toasts after
+returning to a backgrounded tab.
