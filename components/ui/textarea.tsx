@@ -8,14 +8,24 @@ import { cn } from '@/lib/utils'
 import { clamp, computeTextareaEnvelope } from './textarea-envelope'
 
 type TextareaProps = React.ComponentProps<typeof TextInput> & {
+  /**
+   * Minimum visible rows. Sets the initial height. Default 3.
+   */
   rows?: number
+  /**
+   * Maximum rows before scrolling kicks in. Default 10. Together
+   * with `rows` defines the height envelope: web grows via CSS
+   * `field-sizing-content`, native grows via `onContentSizeChange`
+   * clamped to the same envelope.
+   */
   maxRows?: number
   className?: string
-  // RN 0.83's TextInput type doesn't include aria-invalid; surface
-  // explicitly so consumers can drive error state through ARIA. The
-  // primitive reads this prop directly to apply the danger classes
-  // rather than relying on the attribute reaching the DOM (which
-  // RN-Web doesn't guarantee for TextInput).
+  /**
+   * Drives the error-state border + ring. Read JS-side and applied
+   * as `border-danger` rather than via the CSS `aria-invalid:`
+   * Tailwind variant — RN-Web's TextInput doesn't reliably forward
+   * arbitrary aria-\* attributes to the rendered DOM.
+   */
   'aria-invalid'?: boolean | 'true' | 'false'
 }
 

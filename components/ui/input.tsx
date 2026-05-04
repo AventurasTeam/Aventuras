@@ -47,14 +47,26 @@ function disabledClasses(): string {
 
 type InputProps = React.ComponentProps<typeof TextInput> & {
   size?: InputSize
+  /**
+   * Slot before the text input — typically a leading Icon (search
+   * glyph, etc.). Renders inside the input frame, padded against
+   * the input edge. Pass `<Icon as={Search} size="sm" />` shaped.
+   */
   leading?: React.ReactNode
+  /**
+   * Slot after the text input — typically a trailing affordance
+   * (password show/hide toggle, clear button, info popover trigger).
+   * Treat as interactive: wrap in `<Pressable>` if it should respond
+   * to taps without focusing the input.
+   */
   trailing?: React.ReactNode
   className?: string
-  // RN 0.83's TextInput type doesn't include aria-invalid; surface
-  // explicitly so consumers can drive error state through ARIA. The
-  // primitive reads this prop directly to apply the danger classes
-  // rather than relying on the attribute reaching the DOM (which
-  // RN-Web doesn't guarantee for TextInput).
+  /**
+   * Drives the error-state border + ring. Read JS-side and applied
+   * as `border-danger` rather than via the CSS `aria-invalid:`
+   * Tailwind variant — RN-Web's TextInput doesn't reliably forward
+   * arbitrary aria-\* attributes to the rendered DOM.
+   */
   'aria-invalid'?: boolean | 'true' | 'false'
 }
 

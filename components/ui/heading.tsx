@@ -13,6 +13,12 @@ const HEADING_DEFAULTS: Record<HeadingLevel, { size: TextProps['size']; weight: 
 }
 
 type HeadingProps = TextProps & {
+  /**
+   * Heading level (1–6). Drives `role="heading"` + `aria-level` for
+   * a11y and bakes in default `size` + weight per level. Override
+   * `size` to break the level→size pairing (e.g. visually small but
+   * semantically h2). For non-heading text, use `Text` directly.
+   */
   level: HeadingLevel
 }
 

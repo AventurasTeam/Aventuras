@@ -413,7 +413,20 @@ export type SelectProps = {
   options: SelectOption[]
   value: string | undefined
   onValueChange: (value: string) => void
+  /**
+   * Override the auto-derivation cascade: by default Select picks
+   * `'segment'` (≤3 short options, no descriptions, desktop tier),
+   * `'radio'` (4–7 options or any have descriptions), or
+   * `'dropdown'` (8+, or mobile, or grouped). Set explicitly to
+   * lock a specific shape regardless of count. See
+   * [`forms.md → Auto-derivation cascade`](../../docs/ui/patterns/forms.md#auto-derivation-cascade).
+   */
   mode?: SelectMode
+  /**
+   * Mobile sheet height: `'short'` (33 %), `'medium'` (60 %), or
+   * `'auto'` (sized by option count). Only applies when `mode`
+   * resolves to `'dropdown'` on the phone tier.
+   */
   sheetSize?: SelectSheetSize
   placeholder?: string
   disabled?: boolean

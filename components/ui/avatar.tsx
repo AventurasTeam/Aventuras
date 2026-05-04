@@ -21,8 +21,21 @@ const FALLBACK_TEXT_SIZE = {
 type AvatarSize = keyof typeof SIZE_CLASSES
 
 type AvatarProps = React.ComponentProps<typeof AvatarPrimitive.Root> & {
+  /**
+   * `'xs'` (24 px, mini portrait
+   * row inside cards), `'sm'` (40 px, default row leading),
+   * `'md'` (96 px, compact peek head + mobile portrait reflow),
+   * `'lg'` (220 px, desktop overview hero).
+   */
   size?: AvatarSize
+  /** Image URL. Renders an Image; falls through to `fallback` on load error. */
   src?: string
+  /**
+   * Rendered when no `src` or when the image fails to load. Pass a
+   * `string` for centered initials text (e.g. `"DV"`) or a ReactNode
+   * for a custom shape — typical: an `<Icon as={User} />` for an
+   * entity-kind glyph. Inherits muted color via TextClassContext.
+   */
   fallback?: React.ReactNode | string
   imageClassName?: string
   fallbackClassName?: string

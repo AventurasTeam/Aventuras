@@ -22,10 +22,12 @@ const CHECK_ICON_SIZE: Record<DensityValue, number> = {
 
 type CheckboxProps = React.ComponentProps<typeof CheckboxPrimitive.Root> & {
   className?: string
-  // RN's Pressable type doesn't include aria-invalid; surface
-  // explicitly so consumers can drive error state through ARIA.
-  // The primitive reads this prop directly and applies the danger
-  // border rather than relying on the attribute reaching the DOM.
+  /**
+   * Drives the error-state border. The primitive reads this prop
+   * directly and applies `border-danger` from JS rather than the CSS
+   * `aria-invalid:` Tailwind variant — RN-Web doesn't reliably
+   * forward arbitrary aria-\* attributes from rn-primitives wrappers.
+   */
   'aria-invalid'?: boolean | 'true' | 'false'
 }
 

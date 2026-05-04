@@ -14,7 +14,14 @@ const SPINNER_PX = {
 type SpinnerSize = keyof typeof SPINNER_PX
 
 type SpinnerProps = {
+  /** `'sm'` / `'md'` / `'lg'` matches Icon's 16/20/24 scale. Numeric override accepted. */
   size?: SpinnerSize | number
+  /**
+   * Theme slot driving the spinner color (e.g. `'--fg-primary'`,
+   * `'--accent'`, `'--danger-fg'`). Slot-based rather than className
+   * because native ActivityIndicator can't pick up `text-*` via CSS
+   * cascade (no DOM on RN). Defaults to `--fg-primary`.
+   */
   colorSlot?: keyof ThemeColorSlots
   className?: string
   accessibilityLabel?: string

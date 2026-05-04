@@ -73,6 +73,11 @@ const SPINNER_SLOT_BY_VARIANT: Record<ButtonVariant, keyof ThemeColorSlots> = {
 
 type ButtonProps = PressableProps &
   VariantProps<typeof buttonVariants> & {
+    /**
+     * When `true`, renders a Spinner in place of children and treats
+     * the button as disabled (no presses, `aria-busy`). Spinner color
+     * resolves from the variant via `SPINNER_SLOT_BY_VARIANT`.
+     */
     loading?: boolean
     className?: string
   }

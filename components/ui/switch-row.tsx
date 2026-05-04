@@ -6,7 +6,9 @@ import { Text } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 
 type SwitchRowProps = {
+  /** Setting label. Doubles as the accessible name for the row's switch role. */
   label: string
+  /** Optional secondary line below the label — explanatory hint, not interactive. */
   hint?: string
   checked: boolean
   onCheckedChange: (checked: boolean) => void

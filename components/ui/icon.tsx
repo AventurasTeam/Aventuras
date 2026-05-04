@@ -14,7 +14,18 @@ const ICON_SIZE_PX = {
 type IconSizeVariant = keyof typeof ICON_SIZE_PX
 
 type IconProps = Omit<LucideProps, 'size'> & {
+  /**
+   * The Lucide icon component to render. Pass the imported component
+   * itself, not a string name: `<Icon as={Settings} />`. See
+   * [`iconography.md`](../../docs/ui/foundations/iconography.md) for
+   * the canonical glyph vocabulary.
+   */
   as: LucideIcon
+  /**
+   * Sizing token: `'sm'` (16 px, inline with body text), `'md'` (20 px,
+   * default chrome), `'lg'` (24 px, emphasis chrome). Numeric override
+   * accepted for the rare non-canonical case; justify at use site.
+   */
   size?: IconSizeVariant | number
 }
 

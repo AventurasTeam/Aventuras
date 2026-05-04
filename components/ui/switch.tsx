@@ -9,7 +9,14 @@ type SwitchProps = {
   onCheckedChange: (checked: boolean) => void
   disabled?: boolean
   className?: string
+  /**
+   * Required for standalone Switch. The row-shape pattern is
+   * SwitchRow — prefer that for label+toggle combinations; use bare
+   * Switch only for cases that don't fit the row shape (e.g. inline
+   * toggle inside a sentence).
+   */
   'aria-label'?: string
+  /** Alternative to `aria-label` — points at an existing label element by id. */
   'aria-labelledby'?: string
 }
 

@@ -11,6 +11,12 @@ import Animated, {
 import { cn } from '@/lib/utils'
 
 type SkeletonProps = ViewProps & {
+  /**
+   * Dimensions are className-driven (`h-4 w-32`, `size-10`), not a
+   * variant prop — skeleton blocks compose to mimic real loading
+   * layouts (avatar circles, text-line bars, paragraph stacks).
+   * `rounded-md` is the default; override per-use.
+   */
   className?: string
 }
 
