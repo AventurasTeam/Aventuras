@@ -86,13 +86,30 @@ function AccordionTrigger({
       <AccordionPrimitive.Header>
         <AccordionPrimitive.Trigger {...props} asChild>
           <Trigger
+            // Inline `pointerEvents` on disabled web triggers —
+            // same root cause as Tabs (a7a2504): the
+            // rn-primitives Trigger2 wrapper forwards disabled
+            // to the inner Pressable + radix.Trigger, but radix
+            // attaches its onClick to the same DOM element via
+            // Slot, and Pressable.disabled doesn't gate the
+            // radix-side handler. Inline pointer-events: none is
+            // the foolproof DOM-level block.
+            style={
+              Platform.OS === 'web' && props.disabled
+                ? ({ pointerEvents: 'none' } as never)
+                : undefined
+            }
             className={cn(
-              'flex-row items-start justify-between gap-4 rounded-md py-row-y-lg disabled:opacity-50',
+              'flex-row items-start justify-between gap-4 rounded-md py-row-y-lg',
+              // `disabled:opacity-50` (Tailwind disabled variant)
+              // never fires because `Trigger` is a View on web,
+              // which doesn't accept the `disabled` DOM
+              // attribute. Drive opacity off the prop directly.
+              props.disabled && 'opacity-50',
               Platform.select({
                 web: cn(
                   'flex flex-1 cursor-pointer outline-none transition-colors',
                   'focus-visible:ring-2 focus-visible:ring-focus-ring',
-                  'disabled:pointer-events-none',
                 ),
               }),
               className,
