@@ -280,6 +280,12 @@
       margin-top: 2px;
     }
     .input-text, .input-textarea, .input-select { max-width: none; width: 100%; box-sizing: border-box; }
+    /* Segment Selects stretch full-width on narrow containers per
+       forms.md → Form rows → Input width within form rows. The
+       desktop "hug content" idiom (justify-self: start) is the
+       exception, not the default. */
+    .segment { display: flex; justify-self: stretch; width: 100%; }
+    .segment > .seg { flex: 1 1 0; text-align: center; }
   }
 </style>
 </head>
@@ -706,7 +712,7 @@
           <div class="field-label">target language
             <span class="hint">one at a time; add more via the Translation Wizard to convert existing content</span>
           </div>
-          <div class="input-select" style="max-width: 280px;">
+          <div class="input-select">
             <span>Español</span>
             <span style="color: var(--ink-faint);">&#9662;</span>
           </div>
@@ -787,7 +793,7 @@
           <div class="field-label">narrativeStyle
             <span class="hint">enum &middot; pack var</span>
           </div>
-          <div class="input-select" style="max-width: 260px;">
+          <div class="input-select">
             <span>deliberate</span>
             <span style="color: var(--ink-faint);">&#9662;</span>
           </div>
@@ -830,7 +836,7 @@
           <div class="field-label">calendar system
             <span class="hint">per-story</span>
           </div>
-          <div class="input-select" style="max-width: 320px;">
+          <div class="input-select">
             <span>Earth (Gregorian)</span>
             <span class="add-chip" style="padding: 1px 7px; cursor: default; margin-left: 6px;">built-in</span>
             <span style="color: var(--ink-faint); margin-left: auto;">&#9662;</span>

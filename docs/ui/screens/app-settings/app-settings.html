@@ -342,6 +342,10 @@
           margin-top: 2px;
         }
         .input-text, .input-textarea, .input-select { width: 100%; box-sizing: border-box; }
+        /* Segment Selects stretch full-width on narrow containers per
+           forms.md → Form rows → Input width within form rows. */
+        .segment { display: flex; justify-self: stretch; width: 100%; }
+        .segment > .seg { flex: 1 1 0; text-align: center; }
 
         .save-bar { padding: 10px 12px; }
       }
@@ -470,7 +474,7 @@
             <div class="profile-body">
               <div class="field-row">
                 <div class="field-label">display name</div>
-                <input class="input-text" style="max-width: 280px;" value="Anthropic" />
+                <input class="input-text" value="Anthropic" />
               </div>
               <div class="field-row">
                 <div class="field-label">api key</div>
@@ -627,7 +631,7 @@
 
               <div class="field-row">
                 <div class="field-label">display name</div>
-                <input class="input-text" style="max-width: 280px;" value="Ollama (local)" />
+                <input class="input-text" value="Ollama (local)" />
               </div>
               <div class="field-row">
                 <div class="field-label">endpoint
@@ -883,27 +887,27 @@
 
             <div class="assignments-row">
               <span class="a-name">classifier</span>
-              <div class="input-select" style="max-width: 260px;"><span>Fast tasks</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+              <div class="input-select"><span>Fast tasks</span><span style="color: var(--ink-faint);">&#9662;</span></div>
             </div>
             <div class="assignments-row">
               <span class="a-name">translation</span>
-              <div class="input-select" style="max-width: 260px;"><span>Fast tasks</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+              <div class="input-select"><span>Fast tasks</span><span style="color: var(--ink-faint);">&#9662;</span></div>
             </div>
             <div class="assignments-row">
               <span class="a-name">suggestion</span>
-              <div class="input-select" style="max-width: 260px;"><span>Fast tasks</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+              <div class="input-select"><span>Fast tasks</span><span style="color: var(--ink-faint);">&#9662;</span></div>
             </div>
             <div class="assignments-row">
               <span class="a-name">lore-mgmt</span>
-              <div class="input-select" style="max-width: 260px; border-color: var(--warn);"><span>Heavy reasoning <span style="font-size: 10px; color: var(--warn);">&#9888;</span></span><span style="color: var(--ink-faint);">&#9662;</span></div>
+              <div class="input-select" style="border-color: var(--warn);"><span>Heavy reasoning <span style="font-size: 10px; color: var(--warn);">&#9888;</span></span><span style="color: var(--ink-faint);">&#9662;</span></div>
             </div>
             <div class="assignments-row">
               <span class="a-name">memory-compaction</span>
-              <div class="input-select" style="max-width: 260px; border-color: var(--warn);"><span>Heavy reasoning <span style="font-size: 10px; color: var(--warn);">&#9888;</span></span><span style="color: var(--ink-faint);">&#9662;</span></div>
+              <div class="input-select" style="border-color: var(--warn);"><span>Heavy reasoning <span style="font-size: 10px; color: var(--warn);">&#9888;</span></span><span style="color: var(--ink-faint);">&#9662;</span></div>
             </div>
             <div class="assignments-row">
               <span class="a-name">retrieval</span>
-              <div class="input-select" style="max-width: 260px;"><span style="color: var(--ink-faint); font-style: italic;">when designed</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+              <div class="input-select"><span style="color: var(--ink-faint); font-style: italic;">when designed</span><span style="color: var(--ink-faint);">&#9662;</span></div>
             </div>
           </div>
         </div>
@@ -973,7 +977,7 @@
             <div class="field-label">target language
               <span class="hint">ISO 639-1</span>
             </div>
-            <div class="input-select" style="max-width: 220px; opacity: 0.5;"><span style="color: var(--ink-faint);">(disabled &mdash; enable first)</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+            <div class="input-select" style="opacity: 0.5;"><span style="color: var(--ink-faint);">(disabled &mdash; enable first)</span><span style="color: var(--ink-faint);">&#9662;</span></div>
           </div>
           <div class="field-row">
             <div class="field-label">granular toggles
@@ -995,7 +999,7 @@
             <div class="field-label">default calendar
               <span class="hint">seeds new stories</span>
             </div>
-            <div class="input-select" style="max-width: 320px;">
+            <div class="input-select">
               <span>Earth (Gregorian)</span>
               <span class="add-chip" style="padding: 1px 7px; cursor: default; margin-left: 6px;">built-in</span>
               <span style="color: var(--ink-faint); margin-left: auto;">&#9662;</span>
@@ -1069,19 +1073,19 @@
             <div class="field-label">theme
               <span class="hint">dropdown &mdash; curated gallery; user-authored extends later</span>
             </div>
-            <div class="input-select" style="max-width: 260px;"><span>Default Light</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+            <div class="input-select"><span>Default Light</span><span style="color: var(--ink-faint);">&#9662;</span></div>
           </div>
           <div class="field-row">
             <div class="field-label">density
               <span class="hint">default = compact on desktop, regular on phone/tablet</span>
             </div>
-            <div class="input-select" style="max-width: 260px;"><span>Default</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+            <div class="input-select"><span>Default</span><span style="color: var(--ink-faint);">&#9662;</span></div>
           </div>
           <div class="field-row">
             <div class="field-label">reader font size
               <span class="hint">scales reader entry content only &mdash; prose body, entry titles, meta</span>
             </div>
-            <div class="segment"><span class="seg">S</span><span class="seg active">M</span><span class="seg">L</span><span class="seg">XL</span></div>
+            <div class="input-select" title="4 options &middot; cardinality &gt; 3 &rarr; dropdown per Select cascade"><span>M</span><span style="color: var(--ink-faint);">&#9662;</span></div>
           </div>
           <div class="field-row">
             <div class="field-label">accent
@@ -1100,7 +1104,7 @@
             <div class="field-label">interface language
               <span class="hint">i18next &middot; ISO 639-1</span>
             </div>
-            <div class="input-select" style="max-width: 260px;"><span>English (en)</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+            <div class="input-select"><span>English (en)</span><span style="color: var(--ink-faint);">&#9662;</span></div>
           </div>
           <div class="panel-note">
             App-UI translation only (menus, buttons, settings labels). Content translation (narrative, entities, lore) lives on Story Settings &middot; Translation.
