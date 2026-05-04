@@ -1,4 +1,5 @@
-import { ScrollView, View } from 'react-native'
+import { Platform, ScrollView, View } from 'react-native'
+import Animated, { LinearTransition } from 'react-native-reanimated'
 import {
   Accordion,
   AccordionContent,
@@ -9,12 +10,25 @@ import { ThemePicker } from '@/components/foundations/sections/theme-picker'
 import { Heading } from '@/components/ui/heading'
 import { Text } from '@/components/ui/text'
 
+// Section wrapper with native layout-animation so sibling
+// sections slide smoothly when an accordion above expands.
+// Reanimated's LinearTransition has to be on each item that
+// needs to animate its own position; placing it on the parent
+// only animates the parent. Web has no equivalent CSS path for
+// flex-flow position changes — native-only wiring is enough
+// for the dev demo.
+const layoutAnim = Platform.select({ native: LinearTransition.duration(200) })
+
+function Section({ children }: { children: React.ReactNode }) {
+  return <Animated.View layout={layoutAnim}>{children}</Animated.View>
+}
+
 export default function AccordionDevRoute() {
   return (
     <ScrollView className="flex-1 bg-bg-base">
       <ThemePicker />
       <View className="flex-col gap-6 p-4">
-        <View>
+        <Section>
           <Heading level={3}>Strip — multi-open default</Heading>
           <Text variant="muted" size="xs" className="mt-1">
             Browse rail status grouping shape. Multiple groups can be expanded simultaneously.
@@ -47,9 +61,9 @@ export default function AccordionDevRoute() {
               </AccordionItem>
             </Accordion>
           </View>
-        </View>
+        </Section>
 
-        <View>
+        <Section>
           <Heading level={3}>Single-open (FAQ)</Heading>
           <View className="mt-3">
             <Accordion type="single" collapsible defaultValue="q1">
@@ -73,9 +87,9 @@ export default function AccordionDevRoute() {
               </AccordionItem>
             </Accordion>
           </View>
-        </View>
+        </Section>
 
-        <View>
+        <Section>
           <Heading level={3}>Card composition</Heading>
           <Text variant="muted" size="xs" className="mt-1">
             App Settings profile-list shape. Card chrome via consumer className.
@@ -116,7 +130,7 @@ export default function AccordionDevRoute() {
               </AccordionItem>
             </Accordion>
           </View>
-        </View>
+        </Section>
       </View>
     </ScrollView>
   )
