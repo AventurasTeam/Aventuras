@@ -32,6 +32,8 @@ export const themes: readonly Theme[] = [
       '--focus-ring': '#3b82f6',
       '--selection-bg': '#dbeafe',
       '--recently-classified-bg': '#fef3c7',
+      '--tint-hover': 'rgba(10, 10, 10, 0.12)',
+      '--tint-press': 'rgba(10, 10, 10, 0.20)',
     },
   },
   {
@@ -65,6 +67,8 @@ export const themes: readonly Theme[] = [
       '--focus-ring': '#3b82f6',
       '--selection-bg': '#1e3a8a',
       '--recently-classified-bg': '#422006',
+      '--tint-hover': 'rgba(245, 245, 245, 0.08)',
+      '--tint-press': 'rgba(245, 245, 245, 0.14)',
     },
   },
   {
@@ -102,6 +106,8 @@ export const themes: readonly Theme[] = [
       '--focus-ring': '#8b3a14',
       '--selection-bg': '#e8d8a8',
       '--recently-classified-bg': '#f0d68a',
+      '--tint-hover': 'rgba(58, 40, 24, 0.12)',
+      '--tint-press': 'rgba(58, 40, 24, 0.20)',
     },
   },
   {
@@ -135,6 +141,8 @@ export const themes: readonly Theme[] = [
       '--focus-ring': '#1e66f5',
       '--selection-bg': '#b9cbf7',
       '--recently-classified-bg': '#fff5d6',
+      '--tint-hover': 'rgba(76, 79, 105, 0.12)',
+      '--tint-press': 'rgba(76, 79, 105, 0.20)',
     },
   },
   {
@@ -168,6 +176,8 @@ export const themes: readonly Theme[] = [
       '--focus-ring': '#cba6f7',
       '--selection-bg': '#45475a',
       '--recently-classified-bg': '#4a3d2a',
+      '--tint-hover': 'rgba(205, 214, 244, 0.08)',
+      '--tint-press': 'rgba(205, 214, 244, 0.14)',
     },
   },
   {
@@ -201,6 +211,8 @@ export const themes: readonly Theme[] = [
       '--focus-ring': '#7aa2f7',
       '--selection-bg': '#3d4775',
       '--recently-classified-bg': '#3b2e4a',
+      '--tint-hover': 'rgba(192, 202, 245, 0.08)',
+      '--tint-press': 'rgba(192, 202, 245, 0.14)',
     },
   },
   {
@@ -234,6 +246,8 @@ export const themes: readonly Theme[] = [
       '--focus-ring': '#fbbf24',
       '--selection-bg': '#4b2c75',
       '--recently-classified-bg': '#4a3a0a',
+      '--tint-hover': 'rgba(243, 232, 255, 0.08)',
+      '--tint-press': 'rgba(243, 232, 255, 0.14)',
     },
   },
   {
@@ -267,6 +281,8 @@ export const themes: readonly Theme[] = [
       '--focus-ring': '#faff00',
       '--selection-bg': '#1a4d5e',
       '--recently-classified-bg': '#2a4868',
+      '--tint-hover': 'rgba(224, 247, 250, 0.08)',
+      '--tint-press': 'rgba(224, 247, 250, 0.14)',
     },
   },
   {
@@ -304,6 +320,8 @@ export const themes: readonly Theme[] = [
       '--focus-ring': '#ffff00',
       '--selection-bg': '#4a4a00',
       '--recently-classified-bg': '#1a1a00',
+      '--tint-hover': 'rgba(255, 255, 255, 0.08)',
+      '--tint-press': 'rgba(255, 255, 255, 0.14)',
     },
   },
   {
@@ -337,6 +355,8 @@ export const themes: readonly Theme[] = [
       '--focus-ring': '#d4c9a8',
       '--selection-bg': '#2a3d5e',
       '--recently-classified-bg': '#2a4068',
+      '--tint-hover': 'rgba(212, 201, 168, 0.08)',
+      '--tint-press': 'rgba(212, 201, 168, 0.14)',
     },
   },
 ]

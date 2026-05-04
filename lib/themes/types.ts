@@ -34,6 +34,14 @@ export type ThemeColorSlots = {
   '--selection-bg': string
   // Pattern-driven (1)
   '--recently-classified-bg': string
+  // State-layer tints (2) — low-alpha rgba derived from each
+  // theme's --fg-primary. Concrete rgba strings (not color-mix
+  // expressions) so NativeWind on native can parse them. Light
+  // themes use 12% / 20% alpha; dark themes use 8% / 14% — the
+  // perceptual asymmetry between dark-on-light and light-on-dark
+  // overlays. See global.css for the tint contract.
+  '--tint-hover': string
+  '--tint-press': string
 }
 
 export type ThemeFontOverrides = Partial<{
@@ -77,4 +85,6 @@ export const COLOR_SLOT_KEYS = [
   '--focus-ring',
   '--selection-bg',
   '--recently-classified-bg',
+  '--tint-hover',
+  '--tint-press',
 ] as const satisfies readonly (keyof ThemeColorSlots)[]
