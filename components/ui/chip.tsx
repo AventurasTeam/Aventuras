@@ -30,9 +30,14 @@ export function Chip({ selected = false, onPress, disabled, className, children 
     // doesn't cascade through TextClassContext).
     'group flex-row items-center justify-center rounded-sm border px-3 py-1',
     selected ? 'border-fg-primary bg-fg-primary' : 'border-border-strong bg-bg-base',
+    // State-layer hover/press matching SwitchRow / Tag — minted
+    // `--tint-hover` / `--tint-press` slots are the project's
+    // canonical way to signal tappability across surfaces.
+    interactive && 'active:bg-tint-press',
     Platform.select({
       web: cn(
         interactive && 'cursor-pointer outline-none transition-colors',
+        interactive && 'hover:bg-tint-hover',
         interactive && 'focus-visible:ring-2 focus-visible:ring-focus-ring',
         disabled && 'cursor-not-allowed pointer-events-none',
       ),

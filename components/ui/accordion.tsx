@@ -38,11 +38,11 @@ function AccordionItem({
 }: React.ComponentProps<typeof AccordionPrimitive.Item>) {
   return (
     <AccordionPrimitive.Item
-      className={cn(
-        'border-b border-border',
-        Platform.select({ web: 'last:border-b-0' }),
-        className,
-      )}
+      // Note: no `last:border-b-0` — that override clipped the
+      // bottom edge of the last card in card-style composition.
+      // Strip-style accepts a trailing 1px line on the last item;
+      // it reads as a natural separator before whatever's below.
+      className={cn('border-b border-border', className)}
       value={value}
       asChild={Platform.OS !== 'web'}
       {...props}
