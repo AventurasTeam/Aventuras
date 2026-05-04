@@ -39,24 +39,10 @@ function TabsTrigger({ className, count, children, ...props }: TabsTriggerProps)
       value={cn(
         'text-sm',
         active ? 'text-fg-primary font-medium' : 'text-fg-muted',
-        // group-hover lifts the inactive label color on web —
-        // direct hover: on the Pressable doesn't cascade through
-        // the inherited TextClassContext, so we hook the Pressable
-        // as a `group` and target the text via group-hover here.
         !active && Platform.select({ web: 'transition-colors group-hover:text-fg-primary' }),
       )}
     >
       <TabsPrimitive.Trigger
-        // Inline `pointerEvents` on disabled web triggers — the
-        // rn-primitives Trigger2 wrapper drops `disabled` before
-        // forwarding to radix Tabs.Trigger, so radix's own
-        // onClick (which fires onValueChange) doesn't see the
-        // disabled state and runs anyway. Pressable.disabled
-        // blocks its own onPress but not the radix-side onClick
-        // attached via Slot. Inline `pointer-events: none` is
-        // the foolproof gate at the DOM level — kills both.
-        // className-side `pointer-events-none` doesn't work
-        // reliably here (NativeWind/inline-style ordering).
         style={
           Platform.OS === 'web' && props.disabled ? ({ pointerEvents: 'none' } as never) : undefined
         }
@@ -69,11 +55,6 @@ function TabsTrigger({ className, count, children, ...props }: TabsTriggerProps)
               'focus-visible:ring-2 focus-visible:ring-focus-ring',
             ),
           }),
-          // No `cursor-not-allowed` — `pointer-events: none` (set
-          // inline above) prevents hover state, which means CSS
-          // `cursor` doesn't apply either. Matches Button's
-          // `disabled:pointer-events-none` precedent. Visual
-          // disabled cue is `opacity-50`.
           props.disabled && 'opacity-50',
           className,
         )}
@@ -81,13 +62,6 @@ function TabsTrigger({ className, count, children, ...props }: TabsTriggerProps)
       >
         {typeof children === 'string' ? <Text>{children}</Text> : children}
         {count != null ? (
-          // No `variant="muted"` — that'd hard-code muted color
-          // and ignore the inherited TextClassContext, leaving
-          // the count grey even on the active tab. Letting the
-          // count inherit means it picks up text-fg-primary +
-          // font-medium when active, text-fg-muted otherwise.
-          // `font-normal` keeps the count lighter than the label
-          // so the size+weight differentiation reads.
           <Text size="xs" className="font-normal">
             {count}
           </Text>
