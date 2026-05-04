@@ -52,19 +52,37 @@
      * in light themes, near-white in dark themes); color-mix
      * resolves these to a low-alpha overlay that darkens light
      * surfaces and lightens dark surfaces — correct hover/press
-     * direction in either mode. Magnitudes match Material 3's
-     * state-layer spec (8% hover, 14% press, give or take).
+     * direction in either mode.
      *
-     * Why two CSS-var slots instead of `bg-fg-primary/8` Tailwind
-     * opacity: our color tokens use `var(--fg-primary)` without
-     * the `<alpha-value>` placeholder, so Tailwind's alpha
-     * modifier silently emits no rule on those colors. Defining
-     * the tint as a first-class slot via color-mix sidesteps that
-     * — and `bg-tint-hover` / `bg-tint-press` work as ordinary
-     * Tailwind colors, including with the `hover:` / `active:`
-     * variants. */
+     * Magnitudes are mode-asymmetric — light themes get a stronger
+     * overlay than dark. Material 3 specs the same percentages
+     * across modes, but in practice dark-on-light overlays read
+     * fainter than light-on-dark at equivalent alpha (perceptual
+     * mismatch — bright surfaces are less tolerant of low-alpha
+     * darkening). The :root default below is dark-mode-tuned;
+     * light-mode bumps land on the per-theme override block.
+     *
+     * Why CSS-var slots instead of Tailwind alpha modifier
+     * (`bg-fg-primary/8`): our color tokens use `var(--fg-primary)`
+     * without the `<alpha-value>` placeholder Tailwind expects, so
+     * the alpha-modifier silently emits no rule on those colors.
+     * Defining the tint as a first-class slot via color-mix
+     * sidesteps that — `bg-tint-hover` / `bg-tint-press` work as
+     * ordinary Tailwind colors with `hover:` / `active:` variants. */
     --tint-hover: color-mix(in srgb, var(--fg-primary) 8%, transparent);
     --tint-press: color-mix(in srgb, var(--fg-primary) 14%, transparent);
+  }
+
+  /* Light themes get a stronger tint — dark-on-light state layers
+   * read perceptually fainter than light-on-dark at the same alpha,
+   * so the magnitudes step up from 8/14 to 12/20. Update both the
+   * registry's `mode: 'light'` set and this selector list when a
+   * new light theme lands. */
+  [data-theme='default-light'],
+  [data-theme='parchment'],
+  [data-theme='catppuccin-latte'] {
+    --tint-hover: color-mix(in srgb, var(--fg-primary) 12%, transparent);
+    --tint-press: color-mix(in srgb, var(--fg-primary) 20%, transparent);
   }
 }
 
