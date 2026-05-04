@@ -86,8 +86,8 @@ label.
 **Sort.** Status tier (Active → Pending → Resolved → Failed), then
 alphabetical within a tier.
 
-**Filter chips** (single-select). All / Active / Pending / Resolved /
-Failed.
+**[Filter chips](../../patterns/chips.md#chip--square-toggleable)**
+(single-select). All / Active / Pending / Resolved / Failed.
 
 **All view — accordion grouping by status tier.** Same pattern as
 World's accordion (per

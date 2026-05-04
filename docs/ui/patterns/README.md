@@ -35,6 +35,9 @@ The split heuristic + when-to-add rules live in
 - [`tabs.md`](./tabs.md) — horizontal segmented navigation
   primitive (underline style, optional per-tab count). Strip-only;
   consumers substitute Select at narrow tiers per the Group C rule.
+- [`chips.md`](./chips.md) — Chip (square, toggleable filter / state)
+  - Tag (pill, labeled content) primitives split along corner
+    radius as the visual fundamental.
 - [`calendar-picker.md`](./calendar-picker.md) — calendar-system
   selector shared across App Settings, Story Settings, and Wizard:
   rich rows, summary panel, swap warnings (origin / eras / display),

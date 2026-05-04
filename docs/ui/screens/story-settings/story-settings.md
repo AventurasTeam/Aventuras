@@ -91,7 +91,9 @@ card `⋯ → Edit info` routes to `About` directly.
 
 - **About** — title, description (freeform user-text — blurb /
   notes / log line, shown on library cards; not injected into any
-  LLM prompt), tags, cover, accent color, library status
+  LLM prompt),
+  [tags](../../patterns/chips.md#tag--pill-labeled-content), cover,
+  accent color, library status
   (`active` / `archived` — segment per
   [Select primitive rule](../../patterns/forms.md#select-primitive)),
   favorite (orthogonal SwitchRow with a leading star icon — own row,

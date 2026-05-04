@@ -1056,6 +1056,27 @@ too short in practice — e.g., users report missing the message
 while skimming — implement as a per-toast `Date.now()` pause /
 resume on the timer.
 
+### Filter chip pill→square wireframe consolidation
+
+[`ui/patterns/chips.md`](./ui/patterns/chips.md) splits Chip
+(square, toggleable filter / state) and Tag (pill, labeled content)
+along corner radius as the visual fundamental. Three wireframes
+drifted to pill on filter chips when they should match the square
+Chip shape:
+
+- `docs/ui/screens/story-list/story-list.html` — `.filter-chip`
+  (All / Favorited / Archived) currently `border-radius: 999px`.
+- `docs/ui/screens/vault/calendars/calendars.html` —
+  `.filter-chip` (All / Built-in / Custom) currently `999px`.
+- `docs/ui/screens/reader-composer/reader-composer.html` —
+  `.sheet-chip` inside the Browse rail mobile sheet (All / Lead /
+  Recent / Pinned) currently `999px`.
+
+Cosmetic consolidation pass — primitive ships independent of
+wireframe state, and the wireframes still communicate the right UX
+shape. Surface again when wireframes are next on the touch list
+or when a visual-identity sweep ships.
+
 ### Toast — visibility-API tab pause (web)
 
 The web Toast timer keeps running while the browser tab is hidden,

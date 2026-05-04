@@ -134,7 +134,8 @@ stays pinned unless the filter excludes them entirely.
 
 ## Browse filter chips
 
-Mutually exclusive (single-select):
+Mutually exclusive (single-select), rendered with the
+[Chip primitive](./chips.md#chip--square-toggleable):
 `All` / `In scene` / `Active` / `Staged` / `Retired`.
 
 - `All` is the default and shows the full list with accordion

@@ -77,8 +77,9 @@ single-column list — wide screens render denser.
 
 - **Search** — scopes to `name` only. Tooltip + ⓘ help icon per
   [search-bar-scope](../../../patterns/lists.md#search-bar-scope).
-- **Filter chips** — single-select `All | Built-in | Custom`,
-  mutually exclusive. `All` is default.
+- **[Filter chips](../../../patterns/chips.md#chip--square-toggleable)**
+  — single-select `All | Built-in | Custom`, mutually exclusive.
+  `All` is default.
 
 **Primary action** `+ Add calendar ▾` lives in the sub-header next
 to the breadcrumb (full-canvas affords this; not a list-footer).

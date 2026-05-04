@@ -61,7 +61,8 @@ landing from anywhere else, but we're already here).
   to ~360px. Scope: `title`, `description`, `definition.genre.label`,
   `tags`. Affordances per the
   [search-bar-scope pattern](../../patterns/lists.md#search-bar-scope).
-- **Filter chips** — single-select: `All` / `Favorited` / `Archived`.
+- **[Filter chips](../../patterns/chips.md#chip--square-toggleable)**
+  — single-select: `All` / `Favorited` / `Archived`.
   `All` hides archived by default (they only appear when the
   `Archived` filter is active). `Favorited` shows only favorites.
 - **Sort dropdown** — `last-opened` (default) / `created` / `title`.

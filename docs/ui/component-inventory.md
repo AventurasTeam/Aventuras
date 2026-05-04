@@ -47,6 +47,8 @@ Text. Plus the `NativeOnlyAnimatedView` utility wrapper.
 | KindIcon           | [iconography.md → Entity kind glyphs](./foundations/iconography.md#entity-kind-glyphs)                   | 22×22 box, glyph from the canonical table. Trivial.                                                                |
 | Toast              | [toast.md](./patterns/toast.md)                                                                          | Top-center, severity variants, swipe-up dismiss + ×, queue cap 3. Custom (no rn-reusables baseline).               |
 | TabBar             | [tabs.md](./patterns/tabs.md)                                                                            | Underline style, optional per-tab count. Strip-only — substitutes to Select on narrow tiers per Group C rule.      |
+| Chip               | [chips.md → Chip](./patterns/chips.md#chip--square-toggleable)                                           | Square (4px radius), toggleable filter / state indicator. `selected` + `onPress` props.                            |
+| Tag                | [chips.md → Tag](./patterns/chips.md#tag--pill-labeled-content)                                          | Pill (full radius), labeled content. `removable` / `tone` (soft) / `dashed` (add affordance) props.                |
 
 ### Primitives — needs design
 
@@ -54,11 +56,10 @@ Baseline column names the react-native-reusables source per
 [components.md → Sourcing](./components.md#sourcing--react-native-reusables-as-baseline);
 empty means from-scratch.
 
-| Primitive   | Baseline       | Used by                                                                           | Open question                                                                                                                           |
-| ----------- | -------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| AlertDialog | `alert-dialog` | Rollback confirm, delete confirms, calendar swap-warning                          | Severity variants, DANGER-CTA placement + copy contract, sheet-anchor on phone vs popover-style on desktop.                             |
-| Accordion   | `accordion`    | Reader Browse rail grouping, App Settings sections, Story Settings caption groups | Single vs multi-open per surface, header chevron behavior, animation contract, rn-primitives passthrough rules.                         |
-| Chip        | `badge`        | Story List filters, Plot filters, Browse rail filters, tag chips on entities      | Toggle vs static, on/off contrast, border vs filled, stack-vs-flow on narrow container. Baseline is static-only — toggle is grafted on. |
+| Primitive   | Baseline       | Used by                                                                           | Open question                                                                                                   |
+| ----------- | -------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| AlertDialog | `alert-dialog` | Rollback confirm, delete confirms, calendar swap-warning                          | Severity variants, DANGER-CTA placement + copy contract, sheet-anchor on phone vs popover-style on desktop.     |
+| Accordion   | `accordion`    | Reader Browse rail grouping, App Settings sections, Story Settings caption groups | Single vs multi-open per surface, header chevron behavior, animation contract, rn-primitives passthrough rules. |
 
 ### Primitives — deferred
 
