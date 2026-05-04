@@ -152,6 +152,13 @@ function SheetPanel({
             Platform.select({
               web: cn(
                 'absolute z-50',
+                // Web entry animation — native plays this via
+                // reanimated SlideInDown/SlideInRight; web would
+                // snap-in without this since
+                // NativeOnlyAnimatedView is a passthrough on web.
+                // Radix only mounts Content while open, so the
+                // animation fires unconditionally on mount.
+                isBottom ? 'animate-slide-in-from-bottom' : 'animate-slide-in-from-right',
                 isBottom
                   ? cn(
                       'bottom-0 left-0 right-0 rounded-t-lg border-b-0',
@@ -219,7 +226,11 @@ function SheetContent({
             style={Platform.select({ native: StyleSheet.absoluteFill })}
           >
             <DialogPrimitive.Overlay
-              className="absolute inset-0 bg-black/40"
+              className={cn(
+                'absolute inset-0 bg-black/40',
+                // Web fade-in — native uses reanimated FadeIn.
+                Platform.select({ web: 'animate-fade-in' }),
+              )}
               style={Platform.select({ native: StyleSheet.absoluteFill })}
             />
           </NativeOnlyAnimatedView>

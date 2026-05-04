@@ -10,6 +10,14 @@ type SwitchRowProps = {
   label: string
   /** Optional secondary line below the label — explanatory hint, not interactive. */
   hint?: string
+  /**
+   * Optional content placed before the label/hint stack (e.g. a status icon).
+   * Sits inside the row's tap surface, so taps on it still toggle. When
+   * present the row aligns top so the leading element, label baseline, and
+   * switch line up rather than the switch floating to the text-body's
+   * vertical center.
+   */
+  leading?: React.ReactNode
   checked: boolean
   onCheckedChange: (checked: boolean) => void
   disabled?: boolean
@@ -19,11 +27,13 @@ type SwitchRowProps = {
 export function SwitchRow({
   label,
   hint,
+  leading,
   checked,
   onCheckedChange,
   disabled,
   className,
 }: SwitchRowProps) {
+  const hasLeading = leading != null
   return (
     <Pressable
       role="switch"
@@ -33,7 +43,8 @@ export function SwitchRow({
       disabled={disabled}
       onPress={() => onCheckedChange(!checked)}
       className={cn(
-        'flex-row items-center gap-3 rounded-md px-row-x-md py-row-y-md',
+        'flex-row gap-3 rounded-md px-row-x-md py-row-y-md',
+        hasLeading ? 'items-start' : 'items-center',
         'active:bg-tint-press',
         Platform.select({ web: 'cursor-pointer hover:bg-tint-hover' }),
         disabled && 'opacity-50',
@@ -41,6 +52,7 @@ export function SwitchRow({
         className,
       )}
     >
+      {hasLeading ? <View className="mt-0.5">{leading}</View> : null}
       <View className="flex-1 gap-0.5">
         <Text className="font-medium">{label}</Text>
         {hint != null ? (
@@ -49,7 +61,7 @@ export function SwitchRow({
           </Text>
         ) : null}
       </View>
-      <SwitchVisual checked={checked} disabled={disabled} />
+      <SwitchVisual checked={checked} disabled={disabled} className={hasLeading ? 'mt-0.5' : ''} />
     </Pressable>
   )
 }

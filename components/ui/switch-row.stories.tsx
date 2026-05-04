@@ -86,6 +86,27 @@ export const Disabled: Story = {
   ),
 }
 
+export const WithLeading: Story = {
+  render: () => {
+    const [ck, setCk] = React.useState(false)
+    return (
+      <View style={{ width: 360 }}>
+        <SwitchRow
+          leading={
+            <Text size="sm" className={ck ? 'text-fg-primary' : 'text-fg-muted'}>
+              ⊙
+            </Text>
+          }
+          label="common_knowledge"
+          hint={ck ? 'on — awareness rows are skipped' : 'bool · awareness skip'}
+          checked={ck}
+          onCheckedChange={setCk}
+        />
+      </View>
+    )
+  },
+}
+
 export const SettingsList: Story = {
   render: () => {
     const [showHints, setShowHints] = React.useState(true)

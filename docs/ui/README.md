@@ -25,6 +25,10 @@ rationale, and decisions live alongside.
   conventions: react-native-reusables sourcing policy, Storybook
   story conventions, and other meta-rules that apply across every
   primitive and pattern shipped to Storybook.
+- **[component-inventory.md](./component-inventory.md)** — build
+  queue for remaining primitives, app-domain compound components,
+  and layout shells. Tracks state (shipped / build-ready /
+  needs-design / deferred); entries leave when they ship.
 - **[foundations/](./foundations/README.md)** — visual identity
   contract: token slots (color, font-family, structural,
   user-orthogonal), theme data shape, switching mechanism,

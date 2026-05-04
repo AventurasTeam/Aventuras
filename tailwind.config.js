@@ -108,6 +108,34 @@ module.exports = {
         'row-x-md': 'var(--row-px-md)',
         'row-x-lg': 'var(--row-px-lg)',
       },
+      // Web-only entry animations for overlay primitives. Native
+      // gets these via reanimated layout-animations
+      // (FadeIn/SlideInDown/SlideInRight) on Sheet + Popover; web
+      // would otherwise snap-in instantly because
+      // NativeOnlyAnimatedView is a no-op on web. Keyframes target
+      // radix-ui's `data-state="open"` attribute via Tailwind's
+      // `data-[state=open]:animate-*` arbitrary variant.
+      // Durations match the reanimated values
+      // (Sheet: 250ms, Popover/overlay: 200ms).
+      keyframes: {
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'slide-in-from-bottom': {
+          from: { transform: 'translateY(100%)' },
+          to: { transform: 'translateY(0)' },
+        },
+        'slide-in-from-right': {
+          from: { transform: 'translateX(100%)' },
+          to: { transform: 'translateX(0)' },
+        },
+      },
+      animation: {
+        'fade-in': 'fade-in 200ms var(--easing-standard)',
+        'slide-in-from-bottom': 'slide-in-from-bottom 250ms var(--easing-standard)',
+        'slide-in-from-right': 'slide-in-from-right 250ms var(--easing-standard)',
+      },
     },
   },
   plugins: [],

@@ -165,6 +165,8 @@ function PhoneSheetPanel({
           position="popper"
           className={cn(
             'flex-1 rounded-t-lg border border-b-0 border-border-strong bg-bg-overlay p-4 outline-none',
+            // Web entry animation — native uses reanimated SlideInDown.
+            Platform.select({ web: 'animate-slide-in-from-bottom' }),
             className,
           )}
         >
@@ -209,7 +211,10 @@ function PhoneSheetContent({
             style={Platform.select({ native: StyleSheet.absoluteFill })}
           >
             <SelectBase.Overlay
-              className="absolute inset-0 bg-black/40"
+              className={cn(
+                'absolute inset-0 bg-black/40',
+                Platform.select({ web: 'animate-fade-in' }),
+              )}
               style={Platform.select({ native: StyleSheet.absoluteFill })}
             />
           </NativeOnlyAnimatedView>
@@ -244,7 +249,7 @@ function PopoverContent({
                 className={cn(
                   'relative z-50 min-w-[8rem] rounded-md border border-border bg-bg-overlay',
                   Platform.select({
-                    web: 'max-h-52 overflow-y-auto overflow-x-hidden',
+                    web: 'max-h-52 animate-fade-in overflow-y-auto overflow-x-hidden',
                     native: 'p-1',
                   }),
                   className,
