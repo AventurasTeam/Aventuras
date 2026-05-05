@@ -29,16 +29,14 @@ Generic, single-purpose, reusable. Live in `components/ui/`.
 
 ### Primitives — shipped
 
-Accordion, AlertDialog, Avatar, Button, Checkbox, Chip, EmptyState,
-Heading, Icon, IconAction, Input, Popover, Select, Sheet, Skeleton,
-Spinner, Switch, SwitchVisual, Tabs, Tag, Textarea, Text, Toast.
-Plus the `NativeOnlyAnimatedView` utility wrapper.
+Accordion, AlertDialog, Autocomplete, Avatar, Button, Checkbox,
+Chip, EmptyState, Heading, Icon, IconAction, Input, Popover, Select,
+Sheet, Skeleton, Spinner, Switch, SwitchVisual, Tabs, Tag, Textarea,
+Text, Toast. Plus the `NativeOnlyAnimatedView` utility wrapper.
 
 ### Primitives — build-ready
 
-| Primitive    | Spec                                                                                                    | Notes                                                  |
-| ------------ | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Autocomplete | [forms.md → Autocomplete-with-create primitive](./patterns/forms.md#autocomplete-with-create-primitive) | Primary v1 consumer: tag inputs on stories + entities. |
+_Empty — every primitive on the v1 build queue has shipped._
 
 ### Primitives — needs design
 

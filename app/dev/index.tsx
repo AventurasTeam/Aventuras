@@ -16,6 +16,7 @@ const ROUTES = [
   { href: '/dev/visual', label: 'Icon + Avatar' },
   { href: '/dev/icon-action', label: 'IconAction' },
   { href: '/dev/empty-state', label: 'EmptyState' },
+  { href: '/dev/autocomplete', label: 'Autocomplete' },
   { href: '/dev/loading', label: 'Spinner + Skeleton' },
   { href: '/dev/tabs', label: 'Tabs' },
   { href: '/dev/chip-tag', label: 'Chip + Tag' },

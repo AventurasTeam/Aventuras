@@ -104,42 +104,48 @@ function SheetPanel({
     [isBottom],
   )
   const closeFromGesture = React.useCallback(() => onOpenChange(false), [onOpenChange])
-  const panGesture = React.useMemo(
-    () =>
-      Gesture.Pan()
-        .onUpdate((event) => {
-          'worklet'
-          const delta = isBottom ? event.translationY : event.translationX
-          // Clamp to the dismiss direction; spring resistance for the wrong
-          // direction is overkill for v1.
-          dragOffset.value = Math.max(0, delta)
-        })
-        .onEnd((event) => {
-          'worklet'
-          const delta = isBottom ? event.translationY : event.translationX
-          if (delta > DRAG_DISMISS_THRESHOLD_PX) {
-            // Continue the gesture motion smoothly off-screen, then close
-            // once the panel is visually gone.
-            const target = (isBottom ? screenHeight : screenHeight) + 200
-            dragOffset.value = withTiming(target, { duration: 180 }, (finished?: boolean) => {
-              'worklet'
-              if (finished) runOnJS(closeFromGesture)()
-            })
-            return
-          }
-          // overshootClamping prevents the spring from oscillating past 0,
-          // which would raise the panel above its rest position and expose
-          // the system nav-bar area below it.
-          dragOffset.value = withSpring(0, {
-            damping: 18,
-            stiffness: 220,
-            overshootClamping: true,
+  const panGesture = React.useMemo(() => {
+    const base = Gesture.Pan()
+    const directional = isBottom
+      ? base.activeOffsetY([10, Number.POSITIVE_INFINITY])
+      : base.activeOffsetX([10, Number.POSITIVE_INFINITY])
+    return directional
+      .onUpdate((event) => {
+        'worklet'
+        const delta = isBottom ? event.translationY : event.translationX
+        dragOffset.value = Math.max(0, delta)
+      })
+      .onEnd((event) => {
+        'worklet'
+        const delta = isBottom ? event.translationY : event.translationX
+        if (delta > DRAG_DISMISS_THRESHOLD_PX) {
+          const target = (isBottom ? screenHeight : screenHeight) + 200
+          dragOffset.value = withTiming(target, { duration: 180 }, (finished?: boolean) => {
+            'worklet'
+            if (finished) runOnJS(closeFromGesture)()
           })
-        }),
-    [isBottom, dragOffset, closeFromGesture, screenHeight],
-  )
+          return
+        }
+        dragOffset.value = withSpring(0, {
+          damping: 18,
+          stiffness: 220,
+          overshootClamping: true,
+        })
+      })
+  }, [isBottom, dragOffset, closeFromGesture, screenHeight])
 
-  const inner = (
+  const handleVisible = <View className="mx-auto h-1 w-10 rounded-full bg-fg-muted opacity-40" />
+  const handle = isBottom ? (
+    Platform.OS === 'web' ? (
+      <View className="mb-4">{handleVisible}</View>
+    ) : (
+      <GestureDetector gesture={panGesture}>
+        <View className="-mx-6 -mt-6 mb-2 items-center px-6 py-6">{handleVisible}</View>
+      </GestureDetector>
+    )
+  ) : null
+
+  return (
     <NativeOnlyAnimatedView
       entering={slideEnter}
       exiting={slideExit}
@@ -175,19 +181,11 @@ function SheetPanel({
           )}
           {...contentProps}
         >
-          {isBottom ? (
-            <View className="mx-auto mb-4 h-1 w-10 rounded-full bg-fg-muted opacity-40" />
-          ) : null}
+          {handle}
           {children}
         </DialogPrimitive.Content>
       </TextClassContext.Provider>
     </NativeOnlyAnimatedView>
-  )
-
-  return Platform.OS === 'web' ? (
-    inner
-  ) : (
-    <GestureDetector gesture={panGesture}>{inner}</GestureDetector>
   )
 }
 

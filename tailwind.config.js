@@ -104,6 +104,20 @@ module.exports = {
         'icon-action-md': 'var(--icon-action-h-md)',
         'icon-action-lg': 'var(--icon-action-h-lg)',
       },
+      // Tailwind's `minHeight` scale is independent of `height` —
+      // adding the control-* + icon-action-* tokens explicitly so
+      // `min-h-control-md` etc. resolve. Used by Autocomplete's
+      // suggestion rows to enforce HIG-compliant tap targets when
+      // the natural content height (py + text) would fall short.
+      minHeight: {
+        'control-xs': 'var(--control-h-xs)',
+        'control-sm': 'var(--control-h-sm)',
+        'control-md': 'var(--control-h-md)',
+        'control-lg': 'var(--control-h-lg)',
+        'icon-action-sm': 'var(--icon-action-h-sm)',
+        'icon-action-md': 'var(--icon-action-h-md)',
+        'icon-action-lg': 'var(--icon-action-h-lg)',
+      },
       padding: {
         'row-y-xs': 'var(--row-py-xs)',
         'row-y-sm': 'var(--row-py-sm)',
