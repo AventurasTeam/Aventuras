@@ -18,6 +18,7 @@ import { Text } from '@/components/ui/text'
 import { useKeyboardHeight } from '@/hooks/use-keyboard-height'
 import { useTier } from '@/hooks/use-tier'
 import { cn } from '@/lib/utils'
+import { Portal } from '@rn-primitives/portal'
 
 type AutocompleteProps = {
   /** Current text in the input. Controlled. */
@@ -166,6 +167,7 @@ type SuggestionListProps = {
   onPickSuggestion: (s: string) => void
   onPickTail: (typed: string) => void
   createTailLabel: (typed: string) => string
+  style?: React.ComponentProps<typeof View>['style']
   /**
    * `'inline'` — desktop / tablet popover. Compact rows
    * (`min-h-control-md`, density-aware horizontal + vertical
@@ -197,6 +199,7 @@ function SuggestionList({
   createTailLabel,
   variant = 'inline',
   className,
+  style,
 }: SuggestionListProps) {
   const isSheet = variant === 'sheet'
   // Sheet variant: transparent rows. Dividers render as separate
@@ -217,7 +220,7 @@ function SuggestionList({
     : 'min-h-control-md px-row-x-md py-row-y-md'
   const sheetDivider = <View className="mx-3 h-px bg-border" />
   return (
-    <View className={className}>
+    <View className={className} style={style}>
       {isSheet && (suggestions.length > 0 || showTail) && sheetDivider}
       {suggestions.map((s, idx) => {
         const isLastSuggestion = idx === suggestions.length - 1
@@ -285,13 +288,51 @@ function AutocompleteInline({
 }: InlineProps) {
   const [open, setOpen] = React.useState(false)
   const [highlightedIndex, setHighlightedIndex] = React.useState(-1)
+  const [anchorRect, setAnchorRect] = React.useState<{
+    x: number
+    y: number
+    width: number
+    height: number
+  } | null>(null)
   const blurTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wrapperRef = React.useRef<View>(null)
+  // Each Autocomplete instance gets a stable Portal name so multiple
+  // instances on the same page don't overwrite each other's portal
+  // content (Portals keyed off the same name share a slot).
+  const portalName = React.useId()
 
   React.useEffect(() => {
     return () => {
       if (blurTimerRef.current) clearTimeout(blurTimerRef.current)
     }
   }, [])
+
+  // Measure the input wrapper's viewport coords. Used to position
+  // the portaled popover. Portal mounts content at the root-level
+  // PortalHost (app/_layout.tsx), escaping every ancestor stacking
+  // context — the earlier in-flow approach (with `z-50` then
+  // `position: fixed`) was getting clipped by parent ScrollViews on
+  // Electron. RN-Web's style allowlist also drops `position: fixed`,
+  // which is why fixed-positioning didn't work either.
+  const updateAnchor = React.useCallback(() => {
+    const node = wrapperRef.current
+    if (!node) return
+    node.measureInWindow((x, y, width, height) => {
+      setAnchorRect({ x, y, width, height })
+    })
+  }, [])
+
+  React.useEffect(() => {
+    if (!open || Platform.OS !== 'web') return undefined
+    updateAnchor()
+    const handler = () => updateAnchor()
+    window.addEventListener('scroll', handler, true)
+    window.addEventListener('resize', handler)
+    return () => {
+      window.removeEventListener('scroll', handler, true)
+      window.removeEventListener('resize', handler)
+    }
+  }, [open, updateAnchor])
 
   const { trimmed, exactMatch, suggestions, showTail } = useFilter(value, sourceList)
   const totalItems = suggestions.length + (showTail ? 1 : 0)
@@ -363,8 +404,23 @@ function AutocompleteInline({
     }
   }
 
+  const popoverChromeClasses = cn(
+    'max-h-72 overflow-hidden rounded-md border border-border bg-bg-overlay py-1',
+    Platform.select({ web: 'overflow-y-auto', default: '' }),
+    popoverClassName,
+  )
+  const popoverStyle =
+    anchorRect != null
+      ? {
+          position: 'absolute' as const,
+          top: anchorRect.y + anchorRect.height + 4,
+          left: anchorRect.x,
+          width: anchorRect.width,
+          zIndex: 50,
+        }
+      : undefined
   const content = (
-    <View className={cn('relative', className)}>
+    <View ref={wrapperRef} className={cn('relative', className)} onLayout={updateAnchor}>
       <Input
         value={value}
         onChangeText={(v) => {
@@ -400,26 +456,26 @@ function AutocompleteInline({
         }
         className={inputClassName}
       />
-      {isOpen && (
-        <SuggestionList
-          suggestions={suggestions}
-          showTail={showTail}
-          trimmed={trimmed}
-          highlightedIndex={highlightedIndex}
-          onPickSuggestion={commitValue}
-          onPickTail={commitValue}
-          createTailLabel={tailLabel}
-          className={cn(
-            // `max-h-72` enforces the spec's ~7-visible viewport
-            // height (≈ 7 × control-md). Web's overflow-y-auto
-            // handles scroll past that; native popover usage is
-            // tier-dispatched to the Sheet path so this max-h only
-            // applies to web-tier rendering.
-            'absolute left-0 right-0 top-full z-50 mt-1 max-h-72 overflow-hidden rounded-md border border-border bg-bg-overlay py-1',
-            Platform.select({ web: 'overflow-y-auto', default: '' }),
-            popoverClassName,
-          )}
-        />
+      {isOpen && popoverStyle && (
+        // Portal mounts the popover at the root-level PortalHost
+        // (app/_layout.tsx), escaping every ancestor stacking
+        // context. The container View carries position:absolute +
+        // measured viewport coords; the SuggestionList provides
+        // the chrome + items. Same pattern Select uses via Radix
+        // portal — this is the rn-primitives equivalent.
+        <Portal name={portalName}>
+          <SuggestionList
+            suggestions={suggestions}
+            showTail={showTail}
+            trimmed={trimmed}
+            highlightedIndex={highlightedIndex}
+            onPickSuggestion={commitValue}
+            onPickTail={commitValue}
+            createTailLabel={tailLabel}
+            className={popoverChromeClasses}
+            style={popoverStyle}
+          />
+        </Portal>
       )}
     </View>
   )
@@ -510,7 +566,7 @@ function AutocompleteSheet({
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent anchor="bottom" size="tall" title={label ?? placeholder ?? 'Pick value'}>
           {label != null && label.length > 0 && (
-            <Heading level={3} className="mb-3 text-base">
+            <Heading level={2} className="mb-3">
               {label}
             </Heading>
           )}
@@ -567,7 +623,11 @@ function AutocompleteSheet({
 export function Autocomplete(props: AutocompleteProps) {
   const tier = useTier()
   const tailLabel = props.createTailLabel ?? defaultTailLabel
-  if (tier === 'phone') {
+  // Sheet is a touch idiom; on web (any width) the user is on mouse,
+  // so popover/inline is the appropriate shape regardless of viewport
+  // width. Gate sheet dispatch on native-phone only. Matches Select.
+  const usesSheet = Platform.OS !== 'web' && tier === 'phone'
+  if (usesSheet) {
     return <AutocompleteSheet {...props} tailLabel={tailLabel} />
   }
   return <AutocompleteInline {...props} tailLabel={tailLabel} />

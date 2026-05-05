@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import * as React from 'react'
 import { View } from 'react-native'
-import { expect, fireEvent, fn, userEvent, waitFor } from 'storybook/test'
+import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { themes } from '@/lib/themes/registry'
 import { Autocomplete } from './autocomplete'
@@ -133,10 +133,10 @@ export const FocusOpensDropdown: Story = {
   play: async ({ canvas }) => {
     const input = await canvas.findByPlaceholderText('Era name…')
     await userEvent.click(input)
-    await waitFor(() => expect(canvas.getAllByRole('button').length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getAllByRole('button').length).toBeGreaterThan(0))
     // All five era names appear as suggestions when input is empty
     for (const era of ERA_NAMES) {
-      expect(canvas.getByRole('button', { name: era })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: era })).toBeInTheDocument()
     }
   },
 }
@@ -148,10 +148,10 @@ export const TypingFiltersSuggestions: Story = {
     await userEvent.click(input)
     await userEvent.type(input, 'sho')
     await waitFor(() => {
-      expect(canvas.getByRole('button', { name: 'Showa' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Showa' })).toBeInTheDocument()
     })
     // 'Reiwa' is filtered out
-    expect(canvas.queryByRole('button', { name: 'Reiwa' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reiwa' })).not.toBeInTheDocument()
   },
 }
 
@@ -162,7 +162,7 @@ export const TailCreateAppearsForUnknownTyped: Story = {
     await userEvent.click(input)
     await userEvent.type(input, 'Genroku')
     await waitFor(() => {
-      expect(canvas.getByRole('button', { name: '+ Add new: "Genroku"' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: '+ Add new: "Genroku"' })).toBeInTheDocument()
     })
   },
 }
@@ -176,7 +176,7 @@ export const SuggestionPickCommitsCanonical: Story = {
     const input = await canvas.findByPlaceholderText('Era name…')
     await userEvent.click(input)
     await userEvent.type(input, 'reiw')
-    const suggestion = await canvas.findByRole('button', { name: 'Reiwa' })
+    const suggestion = await screen.findByRole('button', { name: 'Reiwa' })
     await userEvent.click(suggestion)
     await waitFor(() => expect(args.onCommit).toHaveBeenCalledWith('Reiwa'))
   },
@@ -191,7 +191,7 @@ export const TailCreateCommitsTyped: Story = {
     const input = await canvas.findByPlaceholderText('Era name…')
     await userEvent.click(input)
     await userEvent.type(input, 'Genroku')
-    const tail = await canvas.findByRole('button', { name: '+ Add new: "Genroku"' })
+    const tail = await screen.findByRole('button', { name: '+ Add new: "Genroku"' })
     await userEvent.click(tail)
     await waitFor(() => expect(args.onCommit).toHaveBeenCalledWith('Genroku'))
   },
@@ -290,6 +290,6 @@ export const DisabledNoDropdown: Story = {
     fireEvent.focus(input)
     // No suggestion buttons should appear in disabled state
     await new Promise((r) => setTimeout(r, 100))
-    expect(canvas.queryByRole('button', { name: 'Reiwa' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reiwa' })).not.toBeInTheDocument()
   },
 }

@@ -1,3 +1,4 @@
+import { PortalHost } from '@rn-primitives/portal'
 import type { Preview } from '@storybook/react-native-web-vite'
 import React from 'react'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
@@ -97,6 +98,10 @@ const preview: Preview = {
               <ThemeApplier themeId={themeId}>
                 <DensityApplier setting={densitySetting}>
                   <Story />
+                  {/* Mirrors the runtime app/_layout PortalHost so
+                      `@rn-primitives/portal` consumers (Autocomplete's
+                      popover) have somewhere to render in Storybook. */}
+                  <PortalHost />
                 </DensityApplier>
               </ThemeApplier>
             </DensityProvider>

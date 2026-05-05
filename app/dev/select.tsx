@@ -52,6 +52,7 @@ function Stateful({
   mode?: React.ComponentProps<typeof Select>['mode']
   sheetSize?: React.ComponentProps<typeof Select>['sheetSize']
   placeholder?: string
+  label?: string
   disabled?: boolean
   className?: string
 }) {
@@ -95,7 +96,12 @@ export default function SelectDevRoute() {
               <Text variant="muted" size="xs">
                 dropdown — flat list (auto Sheet short on phone)
               </Text>
-              <Stateful initial="opt-1" mode="dropdown" options={LONG_OPTIONS} />
+              <Stateful
+                initial="opt-1"
+                mode="dropdown"
+                options={LONG_OPTIONS}
+                label="Pick option"
+              />
             </View>
             <View className="flex-col gap-1">
               <Text variant="muted" size="xs">

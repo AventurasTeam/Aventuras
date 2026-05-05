@@ -1,3 +1,4 @@
+import { Heading } from '@/components/ui/heading'
 import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { Text, TextClassContext } from '@/components/ui/text'
@@ -103,10 +104,12 @@ function PhoneSheetPanel({
   className,
   children,
   sheetSize,
+  label,
 }: {
   className?: string
   children?: React.ReactNode
   sheetSize: ContentSheetSize
+  label?: string
 }) {
   const { onOpenChange } = SelectBase.useRootContext()
   const insets = useSafeAreaInsets()
@@ -127,33 +130,49 @@ function PhoneSheetPanel({
     [],
   )
   const closeFromGesture = React.useCallback(() => onOpenChange(false), [onOpenChange])
-  const panGesture = React.useMemo(
-    () =>
-      Gesture.Pan()
-        .onUpdate((event) => {
-          'worklet'
-          dragOffset.value = Math.max(0, event.translationY)
-        })
-        .onEnd((event) => {
-          'worklet'
-          if (event.translationY > DRAG_DISMISS_THRESHOLD_PX) {
-            const target = screenHeight + 200
-            dragOffset.value = withTiming(target, { duration: 180 }, (finished?: boolean) => {
-              'worklet'
-              if (finished) runOnJS(closeFromGesture)()
-            })
-            return
-          }
-          dragOffset.value = withSpring(0, {
-            damping: 18,
-            stiffness: 220,
-            overshootClamping: true,
+  const panGesture = React.useMemo(() => {
+    const base = Gesture.Pan()
+    return base
+      .activeOffsetY([10, Number.POSITIVE_INFINITY])
+      .onUpdate((event) => {
+        'worklet'
+        dragOffset.value = Math.max(0, event.translationY)
+      })
+      .onEnd((event) => {
+        'worklet'
+        if (event.translationY > DRAG_DISMISS_THRESHOLD_PX) {
+          const target = screenHeight + 200
+          dragOffset.value = withTiming(target, { duration: 180 }, (finished?: boolean) => {
+            'worklet'
+            if (finished) runOnJS(closeFromGesture)()
           })
-        }),
-    [dragOffset, closeFromGesture, screenHeight],
-  )
+          return
+        }
+        dragOffset.value = withSpring(0, {
+          damping: 18,
+          stiffness: 220,
+          overshootClamping: true,
+        })
+      })
+  }, [dragOffset, closeFromGesture, screenHeight])
 
-  const panel = (
+  // Drag handle: gesture wrapper covers ONLY the handle (matching
+  // Sheet primitive's pattern — see sheet.tsx for the full
+  // rationale). Web gets no gesture; the panel uses backdrop +
+  // Escape. Hit area is `py-6` (~52 px tall, full panel width via
+  // `-mx-4 px-4`) so the handle is comfortably grabbable while the
+  // visible bar stays at the iOS-standard 4 × 40.
+  const handleVisible = <View className="mx-auto h-1 w-10 rounded-full bg-fg-muted opacity-40" />
+  const handle =
+    Platform.OS === 'web' ? (
+      <View className="mb-3">{handleVisible}</View>
+    ) : (
+      <GestureDetector gesture={panGesture}>
+        <View className="-mx-4 -mt-4 mb-2 items-center px-4 py-6">{handleVisible}</View>
+      </GestureDetector>
+    )
+
+  return (
     <NativeOnlyAnimatedView
       entering={SlideInDown.duration(250)}
       exiting={SlideOutDown}
@@ -170,19 +189,18 @@ function PhoneSheetPanel({
             className,
           )}
         >
-          <View className="mx-auto mb-3 h-1 w-10 rounded-full bg-fg-muted opacity-40" />
+          {handle}
+          {label != null && label.length > 0 && (
+            <Heading level={2} className="mb-3">
+              {label}
+            </Heading>
+          )}
           <ScrollView className="flex-1">
             <SelectBase.Viewport>{children}</SelectBase.Viewport>
           </ScrollView>
         </SelectBase.Content>
       </TextClassContext.Provider>
     </NativeOnlyAnimatedView>
-  )
-
-  return Platform.OS === 'web' ? (
-    panel
-  ) : (
-    <GestureDetector gesture={panGesture}>{panel}</GestureDetector>
   )
 }
 
@@ -191,11 +209,13 @@ function PhoneSheetContent({
   children,
   sheetSize = 'short',
   portalHost,
+  label,
 }: {
   className?: string
   children?: React.ReactNode
   sheetSize?: ContentSheetSize
   portalHost?: string
+  label?: string
 }) {
   return (
     <SelectBase.Portal hostName={portalHost}>
@@ -218,7 +238,7 @@ function PhoneSheetContent({
               style={Platform.select({ native: StyleSheet.absoluteFill })}
             />
           </NativeOnlyAnimatedView>
-          <PhoneSheetPanel className={className} sheetSize={sheetSize}>
+          <PhoneSheetPanel className={className} sheetSize={sheetSize} label={label}>
             {children}
           </PhoneSheetPanel>
         </View>
@@ -288,16 +308,23 @@ function PopoverContent({
 
 function Content({
   sheetSize,
+  label,
   ...props
 }: React.ComponentProps<typeof SelectBase.Content> & {
   className?: string
   portalHost?: string
   sheetSize?: ContentSheetSize
+  label?: string
 }) {
   const tier = useTier()
-  if (tier === 'phone') {
+  // Sheet shape is a touch idiom (large pull-down picker on a small
+  // touchscreen). On web, even at narrow widths (Electron resized
+  // small), the user is still on mouse — popover is the appropriate
+  // idiom there. Gate sheet dispatch on native-only.
+  const usesSheet = Platform.OS !== 'web' && tier === 'phone'
+  if (usesSheet) {
     return (
-      <PhoneSheetContent className={props.className} sheetSize={sheetSize}>
+      <PhoneSheetContent className={props.className} sheetSize={sheetSize} label={label}>
         {props.children}
       </PhoneSheetContent>
     )
@@ -319,10 +346,28 @@ function Item({
   children,
   ...props
 }: React.ComponentProps<typeof SelectBase.Item> & { children?: React.ReactNode }) {
+  // Tier-conditional row treatment: when the Item lives inside the
+  // bottom Sheet (PhoneSheetContent — native phone only), it needs
+  // touch-sized min-height (`control-lg`), an edge-to-edge bleed
+  // (`-mx-4` cancels Sheet panel's p-4 so dividers run full width),
+  // a top border on the first row + closing border on the last so
+  // the list visually anchors against the surrounding Sheet chrome,
+  // and `pl-8` so option text doesn't sit cropped against the
+  // screen edge. `w-auto` overrides the base `w-full` so the
+  // negative margin extends symmetrically.
+  // Desktop / tablet popover (and web at any width — sheet is gated
+  // to native-phone only) keeps the original tighter chrome:
+  // hairline borders between rows + `last:border-b-0` since the
+  // popover's own outer border closes the list.
+  const tier = useTier()
+  const isPhone = Platform.OS !== 'web' && tier === 'phone'
   return (
     <SelectBase.Item
       className={cn(
-        'group relative flex w-full flex-row items-center gap-2 rounded-sm border-b border-b-border py-row-y-md pl-row-x-md pr-10 last:border-b-0 active:bg-bg-sunken',
+        'group relative flex w-full flex-row items-center gap-2 rounded-sm border-b border-b-border py-row-y-md pl-row-x-md pr-10 active:bg-bg-sunken',
+        isPhone
+          ? '-mx-4 min-h-control-lg w-auto pl-8 first:border-t first:border-t-border'
+          : 'last:border-b-0',
         Platform.select({
           web: 'cursor-default outline-none hover:bg-bg-sunken focus:bg-bg-sunken data-[disabled]:pointer-events-none [&_svg]:pointer-events-none',
         }),
@@ -434,6 +479,15 @@ export type SelectProps = {
    */
   sheetSize?: SelectSheetSize
   placeholder?: string
+  /**
+   * Field label. On phone (when `mode` resolves to `'dropdown'`),
+   * surfaces as the visible title at the top of the bottom Sheet —
+   * the Sheet is the entire editing context and any surrounding
+   * FormRow label isn't visible inside it. Optional; falls through
+   * to no title when omitted. Desktop / tablet popover doesn't
+   * render the label (the surrounding FormRow handles that).
+   */
+  label?: string
   disabled?: boolean
   className?: string
 }
@@ -558,6 +612,7 @@ function DropdownBranch({
   disabled,
   sheetSize,
   placeholder,
+  label,
   className,
 }: SelectProps) {
   const selected = options.find((o) => o.value === value)
@@ -574,7 +629,7 @@ function DropdownBranch({
       <Trigger className={className}>
         <Value placeholder={placeholder} />
       </Trigger>
-      <Content sheetSize={resolvedSheetSize}>
+      <Content sheetSize={resolvedSheetSize} label={label}>
         <Group>
           {options.map((opt) => (
             <Item key={opt.value} value={opt.value} label={opt.label} disabled={opt.disabled} />
