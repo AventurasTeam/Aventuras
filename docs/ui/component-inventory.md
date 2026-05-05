@@ -55,39 +55,32 @@ source per [components.md → Sourcing](./components.md#sourcing--react-native-r
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | VirtualList | Library choice — `react-window` vs `@tanstack/react-virtual` not picked. RN-Web compat untested. Tracked in [followups.md → Virtual-list library choice](../followups.md#virtual-list-library-choice). |
 
-## Generic compounds
+## Compounds
 
-Domain-agnostic peer compositions of primitives. Live in
-`components/compounds/` per
-[components.md → Directory layout](./components.md#directory-layout).
+Peer compositions of primitives. Domain-agnostic and
+multi-domain compounds live in `components/compounds/`;
+single-domain compounds live in `components/<domain>/`. Folder
+column distinguishes per-row. See
+[components.md → Directory layout](./components.md#directory-layout)
+for the rule.
 
-### Generic compounds — shipped
+### Compounds — shipped
 
-SwitchRow.
-
-### Generic compounds — build-ready
-
-| Compound | Spec                                                                               | Notes                                                                                                              |
-| -------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| FormRow  | [forms.md → Form rows](./patterns/forms.md#form-rows--stacked-on-narrow-container) | Container-keyed stacked-on-narrow wrapper around label + control + hint. Adopting consumers handles half the work. |
-
-## Compound app components
-
-Domain-shaped composites built from primitives. Directory placement
-follows [components.md → Directory layout](./components.md#directory-layout):
-single-domain compounds in `components/<domain>/`, cross-domain
-compounds in `components/app/`.
+| Compound  | Folder                  | Notes                                         |
+| --------- | ----------------------- | --------------------------------------------- |
+| SwitchRow | `components/compounds/` | Label + description + toggle, three-peer row. |
 
 ### Compounds — build-ready
 
-| Compound       | Folder               | Spec                                                                                       | Notes                                                                                                                                                   |
-| -------------- | -------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ListRow        | `components/app/`    | [entity.md](./patterns/entity.md)                                                          | Four indicator channels, kind-icon variants per surface, recently-classified accent. Pan-domain consumer.                                               |
-| KindIcon       | `components/entity/` | [iconography.md → Entity kind glyphs](./foundations/iconography.md#entity-kind-glyphs)     | 22×22 box, glyph from the canonical entity-kind table. Domain-coupled — was a primitive candidate, reclassified per the directory-layout decision rule. |
-| SaveBar        | `components/app/`    | [save-sessions.md → Save bar](./patterns/save-sessions.md#save-bar--the-visible-ui)        | Composition; pairs with the `useNavGuard` hook (lives in `hooks/`, not here).                                                                           |
-| CalendarPicker | `components/app/`    | [calendar-picker.md](./patterns/calendar-picker.md)                                        | Hosted in App Settings / Story Settings / Wizard. Spec covers all three host adaptations + swap warnings.                                               |
-| JSONViewer     | `components/app/`    | [data.md → Raw JSON viewer](./patterns/data.md#raw-json-viewer--shared-modal-pattern)      | Modal-shaped read-out.                                                                                                                                  |
-| Importer       | `components/app/`    | [data.md → Import counterparts](./patterns/data.md#import-counterparts--file-based--vault) | File picker + Vault picker.                                                                                                                             |
+| Compound       | Folder                  | Spec                                                                                       | Notes                                                                                                                                                           |
+| -------------- | ----------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FormRow        | `components/compounds/` | [forms.md → Form rows](./patterns/forms.md#form-rows--stacked-on-narrow-container)         | Container-keyed stacked-on-narrow wrapper around label + control + hint. Adopting consumers handles half the work.                                              |
+| ListRow        | `components/compounds/` | [entity.md](./patterns/entity.md)                                                          | Four indicator channels, kind-icon variants per surface, recently-classified accent. Pan-domain consumer.                                                       |
+| KindIcon       | `components/entity/`    | [iconography.md → Entity kind glyphs](./foundations/iconography.md#entity-kind-glyphs)     | 22×22 box, glyph from the canonical entity-kind table. Single-domain (entity) — was a primitive candidate, reclassified per the directory-layout decision rule. |
+| SaveBar        | `components/compounds/` | [save-sessions.md → Save bar](./patterns/save-sessions.md#save-bar--the-visible-ui)        | Composition; pairs with the `useNavGuard` hook (lives in `hooks/`, not here).                                                                                   |
+| CalendarPicker | `components/compounds/` | [calendar-picker.md](./patterns/calendar-picker.md)                                        | Hosted in App Settings / Story Settings / Wizard. Spec covers all three host adaptations + swap warnings.                                                       |
+| JSONViewer     | `components/compounds/` | [data.md → Raw JSON viewer](./patterns/data.md#raw-json-viewer--shared-modal-pattern)      | Modal-shaped read-out.                                                                                                                                          |
+| Importer       | `components/compounds/` | [data.md → Import counterparts](./patterns/data.md#import-counterparts--file-based--vault) | File picker + Vault picker.                                                                                                                                     |
 
 ### Compounds — needs design
 

@@ -30,6 +30,11 @@ vars, no BaaS.
 ├── app/                   Expo Router routes
 ├── electron/              Electron main + IPC
 ├── components/            Shared UI (RN + RN Web)
+│   ├── ui/                Primitives (single semantic role)
+│   ├── compounds/         Compounds — peer compositions of primitives
+│   ├── <domain>/          Domain compounds (entity, story, reader, ...)
+│   ├── shells/            Layout shells (top-level screen routes)
+│   └── foundations/       Storybook-only docs surfaces
 ├── lib/ hooks/ types/ constants/
 ├── assets/                Static assets bundled with the app
 ├── docs/                  Project documentation
@@ -40,6 +45,11 @@ vars, no BaaS.
 ├── .github/               CI / actions
 └── .storybook/            Storybook config
 ```
+
+Component-folder taxonomy + decision rule:
+[`components/README.md`](./components/README.md) (quick reference)
+and [`docs/ui/components.md → Directory layout`](./docs/ui/components.md#directory-layout)
+(canonical).
 
 ## Stack at a glance
 
