@@ -41,7 +41,7 @@ single branch. Three concrete polish items surfaced:
   The button placement and gesture model don't paint mobile into
   a corner.
 - **Library choice for virtualization stays parked** in
-  [`followups.md → Virtual-list library choice`](../followups.md#virtual-list-library-choice).
+  [`followups.md → Virtual-list library choice`](../followups.md#reader-narrative-scroll-anchoring-on-prepend).
   This design adds the reader narrative as another use case and
   flags variable-height + scroll-anchoring as new constraints,
   but doesn't pick a library.
@@ -320,7 +320,7 @@ is cited as a v1 use case. The full reader-specific behavior
   this because they manipulate `scrollTop` programmatically.
   Library choice MUST verify scroll-anchoring is preserved.
   Captured as an implementation note above; flagged for the
-  [Virtual-list library choice followup](../followups.md#virtual-list-library-choice).
+  [Virtual-list library choice followup](../followups.md#reader-narrative-scroll-anchoring-on-prepend).
 - **Auto-load distance tuning.** "~one viewport-height" is a
   starting heuristic for the trigger threshold. Too early =
   wasted fetches if user reverses; too late = visible
@@ -370,7 +370,7 @@ is cited as a v1 use case. The full reader-specific behavior
 None blocking the integration. Implementation-time concerns:
 
 - **Library choice** — updates the existing
-  [Virtual-list library choice followup](../followups.md#virtual-list-library-choice)
+  [Virtual-list library choice followup](../followups.md#reader-narrative-scroll-anchoring-on-prepend)
   with reader narrative as another use case (variable-height,
   scroll-anchoring requirements).
 - **Tolerance + chunk + auto-load-distance tuning** —

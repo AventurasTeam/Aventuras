@@ -412,7 +412,7 @@ session 3 doesn't classify the rail as a primitive. Acceptable.
 - **Sheet library choice for RN implementation.** Bundles with
   session 7's per-screen implementation; not a foundations
   decision. Existing followup
-  [`virtual-list library choice`](../followups.md#virtual-list-library-choice)
+  [`virtual-list library choice`](../followups.md#reader-narrative-scroll-anchoring-on-prepend)
   is a precedent for "library choice happens at first
   implementation." Adopt the same pattern.
 - **Sheet drag dismissal threshold per platform.** iOS and Android

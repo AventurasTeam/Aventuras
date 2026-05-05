@@ -355,9 +355,10 @@ Highlights:
   native (Viewport is a Fragment); reshape wraps it in
   `<ScrollView>` with viewport-fraction max-height. Web inherits
   baseline `max-h-52` + ScrollUpButton / ScrollDownButton.
-- **Virtualization stays deferred** to Autocomplete's
-  implementation pass per the
-  [virtual-list followup](../../followups.md#virtual-list-library-choice).
+- **Virtualization** lives inside Autocomplete via
+  `@tanstack/react-virtual` (web) + `FlatList` (native phone
+  Sheet). The dropdown stays virtualized regardless of source-list
+  size.
 
 ---
 

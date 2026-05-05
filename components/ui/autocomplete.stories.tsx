@@ -276,6 +276,41 @@ export const ThemeMatrix: Story = {
   ),
 }
 
+/**
+ * Virtualization smoke test — 1000-row source list renders only
+ * the visible window. With `min-h-control-md` ≈ 40 px and a
+ * `max-h-72` (288 px) popover, ~7–8 rows are visible at any time;
+ * the rest stay unmounted until scrolled into view. Filter still
+ * narrows correctly mid-list. If virtualization regresses to a
+ * full mount, this story will visibly bog down on render.
+ */
+export const VirtualizedManyRows: Story = {
+  render: () => {
+    const MANY = React.useMemo(
+      () => Array.from({ length: 1000 }, (_, i) => `Entry ${String(i + 1).padStart(4, '0')}`),
+      [],
+    )
+    return <ControlledAutocomplete sourceList={MANY} placeholder="1000 entries…" />
+  },
+  play: async ({ canvas }) => {
+    const input = await canvas.findByPlaceholderText('1000 entries…')
+    await userEvent.click(input)
+    // First entry should be in the rendered window on focus.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Entry 0001' })).toBeInTheDocument()
+    })
+    // Far-off entry must NOT be in the DOM yet — the whole point
+    // of virtualization is that it isn't mounted.
+    expect(screen.queryByRole('button', { name: 'Entry 0500' })).not.toBeInTheDocument()
+    // Type a unique substring that matches one row deep in the
+    // list — filter result is small, that row should now render.
+    await userEvent.type(input, '0500')
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Entry 0500' })).toBeInTheDocument()
+    })
+  },
+}
+
 export const DisabledNoDropdown: Story = {
   render: () => (
     <ControlledAutocomplete

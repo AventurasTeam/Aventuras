@@ -1,9 +1,11 @@
+import { Portal } from '@rn-primitives/portal'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { X } from 'lucide-react-native'
 import * as React from 'react'
 import {
+  FlatList,
   Platform,
   Pressable,
-  ScrollView,
   View,
   type NativeSyntheticEvent,
   type TextInputKeyPressEventData,
@@ -18,7 +20,6 @@ import { Text } from '@/components/ui/text'
 import { useKeyboardHeight } from '@/hooks/use-keyboard-height'
 import { useTier } from '@/hooks/use-tier'
 import { cn } from '@/lib/utils'
-import { Portal } from '@rn-primitives/portal'
 
 type AutocompleteProps = {
   /** Current text in the input. Controlled. */
@@ -269,6 +270,124 @@ function SuggestionList({
   )
 }
 
+type VirtualSuggestionListWebProps = {
+  suggestions: string[]
+  showTail: boolean
+  trimmed: string
+  highlightedIndex: number
+  onPickSuggestion: (s: string) => void
+  onPickTail: (typed: string) => void
+  createTailLabel: (typed: string) => string
+  style?: React.CSSProperties
+  className?: string
+}
+
+// Web-only virtualized variant of SuggestionList. Uses
+// `@tanstack/react-virtual` against a raw `<div>` scroll container
+// (RN-Web's `View` resolves to a div, but the virtualizer's
+// `getScrollElement` wants a real HTMLElement with measurable
+// `getBoundingClientRect`/`scrollTop` — keeping the wrapper as a
+// raw div avoids any RN-Web abstraction noise). Estimated row
+// height tracks `min-h-control-md` (40 px regular density);
+// `measureElement` refines once the row mounts, so longer
+// labels that wrap don't desync the viewport.
+function VirtualSuggestionListWeb({
+  suggestions,
+  showTail,
+  trimmed,
+  highlightedIndex,
+  onPickSuggestion,
+  onPickTail,
+  createTailLabel,
+  className,
+  style,
+}: VirtualSuggestionListWebProps) {
+  const parentRef = React.useRef<HTMLDivElement>(null)
+  const totalItems = suggestions.length + (showTail ? 1 : 0)
+
+  const virtualizer = useVirtualizer({
+    count: totalItems,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 40,
+    overscan: 8,
+  })
+
+  // Keep the keyboard-highlighted row inside the viewport while the
+  // user arrows through long lists. `align: 'auto'` only scrolls
+  // when the row is out of view, so it doesn't yank the viewport
+  // when the highlight is already visible.
+  React.useEffect(() => {
+    if (highlightedIndex >= 0 && highlightedIndex < totalItems) {
+      virtualizer.scrollToIndex(highlightedIndex, { align: 'auto' })
+    }
+  }, [highlightedIndex, totalItems, virtualizer])
+
+  const items = virtualizer.getVirtualItems()
+
+  return (
+    <div ref={parentRef} className={className} style={style}>
+      <div
+        style={{
+          height: virtualizer.getTotalSize(),
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {items.map((virtualRow) => {
+          const idx = virtualRow.index
+          const isTail = idx === suggestions.length
+          const isLastSuggestion = idx === suggestions.length - 1
+          const label = isTail ? createTailLabel(trimmed) : suggestions[idx]!
+          return (
+            <div
+              key={virtualRow.key}
+              ref={virtualizer.measureElement}
+              data-index={idx}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                // `display: flex` so the inner Pressable inherits
+                // `align-items: stretch` and spans the full popover
+                // width — without it the Pressable sits at content
+                // width and the row's press-tint + divider end at
+                // the text edge instead of running edge-to-edge.
+                display: 'flex',
+                flexDirection: 'column',
+                transform: `translateY(${virtualRow.start}px)`,
+              }}
+            >
+              <Pressable
+                onPress={() => (isTail ? onPickTail(trimmed) : onPickSuggestion(suggestions[idx]!))}
+                className={cn(
+                  ROW_BASE,
+                  'min-h-control-md px-row-x-md py-row-y-md',
+                  // Suggestion rows: hairline divider beneath each
+                  // except the last suggestion when no tail follows.
+                  !isTail && !(isLastSuggestion && !showTail) && 'border-b border-border',
+                  // Tail row gets a stronger top divider when there
+                  // are suggestions above it.
+                  isTail && suggestions.length > 0 && 'border-t border-border-strong',
+                  highlightedIndex === idx && 'bg-tint-hover',
+                  'hover:bg-tint-hover',
+                )}
+                accessibilityRole="button"
+                aria-label={label}
+                aria-selected={highlightedIndex === idx}
+              >
+                <Text className={cn('text-sm', isTail ? 'text-fg-secondary' : 'text-fg-primary')}>
+                  {label}
+                </Text>
+              </Pressable>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 type InlineProps = AutocompleteProps & { tailLabel: (typed: string) => string }
 
 function AutocompleteInline({
@@ -464,17 +583,31 @@ function AutocompleteInline({
         // the chrome + items. Same pattern Select uses via Radix
         // portal — this is the rn-primitives equivalent.
         <Portal name={portalName}>
-          <SuggestionList
-            suggestions={suggestions}
-            showTail={showTail}
-            trimmed={trimmed}
-            highlightedIndex={highlightedIndex}
-            onPickSuggestion={commitValue}
-            onPickTail={commitValue}
-            createTailLabel={tailLabel}
-            className={popoverChromeClasses}
-            style={popoverStyle}
-          />
+          {Platform.OS === 'web' ? (
+            <VirtualSuggestionListWeb
+              suggestions={suggestions}
+              showTail={showTail}
+              trimmed={trimmed}
+              highlightedIndex={highlightedIndex}
+              onPickSuggestion={commitValue}
+              onPickTail={commitValue}
+              createTailLabel={tailLabel}
+              className={popoverChromeClasses}
+              style={popoverStyle as React.CSSProperties}
+            />
+          ) : (
+            <SuggestionList
+              suggestions={suggestions}
+              showTail={showTail}
+              trimmed={trimmed}
+              highlightedIndex={highlightedIndex}
+              onPickSuggestion={commitValue}
+              onPickTail={commitValue}
+              createTailLabel={tailLabel}
+              className={popoverChromeClasses}
+              style={popoverStyle}
+            />
+          )}
         </Portal>
       )}
     </View>
@@ -584,36 +717,53 @@ function AutocompleteSheet({
             }
             className="mb-3"
           />
-          <ScrollView
+          {/* FlatList virtualizes natively — only visible rows
+              mount, so a 1000-entry source picks doesn't pay
+              render cost for unscrolled items. Tail-create lives
+              in `ListFooterComponent` so it scrolls with the list
+              (consistent with the prior ScrollView shape) and
+              stays accessible above the keyboard via the same
+              `paddingBottom: keyboardHeight` mechanism. Web
+              equivalent uses `@tanstack/react-virtual` —
+              `VirtualSuggestionListWeb` above. */}
+          <FlatList
+            data={suggestions}
+            keyExtractor={(s) => s}
             className="-mx-6"
             style={{ flex: 1 }}
-            // `paddingBottom: keyboardHeight` extends the scrollable
-            // content past the keyboard's footprint so the last
-            // suggestion row + tail-create Button can be scrolled
-            // above the keyboard rather than being covered by it.
-            // The hook returns 0 on web + when keyboard is hidden,
-            // so this is a no-op in those states.
             contentContainerStyle={{ paddingBottom: keyboardHeight }}
             keyboardShouldPersistTaps="handled"
-          >
-            <SuggestionList
-              suggestions={suggestions}
-              showTail={false}
-              trimmed={trimmed}
-              highlightedIndex={-1}
-              onPickSuggestion={commitValue}
-              onPickTail={commitValue}
-              createTailLabel={tailLabel}
-              variant="sheet"
-            />
-            {showTail && (
-              <View className="mx-6 mt-3">
-                <Button variant="secondary" onPress={() => commitValue(trimmed)} className="w-full">
-                  <Text>{tailLabel(trimmed)}</Text>
-                </Button>
-              </View>
+            ListHeaderComponent={
+              suggestions.length > 0 ? <View className="mx-3 h-px bg-border" /> : null
+            }
+            ItemSeparatorComponent={() => <View className="mx-3 h-px bg-border" />}
+            ListFooterComponent={
+              <>
+                {suggestions.length > 0 && <View className="mx-3 h-px bg-border" />}
+                {showTail && (
+                  <View className="mx-6 mt-3">
+                    <Button
+                      variant="secondary"
+                      onPress={() => commitValue(trimmed)}
+                      className="w-full"
+                    >
+                      <Text>{tailLabel(trimmed)}</Text>
+                    </Button>
+                  </View>
+                )}
+              </>
+            }
+            renderItem={({ item }) => (
+              <Pressable
+                onPress={() => commitValue(item)}
+                className={cn(ROW_BASE, 'min-h-control-lg px-9 py-row-y-md')}
+                accessibilityRole="button"
+                aria-label={item}
+              >
+                <Text className="text-sm text-fg-primary">{item}</Text>
+              </Pressable>
             )}
-          </ScrollView>
+          />
         </SheetContent>
       </Sheet>
     </View>

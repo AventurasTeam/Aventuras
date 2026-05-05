@@ -90,15 +90,17 @@ virtualization only if their own scale demands it.
 
 ### Library choice
 
-Deferred to component implementation — `react-window` and
-`@tanstack/react-virtual` are both mature options; React Native Web
-compatibility needs verification. The reader narrative adds
-**variable-height entries** (reasoning-body expansion toggles row
-height) and **scroll-anchoring on above-viewport mutations** as
-hard constraints — the chosen library must preserve native
-scroll-anchoring when content is inserted above the viewport, or the
-auto-load behavior visibly jumps. Tracked in
-[`followups.md`](../../followups.md#virtual-list-library-choice).
+Resolved: **`@tanstack/react-virtual`** on web (validated inside
+Autocomplete's portaled popover via Electron's RN-Web build) +
+**`FlatList`** on native. Variable-height rows are handled by
+`measureElement` on web and FlatList's native layout pass. The
+**scroll-anchoring on above-viewport mutations** constraint that
+the reader narrative needs (auto-load-older + reasoning-body
+expansion) is a separate problem — `@tanstack/react-virtual` does
+not preserve native browser scroll-anchoring on prepend out of the
+box, and the recipe to keep the viewport stable lands when reader
+narrative is built. Tracked in
+[`followups.md`](../../followups.md#reader-narrative-scroll-anchoring-on-prepend).
 
 ---
 

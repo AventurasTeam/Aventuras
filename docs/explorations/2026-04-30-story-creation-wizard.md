@@ -503,7 +503,7 @@ category). 80%+ of users skip the disclosure.
 **Long scroll.** No pagination chrome on the lore list — typical
 wizard counts are 0–5 rows; scroll handles the edge case (20+).
 Virtualization, if it bites, lands via the existing
-[virtual-list followup](../followups.md#virtual-list-library-choice).
+[virtual-list followup](../followups.md#reader-narrative-scroll-anchoring-on-prepend).
 
 **Validation:** any lore rows present must have `title` + `body`
 non-empty (per

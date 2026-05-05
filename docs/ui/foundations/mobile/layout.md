@@ -293,5 +293,4 @@ Bundles with later sessions:
   resistance feel) — session 5 (touch grammar).
 - **Sheet library choice** for RN implementation
   (`@gorhom/bottom-sheet` vs alternatives) — bundles with session
-  7's first per-screen retrofit that needs a Sheet, same pattern
-  as the virtual-list library decision.
+  7's first per-screen retrofit that needs a Sheet.

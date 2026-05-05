@@ -302,9 +302,10 @@ Defaults sensible (`keyword_llm`, priority `0`, no tags / category).
 80%+ skip the disclosure.
 
 **Long scroll** — no pagination chrome on the lore list, per the
-[lists pattern](../../patterns/lists.md). Virtualization, if it
-bites at high counts, lands via the existing
-[virtual-list followup](../../../followups.md#virtual-list-library-choice).
+[lists pattern](../../patterns/lists.md). Virtualization library
+is settled (`@tanstack/react-virtual` on web, FlatList on native);
+if the lore list is long enough that render cost bites, drop in
+the same engine Autocomplete uses.
 
 ### Validation gates on `Next`
 

@@ -47,9 +47,15 @@ source per [components.md → Sourcing](./components.md#sourcing--react-native-r
 
 ### Primitives — deferred
 
-| Primitive   | Blocker                                                                                                                                                                                                |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| VirtualList | Library choice — `react-window` vs `@tanstack/react-virtual` not picked. RN-Web compat untested. Tracked in [followups.md → Virtual-list library choice](../followups.md#virtual-list-library-choice). |
+_Empty — no primitives currently blocked on a design decision._
+
+Virtualization library choice is resolved (`@tanstack/react-virtual`
+on web, `FlatList` on native) and validated inside Autocomplete's
+suggestion list. A standalone `VirtualList` primitive isn't built:
+the second consumer with materially different requirements
+(reader narrative, with scroll-anchoring on above-viewport
+mutations) will inform whether one shared primitive makes sense or
+whether `NarrativeStream` should own its own virtualized shape.
 
 ## Compounds
 

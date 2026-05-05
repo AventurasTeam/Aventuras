@@ -156,7 +156,7 @@ reusables baseline's `max-h-52 overflow-y-auto` + ScrollUpButton /
 ScrollDownButton — no work needed.
 
 Virtualization is the
-[virtual-list followup](../followups.md#virtual-list-library-choice).
+[virtual-list followup](../followups.md#reader-narrative-scroll-anchoring-on-prepend).
 Group B doesn't trigger it: Select's "if your list outgrows Sheet
 (medium), switch to Autocomplete" rule keeps option counts in
 ScrollView-friendly territory. Autocomplete's larger lists (200+

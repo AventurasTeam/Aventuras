@@ -49,7 +49,7 @@ Sheet / Popover pair from Group A.
 
 This is the most complex single primitive in phase 2 — keyboard
 nav, focus trap, scroll behavior, virtualization for long lists
-([virtual-list library choice](../followups.md#virtual-list-library-choice)
+([virtual-list library choice](../followups.md#reader-narrative-scroll-anchoring-on-prepend)
 becomes ripe here), accent / focus-ring styling, accessible-name /
 value coupling. Lands as one focused phase 2 pass.
 
@@ -222,7 +222,7 @@ Worth surfacing here so they're not discovered mid-implementation:
    primitive with a mode prop, or two siblings? Calendar picker is
    the next consumer — its shape decision feeds back into this.
 4. **Native virtualization library choice.** Per
-   [`followups.md → Virtual-list library choice`](../followups.md#virtual-list-library-choice).
+   [`followups.md → Virtual-list library choice`](../followups.md#reader-narrative-scroll-anchoring-on-prepend).
    Becomes load-bearing during Select implementation (long lists +
    measured rows + scroll-anchoring). Decide before Group B starts.
 5. **Cross-platform spinner shape.** Phase 1 uses RN's

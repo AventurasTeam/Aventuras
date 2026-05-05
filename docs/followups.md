@@ -228,30 +228,28 @@ Open questions for the design pass:
 Lands when classification awareness becomes the focus of its own
 design pass; not subsidiary to any single surface.
 
-### Virtual-list library choice
+### Reader narrative scroll-anchoring on prepend
 
-`react-window` vs `@tanstack/react-virtual` — both mature, both
-solve the same problem. Decision blocked on:
+Library choice resolved on 2026-05-06:
+**`@tanstack/react-virtual`** on web (validated inside
+Autocomplete's portaled popover via Electron's RN-Web build) +
+**`FlatList`** on native. Variable-height rows handled by
+`measureElement` on web and FlatList's native layout on phone.
 
-- React Native Web compatibility verification (we render to RN-Web
-  for desktop via Electron; library must work there).
-- Per-row height handling: uniform vs computed-per-row vs measured.
-  Model rows are uniform; history rows might vary slightly. The
-  [reader narrative scroll model](./ui/screens/reader-composer/reader-composer.md#scroll-behavior)
-  forces **measured** — entries are variable length and reasoning-
-  body expansion toggles row height post-mount.
-- **Scroll-anchoring on above-viewport mutations.** The reader's
-  auto-load-older + reasoning-expansion behaviors require the
-  library to preserve native scroll-anchoring when content is
-  inserted above the viewport. Libraries that manipulate
-  `scrollTop` programmatically and break native anchoring are
-  disqualified.
-- Bundle size and tree-shaking story.
+What **isn't** resolved: when the reader narrative auto-loads older
+entries (insertion above the viewport) or when a reasoning body
+expands above the current scroll, the user's apparent scroll
+position must stay anchored — content above the fold can shift, but
+what's in front of the user must not jump.
+`@tanstack/react-virtual` does not preserve native browser
+scroll-anchoring across prepend out of the box; community recipes
+(measure prepended block, add equivalent top padding, scroll by
+the same delta, then drop the padding) work but need careful
+glue. FlatList's `maintainVisibleContentPosition` covers the
+native side. Lands when reader-composer is built and a real
+prepend stream exists to validate against.
 
-Lands when the first virtualized component is implemented. v1
-surfaces that pull on this: the model picker dropdown, App
-Settings · Profiles model list, **and the reader narrative**
-(per [`reader-composer.md → Scroll behavior`](./ui/screens/reader-composer/reader-composer.md#scroll-behavior)).
+Reference: [reader narrative scroll model](./ui/screens/reader-composer/reader-composer.md#scroll-behavior).
 
 ### Calendar picker primitive — open shape decisions
 
