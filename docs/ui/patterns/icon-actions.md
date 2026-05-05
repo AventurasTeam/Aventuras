@@ -31,27 +31,59 @@ Used by:
 Future row-shaped surfaces with per-row actions follow the same
 pattern.
 
-## Visibility — always rendered, muted default, brighten on hover
+## Visibility — always rendered, color-tiered, brighten on hover
 
 - **Always rendered**, not hover-to-reveal. Findability is
   preserved regardless of input device or accessibility tooling.
-- **Muted default opacity** (~0.35–0.40). Icons are present but
+- **Receded default color** — icons render in `text-fg-secondary`
+  (a softer color slot than the row's primary text). Visible but
   visually receded so they don't compete with the row's primary
   content.
-- **Brighten to full opacity** on row hover/focus (desktop), with
-  a quick transition (~120ms). Hovering an individual icon
-  additionally surfaces its own affordance (background tint;
-  destructive icons may shift color too).
+- **Brighten to `text-fg-primary`** on row hover/focus (desktop)
+  via `group-hover:` / `group-focus-visible:`, with a quick
+  transition (~120ms). Hovering an individual icon additionally
+  surfaces its own affordance (`bg-tint-hover` background;
+  destructive icons shift to `text-danger`).
 - **Same affordance on desktop and mobile.** Touch has no hover
-  state, so mobile sits at the muted default; taps trigger
+  state, so mobile sits at the receded color; taps trigger
   normally. The brightening is a desktop confirmation cue, not a
   load-bearing affordance — touch users can still see and tap the
-  icons at muted opacity.
+  icons at the receded color.
 
 The alternative — hover-reveal on desktop, persistent on mobile —
 was considered and rejected. Inconsistent cross-device behavior
 costs more than the small visual weight saved by hiding muted
 icons on desktop.
+
+### Why color tiers, not opacity tiers
+
+An earlier draft of this pattern specified opacity-based muting
+(~0.35–0.40 default, 1.0 on hover). Two problems surfaced when
+the IconAction primitive was implemented and reviewed:
+
+1. **NativeWind opacity isn't hover-composable.** Opacity is
+   extracted to a style prop via `cssInterop` rather than emitted
+   as a CSS class, so `hover:opacity-100` and
+   `group-hover:opacity-100` never fire through CSS-driven hover
+   state. Background-color hover modifiers work because `bg-*`
+   stays a regular class with a `:hover` selector; opacity does
+   not. Routing opacity through JS-tracked hover state via
+   `Pressable.onHoverIn` is possible but adds rendering churn for
+   a purely visual cue.
+2. **Opacity-muted-active and color-muted-disabled collide
+   visually.** `text-fg-primary` rendered at 40% opacity reads as
+   roughly the same midpoint grey as `text-fg-muted` at 100%
+   opacity, so a disabled-vs-enabled side-by-side comparison
+   looks identical when one uses opacity and the other uses
+   color. The two muting axes cancel.
+
+Color-tiered muting (three slots: `--fg-primary` /
+`--fg-secondary` / `--fg-muted`) sidesteps both problems. Tiers
+compose cleanly with `:hover` / `:group-hover` modifiers, give a
+genuine three-step visual hierarchy, and degrade gracefully on
+touch where hover is absent — disabled remains visibly different
+from enabled because the color slot differs, not because the
+hover state can't fire.
 
 ## Glyph vocabulary
 

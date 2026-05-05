@@ -27,6 +27,12 @@ export type DensityTokens = {
   '--row-px-sm': string
   '--row-px-md': string
   '--row-px-lg': string
+  // Square icon-button heights — IconAction and future row-action
+  // icon buttons. Smaller than --control-h-* since row-nestled
+  // icons want a compact footprint.
+  '--icon-action-h-sm': string
+  '--icon-action-h-md': string
+  '--icon-action-h-lg': string
 }
 
 export const DENSITY_TOKEN_KEYS = [
@@ -42,6 +48,9 @@ export const DENSITY_TOKEN_KEYS = [
   '--row-px-sm',
   '--row-px-md',
   '--row-px-lg',
+  '--icon-action-h-sm',
+  '--icon-action-h-md',
+  '--icon-action-h-lg',
 ] as const satisfies readonly (keyof DensityTokens)[]
 
 export const DENSITY_VALUES = [

@@ -1,4 +1,4 @@
-import { View } from 'react-native'
+import { ScrollView } from 'react-native'
 import { Link } from 'expo-router'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
@@ -14,6 +14,7 @@ const ROUTES = [
   { href: '/dev/input', label: 'Input + Textarea' },
   { href: '/dev/choice', label: 'Switch + Checkbox' },
   { href: '/dev/visual', label: 'Icon + Avatar' },
+  { href: '/dev/icon-action', label: 'IconAction' },
   { href: '/dev/loading', label: 'Spinner + Skeleton' },
   { href: '/dev/tabs', label: 'Tabs' },
   { href: '/dev/chip-tag', label: 'Chip + Tag' },
@@ -24,7 +25,7 @@ const ROUTES = [
 
 export default function DevIndex() {
   return (
-    <View className="flex-1 gap-2 bg-bg-base p-4">
+    <ScrollView className="flex-1 bg-bg-base" contentContainerClassName="gap-2 p-4">
       <Text size="lg">Dev surfaces</Text>
       {ROUTES.map((r) => (
         <Link key={r.href} href={r.href} asChild>
@@ -33,6 +34,6 @@ export default function DevIndex() {
           </Button>
         </Link>
       ))}
-    </View>
+    </ScrollView>
   )
 }

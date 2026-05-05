@@ -30,17 +30,16 @@ Generic, single-purpose, reusable. Live in `components/ui/`.
 ### Primitives — shipped
 
 Accordion, AlertDialog, Avatar, Button, Checkbox, Chip, Heading,
-Icon, Input, Popover, Select, Sheet, Skeleton, Spinner, Switch,
-SwitchVisual, Tabs, Tag, Textarea, Text, Toast. Plus the
+Icon, IconAction, Input, Popover, Select, Sheet, Skeleton, Spinner,
+Switch, SwitchVisual, Tabs, Tag, Textarea, Text, Toast. Plus the
 `NativeOnlyAnimatedView` utility wrapper.
 
 ### Primitives — build-ready
 
-| Primitive    | Spec                                                                                                    | Notes                                                                    |
-| ------------ | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Autocomplete | [forms.md → Autocomplete-with-create primitive](./patterns/forms.md#autocomplete-with-create-primitive) | Primary v1 consumer: tag inputs on stories + entities.                   |
-| EmptyState   | [lists.md → Empty list / table state](./patterns/lists.md#empty-list--table-state)                      | Centered placeholder; title + sub-text contract per kind.                |
-| IconAction   | [icon-actions.md](./patterns/icon-actions.md)                                                           | Always-visible-muted, hover-brightens. Used on every row-shaped surface. |
+| Primitive    | Spec                                                                                                    | Notes                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Autocomplete | [forms.md → Autocomplete-with-create primitive](./patterns/forms.md#autocomplete-with-create-primitive) | Primary v1 consumer: tag inputs on stories + entities.    |
+| EmptyState   | [lists.md → Empty list / table state](./patterns/lists.md#empty-list--table-state)                      | Centered placeholder; title + sub-text contract per kind. |
 
 ### Primitives — needs design
 

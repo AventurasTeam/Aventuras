@@ -19,6 +19,9 @@ export const densityTokens: Record<DensityValue, DensityTokens> = {
     '--row-px-sm': '8px',
     '--row-px-md': '8px',
     '--row-px-lg': '12px',
+    '--icon-action-h-sm': '22px',
+    '--icon-action-h-md': '24px',
+    '--icon-action-h-lg': '28px',
   },
   regular: {
     '--control-h-xs': '36px',
@@ -33,6 +36,9 @@ export const densityTokens: Record<DensityValue, DensityTokens> = {
     '--row-px-sm': '10px',
     '--row-px-md': '12px',
     '--row-px-lg': '16px',
+    '--icon-action-h-sm': '24px',
+    '--icon-action-h-md': '28px',
+    '--icon-action-h-lg': '32px',
   },
   comfortable: {
     '--control-h-xs': '40px',
@@ -47,5 +53,8 @@ export const densityTokens: Record<DensityValue, DensityTokens> = {
     '--row-px-sm': '12px',
     '--row-px-md': '16px',
     '--row-px-lg': '20px',
+    '--icon-action-h-sm': '28px',
+    '--icon-action-h-md': '32px',
+    '--icon-action-h-lg': '36px',
   },
 }

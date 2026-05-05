@@ -90,6 +90,9 @@ module.exports = {
         'control-sm': 'var(--control-h-sm)',
         'control-md': 'var(--control-h-md)',
         'control-lg': 'var(--control-h-lg)',
+        'icon-action-sm': 'var(--icon-action-h-sm)',
+        'icon-action-md': 'var(--icon-action-h-md)',
+        'icon-action-lg': 'var(--icon-action-h-lg)',
       },
       // Mirror as widths for square (icon-button-shaped) controls.
       width: {
@@ -97,6 +100,9 @@ module.exports = {
         'control-sm': 'var(--control-h-sm)',
         'control-md': 'var(--control-h-md)',
         'control-lg': 'var(--control-h-lg)',
+        'icon-action-sm': 'var(--icon-action-h-sm)',
+        'icon-action-md': 'var(--icon-action-h-md)',
+        'icon-action-lg': 'var(--icon-action-h-lg)',
       },
       padding: {
         'row-y-xs': 'var(--row-py-xs)',

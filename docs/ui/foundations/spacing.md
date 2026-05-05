@@ -51,6 +51,22 @@ Button, Input — anything where a tap-target SLA matters):
 | `--control-h-md` | 40 px   | 44 px   | 48 px       | default form controls |
 | `--control-h-lg` | 44 px   | 48 px   | 56 px       | hero CTAs             |
 
+**Square icon-button tokens** for `IconAction` and any future
+row-action icon buttons. Sized smaller than `--control-h-*`
+because row-nestled icons want a compact footprint that doesn't
+dominate the row's primary content:
+
+| Token                | compact | regular | comfortable | Use                                       |
+| -------------------- | ------- | ------- | ----------- | ----------------------------------------- |
+| `--icon-action-h-sm` | 22 px   | 24 px   | 28 px       | tight icon-action buttons (16 px icon)    |
+| `--icon-action-h-md` | 24 px   | 28 px   | 32 px       | default icon-action buttons (20 px icon)  |
+| `--icon-action-h-lg` | 28 px   | 32 px   | 36 px       | emphasis icon-action buttons (24 px icon) |
+
+Mirrored as widths so the buttons render square; consumed via
+`h-icon-action-md w-icon-action-md` in NativeWind. Hit targets on
+mobile rely on `hitSlop` (set in IconAction itself) to reach
+44 px without growing the visual footprint.
+
 **Padding-driven tokens** for rows (list rows, item rows, where
 content varies and row height emerges from content + padding):
 
