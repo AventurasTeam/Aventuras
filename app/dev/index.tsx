@@ -18,6 +18,7 @@ const ROUTES = [
   { href: '/dev/empty-state', label: 'EmptyState' },
   { href: '/dev/autocomplete', label: 'Autocomplete' },
   { href: '/dev/form-row', label: 'FormRow' },
+  { href: '/dev/entity-kind-icon', label: 'EntityKindIcon' },
   { href: '/dev/loading', label: 'Spinner + Skeleton' },
   { href: '/dev/tabs', label: 'Tabs' },
   { href: '/dev/chip-tag', label: 'Chip + Tag' },
