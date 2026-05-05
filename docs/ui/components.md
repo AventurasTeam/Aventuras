@@ -7,6 +7,30 @@ and architecture rules) and [`patterns/`](./patterns/README.md)
 build** rules — sourcing, story conventions, anything else that
 applies across every primitive and pattern shipped to Storybook.
 
+## Directory layout
+
+Components fan out across four buckets under `components/`. Layer
+determines folder; folder determines Storybook `title:` prefix.
+
+| Bucket                 | Folder                  | Storybook `title:`          | What lives here                                                                                                                                                                                                 |
+| ---------------------- | ----------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Primitives             | `components/ui/`        | `Primitives/<Name>`         | Single semantic role, generic, domain-agnostic. May internally compose sub-parts via slots / `asChild` / adornments, but exposes itself as one unit. Examples: Button, Input, Sheet, AlertDialog, Select, Tabs. |
+| Generic compounds      | `components/compounds/` | `Compounds/<Name>`          | Stable arrangement of **peer** primitives, each carrying its own semantic role. Domain-agnostic. Examples: SwitchRow, FormRow.                                                                                  |
+| Domain compounds       | `components/<domain>/`  | `Compounds/<Domain>/<Name>` | Generic-compound shape + domain vocabulary (entity kinds, branch shape, story fields, delta-log ops, etc.). Mirrors `docs/ui/screens/` granularity. Examples: KindIcon (entity), EntryCard (reader).            |
+| Cross-domain compounds | `components/app/`       | `Compounds/<Name>`          | Composites used across two or more domains with no single owning domain. Examples: ListRow, Toolbar, SaveBar, JSONViewer, Importer.                                                                             |
+| Shells                 | `components/shells/`    | `Shells/<Name>`             | Top-level layout primitives that compose a screen route. Examples: MasterDetailLayout, ScreenShell, ListPane, DetailPane.                                                                                       |
+
+Decision rule when classifying a new component:
+
+1. **Single semantic role, exposed as one unit?** → primitive (`components/ui/`), even when it internally composes sub-parts via slots / `asChild` / adornments. Heuristic: the public API is one component name; sub-parts (Title, Description, Trigger, Content, leading / trailing) are implementation, not the contract.
+2. **Peer composition of multiple primitives, each carrying its own semantic role?** → compound. Heuristic: callers reason about each peer independently (e.g. SwitchRow's label + description text + the toggle are three peers; AlertDialog's Title + Action are sub-parts of one consent gate).
+3. **Compound only — does it know any domain vocabulary** (entity kinds, branch shape, story fields, delta-log ops, etc.)? No → generic compound (`components/compounds/`). Single domain → `components/<domain>/`. Two or more domains with no single owner → `components/app/`.
+4. **Does it shape a whole screen route** (header + body + footer envelope, master/detail split, list-pane container)? → shell (`components/shells/`).
+
+Foundations explorers (`components/foundations/`) are an exception: they're Storybook-only documentation surfaces, not consumer-facing components, and use `Foundations/*` titles.
+
+Hooks-only utilities (e.g. NavGuard) live in `hooks/`, not `components/`.
+
 ## Sourcing — react-native-reusables as baseline
 
 `react-native-reusables` is the scaffold source for primitives that
@@ -125,7 +149,7 @@ Documented precedents:
   every wireframe consumer; if a non-description radio case ever
   surfaces, extend Select rather than duplicate the primitive.
 - **SwitchRow as the canonical boolean-setting shape**
-  ([`components/ui/switch-row.tsx`](../../components/ui/switch-row.tsx),
+  ([`components/compounds/switch-row.tsx`](../../components/compounds/switch-row.tsx),
   Phase 2 Group D). The pattern, not the standalone Switch, is the
   canonical cross-platform shape for boolean settings — same row-
   tappable interaction on every tier, no fork between mobile and

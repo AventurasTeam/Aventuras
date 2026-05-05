@@ -351,7 +351,7 @@ accordion, profile editors).
 
 - **Verified.** SwitchRow is a separate row primitive with its
   own inline shape — confirmed in
-  [`components/ui/switch-row.tsx`](../../components/ui/switch-row.tsx).
+  [`components/compounds/switch-row.tsx`](../../components/compounds/switch-row.tsx).
   Stacked form-row rule doesn't propagate into it. Density tokens
   exist for compact / regular / comfortable per `--control-h-*`
   / `--row-py-*` / `--row-px-*` and are consumed by the existing

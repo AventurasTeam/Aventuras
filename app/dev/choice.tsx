@@ -6,7 +6,7 @@ import { ThemePicker } from '@/components/foundations/sections/theme-picker'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Heading } from '@/components/ui/heading'
 import { Switch } from '@/components/ui/switch'
-import { SwitchRow } from '@/components/ui/switch-row'
+import { SwitchRow } from '@/components/compounds/switch-row'
 import { Text } from '@/components/ui/text'
 
 export default function ChoiceDevRoute() {
