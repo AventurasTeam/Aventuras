@@ -68,9 +68,10 @@ for the rule.
 
 ### Compounds — shipped
 
-| Compound  | Folder                  | Notes                                         |
-| --------- | ----------------------- | --------------------------------------------- |
-| SwitchRow | `components/compounds/` | Label + description + toggle, three-peer row. |
+| Compound  | Folder                  | Notes                                                                                                                             |
+| --------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| FormRow   | `components/compounds/` | Container-keyed stacked-vs-2-col layout (label / hint / error / required slot). Library-agnostic — caller pipes the error string. |
+| SwitchRow | `components/compounds/` | Label + description + toggle, three-peer row.                                                                                     |
 
 ### Compounds — build-ready
 
