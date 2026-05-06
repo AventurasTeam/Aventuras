@@ -81,7 +81,9 @@ for the rule.
 
 ### Compounds — build-ready
 
-_Empty — every build-ready compound has shipped._
+| Compound | Folder                  | Spec                                                                |
+| -------- | ----------------------- | ------------------------------------------------------------------- |
+| TagInput | `components/compounds/` | [forms.md → TagInput pattern](./patterns/forms.md#taginput-pattern) |
 
 ### Compounds — needs design
 
@@ -91,7 +93,6 @@ _Empty — every build-ready compound has shipped._
 | StoryCard   | Story List grid                                                  | Title + blurb (3-line) + favorite star + overflow menu — borderline whether the wireframe is enough.                                                                                                                                                                                                                             |
 | DeltaLogRow | History tabs across World / Plot / future global delta-log       | Field-path strings, op label, change-summary text. Different shape from entity rows.                                                                                                                                                                                                                                             |
 | Toolbar     | List-pane tops on World / Plot / Story List / Reader Browse rail | Search + filter chips + sort + ⓘ + kind-selector. Absorbs the previous SearchInput primitive (Input + scope tooltip + ⓘ help-popover). Cross-surface ordering, overflow behavior.                                                                                                                                                |
-| TagInput    | Story tags, entity tags                                          | Concrete instance of Autocomplete-with-create — likely a config rather than a separate compound. Resolve once Autocomplete lands.                                                                                                                                                                                                |
 | Importer    | World / Plot per-row, Vault calendars, Story import              | Full picker wrapper around `ImporterMenu` — file dialog (web `<input>` / native `expo-document-picker`), paste flow, zod-validated parse, error display, future Vault picker. Action surfaces per host differ enough that the wrapper shape needs a design pass before scaffolding. Deferred until more import groundwork lands. |
 
 ## Layout shells

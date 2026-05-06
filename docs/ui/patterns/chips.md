@@ -71,7 +71,7 @@ API (all orthogonal):
 
 - `removable?: boolean` + `onRemove?: () => void` — renders inline × button after the label. The × is its own touch target (44px floor on phone per [`touch.md`](../foundations/mobile/touch.md)).
 - `tone?: 'default' | 'soft'` — `soft` adds `bg-region` background tint (entity-ref usage). Default `default` (border only).
-- `dashed?: boolean` — solid border → dashed border. Used for add-affordance ("+ tag", "+ relationship"). Mutually-exclusive with `removable` in practice (add vs. remove are different use cases).
+- `dashed?: boolean` — solid border → dashed border. Used for **standalone add-affordance** in pre-existing chip rows ("+ relationship" on entity panes, quick-add UI in chip-only contexts). **Not** the right shape for tag-field entry — that pattern lives in [`forms.md → TagInput pattern`](./forms.md#taginput-pattern), which composes Tag + Input into a single tokenized-input surface. Mutually-exclusive with `removable` in practice (add vs. remove are different use cases).
 - `onPress?: () => void` — optional. Sets `role="button"` when present.
 - `disabled?: boolean` — `opacity-50`.
 

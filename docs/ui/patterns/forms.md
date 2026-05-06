@@ -16,18 +16,20 @@ Used by:
   (Select primitive across mode / narration / generation knobs;
   Autocomplete-with-create on the model field; Input + Textarea
   for prose definition fields; SwitchRow pattern for per-story
-  toggles)
+  toggles; TagInput pattern on the story tags field)
 - [Plot](../screens/plot/plot.md#mobile-expression)
   (Select primitive on the Threads / Happenings segment toggle and
   as the detail-pane tab navigation on phone; SwitchRow for the
-  common-knowledge skip toggle)
+  common-knowledge skip toggle; TagInput pattern on thread +
+  happening tags fields)
 - [Wizard](../screens/wizard/wizard.md#step-1--frame)
   (Select primitive in segment mode for mode / narration; calendar
   picker integration cite; Input + Textarea for genre / tone /
   setting fields, narrow numeric for year / day fields)
 - [Reader composer](../screens/reader-composer/reader-composer.md#per-entry-actions)
   (Autocomplete-with-create primitive in entity / lore creation;
-  Input + Textarea for entity / lore detail fields)
+  Input + Textarea for entity / lore detail fields; TagInput
+  pattern on entity / lore tags during creation)
 - [Onboarding](../screens/onboarding/onboarding.md)
   (Select primitive in initial setup flow)
 - [Vault calendars](../screens/vault/calendars/calendars.md)
@@ -36,7 +38,8 @@ Used by:
 - [World](../screens/world/world.md#mobile-expression)
   (Select primitive on the list-pane category dropdown and as the
   detail-pane tab navigation when the desktop tab strip overflows
-  on narrow tiers; Input + Textarea for entity edits)
+  on narrow tiers; Input + Textarea for entity edits; TagInput
+  pattern on entity + lore tags fields)
 
 ---
 
@@ -244,8 +247,10 @@ Sheet size auto-derives from option shape:
   feels cramped (~7+ options, or any options carrying a `group`
   field). Auto-applied; `sheetSize` prop overrides. The
   [calendar picker pattern](./calendar-picker.md) is the canonical
-  Sheet (medium) consumer — its richer rows + tail action go
-  beyond Select's contract per the [open-shape followup](../../followups.md#calendar-picker-primitive--open-shape-decisions).
+  Sheet (medium) consumer — its richer rows and tail action go
+  beyond Select's contract via the `renderRow` / `renderTrigger` /
+  `tailAction` extension points, resolved during the calendar
+  picker build pass.
 
 Tablet keeps the desktop anchored Popover — no edge-clipping risk
 at tablet widths. Segment and radio render modes are unchanged at
@@ -262,12 +267,12 @@ below on phone (see
 The underlying Sheet and Popover primitive contracts (API surface,
 rn-primitives mapping, slot reshape) live in
 [`overlays.md`](./overlays.md). The phone-tier Sheet bridge is
-implemented in-Select via `useTier()`; the
-[`<ResponsiveOverlay>` helper question](../../followups.md#calendar-picker-primitive--open-shape-decisions)
-stays parked for Phase 3 consumers (calendar picker, actions menu)
-whose popover branch uses our Popover primitive — Select's popover
-branch uses `@rn-primitives/select`'s own machinery, so a generic
-helper can't host it. See [Implementation contract](#select--implementation-contract).
+implemented in-Select via `useTier()`. A generic
+`<ResponsiveOverlay>` helper for Phase 3 consumers (actions menu,
+others) whose popover branch uses our Popover primitive remains an
+open shape — Select's popover branch uses `@rn-primitives/select`'s
+own machinery, so a shared helper can't host both. See
+[Implementation contract](#select--implementation-contract).
 
 ### Chrome carve-out
 
@@ -716,3 +721,148 @@ empty-source (free-form-only behavior), casing-normalization
 in action, the tail-create-on-new-typed-value state. Belongs in
 the same `Patterns/Form controls/` Storybook tree as the Select
 primitive when component implementation begins.
+
+---
+
+## TagInput pattern
+
+Multi-value, iterative tag entry. Composes the
+[Tag](./chips.md#tag--pill-labeled-content) and
+[Input](#input-primitive) primitives into a single bordered surface
+that accumulates committed tags as removable chips alongside an
+inline typing input. Used wherever a `string[]` field needs
+free-form labels — story tags, entity tags, lore tags, thread or
+happening tags.
+
+Distinct from
+[Autocomplete-with-create](#autocomplete-with-create-primitive):
+Autocomplete is **single-value, terminal "pick or create"**;
+TagInput is **multi-value, stay-open iterative entry**. The full
+identity argument lives in
+[`docs/explorations/2026-05-06-tag-input-compound.md`](../../explorations/2026-05-06-tag-input-compound.md).
+
+### Contract
+
+```ts
+type TagInputProps = {
+  value: string[] // controlled
+  onChange: (next: string[]) => void // fires on add + remove only
+
+  placeholder?: string
+  disabled?: boolean
+  disabledReason?: string // web title-tooltip parity with Input
+  'aria-invalid'?: boolean | 'true' | 'false'
+
+  className?: string
+  inputClassName?: string
+
+  maxCount?: number // total tags ceiling, default unlimited
+  maxTagLength?: number // per-tag char cap, default unlimited
+}
+```
+
+Internal state is a single private `typed: string` draft. No
+`inputValue` controlled prop, no `onCommit` callback separate from
+`onChange`, no `commitOnBlur` toggle — a single emit-shape, a single
+commit policy.
+
+### Interaction model
+
+**Commit triggers** (any of):
+
+- **Enter / Return** — typed text (trimmed) commits if non-empty
+  and non-duplicate. Input clears. Keyboard stays up
+  (`blurOnSubmit={false}`) so iterative entry works without a
+  re-tap.
+- **Comma** — same as Enter, but the comma keystroke is consumed
+  (doesn't render in the input).
+- **Blur** — typed text commits if non-empty and non-duplicate.
+  Input clears. Mobile convention across iOS Mail, Apple Notes,
+  iOS Reminders, Material chip-input is overwhelmingly
+  blur-commits; the asymmetric cost (data loss without it vs a
+  junk chip the user can × off with it) makes blur-commits the
+  right default, not a user toggle.
+- **Paste** containing commas or newlines — split on `[,\n]+`,
+  trim each piece, push the non-empty non-dupes in order.
+
+**Removal triggers:**
+
+- **× on chip** — removes that chip via Tag's `removable` slot.
+  Input keeps focus.
+- **Backspace on empty input** — removes the last chip. Web fires
+  this via `onKeyPress`; native iOS has a known RN gotcha where
+  Backspace on an empty input doesn't fire `onKeyPress` —
+  workaround is `onSelectionChange` detecting selection at
+  `{start: 0, end: 0}` after an unchanged content event. Web
+  baseline; native parity is best-effort.
+
+**Dedupe.** Case-insensitive
+(`array.some(t => t.toLowerCase() === typed.toLowerCase())`). On
+dedupe-rejection, **input clears anyway** — the user already has
+that tag, no error surface needed. `toLowerCase()` (ASCII case fold)
+is sufficient for v1; Unicode case folding via `toLocaleLowerCase()`
+is a one-line upgrade if drift surfaces.
+
+**Caps.** `maxCount` reached → input visually disabled, commits
+become noops (chip × still works). `maxTagLength` → underlying
+TextInput's `maxLength` prop; paste-split pieces over the cap are
+truncated.
+
+### Cross-tier shape
+
+**Inline at every tier. No Sheet, no Popover.** The compound renders
+directly inside whatever form-row hosts it.
+
+- **Phone** — input min-height `control-lg` (44 px touch floor).
+- **Tablet / Desktop** — input min-height `control-md`.
+- **Stacked vs 2-col** — handled by the
+  [form-row pattern](#form-rows--stacked-on-narrow-container) at the
+  host level; TagInput just fills the input slot.
+
+No `useTier()` dispatch inside the compound. Same component, same
+layout, density-driven sizing.
+
+### Visual layout
+
+Single bordered surface (Input-shaped border, matching focus-ring).
+Chips wrap inline alongside the typing input:
+
+```
+┌──────────────────────────────────────────────────┐
+│ [sci-fi ×] [fantasy ×] [dystopia ×] [type tag…]  │
+└──────────────────────────────────────────────────┘
+```
+
+- Chips: `flex-row flex-wrap items-center gap-1.5`.
+- Inline TextInput appended after the last chip with
+  `flex-1 min-w-[60px]` so it grows but never disappears when
+  chips fill the row.
+- Focus state lifts to the wrapper (same pattern Input uses when
+  adornments are present).
+
+### Implementation flag
+
+Verify the [Tag primitive](./chips.md#tag--pill-labeled-content)'s
+chip-text behavior at long content during the build pass — confirm
+whether long single tags wrap chip width past the surface or
+truncate cleanly. Apply `numberOfLines={1}` together with
+truncate-with-ellipsis on the chip if needed.
+
+### Storybook (TagInput)
+
+Live demos for: empty array (placeholder visible), populated array
+(chip-row alongside appended input), commit-on-Enter / -comma /
+-blur, paste-with-commas split, backspace-removes-last (web),
+maxCount disabled state, maxTagLength truncation. Belongs in the
+same `Patterns/Form controls/` tree as Select and Autocomplete
+when component implementation begins.
+
+### What this defers
+
+- **Suggestions source.** If a host later wants reuse-from-pool
+  (canonical taxonomy, project-wide dedupe), TagInput grows an
+  optional `suggestions: string[]` prop with a popover/sheet beneath
+  the input. v1 ships free-form-only; the extension axis stays
+  clean.
+- **Click-to-edit chip** (tap chip to edit text in-place) — v2+.
+- **Drag-reorder** of accumulated chips — v2+.
