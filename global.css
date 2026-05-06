@@ -513,3 +513,43 @@
     field-sizing: content;
   }
 }
+
+/* Themed scrollbars — Chromium (Electron) and Firefox.
+ *
+ * Defaults look bad on dark themes (white-on-black tracks, mismatch
+ * with chrome). Drive thumb / hover-thumb off `--fg-muted` /
+ * `--fg-secondary` so the bar follows the active theme without
+ * needing per-theme overrides — both tokens are declared on every
+ * theme block.
+ *
+ * Native (iOS / Android) ignores these rules entirely and uses the
+ * platform's overlay scroll indicators, which is correct.
+ *
+ * macOS Safari / Chromium also defaults to overlay scrollbars that
+ * auto-hide; these styles only apply when the OS / app forces
+ * persistent classic scrollbars (Linux + Windows defaults; macOS
+ * "Always show" preference). On macOS overlay mode they're a no-op,
+ * matching native expectations.
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--fg-muted) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--fg-muted);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--fg-secondary);
+}
