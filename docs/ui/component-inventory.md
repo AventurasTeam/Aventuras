@@ -77,14 +77,12 @@ for the rule.
 
 ### Compounds — build-ready
 
-| Compound       | Folder                  | Spec                                                                                       | Notes                                                                                                                                                           |
-| -------------- | ----------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ListRow        | `components/compounds/` | [entity.md](./patterns/entity.md)                                                          | Four indicator channels, kind-icon variants per surface, recently-classified accent. Pan-domain consumer.                                                       |
-| EntityKindIcon | `components/entity/`    | [iconography.md → Entity kind glyphs](./foundations/iconography.md#entity-kind-glyphs)     | 22×22 box, glyph from the canonical entity-kind table. Single-domain (entity) — was a primitive candidate, reclassified per the directory-layout decision rule. |
-| SaveBar        | `components/compounds/` | [save-sessions.md → Save bar](./patterns/save-sessions.md#save-bar--the-visible-ui)        | Composition; pairs with the `useNavGuard` hook (lives in `hooks/`, not here).                                                                                   |
-| CalendarPicker | `components/compounds/` | [calendar-picker.md](./patterns/calendar-picker.md)                                        | Hosted in App Settings / Story Settings / Wizard. Spec covers all three host adaptations + swap warnings.                                                       |
-| JSONViewer     | `components/compounds/` | [data.md → Raw JSON viewer](./patterns/data.md#raw-json-viewer--shared-modal-pattern)      | Modal-shaped read-out.                                                                                                                                          |
-| Importer       | `components/compounds/` | [data.md → Import counterparts](./patterns/data.md#import-counterparts--file-based--vault) | File picker + Vault picker.                                                                                                                                     |
+| Compound       | Folder                  | Spec                                                                                       | Notes                                                                                                     |
+| -------------- | ----------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| SaveBar        | `components/compounds/` | [save-sessions.md → Save bar](./patterns/save-sessions.md#save-bar--the-visible-ui)        | Composition; pairs with the `useNavGuard` hook (lives in `hooks/`, not here).                             |
+| CalendarPicker | `components/compounds/` | [calendar-picker.md](./patterns/calendar-picker.md)                                        | Hosted in App Settings / Story Settings / Wizard. Spec covers all three host adaptations + swap warnings. |
+| JSONViewer     | `components/compounds/` | [data.md → Raw JSON viewer](./patterns/data.md#raw-json-viewer--shared-modal-pattern)      | Modal-shaped read-out.                                                                                    |
+| Importer       | `components/compounds/` | [data.md → Import counterparts](./patterns/data.md#import-counterparts--file-based--vault) | File picker + Vault picker.                                                                               |
 
 ### Compounds — needs design
 
