@@ -138,6 +138,14 @@ different defaults:
   itself rather than offering an action against the row.
 - **System-entry content-level buttons** (`Retry` / `Details` /
   `Dismiss`) — text labels by design, not part of this pattern.
+- **Inline single-icon affordances inside content rows** (not
+  in an action cluster) — e.g., the favorite star inline-before
+  the title on a [Story Card](./story-card.md#favorite-star--visibility-exception).
+  These follow a hover-reveal rest state (~25% opacity at rest
+  for the unfavorited state) to avoid competing with the title's
+  visual weight. Documented as the canonical exception; new
+  inline-content single-icon affordances should consider the
+  same shape rather than the always-visible-muted default.
 
 The pattern is specifically about **discrete actions associated
 with a row in a list**.

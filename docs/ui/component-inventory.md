@@ -84,6 +84,7 @@ for the rule.
 | Compound  | Folder                  | Spec                                                                |
 | --------- | ----------------------- | ------------------------------------------------------------------- |
 | EntryCard | `components/reader/`    | [entry-card.md](./patterns/entry-card.md)                           |
+| StoryCard | `components/story/`     | [story-card.md](./patterns/story-card.md)                           |
 | TagInput  | `components/compounds/` | [forms.md → TagInput pattern](./patterns/forms.md#taginput-pattern) |
 | Toolbar   | `components/compounds/` | [toolbar.md](./patterns/toolbar.md)                                 |
 
@@ -91,7 +92,6 @@ for the rule.
 
 | Compound    | Surfaces                                                   | Open question                                                                                                                                                                                                                                                                                                                    |
 | ----------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| StoryCard   | Story List grid                                            | Title + blurb (3-line) + favorite star + overflow menu — borderline whether the wireframe is enough.                                                                                                                                                                                                                             |
 | DeltaLogRow | History tabs across World / Plot / future global delta-log | Field-path strings, op label, change-summary text. Different shape from entity rows.                                                                                                                                                                                                                                             |
 | Importer    | World / Plot per-row, Vault calendars, Story import        | Full picker wrapper around `ImporterMenu` — file dialog (web `<input>` / native `expo-document-picker`), paste flow, zod-validated parse, error display, future Vault picker. Action surfaces per host differ enough that the wrapper shape needs a design pass before scaffolding. Deferred until more import groundwork lands. |
 

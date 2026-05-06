@@ -23,7 +23,9 @@ default); Select is for single-choice selectors.
 Used by:
 
 - [Story List](../screens/story-list/story-list.md) — filter chips
-  (after wireframe reframe — see Followups below).
+  (after wireframe reframe — see Followups below); status badges on
+  story cards (`Draft`, `Archived`) via the
+  [StoryCard pattern](./story-card.md#status-badges-chip-primitives).
 - [World panel](../screens/world/world.md) — state filter (Chip);
   entity tags (Tag); inline entity refs (Tag, soft tone).
 - [Plot panel](../screens/plot/plot.md) — threads + happenings
@@ -56,6 +58,15 @@ Visual contract:
 - Selected: `bg-fg-primary text-bg-base border-fg-primary`.
 - Hover (web, when interactive): `text-fg-primary` on unselected.
 - Focus-visible (web): standard `--focus-ring` slot.
+
+**Density-awareness gates on interactivity.** Interactive Chip
+(with `onPress`) follows the active density tokens for tap-target
+floor on phone (per
+[touch.md → Touch-target floor](../foundations/mobile/touch.md#touch-target-floor-on-phone)).
+Non-interactive Chip (no `onPress`) is density-agnostic —
+display-only sizing, no touch-floor inflation. A `Draft` badge on
+a [Story Card](./story-card.md#status-badges-chip-primitives)
+doesn't need a 44 px tap target.
 
 ## Tag — pill, labeled content
 

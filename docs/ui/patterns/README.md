@@ -59,5 +59,10 @@ The split heuristic + when-to-add rules live in
   streaming) with conditional reasoning expansion, in-place edit,
   per-kind action cluster, muted world-time footer. Variable-height
   by contract; calendar-agnostic.
+- [`story-card.md`](./story-card.md) — Story List grid card:
+  mode-accented strip, genre overline, title with inline favorite
+  star, status badges (`Draft` / `Archived`) as Chips, meta row,
+  3-line description, top-right overflow menu. Documents the
+  favorite-star visibility exception to icon-actions.
 - [`data.md`](./data.md) — raw JSON viewer, import counterparts
   (file-based + Vault).

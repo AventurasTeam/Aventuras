@@ -75,6 +75,11 @@ Everything else sorts by the chosen key.
 
 ## Story card — text-first
 
+Visual contract and compound API live in the
+[StoryCard pattern](../../patterns/story-card.md); this section
+covers the surface-specific narrative (text-first lean, click
+behavior, draft handling).
+
 Cards work beautifully **text-only**; covers are a nice-to-have
 enhancement, not a requirement. Most users will never make a
 cover, so the card design can't depend on one.
@@ -284,7 +289,7 @@ phone-tier specifics below.
   wires container-query reflow; the existing grid CSS needs no
   shape change.
 - **Favorite star.** Already implements
-  [always-visible-muted](../../patterns/icon-actions.md#visibility--always-rendered-muted-default-brighten-on-hover)
+  [always-visible-muted](../../patterns/icon-actions.md#visibility--always-rendered-color-tiered-brighten-on-hover)
   (`opacity: 0.25` default, brighten on hover / focus on desktop).
   Touch users see the muted star without any hover state — exactly
   the canonical pattern per
