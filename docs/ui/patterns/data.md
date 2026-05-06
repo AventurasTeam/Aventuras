@@ -31,8 +31,11 @@ component reused everywhere; no per-surface variants.
 
 **Shape:**
 
-- Right-anchored drawer, ~440px wide (matches reader peek drawer
-  dimensions for visual consistency).
+- Tablet / desktop: right-anchored drawer, ~440 px wide (matches
+  reader peek drawer dimensions for visual consistency).
+- Phone: tall bottom sheet — 440 px right-anchored doesn't fit phone
+  widths, so the drawer swaps to the bottom-sheet shape used
+  elsewhere for phone-tier overlays (Select's phone swap, etc.).
 - Header: `Raw JSON · <row name>` + close `×`.
 - Body: pretty-printed JSON of the row + nested fields merged
   (e.g. entity row + `state` JSON; happening row + involvements +
