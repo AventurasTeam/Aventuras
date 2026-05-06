@@ -572,20 +572,31 @@
     return prompt.split('. ').slice(0, -1).join('. ') || prompt
   }
 
+  function getRawPrompt(image: (typeof embeddedImages)[0]): string {
+    if (image.generationMode === 'inline' && image.sourceText?.startsWith('<pic')) {
+      const match = image.sourceText.match(/prompt=["']([^"']+)["']/i)
+      if (match?.[1]) return match[1]
+    }
+    return stripStyleSuffix(image.prompt)
+  }
+
   async function fetchCurrentStylePrompt(): Promise<string> {
     const styleId = settings.systemServicesSettings.imageGeneration.styleId
     try {
       const template = await database.getPackTemplate('default-pack', styleId)
-      return template?.content || ''
+      if (template?.content) {
+        return template.content
+      }
     } catch {
-      return DEFAULT_FALLBACK_STYLE_PROMPT
+      // Template not found, use fallback
     }
+    return DEFAULT_FALLBACK_STYLE_PROMPT
   }
 
   // Open the image view/edit modal
   function openImageViewModal(image: (typeof embeddedImages)[0]) {
     viewingImage = image
-    viewingImagePrompt = stripStyleSuffix(image.prompt)
+    viewingImagePrompt = getRawPrompt(image)
     viewingImagePromptMode = 'chat'
     isViewingImage = true
   }
@@ -598,7 +609,11 @@
       await regenerateInlineImage(imageId, viewingImage.prompt)
     } else {
       const stylePrompt = await fetchCurrentStylePrompt()
-      await regenerateInlineImage(imageId, `${viewingImagePrompt.trim()}. ${stylePrompt}`, true)
+      await regenerateInlineImage(
+        imageId,
+        `${viewingImagePrompt.trim().replace(/\.+$/, '')}. ${stylePrompt}`,
+        true,
+      )
     }
   }
 
@@ -714,7 +729,7 @@
         const rawPrompt = match[1]
 
         const stylePrompt = await fetchCurrentStylePrompt()
-        finalPrompt = `${rawPrompt}. ${stylePrompt}`
+        finalPrompt = `${rawPrompt.replace(/\.+$/, '')}. ${stylePrompt}`
         console.log('[StoryEntry] Reconstructed prompt with new style:', finalPrompt)
       }
     }
@@ -1500,7 +1515,7 @@
           type="button"
           onclick={() => {
             viewingImagePromptMode = 'chat'
-            if (viewingImage) viewingImagePrompt = stripStyleSuffix(viewingImage.prompt)
+            if (viewingImage) viewingImagePrompt = getRawPrompt(viewingImage)
           }}
           class="h-6 rounded px-2 text-xs font-medium transition-colors
             {viewingImagePromptMode === 'chat'
