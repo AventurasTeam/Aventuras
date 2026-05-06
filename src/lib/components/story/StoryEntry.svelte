@@ -180,9 +180,6 @@
   let branchName = $state('')
 
   // Inline image edit state
-  let _isEditingImage = $state(false)
-  let editingImageId = $state<string | null>(null)
-  let editingImagePrompt = $state('')
 
   // Timer for checking stuck images
   let now = $state(Date.now())
@@ -311,6 +308,7 @@
   let isViewingImage = $state(false)
   let viewingImage = $state<(typeof embeddedImages)[0] | null>(null)
   let viewingImagePrompt = $state('')
+  let viewingImagePromptMode = $state<'chat' | 'custom'>('chat')
 
   // Track images currently being regenerated (for loading overlay)
   let regeneratingImageIds = $state<Set<string>>(new Set())
@@ -570,12 +568,38 @@
     }
   }
 
+  function stripStyleSuffix(prompt: string): string {
+    return prompt.split('. ').slice(0, -1).join('. ') || prompt
+  }
+
+  async function fetchCurrentStylePrompt(): Promise<string> {
+    const styleId = settings.systemServicesSettings.imageGeneration.styleId
+    try {
+      const template = await database.getPackTemplate('default-pack', styleId)
+      return template?.content || ''
+    } catch {
+      return DEFAULT_FALLBACK_STYLE_PROMPT
+    }
+  }
+
   // Open the image view/edit modal
   function openImageViewModal(image: (typeof embeddedImages)[0]) {
     viewingImage = image
-    // Extract original prompt (remove style suffix)
-    viewingImagePrompt = image.prompt.split('. ').slice(0, -1).join('. ') || image.prompt
+    viewingImagePrompt = stripStyleSuffix(image.prompt)
+    viewingImagePromptMode = 'chat'
     isViewingImage = true
+  }
+
+  async function handleViewModalRegenerate() {
+    if (!viewingImage) return
+    const imageId = viewingImage.id
+    isViewingImage = false
+    if (viewingImagePromptMode === 'chat') {
+      await regenerateInlineImage(imageId, viewingImage.prompt)
+    } else {
+      const stylePrompt = await fetchCurrentStylePrompt()
+      await regenerateInlineImage(imageId, `${viewingImagePrompt.trim()}. ${stylePrompt}`, true)
+    }
   }
 
   // Handle click on embedded image link
@@ -651,19 +675,22 @@
     if (!image) return
 
     if (action === 'edit') {
-      // Open edit modal with current prompt
-      editingImageId = imageId
-      // Extract the original prompt from the stored prompt (remove style suffix)
-      editingImagePrompt = image.prompt.split('. ').slice(0, -1).join('. ') || image.prompt
-      _isEditingImage = true
+      openImageViewModal(image)
+      viewingImagePromptMode = 'custom'
     } else if (action === 'regenerate') {
       // Regenerate with same prompt
       await regenerateInlineImage(imageId, image.prompt)
     }
   }
 
-  // Regenerate an inline image with a new or existing prompt
-  async function regenerateInlineImage(imageId: string, prompt: string) {
+  // Regenerate an inline image with a new or existing prompt.
+  // Pass usePassedPromptAsIs=true when the caller has already built the final prompt
+  // (e.g. a user-edited custom prompt) and the sourceText reconstruction should be skipped.
+  async function regenerateInlineImage(
+    imageId: string,
+    prompt: string,
+    usePassedPromptAsIs = false,
+  ) {
     const image = embeddedImages.find((img) => img.id === imageId)
     if (!image) return
 
@@ -673,8 +700,10 @@
     let finalPrompt = prompt
 
     // If it's an inline image, try to reconstruct prompt with CURRENT style
-    // This allows style changes in settings to apply when retrying/regenerating
+    // This allows style changes in settings to apply when retrying/regenerating.
+    // Skip when usePassedPromptAsIs is true so a custom user prompt is honoured.
     if (
+      !usePassedPromptAsIs &&
       image.generationMode === 'inline' &&
       image.sourceText &&
       image.sourceText.startsWith('<pic')
@@ -684,18 +713,7 @@
       if (match && match[1]) {
         const rawPrompt = match[1]
 
-        // Get CURRENT style
-        const imageSettings = settings.systemServicesSettings.imageGeneration
-        const styleId = imageSettings.styleId
-        let stylePrompt = ''
-        try {
-          const template = await database.getPackTemplate('default-pack', styleId)
-          stylePrompt = template?.content || ''
-        } catch {
-          stylePrompt = DEFAULT_FALLBACK_STYLE_PROMPT
-        }
-
-        // Reconstruct full prompt
+        const stylePrompt = await fetchCurrentStylePrompt()
         finalPrompt = `${rawPrompt}. ${stylePrompt}`
         console.log('[StoryEntry] Reconstructed prompt with new style:', finalPrompt)
       }
@@ -713,33 +731,6 @@
       newSet.delete(imageId)
       regeneratingImageIds = newSet
     }
-  }
-
-  // Handle edit modal submission
-  async function handleEditImageSubmit() {
-    if (!editingImageId || !editingImagePrompt.trim()) return
-
-    const image = embeddedImages.find((img) => img.id === editingImageId)
-    if (!image) return
-
-    // Get style prompt and append it
-    const imageSettings = settings.systemServicesSettings.imageGeneration
-    const styleId = imageSettings.styleId
-    let stylePrompt = ''
-    try {
-      const template = await database.getPackTemplate('default-pack', styleId)
-      stylePrompt = template?.content || ''
-    } catch {
-      stylePrompt = DEFAULT_FALLBACK_STYLE_PROMPT
-    }
-
-    const fullPrompt = `${editingImagePrompt.trim()}. ${stylePrompt}`
-
-    // Close modal and regenerate
-    _isEditingImage = false
-    await regenerateInlineImage(editingImageId, fullPrompt)
-    editingImageId = null
-    editingImagePrompt = ''
   }
 
   // Manage inline image display
@@ -1503,14 +1494,51 @@
 
     <!-- Edit area -->
     <div class="bg-surface-900 border-surface-800 border-t px-4 py-3">
-      <!-- svelte-ignore a11y_label_has_associated_control -->
-      <label class="text-surface-400 mb-1.5 block text-xs">Image Prompt</label>
-      <Textarea
-        bind:value={viewingImagePrompt}
-        placeholder="Describe the image you want to generate..."
-        rows={3}
-        class="resize-none text-sm"
-      />
+      <!-- Prompt source toggle -->
+      <div class="mb-2 flex items-center gap-1">
+        <button
+          type="button"
+          onclick={() => {
+            viewingImagePromptMode = 'chat'
+            if (viewingImage) viewingImagePrompt = stripStyleSuffix(viewingImage.prompt)
+          }}
+          class="h-6 rounded px-2 text-xs font-medium transition-colors
+            {viewingImagePromptMode === 'chat'
+            ? 'bg-primary text-primary-foreground'
+            : 'text-surface-400 hover:text-surface-200'}"
+        >
+          From chat
+        </button>
+        <button
+          type="button"
+          onclick={() => (viewingImagePromptMode = 'custom')}
+          class="h-6 rounded px-2 text-xs font-medium transition-colors
+            {viewingImagePromptMode === 'custom'
+            ? 'bg-primary text-primary-foreground'
+            : 'text-surface-400 hover:text-surface-200'}"
+        >
+          Custom
+        </button>
+      </div>
+
+      {#if viewingImagePromptMode === 'chat'}
+        <!-- Read-only preview of the chat-derived prompt -->
+        <p
+          class="text-surface-400 border-surface-700 line-clamp-3 rounded border border-dashed px-2.5 py-2 text-xs leading-relaxed"
+        >
+          {viewingImagePrompt || 'No prompt available'}
+        </p>
+      {:else}
+        <!-- Editable custom prompt -->
+        <!-- svelte-ignore a11y_label_has_associated_control -->
+        <label class="text-surface-400 mb-1.5 block text-xs">Custom Prompt</label>
+        <Textarea
+          bind:value={viewingImagePrompt}
+          placeholder="Describe the image you want to generate..."
+          rows={3}
+          class="resize-none text-sm"
+        />
+      {/if}
     </div>
 
     <!-- Footer toolbar -->
@@ -1527,18 +1555,8 @@
       </Button>
       <Button
         size="sm"
-        onclick={async () => {
-          if (viewingImage && viewingImagePrompt.trim()) {
-            const imageId = viewingImage.id
-            // Close modal immediately - loading will show on inline image
-            isViewingImage = false
-            // Regenerate with the prompt from the textarea
-            editingImageId = imageId
-            editingImagePrompt = viewingImagePrompt
-            await handleEditImageSubmit()
-          }
-        }}
-        disabled={!viewingImagePrompt.trim()}
+        onclick={handleViewModalRegenerate}
+        disabled={viewingImagePromptMode === 'custom' && !viewingImagePrompt.trim()}
         class="h-8 gap-1.5 text-xs"
       >
         <RefreshCw class="h-3.5 w-3.5" />
