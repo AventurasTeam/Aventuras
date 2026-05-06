@@ -23,6 +23,7 @@ const ROUTES = [
   { href: '/dev/save-bar', label: 'SaveBar' },
   { href: '/dev/json-viewer', label: 'JSONViewer' },
   { href: '/dev/importer-menu', label: 'ImporterMenu' },
+  { href: '/dev/calendar-picker', label: 'CalendarPicker' },
   { href: '/dev/loading', label: 'Spinner + Skeleton' },
   { href: '/dev/tabs', label: 'Tabs' },
   { href: '/dev/chip-tag', label: 'Chip + Tag' },

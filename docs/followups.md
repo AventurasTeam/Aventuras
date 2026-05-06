@@ -251,34 +251,19 @@ prepend stream exists to validate against.
 
 Reference: [reader narrative scroll model](./ui/screens/reader-composer/reader-composer.md#scroll-behavior).
 
-### Calendar picker primitive — open shape decisions
+### Calendar swap-warning AlertDialog (W1 / W2 / W3)
 
-The [calendar picker pattern](./ui/patterns/calendar-picker.md)
-uses Select-shaped UI but its row content + tail action go beyond
-the current Select primitive. Open shape decision: either Select
-gains rich-row content + popover tail-action support (and the
-calendar picker is a configuration of Select), or a sibling
-`Picker` primitive forks the contract for richer-row use cases
-(calendar picker, future multi-line option pickers). Decide when
-the second rich-row picker emerges and the trade-off is concrete.
-
-The popover-search threshold sub-question (parked-until-signal)
-moved to
-[`parked.md → Calendar picker search-bar threshold`](./parked.md#calendar-picker-search-bar-threshold).
-
-**Partial resolution (2026-05-03, Phase 2 Group B Select pass).**
-Select's responsive-switch question (in-Select breakpoint dispatch
-vs. shared `<ResponsiveOverlay>` helper) resolved as **in-Select
-via `useTier()` hook**. ResponsiveOverlay isn't viable for Select:
-its tablet / desktop popover branch uses `@rn-primitives/select`'s
-own Content, not our Popover primitive — a generic helper can't
-host both branches. ResponsiveOverlay defers to Phase 3 consumers
-whose popover branch IS our Popover (Actions menu, branch /
-chapter / time chip popovers). The Picker-fork-vs-Select-extension
-question for calendar picker itself stays open until calendar
-picker's design pass — calendar picker's rich rows + tail action
-still go beyond Select's contract. See
-[`forms.md → Select implementation contract`](./ui/patterns/forms.md#select--implementation-contract).
+The [calendar picker pattern](./ui/patterns/calendar-picker.md#story-settings--swap-warnings)
+specifies a combined confirmation modal that fires on Story
+Settings calendar swaps — origin-tuple mismatch (W1), era support
+mismatch (W2), display-format change (W3). Intentionally NOT part
+of the `CalendarPicker` compound that shipped (the modal is a
+Story-Settings-specific composition layer wrapping the swap path).
+Build it as a dedicated `CalendarSwapDialog` compound on top of
+the AlertDialog primitive when Story Settings · Calendar tab
+lands. The Continue button label adapts (`Continue & re-pick origin`
+when W1 applies, `Continue & swap` otherwise) and modal sections
+render only the warnings that apply.
 
 ### Custom-font theme support
 

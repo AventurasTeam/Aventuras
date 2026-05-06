@@ -6,14 +6,14 @@ wizard. Same primitive across all three; differences are
 wrapper-level (framing copy, summary placement, swap warnings,
 edit-restrictions gating).
 
-Cites
-[`forms.md → Select primitive`](./forms.md#select-primitive) —
-the picker extends Select with rich rows + popover tail action,
-or implements a Picker variant per
-[`forms.md → What stays separate`](./forms.md#what-stays-separate).
-The calendar definition shape the picker reads is in
-[`calendar-systems/`](../../calendar-systems/README.md);
-the upstream editor is the
+Built on the [Select primitive](./forms.md#select-primitive) via
+its `renderRow` / `renderTrigger` / `tailAction` extension points
+— Select gained these specifically so calendar picker (and future
+rich-row pickers) could ride its tier-adapted Popover↔Sheet
+dispatch + selection + a11y semantics without forking. The
+calendar definition shape the picker reads is in
+[`calendar-systems/`](../../calendar-systems/README.md); the
+upstream editor is the
 [Vault calendar editor](../screens/vault/calendars/calendars.md).
 
 Used by:
@@ -290,7 +290,10 @@ template. Sample render before/after gives a concrete preview.
 
 Rendered via the [AlertDialog primitive](./alert-dialog.md) with
 the W1 / W2 / W3 sub-warning blocks composed between header and
-footer.
+footer. Lives outside the `CalendarPicker` compound — wrapper-level
+composition that the Story Settings host owns. Implementation
+deferred to the Story Settings build pass; see
+[`followups.md → Calendar swap-warning AlertDialog (W1 / W2 / W3)`](../../followups.md#calendar-swap-warning-alertdialog-w1--w2--w3).
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -355,13 +358,12 @@ primitive's gate is a direct consequence of that principle.
   bar is present (see deferrals below). Inherits from Select /
   Picker base.
 
-Two deferrals — see
-[`followups.md → Calendar picker primitive — open shape decisions`](../../followups.md#calendar-picker-primitive--open-shape-decisions):
-
-- whether the picker reuses Select with rich-row + tail-action
-  extensions vs. forks into a sibling Picker primitive;
-- the option-count threshold at which the popover gains a
-  search/filter bar.
+Resolved during the implementation pass: the picker rides Select
+via the `renderRow` / `renderTrigger` / `tailAction` extension
+points; no sibling `Picker` primitive was needed. The
+option-count search-bar threshold is parked until the second
+rich-row picker emerges — see
+[`parked.md → Calendar picker search-bar threshold`](../../parked.md#calendar-picker-search-bar-threshold).
 
 ## Storybook
 
