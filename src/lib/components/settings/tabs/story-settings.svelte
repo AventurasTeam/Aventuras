@@ -137,6 +137,7 @@
   }
 
   function loadCurrentTemplate() {
+    if (debounceTimer) clearTimeout(debounceTimer)
     const mode = story.currentStory?.mode ?? 'adventure'
     const templateId = mode === 'creative-writing' ? 'creative-writing' : 'adventure'
     const template = PROMPT_TEMPLATES.find((t) => t.id === templateId)
@@ -301,8 +302,9 @@
           by all other stories.
         </li>
         <li>
-          Custom pack variables (defined in Vault → Prompts) are also available here but won't
-          appear in the unknown variable warning — they're resolved at generation time.
+          Custom pack variables (defined in Vault → Prompts) are also available here. They will
+          appear in the unknown variable warning below, but that's expected — they're resolved at
+          generation time and will work correctly.
         </li>
         <li>
           For more advanced use cases — multiple template variants or sharing prompts across stories
