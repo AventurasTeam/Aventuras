@@ -131,6 +131,7 @@
 
   function onDraftInput(value: string) {
     customPromptDraft = value
+    validationResult = null // clear stale result immediately so canSave goes false until debounce fires
     if (debounceTimer) clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => validate(value), 300)
   }
