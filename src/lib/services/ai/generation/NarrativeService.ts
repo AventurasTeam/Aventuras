@@ -14,6 +14,7 @@
 import { streamNarrative, generateNarrative } from '../sdk/generate'
 import { ContextBuilder } from '$lib/services/context'
 import { StyleReviewerService } from './StyleReviewerService'
+import { templateEngine } from '$lib/services/templates/engine'
 import { createLogger } from '$lib/log'
 import { stripPicTags } from '$lib/utils/inlineImageParser'
 import type { StreamChunk } from '../core/types'
@@ -436,9 +437,22 @@ export class NarrativeService {
       ctx.add({ visualProseInstructions: VISUAL_PROSE_INSTRUCTIONS })
     }
 
-    // Render through the mode-specific template
-    const templateId = mode === 'creative-writing' ? 'creative-writing' : 'adventure'
-    const { system: systemPrompt } = await ctx.render(templateId)
+    // Render system prompt — use per-story override when set, otherwise fall back to pack template
+    let systemPrompt: string
+    const customPrompt = story?.settings?.customSystemPrompt
+    if (customPrompt) {
+      const rendered = templateEngine.render(customPrompt, ctx.getContext())
+      if (rendered === null) {
+        throw new Error(
+          'Custom system prompt contains a Liquid syntax error. Edit it in Story Settings.',
+        )
+      }
+      systemPrompt = rendered
+    } else {
+      const templateId = mode === 'creative-writing' ? 'creative-writing' : 'adventure'
+      const { system } = await ctx.render(templateId)
+      systemPrompt = system
+    }
 
     // Build priming message based on mode/pov/tense
     const context = ctx.getContext()
@@ -451,7 +465,7 @@ export class NarrativeService {
 
     log('buildPrompts complete', {
       mode,
-      templateId,
+      usingCustomPrompt: !!customPrompt,
       systemPromptLength: systemPrompt.length,
       primingMessageLength: primingMessage.length,
     })
