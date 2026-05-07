@@ -117,6 +117,7 @@ export interface StorySettings {
   imageGenerationMode?: 'none' | 'agentic' | 'inline' // Image generation strategy
   backgroundImagesEnabled?: boolean
   referenceMode?: boolean
+  customSystemPrompt?: string // Per-story Liquid template override; bypasses pack template when set
 }
 
 export interface StoryEntry {
