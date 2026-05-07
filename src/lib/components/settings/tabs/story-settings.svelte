@@ -11,14 +11,30 @@
 
   // Static — defined at module scope so they aren't re-created per component instance
   const KNOWN_VARIABLES = new Set([
-    'mode', 'pov', 'tense', 'genre', 'tone', 'themes', 'settingDescription',
-    'visualProseMode', 'inlineImageMode',
-    'protagonistName', 'protagonistDescription',
-    'currentLocation', 'storyTime',
-    'tieredContextBlock', 'retrievedChapterContext', 'chapterSummaries',
-    'styleGuidance', 'inlineImageInstructions', 'visualProseInstructions',
-    'runtimeVars_characters', 'runtimeVars_locations', 'runtimeVars_items',
-    'runtimeVars_storyBeats', 'runtimeVars_protagonist',
+    'mode',
+    'pov',
+    'tense',
+    'genre',
+    'tone',
+    'themes',
+    'settingDescription',
+    'visualProseMode',
+    'inlineImageMode',
+    'protagonistName',
+    'protagonistDescription',
+    'currentLocation',
+    'storyTime',
+    'tieredContextBlock',
+    'retrievedChapterContext',
+    'chapterSummaries',
+    'styleGuidance',
+    'inlineImageInstructions',
+    'visualProseInstructions',
+    'runtimeVars_characters',
+    'runtimeVars_locations',
+    'runtimeVars_items',
+    'runtimeVars_storyBeats',
+    'runtimeVars_protagonist',
   ])
 
   const VARIABLE_REFERENCE = [
@@ -73,7 +89,9 @@
   // setting changes (tone, pov, etc.) and overwrite an unsaved draft.
   const savedCustomPrompt = $derived(story.currentStory?.settings?.customSystemPrompt)
 
-  // Local draft — initialised and re-synced only when the saved value changes
+  // Local draft — initialised and re-synced only when the saved value changes.
+  // Two write sources (user input + external sync) make a writable $derived inapplicable.
+  // eslint-disable-next-line svelte/prefer-writable-derived
   let customPromptDraft = $state('')
   $effect(() => {
     customPromptDraft = savedCustomPrompt ?? ''
@@ -172,7 +190,9 @@
       <div class="flex items-center gap-2">
         <Label class="text-sm font-medium">Custom System Prompt</Label>
         {#if isActive}
-          <span class="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+          <span
+            class="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400"
+          >
             Active
           </span>
         {/if}
@@ -182,7 +202,12 @@
           Load default template
         </Button>
         {#if isActive || customPromptDraft}
-          <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive" onclick={clearOverride}>
+          <Button
+            variant="ghost"
+            size="sm"
+            class="text-destructive hover:text-destructive"
+            onclick={clearOverride}
+          >
             Clear override
           </Button>
         {/if}
@@ -215,7 +240,7 @@
         {#if unknownVars.length > 0}
           <p class="text-xs text-amber-600 dark:text-amber-400">
             ⚠ Unknown variables (will render empty):
-            {#each unknownVars as v, i}
+            {#each unknownVars as v, i (v)}
               <code class="font-mono">{v}</code>{i < unknownVars.length - 1 ? ', ' : ''}
             {/each}
             — these may be custom pack variables.
@@ -245,13 +270,15 @@
 
       {#if showVarReference}
         <div class="border-border mt-2 rounded-md border p-3 text-xs">
-          {#each VARIABLE_REFERENCE as group}
+          {#each VARIABLE_REFERENCE as group (group.group)}
             <div class="mb-3 last:mb-0">
-              <p class="text-muted-foreground mb-1 text-[0.65rem] font-semibold uppercase tracking-wide">
+              <p
+                class="text-muted-foreground mb-1 text-[0.65rem] font-semibold tracking-wide uppercase"
+              >
                 {group.group}
               </p>
               <div class="space-y-1">
-                {#each group.vars as v}
+                {#each group.vars as v (v.name)}
                   <div class="flex gap-2">
                     <code class="text-primary min-w-0 shrink-0 font-mono">{`{{ ${v.name} }}`}</code>
                     <span class="text-muted-foreground">{v.desc}</span>
