@@ -12,11 +12,12 @@ implementation, and the open questions tracked across the project.
 - **[data-model.md](./data-model.md)** — schema, decisions, the
   `entities` / `lore` / `threads` / `happenings` shapes. What's
   stored.
-- **[memory.md](./memory.md)** — how prose and structured world state
-  stay consistent turn by turn, what gets injected into each
+- **[memory/](./memory/README.md)** — how prose and structured world
+  state stay consistent turn by turn, what gets injected into each
   generation call, how older content ranks against current scene
-  context. Cadence, embedding infrastructure, retrieval queries,
-  pinning.
+  context. Multi-file: cadence, piggyback contract, periodic
+  classifier, chapter-close pipeline, retrieval (embeddings, queries,
+  ranker, pinning, budgets), edge cases, schema impact + followups.
 - **[calendar-systems/](./calendar-systems/README.md)** — tiered-counter
   primitive for in-world date-time display, classifier vocabulary,
   and (eventually) user-authored fictional calendars. Design spec,
