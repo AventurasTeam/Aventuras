@@ -156,25 +156,34 @@ vector silently mis-ranks or excludes candidates that current
 content would have qualified.
 
 **Embedder unavailability — `embedding_stale` flag.** When an
-embedder isn't available at write time (local model still
-initializing; provider mode network down) the write succeeds in the
-metadata table, the row's `embedding_stale` is set to 1, and vec0
-is left without the row (for creates) or has the row removed (for
-updates that invalidate the existing vector). The flag captures the
+embed call fails at write time (init failed lazily, provider
+network down, EP crashed) the write succeeds in the metadata
+table, the row's `embedding_stale` is set to 1, and vec0 is left
+without the row (for creates) or has the row removed (for updates
+that invalidate the existing vector). The flag captures the
 degradation explicitly — embeddings aren't delta-logged, so without
 it any drift between source content and stored vector would be
 silent.
 
-A worker drains flagged rows opportunistically: on embedder init
-completion, on next successful embed call (provider recovery), in
-idle windows between turns, or via an explicit user "retry sync"
-affordance in Story Settings. Drain re-embeds, inserts/updates
-vec0, and clears the flag in one transaction.
+**Embed failure is blocking, not "queue and continue."** A failed
+embed is treated identically to a failed LLM call: surfaced as an
+error, must be resolved, no ignore path. The next-turn affordance
+disables until the user picks Retry / Switch embedder / Roll back
+this turn. See
+[`model-management.md → Embedder failures`](./model-management.md#embedder-failures)
+for the action surface and the wider failure-mode discussion.
+
+A worker drains flagged rows opportunistically when conditions
+allow — if the user's retry succeeds, or the embedder recovers and
+the next normal embed call goes through, the worker catches up the
+staleness in the same transaction. The opportunistic drain is the
+recovery mechanism; it isn't a "user can ignore the error and let
+the worker fix it later" license. The blocking UX prevents the
+ignore path.
 
 **Retrieval excludes stale rows.** Stale rows aren't in vec0 — they
 don't surface as KNN candidates. Better known-absent than silently-
-wrong. The user-facing UX may surface "N rows pending re-embed" as
-a status signal on the affected story.
+wrong.
 
 **Per-turn cost.** With this contract, retrieval pays no embed cost
 inline for stored rows — vec0 is fresh by the time KNN runs. The

@@ -180,16 +180,19 @@ Settings Memory tab pass.
   desktop-only / opt-in, leave provider as mobile default if low-end
   devices fail) remains on the table until cross-device data lands.
 
-  **Open — production integration.** Cluster-1 (catalog,
-  onboarding, on-disk layout, download flow, license attestation,
-  removal, init-failure handling, staleness UI) is designed in
-  [`model-management.md`](./model-management.md); v1-blocking work
-  there is the implementation (real downloader, SHA256 verification
-  against catalog hashes, license-dialog wiring, Settings · Memory
-  tab, the staleness panel + top-bar pill). Cluster-2 stays open
-  for design — execution-provider selection per device (PoC
-  surfaced `xnnpack` crashes; CPU + NNAPI both work) and
-  provider-mode fallback semantics on local-embedder init failure.
+  **Open — production integration.** Production wiring is fully
+  designed in [`model-management.md`](./model-management.md):
+  catalog (with per-platform `default_ep`), onboarding, on-disk
+  layout, download flow, license attestation, removal, embedder
+  failures (lazy init, test button, embed-failure-as-blocking-
+  error), staleness UI. v1-blocking work that remains is
+  implementation: real downloader with SHA256 verification against
+  catalog hashes, license-dialog wiring, Settings · Memory tab,
+  test-button affordances, the staleness panel + top-bar pill, and
+  the per-model EP override surface. No automatic provider-mode
+  fallback in v1 — embed failures are resolved by the user
+  (retry / switch embedder / roll back) per the lifecycle contract
+  in [`retrieval.md → Compute lifecycle`](./retrieval.md#compute-lifecycle).
 
 - **Per-story embedding provider id.** The schema has
   `stories.settings.embeddingBackend` (`provider | local`) and

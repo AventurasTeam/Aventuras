@@ -55,6 +55,13 @@ Per-entry shape:
         "tokenizer.json": "...",
         "tokenizer_config.json": "..."
       },
+      "default_ep": {
+        "android": "cpu",
+        "ios": "cpu",
+        "linux": "cpu",
+        "macos": "cpu",
+        "windows": "cpu"
+      },
       "tags": ["mobile", "lightweight", "english", "default"]
     }
   ]
@@ -68,6 +75,12 @@ Per-entry shape:
   curation edits to the model card or weights.
 - **`expectedSha256`** — known hashes for the three required files.
   Verified after download completion.
+- **`default_ep`** — per-platform execution provider, set at
+  curation time based on our pre-release testing. v1 default
+  posture is `cpu` everywhere unless we have explicit test evidence
+  justifying a non-CPU pick. User-overridable per-model in Settings
+  (see [Embedder failures](#embedder-failures)). No runtime
+  detection or try-and-fall-back; we ship what we tested.
 - **`tags`** — UI filtering hints (mobile, desktop, lightweight,
   heavy, multilingual, etc.). One entry may carry the `default` tag
   for the recommended pick.
@@ -146,6 +159,7 @@ canonical `id` with `/` replaced by `--` to be filesystem-safe.
     meta.json
     LICENSE.txt          # frozen at agreement time (curated path only)
     .attestation         # acceptance timestamp + license SHA256 + source URL + revision
+    runtime.json         # { ep: 'cpu' | 'nnapi' | ..., source: 'catalog' | 'user' }; absent for curated until user overrides
   baai--bge-base-en-v1.5/
     ...
 ```
@@ -163,7 +177,8 @@ Per-platform `<embedders-root>`:
 The folder is self-contained — removal is a recursive delete, and
 copying a folder to a new device transports the agreed-to license
 along with the model. Custom imports follow the same shape (without
-a `LICENSE.txt`).
+a `LICENSE.txt`); their `runtime.json` is always present, written
+at import time when the user picks an EP.
 
 ---
 
@@ -211,15 +226,24 @@ local model file outside the curated catalog. The user provides
 three files from the filesystem (`model.onnx`, `tokenizer.json`,
 `tokenizer_config.json`). Flow:
 
-1. App validates the bundle: all three files parse, a smoke-test
-   embed runs and returns a vector of the expected dimensionality.
-2. Confirmation dialog: `By using this model, you assert that you
-have a license to do so. The file SHA256 hashes are recorded for
-your reference. [Cancel / Import]`.
-3. On Import: files copied into
+1. **EP picker** — user selects the execution provider this model
+   should run under (CPU, NNAPI, CoreML, xnnpack, etc., filtered
+   to what the ORT build supports). Warning copy explains that
+   the wrong choice can crash the app on subsequent embed calls.
+2. **Smoke-test embed** runs under the picked EP and must return a
+   vector of the expected dimensionality. Validation under the
+   chosen EP catches the mismatch up front — if a different EP
+   would have worked but the picked one crashes, the user finds
+   out at import rather than at first turn-time use. On crash,
+   the import is aborted and the user can try a different EP.
+3. **Confirmation dialog**: `By using this model, you assert that
+you have a license to do so. The file SHA256 hashes are
+recorded for your reference. [Cancel / Import]`.
+4. **On Import**: files copied into
    `<embedders-root>/<sanitized-id>/`, `.attestation` records
-   user-attested license + import timestamp + computed SHA256s. No
-   `LICENSE.txt` is written (none was fetched).
+   user-attested license + import timestamp + computed SHA256s,
+   `runtime.json` records the picked EP. No `LICENSE.txt` is
+   written (none was fetched).
 
 User-supplied id format follows the HF convention
 (`<namespace>/<model>`); the app rejects ids that would collide
@@ -295,28 +319,75 @@ explicitly per story; we don't auto-migrate or auto-reassign.
 
 ---
 
-## Init-failure handling
+## Embedder failures
 
-The local embedder may fail to initialize for reasons beyond
-removal: a corrupt model file, a missing native library, an
-op-coverage gap on the chosen execution provider (the PoC found
-`xnnpack` crashes on embed under our model), incompatible quant.
-Init-failure surfaces as:
+**Init is lazy.** The embedder doesn't initialize at app launch.
+First call (test button, story-creation finalization, turn-time
+embed, retrieval query embed) brings the session up under the
+configured EP. If init or any subsequent embed call fails, the
+failure surfaces at the action that triggered it — never at boot.
+This eliminates the "app crashes on launch from a misconfigured
+EP" failure mode entirely; recovery is just opening Settings and
+adjusting.
 
-- **Error toast** at app launch (or on the first attempted use).
-- **Persistent banner in Settings · Memory** describing the failure
-  mode and offering retry / switch model / switch backend
-  affordances.
-- **Story creation in local mode is blocked** while the embedder is
-  in the failed state. Stories created prior to the failure
-  continue to read from vec0 for already-embedded rows; new writes
-  produce `embedding_stale = 1` per the lifecycle contract in
-  [`retrieval.md → Compute lifecycle`](./retrieval.md#compute-lifecycle).
+### Test button
 
-EP selection per device (CPU, NNAPI, fallback orderings) and
-provider-mode fallback semantics on init failure are owned by the
-cluster 2 design pass; see
-[`followups.md → v1-blocking`](./followups.md#v1-blocking).
+Settings · Memory exposes a `Test embedder` affordance per active
+embedder configuration (the local model, and/or the configured
+provider embedder). Tapping it runs init + a smoke-test embed and
+reports success or failure with diagnostics. Lets users verify
+proactively rather than waiting for the first turn-time use.
+
+### Failure surfaces
+
+Possible failure points:
+
+- **Init failure** — corrupt model file, missing native lib,
+  EP-incompatible quant, OS API gap (the PoC's `xnnpack` hard-
+  crash was an extreme example for our default model).
+- **Embed call failure** post-init — provider mode network
+  failure, rare on-device failure.
+
+Both surface at the action that triggered them. Story-creation
+finalization that fails to embed initial cast surfaces in the
+wizard's commit step:
+`Couldn't initialize the embedder. [Retry] [Settings] [Cancel]`.
+The story isn't created until an embed succeeds; cancelling
+discards wizard state.
+
+### Embed failure is blocking
+
+When an embed call fails for a row that's already been written to
+its metadata table (turn-time emit, user-edit save, etc.), that
+row gets `embedding_stale = 1` and the user-facing UX is
+**identical to a failed LLM call**: blocking, must be resolved, no
+ignore path.
+
+A turn whose classifier emits 5 rows where 3 embed and 2 fail
+lands in a half-committed state — 3 in vec0, 2 stale-flagged in
+metadata. The user sees:
+
+> Embedding failed for 2 rows. `[Retry]` `[Switch embedder]` `[Roll back this turn]`
+
+The next-turn affordance is disabled until one is taken:
+
+- **Retry** re-attempts the failed embeds. On success, stale flags
+  clear, the turn fully commits, user proceeds.
+- **Switch embedder** routes to Story Settings · Memory · Switch,
+  firing the [Model swap UX](./retrieval.md#model-swap-ux) dialog.
+  Re-index processes the staleness as part of the swap.
+- **Roll back this turn** reverse-replays the entire turn's
+  deltas, reverting both narrative and emitted rows. Returns to
+  pre-turn state; the user can retry the turn from scratch.
+
+The worker may still drain stale rows opportunistically (if the
+embedder recovers and the next normal embed call succeeds, the
+worker catches up the staleness in the same path). The blocking
+UX is the user-facing contract; the worker is the same machinery
+running under the hood. Staleness from the same embedder failing
+is not a "queue for later, ignore for now" condition — see
+[`retrieval.md → Compute lifecycle`](./retrieval.md#compute-lifecycle)
+for the worker contract and the lifecycle-level framing.
 
 ---
 
@@ -379,10 +450,20 @@ Two surfaces:
 stories' settings:
 
 - Embedder backend default (`local | provider`).
-- Local model picker (catalog list + Import custom + Remove).
+- Local model picker (catalog list + Import custom + Remove). Each
+  installed model carries:
+  - A `Test embedder` button that runs init + smoke-test embed.
+  - An `Execution provider` picker — defaults to the catalog
+    `default_ep[platform]` for curated entries, or the user's pick
+    at import time for custom entries. Override persists in the
+    model's `runtime.json`. Warning copy on the picker explains
+    that picking the wrong EP can crash the app on next embed
+    call (which surfaces at action time per
+    [Embedder failures](#embedder-failures), not at app launch).
 - Provider embedder picker (provider dropdown grouped by configured
   providers; model dropdown filtered to embedding-capable models on
-  the chosen provider). Required when backend is `provider`.
+  the chosen provider) plus its own `Test embedder` button.
+  Required when backend is `provider`.
 - Per-type retrieval budgets (see
   [`retrieval.md → Per-type retrieval budgets`](./retrieval.md#per-type-retrieval-budgets)
   — already in scope).
@@ -390,10 +471,11 @@ stories' settings:
   story has staleness or a model-swap pending.
 
 **Story Settings · Memory tab** — per-story override of the
-app-level defaults. Same fields, locked once the story has any
-embedded content (i.e. once any vec0 rows exist for that story's
-branches), unless the user explicitly triggers the model-swap
-re-index path.
+app-level defaults. Same fields except the EP picker (per-story EP
+override is parked — limited divergence data justifies one surface
+in v1). Locked once the story has any embedded content (i.e. once
+any vec0 rows exist for that story's branches), unless the user
+explicitly triggers the model-swap re-index path.
 
 ---
 
@@ -406,15 +488,13 @@ re-index path.
   to call — the user may run a different provider for embeddings
   than for narrative. Tracked in
   [`followups.md → v1-blocking`](./followups.md#v1-blocking).
-- **Cluster 2 design pass.** Execution-provider selection per
-  device (CPU, NNAPI, fallback orderings on init failure) and
-  provider-mode fallback semantics. Lands as additions to this doc
-  once the design pass concludes.
+- **Per-story EP override.** Parked. The app-level `Execution
+provider` picker covers the v1 use case; per-story override
+  could revisit if real signal shows users wanting a different EP
+  per story (unlikely with one device datapoint on EP divergence).
 - **Catalog remote update path.** v1 ships catalog updates in app
-  releases. If the curation cadence ever needs to outpace app
+  releases. If curation cadence ever needs to outpace app
   releases, a remote-fetched catalog with bundled fallback is the
   natural extension.
 - **Encryption at rest for the model file and license text.** Not
-  v1 — same posture as provider API keys (see
-  [`followups.md → v1-blocking`](./followups.md#v1-blocking) for
-  the broader encryption-at-rest follow-up if one exists).
+  v1 — same posture as provider API keys.
