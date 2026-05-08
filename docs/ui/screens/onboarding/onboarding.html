@@ -157,6 +157,7 @@
     <button class="rb-btn active" data-step="1">1 — Basics</button>
     <button class="rb-btn" data-step="2">2 — Provider</button>
     <button class="rb-btn" data-step="3">3 — Configure</button>
+    <button class="rb-btn" data-step="4">4 — Embedder</button>
   </div>
   <div class="rb-group">
     <span class="gl">step 2 pick:</span>
@@ -190,8 +191,9 @@
           <span class="dot active" data-dot="1"></span>
           <span class="dot" data-dot="2"></span>
           <span class="dot" data-dot="3"></span>
+          <span class="dot" data-dot="4"></span>
         </div>
-        <span class="step-label" id="step-label">step 1 of 3</span>
+        <span class="step-label" id="step-label">step 1 of 4</span>
       </div>
     </div>
 
@@ -315,6 +317,54 @@
 
       </div>
 
+      <!-- Step 4 — Pick an embedder -->
+      <div class="step" data-step-body="4">
+        <h3 class="step-title">Pick an embedder</h3>
+        <div class="step-rule"></div>
+        <p class="step-intro">
+          An embedding model lets Aventuras find relevant memory rows when generating responses. You can download a small local model now, or use one from your provider.
+        </p>
+
+        <div class="field-group">
+          <div class="field-label" style="margin-bottom: 6px;">Curated local models</div>
+
+          <label class="provider-card selected" style="display: block; cursor: pointer; padding: 10px 14px; margin-bottom: 8px;">
+            <input type="radio" name="embedder" value="curated-minilm" checked style="margin-right: 8px; vertical-align: middle;">
+            <span style="font-weight: 600; font-size: 13px;">MiniLM-L6 (lightweight)</span>
+            <span style="font-size: 11px; color: var(--ink-faint); margin-left: 6px;">25 MB</span>
+            <div style="font-size: 11px; color: var(--ink-muted); margin-top: 4px; margin-left: 22px;">Small, fast, English-focused. Default for mobile.</div>
+          </label>
+
+          <label class="provider-card" style="display: block; cursor: pointer; padding: 10px 14px; margin-bottom: 8px;">
+            <input type="radio" name="embedder" value="curated-bge" style="margin-right: 8px; vertical-align: middle;">
+            <span style="font-weight: 600; font-size: 13px;">BGE-base-en (mid)</span>
+            <span style="font-size: 11px; color: var(--ink-faint); margin-left: 6px;">120 MB</span>
+            <div style="font-size: 11px; color: var(--ink-muted); margin-top: 4px; margin-left: 22px;">Higher quality, English-focused.</div>
+          </label>
+        </div>
+
+        <div class="field-group">
+          <div class="field-label" style="margin-bottom: 6px;">Provider embedder
+            <span style="font-size: 10px; color: var(--ink-faint); font-weight: 400;">&middot; only when configured provider supports embeddings</span>
+          </div>
+
+          <label class="provider-card" style="display: block; cursor: pointer; padding: 10px 14px;">
+            <input type="radio" name="embedder" value="provider-openai" style="margin-right: 8px; vertical-align: middle;">
+            <span style="font-weight: 600; font-size: 13px;">Use <span id="embed-provider-name">OpenRouter</span>'s</span>
+            <code style="font-size: 11px; margin-left: 4px;">text-embedding-3-small</code>
+            <div style="font-size: 11px; color: var(--ink-muted); margin-top: 4px; margin-left: 22px;">No download — runs on the provider when needed.</div>
+          </label>
+        </div>
+
+        <div class="helper-link" style="margin-top: 16px; font-size: 11px; color: var(--ink-faint);">
+          Advanced setup &rarr; <a href="#">Import a custom model file in Settings &middot; Embedding models</a>
+        </div>
+
+        <div class="config-warn" style="margin-top: 18px;">
+          &#9888; Skipping leaves the embedder unconfigured. Story creation is blocked until you set one up in Settings &middot; Memory.
+        </div>
+      </div>
+
     </div>
 
     <div class="wizard-foot">
@@ -371,6 +421,7 @@
   const stepBtns = document.querySelectorAll('.rb-btn[data-step]');
 
   let currentStep = 1;
+  const TOTAL_STEPS = 4;
 
   function setStep(n) {
     currentStep = n;
@@ -379,15 +430,15 @@
       d.classList.toggle('active', i + 1 === n);
       d.classList.toggle('done', i + 1 < n);
     });
-    stepLabel.textContent = `step ${n} of 3`;
+    stepLabel.textContent = `step ${n} of ${TOTAL_STEPS}`;
     backBtn.disabled = (n === 1);
-    nextBtn.textContent = (n === 3) ? 'Finish' : 'Next →';
+    nextBtn.textContent = (n === TOTAL_STEPS) ? 'Finish' : 'Next →';
     stepBtns.forEach(b => b.classList.toggle('active', +b.dataset.step === n));
   }
 
   stepBtns.forEach(b => b.addEventListener('click', () => setStep(+b.dataset.step)));
   backBtn.addEventListener('click', () => { if (currentStep > 1) setStep(currentStep - 1); });
-  nextBtn.addEventListener('click', () => { if (currentStep < 3) setStep(currentStep + 1); });
+  nextBtn.addEventListener('click', () => { if (currentStep < TOTAL_STEPS) setStep(currentStep + 1); });
 
   // --- provider selection (step 2) drives step 3 morph ---
   const providerCards = document.querySelectorAll('.provider-card');
@@ -413,6 +464,8 @@
     document.getElementById('native-provider-name').textContent = name;
     document.getElementById('fail-provider-name').textContent = name;
     document.getElementById('helper-provider-name').textContent = name;
+    const embedNameEl = document.getElementById('embed-provider-name');
+    if (embedNameEl) embedNameEl.textContent = name;
   }
 
   providerCards.forEach(c => c.addEventListener('click', () => setProvider(c.dataset.providerCard)));
@@ -429,6 +482,16 @@
     });
   }
   testBtns.forEach(b => b.addEventListener('click', () => setTestState(b.dataset.test)));
+
+  // --- step 4 embedder selection visual highlight ---
+  document.querySelectorAll('input[name="embedder"]').forEach(input => {
+    input.addEventListener('change', () => {
+      document.querySelectorAll('input[name="embedder"]').forEach(i => {
+        const card = i.closest('.provider-card');
+        if (card) card.classList.toggle('selected', i.checked);
+      });
+    });
+  });
 
   // --- step 1 segment toggle ---
   document.querySelectorAll('.segment').forEach(seg => {

@@ -2,7 +2,7 @@
 
 **Wireframe:** [`onboarding.html`](./onboarding.html) — interactive
 
-The first thing a user sees on a fresh install. A three-step linear
+The first thing a user sees on a fresh install. A four-step linear
 wizard that gets them from zero to a working AI configuration with
 the minimum possible friction. Skippable at any step — anyone who
 bypasses it lands on the [Story list](../story-list/story-list.md)
@@ -22,7 +22,7 @@ Cross-cutting principles that govern this surface are in
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                       Welcome to Aventuras                  │
-│                          • • •  step 1 of 3                 │
+│                          • • • •  step 1 of 4               │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
 │   App basics                                                 │
@@ -43,15 +43,15 @@ Cross-cutting principles that govern this surface are in
 
 Centered card on a dim backdrop. No top bar, no Actions, no Settings
 gear, no Return — the wizard IS the chrome at first launch. The
-three-dot progress indicator under the title is the only navigation
-context. `← Back` and `Next →` (or `Finish` on Step 3) live in the
+four-dot progress indicator under the title is the only navigation
+context. `← Back` and `Next →` (or `Finish` on Step 4) live in the
 footer along with the persistent `Skip for now` link.
 
 ## Cross-cutting decisions
 
 These shape every step:
 
-- **Three steps, no welcome screen.** The wizard opens directly on
+- **Four steps, no welcome screen.** The wizard opens directly on
   Step 1. Marketing/pitch copy belongs to the website, not the
   installed app's first interaction.
 - **Skippable, no resume.** `Skip for now` ends onboarding
@@ -62,12 +62,12 @@ These shape every step:
   to discover the missing setup.
 - **No mid-wizard persistence beyond Step 1.** Step 1 selections
   commit on `Next` (they're valid `app_settings.appearance` /
-  `app_settings.ui_language` values either way). Steps 2 and 3 are
-  in-memory until the user clicks `Finish` — partial provider
-  config is invalid by zod/TS contract and never touches the DB.
-  Closing the window mid-wizard is identical to clicking `Skip`:
-  Step 1 commits stay, Steps 2/3 selections are dropped, onboarding
-  is marked done.
+  `app_settings.ui_language` values either way). Steps 2-4 are
+  in-memory until the user clicks `Finish` — partial provider /
+  embedder config is invalid by zod/TS contract and never touches
+  the DB. Closing the window mid-wizard is identical to clicking
+  `Skip`: Step 1 commits stay, Steps 2-4 selections are dropped,
+  onboarding is marked done.
 - **Defaults are sensible.** Every Step 1 field has a default that
   works without thinking. The user can `Next` through Step 1
   without touching anything; nothing here is load-bearing for the
@@ -258,16 +258,113 @@ setup and fix later in Settings.` **Does not block `Finish`** —
    user actually navigates there — they're already in Settings,
    the work is in front of them.
 
+## Step 4 — Pick an embedder
+
+Story creation requires an embedder for retrieval-driven memory.
+Step 4 surfaces the curated catalog (the common path) plus a path
+to use a configured provider's embedding model. Custom-file import
+is power-user-only and lives in
+[App Settings · Embedding models](../app-settings/app-settings.md#generation--embedding-models),
+not the wizard.
+
+```
+┌────────────────────────────────────────────────────────┐
+│  Pick an embedder                                       │
+│  ─────────────                                          │
+│  An embedding model lets Aventuras find relevant        │
+│  memory rows when generating responses. You can         │
+│  download a small local model now, or use one from      │
+│  your provider.                                         │
+│                                                          │
+│  ── Curated local models ──                             │
+│  ◯  MiniLM-L6 (lightweight)                25 MB        │
+│       Small, fast, English-focused. Default for         │
+│       mobile.                                           │
+│                                                          │
+│  ◯  BGE-base-en (mid)                     120 MB        │
+│       Higher quality, English-focused.                  │
+│                                                          │
+│  ── Provider embedder ──                                │
+│  ◯  Use OpenRouter's text-embedding-3-small             │
+│       (when the configured provider exposes embedding   │
+│       models)                                           │
+│                                                          │
+│  Advanced setup → import a custom model file in         │
+│  Settings · Embedding models                            │
+│                                                          │
+│  [ Skip for now ]                          [ Finish ]   │
+└────────────────────────────────────────────────────────┘
+```
+
+### Path A — Curated local model
+
+Selecting a curated entry and clicking `Finish`:
+
+1. Triggers the curated download flow (live model-card fetch +
+   license dialog at the catalog's pinned `huggingfaceRevision`)
+   per
+   [`memory/model-management.md → Download flow`](../../../memory/model-management.md#download-flow).
+2. On accept, downloads the three required files into
+   `<embedders-root>/<sanitized-id>/`, SHA256-verifies, writes
+   `LICENSE.txt` + `.attestation`.
+3. Seeds:
+   - `app_settings.default_story_settings.embeddingBackend = 'local'`
+   - `app_settings.default_story_settings.embedding_model_id = '<picked-id>'`
+4. Routes to Story list (no banner — embedder configured).
+
+If the user accepts the license but the download fails or is
+cancelled mid-flight, no defaults seed and the user lands on Story
+list with the embedder banner.
+
+### Path B — Provider embedder
+
+This card only renders when the just-configured provider exposes
+embedding-capable models (per the capability classification in
+[App Settings · Providers' Embedding models section](../app-settings/app-settings.md#models--split-by-capability)).
+Selecting + `Finish`:
+
+1. Seeds:
+   - `app_settings.default_story_settings.embeddingBackend = 'provider'`
+   - `app_settings.default_story_settings.embedding_model_id = '<picked-id>'`
+   - (Per-story `embedding_provider_id` lands once the
+     [v1 followup](../../../memory/followups.md#v1-blocking)
+     resolves; until then the provider is implicitly the default.)
+2. Routes to Story list (no banner).
+
+Providers without embedding capability hide the card entirely
+rather than greying it. Anthropic, for instance, would hide it.
+
+### Skip on Step 4
+
+Same shape as Skip on any earlier step — onboarding marked done,
+Steps 2-4 in-memory state dropped (provider config from Step 3
+still gets committed on Skip from Step 4 — behavior parity with
+clicking `Finish` on a provider-configured wizard, just without
+the embedder seed). Story list banner fires noting embedder needs
+configuration.
+
+### Why no custom-file import here
+
+Custom imports require the user to provide three HF files plus
+pick an EP under which to validate the model. That's enough
+ceremony to belong on a power-user surface, not a first-launch
+wizard. The wizard's footer link routes to Settings if the user
+needs that path.
+
 ## Skip behavior
 
 `Skip for now` is present on every step. Clicking it:
 
 1. Commits whatever Step 1 changes the user made (defaults if they
    didn't touch anything).
-2. Drops Steps 2/3 in-memory state.
-3. Marks `onboarding_completed_at` with the skip timestamp.
-4. Routes to **Story list**, where the
-   [banner](#story-list-integration--banner) fires.
+2. Commits Step 3 provider config if Step 3 was completed (i.e.,
+   skip-from-Step-4 keeps the provider; skip-from-earlier-steps
+   drops provider config too).
+3. Drops Step 4 in-memory selection (no embedder seeds).
+4. Marks `onboarding_completed_at` with the skip timestamp.
+5. Routes to **Story list**, where the
+   [banner](#story-list-integration--banner) fires noting whatever
+   remains unconfigured (provider, embedder, or both).
 
 The wizard never re-opens. Users who skipped configure providers
 the same way as users whose initial provider stopped working: from
@@ -299,6 +396,17 @@ written without any user-facing UI:
   `wizard-assist` (backs all AI calls fired from the
   [Story creation wizard](../wizard/wizard.md)), seeded to
   the `Fast tasks` profile by default.
+- **Embedder default** (Step 4) — when the user finishes Step 4
+  with a curated pick or provider pick:
+  - `app_settings.default_story_settings.embeddingBackend` set to
+    `'local'` or `'provider'` per the pick.
+  - `app_settings.default_story_settings.embedding_model_id` set
+    to the chosen model id.
+  - For curated picks, the model file lands in
+    `<embedders-root>/<sanitized-id>/` per
+    [`memory/model-management.md → Storage layout`](../../../memory/model-management.md#storage-layout).
+  - When Step 4 is skipped, no embedder defaults seed; the Story
+    list banner notes embedder needs setup.
 
 > **Note:** the specific profile names (`Fast tasks` /
 > `Heavy reasoning`), the per-agent assignment matrix, and the
