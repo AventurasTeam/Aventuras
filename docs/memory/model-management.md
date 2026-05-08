@@ -216,6 +216,21 @@ doesn't match the expected hash. Try again later.` Don't
 - **Disk-full** mid-download — abort and surface a clear error;
   delete partials.
 
+**Implementation note — `@huggingface/hub`.** The official
+[`@huggingface/hub`](https://www.npmjs.com/package/@huggingface/hub)
+JS SDK covers most of the curated path: `downloadFile({ repo, path,
+revision })` returns a `Response` for an individual file, pinned to
+the catalog entry's `huggingfaceRevision`; `modelInfo({ name,
+revision })` fetches the model-card metadata used for license
+rendering. Both work in browser-shaped runtimes (Expo, Electron
+renderer). `snapshotDownload` is Node-only (uses a local cache
+dir) and not what we want — it bypasses our per-model folder
+layout. The downloader fetches the three required files
+individually via `downloadFile`, streams to disk under
+`<embedders-root>/<sanitized-id>/`, computes SHA256 against the
+catalog's `expectedSha256`, and wraps resume/retry/progress
+around the call site rather than inside the SDK.
+
 ### Custom file import
 
 Settings · Memory exposes "Import custom model" for users with a
