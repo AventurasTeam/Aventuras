@@ -56,6 +56,20 @@ this design to be implementable:
   `chapter`, per-`field`, per-`model_id`, with `vector` blob and
   `source_hash` for staleness detection. Forks with branch.
   See [`retrieval.md → Storage`](./retrieval.md#storage--embeddings-table).
+- **Implementation update from PoC**: physical storage is
+  per-type `vec0` virtual tables (sqlite-vec, bundled with
+  expo-sqlite) — `entities_vec`, `lore_vec`, `happenings_vec`,
+  `threads_vec`, `chapter_summaries_vec` — paired with the regular
+  metadata tables and joined by id. The polymorphic-table model
+  above is the logical view; production uses one vec0 table per
+  entity type because vec0 doesn't filter efficiently across
+  mixed-type rows. **Multi-model coexistence dropped** — mixed-model
+  retrieval is fundamentally broken (queries are embedded under one
+  model and can't be compared to vectors in a different model's
+  space). Single active model at any time; on swap, vec0 tables
+  are dropped and recreated. `source_hash` placement (auxiliary
+  vec0 column or sidecar table) and the exact per-field embedding
+  shape are TBD in production-integration design.
 
 ### `stories.settings`
 
@@ -170,12 +184,19 @@ Settings Memory tab pass.
   files (no Python conversion either side). License is user-attested
   for custom imports.
 
-  **PoC findings (Galaxy Fold 7 — last-gen flagship; low-end
-  testing parked, see below).**
+  **PoC findings — embedder (Galaxy Fold 7 — last-gen flagship;
+  low-end testing parked, see below).**
   - **Warm per-embed:** CPU 10 ms mean / 1-30 ms range; NNAPI 13 ms
     mean, much tighter distribution. NNAPI's stability is more
     valuable for P99-bounded budgeting than its slightly higher
     mean.
+  - **Embed-cost variance under load:** tight-loop microbenchmark
+    measures ~10 ms warm; single-shot embeds (with idle gaps) come
+    in closer to ~30 ms. CPU governor downclock between calls
+    accounts for the gap. Same pattern under both CPU and NNAPI EPs.
+    Real per-turn budgeting must use the single-shot number, not the
+    loop number — three single-shot query embeds is realistically
+    ~100 ms under normal use, not 30 ms.
   - **Cold init:** ~270 ms (asset extraction from APK dominates).
     Warm re-init: ~120 ms. Asset extraction accounts for ~150 ms of
     cold start.
@@ -189,9 +210,57 @@ Settings Memory tab pass.
     quant incompatibility. Not blocking — CPU + NNAPI both work and
     are interchangeable.
 
-  Numbers are 100x+ under the few-second pre-LLM gate budget.
-  Mobile feasibility settled with significant headroom; a 4-year-old
-  mid-range device could be 10x slower and still comfortably pass.
+  Embedder cost is comfortable. Mobile feasibility settled with
+  significant headroom on flagship hardware; a 4-year-old mid-range
+  device could be 10x slower and still pass.
+
+  **PoC findings — retrieval pipeline (same device).**
+  - **JS-side cosine scan + ranker + MMR**, pure-JS implementation:
+    - Cosine scan scales linearly: ~24-30 µs per 384-dim dot
+      product on Hermes. At 100k candidates × 3 query vectors,
+      cosine alone is ~3 s.
+    - MMR initially ~280 ms regardless of pool size (iteration
+      overhead dominated FLOPs); rewrite using `Uint8Array` bitmap
+      - incremental `maxSimToSelected[]` tracking dropped it to
+        ~15-18 ms. ~17x speedup.
+    - Cache-locality experiment with a contiguous flat
+      `Float32Array(N×dim)` pool was **worse** than per-vector
+      `Float32Array[]`, not better. Hermes pays a tax on
+      offset-indexed typed-array access that exceeds whatever
+      cache benefit a flat layout yields.
+    - JS-only retrieval is comfortable up to ~10-15k effective
+      candidates. At 50k it's ~1.5 s; at 100k ~3.5 s.
+  - **`sqlite-vec` (bundled with `expo-sqlite` since SDK 55):**
+    - Wired in via the standard plugin flag
+      (`withSQLiteVecExtension: true`). Drizzle wrapper packages
+      considered then rejected (`@aeriondyseti/drizzle-sqlite-vec`
+      is single-version, no source link, ~zero downloads); Drizzle's
+      `sql` template-literal escape hatch handles vec0 operations
+      natively, which is the canonical pattern.
+    - Per-query KNN against vec0: ~11 / 43 / 61 / 122 ms at 1k /
+      10k / 50k / 100k. With three queries per pass, total
+      retrieval (incl. embed and merge) is ~478 ms at 100k —
+      ~5-8x faster than JS-side at large pools, comparable at
+      1-10k.
+    - Slower than the published 75 ms@100k benchmark — likely a
+      mix of mobile ARM lacking AVX2 SIMD, expo-sqlite's bridge
+      overhead, and our 3-query workload vs published 1-query.
+    - **Insert cost:** ~600 µs/row → 60 s to populate 100k
+      vectors. UX implication: bulk-population events
+      (first-story embed, model-swap re-index) need progress
+      indicators. Per-turn incremental writes are not a concern.
+    - **Decision: vec0 is the canonical retrieval path for v1.**
+      No JS-only fallback in production — splitting paths just
+      for the early-game window where JS is competitive adds
+      maintenance cost without real benefit.
+  - **Open — multi-query KNN cost.** Three separate KNN queries
+    triple the per-pass cost vs a single query. Pre-blending the
+    three query vectors into one before sending to vec0 would cut
+    that to one query but produces different results
+    (vector-blend ≠ score-blend). Worth measuring whether the
+    vector-blend approximation is acceptable for retrieval
+    quality, since the perf win is real (~120 ms vs ~370 ms at
+    100k).
 
   **Open — cross-device tier-finding.** PoC tested only the flagship.
   Tier-finding question (one model serves all device classes vs
