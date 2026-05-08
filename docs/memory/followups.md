@@ -210,14 +210,6 @@ Settings Memory tab pass.
   Profiles tab — embedders share none of the LLM-profile parameter
   shape (temperature, max output, thinking, structured-output).
 
-- **Background classifier UX.** Pill behavior settled — folds into
-  the existing generation indicator at low priority (narrative
-  wins; classifier surfaces when nothing higher is running). See
-  [`classifier.md → Background-task framing`](./classifier.md#background-task-framing).
-  What remains: Story Settings · Memory affordance (last-run-at,
-  cadence display, current state) and the manual "Run classifier
-  now" override button. Both live alongside the cluster-1
-  staleness panel in the same Memory tab.
 - **Entity-merge UI** — for the residual collision-flag recovery path.
   Doesn't exist today. World-panel surface, design pass.
 - **Memory probe affordance** — debug UI for "what was retrieved and

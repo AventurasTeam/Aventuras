@@ -118,3 +118,64 @@ isn't predictable). Chapter-close uses `'pill-and-banner'`
 shares the pill, not the banner. The pill is unconditional — if
 something's generating it shows, no fail-only or quiet-success
 mode.
+
+## Settings · Memory · Classifier panel
+
+The Story Settings · Memory tab surfaces classifier controls and
+state for the active branch in a compact panel.
+
+### Cadence config
+
+In-place edit of `stories.settings.classifierCadence` and
+`piggybackMode`. The buffer-aware indicator from
+[`cadence.md → User-tunable knobs`](./cadence.md#user-tunable-knobs)
+renders inline so the user sees the cadence-vs-recent-buffer
+overlap.
+
+### Status block
+
+Reflects the classifier's current state:
+
+- **Idle** — `Last run N turns ago, processed P happenings + Q awareness rows.`
+- **Running** — `Running... processed N of M turns.` Mirrors the pill.
+- **Retrying** — `⚠ Last run failed (X of 3 attempts), retrying in N minutes.` Visible to users who look in Settings; doesn't escalate elsewhere.
+- **Failed-persistent** — `⚠ Classifier failed after 3 attempts: [reason].` Inline `[Retry]` + `[View error details]`. Also surfaces as a top-bar error pill in the affected story — same visual vocabulary as the cluster-1 staleness pill; tap routes back here. Two different reasons, one UX pattern: error pill is the discovery channel, Settings panel is the resolution channel.
+
+### Manual override
+
+`[Run classifier now]` triggers an immediate pass over unprocessed
+turns. Disabled while a run is actively in flight; enabled in
+**idle** and **retrying** states (lets the user preempt the
+auto-retry backoff). The **failed-persistent** inline `[Retry]`
+is the equivalent action surfaced from the loud-error path.
+
+### Auto-retry policy
+
+A failed run schedules auto-retry with exponential backoff: **30
+seconds → 2 minutes → 5 minutes**. After 3 retries exhausted, the
+classifier enters **failed-persistent** state. Cadence-triggered
+runs suspend in that state — no point spamming a broken provider
+on every cadence tick — until the user explicitly retries. Cadence
+resumes from the next normal trigger after a retry succeeds.
+
+The retry policy applies to whatever caused the failure (rate
+limit, network drop, provider 5xx). Errors that aren't transient
+(invalid API key, model removed from provider catalog) hit
+failed-persistent on the original failure plus the three retries
+just like any other; the user resolves at the source (re-key,
+swap profile, etc.) rather than waiting for retries to magically
+succeed.
+
+### Persistence
+
+Per-branch classifier status — current state, last-success-at,
+last-error, retry-attempt count — persists alongside the branch.
+Concrete shape (`branches.classifier_status?: JSON` field vs
+sidecar table) is an implementation detail; this design pins what
+gets stored, not where.
+
+The panel sits in the same Memory tab as the embedder controls
+(see
+[`model-management.md → Embedder config`](./model-management.md#embedder-config--where-it-lives-in-settings))
+and the cluster-1 staleness panel. Wire-level layout lands at the
+per-screen Story Settings design pass.
