@@ -160,14 +160,16 @@ Settings Memory tab pass.
       No JS-only fallback in production — splitting paths just
       for the early-game window where JS is competitive adds
       maintenance cost without real benefit.
-  - **Open — multi-query KNN cost.** Three separate KNN queries
-    triple the per-pass cost vs a single query. Pre-blending the
-    three query vectors into one before sending to vec0 would cut
-    that to one query but produces different results
-    (vector-blend ≠ score-blend). Worth measuring whether the
-    vector-blend approximation is acceptable for retrieval
-    quality, since the perf win is real (~120 ms vs ~370 ms at
-    100k).
+  - **Multi-query KNN cost — pre-blend escape hatch (post-v1; see
+    [Parked / post-v1](#parked--post-v1)).** Three separate KNN
+    queries triple per-pass cost vs single-query. Pre-blending
+    the three query vectors before KNN is mathematically rank-
+    equivalent to weighted score-blend for L2-normalized embeddings
+    (the original "vector-blend ≠ score-blend" framing was wrong on
+    the math); the real trade-offs are recall at the top-K cutoff,
+    loss of per-query debug visibility for tuning, and inability to
+    express non-linear blends. Kept as an optionality lever for
+    future high-dim-provider-on-mobile signal, not a v1 target.
 
   **Open — cross-device tier-finding.** PoC tested only the flagship.
   Tier-finding question (one model serves all device classes vs
@@ -231,6 +233,24 @@ Settings Memory tab pass.
   need to be lower for tight worlds, higher for first chapters of
   rich-worldbuilding stories). Belongs in the same empirical
   calibration pass as the threshold tuning.
+- **Matryoshka effective-dim selector for provider models.** Modern
+  embedding models (OpenAI `text-embedding-3-*`, Qwen3-Embedding,
+  BGE-M3) are trained so the first N dims of a high-dim output
+  vector are themselves a usable lower-dim embedding. Lets one
+  provider model serve mobile and desktop users at different cost
+  points: e.g., a homelab user picks Qwen3-Embedding-8B (4096-dim
+  native), and on mobile the story stores 1024-dim truncated
+  vectors. Trade quality (slight) for retrieval-cost order-of-
+  magnitude improvement. Schema impact: add immutable
+  `stories.settings.effectiveDim?: number` (set at story creation,
+  null = use model native dim, locked thereafter same as
+  `retrievalMode`). UX: surface in story creation when the chosen
+  provider model declares Matryoshka capability in
+  `app_settings.providers[].cachedModels[].capabilities`; suggest a
+  default based on detected platform; show projected per-turn
+  retrieval cost. App Settings → Memory shows read-only effective
+  dim per story. Not relevant for local-mode (the bundled local
+  model is small enough not to need truncation).
 
 ### Parked / post-v1
 
@@ -273,3 +293,32 @@ Settings Memory tab pass.
   awareness rows, per-character awareness volume cap, retrieval-
   frequency-driven pruning. Not in v1; levers if testing shows
   the awareness-graph long tail genuinely bites.
+- **Pre-blended query vector — escape hatch for high-dim provider
+  on mobile.** Three-query KNN scales linearly with dim and triples
+  per-pass cost vs single-query. For users running heavy provider
+  embeddings (Qwen3-Embedding-8B at 4096-dim, OpenAI
+  `text-embedding-3-large`) on mobile, retrieval-pass cost grows
+  into multi-second territory at 100k pools. Pre-blending the three
+  query vectors before KNN is mathematically rank-equivalent to
+  weighted score-blend for L2-normalized embeddings (with
+  per-batch-constant scaling — the original "vector-blend ≠
+  score-blend" framing was wrong on the math). Real trade-offs:
+  - **Recall at top-K cutoff.** Score-blend retrieves top-K from
+    each query separately; candidates that excel at one query but
+    average poorly still enter the candidate pool. Pre-blend
+    operates on a single top-K of the blended query — those
+    "specialist" candidates can fall off entirely. Mitigated by
+    raising K, but recall recovery isn't free.
+  - **Lost per-query debug visibility.** The empirical-tuning pass
+    leans on the memory probe affordance to inspect per-query
+    similarity contributions. Pre-blend collapses three signals
+    into one; "why was this row retrieved" gets murkier.
+  - **Forecloses non-linear blends.** Pre-blend can only express
+    linear combinations of query vectors. Future levers like
+    per-query thresholds, max-of-cosines, or harmonic mean become
+    impossible without going back to score-blend.
+
+  Lands as a story-level toggle ("Use combined query — faster, less
+  precise") if cross-device data shows mid-range mobile users with
+  high-dim provider models hitting unworkable retrieval latency.
+  Not v1.
