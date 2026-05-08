@@ -90,7 +90,7 @@ pipeline phase:
 | ---------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `gateBehavior`   | `'no-gate'`                                                                                                          |
 | `conflictPolicy` | `'concurrent-allowed'`                                                                                               |
-| `affordance`     | `'pill-only'` (or `'invisible'` — UI surface design TBD)                                                             |
+| `affordance`     | `'pill-only'` — folds into the generation indicator at low priority (see below)                                      |
 | `writeSet`       | happenings, happening_involvements, happening_awareness, entity status flips, first-introduction entity descriptions |
 
 The single-writer invariant in
@@ -108,3 +108,13 @@ them off independently.
 `'abort-self'` was rejected as wasteful — it discards in-flight
 classifier work that doesn't conflict with the new turn's writes
 anyway.
+
+**Pill priority.** The classifier surfaces on the existing
+generation indicator pill with low priority — user-initiated
+narrative wins when both are in flight; the classifier pill shows
+when nothing higher is running. No ETA in the popover (run length
+isn't predictable). Chapter-close uses `'pill-and-banner'`
+(blocking workload, separate visual treatment); periodic classifier
+shares the pill, not the banner. The pill is unconditional — if
+something's generating it shows, no fail-only or quiet-success
+mode.
