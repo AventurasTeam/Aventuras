@@ -261,9 +261,9 @@ setup and fix later in Settings.` **Does not block `Finish`** —
 ## Step 4 — Pick an embedder
 
 Story creation requires an embedder for retrieval-driven memory.
-Step 4 surfaces the curated catalog (the common path) plus a path
-to use a configured provider's embedding model. Custom-file import
-is power-user-only and lives in
+Step 4 is a single grouped picker covering both the curated catalog
+(the common path) and any configured provider's embedding models.
+Custom-file import is power-user-only and lives in
 [App Settings · Embedding models](../app-settings/app-settings.md#generation--embedding-models),
 not the wizard.
 
@@ -272,22 +272,20 @@ not the wizard.
 │  Pick an embedder                                       │
 │  ─────────────                                          │
 │  An embedding model lets Aventuras find relevant        │
-│  memory rows when generating responses. You can         │
-│  download a small local model now, or use one from      │
-│  your provider.                                         │
+│  memory rows when generating responses.                 │
 │                                                          │
-│  ── Curated local models ──                             │
-│  ◯  MiniLM-L6 (lightweight)                25 MB        │
-│       Small, fast, English-focused. Default for         │
-│       mobile.                                           │
+│  Embedder model                                         │
+│  [ MiniLM-L6 (lightweight) — 25 MB              ▾ ]    │
 │                                                          │
-│  ◯  BGE-base-en (mid)                     120 MB        │
+│   (dropdown options, grouped:)                          │
+│   ── Curated local models ──                            │
+│   • MiniLM-L6 (lightweight)              25 MB          │
+│       Small, fast, English-focused.                     │
+│   • BGE-base-en (mid)                   120 MB          │
 │       Higher quality, English-focused.                  │
-│                                                          │
-│  ── Provider embedder ──                                │
-│  ◯  Use OpenRouter's text-embedding-3-small             │
-│       (when the configured provider exposes embedding   │
-│       models)                                           │
+│   ── Provider models ── (when configured provider       │
+│                          supports embeddings)           │
+│   • OpenRouter / text-embedding-3-small                 │
 │                                                          │
 │  Advanced setup → import a custom model file in         │
 │  Settings · Embedding models                            │
@@ -296,43 +294,60 @@ not the wizard.
 └────────────────────────────────────────────────────────┘
 ```
 
+The picker is a single Select with grouped options rather than
+two radio cards — pickers scale better than radio lists when the
+catalog grows, and one field reads more cleanly than two parallel
+groups. Selecting an entry implicitly determines the backend
+(curated entries set `backend=local`; provider entries set
+`backend=provider`).
+
 ### Path A — Curated local model
 
 Selecting a curated entry and clicking `Finish`:
 
-1. Triggers the curated download flow (live model-card fetch +
-   license dialog at the catalog's pinned `huggingfaceRevision`)
-   per
-   [`memory/model-management.md → Download flow`](../../../memory/model-management.md#download-flow).
+1. **Triggers the curated download flow** — same dialog component
+   as
+   [App Settings · Embedding models · Add model](../app-settings/app-settings.md#installed-local-models)
+   (live model-card fetch at the catalog's pinned
+   `huggingfaceRevision`, license dialog with source URL +
+   revision hash). Single canonical UI; the wizard just invokes
+   it.
 2. On accept, downloads the three required files into
    `<embedders-root>/<sanitized-id>/`, SHA256-verifies, writes
-   `LICENSE.txt` + `.attestation`.
+   `LICENSE.txt` + `.attestation` per
+   [`memory/model-management.md → Download flow`](../../../memory/model-management.md#download-flow).
 3. Seeds:
    - `app_settings.default_story_settings.embeddingBackend = 'local'`
    - `app_settings.default_story_settings.embedding_model_id = '<picked-id>'`
 4. Routes to Story list (no banner — embedder configured).
 
-If the user accepts the license but the download fails or is
-cancelled mid-flight, no defaults seed and the user lands on Story
-list with the embedder banner.
+If the user **declines the license** or **cancels mid-download**,
+the download dialog dismisses back to Step 4 with the picker
+unchanged — no defaults seed, the wizard remains on Step 4 so the
+user can pick a different entry, retry, or skip. License-acceptance
+is contingent on completion (see
+[`memory/model-management.md → License attestation`](../../../memory/model-management.md#license-attestation)).
 
 ### Path B — Provider embedder
 
-This card only renders when the just-configured provider exposes
-embedding-capable models (per the capability classification in
+The "Provider models" group only appears in the dropdown when the
+just-configured provider exposes embedding-capable models (per the
+capability classification in
 [App Settings · Providers' Embedding models section](../app-settings/app-settings.md#models--split-by-capability)).
-Selecting + `Finish`:
+For providers without embedding capability (e.g. Anthropic today),
+the group is omitted entirely rather than shown disabled.
 
-1. Seeds:
+Selecting a provider entry and clicking `Finish`:
+
+1. No download — the model lives on the provider, nothing to fetch
+   locally.
+2. Seeds:
    - `app_settings.default_story_settings.embeddingBackend = 'provider'`
    - `app_settings.default_story_settings.embedding_model_id = '<picked-id>'`
    - (Per-story `embedding_provider_id` lands once the
      [v1 followup](../../../memory/followups.md#v1-blocking)
      resolves; until then the provider is implicitly the default.)
-2. Routes to Story list (no banner).
-
-Providers without embedding capability hide the card entirely
-rather than greying it. Anthropic, for instance, would hide it.
+3. Routes to Story list (no banner).
 
 ### Skip on Step 4
 
@@ -348,8 +363,8 @@ configuration.
 Custom imports require the user to provide three HF files plus
 pick an EP under which to validate the model. That's enough
 ceremony to belong on a power-user surface, not a first-launch
-wizard. The wizard's footer link routes to Settings if the user
-needs that path.
+wizard. The wizard's advanced-setup link routes to Settings if the
+user needs that path.
 
 ## Skip behavior
 

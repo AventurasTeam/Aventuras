@@ -322,45 +322,34 @@
         <h3 class="step-title">Pick an embedder</h3>
         <div class="step-rule"></div>
         <p class="step-intro">
-          An embedding model lets Aventuras find relevant memory rows when generating responses. You can download a small local model now, or use one from your provider.
+          An embedding model lets Aventuras find relevant memory rows when generating responses. Pick a curated local model to download, or use one from your provider.
         </p>
 
         <div class="field-group">
-          <div class="field-label" style="margin-bottom: 6px;">Curated local models</div>
-
-          <label class="provider-card selected" style="display: block; cursor: pointer; padding: 10px 14px; margin-bottom: 8px;">
-            <input type="radio" name="embedder" value="curated-minilm" checked style="margin-right: 8px; vertical-align: middle;">
-            <span style="font-weight: 600; font-size: 13px;">MiniLM-L6 (lightweight)</span>
-            <span style="font-size: 11px; color: var(--ink-faint); margin-left: 6px;">25 MB</span>
-            <div style="font-size: 11px; color: var(--ink-muted); margin-top: 4px; margin-left: 22px;">Small, fast, English-focused. Default for mobile.</div>
-          </label>
-
-          <label class="provider-card" style="display: block; cursor: pointer; padding: 10px 14px; margin-bottom: 8px;">
-            <input type="radio" name="embedder" value="curated-bge" style="margin-right: 8px; vertical-align: middle;">
-            <span style="font-weight: 600; font-size: 13px;">BGE-base-en (mid)</span>
-            <span style="font-size: 11px; color: var(--ink-faint); margin-left: 6px;">120 MB</span>
-            <div style="font-size: 11px; color: var(--ink-muted); margin-top: 4px; margin-left: 22px;">Higher quality, English-focused.</div>
-          </label>
-        </div>
-
-        <div class="field-group">
-          <div class="field-label" style="margin-bottom: 6px;">Provider embedder
-            <span style="font-size: 10px; color: var(--ink-faint); font-weight: 400;">&middot; only when configured provider supports embeddings</span>
+          <div class="field-label" style="margin-bottom: 6px;">Embedder model</div>
+          <div class="field-control">
+            <select id="embedder-select" style="width: 100%; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 4px; background: var(--bg); color: var(--ink); font-size: 13px; font-family: inherit;">
+              <optgroup label="Curated local models">
+                <option value="local:Xenova/all-MiniLM-L6-v2-q8" selected>MiniLM-L6 (lightweight) — 25 MB</option>
+                <option value="local:BAAI/bge-base-en-v1.5">BGE-base-en (mid) — 120 MB</option>
+              </optgroup>
+              <optgroup label="Provider models" id="embedder-provider-group">
+                <option value="provider:text-embedding-3-small" id="embedder-provider-option">OpenRouter / text-embedding-3-small</option>
+              </optgroup>
+            </select>
           </div>
-
-          <label class="provider-card" style="display: block; cursor: pointer; padding: 10px 14px;">
-            <input type="radio" name="embedder" value="provider-openai" style="margin-right: 8px; vertical-align: middle;">
-            <span style="font-weight: 600; font-size: 13px;">Use <span id="embed-provider-name">OpenRouter</span>'s</span>
-            <code style="font-size: 11px; margin-left: 4px;">text-embedding-3-small</code>
-            <div style="font-size: 11px; color: var(--ink-muted); margin-top: 4px; margin-left: 22px;">No download — runs on the provider when needed.</div>
-          </label>
+          <div id="embedder-detail" style="font-size: 11px; color: var(--ink-muted); margin-top: 6px;">Small, fast, English-focused. Default for mobile.</div>
         </div>
 
-        <div class="helper-link" style="margin-top: 16px; font-size: 11px; color: var(--ink-faint);">
+        <div class="config-info" style="margin-top: 14px; padding: 10px 12px; background: var(--bg-region); border-left: 3px solid var(--line-soft); border-radius: 3px; font-size: 11px; color: var(--ink-muted);">
+          <b>Curated picks</b> trigger the model download flow on Finish (license dialog + download + SHA256 verify) — same UI as Settings &middot; Embedding models &middot; Add model. <b>Provider picks</b> seed instantly with no download.
+        </div>
+
+        <div class="helper-link" style="margin-top: 14px; font-size: 11px; color: var(--ink-faint);">
           Advanced setup &rarr; <a href="#">Import a custom model file in Settings &middot; Embedding models</a>
         </div>
 
-        <div class="config-warn" style="margin-top: 18px;">
+        <div class="config-warn" style="margin-top: 14px;">
           &#9888; Skipping leaves the embedder unconfigured. Story creation is blocked until you set one up in Settings &middot; Memory.
         </div>
       </div>
@@ -464,8 +453,8 @@
     document.getElementById('native-provider-name').textContent = name;
     document.getElementById('fail-provider-name').textContent = name;
     document.getElementById('helper-provider-name').textContent = name;
-    const embedNameEl = document.getElementById('embed-provider-name');
-    if (embedNameEl) embedNameEl.textContent = name;
+    const embedOption = document.getElementById('embedder-provider-option');
+    if (embedOption) embedOption.textContent = name + ' / text-embedding-3-small';
   }
 
   providerCards.forEach(c => c.addEventListener('click', () => setProvider(c.dataset.providerCard)));
@@ -483,15 +472,19 @@
   }
   testBtns.forEach(b => b.addEventListener('click', () => setTestState(b.dataset.test)));
 
-  // --- step 4 embedder selection visual highlight ---
-  document.querySelectorAll('input[name="embedder"]').forEach(input => {
-    input.addEventListener('change', () => {
-      document.querySelectorAll('input[name="embedder"]').forEach(i => {
-        const card = i.closest('.provider-card');
-        if (card) card.classList.toggle('selected', i.checked);
-      });
+  // --- step 4 embedder description binding ---
+  const embedderSelect = document.getElementById('embedder-select');
+  const embedderDetail = document.getElementById('embedder-detail');
+  const embedderDescriptions = {
+    'local:Xenova/all-MiniLM-L6-v2-q8': 'Small, fast, English-focused. Default for mobile.',
+    'local:BAAI/bge-base-en-v1.5': 'Higher quality, English-focused. ~5x larger than MiniLM-L6.',
+    'provider:text-embedding-3-small': 'Runs on the configured provider — no local download.',
+  };
+  if (embedderSelect && embedderDetail) {
+    embedderSelect.addEventListener('change', () => {
+      embedderDetail.textContent = embedderDescriptions[embedderSelect.value] || '';
     });
-  });
+  }
 
   // --- step 1 segment toggle ---
   document.querySelectorAll('.segment').forEach(seg => {
