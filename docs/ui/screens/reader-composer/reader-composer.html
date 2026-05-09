@@ -317,6 +317,10 @@
   .entry-action:hover { color: var(--ink); border-color: var(--line); }
   .entry-action.danger { color: var(--warn); border-color: #ebc; }
   .entry-action.danger:hover { background: #fef4ee; }
+  /* Probe icon — conditional on probe mode being active at app + story
+     level; rendered inert in the wireframe and toggled via review-bar. */
+  .entry-action.probe { display: none; }
+  body[data-probe="on"] .entry-action.probe { display: inline-flex; }
 
   /* reasoning icon in meta line + expandable body */
   .bubble-meta { display: inline-flex; align-items: center; gap: 6px; }
@@ -492,7 +496,7 @@
   }
 </style>
 </head>
-<body>
+<body data-probe="off">
 
 <div class="screen-label"><strong>Wireframe:</strong> Reader / Composer &mdash; responsive across phone / tablet / desktop</div>
 
@@ -551,6 +555,12 @@
     <button class="rb-btn active" data-err="hidden">hidden</button>
     <button class="rb-btn" data-err="llm">LLM error</button>
     <button class="rb-btn" data-err="embed">embed error</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">probe mode:</span>
+    <button class="rb-btn active" data-probe="off">off</button>
+    <button class="rb-btn" data-probe="on">on (probe icon visible)</button>
   </div>
 
   <div class="rb-group">
@@ -736,6 +746,7 @@
           <div class="bubble-content placeholder">[user action text &mdash; pack-wrapped per the composer mode at send time, stored verbatim on the entry. Mode is a send-time transform, not a saved field.]</div>
           <div class="entry-actions">
             <span class="entry-action" title="Edit">&#x270E;</span>
+            <span class="entry-action probe" title="Probe this turn — open the memory probe scoped to this entry (visible only when probe mode is on)">&#128270;</span>
             <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
           </div>
         </div>
@@ -759,6 +770,7 @@
             <span class="entry-action" title="Regenerate this reply">&#x21BB;</span>
             <span class="entry-action" title="Branch from this entry">&#x2387;</span>
             <span class="entry-action" title="Flip era from this entry (renders only when calendar has eras)" onclick="document.getElementById('flip-era-modal').classList.add('open')">&#128197;</span>
+            <span class="entry-action probe" title="Probe this turn — open the memory probe scoped to this entry (visible only when probe mode is on)">&#128270;</span>
             <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
           </div>
         </div>
@@ -785,6 +797,7 @@
           <div class="bubble-content placeholder">[latest user action &mdash; wrapped per the composer mode at send time]</div>
           <div class="entry-actions">
             <span class="entry-action" title="Edit">&#x270E;</span>
+            <span class="entry-action probe" title="Probe this turn — open the memory probe scoped to this entry (visible only when probe mode is on)">&#128270;</span>
             <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
           </div>
         </div>
@@ -1464,6 +1477,16 @@
   });
   const initialDismissBtn = document.getElementById('err-dismiss');
   if (initialDismissBtn) initialDismissBtn.addEventListener('click', () => setErr('hidden'));
+
+  // probe-mode toggle — show / hide the per-entry probe icon
+  document.querySelectorAll('.review-bar [data-probe]').forEach(b => {
+    b.addEventListener('click', () => {
+      document.body.dataset.probe = b.dataset.probe;
+      document.querySelectorAll('.review-bar [data-probe]').forEach(x => {
+        x.classList.toggle('active', x.dataset.probe === b.dataset.probe);
+      });
+    });
+  });
 
   // progress state (safe / warn / danger) — applies to both top strip and popover bar
   const topbarProgress = document.querySelector('.topbar-progress');

@@ -1368,6 +1368,22 @@
               avg request: 1.4s &middot; cache hits: 84% &middot; SQLite size: 12.3 MB
             </div>
           </div>
+
+          <div class="tab-section">
+            <div class="tab-section-title">Memory probe mode <span style="font-size: 10px; color: var(--ink-faint); font-weight: 400;">&middot; master gate</span></div>
+          </div>
+
+          <div class="switch-row" role="switch" aria-checked="false">
+            <div class="switch-row-text">
+              <div class="switch-row-label">enable memory probe</div>
+              <div class="switch-row-hint">when on, stories whose Probe toggle is on capture per-turn retrieval state for diagnostic inspection. Off zeros that cost across the whole app. Existing captures stay inspectable when toggled off.</div>
+            </div>
+            <span class="toggle"></span>
+          </div>
+          <div class="field-row">
+            <div class="field-label">memory probe screen</div>
+            <div><span class="prov-actions" style="display: inline-flex;"><span class="a">Open memory probe &rarr;</span></span></div>
+          </div>
         </div>
 
         <!-- SAVE BAR -->
