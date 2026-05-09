@@ -108,6 +108,8 @@
   .gen-status { display: none; position: relative; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); font-size: 11px; color: var(--ink); cursor: pointer; }
   .gen-status.visible { display: flex; }
   .gen-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s infinite; }
+  .gen-status.error { border-color: var(--warn); background: var(--warn-bg); color: #642; }
+  .gen-status.error .dot { background: var(--warn); animation: none; }
   @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(74,168,136,0.5);} 70% { box-shadow: 0 0 0 5px rgba(74,168,136,0);} 100% { box-shadow: 0 0 0 0 rgba(74,168,136,0);} }
 
   /* cancel popover anchored to the active status pill — see principles.md → Edit restrictions */
@@ -510,6 +512,8 @@
     <button class="rb-btn" data-gen="generating">replying</button>
     <button class="rb-btn" data-gen="classifying">classifying</button>
     <button class="rb-btn" data-gen="chapter-close">chapter-close</button>
+    <button class="rb-btn" data-gen="error-stale">error-stale</button>
+    <button class="rb-btn" data-gen="error-classifier">error-classifier</button>
   </div>
 
   <div class="rb-group">
@@ -545,7 +549,8 @@
   <div class="rb-group">
     <span class="gl">error entry:</span>
     <button class="rb-btn active" data-err="hidden">hidden</button>
-    <button class="rb-btn" data-err="visible">visible</button>
+    <button class="rb-btn" data-err="llm">LLM error</button>
+    <button class="rb-btn" data-err="embed">embed error</button>
   </div>
 
   <div class="rb-group">
@@ -761,12 +766,12 @@
 
       <div class="entry system error-entry" id="error-entry">
         <div class="bubble">
-          <div class="bubble-kind">&#9888; System &middot; generation error</div>
-          <div class="bubble-content">
+          <div class="bubble-kind" id="err-kind">&#9888; System &middot; generation error</div>
+          <div class="bubble-content" id="err-content">
             <b>API rate limit hit.</b> Claude returned 429 after 3 retries.
             The narrative stream stopped at paragraph 2; no entry was committed.
           </div>
-          <div class="err-actions">
+          <div class="err-actions" id="err-actions">
             <span class="err-btn primary">Retry</span>
             <span class="err-btn">View details</span>
             <span class="err-btn" id="err-dismiss">Dismiss</span>
@@ -1216,7 +1221,11 @@
     generating: 'generating narrative…',
     classifying: 'classifying…',
     'chapter-close': 'closing chapter…',
+    'error-stale': 'Embedder offline · 12 rows pending',
+    'error-classifier': 'Classifier offline · retrieval thinning',
   };
+
+  const errorStates = new Set(['error-stale', 'error-classifier']);
 
   const streamingBrain = document.getElementById('streaming-brain');
   const streamingToks = document.getElementById('streaming-toks');
@@ -1225,35 +1234,51 @@
 
   function setGenState(state) {
     const label = genPhaseLabels[state];
+    const isError = errorStates.has(state);
     if (label) {
       genStatus.classList.add('visible');
+      genStatus.classList.toggle('error', isError);
       genLabel.textContent = label;
-      streamingEntry.classList.add('visible');
-      composer.classList.add('generating');
-      sendBtn.classList.add('hidden');
-      cancelBtn.classList.remove('hidden');
 
-      // streaming-entry internals per phase — reasoning body stays collapsed by default
-      const streamingBubble = document.getElementById('streaming-bubble');
-      streamingBubble.classList.remove('reasoning-open');
-      if (state === 'reasoning') {
-        streamingBrain.classList.add('pulsing');
-        streamingToks.textContent = '— / 0.8k →';
-        streamingContent.textContent = '[reply hasn’t started yet — model still reasoning]';
-      } else if (state === 'generating') {
-        streamingBrain.classList.remove('pulsing');
-        streamingToks.textContent = '0.4k / 3.2k →';
-        streamingContent.textContent = '[partial text appearing token by token…]';
-      } else {
-        // classifying / chapter-close — keep streaming entry hidden
+      if (isError) {
+        // Error state: sticky pill, error-tinted, no streaming, composer stays normal.
+        // Tap routes to Settings (here we just open the cancel popover with a Settings action).
         streamingEntry.classList.remove('visible');
-      }
+        composer.classList.remove('generating');
+        sendBtn.classList.remove('hidden');
+        cancelBtn.classList.add('hidden');
+        banner.classList.remove('visible');
+        cancelAction.textContent = state === 'error-classifier' ? 'Open Memory settings' : 'Open Memory settings';
+      } else {
+        // Active generation phase — streaming surface + composer-cancel mode.
+        streamingEntry.classList.add('visible');
+        composer.classList.add('generating');
+        sendBtn.classList.add('hidden');
+        cancelBtn.classList.remove('hidden');
 
-      // Banner shows only during chapter-close (no streaming surface to anchor user attention)
-      banner.classList.toggle('visible', state === 'chapter-close');
-      cancelAction.textContent = state === 'chapter-close' ? 'Cancel chapter close' : 'Cancel generation';
+        // streaming-entry internals per phase — reasoning body stays collapsed by default
+        const streamingBubble = document.getElementById('streaming-bubble');
+        streamingBubble.classList.remove('reasoning-open');
+        if (state === 'reasoning') {
+          streamingBrain.classList.add('pulsing');
+          streamingToks.textContent = '— / 0.8k →';
+          streamingContent.textContent = '[reply hasn’t started yet — model still reasoning]';
+        } else if (state === 'generating') {
+          streamingBrain.classList.remove('pulsing');
+          streamingToks.textContent = '0.4k / 3.2k →';
+          streamingContent.textContent = '[partial text appearing token by token…]';
+        } else {
+          // classifying / chapter-close — keep streaming entry hidden
+          streamingEntry.classList.remove('visible');
+        }
+
+        // Banner shows only during chapter-close
+        banner.classList.toggle('visible', state === 'chapter-close');
+        cancelAction.textContent = state === 'chapter-close' ? 'Cancel chapter close' : 'Cancel generation';
+      }
     } else {
       genStatus.classList.remove('visible');
+      genStatus.classList.remove('error');
       streamingEntry.classList.remove('visible');
       composer.classList.remove('generating');
       sendBtn.classList.remove('hidden');
@@ -1399,11 +1424,37 @@
   });
   scopeClear.addEventListener('click', () => setScope('none'));
 
-  // error entry
+  // error entry — two variants (LLM failure, embed failure) plus hidden
   const errorEntry = document.getElementById('error-entry');
-  const errDismiss = document.getElementById('err-dismiss');
+  const errKind = document.getElementById('err-kind');
+  const errContent = document.getElementById('err-content');
+  const errActions = document.getElementById('err-actions');
+  const errVariants = {
+    llm: {
+      kind: '⚠ System · generation error',
+      content: '<b>API rate limit hit.</b> Claude returned 429 after 3 retries. The narrative stream stopped at paragraph 2; no entry was committed.',
+      actions: '<span class="err-btn primary">Retry</span><span class="err-btn">View details</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+    },
+    embed: {
+      kind: '⚠ System · embedding error',
+      content: "<b>Embedding failed for 2 rows.</b> The narrative completed and 3 of 5 classifier-emitted rows embedded successfully; 2 rows hit a provider timeout. The next-turn affordance is disabled until you resolve.",
+      actions: '<span class="err-btn primary">Retry</span><span class="err-btn">Switch embedder</span><span class="err-btn">Roll back this turn</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+    },
+  };
   function setErr(state) {
-    errorEntry.classList.toggle('visible', state === 'visible');
+    if (state === 'hidden') {
+      errorEntry.classList.remove('visible');
+    } else {
+      errorEntry.classList.add('visible');
+      const v = errVariants[state];
+      if (v) {
+        errKind.innerHTML = v.kind;
+        errContent.innerHTML = v.content;
+        errActions.innerHTML = v.actions;
+        const dismissBtn = document.getElementById('err-dismiss');
+        if (dismissBtn) dismissBtn.addEventListener('click', () => setErr('hidden'));
+      }
+    }
     document.querySelectorAll('[data-err]').forEach(b => {
       b.classList.toggle('active', b.dataset.err === state);
     });
@@ -1411,7 +1462,8 @@
   document.querySelectorAll('[data-err]').forEach(b => {
     b.addEventListener('click', () => setErr(b.dataset.err));
   });
-  errDismiss.addEventListener('click', () => setErr('hidden'));
+  const initialDismissBtn = document.getElementById('err-dismiss');
+  if (initialDismissBtn) initialDismissBtn.addEventListener('click', () => setErr('hidden'));
 
   // progress state (safe / warn / danger) — applies to both top strip and popover bar
   const topbarProgress = document.querySelector('.topbar-progress');

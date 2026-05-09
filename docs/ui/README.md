@@ -79,7 +79,7 @@ rationale, and decisions live alongside.
 
 - Streaming / loading / error inside the reader (error surface
   locked as system entries — see
-  [reader-composer.md → Error surface](./screens/reader-composer/reader-composer.md#error-surface--system-entries-not-chrome-indicators))
+  [reader-composer.md → Error surface](./screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill))
 - Empty states for each list
 - Mobile / responsive variants for every surface — contract +
   multi-session plan at

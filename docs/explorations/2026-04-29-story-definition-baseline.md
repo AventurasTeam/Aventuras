@@ -284,7 +284,7 @@ story_entries.kind:
 
 - Reusing `system` would conflict with its established "error
   surfaces" semantics (per
-  [`reader-composer.md → Error surface`](../ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-not-chrome-indicators)).
+  [`reader-composer.md → Error surface`](../ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill)).
   An `opening` is narrative, not machinery output.
 - Reusing `ai_reply` for user-written openings is genuinely wrong
   (calling user-authored prose "AI reply" misleads downstream code

@@ -67,7 +67,7 @@ Out of scope for Group A:
   as a sibling primitive in the same `patterns/overlays.md` doc.
 - **Toasts** — future, separate primitive.
 - **System entries** — inline reader entries per the
-  [reader's error surface decision](../ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-not-chrome-indicators),
+  [reader's error surface decision](../ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill),
   not overlays.
 
 A subtle but load-bearing detail surfaced during inventory: on mobile,

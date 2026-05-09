@@ -796,17 +796,28 @@ that sees them. Two banner shapes are defined today:
   Never re-opens the onboarding wizard — that path is intentionally
   one-shot (see
   [Onboarding → Skip behavior](./screens/onboarding/onboarding.md#skip-behavior)).
+- **Embedder not configured** — fires when no embedder default is
+  set (user skipped Onboarding · Step 4, or removed all installed
+  models without configuring a provider embedder). Copy:
+  `⚠ Memory not configured — set up an embedder to create stories. [Open settings →]`.
+  CTA routes to
+  [App Settings · Embedding models](./screens/app-settings/app-settings.md#generation--embedding-models).
+  Story creation is hard-gated until resolved.
 - **Profile errors** — fires when at least one profile has a
   configuration error (e.g., references a model that's no longer
   in the provider's catalog). Copy:
   `⚠ N profiles have configuration errors. [Open settings →]`.
 
-**Mutual exclusion + priority.** Both banners can be true at the
-same time — a user who skipped onboarding might also have leftover
-profile errors from a prior session. Only one renders, with
-**no-providers taking priority** (profile errors are downstream
-of having a provider in the first place). When the user fixes the
-no-providers state, profile-error renders if still applicable.
+**Mutual exclusion + priority.** Multiple banners can be true at
+the same time — a user who skipped onboarding might have no
+provider AND no embedder AND leftover profile errors from a prior
+session. Only one renders, with the priority order:
+**no-providers > no-embedder > profile-errors**. Provider must
+exist before embedder can be configured (provider mode) or
+referenced (local mode also needs a provider for narrative); both
+must exist before profile errors are downstream-meaningful. When
+the user fixes the higher-priority state, the next-priority banner
+takes over if still applicable.
 
 **Provider-only misconfiguration** (e.g., a key the user typed
 wrong, but no profile references that provider yet) does **not**

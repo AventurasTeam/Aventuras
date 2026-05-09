@@ -350,14 +350,57 @@ entry.
 Non-reasoning providers: no brain, token display collapses to just
 reply tokens.
 
-## Error surface — system entries, not chrome indicators
+## Error surface — system entries vs. persistent state pill
 
-Pipeline errors do **not** live in the top-bar status pill. They
-render as **system-kind entries in the main chat** — orange/warn-
-tinted bubbles with the failure description and action buttons (Retry
-/ View details / Dismiss). Rationale: errors need to be visible,
+Two distinct surfaces handle two different kinds of failure:
+
+### Transient pipeline failures — system entries in chat
+
+Mid-turn pipeline errors (LLM call, embed call, classifier emit
+that failed retries) render as **system-kind entries in the main
+chat** — orange/warn-tinted bubbles with the failure description
+and action buttons. Rationale: these errors need to be visible,
 actionable, and part of the narrative log as context, not a silent
 chrome blip.
+
+| Failure                                                                                                                                                                          | Action buttons                                      |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| **LLM call failed**                                                                                                                                                              | `Retry` · `View details` · `Dismiss`                |
+| **Embed call failed** mid-turn (the new-turn affordance disables until resolved per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle)) | `Retry` · `Switch embedder` · `Roll back this turn` |
+
+The embed-failure system entry follows the same visual shape as the
+LLM-failure entry — the contract is "transient pipeline failure
+that blocks turn completion until resolved." `Switch embedder`
+routes to Story Settings · Memory · Switch and fires the
+[Model swap UX](../../../memory/retrieval.md#model-swap-ux) dialog.
+`Roll back this turn` reverse-replays the entire turn's deltas
+through the
+[rollback-confirm modal](./rollback-confirm/rollback-confirm.md).
+
+### Persistent state — top-bar status pill error variant
+
+The top-bar status pill (per
+[principles → Top-bar design rule](../../principles.md#top-bar-design-rule))
+extends with an **error variant** for sticky state that can't be
+dismissed by the next turn:
+
+- **Embedding staleness** in this story (per
+  [`memory/model-management.md → Staleness UI`](../../../memory/model-management.md#staleness-ui)).
+  Pill copy: `Embedder offline — N rows pending`. Tap → routes to
+  Story Settings · Memory's resolution panel.
+- **Failed-persistent classifier** (per
+  [`memory/classifier.md → Pill priority`](../../../memory/classifier.md#background-task-framing)).
+  Pill copy: `Classifier offline — retrieval coverage thinning`.
+  Tap → routes to Story Settings · Memory · Classifier panel.
+
+Pill state precedence: active generation (narrative / chapter-
+close / classifier) > error state > hidden. Sticky errors stay
+visible between turns; once resolved, the pill collapses back to
+hidden until the next event.
+
+The error-pill is **not a new vocabulary** — it reuses the existing
+gen-pill chrome with error-tinted styling instead of the active
+animation. Single slot, multiple states, priority-ordered.
 
 ## Next-turn suggestions
 
