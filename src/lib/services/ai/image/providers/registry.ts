@@ -155,7 +155,7 @@ export async function listImageModels(profileId: string): Promise<ImageModelInfo
     }
     const provider = PROVIDER_FACTORIES[profile.providerType](config)
     const models = await provider.listModels(profile.apiKey)
-    if (models.length > 0) modelCaches.set(cacheKey, { models, timestamp: Date.now() })
+    modelCaches.set(cacheKey, { models, timestamp: Date.now() })
     return models
   } catch (error) {
     log('Error listing models', { providerType: profile.providerType, error })
@@ -189,7 +189,7 @@ export async function listImageModelsByProvider(
     }
     const provider = PROVIDER_FACTORIES[providerType](config)
     const models = await provider.listModels(apiKey)
-    if (models.length > 0) modelCaches.set(cacheKey, { models, timestamp: Date.now() })
+    modelCaches.set(cacheKey, { models, timestamp: Date.now() })
     return models
   } catch (error) {
     log('Error listing models by provider', { providerType, error })
@@ -200,7 +200,7 @@ export async function listImageModelsByProvider(
 /**
  * Get sampler/scheduler info for a ComfyUI or A1111 provider.
  */
-export async function getComfySamplerInfo(
+export async function getProviderSamplerInfo(
   baseUrl?: string,
   providerType: 'comfyui' | 'a1111' = 'comfyui',
 ): Promise<{ samplers: string[]; schedulers: string[] }> {

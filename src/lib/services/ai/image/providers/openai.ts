@@ -21,30 +21,6 @@ import { imageFetch, imageGetFetch } from './fetchAdapter'
 
 const DEFAULT_BASE_URL = 'https://api.openai.com/v1'
 
-// Metadata for known OpenAI image models — used to enrich API-fetched results
-const KNOWN_IMAGE_MODELS: Record<string, Omit<ImageModelInfo, 'id' | 'name'>> = {
-  'dall-e-3': {
-    description: 'High quality image generation',
-    supportsSizes: ['1024x1024', '1024x1792', '1792x1024'],
-    supportsImg2Img: false,
-  },
-  'dall-e-2': {
-    description: 'Image generation with editing support',
-    supportsSizes: ['256x256', '512x512', '1024x1024'],
-    supportsImg2Img: true,
-  },
-  'gpt-image-1': {
-    description: 'GPT-powered image generation',
-    supportsSizes: ['1024x1024', '1024x1792', '1792x1024'],
-    supportsImg2Img: true,
-  },
-  'gpt-image-2': {
-    description: 'GPT-powered image generation (latest)',
-    supportsSizes: ['1024x1024', '1024x1792', '1792x1024'],
-    supportsImg2Img: true,
-  },
-}
-
 // Prefixes used to identify image-capable models in the /v1/models response
 const IMAGE_MODEL_PREFIXES = ['dall-e-', 'gpt-image-']
 
@@ -107,25 +83,29 @@ export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider
 }
 
 async function fetchOpenAIImageModels(baseUrl: string, apiKey: string): Promise<ImageModelInfo[]> {
-  const response = await imageGetFetch(
-    `${baseUrl}/models`,
-    apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
-    { serviceId: 'openai-image-models' },
-  )
-  const data = await response.json()
-  const entries: { id?: string }[] = Array.isArray(data?.data) ? data.data : []
+  try {
+    const response = await imageGetFetch(
+      `${baseUrl}/models`,
+      apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
+      { serviceId: 'openai-image-models' },
+    )
+    const data = await response.json()
+    const entries: { id?: string }[] = Array.isArray(data?.data) ? data.data : []
 
-  return entries
-    .filter((m) => m.id && IMAGE_MODEL_PREFIXES.some((prefix) => m.id!.startsWith(prefix)))
-    .map((m) => {
-      const id = m.id!
-      const known = KNOWN_IMAGE_MODELS[id]
-      return {
-        id,
-        name: id,
-        ...(known ?? { supportsSizes: [], supportsImg2Img: false }),
-      }
-    })
+    return entries
+      .filter((m) => m.id && IMAGE_MODEL_PREFIXES.some((prefix) => m.id!.startsWith(prefix)))
+      .map((m) => {
+        const id = m.id!
+        return {
+          id,
+          name: id,
+          supportsSizes: ['512x512', '1024x1024'],
+          supportsImg2Img: true,
+        }
+      })
+  } catch {
+    return []
+  }
 }
 
 async function fetchCustomModels(baseUrl: string, apiKey: string): Promise<ImageModelInfo[]> {

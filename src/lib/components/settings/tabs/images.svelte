@@ -12,7 +12,7 @@
   import {
     listImageModels,
     listImageModelsByProvider,
-    getComfySamplerInfo,
+    getProviderSamplerInfo,
     listLoras,
     generateImage,
     ComfyMode,
@@ -382,13 +382,16 @@
           loadLoras(baseUrl || undefined)
         } else if (providerType === 'a1111') {
           loadSamplerInfo(baseUrl || undefined, 'a1111')
+        } else {
+          profileSamplers = []
+          profileSchedulers = []
         }
       })
     }
   })
 
   async function loadSamplerInfo(baseUrl?: string, providerType: 'comfyui' | 'a1111' = 'comfyui') {
-    const info = await getComfySamplerInfo(baseUrl, providerType)
+    const info = await getProviderSamplerInfo(baseUrl, providerType)
     if ((profileBaseUrl || undefined) !== baseUrl) return
     profileSamplers = info.samplers.map((s) => ({ value: s, label: s }))
     profileSchedulers = info.schedulers.map((s) => ({ value: s, label: s }))
