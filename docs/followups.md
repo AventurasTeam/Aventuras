@@ -86,8 +86,8 @@ removed with this commit.
 
 - [v1-blocking memory work](./memory/followups.md#v1-blocking) —
   threshold tuning, embedder production integration, embedding
-  compute lifecycle, background classifier UX, entity-merge UI,
-  memory probe affordance, lore-creation cap tuning.
+  compute lifecycle, background classifier UX, memory probe
+  affordance, lore-creation cap tuning.
 - [Parked / post-v1 items](./memory/followups.md#parked--post-v1) —
   multi-axis salience, pin-contradiction reconciliation, spillover
   policy, polymorphic naming, etc.

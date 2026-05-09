@@ -266,6 +266,74 @@
   .new-menu-item.disabled { color: var(--ink-faint); cursor: not-allowed; font-style: italic; }
   .new-menu-item.disabled:hover { background: transparent; }
 
+  /* Collision review + entity merge — see world.md → Collision review and entity merge.
+     Three-layer surfacing: top-bar pill, list-toggle chip, per-row strip. */
+  .review-pill { display: none; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border: 1px solid var(--warn); border-radius: 999px; background: #fdf6e8; font-size: 11px; color: #7a4f1a; cursor: pointer; }
+  .review-pill .glyph { font-size: 11px; line-height: 1; }
+  body[data-review-state="has-flags"] .review-pill { display: inline-flex; }
+
+  .list-toggle.needs-review { display: none; border-color: var(--warn); color: #7a4f1a; gap: 4px; align-items: center; }
+  body[data-review-state="has-flags"] .list-toggle.needs-review { display: inline-flex; }
+  .list-toggle.needs-review .count { font-weight: 600; }
+
+  /* Per-row collision strip — visible only when the row is .flagged AND
+     the needs-review filter is active. Outside that view the row renders
+     normally (the strip is display:none). */
+  .row-main { display: flex; gap: 8px; align-items: center; flex: 1; min-width: 0; }
+  .collision-strip { display: none; padding: 6px 8px 8px 14px; font-size: 11px; color: #7a4f1a; background: #fdf6e8; border-top: 1px dotted #e3d5b6; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .collision-strip .col-msg { flex: 1; min-width: 0; }
+  .collision-strip .resolve-btn { padding: 3px 9px; border: 1px solid var(--warn); border-radius: 3px; background: var(--bg-region); font-size: 11px; color: #7a4f1a; cursor: pointer; }
+  body[data-review-state="has-flags"] .list-row.flagged { display: flex; }
+  body[data-review-state="none"] .list-row.flagged { display: none; }
+  body[data-review-filter="active"] .list-row.flagged { flex-direction: column; align-items: stretch; gap: 0; padding: 0; }
+  body[data-review-filter="active"] .list-row.flagged > .row-main { padding: 8px 8px; }
+  body[data-review-filter="active"] .list-row.flagged .collision-strip { display: flex; }
+
+  /* Resolve dialog — anchored to .viewport. Mobile reflow noted in world.md → Mobile expression. */
+  .resolve-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.18); display: none; z-index: 25; align-items: flex-start; justify-content: center; padding: 32px 24px; box-sizing: border-box; overflow: auto; }
+  .resolve-overlay.open { display: flex; }
+  .resolve-modal { background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; max-width: 720px; width: 100%; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.18); overflow: hidden; }
+  .resolve-head { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); }
+  .resolve-head .title { font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+  .resolve-head .title .glyph { color: var(--warn); }
+  .resolve-head .sub { margin-top: 4px; font-size: 11px; color: var(--ink-muted); }
+  .resolve-paths { padding: 12px 18px 0; display: flex; gap: 6px; flex-wrap: wrap; }
+  .resolve-path-btn { padding: 6px 14px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); font-size: 12px; color: var(--ink); cursor: pointer; }
+  .resolve-path-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .resolve-body { padding: 16px 18px; display: none; }
+  .resolve-body.active { display: block; }
+  .resolve-foot { padding: 12px 18px; border-top: 1px solid var(--line-soft); display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--bg); flex-wrap: wrap; }
+  .resolve-foot .ghost { padding: 6px 14px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); color: var(--ink); cursor: pointer; font-size: 12px; }
+  .resolve-foot .primary { padding: 6px 14px; border: 1px solid var(--ink); border-radius: 3px; background: var(--ink); color: #fff; cursor: pointer; font-size: 12px; }
+  .resolve-foot .primary.danger { background: #b04a3a; border-color: #b04a3a; }
+
+  /* Merge body — canonical picker + per-field grid + relations */
+  .canon-picker { display: flex; gap: 6px; padding: 6px; background: var(--bg); border: 1px solid var(--line-soft); border-radius: 3px; margin-bottom: 14px; }
+  .canon-picker .seg { flex: 1; padding: 8px 10px; text-align: center; cursor: pointer; border-radius: 2px; font-size: 12px; color: var(--ink-muted); border: 1px solid transparent; }
+  .canon-picker .seg.active { background: var(--bg-region); color: var(--ink); border-color: var(--line); }
+  .canon-picker .seg .meta { display: block; font-size: 9px; color: var(--ink-faint); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .field-grid { display: grid; grid-template-columns: 110px 1fr 1fr; gap: 0 14px; font-size: 12px; }
+  .field-grid .h { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-faint); padding: 0 0 6px; border-bottom: 1px solid var(--line-soft); }
+  .field-grid .row-l { color: var(--ink-muted); padding: 8px 0; border-bottom: 1px dotted var(--line-soft); }
+  .field-grid .row-v { padding: 8px 0; border-bottom: 1px dotted var(--line-soft); display: flex; gap: 6px; align-items: flex-start; }
+  .field-grid .row-v input[type="radio"] { margin-top: 3px; flex-shrink: 0; }
+  .field-grid .row-v.muted { color: var(--ink-faint); font-style: italic; }
+  .field-grid .row-v.span2 { grid-column: 2 / span 2; }
+  .state-note { margin-top: 10px; padding: 6px 10px; background: var(--bg); border: 1px dashed var(--line-soft); border-radius: 3px; font-size: 11px; color: var(--ink-muted); }
+  .relations-block { margin-top: 14px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line-soft); border-radius: 3px; }
+  .relations-block .h { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-faint); margin-bottom: 6px; }
+  .relations-block ul { margin: 0; padding-left: 18px; font-size: 12px; color: var(--ink); line-height: 1.7; }
+  .relations-block .footnote { margin-top: 8px; font-size: 11px; color: var(--ink-muted); font-style: italic; }
+
+  /* Rename body */
+  .rename-row { display: grid; grid-template-columns: 220px 1fr; gap: 12px; align-items: center; padding: 10px 0; }
+  .rename-row .meta { font-size: 11px; color: var(--ink-muted); }
+  .rename-row .meta strong { color: var(--ink); display: block; font-size: 12px; margin-bottom: 2px; }
+  .rename-row input { padding: 6px 10px; border: 1px solid var(--line); border-radius: 3px; font-size: 13px; background: var(--bg-region); color: var(--ink); width: 100%; box-sizing: border-box; }
+
+  /* Keep-as-distinct body */
+  .distinct-warn { padding: 12px 14px; background: #fdf6e8; border: 1px solid #e3d5b6; border-radius: 3px; font-size: 12px; color: #5a4820; line-height: 1.6; }
+
   /* JSON viewer drawer */
   .json-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.18); display: none; z-index: 20; }
   .json-overlay.open { display: block; }
@@ -396,13 +464,29 @@
     .history-row > *:last-child { white-space: normal; overflow: visible; text-overflow: clip; }
     .history-ts { font-size: 10px; }
 
+    /* Resolve modal reflows to Sheet (tall ~95%) on phone — per
+       world.md → Mobile expression. Modal pins to bottom of the
+       viewport; merge body's two-column field grid stacks (field
+       label, side A, side B as three vertical cells per field). */
+    .resolve-overlay { padding: 0; align-items: flex-end; overflow: visible; }
+    .resolve-modal { max-width: none; height: 95%; max-height: 95%; border-radius: 4px 4px 0 0; }
+    .resolve-body { overflow: auto; }
+    .canon-picker { flex-direction: column; }
+    .field-grid { grid-template-columns: 1fr; gap: 0; }
+    .field-grid .h:nth-child(2), .field-grid .h:nth-child(3) { display: none; }
+    .field-grid .h:first-child { grid-column: 1; }
+    .field-grid .row-l { padding-top: 14px; padding-bottom: 4px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); border-bottom: none; }
+    .field-grid .row-v { border-bottom: 1px dotted var(--line-soft); padding: 6px 0; }
+    .field-grid .row-v.span2 { grid-column: 1; }
+    .rename-row { grid-template-columns: 1fr; gap: 4px; }
+
     /* JSON overlay drawer reflows to bottom-anchored Sheet (tall ~95%) */
     .json-drawer { width: 100%; height: 95%; top: auto; bottom: 0; left: 0; right: 0; border-left: none; border-top: 1px solid var(--line); border-top-left-radius: 12px; border-top-right-radius: 12px; box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18); }
     .json-drawer::before { content: ""; display: block; width: 36px; height: 4px; background: var(--line); border-radius: 2px; margin: 8px auto 0; }
   }
 </style>
 </head>
-<body data-list-state="populated" data-md-state="detail">
+<body data-list-state="populated" data-md-state="detail" data-review-state="none" data-review-filter="off">
 
 <div class="screen-label"><strong>Wireframe:</strong> World &mdash; entities + lore &mdash; responsive across phone / tablet / desktop &mdash; low-fi, interactive</div>
 
@@ -454,6 +538,23 @@
     <button class="rb-btn active" data-kind="entity">entity (Kael)</button>
     <button class="rb-btn" data-kind="lore">lore (Three Moons)</button>
   </div>
+  <div class="rb-group">
+    <span class="gl">review:</span>
+    <button class="rb-btn active" data-review-state="none">no flags</button>
+    <button class="rb-btn" data-review-state="has-flags">2 flagged</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">filter:</span>
+    <button class="rb-btn active" data-review-filter="off">off</button>
+    <button class="rb-btn" data-review-filter="active">needs-review</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">resolve:</span>
+    <button class="rb-btn active" data-resolve="closed">closed</button>
+    <button class="rb-btn" data-resolve="merge">merge</button>
+    <button class="rb-btn" data-resolve="rename">rename</button>
+    <button class="rb-btn" data-resolve="keep">keep distinct</button>
+  </div>
   <span class="rb-note">click a row · tab · ⓘ help · + new menu &middot; flip viewport via 1/2/3</span>
 </div>
 
@@ -473,6 +574,13 @@
     <div class="gen-status" title="Click to cancel">
       <span class="dot"></span>
       <span>generating narrative&hellip;</span>
+    </div>
+    <!-- Collision review pill — visible when data-review-state="has-flags".
+         Click activates the list-pane needs-review filter. Doc:
+         world.md → Collision review and entity merge → Surfacing. -->
+    <div class="review-pill" id="review-pill" title="Review collision flags">
+      <span class="glyph">&#9888;</span>
+      <span>2 need review</span>
     </div>
     <div class="icon-btn" title="Actions">&#9906;</div>
     <div class="icon-btn" title="Story settings">&#9965;</div>
@@ -512,6 +620,9 @@
         <span class="list-toggle" data-filter="active">Active</span>
         <span class="list-toggle" data-filter="staged">Staged</span>
         <span class="list-toggle" data-filter="retired">Retired</span>
+        <!-- Needs-review chip — joins the filter row only when flagged
+             entities exist. Hidden by default; revealed by review-state. -->
+        <span class="list-toggle needs-review" data-filter="needs-review">&#9888; Needs review <span class="count">2</span></span>
       </div>
     </div>
 
@@ -546,6 +657,21 @@
             <span class="list-kind" title="character">☺</span>
             <span class="list-name"><span class="name-text">Jorin</span></span>
             <span class="row-status-pill active">active</span>
+          </div>
+          <!-- Flagged duplicate Kael — surfaces only when data-review-state
+               has-flags. Inside the needs-review filter the .collision-strip
+               appears below the row-main composition. -->
+          <div class="list-row flagged" data-entity="kael2">
+            <div class="row-main">
+              <span class="list-kind" title="character">☺</span>
+              <span class="list-name"><span class="name-text">Kael</span></span>
+              <span class="row-status-pill active">active</span>
+            </div>
+            <div class="collision-strip">
+              <span>&#9888;</span>
+              <span class="col-msg">Collides with <a href="#" style="color: inherit;">Kael (older)</a></span>
+              <button class="resolve-btn" id="resolve-trigger">Resolve &rarr;</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1177,6 +1303,101 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
   </div>
 </div>
 
+<!-- Resolve dialog — collision-flag resolution. Three paths: merge, rename,
+     keep as distinct. Per world.md → Resolve dialog. -->
+<div class="resolve-overlay" id="resolve-overlay">
+  <div class="resolve-modal">
+    <div class="resolve-head">
+      <div class="title"><span class="glyph">&#9888;</span> Two characters named &ldquo;Kael&rdquo;</div>
+      <div class="sub">Resolve the collision so retrieval and prose treat the entity unambiguously.</div>
+    </div>
+    <div class="resolve-paths" id="resolve-paths">
+      <button class="resolve-path-btn active" data-path="merge">Merge into one</button>
+      <button class="resolve-path-btn" data-path="rename">Rename one</button>
+      <button class="resolve-path-btn" data-path="keep">Keep as distinct</button>
+    </div>
+
+    <!-- MERGE body — canonical picker + per-field grid + relations summary -->
+    <div class="resolve-body active" data-path="merge">
+      <div class="canon-picker" id="canon-picker">
+        <div class="seg active" data-canon="A">
+          ent_kael_1 &mdash; Kael
+          <span class="meta">created 12 turns ago &middot; canonical</span>
+        </div>
+        <div class="seg" data-canon="B">
+          ent_kael_2 &mdash; Kael
+          <span class="meta">created this turn</span>
+        </div>
+      </div>
+      <div class="field-grid">
+        <span class="h">field</span>
+        <span class="h">side A (canonical)</span>
+        <span class="h">side B</span>
+
+        <span class="row-l">description</span>
+        <span class="row-v"><input type="radio" name="f-desc" checked> wandering swordsman, weathered jaw, ice-blue eyes</span>
+        <span class="row-v"><input type="radio" name="f-desc"> guardsman at the city gate, recently posted</span>
+
+        <span class="row-l">status</span>
+        <span class="row-v"><input type="radio" name="f-status" checked> active</span>
+        <span class="row-v"><input type="radio" name="f-status"> active</span>
+
+        <span class="row-l">tags</span>
+        <span class="row-v span2">union (default): <code>bounty-hunter</code> &middot; <code>ally</code> &middot; <code>guardsman</code> &middot; <code>chapter-3-introduced</code></span>
+
+        <span class="row-l">state JSON</span>
+        <span class="row-v span2 muted">follows the canonical row &middot; edit on detail pane after merge</span>
+      </div>
+      <div class="state-note">
+        <code>state</code> JSON is taken whole-side from canonical (per-kind shape &mdash; character / location / item / faction). To pick the loser&rsquo;s state, re-pick canonical above.
+      </div>
+      <div class="relations-block">
+        <div class="h">Relations move to canonical</div>
+        <ul>
+          <li>Awareness rows: 4 (1 dropped on UNIQUE collision &mdash; see footnote)</li>
+          <li>Involvements: 2</li>
+          <li>Inverse refs: 3 entities point at non-canonical &rarr; rewritten</li>
+          <li>Embeddings: 1 vec0 row dropped (canonical re-embeds if any field changed)</li>
+          <li>Translation rows: 0</li>
+        </ul>
+        <div class="footnote">
+          One awareness row exists on both sides for happening &ldquo;tavern brawl&rdquo;; canonical&rsquo;s row stays, non-canonical&rsquo;s drops.
+        </div>
+      </div>
+    </div>
+
+    <!-- RENAME body — two stacked rename rows -->
+    <div class="resolve-body" data-path="rename">
+      <div class="rename-row">
+        <div class="meta"><strong>ent_kael_1</strong>created 12 turns ago</div>
+        <input type="text" value="Kael">
+      </div>
+      <div class="rename-row">
+        <div class="meta"><strong>ent_kael_2</strong>created this turn</div>
+        <input type="text" value="Kael (the guardsman)">
+      </div>
+      <div class="state-note">
+        At least one name must change. Both rows persist; the formerly-flagged row clears its <code>name_collision_flag</code>.
+      </div>
+    </div>
+
+    <!-- KEEP body — confirmation panel -->
+    <div class="resolve-body" data-path="keep">
+      <div class="distinct-warn">
+        Both <b>Kael</b> entities will continue to exist with the same name.
+        Retrieval treats them by id, but storyteller responses may conflate them in prose.
+        Polymorphic naming is a documented v1 limitation &mdash; the schema doesn&rsquo;t enforce
+        unique names. The flag clears; no other writes.
+      </div>
+    </div>
+
+    <div class="resolve-foot">
+      <button class="ghost" id="resolve-cancel">Cancel</button>
+      <button class="primary danger" id="resolve-primary"><span id="resolve-primary-label">Merge into Kael (older)</span></button>
+    </div>
+  </div>
+</div>
+
     </div><!-- /.viewport -->
   </div><!-- /.vp-stage-wrap -->
 </div><!-- /.vp-stage -->
@@ -1351,6 +1572,84 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     helpPop?.classList.remove('open');
     newMenu?.classList.remove('open');
   });
+
+  // Collision review — three-layer surfacing + three-path resolve dialog.
+  // Doc: world.md → Collision review and entity merge.
+  function setReviewState(s) {
+    document.body.dataset.reviewState = s;
+    document.querySelectorAll('[data-review-state]').forEach(b => b.classList.toggle('active', b.dataset.reviewState === s));
+    if (s === 'none') {
+      // dropping flags resets the filter view too
+      setReviewFilter('off');
+    }
+  }
+  function setReviewFilter(f) {
+    document.body.dataset.reviewFilter = f;
+    document.querySelectorAll('[data-review-filter]').forEach(b => b.classList.toggle('active', b.dataset.reviewFilter === f));
+  }
+  function setResolve(r) {
+    document.querySelectorAll('[data-resolve]').forEach(b => b.classList.toggle('active', b.dataset.resolve === r));
+    const overlay = document.getElementById('resolve-overlay');
+    overlay?.classList.toggle('open', r !== 'closed');
+    if (r !== 'closed') setResolvePath(r);
+  }
+  function setResolvePath(p) {
+    document.querySelectorAll('.resolve-path-btn').forEach(b => b.classList.toggle('active', b.dataset.path === p));
+    document.querySelectorAll('.resolve-body').forEach(b => b.classList.toggle('active', b.dataset.path === p));
+    document.querySelectorAll('[data-resolve]').forEach(b => b.classList.toggle('active', b.dataset.resolve === p));
+    const lbl = document.getElementById('resolve-primary-label');
+    const primary = document.getElementById('resolve-primary');
+    if (!lbl || !primary) return;
+    if (p === 'merge') { lbl.textContent = 'Merge into Kael (older)'; primary.classList.add('danger'); }
+    else if (p === 'rename') { lbl.textContent = 'Save renames'; primary.classList.remove('danger'); }
+    else if (p === 'keep') { lbl.textContent = 'Keep as distinct'; primary.classList.remove('danger'); }
+  }
+
+  document.querySelectorAll('[data-review-state]').forEach(b => b.addEventListener('click', () => setReviewState(b.dataset.reviewState)));
+  document.querySelectorAll('[data-review-filter]').forEach(b => b.addEventListener('click', () => {
+    if (document.body.dataset.reviewState !== 'has-flags') setReviewState('has-flags');
+    setReviewFilter(b.dataset.reviewFilter);
+  }));
+  document.querySelectorAll('[data-resolve]').forEach(b => b.addEventListener('click', () => setResolve(b.dataset.resolve)));
+  document.querySelectorAll('.resolve-path-btn').forEach(b => b.addEventListener('click', () => setResolvePath(b.dataset.path)));
+
+  document.getElementById('resolve-trigger')?.addEventListener('click', e => {
+    e.stopPropagation();
+    setResolve('merge');
+  });
+  document.getElementById('resolve-cancel')?.addEventListener('click', () => setResolve('closed'));
+  document.getElementById('resolve-overlay')?.addEventListener('click', e => {
+    if (e.target.id === 'resolve-overlay') setResolve('closed');
+  });
+  document.getElementById('review-pill')?.addEventListener('click', () => {
+    setReviewFilter('active');
+  });
+  document.querySelectorAll('.list-toggle.needs-review').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    setReviewFilter('active');
+  }));
+
+  // canon-picker segment — flips primary button label so destructive direction stays obvious
+  document.querySelectorAll('.canon-picker .seg').forEach(s => {
+    s.addEventListener('click', () => {
+      document.querySelectorAll('.canon-picker .seg').forEach(x => x.classList.remove('active'));
+      s.classList.add('active');
+      const lbl = document.getElementById('resolve-primary-label');
+      if (lbl) {
+        lbl.textContent = s.dataset.canon === 'A' ? 'Merge into Kael (older)' : 'Merge into Kael (newer)';
+      }
+    });
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('resolve-overlay')?.classList.contains('open')) {
+      setResolve('closed');
+    }
+  });
+
+  setReviewState('none');
+  setReviewFilter('off');
+  setResolve('closed');
 })();
 </script>
 

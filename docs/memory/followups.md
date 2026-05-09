@@ -224,8 +224,6 @@ Settings Memory tab pass.
   Profiles tab — embedders share none of the LLM-profile parameter
   shape (temperature, max output, thinking, structured-output).
 
-- **Entity-merge UI** — for the residual collision-flag recovery path.
-  Doesn't exist today. World-panel surface, design pass.
 - **Memory probe affordance** — debug UI for "what was retrieved and
   why this turn." **Load-bearing for the empirical-tuning pass.**
   Decay rates, similarity thresholds, MMR diversity, chapter-boost

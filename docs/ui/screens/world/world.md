@@ -31,6 +31,9 @@ Cross-cutting principles that govern this panel are in
   (centered placeholder when the active scope has zero rows;
   applies to the list pane AND the detail-pane Involvements +
   History tabs)
+- [`memory/edge-cases.md → Name collision`](../../../memory/edge-cases.md#name-collision-and-disambiguation)
+  (classifier flag origin — resolved here via
+  [Collision review and entity merge](#collision-review-and-entity-merge))
 
 ## Layout
 
@@ -506,6 +509,228 @@ flow through the delta log per the standard authorship contract,
 so the History tab surface is uniform across the kinds with no
 lore-specific deviation.
 
+## Collision review and entity merge
+
+The classifier writes `name_collision_flag = true` on a
+freshly-created entity when the prose-extracted description
+didn't match an existing same-name entity strongly enough to
+promote the existing one. The flag means "this could be a
+duplicate; the user should decide." Schema and classifier rules
+live in
+[`memory/edge-cases.md → Name collision`](../../../memory/edge-cases.md#name-collision-and-disambiguation).
+
+The World panel is the only surface where the flag is resolved.
+Three resolution paths are offered: **merge** the two rows into
+one canonical entity, **rename** one to make them genuinely
+distinct, or **keep as distinct** and accept both same-name rows.
+Lore has no collision flag — only the four entity kinds
+(character / location / item / faction) carry it.
+
+### Surfacing — three layers
+
+Discoverability climbs in three steps; all three observe the same
+flag count.
+
+1. **Top-bar review pill** — when one or more entities on the
+   current branch carry `name_collision_flag = true`, a
+   `⚠ N need review` pill renders inline in the World top-bar,
+   between the chapter-progress strip and the actions cluster.
+   Hidden when N=0. Click → activates the list-pane "Needs
+   review" filter (next bullet) and selects the first flagged
+   row. Same chrome shape as the
+   [generation status pill](../../principles.md#universal-in-story-chrome);
+   warn-tinted to distinguish.
+2. **List-pane filter chip** — a `⚠ Needs review (N)` chip
+   joins the `[All|In scene|Active|Staged|Retired]` filter row
+   when N > 0; hidden otherwise. Selecting it filters the list
+   to flagged rows across all kinds (a collision can hit any
+   entity kind). Search composes — searching while the chip is
+   active narrows further.
+3. **Per-row indicator (filter view only)** — when the
+   Needs-review chip is active, each flagged row carries an
+   inline strip below the standard row composition:
+   `⚠ Collides with <other-name>` link plus a `Resolve →`
+   button. The standard row chrome stays clean outside the
+   filter view to keep the common case uncluttered. Adding a
+   fifth orthogonal channel to the
+   [four row indicators](../../patterns/entity.md#entity-row-indicators--four-orthogonal-channels)
+   doesn't pay for itself when the typical flag rate is zero.
+
+The pill is the discovery surface; the chip + per-row strip are
+the actionable destination. Pill click and chip click route to
+the same view.
+
+### Resolve dialog
+
+`Resolve →` opens a modal anchored to the World panel. Header
+states the collision (`⚠ Two characters named "Kael"`) and
+offers the three resolution paths as a primary action picker:
+
+```
+[ Merge into one ] [ Rename one ] [ Keep as distinct ]
+```
+
+Default is `Merge` — the most common intended resolution. Each
+path collapses the dialog to a different body shape (below).
+All paths are dismissible without writes (`Cancel` in the footer
+or Esc).
+
+#### Merge
+
+The body renders the two rows side-by-side with a **canonical
+picker** at the top: a segment toggle picking which row's `id`
+survives. The non-canonical row is deleted at end-of-merge.
+Default selection is the older row by `created_at` — the older
+row tends to have more accumulated state (relations, lore
+links, history), so absorbing the newer one into it preserves
+more by default.
+
+Below the picker, a **per-field resolution table** lists fields
+that diverge between the two:
+
+| field        | side A (canonical)                                          | side B                      |
+| ------------ | ----------------------------------------------------------- | --------------------------- |
+| description  | (•) wandering swordsman…                                    | ( ) guardsman at city gate… |
+| status       | (•) active                                                  | ( ) active                  |
+| `tags[]`     | union (default) — deselect per conflicting tag              |                             |
+| `state` JSON | follows the canonical row · edit on detail pane after merge |                             |
+
+Field-level rules:
+
+- **Top-level scalars** (`name`, `description`, `status`,
+  `retired_reason`, `injection_mode`) — radio per row.
+- **`tags[]`** — union by default with a per-tag deselect.
+- **`state` JSON** — taken whole-side from canonical. Per-field
+  diff inside `state` is out of scope for v1: schema shape
+  varies per kind (character / location / item / faction),
+  traversal/diff UI gets complex fast, and the canonical-picker
+  default already encodes "older row's state wins." When the
+  user wants the newer row's state, picking it as canonical and
+  then editing top-level scalars from the loser is a clean
+  two-step path. Surfaced as an inline note.
+
+A **relations summary** below the field table tells the user
+what will move (read-only — relations always follow the
+canonical id):
+
+- `Awareness rows: <N>` from non-canonical → canonical.
+- `Involvements: <N>` from non-canonical → canonical.
+- `Inverse refs: <N>` other entities point at non-canonical via
+  `inventory[]`, `equipped_items[]`, `current_location_id`,
+  `parent_location_id`, `at_location_id`, or `faction_id` —
+  rewritten to canonical.
+- `Embeddings: 1` vec0 row from non-canonical dropped (the
+  canonical re-embeds if any of its embedded fields changed).
+- `Translation rows: <N>` from non-canonical → canonical.
+
+UNIQUE-constraint handling is deterministic and not
+user-facing: when an awareness row from non-canonical would
+collide on `(branch_id, character_id, happening_id)` with an
+existing canonical row, the canonical's row stays and the
+loser's row is dropped. Documented inline in the relations
+summary as a footnote when the case fires.
+
+Footer:
+
+```
+[ Cancel ]                  [ Merge into <canonical-name> ]
+```
+
+The primary button echoes the canonical pick to keep the
+destructive direction obvious.
+
+#### Rename
+
+Body is a single inline rename form, two rows stacked:
+
+```
+ent_kael_1 (older, 12 turns ago):  [ Kael                       ]
+ent_kael_2 (newer, this turn):     [ Kael (the guardsman)       ]
+```
+
+Editing either field dirties the form. Save commits both rows
+under one delta `action_id`; the flag clears on the
+formerly-flagged row. No additional reconciliation — both rows
+continue to exist unchanged except for the one that got
+renamed.
+
+Validation: at least one of the two names must change
+(otherwise the collision is unresolved). Save disables until
+that holds.
+
+#### Keep as distinct
+
+Body is a confirmation panel:
+
+> Both `Kael` entities will continue to exist with the same
+> name. Retrieval treats them by id, but storyteller responses
+> may conflate them in prose. Polymorphic naming is a
+> documented v1 limitation
+> ([`edge-cases.md → Polymorphic naming`](../../../memory/edge-cases.md#polymorphic-naming--v1-limitation))
+> — the schema doesn't enforce unique names. The flag clears;
+> no other writes.
+
+Footer:
+
+```
+[ Cancel ]                              [ Keep as distinct ]
+```
+
+Confirming clears the flag on the newer row without writing
+anything else. The user is opting into the v1 limitation with
+eyes open.
+
+### Reversibility
+
+All three paths write deltas under a single `action_id` so
+[CTRL-Z rollback](../../../data-model.md#entry-mutability--rollback)
+unwinds the resolution as one step.
+
+Merge writes:
+
+- `entities` op=`update` on canonical (changed fields).
+- `entities` op=`delete` on non-canonical (full
+  `undo_payload` carries the row).
+- `happening_awareness` op=`update`/`delete` per affected row.
+- `happening_involvements` op=`update`/`delete` per affected
+  row.
+- `entities` op=`update` on every other entity that held an
+  inverse ref to non-canonical (state JSON paths rewritten).
+- `translations` op=`update` per affected row.
+
+Embeddings are not delta-logged
+([`data-model.md → embeddings`](../../../data-model.md#diagram)) —
+the loser's vec0 row is dropped silently; on rollback the
+restored entity row re-embeds via the standard
+[eager-sync-on-write contract](../../../memory/retrieval.md#compute-lifecycle).
+The user-visible behavior is "merge is reversible" — the
+non-trivial wiring lives below the surface.
+
+Rename and keep-as-distinct are similarly grouped and unwind
+identically.
+
+### Edit restrictions during in-flight generation
+
+The resolve dialog is a write surface; per
+[`principles.md → Edit restrictions during in-flight generation`](../../principles.md#edit-restrictions-during-in-flight-generation),
+the `Resolve →` button is disabled while narrative or
+chapter-close generation is running, with the same disabled-
+tooltip language as the entity save bar. The pill and filter
+chip stay visible — discovery isn't gated, only the write.
+
+### Authorship and 3+ collisions
+
+Resolution writes deltas with `source = user_edit`. The flag
+itself is classifier-written
+([authorship contract](../../../data-model.md#authorship-contract)
+keeps `name_collision_flag` on the classifier side); resolution
+is always user-authored.
+
+The dialog handles two-side merges only. When 3+ entities
+collide on the same name, the user iterates: resolve any pair,
+the remaining pair re-surfaces in the filter view on the next
+open. N-way merge UI is not v1.
+
 ## Mobile expression
 
 Phone forces master-detail collapse: list-first by default, detail
@@ -611,3 +836,21 @@ overflows.
   [responsive contract](../../foundations/mobile/responsive.md).
   2-pane (list ~340 px, detail ~360–560 px); cramped but usable.
   Tab-strip overflow rule applies per the tablet column.
+- **Resolve dialog reflows** to Sheet (tall ~95 %) on phone per
+  [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
+  The merge body's two side-by-side columns
+  ([Merge](#merge)) stack vertically on phone — side A as one
+  card, side B as a second card below, with the per-field
+  radios stacked under each. Canonical picker stays a 2-segment
+  toggle full-width. Relations summary stays single-column;
+  always vertical. Action footer pins to the Sheet bottom.
+- **Top-bar review pill** mirrors the
+  [generation pill phone treatment](../../principles.md#universal-in-story-chrome) —
+  collapses to icon-only (`⚠ N`) at slim top-bar tier; full
+  label returns on tablet+.
+- **Per-row collision strip** wraps cleanly on phone — the
+  collide-with link and Resolve button drop to a second row
+  inside the strip when the row width can't fit them.
+- **Needs-review filter chip** wraps with the rest of the
+  filter chip row via the existing `flex-wrap` rule; no special
+  treatment.
