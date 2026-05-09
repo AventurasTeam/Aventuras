@@ -241,24 +241,21 @@ Settings Memory tab pass.
   need to be lower for tight worlds, higher for first chapters of
   rich-worldbuilding stories). Belongs in the same empirical
   calibration pass as the threshold tuning.
-- **Matryoshka effective-dim selector for provider models.** Modern
-  embedding models (OpenAI `text-embedding-3-*`, Qwen3-Embedding,
-  BGE-M3) are trained so the first N dims of a high-dim output
-  vector are themselves a usable lower-dim embedding. Lets one
-  provider model serve mobile and desktop users at different cost
-  points: e.g., a homelab user picks Qwen3-Embedding-8B (4096-dim
-  native), and on mobile the story stores 1024-dim truncated
-  vectors. Trade quality (slight) for retrieval-cost order-of-
-  magnitude improvement. Schema impact: add immutable
-  `stories.settings.effectiveDim?: number` (set at story creation,
-  null = use model native dim, locked thereafter same as
-  `retrievalMode`). UX: surface in story creation when the chosen
-  provider model declares Matryoshka capability in
-  `app_settings.providers[].cachedModels[].capabilities`; suggest a
-  default based on detected platform; show projected per-turn
-  retrieval cost. App Settings → Memory shows read-only effective
-  dim per story. Not relevant for local-mode (the bundled local
-  model is small enough not to need truncation).
+- **Matryoshka effective-dim selector** — designed; contract +
+  truncation rules + screen wiring landed in
+  [`retrieval.md → Matryoshka effective dim`](./retrieval.md#matryoshka-effective-dim)
+  with schema delta in
+  [`data-model.md`](../data-model.md) and UI surfaces in
+  [wizard](../ui/screens/wizard/wizard.md#memory-cost--matryoshka-effective-dim),
+  [Story Settings · Memory · Embedder](../ui/screens/story-settings/story-settings.md#embedder),
+  and
+  [App Settings · Story Defaults · Memory](../ui/screens/app-settings/app-settings.md#memory)
+  - capability badge in
+    [App Settings · Providers · Models](../ui/screens/app-settings/app-settings.md#models--split-by-capability).
+    Implementation work that remains: client-side truncation +
+    re-normalization in the embed pipeline, server-side `dimensions`
+    parameter wiring per provider, capability detection from
+    `/models` metadata, wizard cost-preview math.
 
 ### Parked / post-v1
 

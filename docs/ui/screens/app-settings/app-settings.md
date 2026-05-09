@@ -205,6 +205,26 @@ always user-overridable (per the global pattern; some providers
 report inconsistently, custom endpoints may run models the
 provider's metadata doesn't recognize).
 
+**Capability badges per category.** Each model row shows the
+capability badges relevant to its category as small clickable
+chips. Click toggles the user override; visual state distinguishes
+detected-on (filled), user-overridden-on (filled, marked), and
+off (outline).
+
+| Category         | Badge | Capability                                                                                                                                                                   |
+| ---------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Text models      | 🧠    | `reasoning` — model exposes thinking-tokens API                                                                                                                              |
+| Text models      | ⚙     | `structuredOutput` — model supports the JSON-schema / structured-output mode                                                                                                 |
+| Embedding models | 🪆    | `matryoshkaSupported` — model trained for representation truncation (per [`retrieval.md → Matryoshka effective dim`](../../../memory/retrieval.md#matryoshka-effective-dim)) |
+
+When the Matryoshka badge is on, the tooltip shows the model's
+curated dim ladder (`capabilities.matryoshkaDims`); a user-
+overridden-on without a declared ladder falls back to a sensible
+defaults set (`[512, 1024, 2048, native]` clamped to native).
+The badge itself is the only knob here — actual per-story dim
+selection happens at [story creation](../wizard/wizard.md#memory-cost--matryoshka-effective-dim);
+Models tab is just the capability-toggle layer.
+
 ### Model fetching strategy
 
 - **Refresh on app launch** — automatic on startup, **staggered**
@@ -447,6 +467,19 @@ Two intentional differences from the per-story version:
 
   `Test embedder` button next to the picker runs init + smoke-test
   embed against whatever's currently selected.
+
+- **Effective-dim default.** Conditional row, only when the
+  selected default backend is `provider` AND the picked model has
+  `capabilities.matryoshkaSupported = true`. Surfaces the same
+  picker shape as the wizard's
+  [Memory cost section](../wizard/wizard.md#memory-cost--matryoshka-effective-dim)
+  (curated ladder + Custom… + storage / latency preview), bound to
+  `app_settings.default_story_settings.effectiveDim`. Hidden for
+  non-Matryoshka models and for `local` backends. Default
+  pre-selection follows the wizard's platform-aware rule (mobile
+  → smaller dim, desktop → native). Editing this default does not
+  propagate to existing stories — they're locked at their
+  creation-time dim.
 
 ### Translation
 

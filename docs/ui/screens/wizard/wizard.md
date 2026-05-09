@@ -641,6 +641,85 @@ calendar/genre/tone/setting/lore/cast/opening). Resolves the
 "title generation with no prior data" concern that drove placing
 identity at the end.
 
+### Memory cost — Matryoshka effective dim
+
+Conditional disclosure section, collapsed by default. Visible only
+when both:
+
+- `app_settings.default_story_settings.embeddingBackend === 'provider'`
+  (story will use provider embeddings, not local).
+- The default-provider's selected embedding model has
+  `capabilities.matryoshkaSupported === true`
+  ([data-model · cachedModels capabilities](../../../data-model.md#diagram)).
+
+Hidden otherwise — local-mode stories use the bundled small model
+where truncation isn't worth the quality tail; non-Matryoshka
+provider models don't expose the lever.
+
+Disclosure header (collapsed by default):
+
+```
+▸ Memory cost (advanced) — using model native dim
+```
+
+Expanded body:
+
+```
+Memory cost
+<copy: Provider model supports Matryoshka representation. Smaller dim = faster
+       retrieval and less storage, slight quality cost. Locked at story creation.>
+
+Effective dim
+○ 512 dim          ⚡ ~80 ms/turn   📦 ~2 MB / 30 ch
+○ 1024 dim         ⚡ ~160 ms/turn  📦 ~4 MB / 30 ch     ← suggested for mobile
+○ 2048 dim         ⚡ ~320 ms/turn  📦 ~8 MB / 30 ch
+● 3072 dim (native) ⚡ ~480 ms/turn  📦 ~12 MB / 30 ch    ← suggested for desktop
+○ Custom…
+
+[footer]: Estimates assume a 30-chapter story on this device's tier.
+         Actual latency depends on device and story length.
+```
+
+**Suggested default by platform.** At wizard load, the platform
+the user is creating on drives the pre-selected option:
+
+- Mobile → smallest curated dim that's `≥ 512` (typical: 1024).
+- Desktop → model native dim (no truncation suggested).
+
+Aventuras is local-first; a story stays on the device where it was
+created. The suggestion reflects that reality. The pre-selection
+shows a `← suggested` annotation on the matching row; the user can
+override either way.
+
+**Curated ladder.** The radios listed mirror the
+`capabilities.matryoshkaDims` array from the provider's model
+metadata. Models without an explicit ladder fall back to a
+sensible defaults set (`[512, 1024, 2048, native]` clamped to
+native).
+
+**Custom dim.** The `Custom…` option opens a number input
+constrained to `1 ≤ N ≤ native_dim`. Footer caveat: "Custom dims
+not on the model's curated ladder may exhibit quality cliffs."
+
+**Cost preview math.** Storage is precise (`dim × 4 bytes` per row
+× projected row count for a 30-chapter story, derived from
+[scale assumptions](../../../memory/retrieval.md#scale-assumptions)).
+Latency is order-of-magnitude per the
+[PoC findings](../../../memory/followups.md#v1-blocking) (per-query
+KNN scales linearly in dim; ~122 ms at 100k rows on flagship
+phone at 384 dim, scaled accordingly). Both numbers come with
+the footer disclaimer about device tier and story length — no
+false precision.
+
+**Lock semantics.** The chosen dim writes to
+`stories.settings.effectiveDim` at Finish, locked thereafter
+along with `embedding_model_id` and `retrievalMode`. Same
+re-index ramp applies if the user later wants a different dim —
+exposed via the
+[Model swap UX](../../../memory/retrieval.md#model-swap-ux)
+since dim changes have the same vector-space invalidation
+properties as model changes.
+
 ### Validation gate on `Finish`
 
 - Opening prose non-empty.
@@ -648,6 +727,10 @@ identity at the end.
 - Lead-character constraint satisfied (re-checked from step 4).
 - `description` optional (library card has muted "(no description
   yet)" fallback).
+- If the Memory-cost section is shown and the user picked
+  `Custom…`, the custom-dim input must be a positive integer
+  ≤ model native dim. Empty / out-of-range blocks Finish with an
+  inline error on that input.
 
 ### What `Finish` does — atomic commit
 

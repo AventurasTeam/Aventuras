@@ -88,8 +88,10 @@ removed with this commit.
   threshold tuning, embedder production integration, embedding
   compute lifecycle, background classifier UX, memory probe
   implementation (contract + screen UX landed; see
-  [`memory/probe.md`](./memory/probe.md)), lore-creation cap
-  tuning.
+  [`memory/probe.md`](./memory/probe.md)), Matryoshka
+  effective-dim implementation (contract + UI landed; see
+  [`memory/retrieval.md → Matryoshka effective dim`](./memory/retrieval.md#matryoshka-effective-dim)),
+  lore-creation cap tuning.
 - [Parked / post-v1 items](./memory/followups.md#parked--post-v1) —
   multi-axis salience, pin-contradiction reconciliation, spillover
   policy, polymorphic naming, etc.

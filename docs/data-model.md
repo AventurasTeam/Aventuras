@@ -805,6 +805,7 @@ stories.settings: {
     threads: number
     chapters: number                 // chapter summaries pool
   }
+  effectiveDim?: number              // Matryoshka effective dim — null = use model native dim, <N> = truncate stored vectors and queries to N. Set at story creation, locked thereafter same as embedding_model_id and retrievalMode. Provider-only (local model is small enough that truncation isn't worth the quality tail). See docs/memory/retrieval.md → Matryoshka effective dim
   probe_mode_active: boolean        // per-story activation of the memory probe. No-op while app_settings.diagnostics.probe_mode_enabled is off. Default false. See docs/memory/probe.md
 
   // Composer
@@ -957,7 +958,12 @@ app_settings.providers: Array<{
   pinnedModelIds: string[]                   // user's working set; floats to top of selectors
   cachedModels?: Array<{                     // result of /models fetch; survives offline restarts
     id: string
-    capabilities?: { reasoning?: boolean; structuredOutput?: boolean }
+    capabilities?: {
+      reasoning?: boolean
+      structuredOutput?: boolean
+      matryoshkaSupported?: boolean          // NEW: model supports Matryoshka representation truncation. See docs/memory/retrieval.md → Matryoshka effective dim
+      matryoshkaDims?: number[]              // NEW: curated dim ladder declared by the model card (e.g., [256, 512, 1024, 1536, 2048, 3072]). Picker surfaces these first; Custom… accepts any N up to native.
+    }
   }>
   cachedAt?: number                          // last successful /models fetch timestamp
 }>

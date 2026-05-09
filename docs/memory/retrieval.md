@@ -265,6 +265,161 @@ A standalone "Re-index this story now" button stays available in
 the same Story Settings panel for users who want to force a
 re-index without changing the model.
 
+### Matryoshka effective dim
+
+Provider models trained with **Matryoshka representation learning**
+(MRL) produce vectors whose first N dimensions are themselves a
+usable embedding at lower cost. OpenAI `text-embedding-3-large`
+(3072 native), `text-embedding-3-small` (1536), Qwen3-Embedding,
+BGE-M3, and others ship with a curated dim ladder in their model
+card. Truncating to a smaller N trades slight retrieval quality
+for proportional storage and compute reduction — at 1024 dim a
+3072-dim native model uses 1/3 the storage and ~1/3 the per-turn
+KNN compute.
+
+Local-mode is **out of scope** for this lever. The bundled
+`all-MiniLM-L6-v2-q8` is 384-dim native — already small; further
+truncation isn't worth the quality tail.
+
+#### Schema
+
+A new immutable per-story field:
+
+```
+stories.settings.effectiveDim?: number
+```
+
+- `null` — use the model's native dim. Default for stories whose
+  embedding model doesn't declare Matryoshka support.
+- `<N>` — store and query at N dim, truncated from the model's
+  native output. Set at story creation; **locked thereafter** with
+  the same lock semantics as `embedding_model_id` and
+  `retrievalMode`. Changing it would invalidate every stored
+  vector under the old dim and force a full re-index — same
+  trade-off as a model swap, exposed through the same UX path.
+
+#### Capability flags — provider-side
+
+The provider-model capability JSON gains two fields:
+
+```ts
+app_settings.providers[].cachedModels[].capabilities = {
+  reasoning?: boolean,
+  structuredOutput?: boolean,
+  matryoshkaSupported?: boolean,    // NEW
+  matryoshkaDims?: number[],        // NEW; curated ladder, e.g. [256, 512, 1024, 1536, 2048, 3072]
+}
+```
+
+Capability flags are detected from the provider's `/models`
+metadata where available and **always user-overridable** in App
+Settings · Providers · Models — same pattern as
+`reasoning` and `structuredOutput`. A user setting
+`matryoshkaSupported = true` on a model the provider didn't
+declare is a power-user assertion: the system honors it, and
+quality is the user's problem if the model wasn't actually
+trained for it.
+
+`matryoshkaDims` is the **curated** ladder — the dims the
+provider explicitly endorses. The story-creation picker lists
+those first, plus a `Custom…` option for any N from 1 up to
+native. Dims off the ladder may exhibit quality cliffs; that's
+the user's call.
+
+#### Truncation contract
+
+When `stories.settings.effectiveDim = N` is non-null:
+
+1. **Stored vectors.** At every embed-write (creates, edits,
+   chapter-close summaries, etc.), the provider returns a native-
+   dim vector. The system truncates to the first N floats and
+   **re-normalizes to unit length** before storing. Cosine
+   similarity on L2-normalized vectors requires this — truncation
+   without re-normalization breaks the unit norm and degrades
+   ranking.
+2. **Query vectors.** The same truncation + re-normalization
+   applies to the three per-turn query vectors (Q1 / Q2 / Q3) so
+   query and stored vectors live in the same N-dim space.
+3. **vec0 partitioning.** The per-type `*_vec` virtual tables
+   store vectors at the dim of the stories that created them;
+   different stories can run different effective dims in the same
+   physical table, partitioned by `branch_id` per the
+   [Storage](#storage) section. Within one branch, all rows share
+   one dim — the same single-model invariant extended to dim.
+4. **Source-hash tripwire.** `source_hash` continues to compare
+   content hashes, not vectors. Truncation is deterministic from
+   the native vector; `source_hash` mismatch still indicates a
+   bypassed embed step.
+
+Some providers offer **server-side truncation** by passing a
+`dimensions` parameter on the embedding request. Where supported,
+the integration uses the server-side path — saves bandwidth and
+ensures the truncation matches the model's published behavior
+exactly. Where not supported, client-side truncation does the
+same math; per published Matryoshka properties the result is
+indistinguishable.
+
+#### Defaults — platform-aware suggestion
+
+At story creation, the wizard suggests an effective dim based on
+the platform the user is creating on:
+
+- **Mobile** — smallest curated dim that's `≥ 512` (typical:
+  1024). Mobile-tier devices benefit most from the cost reduction;
+  retrieval latency on flagship phones is the binding constraint.
+- **Desktop** — model native dim (no truncation). Desktop has
+  enough headroom that the quality tail outweighs the
+  cost reduction.
+
+Aventuras is local-first; a story stays on the device where it
+was created. The suggestion reflects that reality. The user can
+override either way — picking native on mobile is fine if the
+user has signal that the device handles it.
+
+The numbers in the wizard preview are derived from the PoC
+benchmark table in
+[`docs/memory/followups.md → PoC findings — retrieval pipeline`](./followups.md#v1-blocking)
+(per-query KNN at ~11 / 43 / 61 / 122 ms at 1k / 10k / 50k / 100k
+rows on a flagship Android at 384-dim, scaling linearly with dim).
+
+#### Per-turn pipeline impact
+
+- **Embed cost** — unchanged at the API layer (provider returns
+  native dim either way). Slight savings if `dimensions` parameter
+  reduces bandwidth.
+- **Storage cost** — `dim × 4 bytes` per row. Direct ratio: 1024
+  vs 3072 = 1/3 the bytes.
+- **KNN cost** — cosine scan compute is linear in dim. Direct
+  ratio: 1024 vs 3072 ≈ 1/3 the per-row work for the same pool.
+- **MMR cost** — same linear factor; MMR's diversity computation
+  is also dim-bound.
+- **Memory probe captures** — light captures store per-row
+  similarities (3 floats per row) regardless of dim; deep captures
+  store vectors and follow the dim ratio. See
+  [`probe.md → Capture model`](./probe.md#capture-model).
+
+#### Edge cases
+
+- **Capability flag flips after stories exist.** A user manually
+  toggles `matryoshkaSupported = false` on a model that already
+  has stories with non-null `effectiveDim`. Existing stories'
+  vectors stay where they are — the flag only governs new-story
+  creation. Trust the stored data over the flag.
+- **Provider redeploys a different model under the same id.**
+  Same as the existing model-swap-mismatch hazard. The
+  [model swap UX](#model-swap-ux) covers it; the `Skip with
+relabel` path is already user-attested-only. Effective dim
+  joins `embedding_model_id` in the locked-set the relabel
+  asserts unchanged.
+- **Story configured for `retrievalMode = 'llm-only'`.**
+  `effectiveDim` is moot — no vectors are stored. The wizard
+  suppresses the picker for these stories. Schema-wise the field
+  stays writable but defaults to null.
+- **Bulk re-index (model swap).** Re-index uses the story's
+  current `effectiveDim` (the one stored at creation, not a
+  per-swap input). A model swap that changes the underlying model
+  doesn't re-pick the dim; it rebuilds at the same N.
+
 ---
 
 ## Query construction — three-vector stack

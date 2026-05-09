@@ -361,12 +361,26 @@ Displayed:
 - For local backends, the resolved execution provider (per-model
   override if any, otherwise the catalog's `default_ep[platform]`
   for curated entries or the user-picked EP for custom imports).
+- **Effective dim** — conditional row, only when
+  `stories.settings.effectiveDim` is non-null. Reads
+  `<N> dim (truncated from <native> dim, Matryoshka)` and is
+  read-only — the dim was locked at story creation alongside
+  `embedding_model_id`. Hidden when null (no truncation, model
+  native dim).
 - `[Switch embedder]` button.
 
 When `embeddingBackend = 'provider'`, both the provider and the
 model id are displayed together — the schema delta for
 `embedding_provider_id` is tracked at
 [`memory/followups.md → Per-story embedding provider id`](../../../memory/followups.md#v1-blocking).
+
+Changing the effective dim post-creation requires the same
+[Model swap UX](../../../memory/retrieval.md#model-swap-ux) ramp
+as a model change — a different dim invalidates every stored
+vector under the old dim. The `[Switch embedder]` button covers
+both axes (model id and effective dim) in the same dialog; full
+contract in
+[`retrieval.md → Matryoshka effective dim`](../../../memory/retrieval.md#matryoshka-effective-dim).
 
 ### Retrieval budgets
 
