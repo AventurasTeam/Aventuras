@@ -319,6 +319,16 @@
   .field-grid .row-v input[type="radio"] { margin-top: 3px; flex-shrink: 0; }
   .field-grid .row-v.muted { color: var(--ink-faint); font-style: italic; }
   .field-grid .row-v.span2 { grid-column: 2 / span 2; }
+  .field-grid .row-prose { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; cursor: pointer; }
+  .field-grid .row-prose .prose-body { color: var(--ink); line-height: 1.5; }
+  .field-grid .row-prose .side-meta { font-size: 9px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; }
+  /* On desktop the column header carries side identity; the per-row
+     side-meta is hidden to avoid duplication. Revealed on mobile via
+     the @container override below. */
+  .field-grid .row-prose .side-meta { display: none; }
+  .field-grid .tags-row { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .field-grid .tags-row .tags-list { display: flex; gap: 6px; flex-wrap: wrap; }
+  .field-grid .tags-row .side-meta { font-size: 9px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; }
   .state-note { margin-top: 10px; padding: 6px 10px; background: var(--bg); border: 1px dashed var(--line-soft); border-radius: 3px; font-size: 11px; color: var(--ink-muted); }
   .relations-block { margin-top: 14px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line-soft); border-radius: 3px; }
   .relations-block .h { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-faint); margin-bottom: 6px; }
@@ -466,18 +476,26 @@
 
     /* Resolve modal reflows to Sheet (tall ~95%) on phone — per
        world.md → Mobile expression. Modal pins to bottom of the
-       viewport; merge body's two-column field grid stacks (field
-       label, side A, side B as three vertical cells per field). */
+       viewport; merge body's three-column field grid collapses to
+       single column. Each divergent field renders as a section: field
+       name as section header, then side A (radio + value + meta) and
+       side B (radio + value + meta) as the only descendants. Long
+       prose clamps to 3 lines with tap-to-expand. */
     .resolve-overlay { padding: 0; align-items: flex-end; overflow: visible; }
     .resolve-modal { max-width: none; height: 95%; max-height: 95%; border-radius: 4px 4px 0 0; }
     .resolve-body { overflow: auto; }
     .canon-picker { flex-direction: column; }
     .field-grid { grid-template-columns: 1fr; gap: 0; }
-    .field-grid .h:nth-child(2), .field-grid .h:nth-child(3) { display: none; }
-    .field-grid .h:first-child { grid-column: 1; }
-    .field-grid .row-l { padding-top: 14px; padding-bottom: 4px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); border-bottom: none; }
-    .field-grid .row-v { border-bottom: 1px dotted var(--line-soft); padding: 6px 0; }
+    /* Hide column headers on mobile — per-section structure carries layout. */
+    .field-grid .h { display: none; }
+    .field-grid .row-l { padding-top: 16px; padding-bottom: 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-faint); border-bottom: none; font-weight: 600; }
+    .field-grid .row-v { border-bottom: 1px dotted var(--line-soft); padding: 8px 0; }
     .field-grid .row-v.span2 { grid-column: 1; }
+    /* Reveal per-radio side meta — desktop relies on column headers, mobile relies on this. */
+    .field-grid .row-prose .side-meta { display: block; }
+    /* 3-line clamp for prose values; tap the row to expand in place. */
+    .field-grid .row-prose .prose-body { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .field-grid .row-prose.expanded .prose-body { display: block; -webkit-line-clamp: unset; overflow: visible; }
     .rename-row { grid-template-columns: 1fr; gap: 4px; }
 
     /* JSON overlay drawer reflows to bottom-anchored Sheet (tall ~95%) */
@@ -1329,21 +1347,36 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
           <span class="meta">created this turn</span>
         </div>
       </div>
+      <!-- Only fields that diverge between the two rows render here.
+           Identical values aren't surfaced (no decision to make). -->
       <div class="field-grid">
         <span class="h">field</span>
         <span class="h">side A (canonical)</span>
         <span class="h">side B</span>
 
         <span class="row-l">description</span>
-        <span class="row-v"><input type="radio" name="f-desc" checked> wandering swordsman, weathered jaw, ice-blue eyes</span>
-        <span class="row-v"><input type="radio" name="f-desc"> guardsman at the city gate, recently posted</span>
-
-        <span class="row-l">status</span>
-        <span class="row-v"><input type="radio" name="f-status" checked> active</span>
-        <span class="row-v"><input type="radio" name="f-status"> active</span>
+        <span class="row-v">
+          <input type="radio" name="f-desc" checked>
+          <span class="row-prose" data-expandable>
+            <span class="prose-body">wandering swordsman, weathered jaw, ice-blue eyes; raised in the southern marshes by rebels who taught him to track and to harbor a deep distrust of authority despite his privileged origins; carries a worn signet ring he refuses to explain.</span>
+            <span class="side-meta">12 turns ago &middot; canonical</span>
+          </span>
+        </span>
+        <span class="row-v">
+          <input type="radio" name="f-desc">
+          <span class="row-prose" data-expandable>
+            <span class="prose-body">guardsman at the city gate, recently posted</span>
+            <span class="side-meta">this turn</span>
+          </span>
+        </span>
 
         <span class="row-l">tags</span>
-        <span class="row-v span2">union (default): <code>bounty-hunter</code> &middot; <code>ally</code> &middot; <code>guardsman</code> &middot; <code>chapter-3-introduced</code></span>
+        <span class="row-v span2 tags-row">
+          <span class="tags-list">
+            <code>bounty-hunter</code> &middot; <code>ally</code> &middot; <code>guardsman</code> &middot; <code>chapter-3-introduced</code>
+          </span>
+          <span class="side-meta">union by default &middot; tap a tag to deselect</span>
+        </span>
 
         <span class="row-l">state JSON</span>
         <span class="row-v span2 muted">follows the canonical row &middot; edit on detail pane after merge</span>
@@ -1645,6 +1678,15 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     if (e.key === 'Escape' && document.getElementById('resolve-overlay')?.classList.contains('open')) {
       setResolve('closed');
     }
+  });
+
+  // Mobile-only: tap a clamped prose body to expand it in place. Desktop
+  // renders prose freely (no clamp), so the toggle is a no-op there.
+  document.querySelectorAll('.row-prose[data-expandable]').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      el.classList.toggle('expanded');
+    });
   });
 
   setReviewState('none');

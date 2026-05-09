@@ -597,9 +597,14 @@ that diverge between the two:
 
 Field-level rules:
 
+- **Divergent fields only.** Identical values on both sides
+  don't render — there's no decision to make. The table lists
+  only fields where side A and side B differ.
 - **Top-level scalars** (`name`, `description`, `status`,
-  `retired_reason`, `injection_mode`) — radio per row.
+  `retired_reason`, `injection_mode`) — radio per row when
+  divergent.
 - **`tags[]`** — union by default with a per-tag deselect.
+  Renders only when the two tag sets differ.
 - **`state` JSON** — taken whole-side from canonical. Per-field
   diff inside `state` is out of scope for v1: schema shape
   varies per kind (character / location / item / faction),
@@ -608,6 +613,19 @@ Field-level rules:
   user wants the newer row's state, picking it as canonical and
   then editing top-level scalars from the loser is a clean
   two-step path. Surfaced as an inline note.
+- **Long-text values.** Description and other prose-shaped
+  fields wrap freely on desktop (modal scrolls). On mobile, a
+  3-line clamp applies with a "..." trailing truncation; tap
+  the prose body to expand the row in place. Radios stay tappable
+  independently — the tap zone splits between the radio circle
+  and the prose body. Keeps comparison glance-able when prose
+  diverges in length.
+- **Side identification.** Desktop column headers (`side A
+(canonical)` / `side B`) carry side identity. On mobile the
+  headers collapse out of view, so each radio's value carries an
+  inline meta caption (`12 turns ago` / `this turn`, same wording
+  as the canonical picker) underneath the prose. Each radio is
+  self-describing without relying on column position.
 
 A **relations summary** below the field table tells the user
 what will move (read-only — relations always follow the
@@ -838,12 +856,17 @@ overflows.
   Tab-strip overflow rule applies per the tablet column.
 - **Resolve dialog reflows** to Sheet (tall ~95 %) on phone per
   [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
-  The merge body's two side-by-side columns
-  ([Merge](#merge)) stack vertically on phone — side A as one
-  card, side B as a second card below, with the per-field
-  radios stacked under each. Canonical picker stays a 2-segment
-  toggle full-width. Relations summary stays single-column;
-  always vertical. Action footer pins to the Sheet bottom.
+  The merge body's three-column field grid
+  ([Merge](#merge)) collapses to single column: each divergent
+  field renders as a section (field name as section header,
+  side A radio + value, side B radio + value, each with its own
+  meta caption to retain side identity). Column headers (`field`
+  / `side A` / `side B`) hide on mobile — the per-section
+  structure carries the layout. Canonical picker stacks
+  vertically (segments full-width). Long-prose values clamp to
+  3 lines with tap-to-expand. Relations summary stays
+  single-column; always vertical. Action footer pins to the
+  Sheet bottom.
 - **Top-bar review pill** mirrors the
   [generation pill phone treatment](../../principles.md#universal-in-story-chrome) —
   collapses to icon-only (`⚠ N`) at slim top-bar tier; full
