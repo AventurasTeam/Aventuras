@@ -526,39 +526,51 @@ distinct, or **keep as distinct** and accept both same-name rows.
 Lore has no collision flag — only the four entity kinds
 (character / location / item / faction) carry it.
 
-### Surfacing — three layers
+### Surfacing
 
-Discoverability climbs in three steps; all three observe the same
-flag count.
+A collision flag is a "do something" signal, not a "narrow your
+view" signal. Chrome appears wherever the flag exists; no extra
+discovery step.
 
 1. **Top-bar review pill** — when one or more entities on the
    current branch carry `name_collision_flag = true`, a
    `⚠ N need review` pill renders inline in the World top-bar,
-   between the chapter-progress strip and the actions cluster.
-   Hidden when N=0. Click → activates the list-pane "Needs
-   review" filter (next bullet) and selects the first flagged
-   row. Same chrome shape as the
-   [generation status pill](../../principles.md#universal-in-story-chrome);
-   warn-tinted to distinguish.
-2. **List-pane filter chip** — a `⚠ Needs review (N)` chip
-   joins the `[All|In scene|Active|Staged|Retired]` filter row
-   when N > 0; hidden otherwise. Selecting it filters the list
-   to flagged rows across all kinds (a collision can hit any
-   entity kind). Search composes — searching while the chip is
-   active narrows further.
-3. **Per-row indicator (filter view only)** — when the
-   Needs-review chip is active, each flagged row carries an
-   inline strip below the standard row composition:
-   `⚠ Collides with <other-name>` link plus a `Resolve →`
-   button. The standard row chrome stays clean outside the
-   filter view to keep the common case uncluttered. Adding a
-   fifth orthogonal channel to the
-   [four row indicators](../../patterns/entity.md#entity-row-indicators--four-orthogonal-channels)
-   doesn't pay for itself when the typical flag rate is zero.
+   alongside the
+   [generation status pill](../../principles.md#universal-in-story-chrome).
+   Warn-tinted to distinguish. Hidden when N=0. Click → scrolls
+   the list-pane to the first flagged row (and expands its
+   accordion group if collapsed). On phone the label collapses
+   to glyph + count (`⚠ N`) parallel to the gen pill.
+2. **Per-row collision strip — always visible on flagged rows.**
+   Each flagged row carries an inline strip below the standard
+   row composition: `⚠ Collides with <other-name>` link plus a
+   `Resolve →` button. Renders unconditionally — no filter
+   activation, no extra tap to expose. Flagged rows show signal
+   in-place wherever they live in the list (Active, Staged, or
+   Retired group), warn-tinted so they read distinct from the
+   surrounding rows. The strip is row-conditional (renders only
+   on flagged rows), so unflagged rows stay decoration-clean and
+   the
+   [four-channel rule](../../patterns/entity.md#entity-row-indicators--four-orthogonal-channels)
+   isn't violated for the common case.
+3. **Collapsed-accordion badge** — when an accordion group
+   (Active / Staged / Retired) is collapsed AND contains one or
+   more flagged rows, the group header carries a small
+   `⚠ N` count badge to the right of the group count. Keeps
+   the signal visible without overriding the user's manual
+   collapse intent. Click the badge → expands the group and
+   scrolls to its first flagged row. Hidden when the group is
+   expanded (the strips themselves are visible) or when the
+   group has no flagged rows.
 
-The pill is the discovery surface; the chip + per-row strip are
-the actionable destination. Pill click and chip click route to
-the same view.
+The pill is the at-a-glance count and jump target. The strip is
+the action surface. The badge is the bridge — keeps signal
+visible when accordions hide rows.
+
+A "Needs review" filter chip was considered and rejected:
+filter chips are for browsing modes, and a collision is an
+attention signal. Filtering layered an extra tap between the
+user and the action with no compensating browsing benefit.
 
 ### Resolve dialog
 
@@ -877,6 +889,7 @@ overflows.
 - **Per-row collision strip** wraps cleanly on phone — the
   collide-with link and Resolve button drop to a second row
   inside the strip when the row width can't fit them.
-- **Needs-review filter chip** wraps with the rest of the
-  filter chip row via the existing `flex-wrap` rule; no special
-  treatment.
+- **Collapsed-accordion badge** stays inline with the group
+  header on phone. Group headers reflow no differently from
+  their unflagged counterparts; the badge sits after the count
+  in the same row.

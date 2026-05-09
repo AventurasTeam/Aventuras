@@ -273,22 +273,23 @@
   .review-pill .rp-count { font-weight: 600; }
   body[data-review-state="has-flags"] .review-pill { display: inline-flex; }
 
-  .list-toggle.needs-review { display: none; border-color: var(--warn); color: #7a4f1a; gap: 4px; align-items: center; }
-  body[data-review-state="has-flags"] .list-toggle.needs-review { display: inline-flex; }
-  .list-toggle.needs-review .count { font-weight: 600; }
-
-  /* Per-row collision strip — visible only when the row is .flagged AND
-     the needs-review filter is active. Outside that view the row renders
-     normally (the strip is display:none). */
+  /* Per-row collision strip — always visible on flagged rows when
+     review-state is has-flags. Filter activation is NOT required;
+     a collision is an attention signal, not a browse-mode filter. */
   .row-main { display: flex; gap: 8px; align-items: center; flex: 1; min-width: 0; }
-  .collision-strip { display: none; padding: 6px 8px 8px 14px; font-size: 11px; color: #7a4f1a; background: #fdf6e8; border-top: 1px dotted #e3d5b6; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .collision-strip { padding: 6px 8px 8px 14px; font-size: 11px; color: #7a4f1a; background: #fdf6e8; border-top: 1px dotted #e3d5b6; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .collision-strip .col-msg { flex: 1; min-width: 0; }
   .collision-strip .resolve-btn { padding: 3px 9px; border: 1px solid var(--warn); border-radius: 3px; background: var(--bg-region); font-size: 11px; color: #7a4f1a; cursor: pointer; }
-  body[data-review-state="has-flags"] .list-row.flagged { display: flex; }
+  /* Flagged-row layout — column flow so the strip drops below row-main. */
+  body[data-review-state="has-flags"] .list-row.flagged { display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: 0; }
+  body[data-review-state="has-flags"] .list-row.flagged > .row-main { padding: 8px 8px; }
   body[data-review-state="none"] .list-row.flagged { display: none; }
-  body[data-review-filter="active"] .list-row.flagged { flex-direction: column; align-items: stretch; gap: 0; padding: 0; }
-  body[data-review-filter="active"] .list-row.flagged > .row-main { padding: 8px 8px; }
-  body[data-review-filter="active"] .list-row.flagged .collision-strip { display: flex; }
+
+  /* Group-header flag badge — shown when the group contains flagged rows.
+     Doubly-helpful when collapsed (the strips are hidden behind the
+     accordion); still shows when expanded (cheap chrome, useful at-a-glance). */
+  .list-group-header .group-flag { display: none; font-size: 9px; color: #7a4f1a; padding: 1px 6px; border: 1px solid var(--warn); border-radius: 999px; background: #fdf6e8; margin-left: auto; cursor: pointer; }
+  body[data-review-state="has-flags"] .list-group.has-flags .group-flag { display: inline-flex; align-items: center; gap: 3px; }
 
   /* Resolve dialog — anchored to .viewport. Mobile reflow noted in world.md → Mobile expression. */
   .resolve-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.18); display: none; z-index: 25; align-items: flex-start; justify-content: center; padding: 32px 24px; box-sizing: border-box; overflow: auto; }
@@ -416,10 +417,15 @@
     .overview-row .portrait-slot { width: 140px !important; height: 140px !important; align-self: flex-start; }
   }
   @container (max-width: 639px) {
-    /* slim top-bar */
+    /* Phone top-bar shape — per mobile/navigation.md → Phone:
+       slim single-row [←] [<title> / World] [pill] [⛭]. Back arrow
+       reorders to leftmost; logo and actions icon hide. */
     .topbar { padding: 8px 12px; gap: 8px; }
     .crumb-primary { font-size: 13px; }
     .topbar-right { gap: 6px; }
+    .topbar > .logo { display: none; }
+    .topbar .topbar-actions { display: none; }
+    .topbar > .topbar-back { order: -1; }
     .gen-status > span:not(.dot) { display: none; }
     .gen-status { padding: 3px 6px; }
 
@@ -511,7 +517,7 @@
   }
 </style>
 </head>
-<body data-list-state="populated" data-md-state="detail" data-review-state="none" data-review-filter="off">
+<body data-list-state="populated" data-md-state="detail" data-review-state="none">
 
 <div class="screen-label"><strong>Wireframe:</strong> World &mdash; entities + lore &mdash; responsive across phone / tablet / desktop &mdash; low-fi, interactive</div>
 
@@ -569,11 +575,6 @@
     <button class="rb-btn" data-review-state="has-flags">2 flagged</button>
   </div>
   <div class="rb-group">
-    <span class="gl">filter:</span>
-    <button class="rb-btn active" data-review-filter="off">off</button>
-    <button class="rb-btn" data-review-filter="active">needs-review</button>
-  </div>
-  <div class="rb-group">
     <span class="gl">resolve:</span>
     <button class="rb-btn active" data-resolve="closed">closed</button>
     <button class="rb-btn" data-resolve="merge">merge</button>
@@ -601,7 +602,7 @@
       <span>generating narrative&hellip;</span>
     </div>
     <!-- Collision review pill — visible when data-review-state="has-flags".
-         Click activates the list-pane needs-review filter. Doc:
+         Click jumps the list pane to the first flagged row. Doc:
          world.md → Collision review and entity merge → Surfacing.
          Phone tier hides the .rp-label, keeping glyph + count only. -->
     <div class="review-pill" id="review-pill" title="Review collision flags">
@@ -609,10 +610,13 @@
       <span class="rp-count">2</span>
       <span class="rp-label">need review</span>
     </div>
-    <div class="icon-btn" title="Actions">&#9906;</div>
-    <div class="icon-btn" title="Story settings">&#9965;</div>
-    <div class="icon-btn" title="Back to reader">&larr;</div>
+    <div class="icon-btn topbar-actions" title="Actions">&#9906;</div>
+    <div class="icon-btn topbar-settings" title="Story settings">&#9965;</div>
   </div>
+  <!-- Back arrow lives outside .topbar-right so it can reorder to the
+       leftmost position on phone tier per mobile/navigation.md → Phone.
+       On desktop, document order keeps it at the rightmost edge. -->
+  <div class="icon-btn topbar-back" title="Back to reader">&larr;</div>
 </header>
 
 <div class="topbar-progress" data-label="Chapter 3 &middot; 8,420 / 24,000 tok">
@@ -647,19 +651,20 @@
         <span class="list-toggle" data-filter="active">Active</span>
         <span class="list-toggle" data-filter="staged">Staged</span>
         <span class="list-toggle" data-filter="retired">Retired</span>
-        <!-- Needs-review chip — joins the filter row only when flagged
-             entities exist. Hidden by default; revealed by review-state. -->
-        <span class="list-toggle needs-review" data-filter="needs-review">&#9888; Needs review <span class="count">2</span></span>
       </div>
     </div>
 
     <div class="list-items">
       <!-- All view: grouped by status tier -->
-      <div class="list-group" data-group="active">
+      <div class="list-group has-flags" data-group="active">
         <div class="list-group-header">
           <span class="group-collapse">&#9662;</span>
           <span>Active</span>
-          <span class="group-count">4</span>
+          <span class="group-count">5</span>
+          <!-- Group flag badge — visible only when body[data-review-state="has-flags"]
+               AND .list-group.has-flags. Visible regardless of expand state, but
+               doubly-helpful when collapsed (strip is hidden, badge is the only signal). -->
+          <span class="group-flag" title="Click to expand and jump to first flagged row">&#9888; 1</span>
         </div>
         <div class="list-group-body">
           <div class="list-row" data-entity="aria">
@@ -1615,19 +1620,11 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     newMenu?.classList.remove('open');
   });
 
-  // Collision review — three-layer surfacing + three-path resolve dialog.
-  // Doc: world.md → Collision review and entity merge.
+  // Collision review — pill + always-visible strip + collapsed-group badge.
+  // Doc: world.md → Collision review and entity merge → Surfacing.
   function setReviewState(s) {
     document.body.dataset.reviewState = s;
     document.querySelectorAll('[data-review-state]').forEach(b => b.classList.toggle('active', b.dataset.reviewState === s));
-    if (s === 'none') {
-      // dropping flags resets the filter view too
-      setReviewFilter('off');
-    }
-  }
-  function setReviewFilter(f) {
-    document.body.dataset.reviewFilter = f;
-    document.querySelectorAll('[data-review-filter]').forEach(b => b.classList.toggle('active', b.dataset.reviewFilter === f));
   }
   function setResolve(r) {
     document.querySelectorAll('[data-resolve]').forEach(b => b.classList.toggle('active', b.dataset.resolve === r));
@@ -1646,12 +1643,15 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     else if (p === 'rename') { lbl.textContent = 'Save renames'; primary.classList.remove('danger'); }
     else if (p === 'keep') { lbl.textContent = 'Keep as distinct'; primary.classList.remove('danger'); }
   }
+  function jumpToFirstFlagged() {
+    if (document.body.dataset.reviewState !== 'has-flags') setReviewState('has-flags');
+    const groups = document.querySelectorAll('.list-group.has-flags.collapsed');
+    groups.forEach(g => g.classList.remove('collapsed'));
+    const target = document.querySelector('.list-row.flagged');
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 
   document.querySelectorAll('[data-review-state]').forEach(b => b.addEventListener('click', () => setReviewState(b.dataset.reviewState)));
-  document.querySelectorAll('[data-review-filter]').forEach(b => b.addEventListener('click', () => {
-    if (document.body.dataset.reviewState !== 'has-flags') setReviewState('has-flags');
-    setReviewFilter(b.dataset.reviewFilter);
-  }));
   document.querySelectorAll('[data-resolve]').forEach(b => b.addEventListener('click', () => setResolve(b.dataset.resolve)));
   document.querySelectorAll('.resolve-path-btn').forEach(b => b.addEventListener('click', () => setResolvePath(b.dataset.path)));
 
@@ -1663,13 +1663,18 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
   document.getElementById('resolve-overlay')?.addEventListener('click', e => {
     if (e.target.id === 'resolve-overlay') setResolve('closed');
   });
-  document.getElementById('review-pill')?.addEventListener('click', () => {
-    setReviewFilter('active');
+  document.getElementById('review-pill')?.addEventListener('click', jumpToFirstFlagged);
+
+  // group-flag badge — expand the group and scroll to its first flagged row
+  document.querySelectorAll('.group-flag').forEach(badge => {
+    badge.addEventListener('click', e => {
+      e.stopPropagation();
+      const group = badge.closest('.list-group');
+      group?.classList.remove('collapsed');
+      const target = group?.querySelector('.list-row.flagged');
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
   });
-  document.querySelectorAll('.list-toggle.needs-review').forEach(b => b.addEventListener('click', e => {
-    e.stopPropagation();
-    setReviewFilter('active');
-  }));
 
   // canon-picker segment — flips primary button label so destructive direction stays obvious
   document.querySelectorAll('.canon-picker .seg').forEach(s => {
@@ -1699,7 +1704,6 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
   });
 
   setReviewState('none');
-  setReviewFilter('off');
   setResolve('closed');
 })();
 </script>
