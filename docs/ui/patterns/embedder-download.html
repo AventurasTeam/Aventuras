@@ -76,6 +76,9 @@
 
   .file-list { font-size: 11px; color: var(--ink-muted); }
   .file-list code { font-size: 10px; }
+
+  .input { width: 100%; padding: 6px 10px; border: 1px solid var(--line-soft); border-radius: 3px; background: var(--bg); color: var(--ink); font: inherit; }
+  .input:focus { outline: none; border-color: var(--ink); }
 </style>
 </head>
 <body>
@@ -89,6 +92,8 @@
     <button class="rb-btn" data-state="downloading">downloading</button>
     <button class="rb-btn" data-state="verifying">verifying</button>
     <button class="rb-btn" data-state="verify-failed">verify-failed</button>
+    <button class="rb-btn" data-state="hf-id-input">hf-id-input</button>
+    <button class="rb-btn" data-state="validation-failed">validation-failed</button>
     <button class="rb-btn" data-state="custom-import">custom-import</button>
   </div>
   <span class="rb-note">flip controls to inspect each state</span>
@@ -234,6 +239,54 @@
         <p class="info-line" style="margin-top: 10px;">This may indicate a corrupted download or an upstream change the bundled catalog hasn't caught up to. The partial install has been deleted.</p>
       </div>
       <div class="modal-actions">
+        <button class="btn">Close</button>
+      </div>
+    </div>
+
+    <!-- hf-id-input — power-user path entry -->
+    <div class="state-pane" data-state-body="hf-id-input">
+      <div class="modal-head">
+        <div class="modal-title">Install model from HuggingFace</div>
+        <span class="modal-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p class="info-line">Type a HuggingFace model id, or paste a HuggingFace URL. Aventuras fetches the model card + license live.</p>
+
+        <div class="ep-row" style="margin-top: 8px;">
+          <span class="label">Model id</span>
+          <input class="input" type="text" placeholder="namespace/model-name" style="width: 100%; padding: 6px 10px; border: 1px solid var(--line-soft); border-radius: 3px; font-family: ui-monospace, monospace; font-size: 12px;">
+        </div>
+
+        <div class="warn-block" style="margin-top: 12px;">
+          The model must expose <code>model.onnx</code>, <code>tokenizer.json</code>, and <code>tokenizer_config.json</code> at the repo root or under <code>onnx/</code>. We'll validate before showing the license. EP picker comes after license accept.
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn">Cancel</button>
+        <button class="btn primary">Resolve&hellip;</button>
+      </div>
+    </div>
+
+    <!-- validation-failed — model lacks required files -->
+    <div class="state-pane" data-state-body="validation-failed">
+      <div class="modal-head">
+        <div class="modal-title warn">&#9888; Model doesn't have the required ONNX exports</div>
+        <span class="modal-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p class="info-line">Aventuras needs <code>model.onnx</code>, <code>tokenizer.json</code>, and <code>tokenizer_config.json</code> at the repo root or under <code>onnx/</code>.</p>
+        <p class="info-line"><b>This model's repo has:</b></p>
+        <div class="file-list" style="font-size: 11px; padding: 6px 12px; background: var(--bg-region); border-radius: 3px;">
+          <span style="color: var(--ok);">&#10003;</span> <code>model.safetensors</code><br>
+          <span style="color: var(--ok);">&#10003;</span> <code>config.json</code><br>
+          <span style="color: var(--ok);">&#10003;</span> <code>tokenizer.json</code><br>
+          <span style="color: var(--warn);">&#10007;</span> <code>model.onnx</code> &mdash; <span style="color: var(--warn);">missing</span><br>
+          <span style="color: var(--warn);">&#10007;</span> <code>tokenizer_config.json</code> &mdash; <span style="color: var(--warn);">missing</span>
+        </div>
+        <p class="info-line" style="margin-top: 10px;">Some HF models ship in Python-only formats (PyTorch / safetensors). Check the model card for ONNX export instructions, or try the curated catalog.</p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn">Try a different id</button>
         <button class="btn">Close</button>
       </div>
     </div>

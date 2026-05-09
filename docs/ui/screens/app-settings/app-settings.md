@@ -372,15 +372,23 @@ Overflow menu (`⋯`) on the collapsed row: `Remove…` (warn-and-
 confirm; details in
 [`memory/model-management.md → Removal`](../../../memory/model-management.md#removal)).
 
-`+ Add model` opens an action picker:
+`+ Add model` opens an action picker with three paths:
 
 - **Curated catalog** — list of pre-vetted models from the bundled
   JSON catalog (see
   [`memory/model-management.md → Curated catalog`](../../../memory/model-management.md#curated-catalog)).
   Triggers the
   [embedder download dialog](../../patterns/embedder-download.md)
-  for license fetch + download + verify.
-- **Import custom…** — three-file import per
+  for license fetch + download + verify against pre-known SHA256s.
+- **From HuggingFace id…** — power-user path. User types a
+  `<namespace>/<model>` id or pastes a HuggingFace URL; the dialog
+  fetches model card + file listing live, validates the required
+  ONNX exports are present, then runs license fetch + download +
+  verify (computed hashes, no pre-check). Uses the
+  [embedder download dialog's custom HF id variant](../../patterns/embedder-download.md#custom-hf-id-variant).
+  EP picker before download.
+- **Import custom files…** — filesystem-supplied. Three-file
+  import per
   [`memory/model-management.md → Custom file import`](../../../memory/model-management.md#custom-file-import);
   uses the
   [embedder download dialog's custom-import variant](../../patterns/embedder-download.md#custom-import-variant).

@@ -80,16 +80,30 @@ Settings Memory tab pass.
   `{model.onnx, tokenizer.json, tokenizer_config.json, meta.json}`.
   The previous `tokenizer.onnx` format is dropped.
 
-  **Sourcing (simplified by pivot).** Curated HF download is the
-  in-app primary path with **live model-card fetch** at download
-  time so the user agrees to the current license rather than a
+  **Sourcing — three paths.** Curated HF download is the in-app
+  primary path with **live model-card fetch** at download time so
+  the user agrees to the current license rather than a
   curation-time snapshot — defends against authors editing model
-  cards post-curation. We store the agreed-to license text alongside
-  the model file so the agreement is frozen even if the source
-  changes later. Custom-URL dropped entirely; replaced with
-  **custom file import** — user provides the three standard HF
-  files (no Python conversion either side). License is user-attested
-  for custom imports.
+  cards post-curation. We store the agreed-to license text
+  alongside the model file so the agreement is frozen even if the
+  source changes later. Two power-user paths sit in App Settings ·
+  Embedding models alongside curated:
+  - **HF id input** — user types a `<namespace>/<model>` id; the
+    dialog fetches model card + file listing live, validates the
+    required ONNX/tokenizer files are present, runs the same
+    license + download flow as curated. SHA256s computed (not
+    pre-known) and stored in `.attestation` for reference. EP
+    picker before download. Brings the convenience of curated
+    auto-fetch to non-curated models without forcing manual
+    download. Requires `@huggingface/tokenizers` to handle the
+    standard HF tokenizer.json directly — pivoting to that JS
+    library (away from the original ort-extensions plan) is what
+    makes this path viable.
+  - **Custom file import** — user provides the three standard HF
+    files from filesystem (`model.onnx`, `tokenizer.json`,
+    `tokenizer_config.json`). License is user-attested. EP picker
+    at import time. The escape hatch for air-gapped or
+    pre-downloaded models.
 
   **PoC findings — embedder (Galaxy Fold 7 — last-gen flagship;
   low-end testing parked, see below).**

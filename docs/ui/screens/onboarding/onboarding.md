@@ -287,8 +287,8 @@ not the wizard.
 │                          supports embeddings)           │
 │   • OpenRouter / text-embedding-3-small                 │
 │                                                          │
-│  Advanced setup → import a custom model file in         │
-│  Settings · Embedding models                            │
+│  Advanced setup → install from a HuggingFace id, or     │
+│  import custom files — Settings · Embedding models      │
 │                                                          │
 │  [ Skip for now ]                          [ Finish ]   │
 └────────────────────────────────────────────────────────┘
@@ -358,13 +358,16 @@ clicking `Finish` on a provider-configured wizard, just without
 the embedder seed). Story list banner fires noting embedder needs
 configuration.
 
-### Why no custom-file import here
+### Why no power-user paths here
 
-Custom imports require the user to provide three HF files plus
-pick an EP under which to validate the model. That's enough
-ceremony to belong on a power-user surface, not a first-launch
-wizard. The wizard's advanced-setup link routes to Settings if the
-user needs that path.
+Onboarding stays minimal: curated catalog only. Both **HF id
+input** (typing a `<namespace>/<model>` for live fetch) and
+**custom file import** (filesystem-supplied 3-file bundle) are
+power-user paths that belong in App Settings · Embedding models,
+not in a first-launch wizard. They share enough ceremony (EP
+picker, validation, smoke-test) that the wizard would balloon.
+The wizard's advanced-setup link routes to Settings for either
+path.
 
 ## Skip behavior
 
