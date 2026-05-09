@@ -670,14 +670,14 @@ Memory cost
        uses less storage; slight quality cost. Locked at story creation.>
 
 Effective dim
-○ 512 dim           📦 ~2 MB / 30 ch
-○ 1024 dim          📦 ~4 MB / 30 ch     ← suggested for mobile
-○ 2048 dim          📦 ~8 MB / 30 ch
-● 3072 dim (native) 📦 ~12 MB / 30 ch    ← suggested for desktop
+○ 512 dim           📦 ~5 MB / 30 ch
+○ 1024 dim          📦 ~10 MB / 30 ch    ← suggested for mobile
+○ 2048 dim          📦 ~20 MB / 30 ch
+● 3072 dim (native) 📦 ~30 MB / 30 ch    ← suggested for desktop
 ○ Custom…
 
-[footer]: Storage estimate assumes a 30-chapter story; scales linearly
-         with story length.
+[footer]: Storage estimate assumes a 30-chapter story at the default
+         chapter-token threshold; scales linearly with story length.
 ```
 
 **Suggested default by platform.** At wizard load, the platform

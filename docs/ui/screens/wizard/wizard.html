@@ -766,22 +766,22 @@
           <label style="display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--line-soft); border-radius: 4px; cursor: pointer;">
             <input type="radio" name="effective-dim" value="512">
             <span style="flex: 1;"><b>512 dim</b></span>
-            <span style="color: var(--ink-muted); font-family: ui-monospace, monospace; font-size: 11px;">📦 ~2 MB / 30 ch</span>
+            <span style="color: var(--ink-muted); font-family: ui-monospace, monospace; font-size: 11px;">📦 ~5 MB / 30 ch</span>
           </label>
           <label style="display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--ink); border-radius: 4px; cursor: pointer; background: #f7f4ec;">
             <input type="radio" name="effective-dim" value="1024" checked>
             <span style="flex: 1;"><b>1024 dim</b> <span style="font-size: 10px; color: #7a6a40; font-style: italic;">← suggested for mobile</span></span>
-            <span style="color: var(--ink-muted); font-family: ui-monospace, monospace; font-size: 11px;">📦 ~4 MB / 30 ch</span>
+            <span style="color: var(--ink-muted); font-family: ui-monospace, monospace; font-size: 11px;">📦 ~10 MB / 30 ch</span>
           </label>
           <label style="display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--line-soft); border-radius: 4px; cursor: pointer;">
             <input type="radio" name="effective-dim" value="2048">
             <span style="flex: 1;"><b>2048 dim</b></span>
-            <span style="color: var(--ink-muted); font-family: ui-monospace, monospace; font-size: 11px;">📦 ~8 MB / 30 ch</span>
+            <span style="color: var(--ink-muted); font-family: ui-monospace, monospace; font-size: 11px;">📦 ~20 MB / 30 ch</span>
           </label>
           <label style="display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--line-soft); border-radius: 4px; cursor: pointer;">
             <input type="radio" name="effective-dim" value="3072">
             <span style="flex: 1;"><b>3072 dim</b> <span style="font-size: 10px; color: var(--ink-faint);">(native)</span></span>
-            <span style="color: var(--ink-muted); font-family: ui-monospace, monospace; font-size: 11px;">📦 ~12 MB / 30 ch</span>
+            <span style="color: var(--ink-muted); font-family: ui-monospace, monospace; font-size: 11px;">📦 ~30 MB / 30 ch</span>
           </label>
           <label style="display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px dashed var(--line-soft); border-radius: 4px; cursor: pointer;">
             <input type="radio" name="effective-dim" value="custom">
@@ -790,7 +790,7 @@
           </label>
         </div>
         <div style="font-size: 10px; color: var(--ink-faint); margin-top: 8px; line-height: 1.5;">
-          Storage estimate assumes a 30-chapter story; scales linearly with story length.<br>
+          Storage estimate assumes a 30-chapter story at the default chapter-token threshold; scales linearly with story length.<br>
           Custom dims off the model's curated ladder may exhibit quality cliffs.
         </div>
       </div>
