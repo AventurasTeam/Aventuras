@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Embedder download dialog — pattern wireframe</title>
+<style>
+  :root {
+    --ink: #2a241a;
+    --ink-muted: #6b5e48;
+    --ink-faint: #948668;
+    --bg: #fbf7ee;
+    --bg-region: #f4ecdc;
+    --bg-highlight: #ede2c4;
+    --line: #c8b88f;
+    --line-soft: #d8c99a;
+    --warn: #b8742a;
+    --warn-bg: #f8e6c8;
+    --ok: #4a7a3c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg-region); }
+
+  .review-bar { background: #faf2dd; border-bottom: 1px solid var(--line-soft); padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 11px; color: #6b5520; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .review-bar .gl { font-size: 10px; color: #967; margin-right: 4px; }
+  .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; font-family: inherit; }
+  .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
+  .rb-note { font-size: 10px; color: var(--ink-muted); font-style: italic; }
+
+  .stage { padding: 40px 24px; min-height: calc(100vh - 50px); display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.18); background-image: radial-gradient(circle at 50% 30%, rgba(255,255,255,0.08), transparent 60%); }
+
+  .modal { width: 100%; max-width: 560px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18); display: flex; flex-direction: column; max-height: calc(100vh - 80px); }
+  .modal-head { padding: 16px 20px 12px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; gap: 12px; }
+  .modal-title { flex: 1; font-size: 14px; font-weight: 600; color: var(--ink); margin: 0; }
+  .modal-title.warn { color: var(--warn); }
+  .modal-close { color: var(--ink-faint); cursor: pointer; padding: 0 4px; font-size: 18px; line-height: 1; }
+  .modal-meta-row { padding: 6px 20px 0; font-size: 11px; color: var(--ink-muted); display: flex; flex-wrap: wrap; gap: 10px; }
+  .modal-meta-row code { font-size: 10px; }
+  .modal-body { flex: 1; overflow: auto; padding: 14px 20px; }
+  .modal-actions { padding: 12px 20px; border-top: 1px solid var(--line-soft); display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  .btn { padding: 6px 14px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); color: var(--ink); font-size: 12px; cursor: pointer; font-family: inherit; }
+  .btn:hover { background: var(--bg-highlight); }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .btn.warn { color: var(--warn); border-color: var(--warn); }
+
+  .license-block { border: 1px solid var(--line-soft); background: var(--bg-region); padding: 12px 14px; max-height: 220px; overflow: auto; font-size: 11px; line-height: 1.6; color: var(--ink-muted); border-radius: 3px; }
+
+  .progress-row { display: grid; grid-template-columns: 160px 1fr 80px 80px; gap: 10px; align-items: center; font-size: 11px; padding: 4px 0; }
+  .progress-row .name { color: var(--ink); }
+  .progress-row .name.muted { color: var(--ink-faint); }
+  .bar { height: 6px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--bg); overflow: hidden; }
+  .bar .fill { height: 100%; background: var(--ok); }
+  .progress-row .pct { text-align: right; color: var(--ink-muted); }
+  .progress-row .size { text-align: right; color: var(--ink-faint); font-size: 10px; }
+
+  .verify-row { display: grid; grid-template-columns: 22px 200px 1fr; gap: 8px; align-items: center; font-size: 11px; padding: 4px 0; }
+  .verify-row .icon.ok { color: var(--ok); }
+  .verify-row .icon.fail { color: var(--warn); }
+  .verify-row .icon.pending { color: var(--ink-faint); }
+
+  .info-line { font-size: 11px; color: var(--ink-muted); margin: 8px 0; line-height: 1.5; }
+  .warn-block { background: var(--warn-bg); border-left: 3px solid var(--warn); padding: 8px 12px; font-size: 11px; color: #6b5520; border-radius: 0 3px 3px 0; margin: 8px 0; }
+  .spinner-block { display: flex; align-items: center; gap: 12px; padding: 24px 4px; font-size: 12px; color: var(--ink-muted); }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--line-soft); border-top-color: var(--ink); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* state visibility */
+  .state-pane { display: none; }
+  .state-pane.active { display: block; }
+
+  /* ep picker (custom-import only) */
+  .ep-row { display: grid; grid-template-columns: 130px 1fr; gap: 12px; align-items: center; font-size: 11px; padding: 4px 0; }
+  .ep-row .label { color: var(--ink-muted); }
+  .input-select { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; border: 1px solid var(--line-soft); border-radius: 3px; background: var(--bg); cursor: pointer; min-width: 110px; }
+  .ep-warn { font-size: 10px; color: var(--warn); margin-top: 2px; }
+
+  .file-list { font-size: 11px; color: var(--ink-muted); }
+  .file-list code { font-size: 10px; }
+</style>
+</head>
+<body>
+
+<div class="review-bar">
+  <div class="rb-group">
+    <span class="gl">state:</span>
+    <button class="rb-btn" data-state="card-fetch">card-fetch</button>
+    <button class="rb-btn" data-state="fetch-failed">fetch-failed</button>
+    <button class="rb-btn active" data-state="license">license</button>
+    <button class="rb-btn" data-state="downloading">downloading</button>
+    <button class="rb-btn" data-state="verifying">verifying</button>
+    <button class="rb-btn" data-state="verify-failed">verify-failed</button>
+    <button class="rb-btn" data-state="custom-import">custom-import</button>
+  </div>
+  <span class="rb-note">flip controls to inspect each state</span>
+</div>
+
+<div class="stage">
+  <div class="modal">
+
+    <!-- card-fetch — in flight -->
+    <div class="state-pane" data-state-body="card-fetch">
+      <div class="modal-head">
+        <div class="modal-title">Install MiniLM-L6 (lightweight)</div>
+        <span class="modal-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="spinner-block">
+          <div class="spinner"></div>
+          <div>Fetching model card from <code>huggingface.co</code>&hellip;</div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn">Cancel</button>
+      </div>
+    </div>
+
+    <!-- fetch-failed -->
+    <div class="state-pane" data-state-body="fetch-failed">
+      <div class="modal-head">
+        <div class="modal-title warn">&#9888; Couldn't reach the model source</div>
+        <span class="modal-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p class="info-line">Aventuras tried to fetch the license from <code>huggingface.co</code>. The request failed:</p>
+        <div class="warn-block">Network unreachable (no response after 3 retries)</div>
+        <p class="info-line">The license is fetched live to defend against post-curation edits — we can't proceed with a cached copy. Check your connection and try again.</p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn">Cancel</button>
+        <button class="btn primary">Retry</button>
+      </div>
+    </div>
+
+    <!-- license — center of the flow -->
+    <div class="state-pane active" data-state-body="license">
+      <div class="modal-head">
+        <div class="modal-title">Install MiniLM-L6 (lightweight)</div>
+        <span class="modal-close">&times;</span>
+      </div>
+      <div class="modal-meta-row">
+        <span><b>Source:</b> <code>huggingface.co/Xenova/all-MiniLM-L6-v2-q8</code></span>
+        <span><b>Revision:</b> <code>abc123def456&hellip;</code></span>
+        <span><b>Size:</b> 25 MB &middot; 3 files</span>
+      </div>
+      <div class="modal-body">
+        <div class="info-line"><b>License — Apache 2.0</b></div>
+        <div class="license-block">
+          Apache License<br>
+          Version 2.0, January 2004<br>
+          http://www.apache.org/licenses/<br><br>
+          TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION<br><br>
+          1. Definitions.<br>
+          "License" shall mean the terms and conditions for use, reproduction, and distribution as defined by Sections 1 through 9 of this document.<br>
+          "Licensor" shall mean the copyright owner or entity authorized by the copyright owner that is granting the License.<br>
+          "Legal Entity" shall mean the union of the acting entity and all other entities that control, are controlled by, or are under common control with that entity.<br>
+          "You" (or "Your") shall mean an individual or Legal Entity exercising permissions granted by this License.<br><br>
+          <i>&hellip; (full license text fetched live, scrolls within this region)</i>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn">Decline</button>
+        <button class="btn primary">Accept &amp; download</button>
+      </div>
+    </div>
+
+    <!-- downloading — progress per file -->
+    <div class="state-pane" data-state-body="downloading">
+      <div class="modal-head">
+        <div class="modal-title">Downloading MiniLM-L6 (lightweight)</div>
+      </div>
+      <div class="modal-body">
+        <div class="progress-row">
+          <span class="name">model.onnx</span>
+          <div class="bar"><div class="fill" style="width: 72%"></div></div>
+          <span class="pct">72%</span>
+          <span class="size">18 / 25 MB</span>
+        </div>
+        <div class="progress-row">
+          <span class="name muted">tokenizer.json</span>
+          <div class="bar"><div class="fill" style="width: 0%"></div></div>
+          <span class="pct">waiting&hellip;</span>
+          <span class="size">0 / 695 KB</span>
+        </div>
+        <div class="progress-row">
+          <span class="name muted">tokenizer_config.json</span>
+          <div class="bar"><div class="fill" style="width: 0%"></div></div>
+          <span class="pct">waiting&hellip;</span>
+          <span class="size">0 / 366 B</span>
+        </div>
+        <p class="info-line" style="margin-top: 10px;">Total: <b>18 / 25 MB</b> &middot; ~12 s remaining</p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn warn">Cancel download</button>
+      </div>
+    </div>
+
+    <!-- verifying -->
+    <div class="state-pane" data-state-body="verifying">
+      <div class="modal-head">
+        <div class="modal-title">Verifying MiniLM-L6 (lightweight)</div>
+      </div>
+      <div class="modal-body">
+        <div class="verify-row">
+          <span class="icon ok">&#10003;</span>
+          <span>model.onnx</span>
+          <span style="color: var(--ink-muted); font-size: 10px;">hash matches</span>
+        </div>
+        <div class="verify-row">
+          <span class="icon ok">&#10003;</span>
+          <span>tokenizer.json</span>
+          <span style="color: var(--ink-muted); font-size: 10px;">hash matches</span>
+        </div>
+        <div class="verify-row">
+          <span class="icon pending">&hellip;</span>
+          <span>tokenizer_config.json</span>
+          <span style="color: var(--ink-muted); font-size: 10px;">verifying&hellip;</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- verify-failed -->
+    <div class="state-pane" data-state-body="verify-failed">
+      <div class="modal-head">
+        <div class="modal-title warn">&#9888; Verification failed</div>
+        <span class="modal-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p class="info-line">One of the downloaded files doesn't match the expected hash:</p>
+        <div class="verify-row">
+          <span class="icon fail">&#10007;</span>
+          <span>tokenizer.json</span>
+          <span style="color: var(--warn); font-size: 10px;">sha256 mismatch</span>
+        </div>
+        <p class="info-line" style="margin-top: 10px;">This may indicate a corrupted download or an upstream change the bundled catalog hasn't caught up to. The partial install has been deleted.</p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn">Close</button>
+      </div>
+    </div>
+
+    <!-- custom-import variant — confirmation state -->
+    <div class="state-pane" data-state-body="custom-import">
+      <div class="modal-head">
+        <div class="modal-title">Import custom embedding model</div>
+        <span class="modal-close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p class="info-line">You're importing a custom model. By using it, you assert that you have a license to do so. The file SHA256 hashes are recorded for your reference.</p>
+
+        <div class="ep-row" style="margin-top: 8px;">
+          <span class="label">Model id</span>
+          <code>my-org/my-finetune</code>
+        </div>
+        <div class="ep-row">
+          <span class="label">Files</span>
+          <div class="file-list">
+            <code>model.onnx</code> (42 MB)<br>
+            <code>tokenizer.json</code> (1.2 MB)<br>
+            <code>tokenizer_config.json</code> (3 KB)
+          </div>
+        </div>
+        <div class="ep-row" style="align-items: start;">
+          <span class="label">Execution provider</span>
+          <div>
+            <div class="input-select"><span>cpu</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+            <div class="ep-warn">&#9888; wrong choice may crash the app on subsequent embed calls; smoke-test runs under the picked EP.</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn">Cancel</button>
+        <button class="btn primary">Import</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  (function() {
+    const stateBtns = document.querySelectorAll('[data-state]');
+    const stateBodies = document.querySelectorAll('[data-state-body]');
+    function setState(s) {
+      stateBtns.forEach(b => b.classList.toggle('active', b.dataset.state === s));
+      stateBodies.forEach(b => b.classList.toggle('active', b.dataset.stateBody === s));
+    }
+    stateBtns.forEach(b => b.addEventListener('click', () => setState(b.dataset.state)));
+  })();
+</script>
+
+</body>
+</html>

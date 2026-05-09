@@ -71,3 +71,10 @@ The split heuristic + when-to-add rules live in
   Plot history tabs and the future global delta-log surface.
 - [`data.md`](./data.md) — raw JSON viewer, import counterparts
   (file-based + Vault).
+- [`embedder-download.md`](./embedder-download.md) — multi-state
+  modal driving embedding-model installation (license fetch +
+  presentation, download with progress, SHA256 verify, error
+  variants, custom-import variant). Single component invoked from
+  Onboarding · Step 4, App Settings · Embedding models · Add
+  model, and Story Settings · Switch embedder. Resolves with
+  `installed | declined | cancelled | error(reason)` to the host.

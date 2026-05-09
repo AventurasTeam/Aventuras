@@ -377,10 +377,13 @@ confirm; details in
 - **Curated catalog** — list of pre-vetted models from the bundled
   JSON catalog (see
   [`memory/model-management.md → Curated catalog`](../../../memory/model-management.md#curated-catalog)).
-  Triggers the curated download flow with live model-card fetch
-  and license dialog.
+  Triggers the
+  [embedder download dialog](../../patterns/embedder-download.md)
+  for license fetch + download + verify.
 - **Import custom…** — three-file import per
-  [`memory/model-management.md → Custom file import`](../../../memory/model-management.md#custom-file-import).
+  [`memory/model-management.md → Custom file import`](../../../memory/model-management.md#custom-file-import);
+  uses the
+  [embedder download dialog's custom-import variant](../../patterns/embedder-download.md#custom-import-variant).
 
 ### Embedding status — across stories
 

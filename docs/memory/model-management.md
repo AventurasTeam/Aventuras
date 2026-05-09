@@ -181,6 +181,12 @@ at import time when the user picks an EP.
 
 ## Download flow
 
+The user-facing dialog for this flow is wireframed in
+[`ui/patterns/embedder-download.md`](../ui/patterns/embedder-download.md)
+— that pattern carries the per-state UI and copy. This section
+captures the data semantics: what the system fetches, writes,
+verifies, and persists.
+
 For curated catalog entries:
 
 1. User picks a model in onboarding or in Settings · Memory.

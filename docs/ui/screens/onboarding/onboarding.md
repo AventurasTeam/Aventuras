@@ -305,13 +305,13 @@ groups. Selecting an entry implicitly determines the backend
 
 Selecting a curated entry and clicking `Finish`:
 
-1. **Triggers the curated download flow** — same dialog component
-   as
-   [App Settings · Embedding models · Add model](../app-settings/app-settings.md#installed-local-models)
+1. **Triggers the curated download flow** — the
+   [embedder download dialog](../../patterns/embedder-download.md)
    (live model-card fetch at the catalog's pinned
    `huggingfaceRevision`, license dialog with source URL +
-   revision hash). Single canonical UI; the wizard just invokes
-   it.
+   revision hash). Single canonical pattern shared with
+   [App Settings · Embedding models · Add model](../app-settings/app-settings.md#installed-local-models)
+   and Story Settings · Switch embedder.
 2. On accept, downloads the three required files into
    `<embedders-root>/<sanitized-id>/`, SHA256-verifies, writes
    `LICENSE.txt` + `.attestation` per
