@@ -36,10 +36,11 @@ function DialogOverlay({
         {...props}
         asChild={Platform.OS !== 'web'}
       >
-        <NativeOnlyAnimatedView entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)}>
-          <NativeOnlyAnimatedView entering={FadeIn.delay(50)} exiting={FadeOut.duration(150)}>
-            <>{children}</>
-          </NativeOnlyAnimatedView>
+        <NativeOnlyAnimatedView
+          entering={FadeIn.duration(200).delay(50)}
+          exiting={FadeOut.duration(150)}
+        >
+          <>{children}</>
         </NativeOnlyAnimatedView>
       </DialogPrimitive.Overlay>
     </FullWindowOverlay>
@@ -68,17 +69,14 @@ function DialogContent({
           <>{children}</>
           <DialogPrimitive.Close
             className={cn(
-              'absolute right-4 top-4 rounded opacity-70 active:opacity-100',
+              'absolute right-4 top-4 rounded opacity-70 active:bg-tint-press active:opacity-100',
               Platform.select({
-                web: 'ring-offset-background focus:ring-ring transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-offset-2 data-[state=open]:bg-accent',
+                web: 'outline-none transition-colors hover:bg-tint-hover hover:opacity-100 focus-visible:ring-2 focus-visible:ring-focus-ring',
               }),
             )}
             hitSlop={12}
           >
-            <Icon
-              as={X}
-              className={cn('size-4 shrink-0 text-fg-primary web:pointer-events-none')}
-            />
+            <Icon as={X} className="size-4 shrink-0 text-fg-primary web:pointer-events-none" />
             <Text className="sr-only">Close</Text>
           </DialogPrimitive.Close>
         </DialogPrimitive.Content>
