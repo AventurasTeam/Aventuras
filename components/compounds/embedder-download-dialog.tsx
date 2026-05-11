@@ -18,6 +18,11 @@ import {
   type ExecutionProvider,
   type FailReason,
   type FileProgress,
+  type DialogDriver,
+  type DialogInit,
+  type DialogResolution,
+  initialState,
+  reducer,
 } from './embedder-download-dialog-machine'
 
 type EmbedderDownloadDialogViewProps = {
@@ -560,3 +565,194 @@ function Footer(props: EmbedderDownloadDialogViewProps & { hfInputValue: string 
     }
   }
 }
+
+type EmbedderDownloadDialogProps = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  init: DialogInit
+  driver: DialogDriver
+  onResolve: (result: DialogResolution) => void
+}
+
+export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
+  const { open, onOpenChange, init, driver, onResolve } = props
+  const [state, dispatch] = React.useReducer(reducer, init, initialState)
+  const resolvedRef = React.useRef(false)
+  const lastUserActionRef = React.useRef<'declined' | 'cancelled' | null>(null)
+
+  // card-fetch effect: fires driver.fetchModelCard, dispatches result.
+  // Cancellation is best-effort — if state moves away mid-flight,
+  // the dispatched action lands on a stale state and is ignored.
+  React.useEffect(() => {
+    if (state.kind !== 'card-fetch') return
+    if (init.kind !== 'catalog') return
+    let cancelled = false
+    driver
+      .fetchModelCard({ kind: 'catalog', entry: init.entry })
+      .then((res) => {
+        if (cancelled) return
+        dispatch({
+          type: 'card-fetched',
+          meta: res.meta,
+          licenseText: res.licenseText,
+          licenseName: res.licenseName,
+        })
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        const message = err instanceof Error ? err.message : String(err)
+        dispatch({ type: 'card-fetch-failed', message })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [state.kind, driver, init])
+
+  // resolving effect (HF id path): fetch model card live from HF id.
+  React.useEffect(() => {
+    if (state.kind !== 'resolving') return
+    if (state.init.kind !== 'hf-id') return
+    const id = state.init.input
+    let cancelled = false
+    driver
+      .fetchModelCard({ kind: 'hf-id', id })
+      .then((res) => {
+        if (cancelled) return
+        dispatch({
+          type: 'card-fetched',
+          meta: res.meta,
+          licenseText: res.licenseText,
+          licenseName: res.licenseName,
+        })
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        const message = err instanceof Error ? err.message : String(err)
+        dispatch({ type: 'card-fetch-failed', message })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [state.kind, driver, state])
+
+  // downloading effect: iterate files in meta.fileCount + the catalog
+  // entry. The container holds the file list via init; production
+  // driver wires real URLs and target paths. Stub-driver-friendly:
+  // never-resolving promises just leave state in 'downloading'.
+  React.useEffect(() => {
+    if (state.kind !== 'downloading') return
+    if (init.kind !== 'catalog') return
+    let cancelled = false
+    const files = init.entry.files
+    void (async () => {
+      try {
+        for (const file of files) {
+          if (cancelled) return
+          await driver.downloadFile({
+            url: `${init.entry.source}/resolve/${init.entry.revision}/${file}`,
+            targetPath: file,
+            onProgress: (bytesReceived, bytesTotal) => {
+              if (cancelled) return
+              dispatch({ type: 'download-progress', file, bytesReceived, bytesTotal })
+            },
+          })
+          if (cancelled) return
+          dispatch({ type: 'download-complete', file })
+        }
+        if (cancelled) return
+        dispatch({ type: 'all-downloaded' })
+      } catch (err: unknown) {
+        if (cancelled) return
+        const message = err instanceof Error ? err.message : String(err)
+        dispatch({ type: 'card-fetch-failed', message })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [state.kind, driver, init])
+
+  // verifying effect: SHA256 each file; compare to expectedSha256
+  // from the catalog entry (curated path) or just compute (HF id /
+  // import paths).
+  React.useEffect(() => {
+    if (state.kind !== 'verifying') return
+    if (init.kind !== 'catalog') return
+    let cancelled = false
+    const files = init.entry.files
+    const expected = init.entry.expectedSha256
+    void (async () => {
+      for (const file of files) {
+        if (cancelled) return
+        try {
+          const hash = await driver.computeSha256(file)
+          if (cancelled) return
+          const expectedHash = expected[file]
+          if (expectedHash && hash !== expectedHash) {
+            dispatch({ type: 'verify-failed', file })
+            return
+          }
+          dispatch({ type: 'verify-progress', file, result: 'ok' })
+        } catch {
+          if (cancelled) return
+          dispatch({ type: 'verify-failed', file })
+          return
+        }
+      }
+      if (cancelled) return
+      dispatch({ type: 'all-verified' })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [state.kind, driver, init])
+
+  // Terminal-state observer: fires onResolve exactly once per
+  // open-to-close cycle. The lastUserActionRef disambiguates a
+  // done-state caused by license-decline vs successful install.
+  React.useEffect(() => {
+    if (resolvedRef.current) return
+    if (state.kind === 'done') {
+      resolvedRef.current = true
+      if (lastUserActionRef.current === 'declined') {
+        onResolve({ kind: 'declined' })
+      } else {
+        onResolve({ kind: 'installed', meta: state.meta })
+      }
+    } else if (state.kind === 'failed') {
+      resolvedRef.current = true
+      if (state.reason.kind === 'cancelled') {
+        onResolve({ kind: 'cancelled' })
+      } else {
+        onResolve({ kind: 'error', reason: state.reason })
+      }
+    }
+  }, [state, onResolve])
+
+  return (
+    <EmbedderDownloadDialogView
+      open={open}
+      onOpenChange={onOpenChange}
+      state={state}
+      onAcceptLicense={() => dispatch({ type: 'license-accepted' })}
+      onDeclineLicense={() => {
+        lastUserActionRef.current = 'declined'
+        dispatch({ type: 'license-declined' })
+      }}
+      // HF id flow re-routes through init at the host — the host
+      // closes this dialog and re-opens with a new DialogInit
+      // carrying the typed value. The dialog doesn't mutate init.
+      onSubmitHfInput={() => {}}
+      onPickEp={(ep) => dispatch({ type: 'ep-picked', ep })}
+      onConfirmImport={() => dispatch({ type: 'license-accepted' })}
+      onCancel={() => {
+        lastUserActionRef.current = 'cancelled'
+        dispatch({ type: 'cancel' })
+      }}
+      onRetry={() => dispatch({ type: 'retry' })}
+      onClose={() => dispatch({ type: 'close' })}
+    />
+  )
+}
+
+export type { EmbedderDownloadDialogProps }
