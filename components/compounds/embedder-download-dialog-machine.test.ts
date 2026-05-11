@@ -191,6 +191,29 @@ describe('reducer — downloading state', () => {
     }
   })
 
+  it('download-failed transitions downloading to failed with card-fetch-failed reason', () => {
+    const before: DialogState = {
+      kind: 'downloading',
+      meta: sampleMeta,
+      progressByFile: {
+        'model.onnx': { kind: 'downloading', bytesReceived: 5_000_000, bytesTotal: 25_000_000 },
+      },
+    }
+    const after = reducer(before, {
+      type: 'download-failed',
+      file: 'model.onnx',
+      message: 'connection reset',
+    })
+    expect(after.kind).toBe('failed')
+    if (after.kind === 'failed') {
+      expect(after.reason.kind).toBe('card-fetch-failed')
+      if (after.reason.kind === 'card-fetch-failed') {
+        expect(after.reason.message).toContain('model.onnx')
+        expect(after.reason.message).toContain('connection reset')
+      }
+    }
+  })
+
   it('cancel from downloading transitions to failed with cancelled reason', () => {
     const before: DialogState = {
       kind: 'downloading',

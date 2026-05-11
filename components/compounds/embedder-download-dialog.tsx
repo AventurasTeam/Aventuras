@@ -609,10 +609,15 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
   }, [state.kind, driver, init])
 
   // resolving effect (HF id path): fetch model card live from HF id.
+  // Extract the HF id input from the narrowed resolving state so the
+  // dep array references a stable primitive rather than the full state
+  // object (which is recreated on every dispatch). The effect uses
+  // resolvingHfInput directly — null acts as the early-return guard.
+  const resolvingHfInput =
+    state.kind === 'resolving' && state.init.kind === 'hf-id' ? state.init.input : null
   React.useEffect(() => {
-    if (state.kind !== 'resolving') return
-    if (state.init.kind !== 'hf-id') return
-    const id = state.init.input
+    if (resolvingHfInput === null) return
+    const id = resolvingHfInput
     let cancelled = false
     driver
       .fetchModelCard({ kind: 'hf-id', id })
@@ -633,7 +638,7 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
     return () => {
       cancelled = true
     }
-  }, [state.kind, driver, state])
+  }, [driver, resolvingHfInput])
 
   // downloading effect: iterate files in meta.fileCount + the catalog
   // entry. The container holds the file list via init; production
@@ -645,9 +650,11 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
     let cancelled = false
     const files = init.entry.files
     void (async () => {
+      let currentFile = ''
       try {
         for (const file of files) {
           if (cancelled) return
+          currentFile = file
           await driver.downloadFile({
             url: `${init.entry.source}/resolve/${init.entry.revision}/${file}`,
             targetPath: file,
@@ -664,7 +671,7 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
       } catch (err: unknown) {
         if (cancelled) return
         const message = err instanceof Error ? err.message : String(err)
-        dispatch({ type: 'card-fetch-failed', message })
+        dispatch({ type: 'download-failed', file: currentFile, message })
       }
     })()
     return () => {

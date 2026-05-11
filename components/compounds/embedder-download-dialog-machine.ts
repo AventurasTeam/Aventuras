@@ -85,6 +85,7 @@ export type DialogAction =
     }
   | { type: 'download-complete'; file: string }
   | { type: 'all-downloaded' }
+  | { type: 'download-failed'; file: string; message: string }
   | { type: 'verify-progress'; file: string; result: 'ok' | 'fail' }
   | { type: 'all-verified' }
   | { type: 'verify-failed'; file: string }
@@ -240,6 +241,13 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
         const verifyByFile: Record<string, 'pending' | 'ok' | 'fail'> = {}
         for (const file of Object.keys(state.progressByFile)) verifyByFile[file] = 'pending'
         return { kind: 'verifying', meta: state.meta, verifyByFile }
+      }
+      if (action.type === 'download-failed') {
+        return {
+          kind: 'failed',
+          meta: state.meta,
+          reason: { kind: 'card-fetch-failed', message: `${action.file}: ${action.message}` },
+        }
       }
       return state
     }
