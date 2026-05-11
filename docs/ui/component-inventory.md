@@ -30,7 +30,7 @@ Generic, single-purpose, reusable. Live in `components/ui/`.
 ### Primitives — shipped
 
 Accordion, AlertDialog, Autocomplete, Avatar, Button, Checkbox,
-Chip, EmptyState, Heading, Icon, IconAction, Input, Popover, Select,
+Chip, Dialog, EmptyState, Heading, Icon, IconAction, Input, Popover, Select,
 Sheet, Skeleton, Spinner, Switch, SwitchVisual, Tabs, Tag, Textarea,
 Text, Toast. Plus the `NativeOnlyAnimatedView` utility wrapper.
 
