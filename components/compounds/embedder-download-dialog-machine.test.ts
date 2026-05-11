@@ -154,6 +154,23 @@ describe('reducer — license state', () => {
   })
 })
 
+describe('reducer — import-confirm state', () => {
+  it('license-accepted transitions import-confirm to verifying via bundleToMeta', () => {
+    const before: DialogState = {
+      kind: 'import-confirm',
+      bundle: sampleBundle,
+      pickedEp: 'cpu',
+    }
+    const after = reducer(before, { type: 'license-accepted' })
+    expect(after.kind).toBe('verifying')
+    if (after.kind === 'verifying') {
+      expect(after.meta.displayName).toBe(sampleBundle.modelId)
+      expect(after.meta.fileCount).toBe(sampleBundle.files.length)
+      expect(Object.keys(after.verifyByFile)).toHaveLength(0)
+    }
+  })
+})
+
 describe('reducer — downloading state', () => {
   it('download-progress updates per-file progress', () => {
     const before: DialogState = {

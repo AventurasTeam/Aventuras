@@ -92,8 +92,10 @@ type FileProgress =
   | { kind: 'done' }
 
 type FailReason =
+  | { kind: 'cancelled' }
   | { kind: 'card-fetch-failed'; message: string }
   | { kind: 'resolve-failed'; message: string }
+  | { kind: 'download-failed'; failingFile: string; message: string }
   | { kind: 'validation-failed'; missingFiles: string[] }
   | { kind: 'hash-mismatch'; failingFile: string }
   | { kind: 'smoke-test-failed'; ep: ExecutionProvider }
@@ -116,6 +118,7 @@ type DialogState =
   | { kind: 'failed'; meta: ModelMeta | null; reason: FailReason }
 
 type DialogAction =
+  | { type: 'submit-hf-input'; input: string }
   | { type: 'card-fetched'; meta: ModelMeta; licenseText: string; licenseName: string }
   | { type: 'card-fetch-failed'; message: string }
   | { type: 'license-accepted' }
@@ -123,6 +126,8 @@ type DialogAction =
   | { type: 'ep-picked'; ep: ExecutionProvider }
   | { type: 'download-progress'; file: string; bytesReceived: number; bytesTotal: number }
   | { type: 'download-complete'; file: string }
+  | { type: 'download-failed'; file: string; message: string }
+  | { type: 'all-downloaded' }
   | { type: 'verify-progress'; file: string; result: 'ok' | 'fail' }
   | { type: 'all-verified' }
   | { type: 'verify-failed'; file: string }
@@ -150,6 +155,15 @@ Initial-state factory (in the machine file):
 | `hf-id` with input | `{ kind: 'resolving', init }`                      |
 | `hf-id` no input   | `{ kind: 'hf-input' }`                             |
 | `import`           | `{ kind: 'import-confirm', bundle, pickedEp: ep }` |
+
+> **Note:** the code adds three actions (`submit-hf-input`,
+> `download-failed`, `all-downloaded`) and two `FailReason` variants
+> (`cancelled`, `download-failed`) that emerged from implementation
+> review. The original spec used a `__cancelled__` sentinel inside
+> `card-fetch-failed.message` for cancel paths; the refactor makes
+> cancel a first-class FailReason variant. The plan doc at
+> `2026-05-11-embedder-download-dialog-plan.md` captures the
+> motivation for each.
 
 ## Driver interface
 

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Pressable, ScrollView, View } from 'react-native'
+import { Platform, Pressable, ScrollView, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -12,6 +12,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Text } from '@/components/ui/text'
+import { cn } from '@/lib/utils'
 
 import {
   type DialogState,
@@ -247,7 +248,10 @@ function LicenseBody({
       </Text>
       <ScrollView
         accessibilityLabel="License text"
-        className="max-h-[40vh] rounded-md border border-border bg-bg-sunken p-3"
+        className={cn(
+          'rounded-md border border-border bg-bg-sunken p-3',
+          Platform.select({ web: 'max-h-[40vh]', default: 'max-h-96' }),
+        )}
       >
         <Text size="sm" className="font-mono">
           {licenseText}
@@ -730,47 +734,78 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
     }
   }, [state.kind, driver, init])
 
-  // Terminal-state observer: fires onResolve exactly once per
-  // open-to-close cycle. The lastUserActionRef disambiguates a
-  // done-state caused by license-decline vs successful install.
+  const computeResolution = (s: DialogState): DialogResolution | null => {
+    if (s.kind === 'done') {
+      return lastUserActionRef.current === 'declined'
+        ? { kind: 'declined' }
+        : { kind: 'installed', meta: s.meta }
+    }
+    if (s.kind === 'failed') {
+      return s.reason.kind === 'cancelled'
+        ? { kind: 'cancelled' }
+        : { kind: 'error', reason: s.reason }
+    }
+    return null
+  }
+
+  const fireResolveOnce = (res: DialogResolution) => {
+    if (resolvedRef.current) return
+    resolvedRef.current = true
+    onResolve(res)
+  }
+
+  // Auto-fire terminal observer: 'done' and 'failed { cancelled }'
+  // resolve immediately. Other failed states wait for user dismissal
+  // so the FailedBody has a chance to be read.
   React.useEffect(() => {
     if (resolvedRef.current) return
     if (state.kind === 'done') {
-      resolvedRef.current = true
-      if (lastUserActionRef.current === 'declined') {
-        onResolve({ kind: 'declined' })
-      } else {
-        onResolve({ kind: 'installed', meta: state.meta })
-      }
-    } else if (state.kind === 'failed') {
-      resolvedRef.current = true
-      if (state.reason.kind === 'cancelled') {
-        onResolve({ kind: 'cancelled' })
-      } else {
-        onResolve({ kind: 'error', reason: state.reason })
+      const res = computeResolution(state)
+      if (res) fireResolveOnce(res)
+    } else if (state.kind === 'failed' && state.reason.kind === 'cancelled') {
+      fireResolveOnce({ kind: 'cancelled' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, onResolve])
+
+  // Dismissal wrap: every dismissal vector (Escape, overlay click,
+  // corner ×, Cancel/Decline/Close buttons) routes through here.
+  // - Already-resolved: bubble to host, do nothing else.
+  // - Terminal failed (non-cancelled): user reviewed the error, fire
+  //   error resolution and bubble.
+  // - Non-terminal license: treat as declined; reducer transitions
+  //   to 'done' and the terminal observer fires 'declined'.
+  // - Non-terminal other: treat as cancelled; reducer transitions
+  //   to 'failed { cancelled }' and the terminal observer fires.
+  const handleOpenChange = (next: boolean) => {
+    if (!next && !resolvedRef.current) {
+      if (state.kind === 'failed') {
+        const res = computeResolution(state)
+        if (res) fireResolveOnce(res)
+      } else if (state.kind === 'license') {
+        lastUserActionRef.current = 'declined'
+        dispatch({ type: 'license-declined' })
+      } else if (state.kind !== 'done') {
+        lastUserActionRef.current = 'cancelled'
+        dispatch({ type: 'cancel' })
       }
     }
-  }, [state, onResolve])
+    onOpenChange(next)
+  }
 
   return (
     <EmbedderDownloadDialogView
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       state={state}
       onAcceptLicense={() => dispatch({ type: 'license-accepted' })}
-      onDeclineLicense={() => {
-        lastUserActionRef.current = 'declined'
-        dispatch({ type: 'license-declined' })
-      }}
+      onDeclineLicense={() => handleOpenChange(false)}
       onSubmitHfInput={(input) => dispatch({ type: 'submit-hf-input', input })}
       onPickEp={(ep) => dispatch({ type: 'ep-picked', ep })}
       onConfirmImport={() => dispatch({ type: 'license-accepted' })}
-      onCancel={() => {
-        lastUserActionRef.current = 'cancelled'
-        dispatch({ type: 'cancel' })
-      }}
+      onCancel={() => handleOpenChange(false)}
       onRetry={() => dispatch({ type: 'retry' })}
-      onClose={() => dispatch({ type: 'close' })}
+      onClose={() => handleOpenChange(false)}
     />
   )
 }
