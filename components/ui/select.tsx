@@ -282,10 +282,13 @@ function PopoverContent({
       <FullWindowOverlay>
         <SelectBase.Overlay style={Platform.select({ native: StyleSheet.absoluteFill })}>
           <TextClassContext.Provider value="text-fg-primary">
-            <NativeOnlyAnimatedView className="z-50" entering={FadeIn} exiting={FadeOut}>
+            <NativeOnlyAnimatedView className="z-[60]" entering={FadeIn} exiting={FadeOut}>
               <SelectBase.Content
                 className={cn(
-                  'relative z-50 min-w-[8rem] rounded-md border border-border bg-bg-overlay',
+                  // z-[60] sits above modal primitives (Dialog / AlertDialog
+                  // / Sheet all at z-50) so a Select inside a modal renders
+                  // its popover above the modal panel rather than behind it.
+                  'relative z-[60] min-w-[8rem] rounded-md border border-border bg-bg-overlay',
                   Platform.select({
                     web: 'max-h-52 animate-fade-in overflow-y-auto overflow-x-hidden',
                     native: 'p-1',
