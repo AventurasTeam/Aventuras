@@ -282,13 +282,17 @@ function PopoverContent({
       <FullWindowOverlay>
         <SelectBase.Overlay style={Platform.select({ native: StyleSheet.absoluteFill })}>
           <TextClassContext.Provider value="text-fg-primary">
-            <NativeOnlyAnimatedView className="z-[60]" entering={FadeIn} exiting={FadeOut}>
+            <NativeOnlyAnimatedView className="z-[100]" entering={FadeIn} exiting={FadeOut}>
               <SelectBase.Content
+                // z-[100] (matches Toast convention) sits above modal
+                // primitives (Dialog / AlertDialog / Sheet all at z-50) so a
+                // Select inside a modal renders its popover above the modal
+                // panel. Inline style mirrors the class — guards against
+                // Tailwind purging the arbitrary value or HMR not picking up
+                // the new class.
+                style={Platform.select({ web: { zIndex: 100 } })}
                 className={cn(
-                  // z-[60] sits above modal primitives (Dialog / AlertDialog
-                  // / Sheet all at z-50) so a Select inside a modal renders
-                  // its popover above the modal panel rather than behind it.
-                  'relative z-[60] min-w-[8rem] rounded-md border border-border bg-bg-overlay',
+                  'relative z-[100] min-w-[8rem] rounded-md border border-border bg-bg-overlay',
                   Platform.select({
                     web: 'max-h-52 animate-fade-in overflow-y-auto overflow-x-hidden',
                     native: 'p-1',
