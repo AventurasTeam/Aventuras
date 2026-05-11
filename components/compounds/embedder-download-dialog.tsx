@@ -319,19 +319,20 @@ function EpSelectRow({
       <Text size="sm" variant="muted">
         Execution provider
       </Text>
-      {/* w-32 (= 8rem) matches the Select primitive's popover
-          min-width (min-w-[8rem] on SelectBase.Content). Without
-          this, the trigger sizes to its short EP label (cpu, ~60px)
-          while the popover hits its 128px floor — visual mismatch. */}
-      <View className="w-32 self-start">
-        <Select
-          options={options}
-          value={pickedEp}
-          onValueChange={onPick}
-          mode="dropdown"
-          label="Execution provider"
-        />
-      </View>
+      {/* mode='radio' renders inline. The default auto-derivation
+          would flip to 'dropdown' (→ bottom sheet on phone native),
+          stacking a sheet on top of the dialog — discouraged by
+          both iOS HIG and Material guidance on nested modals.
+          Radio keeps the picker inside the modal's context on every
+          tier. 3–4 EPs per platform max, so vertical space cost is
+          modest. */}
+      <Select
+        options={options}
+        value={pickedEp}
+        onValueChange={onPick}
+        mode="radio"
+        label="Execution provider"
+      />
       <Text size="sm" variant="muted">
         ⚠ Wrong choice may crash the app on next embed.
       </Text>
