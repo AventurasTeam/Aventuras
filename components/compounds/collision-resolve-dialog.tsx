@@ -185,11 +185,15 @@ function MergeBody({
     { value: entityB.id, label: `${entityB.name} · ${formatAgo(entityB.createdAt)}` },
   ]
 
-  const finalTags = React.useMemo(() => {
+  const allTags = React.useMemo(() => {
     if (diff.tags == null) return [...entityA.tags].sort()
-    const union = [...new Set([...entityA.tags, ...entityB.tags])].sort()
-    return union.filter((t) => !state.deselectedTags.includes(t))
-  }, [diff.tags, entityA.tags, entityB.tags, state.deselectedTags])
+    return [...diff.tags.both, ...diff.tags.onlyInA, ...diff.tags.onlyInB].sort()
+  }, [diff.tags, entityA.tags])
+
+  const finalTags = React.useMemo(
+    () => allTags.filter((t) => !state.deselectedTags.includes(t)),
+    [allTags, state.deselectedTags],
+  )
 
   function handleConfirm() {
     onSubmit({
@@ -239,7 +243,7 @@ function MergeBody({
             Tags (click to remove from merge)
           </Text>
           <View className="flex-row flex-wrap gap-2">
-            {[...diff.tags.both, ...diff.tags.onlyInA, ...diff.tags.onlyInB].sort().map((tag) => {
+            {allTags.map((tag) => {
               const deselected = state.deselectedTags.includes(tag)
               return (
                 <Chip
@@ -257,7 +261,7 @@ function MergeBody({
 
       {diff.stateDivergent && (
         <Text size="sm" variant="muted">
-          `state` will follow the canonical row · edit on detail pane after merge.
+          State JSON will follow the canonical row · edit on detail pane after merge.
         </Text>
       )}
 
@@ -372,13 +376,13 @@ function RenameBody({ entityA, entityB, onSubmit, onCancel, submitting, error }:
     <View className="gap-4">
       <View className="gap-1">
         <Text size="sm" variant="muted">
-          {`${entityA.id} · ${formatAgo(entityA.createdAt)}`}
+          {`Older · ${formatAgo(entityA.createdAt)}`}
         </Text>
         <Input value={nameA} onChangeText={setNameA} editable={!submitting} />
       </View>
       <View className="gap-1">
         <Text size="sm" variant="muted">
-          {`${entityB.id} · ${formatAgo(entityB.createdAt)}`}
+          {`Newer · ${formatAgo(entityB.createdAt)}`}
         </Text>
         <Input value={nameB} onChangeText={setNameB} editable={!submitting} />
       </View>
