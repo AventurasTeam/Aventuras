@@ -91,7 +91,8 @@ export const ActivePlusError: Story = {
   render: () => (
     <View className="gap-2">
       <Text variant="muted" size="sm">
-        Both inputs set — activePhase wins per the priority rule.
+        Both inputs set — activePhase wins per principles.md → Affordance loci (active &gt; error
+        &gt; hidden).
       </Text>
       <GenerationStatusPill
         activePhase="generating-narrative"
@@ -107,7 +108,9 @@ export const PhonePopover: Story = {
   render: () => (
     <View style={{ width: 360 }} className="gap-2 rounded-md bg-bg-base p-4">
       <Text variant="muted" size="sm">
-        Fixed 360 px wrapper coerces phone-tier — active variant collapses to icon-only.
+        360 px wrapper is a layout context only — `useTier()` reads window dimensions, so the pill
+        renders icon-only when the Storybook window itself is &lt; 640 px wide. Resize the browser
+        to verify the phone collapse.
       </Text>
       <GenerationStatusPill activePhase="reasoning" onCancel={onCancel} onErrorTap={onErrorTap} />
     </View>
