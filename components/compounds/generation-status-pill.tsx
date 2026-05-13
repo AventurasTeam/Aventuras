@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -52,11 +51,8 @@ export function GenerationStatusPill({
   // Priority: active generation > error state > hidden.
   if (activePhase != null) {
     const isPhone = tier === 'phone'
-    // Tag doesn't forward refs, so asChild cannot be used safely with the
-    // Slot contract. PopoverTrigger renders its own Pressable wrapper;
-    // Tag (no onPress prop) renders a plain View inside it — purely visual.
-    // Popover is uncontrolled: rn-primitives Root doesn't accept an `open`
-    // prop. Dismissal is driven via triggerRef.current?.close().
+    // asChild skipped — Tag isn't forwardRef'd; Trigger renders its own Pressable wrapper.
+    // Popover is uncontrolled: rn-primitives Root doesn't accept an `open` prop.
     return (
       <Popover>
         <PopoverTrigger ref={triggerRef}>
@@ -65,17 +61,15 @@ export function GenerationStatusPill({
           </Tag>
         </PopoverTrigger>
         <PopoverContent>
-          <View className="gap-1">
-            <Button
-              variant="secondary"
-              onPress={() => {
-                onCancel()
-                triggerRef.current?.close()
-              }}
-            >
-              <Text>{cancelCopy(activePhase)}</Text>
-            </Button>
-          </View>
+          <Button
+            variant="secondary"
+            onPress={() => {
+              triggerRef.current?.close()
+              onCancel()
+            }}
+          >
+            <Text>{cancelCopy(activePhase)}</Text>
+          </Button>
         </PopoverContent>
       </Popover>
     )
