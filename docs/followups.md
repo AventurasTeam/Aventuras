@@ -667,3 +667,15 @@ compounds land.
   (`init.entry.id`, `init.entry.revision`) or document a host
   requirement to memoize the `init` prop. Defer until a real consumer
   surfaces the regression.
+
+### CollisionResolveDialog
+
+- **Real DB-write drivers per resolution path.** Merge / Rename /
+  Keep drivers writing entities + happening_awareness +
+  happening_involvements + translations deltas under a single
+  `action_id`. World consumer (`app/(story)/world/...` route)
+  wires these. Dialog ships with stub drivers in stories only.
+- **Phone-tier prose clamp on merge body.** 3-line clamp +
+  tap-to-expand on long descriptions per
+  [`world.md → Merge`](./ui/screens/world/world.md#merge). Stories
+  cover desktop wrap; phone tier deferred to v1 mobile pass.
