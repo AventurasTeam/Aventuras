@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import * as React from 'react'
 import { View } from 'react-native'
+import { screen, userEvent } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
@@ -50,7 +51,6 @@ const entityB = baseEntity({
 })
 
 const resolveOk = async (r: Resolution) => {
-   
   console.log('[story] resolved:', r)
 }
 const resolveLoading = () => new Promise<void>(() => {})
@@ -160,6 +160,13 @@ export const MergeCanonicalFlip: Story = {
 
 export const MergeLoading: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveLoading} />,
+  play: async () => {
+    // Open the dialog, then submit so the never-resolving driver locks
+    // the dialog into its submitting state at story load. Without
+    // these clicks the loading lock isn't visible.
+    await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
+  },
 }
 
 export const MergeError: Story = {
@@ -172,6 +179,15 @@ export const RenameMode: Story = {
 
 export const RenameLoading: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveLoading} />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
+    // Switch to rename mode via the segment.
+    await userEvent.click(await screen.findByRole('radio', { name: 'Rename one' }))
+    // Dirty the first input so the Save button enables.
+    const inputs = await screen.findAllByRole('textbox')
+    await userEvent.type(inputs[0], ' edit')
+    await userEvent.click(await screen.findByRole('button', { name: 'Save renames' }))
+  },
 }
 
 export const KeepMode: Story = {
@@ -180,6 +196,13 @@ export const KeepMode: Story = {
 
 export const KeepLoading: Story = {
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveLoading} />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
+    // Mode segment + footer button share the "Keep as distinct"
+    // accessible name — disambiguate by role.
+    await userEvent.click(await screen.findByRole('radio', { name: 'Keep as distinct' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Keep as distinct' }))
+  },
 }
 
 export const ThemeMatrix: Story = {
