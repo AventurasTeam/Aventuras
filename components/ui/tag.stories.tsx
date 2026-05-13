@@ -155,7 +155,7 @@ export const ToneAccent: Story = {
 
 export const WithLeading: Story = {
   render: () => (
-    <Tag tone="accent" leading={<Spinner size="sm" />}>
+    <Tag tone="accent" leading={<Spinner size="sm" colorSlot="--accent-fg" />}>
       reasoning…
     </Tag>
   ),
@@ -177,7 +177,7 @@ export const TonesInThemeMatrix: Story = {
           <Tag tone="success">success</Tag>
           <Tag tone="warning">warning</Tag>
           <Tag tone="danger">danger</Tag>
-          <Tag tone="accent" leading={<Spinner size="sm" />}>
+          <Tag tone="accent" leading={<Spinner size="sm" colorSlot="--accent-fg" />}>
             accent
           </Tag>
         </View>

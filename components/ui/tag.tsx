@@ -5,6 +5,41 @@ import { X } from 'lucide-react-native'
 import * as React from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
+type TagTone = 'default' | 'soft' | 'success' | 'warning' | 'danger' | 'accent'
+
+const TONE_CLASSES: Record<TagTone, { container: string; label: string; filled: boolean }> = {
+  default: {
+    container: 'border-border-strong bg-bg-base',
+    label: 'text-fg-muted',
+    filled: false,
+  },
+  soft: {
+    container: 'border-border-strong bg-bg-region',
+    label: 'text-fg-muted',
+    filled: false,
+  },
+  success: {
+    container: 'border-success bg-success',
+    label: 'text-success-fg',
+    filled: true,
+  },
+  warning: {
+    container: 'border-warning bg-warning',
+    label: 'text-warning-fg',
+    filled: true,
+  },
+  danger: {
+    container: 'border-danger bg-danger',
+    label: 'text-danger-fg',
+    filled: true,
+  },
+  accent: {
+    container: 'border-accent bg-accent',
+    label: 'text-accent-fg',
+    filled: true,
+  },
+}
+
 type TagProps = {
   /**
    * Visual tone:
@@ -15,7 +50,7 @@ type TagProps = {
    * - `danger` — filled `bg-danger` + `text-danger-fg` (Failed thread).
    * - `accent` — filled `bg-accent` + `text-accent-fg` (gen pill active phase).
    */
-  tone?: 'default' | 'soft' | 'success' | 'warning' | 'danger' | 'accent'
+  tone?: TagTone
   /**
    * Replaces the solid border with a dashed border. Used for
    * add-affordance buttons ("+ tag", "+ relationship").
@@ -39,6 +74,11 @@ type TagProps = {
    * existing `gap-1`. Used by GenerationStatusPill to inject a
    * Spinner during active phases; available to any future consumer
    * needing a small leading indicator.
+   *
+   * Note: Spinner / Icon children that take their own color slot
+   * (not the text-color cascade) must be passed the matching slot
+   * for the tone — e.g. `<Spinner size="sm" colorSlot="--accent-fg" />`
+   * inside a `tone="accent"` tag.
    */
   leading?: React.ReactNode
   children?: React.ReactNode
@@ -56,31 +96,22 @@ export function Tag({
   children,
 }: TagProps) {
   const interactive = onPress != null
-  const isFilled =
-    tone === 'success' || tone === 'warning' || tone === 'danger' || tone === 'accent'
+  const toneClasses = TONE_CLASSES[tone]
   const baseClass = cn(
     // `group` hooks the Pressable so the label can hover-lift via
     // group-hover through TextClassContext (direct hover: doesn't
     // cascade to inherited text colors).
     'group flex-row items-center gap-1 rounded-full border px-row-x-xs py-row-y-xs',
-    // Tone — border + background. `default` / `soft` keep the existing
-    // neutral border; the four new tones use their semantic border to
-    // strengthen the signal at small sizes.
-    tone === 'default' && 'border-border-strong bg-bg-base',
-    tone === 'soft' && 'border-border-strong bg-bg-region',
-    tone === 'success' && 'border-success bg-success',
-    tone === 'warning' && 'border-warning bg-warning',
-    tone === 'danger' && 'border-danger bg-danger',
-    tone === 'accent' && 'border-accent bg-accent',
+    toneClasses.container,
     dashed && 'border-dashed',
-    // State-layer tints work only over neutral bgs; filled bgs need
-    // opacity-based feedback. Per `feedback_state_layer_vs_filled`
-    // memory: `bg-tint-*` tints don't read on saturated surfaces.
-    interactive && (isFilled ? 'active:opacity-90' : 'active:bg-tint-press'),
+    // Saturated bg surfaces absorb `bg-tint-*` overlays, so filled
+    // tones need opacity-based hover/press feedback while neutral
+    // tones use the state-layer tints.
+    interactive && (toneClasses.filled ? 'active:opacity-90' : 'active:bg-tint-press'),
     Platform.select({
       web: cn(
         interactive && 'cursor-pointer outline-none transition-colors',
-        interactive && (isFilled ? 'hover:opacity-90' : 'hover:bg-tint-hover'),
+        interactive && (toneClasses.filled ? 'hover:opacity-90' : 'hover:bg-tint-hover'),
         interactive && 'focus-visible:ring-2 focus-visible:ring-focus-ring',
         disabled && 'cursor-not-allowed pointer-events-none',
       ),
@@ -91,17 +122,11 @@ export function Tag({
 
   const labelClass = cn(
     'text-xs',
-    // Tone-keyed text color. The two neutral tones keep `text-fg-muted`;
-    // each filled tone uses its semantic foreground for guaranteed
-    // contrast on the saturated background (matches the convention in
-    // `components/compounds/delta-log-row.tsx:53-55`).
-    (tone === 'default' || tone === 'soft') && 'text-fg-muted',
-    tone === 'success' && 'text-success-fg',
-    tone === 'warning' && 'text-warning-fg',
-    tone === 'danger' && 'text-danger-fg',
-    tone === 'accent' && 'text-accent-fg',
+    toneClasses.label,
+    // `group-hover` lift only on neutral tones — filled tones already
+    // saturate the foreground via `*-fg` and have no second-tier color.
     interactive &&
-      (tone === 'default' || tone === 'soft') &&
+      !toneClasses.filled &&
       Platform.select({ web: 'transition-colors group-hover:text-fg-primary' }),
   )
 
@@ -170,4 +195,4 @@ export function Tag({
   )
 }
 
-export type { TagProps }
+export type { TagProps, TagTone }
