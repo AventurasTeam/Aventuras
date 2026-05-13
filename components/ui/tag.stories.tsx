@@ -2,9 +2,10 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import * as React from 'react'
 import { View } from 'react-native'
 
+import { Spinner } from '@/components/ui/spinner'
+import { themes } from '@/lib/themes/registry'
 import { Tag } from './tag'
 import { Text } from './text'
-import { themes } from '@/lib/themes/registry'
 
 const meta: Meta<typeof Tag> = {
   title: 'Primitives/Tag',
@@ -130,6 +131,55 @@ export const ThemeMatrix: Story = {
               + add
             </Tag>
           </View>
+        </View>
+      ))}
+    </View>
+  ),
+}
+
+export const ToneSuccess: Story = {
+  render: () => <Tag tone="success">staged</Tag>,
+}
+
+export const ToneWarning: Story = {
+  render: () => <Tag tone="warning">retired</Tag>,
+}
+
+export const ToneDanger: Story = {
+  render: () => <Tag tone="danger">Failed</Tag>,
+}
+
+export const ToneAccent: Story = {
+  render: () => <Tag tone="accent">reasoning…</Tag>,
+}
+
+export const WithLeading: Story = {
+  render: () => (
+    <Tag tone="accent" leading={<Spinner size="sm" />}>
+      reasoning…
+    </Tag>
+  ),
+}
+
+export const TonesInThemeMatrix: Story = {
+  render: () => (
+    <View className="gap-4">
+      {themes.map((t) => (
+        <View
+          key={t.id}
+          // @ts-expect-error — dataSet is RN-Web only.
+          dataSet={{ theme: t.id }}
+          className="flex-row flex-wrap items-center gap-2 rounded-md bg-bg-base p-4"
+          style={{ width: 360 }}
+        >
+          <Tag tone="default">default</Tag>
+          <Tag tone="soft">soft</Tag>
+          <Tag tone="success">success</Tag>
+          <Tag tone="warning">warning</Tag>
+          <Tag tone="danger">danger</Tag>
+          <Tag tone="accent" leading={<Spinner size="sm" />}>
+            accent
+          </Tag>
         </View>
       ))}
     </View>
