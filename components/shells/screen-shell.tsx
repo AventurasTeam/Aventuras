@@ -185,7 +185,15 @@ export function ScreenShell({
       >
         {leftSlot}
         <View className="min-w-0 flex-1 flex-row items-center gap-3">
-          <TextClassContext.Provider value="!leading-none">
+          {/*
+            leading-none collapses the line-box; translate-y-[0.08em]
+            then optically re-centers the glyph against its
+            font-metric ascender bias. Same pattern as avatar.tsx —
+            fonts reserve a bit more space above than below the
+            cap-height, which leaves an unbalanced gap at this row's
+            height even with line-height: 1.
+          */}
+          <TextClassContext.Provider value="!leading-none translate-y-[0.08em]">
             <View className="min-w-0 flex-shrink flex-row items-center">{title}</View>
           </TextClassContext.Provider>
           {inlineCenterExtras != null ? (
