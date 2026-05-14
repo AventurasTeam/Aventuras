@@ -187,6 +187,7 @@ export function DetailPane({
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        className="flex-none"
         contentContainerClassName="px-row-x-md"
       >
         {tabs}
