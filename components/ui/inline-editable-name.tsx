@@ -1,12 +1,6 @@
 import { Pencil } from 'lucide-react-native'
 import * as React from 'react'
-import {
-  type NativeSyntheticEvent,
-  Platform,
-  Pressable,
-  type TextInputKeyPressEventData,
-  View,
-} from 'react-native'
+import { Platform, Pressable, type TextInputKeyPressEvent, View } from 'react-native'
 
 import { IconAction } from '@/components/ui/icon-action'
 import { Input } from '@/components/ui/input'
@@ -146,7 +140,7 @@ export function InlineEditableName({
   // The Input primitive doesn't expose a ref, so we lean on the
   // mount lifecycle rather than imperative focus.
 
-  const handleKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+  const handleKeyPress = (e: TextInputKeyPressEvent) => {
     if (Platform.OS !== 'web') return
     const key = e.nativeEvent.key
     if (key === 'Escape') {
