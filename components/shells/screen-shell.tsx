@@ -183,8 +183,8 @@ export function ScreenShell({
         )}
       >
         {leftSlot}
-        <View className="flex-1 flex-row items-center gap-3">
-          <View className="flex-shrink flex-row items-center">{title}</View>
+        <View className="min-w-0 flex-1 flex-row items-center gap-3">
+          <View className="min-w-0 flex-shrink flex-row items-center leading-none">{title}</View>
           {inlineCenterExtras != null ? (
             <View className="flex-row items-center gap-2">{inlineCenterExtras}</View>
           ) : null}
