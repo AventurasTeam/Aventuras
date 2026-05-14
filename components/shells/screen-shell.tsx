@@ -4,6 +4,7 @@ import { View } from 'react-native'
 
 import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
+import { TextClassContext } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { cn } from '@/lib/utils'
 
@@ -184,7 +185,9 @@ export function ScreenShell({
       >
         {leftSlot}
         <View className="min-w-0 flex-1 flex-row items-center gap-3">
-          <View className="min-w-0 flex-shrink flex-row items-center leading-none">{title}</View>
+          <TextClassContext.Provider value="leading-none">
+            <View className="min-w-0 flex-shrink flex-row items-center">{title}</View>
+          </TextClassContext.Provider>
           {inlineCenterExtras != null ? (
             <View className="flex-row items-center gap-2">{inlineCenterExtras}</View>
           ) : null}
