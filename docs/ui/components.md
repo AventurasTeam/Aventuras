@@ -340,6 +340,13 @@ get a **Density** story — one row per `compact` / `regular` /
 dropdown (sister to the Theme dropdown) for ad-hoc swapping
 during development.
 
+The cross-primitive tier landscape (which primitive picks which
+`h-control-*` tier and which `size` variants are publicly exposed)
+lives in the
+[primitive height inventory](./foundations/spacing.md#primitive-height-inventory).
+Update that table when shipping a new density-aware primitive or
+changing an existing one's tier source or size variants.
+
 The Density story is **separate from ThemeMatrix** — both axes
 matter, but a 3 × 10 = 30-cell matrix is overkill. Per-axis
 isolation suffices: ThemeMatrix tests theme-divergent slots at a

@@ -53,7 +53,7 @@ API:
 Visual contract:
 
 - `border-radius: var(--radius-sm)` (4px).
-- `px-3 py-1`, `text-xs font-medium`.
+- `h-control-xs px-row-x-sm`, `text-xs font-medium` (height contract — see [Height](#height) below).
 - Default (unselected): `border border-border-strong text-fg-muted bg-bg-base`.
 - Selected: `bg-fg-primary text-bg-base border-fg-primary`.
 - Hover (web, when interactive): `text-fg-primary` on unselected.
@@ -67,6 +67,40 @@ Non-interactive Chip (no `onPress`) is density-agnostic —
 display-only sizing, no touch-floor inflation. A `Draft` badge on
 a [Story Card](./story-card.md#status-badges-chip-primitives)
 doesn't need a 44 px tap target.
+
+## Height
+
+Chip is fixed at `h-control-xs`. The "dense chrome control" tier in
+[`spacing.md → Component-internal sizing tokens`](../foundations/spacing.md#component-internal-sizing-tokens--density-aware)
+was written for this role. No `size` prop; the height is invariant
+across consumers.
+
+**Why fixed, not a size variant.** Consumers wanting a larger
+interactive pill reach for Button (which carries `sm` / `md` / `lg`
+size variants — see the
+[primitive height inventory](../foundations/spacing.md#primitive-height-inventory));
+consumers wanting a smaller labeled pill reach for
+[Tag](#tag--pill-labeled-content) (content-sized, not part of the
+control-h system). Chip occupies one slot in the taxonomy and that
+slot is dense-chrome at xs.
+
+**Applies to interactive and static Chip alike.** Both
+`<Chip>label</Chip>` (static badge — Story Card status badges,
+Calendar Picker type labels) and `<Chip selected onPress={…}>`
+(interactive filter affordance — Toolbar filter chips,
+CollisionResolveDialog selection chips) render at the same fixed
+height. The invariant doesn't depend on interactivity.
+
+**Tag is excluded by design.** Tag's height is content-driven (text,
+horizontal padding, border); the control-h system doesn't apply.
+Chip is a chrome control with fixed height; Tag is a labeled
+content shape with emergent height. Picking between them is a
+shape decision, not a sizing one.
+
+**Chrome-row composition.** When a Chip cluster sits in a Toolbar
+secondary chrome row alongside Sort or other height-uniform
+controls, the cluster mutually aligns at xs per the
+[Toolbar height contract](./toolbar.md#height-contract--primary-input-vs-secondary-chrome-cluster).
 
 ## Tag — pill, labeled content
 

@@ -158,6 +158,66 @@ tiers.
 Phone: opens via Sheet (short) per the existing tier-aware Select
 binding. Tablet/desktop: anchored Popover.
 
+## Height contract — primary input vs secondary chrome cluster
+
+A Toolbar instance has two height roles, and consumers don't pick
+the tier — the role does.
+
+- **Primary input** — zero or more focal labeled controls consumers
+  actively type into. In Toolbar today this is `Toolbar.Search`.
+  Renders at `h-control-md` (44 px at regular density). HIG-clean on
+  mobile by construction; visually taller signals "this is the focal
+  interactive surface; the rest modify it."
+- **Secondary chrome cluster** — labeled affordances that modify or
+  filter the primary input's behavior. In Toolbar today:
+  `Toolbar.FilterChips` (Chip children) and `Toolbar.Sort`. All
+  render at `h-control-xs` (36 px at regular). Mutually
+  height-uniform by construction — Chip is fixed at xs per
+  [`chips.md → Height`](./chips.md#height); `Toolbar.Sort` uses
+  `Select size="xs"` per
+  [`forms.md → Trigger sizes`](./forms.md#trigger-sizes).
+
+**Why two heights, not one.** The "same height feels right for
+adjacent controls" rule applies **within** the secondary cluster
+(Chip and Sort mutually align). It is **not** extended across
+primary↔secondary — that would force Search below HIG
+(36 px < 44 pt), which
+[`spacing.md → Tap-target on native`](../foundations/spacing.md#tap-target-on-native)
+explicitly preserves as a v1 invariant. Real-world chrome-row
+designs (browser address bars dwarfing icon clusters; macOS
+toolbars; Slack channel headers) all do this two-tier split. The
+contract resolves the secondary-cluster mismatch without touching
+primary-input sizing.
+
+**Cross-tier composition** stacks with the
+[overflow rule below](#cross-tier-overflow-rule):
+
+- **Desktop (`≥ 1024 px`)** — single horizontal row, two heights —
+  Search at md, Chips and Sort at xs. The 8 px height delta reads
+  as visual hierarchy, not inconsistency.
+- **Tablet / phone (`< 1024 px`)** — Search on its own row at md;
+  Chips and Sort overflow into a secondary row, both at xs. The
+  overflow row **is** the secondary cluster; everything in it is
+  height-uniform.
+
+**Out of scope of the contract.**
+
+- **IconAction in Toolbar.** IconAction uses its own
+  [`h-icon-action-*`](../foundations/spacing.md#component-internal-sizing-tokens--density-aware)
+  token system (28 / 32 / 36 px at regular for sm / md / lg),
+  intentionally smaller than control-h tokens. If a future Toolbar
+  adds an IconAction to the chrome cluster (e.g., a "clear filters"
+  trash icon), it doesn't height-align with the labeled controls —
+  square icon buttons are shape-distinct by design. The contract
+  applies only to labeled chrome controls.
+- **Toolbar without a primary input.** Pure-chrome Toolbar (Chips
+  and Sort, no Search) collapses to one height — the secondary
+  cluster at xs. The rule simply has no primary role to apply.
+- **Other chrome-row compounds.** Locally scoped to Toolbar for v1.
+  Promote to [`principles.md`](../principles.md) when the next
+  consumer (DeltaLogRow's badge-vs-controls adjacency, StoryCard's
+  status-strip) needs the same rule.
+
 ## Cross-tier overflow rule
 
 ### Desktop (`≥ 1024 px`)

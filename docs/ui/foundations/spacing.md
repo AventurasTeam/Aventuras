@@ -94,6 +94,51 @@ Tailwind utility shorthand exposed via `tailwind.config.js`
 utility once; density shifts swap the underlying CSS var on web
 and the lookup-table value on native.
 
+Custom token families are registered with tailwind-merge in
+[`lib/utils.ts`](../../../lib/utils.ts) so consumer `className`
+overrides win against primitive defaults; mirror new families there
+when adding to `tailwind.config.js`.
+
+### Primitive height inventory
+
+Density-aware primitives consume the tokens defined above, plus
+their own per-primitive size variants. The table below enumerates
+each primitive's tier source, default size, and publicly-exposed
+size variants — the canonical reference when composing chrome rows
+or auditing height consistency.
+
+| Primitive            | Height source             | Default     | Sizes exposed      | Notes                                                                                             |
+| -------------------- | ------------------------- | ----------- | ------------------ | ------------------------------------------------------------------------------------------------- |
+| Input                | `h-control-*`             | `md`        | `sm` / `md` / `lg` | —                                                                                                 |
+| Textarea             | content-driven            | —           | —                  | `rows` and `maxRows`                                                                              |
+| Select Trigger       | `h-control-*`             | `md`        | `xs` / `sm` / `md` | —                                                                                                 |
+| Button (label)       | `h-control-*`             | `md`        | `sm` / `md` / `lg` | —                                                                                                 |
+| Button (`size=icon`) | `h-control-* w-control-*` | square `md` | `icon`             | square primary-action icon shape                                                                  |
+| IconAction           | `h-icon-action-*`         | `md`        | `sm` / `md` / `lg` | own token family — distinct from `Button size="icon"`                                             |
+| Chip                 | `h-control-xs` (fixed)    | `xs`        | none               | dense-chrome identity per [`chips.md → Height`](../patterns/chips.md#height)                      |
+| Switch               | inline per-density tables | —           | —                  | shape-distinct; values in [`forms.md → Switch`](../patterns/forms.md#switch--visual-contract)     |
+| Checkbox             | inline per-density tables | —           | —                  | shape-distinct; values in [`forms.md → Checkbox`](../patterns/forms.md#checkbox--visual-contract) |
+| Autocomplete         | inherits Input            | inherits    | inherits           | wraps Input                                                                                       |
+| TagInput             | inherits Input            | inherits    | inherits           | wraps Input and Tag                                                                               |
+
+**Button `size="icon"` vs IconAction.** Both render as square icon
+buttons but at different scales: `Button size="icon"` is a
+primary-action shape at `h-control-md` (44 px regular); IconAction
+is the row-nestled secondary affordance at `h-icon-action-md`
+(28 px regular). Not interchangeable — pick by role.
+
+**Switch and Checkbox stay inline by design.** Their per-density
+values aren't tokenized into this doc because each carries a
+multi-dimensional per-density bundle (track-h, track-w, thumb-size,
+thumb-translate-x for Switch; box-size for Checkbox) used by
+exactly one primitive. The
+[`forms.md` visual-contract tables](../patterns/forms.md#switch--visual-contract)
+remain canonical for their values.
+
+> **Maintenance.** Update this table when a primitive's tier source
+> or exposed sizes change. Drift makes future audits more
+> expensive than the per-PR upkeep.
+
 ### Tap-target on native
 
 The `regular` density (mobile default) sets `--control-h-md` to

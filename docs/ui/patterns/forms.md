@@ -292,6 +292,27 @@ For genuinely ambiguous cases, **default to the primary cardinality
 rule**; the carve-out is for clear chrome cases (top-bar, breadcrumb-
 line dropdowns), not "anywhere wide-ish."
 
+### Trigger sizes
+
+The Trigger button exposes three height variants:
+
+- `xs` → `h-control-xs` (36 px at regular density). Chrome-row use —
+  `Toolbar.Sort` is the canonical exemplar per the
+  [Toolbar height contract](./toolbar.md#height-contract--primary-input-vs-secondary-chrome-cluster).
+- `sm` → `h-control-sm` (40 px at regular).
+- `md` → `h-control-md` (44 px at regular). Default; form-row use.
+
+`size` is exposed on the public `<Select>` props. Default `md`,
+unchanged from prior behavior. The dropdown content surface (anchored
+popover on tablet/desktop, Sheet on phone) is unaffected by Trigger
+size — Sheet sizing derives from option count per the
+[cardinality cascade](#auto-derivation-cascade).
+
+`lg` is intentionally absent — Select-as-hero-CTA isn't a v1 shape;
+buttons cover that role. See the
+[primitive height inventory](../foundations/spacing.md#primitive-height-inventory)
+for the cross-primitive size landscape.
+
 ### What stays separate
 
 - **Autocomplete-with-create primitive** — its own pattern, see
