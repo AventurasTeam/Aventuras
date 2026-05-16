@@ -159,6 +159,11 @@ export const MergeCanonicalFlip: Story = {
 }
 
 export const MergeLoading: Story = {
+  // Visual-only: the dialog gates close while submitting (collision-
+  // resolve-dialog.tsx line 74), so the never-resolving driver leaves
+  // body scroll-locked between tests. Skipped from vitest via
+  // `tags: { exclude: ['no-vitest'] }` in vitest.config.ts.
+  tags: ['no-vitest'],
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveLoading} />,
   play: async () => {
     // Open the dialog, then submit so the never-resolving driver locks
@@ -178,6 +183,7 @@ export const RenameMode: Story = {
 }
 
 export const RenameLoading: Story = {
+  tags: ['no-vitest'], // same as MergeLoading — visual-only, leaks body lock
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveLoading} />,
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
@@ -195,6 +201,7 @@ export const KeepMode: Story = {
 }
 
 export const KeepLoading: Story = {
+  tags: ['no-vitest'], // same as MergeLoading — visual-only, leaks body lock
   render: () => <ControlledDialog entityA={entityA} entityB={entityB} onResolve={resolveLoading} />,
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open' }))

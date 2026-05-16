@@ -127,7 +127,9 @@ export const PasteSplitsOnComma: Story = {
 export const DedupeIsCaseInsensitive: Story = {
   render: () => <Harness initial={['sci-fi']} placeholder="Try adding 'Sci-Fi'…" />,
   play: async () => {
-    const input = screen.getByPlaceholderText("Try adding 'Sci-Fi'…")
+    // Placeholder is hidden once tags are present (tag-input.tsx renders
+    // it only when value.length === 0) — query by role instead.
+    const input = screen.getByRole('textbox')
     await userEvent.click(input)
     await userEvent.type(input, 'Sci-Fi{Enter}')
     // Original casing preserved; dupe rejected.
@@ -156,7 +158,7 @@ export const RemoveViaChipX: Story = {
 export const BackspaceOnEmptyRemovesLast: Story = {
   render: () => <Harness initial={['sci-fi', 'fantasy']} placeholder="Add tags…" />,
   play: async () => {
-    const input = screen.getByPlaceholderText('Add tags…')
+    const input = screen.getByRole('textbox')
     await userEvent.click(input)
     // Input is currently empty — Backspace removes last chip.
     await userEvent.keyboard('{Backspace}')
@@ -175,8 +177,10 @@ export const DisabledBlocksInput: Story = {
     placeholder: 'Add tags…',
   },
   play: async ({ args }) => {
-    const input = screen.getByPlaceholderText('Add tags…')
-    expect(input).toBeDisabled()
+    const input = screen.getByRole('textbox')
+    // react-native-web renders disabled TextInput as `readonly`, not
+    // `disabled` — assertion matches the actual DOM contract.
+    expect(input).toHaveAttribute('readonly')
     expect(args.onChange).not.toHaveBeenCalled()
   },
 }

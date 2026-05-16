@@ -22,7 +22,13 @@ export default defineConfig({
         plugins: [
           // The plugin will run tests for the stories defined in your Storybook config
           // See options at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon#storybooktest
-          storybookTest({ configDir: path.join(dirname, '.storybook') }),
+          storybookTest({
+            configDir: path.join(dirname, '.storybook'),
+            // Visual-only stories that intentionally leave a Radix
+            // dialog in submitting state and so leak body scroll-lock
+            // across tests; loadable in Storybook UI, excluded here.
+            tags: { exclude: ['no-vitest'] },
+          }),
         ],
         test: {
           name: 'storybook',

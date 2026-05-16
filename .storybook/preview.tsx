@@ -24,6 +24,25 @@ function DensityApplier({ setting, children }: { setting: DensitySetting; childr
   return <>{children}</>
 }
 
+// Radix Dialog / Popover lock `document.body` (data-scroll-locked +
+// pointer-events: none) while open and clear it on unmount. Stories
+// that leave a Radix overlay open (e.g. CollisionResolveDialog's
+// *Loading variants) unmount their content between vitest stories,
+// but the body attributes can persist across story boundaries and
+// block clicks in the next test. Strip them eagerly on unmount.
+function BodyLockReset({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    const clear = () => {
+      if (typeof document === 'undefined') return
+      document.body.removeAttribute('data-scroll-locked')
+      document.body.style.pointerEvents = ''
+    }
+    clear()
+    return clear
+  }, [])
+  return <>{children}</>
+}
+
 const themeOptions = registryThemes.map((t) => ({ value: t.id, title: t.name }))
 
 // Storybook web has no real OS safe-area to read, and
@@ -86,21 +105,23 @@ const preview: Preview = {
       const themeId = (context.globals.theme as string) ?? registryThemes[0].id
       const densitySetting = (context.globals.density as DensitySetting) ?? 'default'
       return (
-        <SafeAreaProvider initialMetrics={STORYBOOK_SAFE_AREA_METRICS}>
-          <ThemeProvider>
-            <DensityProvider>
-              <ThemeApplier themeId={themeId}>
-                <DensityApplier setting={densitySetting}>
-                  <Story />
-                  {/* Mirrors the runtime app/_layout PortalHost so
-                      `@rn-primitives/portal` consumers (Autocomplete's
-                      popover) have somewhere to render in Storybook. */}
-                  <PortalHost />
-                </DensityApplier>
-              </ThemeApplier>
-            </DensityProvider>
-          </ThemeProvider>
-        </SafeAreaProvider>
+        <BodyLockReset>
+          <SafeAreaProvider initialMetrics={STORYBOOK_SAFE_AREA_METRICS}>
+            <ThemeProvider>
+              <DensityProvider>
+                <ThemeApplier themeId={themeId}>
+                  <DensityApplier setting={densitySetting}>
+                    <Story />
+                    {/* Mirrors the runtime app/_layout PortalHost so
+                        `@rn-primitives/portal` consumers (Autocomplete's
+                        popover) have somewhere to render in Storybook. */}
+                    <PortalHost />
+                  </DensityApplier>
+                </ThemeApplier>
+              </DensityProvider>
+            </ThemeProvider>
+          </SafeAreaProvider>
+        </BodyLockReset>
       )
     },
   ],
