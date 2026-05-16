@@ -1119,12 +1119,12 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
       </div>
     </div>
 
-    <!-- CONNECTIONS — positional / compositional / affiliation links to other entities.
-         Renamed from "Relationships" — see patterns/entity.md. Carrying refs (equipped/inventory)
-         leave for the Carrying tab; only non-carry refs remain here. -->
+    <!-- CONNECTIONS — positional / affiliation / relationships links to other entities.
+         Connections is the umbrella tab; sub-sections within. Carrying refs
+         (equipped/inventory) live on the Carrying tab. -->
     <div class="tab-panel" data-panel="connections">
       <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 14px; padding: 8px 12px; background: #fffbe6; border-left: 3px solid #e3d8c0; border-radius: 2px;">
-        Where this character is and who they're affiliated with. <b>Equipped items + inventory live on the Carrying tab.</b>
+        Where this character is, who they're affiliated with, and who they're tied to. <b>Equipped items + inventory live on the Carrying tab.</b>
       </div>
 
       <div class="rel-section-title">Positional</div>
@@ -1149,7 +1149,41 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
         </div>
       </div>
 
-      <div class="rel-section-title">Last seen</div>
+      <div class="rel-section-title">Relationships</div>
+      <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 8px;">
+        Character-to-character. Both perspectives accumulate as the classifier observes evidence; null sides ("not recorded") are intentional gaps, not blanks. See <i>data-model.md &rarr; character_relationships</i>.
+      </div>
+      <!-- Relationship rows — list-row primitive with a description line. -->
+      <div class="list-row" data-rel="kael" style="cursor: pointer; align-items: flex-start;">
+        <span class="list-kind" title="character">&#9786;</span>
+        <span class="list-name" style="flex-direction: column; align-items: stretch; gap: 2px; white-space: normal;">
+          <span class="name-text"><b>Kael</b></span>
+          <span style="font-size: 11px; color: var(--ink-muted);">sister &middot; he sees you: brother</span>
+        </span>
+        <span style="color: var(--ink-faint); font-size: 14px;">&rsaquo;</span>
+      </div>
+      <div class="list-row" data-rel="jorin" style="cursor: pointer; align-items: flex-start;">
+        <span class="list-kind" title="character">&#9786;</span>
+        <span class="list-name" style="flex-direction: column; align-items: stretch; gap: 2px; white-space: normal;">
+          <span class="name-text"><b>Jorin</b></span>
+          <span style="font-size: 11px; color: var(--ink-muted);">mentor &middot; <span style="font-style: italic; color: var(--ink-faint);">their view: not recorded</span></span>
+        </span>
+        <span style="color: var(--ink-faint); font-size: 14px;">&rsaquo;</span>
+      </div>
+      <div class="list-row" data-rel="mira" style="cursor: pointer; align-items: flex-start;">
+        <span class="list-kind" title="character">&#9786;</span>
+        <span class="list-name" style="flex-direction: column; align-items: stretch; gap: 2px; white-space: normal;">
+          <span class="name-text"><b>Mira</b></span>
+          <span style="font-size: 11px; color: var(--ink-muted);"><span style="font-style: italic; color: var(--ink-faint);">your view: not recorded</span> &middot; she sees you: rival</span>
+        </span>
+        <span style="color: var(--ink-faint); font-size: 14px;">&rsaquo;</span>
+      </div>
+      <!-- Add affordance — pinned at the bottom of the sub-section. -->
+      <div class="list-row" data-rel-add style="cursor: pointer; border-style: dashed; border-color: var(--line-soft); color: var(--ink-muted); justify-content: center;">
+        <span style="font-size: 12px;">+ Add relationship</span>
+      </div>
+
+      <div class="rel-section-title" style="margin-top: 16px;">Last seen</div>
       <div class="field-row">
         <div class="field-label">lastSeenAt
           <span class="type-hint">cache &middot; classifier-only (read-only)</span>

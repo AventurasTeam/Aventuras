@@ -244,23 +244,89 @@ Composition (in order):
 
 Tab is hidden entirely for non-character kinds.
 
-### Connections — positional / compositional / affiliation
+### Connections — positional / compositional / affiliation / relationships
 
-Slimmed from the older "Relationships" tab — the rename is
-documented in
-[`patterns/entity.md`](../../patterns/entity.md#entity-detail-pane-composition).
 Per-kind sub-labels:
 
-| Kind          | Sub-labels                                                                                        |
-| ------------- | ------------------------------------------------------------------------------------------------- |
-| **Character** | `Positional` (current_location_id) · `Affiliation` (faction_id) · `Last seen` (read-only)         |
-| **Location**  | `Compositional` (parent_location_id) · `Characters here` · `Items here` (inverse)                 |
-| **Item**      | `Positional` (at_location_id) · `Held by` (inverse from `character.equipped_items` / `inventory`) |
-| **Faction**   | `Members` (inverse from `character.faction_id`) · inter-faction (deferred)                        |
+| Kind          | Sub-labels                                                                                                              |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **Character** | `Positional` (current_location_id) · `Affiliation` (faction_id) · `Relationships` (char→char) · `Last seen` (read-only) |
+| **Location**  | `Compositional` (parent_location_id) · `Characters here` · `Items here` (inverse)                                       |
+| **Item**      | `Positional` (at_location_id) · `Held by` (inverse from `character.equipped_items` / `inventory`)                       |
+| **Faction**   | `Members` (inverse from `character.faction_id`) · inter-faction (deferred)                                              |
+
+The tab name **Connections** is the umbrella for both structural
+links (positional, affiliation) and social bonds. It was originally
+slimmed from an older "Relationships" tab to be forward-compatible
+when the char→char schema landed — see
+[`patterns/entity.md`](../../patterns/entity.md#entity-detail-pane-composition).
+The Relationships sub-section (below) is that landing.
 
 `lastSeenAt` is classifier-only per the
 [authorship contract](../../../data-model.md#authorship-contract);
 read-only on the UI.
+
+#### Relationships — character-to-character
+
+Backed by the
+[`character_relationships`](../../../data-model.md#character-to-character-relationships)
+table. One row per other character the current character has a
+recorded relationship with. Asymmetric perspectives render together
+so the divergence — when present — is legible at a glance.
+
+**Row composition** — uses the
+[`ListRow`](../../patterns/lists.md) primitive:
+
+- `leading` — [`EntityKindIcon`](../../patterns/entity.md#entity-kind-indicators--icons-not-text)
+  for character.
+- `label` — the other character's name.
+- `description` — both perspectives, joined by `·`. The current
+  character's view comes first; the other character's view second,
+  prefixed for disambiguation. Null perspectives render as "not
+  recorded" rather than blank — the gap is information.
+- `trailing` — chevron (whole-row tap opens the edit sheet).
+
+**Three perspective states** (mirrors the schema's `kind` /
+`inverse_kind` nullability):
+
+| State                 | `description` shape                             |
+| --------------------- | ----------------------------------------------- |
+| Both perspectives     | `sister · he sees you: brother`                 |
+| Only self→other known | `mentor · their view: not recorded`             |
+| Only other→self known | `your view: not recorded · they see you: rival` |
+
+Pronouns default to "they / their" when the other character's
+gender is unknown — the schema doesn't model gender, and pronoun
+authoring is a downstream concern shared with any other place names
+are referenced.
+
+**Affordances:**
+
+- **Add** — `+ Add relationship` row pinned at the bottom of the
+  Relationships sub-section. Opens an edit sheet (composed from
+  existing primitives): an `Autocomplete` over branch-scoped
+  characters (excluding the current one) plus two text fields for
+  `kind` (your view) and `inverse_kind` (their view). At least one of the two must be non-empty per the DB
+  `CHECK` constraint; the form gates Save accordingly.
+- **Edit** — whole-row tap opens the same sheet pre-filled.
+- **Delete** — destructive action inside the edit sheet.
+  Consistent with edit affordances elsewhere on World — destructive
+  actions live in the editor, not on the row.
+
+**Empty state.** When the character has no recorded relationships,
+render the Relationships sub-section heading + an empty-state hint
+("No relationships recorded yet") + the `+ Add relationship` row.
+Sub-section is never hidden — discoverability of the affordance
+matters even with empty data.
+
+**Authoring contract reminder.** Classifier writes follow the same
+v1 lean as the rest of CharacterState: the classifier UPSERTs based
+on prose evidence, user edits stick only until contradicting prose.
+The asymmetric two-field shape means each perspective is independent
+— the classifier may update `kind` without touching `inverse_kind`
+if the new prose only surfaces one side. See
+[`data-model.md → Character-to-character relationships`](../../../data-model.md#character-to-character-relationships)
+for the full authoring + UPSERT contract.
 
 ### Settings — entity-management chrome
 

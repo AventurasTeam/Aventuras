@@ -224,12 +224,17 @@ Overview | Identity | Carrying | Connections | Settings | Assets | Involvements 
 | **Involvements** | `happening_involvements` table for this entity.                                                               |
 | **History**      | Delta log filtered to this entity.                                                                            |
 
-The tab name **Connections** is preferred over the older
-"Relationships" — the latter reads as social bonds (friend / enemy /
-romantic), which the deferred social-relationships graph
-([`data-model.md → FactionState`](../../data-model.md#factionstate-shape)
-notes inter-faction relationships folding into a deferred graph)
-will eventually own. Connections is forward-compatible.
+The tab name **Connections** is the umbrella for both structural
+links (positional, affiliation) and social bonds (friend / enemy /
+romantic). Originally chosen over the older "Relationships" name
+to stay forward-compatible while the char→char schema was deferred;
+that schema landed as
+[`character_relationships`](../../data-model.md#character-to-character-relationships)
+and now surfaces as a **Relationships** sub-section under the
+Connections tab — see
+[`world.md → Relationships`](../screens/world/world.md#relationships--character-to-character).
+Inter-faction relationships remain deferred (see
+[`data-model.md → FactionState`](../../data-model.md#factionstate-shape)).
 
 #### Why Settings is a separate tab
 

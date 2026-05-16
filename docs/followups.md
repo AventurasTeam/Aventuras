@@ -179,26 +179,6 @@ Lands when the classifier-prompt authoring surface is next touched.
 
 ## UX
 
-### Character Connections tab — UI design
-
-[`character_relationships`](./data-model.md#character-to-character-relationships)
-landed in the schema; the character-detail UI doesn't yet surface
-them. Needs a design pass on:
-
-- Tab placement on the character-detail surface (alongside Identity
-  / Carrying / Awareness? own tab?).
-- Row shape — render `selfToOther` + `otherToSelf` together so the
-  asymmetric case ("you see them as mentor; they see you as
-  student") is legible at a glance, with null-POV explicit.
-- Add/edit affordances — manual user-curated row creation, edit, and
-  delete (the v1 lean still has classifier UPSERT on contradicting
-  prose; the UI shouldn't pretend user edits are sticky).
-- Retired-participant rendering — relationship rows survive
-  retirement; UI dims/badges the retired side per
-  [retirement semantics](./data-model.md#characterstate-shape).
-
-Lands alongside the next character-detail UI iteration.
-
 ### Accent color picker UI
 
 Two surfaces consume an accent color picker — Story Settings →
