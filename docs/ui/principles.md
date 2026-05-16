@@ -110,10 +110,10 @@ Settings, Chapter Timeline:
 - Generation status pill (hides when idle, shows during active
   pipeline phases: `reasoning…` / `generating narrative…` /
   `classifying…` / `closing chapter…`). Driven by pipeline event
-  stream (per [`architecture.md`](../architecture.md)). Pipeline
-  state is global to the active story; users navigating between
-  in-story sub-screens during generation deserve the same affordance
-  and click-to-cancel popover the reader has.
+  stream (per [`generation-pipeline.md`](../generation-pipeline.md)).
+  Pipeline state is global to the active story; users navigating
+  between in-story sub-screens during generation deserve the same
+  affordance and click-to-cancel popover the reader has.
 - Chapter token-progress strip. Small visual cost; tells users how
   close they are to chapter close regardless of which sub-screen
   they're on. No textual label, doesn't collide with the breadcrumb.
@@ -272,7 +272,7 @@ flight. Cancel reverts the transaction and is always available.
 The constraint isn't UX — it's a coherence requirement between two
 writers (user, pipeline) racing on the same Zustand store.
 Implementation contract is in
-[`architecture.md → Generation transactions and edit gating`](../architecture.md#generation-transactions-and-edit-gating).
+[`generation-pipeline.md → Transaction lifecycle`](../generation-pipeline.md#transaction-lifecycle).
 
 ### Two pipelines covered
 
@@ -300,9 +300,9 @@ User-origin mutations to: story entries, entities (fields, status,
 state, `injection_mode`), happenings, awareness links, lore,
 threads, branch operations (rollback, switch, branch creation),
 translations, story settings, app settings that feed
-`promptContext`, calendar swap, lead switch, mode switch, narration
-switch, manual `worldTime` correction, backup / export when
-reachable from inside the story.
+`generationContext`, calendar swap, lead switch, mode switch,
+narration switch, manual `worldTime` correction, backup / export
+when reachable from inside the story.
 
 ### What's not gated
 
@@ -375,14 +375,14 @@ navigation. Pack edits (vault is out-of-story) and global-settings
 access naturally route through this modal — no per-feature gate
 needed.
 
-### Background agents
+### Background pipelines
 
-Future background agents (style-review and any agent that splits
-out of chapter-close) declare their gate behavior at their own
-design pass. Declaration interface lives with the implementation
-contract in
-[`architecture.md → Generation transactions and edit gating`](../architecture.md#generation-transactions-and-edit-gating);
-this principle defers all per-agent choices to those passes.
+Future background pipelines (style-review and anything that splits
+out of chapter-close) declare their gate behavior in their Pipeline
+record per the framework's contract; declaration shape and the
+gating mechanism live in
+[`generation-pipeline.md → Concurrency model`](../generation-pipeline.md#concurrency-model).
+This principle defers all per-pipeline choices to those design passes.
 
 ---
 

@@ -6,9 +6,14 @@ implementation, and the open questions tracked across the project.
 
 ## What's here
 
-- **[architecture.md](./architecture.md)** — pipeline, generation
-  context, agent orchestration, retrieval, translation. How code is
-  organized.
+- **[architecture.md](./architecture.md)** — cross-cutting code
+  shape: prompt templates and authoring, settings, agent
+  orchestration overview, translation as a pipeline concern,
+  retrieval phase invariants.
+- **[generation-pipeline.md](./generation-pipeline.md)** — the
+  generation pipeline framework: phases, orchestrator, action layer,
+  event bus, transactions, concurrency model. The shape every
+  concrete pipeline kind plugs into.
 - **[data-model.md](./data-model.md)** — schema, decisions, the
   `entities` / `lore` / `threads` / `happenings` shapes. What's
   stored.

@@ -97,10 +97,11 @@ extends:
 - [`data-model.md → Injection modes`](../data-model.md#injection-modes--unified-enum--structural-invariant)
   — the structural invariant for active+in-scene; the unified enum
   this design renames.
-- [`architecture.md → Generation context and prompt templates`](../architecture.md#generation-context-and-prompt-templates)
+- [`architecture.md → Prompt templates and authoring`](../architecture.md#prompt-templates-and-authoring)
   — the single-context principle and Liquid template model.
 - [`architecture.md → Retrieval / injection phase`](../architecture.md#retrieval--injection-phase)
   — the structural floor and per-mode invariants.
-- [`architecture.md → Generation transactions and edit gating`](../architecture.md#generation-transactions-and-edit-gating)
-  — single-writer invariant and the gate-declaration shape this
-  design's background classifier consumes.
+- [`generation-pipeline.md → Transaction lifecycle`](../generation-pipeline.md#transaction-lifecycle)
+  and [`generation-pipeline.md → Concurrency model`](../generation-pipeline.md#concurrency-model)
+  — single-writer invariant and the gate / concurrency declaration
+  shape this design's background classifier consumes.

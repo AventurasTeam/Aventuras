@@ -1,10 +1,13 @@
 # Periodic classifier contract
 
-A background agent that runs on a configurable cadence (see
+A background pipeline that runs on a configurable cadence (see
 [`cadence.md → classifierCadence`](./cadence.md#user-tunable-knobs))
 and reads the recent prose window not yet covered by piggyback's
 per-turn writes. Its job is populating the structured graph that
-retrieval queries against.
+retrieval queries against. Declares against the framework's Pipeline
+shape per [`generation-pipeline.md`](../generation-pipeline.md); see
+[Background-task framing](#background-task-framing) below for its
+declaration values.
 
 ## What the classifier writes
 
@@ -33,7 +36,7 @@ new happenings, first-introduction entity descriptions, and any
 other write touching an embedded field go through the eager-sync-
 on-write contract specified in
 [`retrieval.md → Compute lifecycle`](./retrieval.md#compute-lifecycle).
-The classifier itself runs as a background agent (see
+The classifier itself runs as a background pipeline (see
 [Background-task framing](#background-task-framing) below), so the
 inline embed cost stays off the user-facing critical path.
 
@@ -83,31 +86,36 @@ once real story data exists; sensible starting ranges (e.g. 0.75 /
 
 ## Background-task framing
 
-The periodic classifier runs as a background agent, not a synchronous
-pipeline phase:
+The periodic classifier runs as a background pipeline — a Pipeline
+declaration in the framework's registry, same shape as per-turn and
+chapter-close but with different concurrency / gating values:
 
-| Field            | Value                                                                                                                |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `gateBehavior`   | `'no-gate'`                                                                                                          |
-| `conflictPolicy` | `'concurrent-allowed'`                                                                                               |
-| `affordance`     | `'pill-only'` — folds into the generation indicator at low priority (see below)                                      |
-| `writeSet`       | happenings, happening_involvements, happening_awareness, entity status flips, first-introduction entity descriptions |
+| Field                           | Value                                                                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `kind`                          | `'periodic-classifier'`                                                                                                  |
+| `gateBehavior`                  | `'no-gate'` — doesn't block user-source writes                                                                           |
+| `concurrencyPolicy`             | `{ blockedBy: ['periodic-classifier', 'chapter-close'] }` — no double passes; blocked from starting during chapter-close |
+| `affordance`                    | `'pill-only'` — folds into the generation indicator at low priority (see below)                                          |
+| Write set (prose, not declared) | happenings, happening_involvements, happening_awareness, entity status flips, first-introduction entity descriptions     |
 
-The single-writer invariant in
-[`architecture.md → Generation transactions and edit gating`](../architecture.md#generation-transactions-and-edit-gating)
-relaxes to **single-writer-per-write-set** in v1. Piggyback's
-write-set and the classifier's write-set are disjoint at the
-row-and-field granularity (see
-[`cadence.md → Concurrency`](./cadence.md#concurrency)).
+Write-set boundaries between the classifier and the piggyback / per-turn
+pipeline are enforced via narrow action functions named for field-set
+scope (see
+[`generation-pipeline.md → Narrow action functions over write-set declarations`](../generation-pipeline.md#narrow-action-functions-over-write-set-declarations)),
+not a typed declaration. The single-writer invariant relaxes to
+**single-writer-per-write-set** in v1; piggyback's write-set and the
+classifier's write-set are disjoint at the row-and-field granularity
+(see [`cadence.md → Concurrency`](./cadence.md#concurrency)).
 
 If the user starts a new turn while the classifier is mid-run, both
-proceed. The classifier holds its own `action_id` for its writes; the
+proceed. The classifier holds its own `actionId` for its writes; the
 user-turn pipeline holds its own. Reverse-replay on rollback peels
 them off independently.
 
-`'abort-self'` was rejected as wasteful — it discards in-flight
-classifier work that doesn't conflict with the new turn's writes
-anyway.
+The classifier's `concurrencyPolicy.yieldsTo` is empty — it does NOT
+abort itself when a foreground pipeline starts. Discarding in-flight
+classifier work that doesn't conflict with the new turn's writes is
+wasteful; the disjoint-write-set property makes coexistence safe.
 
 **Pill priority.** The classifier surfaces on the existing
 generation indicator pill with low priority — user-initiated

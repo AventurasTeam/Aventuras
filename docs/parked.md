@@ -366,16 +366,62 @@ needs to embed user-authored calendar definitions as a sidecar (or
 prompt for substitution on import). Built-in references resolve
 fine since built-ins ship with every install.
 
-#### Background-agent gate declarations
+#### Background-pipeline declarations
 
-[`ui/principles.md → Edit restrictions during in-flight generation`](./ui/principles.md#edit-restrictions-during-in-flight-generation)
-defines a four-field declaration shape (`writeSet`, `gateBehavior`,
-`conflictPolicy`, `affordance`) every future background agent picks
-values for at its own design pass. Style-review is the motivating
-example; any standalone memory-compaction agent that splits out of
-the chapter-close pipeline is another candidate. Each agent's
-design pass picks values with reasoning; the principle doesn't
-prescribe defaults.
+[`generation-pipeline.md → Pipeline declaration`](./generation-pipeline.md#pipeline-declaration)
+defines the Pipeline shape every future background pipeline picks
+values for at its own design pass — `gateBehavior`,
+`concurrencyPolicy`, `affordance`. The periodic classifier is the
+first consumer (see [`memory/classifier.md → Background-task framing`](./memory/classifier.md#background-task-framing));
+future style-review or any agent that splits out of chapter-close is
+another candidate. Each pipeline's design pass picks values with
+reasoning; the framework doesn't prescribe defaults.
+
+#### Smarter mid-pipeline data-error recovery
+
+V1's `callWithRetry` helper retries the SAME prompt up to a budget
+on both provider failures and parse failures (per
+[`generation-pipeline.md → Error, cancel, and retry`](./generation-pipeline.md#error-cancel-and-retry)).
+That's enough for most cases — LLM sampling variance produces
+parseable output on retry surprisingly often. The future direction
+makes retry strategies pluggable:
+
+- Re-prompt with the failed response embedded ("previous response
+  wasn't valid; here's what you sent, please retry following the
+  schema...")
+- Adjust call parameters per retry (lower temperature, system prompt
+  nudge, switch to a sibling model with better structured-output
+  reliability)
+- Per-call-type strategies (classifier parses tolerate looser
+  fallbacks; structured-tool calls need stricter; suggestion
+  emission can ditch failures silently)
+- Cross-attempt context (avoid the same failure mode twice)
+
+Lands when v1 measurement shows where same-prompt retry isn't
+enough. The `callWithRetry` shape doesn't foreclose the extension —
+the retry strategy becomes a typed pluggable argument.
+
+#### Streaming-aware retry / partial-content persistence
+
+V1's streaming resilience is thin: a mid-stream provider error
+returns fatal, reverse-replay runs, orphan placeholder gets dropped,
+user re-prompts. Partial content is lost.
+
+Future directions, materially harder than v1's same-prompt retry:
+
+- **Resume from chunk N.** Some providers expose continuation
+  endpoints; resume from the last received offset rather than
+  re-streaming from scratch.
+- **Accept-partial affordance.** Surface the partial content with
+  a "keep this?" prompt; if accepted, commit as-is and the
+  classifier picks up the broken-off scene normally.
+- **Auto-retry-stream once before fatal.** A single retry attempt
+  before declaring fatal might catch transient provider hiccups
+  without losing all work.
+
+Each option has UX and provider-coupling implications. Lands when
+real user complaints surface; until then, v1's drop-and-re-prompt
+behavior is acceptable.
 
 #### Pack runtimeVariables surface
 
@@ -914,29 +960,41 @@ natural extension if real demand surfaces — would let users fix
 typos or re-canonicalize without delete + re-flip. Defer until
 demand is real.
 
-#### Scoped-gate UI design
+#### Scoped-gate UI design + structural writeSet
 
-[`ui/principles.md → Edit restrictions during in-flight generation`](./ui/principles.md#edit-restrictions-during-in-flight-generation)
+[`generation-pipeline.md → Concurrency model`](./generation-pipeline.md#concurrency-model)
 names `'scoped-gate'` as one of three valid `gateBehavior` values —
-gating only the agent's `writeSet` rather than the entire user
-surface. Surface-level affordance for the partial-gate case
-(which controls disable, what tooltip copy says, how the user
-disambiguates "this control is gated by agent X" from "this
-control is gated by per-turn pipeline") is unspec'd.
+gating only the pipeline's writeSet rather than the entire user
+surface. v1 defers both the value itself AND the structural
+`writeSet` field on Pipeline declarations; pipelines today claim
+disjoint write sets via prose + narrow-action-function naming, not
+typed declarations.
 
-Lands when the first agent declares `gateBehavior: 'scoped-gate'`.
+When scoped-gate lands, three things ship together:
+
+- The `writeSet: readonly ActionKind[]` field on Pipeline (currently
+  absent — see
+  [`generation-pipeline.md → Narrow action functions over write-set declarations`](./generation-pipeline.md#narrow-action-functions-over-write-set-declarations))
+- The orchestrator's gate derivation reads writeSet and gates user
+  actions selectively (instead of the binary blocked / not-blocked)
+- Surface-level affordance for the partial-gate case (which controls
+  disable, what tooltip copy says, how the user disambiguates "this
+  control is gated by pipeline X" from "this control is gated by
+  per-turn pipeline")
+
+Lands when the first pipeline declares `gateBehavior: 'scoped-gate'`.
 Style-review's motivating use is `'no-gate'`, so this followup
 isn't blocking style-review.
 
 #### Scoped-gate read-tracking strategy
 
-`readSet` is intentionally absent from the background-agent
-declaration shape because read-set is template-determined,
-pack-editable, and dynamic — not code-declarable
+`readSet` is intentionally absent from the Pipeline declaration
+shape because read-set is template-determined, pack-editable, and
+dynamic — not code-declarable
 (per [`architecture.md → The single-context principle`](./architecture.md#the-single-context-principle)).
-A `'scoped-gate'` agent therefore prevents user mutations to its
-`writeSet` but not to its (unbound) read-set; user edits during
-the agent's run could create torn reads.
+A `'scoped-gate'` pipeline therefore prevents user mutations to its
+writeSet but not to its (unbound) read-set; user edits during the
+pipeline's run could create torn reads.
 
 Two candidate strategies for when scoped-gate's design pass
 addresses this:
@@ -947,38 +1005,55 @@ addresses this:
   changes (pack edit, app update). Adds infra cost; doesn't catch
   filter-internal slicing but bounds the read surface usefully.
 - **Hard-gate fallback for unbound templates.** Only allow
-  `'scoped-gate'` when the agent's template + context group are
+  `'scoped-gate'` when the pipeline's template + context group are
   simple enough to bound; everything else uses `'hard-gate'`.
 
 Decision lands at scoped-gate's own design pass.
 
-#### Concurrent pipeline / agent coordination — first consumer landed
+#### Concurrent pipeline coordination — first consumer landed
 
 The single-writer invariant in
 [`ui/principles.md → Edit restrictions during in-flight generation`](./ui/principles.md#edit-restrictions-during-in-flight-generation)
 relaxes to **single-writer-per-write-set** with the periodic
-classifier landing as the first `'concurrent-allowed'` consumer of
-the gate-declaration shape. See
-[`docs/memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency)
+classifier landing as the first background pipeline whose
+`concurrencyPolicy` allows coexistence with foreground pipelines.
+See
+[`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency)
 and
-[`docs/memory/classifier.md`](./memory/classifier.md).
+[`memory/classifier.md`](./memory/classifier.md).
 
-The piggyback agent and the periodic classifier write to disjoint
+The piggyback path and the periodic classifier write to disjoint
 field sets; per-field UPDATEs (no row-level read-modify-write)
 keep their writes independent at the SQLite level. Chapter-close
 holds the gate for its own duration and locks out the periodic
-classifier (one-direction lock).
+classifier via the classifier's `concurrencyPolicy.blockedBy`
+(one-direction lock).
 
 What stays parked:
 
-- **Two future background agents simultaneously** (style-review +
+- **Two future background pipelines simultaneously** (style-review +
   standalone memory-compaction or similar). The cascading
-  `conflictPolicy` decisions when multiple non-pipeline agents
-  overlap aren't covered by the periodic classifier alone. Owned by
-  the first design pass that introduces a second concurrent agent.
-- **Style-review specifically.** Mentioned in the gate-declaration
-  table as a future consumer; its `writeSet` / `gateBehavior` /
-  `conflictPolicy` get picked when style-review is designed.
+  `concurrencyPolicy` interactions when multiple background
+  pipelines overlap aren't covered by the periodic classifier alone.
+  Owned by the first design pass that introduces a second concurrent
+  background pipeline.
+- **Style-review specifically.** Mentioned in
+  [`generation-pipeline.md`](./generation-pipeline.md) as a future
+  consumer; its `gateBehavior` / `concurrencyPolicy` / phase list
+  get picked when style-review is designed.
+
+#### Pack-defined pipeline kinds
+
+`PipelineAction` is a closed TypeScript union (see
+[`generation-pipeline.md → Action-layer integration`](./generation-pipeline.md#action-layer-integration)).
+If packs ever ship code (today they're templates / macros only),
+pack-defined pipeline kinds could declare new phases AND new action
+kinds — which means the action layer's typed dispatch table can't
+stay closed. Lands when (a) packs gain a code-shipping surface and
+(b) a real consumer wants pack-defined pipeline behavior. Each is a
+substantial design pass on its own; this entry exists so the
+generation-pipeline framework's closed-PipelineAction-union choice
+is revisitable.
 
 #### Backup / export consistency
 

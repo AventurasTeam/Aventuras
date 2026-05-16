@@ -511,27 +511,37 @@ deleted, etc.
 
 ### Crash recovery for in-flight transactions
 
-A crash mid-transaction leaves a partially-applied `action_id` in
-the delta log: some deltas committed, the transaction never reached
-commit-tx. On next app boot, recovery must detect the in-flight
-`action_id` and replay-in-reverse to restore pre-transaction state
-— the same reverse-replay an orchestrator-driven abort uses, just
+A crash mid-transaction leaves a partially-applied `actionId` in the
+delta log: some deltas committed, the transaction never reached
+commit. On next app boot, recovery must detect the in-flight
+`actionId` and replay-in-reverse to restore pre-transaction state —
+the same reverse-replay an orchestrator-driven abort uses, just
 triggered by recovery on startup rather than at runtime.
 
+The framework contributes the **detection mechanism**: a
+`pipeline_runs` marker table written at `beginRun` / `commitRun` /
+`abortRun`, with rows whose `finished_at IS NULL` being the
+recovery target set (per
+[`generation-pipeline.md → Crash recovery`](./generation-pipeline.md#crash-recovery-via-pipeline_runs-marker-table)).
 [`ui/principles.md → Edit restrictions during in-flight generation`](./ui/principles.md#edit-restrictions-during-in-flight-generation)
-assumes this hook exists; it doesn't ship it. Belongs alongside
-startup / migration flow design (per
-[`architecture.md → What this doc does not yet cover`](./architecture.md#what-this-doc-does-not-yet-cover)).
+assumes the recovery hook exists; this followup is the startup-side
+wiring that consumes the marker table and runs `reverseReplayDeltas`
+per orphaned row. Belongs alongside startup / migration flow design
+(per [`architecture.md → What this doc does not yet cover`](./architecture.md#what-this-doc-does-not-yet-cover)).
 
 Open sub-questions:
 
-- How is "in-flight" detected — a flag on a `transactions` table, a
-  sentinel column on the latest delta, or scanning for an `action_id`
-  whose deltas form an unfinished transaction?
 - User-facing surface — silent recovery, or a "your last action was
   reverted on restart" toast?
 - Interaction with chained transactions (per-turn → chapter-close):
-  does recovery treat them as one unit or two?
+  each run has its own marker row, so recovery treats them as two
+  units. Confirm desired UX is "both runs reversed independently."
+- **Final-delta-to-commit window tightening.** The v1 marker scheme
+  has a small data-loss window between the final action's SQLite
+  commit and the `pipeline_runs` finish marker UPDATE — the run
+  effectively succeeded but the marker says in-flight, so recovery
+  reverses just-finished work. Tighten by coupling them in one txn
+  if measurement shows it bites real users.
 
 ### Settings screens — adopt SwitchRow pattern
 
@@ -682,11 +692,12 @@ compounds land.
 
 ### GenerationStatusPill
 
-- **Pipeline orchestrator wiring.** Real `activePhase` source from
+- **Pipeline orchestrator wiring.** Real `currentPhase` source from
   the per-turn + chapter-close pipelines per
-  [`architecture.md`](./architecture.md). The compound takes
-  `activePhase` as a prop; consumers wire it from the orchestrator
-  state.
+  [`generation-pipeline.md → Orchestrator topology`](./generation-pipeline.md#orchestrator-topology).
+  The compound takes `currentPhase` as a prop; consumers wire it from
+  the orchestrator state via a derived selector on `txState` (foreground-
+  first heuristic per the new doc).
 - **Memory error observation.** Surface `embedder-offline` from
   staleness detection per
   [`memory/model-management.md → Staleness UI`](./memory/model-management.md#staleness-ui),
@@ -700,3 +711,36 @@ compounds land.
   collision-resolve work; now unblocked since `Tag tone="warning"`
   is available. Sits beside (not inside) the generation pill — its
   own slot on the top bar.
+
+### Translation graceful degradation
+
+A translation phase fatal failure currently aborts the entire
+per-turn pipeline (per the framework's "fatal phase → transaction
+abort" contract). User loses their AI response over a translation
+provider hiccup. Harsh — the narrative is the primary user value;
+translation is a display-time bonus.
+
+The fix: translation phase declares its failures as recoverable at
+the phase level (the narrative commits, the translation rows just
+don't land for this turn). On next render of an entity / entry, the
+translation lookup falls back to source language; the next opportunity
+to re-translate (e.g., user edits the entity, or a deliberate
+"re-translate this story" action) covers the gap.
+
+Open sub-questions:
+
+- **Where the soft-fail lives.** Inside the translation phase itself
+  (catch, log a recoverable_error, return completed with empty
+  `translationResult`) or via a wrapper that converts fatal-from-
+  translation into recoverable? Probably former — translation phase
+  knows its own degradation semantics.
+- **Re-translation triggers.** Render-time lazy retry (each missing
+  translation kicks off a one-off call) vs explicit user action
+  ("retranslate this story"). Render-time lazy gets expensive fast;
+  explicit user action is safer but loses the magic.
+- **UX surface for failures.** Toast? Silent? Status pill flag for
+  "some translations failed this turn"? Probably silent + diagnostic
+  in dev mode.
+
+Lands when translation phase is built. The framework already supports
+the degradation pattern; this followup pins the policy.

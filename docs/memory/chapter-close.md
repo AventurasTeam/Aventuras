@@ -53,14 +53,14 @@ entries in the open region. Bounded by the cadence overlap window —
 typically a few turns of un-classified content, fast.
 
 **Concurrency.** The background classifier's
-`'concurrent-allowed'` policy is **lifted to "blocked while
-chapter-close is in flight"** for the duration of phases 0-4.
-Chapter-close holds the gate per
-[`architecture.md → Generation transactions and edit gating`](../architecture.md#generation-transactions-and-edit-gating);
-the background classifier does not start a new pass while the gate
-is held. One-direction lock — chapter-close blocks the background
-classifier; piggyback's per-turn writes can't be in flight because
-chapter-close runs between turns by construction.
+`concurrencyPolicy.blockedBy` includes `'chapter-close'` — it cannot
+start a new pass for the duration of phases 0-4. Chapter-close holds
+the user-edit gate via `gateBehavior: 'hard-gate'` per
+[`generation-pipeline.md → Concurrency model`](../generation-pipeline.md#concurrency-model);
+user edits and new classifier starts are both blocked. One-direction
+lock — chapter-close blocks the background classifier; piggyback's
+per-turn writes can't be in flight because chapter-close runs between
+turns by construction.
 
 ## Phase 1 — boundary selection
 
@@ -354,7 +354,7 @@ classifier should have caught but didn't.
 ## Failure modes and atomic rollback
 
 The chapter-close transaction holds the gate per
-[`architecture.md → Generation transactions and edit gating`](../architecture.md#generation-transactions-and-edit-gating).
+[`generation-pipeline.md → Transaction lifecycle`](../generation-pipeline.md#transaction-lifecycle).
 User edits are blocked; pipeline phase failures cascade as follows:
 
 | Phase                       | Failure mode                                                                                                                                                            |

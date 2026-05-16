@@ -14,8 +14,12 @@ vars, no BaaS.
 - [`docs/tech-stack.md`](./docs/tech-stack.md) — full stack +
   rationale.
 - [`docs/data-model.md`](./docs/data-model.md) — schema + decisions.
-- [`docs/architecture.md`](./docs/architecture.md) — pipeline,
-  state, retrieval, translation.
+- [`docs/architecture.md`](./docs/architecture.md) — prompt
+  templates and authoring, settings, agent orchestration overview,
+  translation, retrieval invariants.
+- [`docs/generation-pipeline.md`](./docs/generation-pipeline.md) —
+  pipeline framework: phases, orchestrator, action layer, event bus,
+  transactions, concurrency model.
 - [`docs/memory/`](./docs/memory/README.md) — memory pipeline:
   cadence layers, piggyback + classifier + chapter-close contracts,
   retrieval (embeddings, queries, ranker, pinning, budgets), edge

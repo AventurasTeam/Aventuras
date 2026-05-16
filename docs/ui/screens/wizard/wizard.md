@@ -758,7 +758,8 @@ One SQLite transaction, all or none:
    metadata. `metadata.model = <wizard-assist profile model>` if
    AI-generated; else `null`. Story entries themselves aren't
    embedded; the opening is exempt from the classifier pass per
-   [`architecture.md → Classifier does NOT run on the opening entry`](../../../architecture.md#agent-orchestration).
+   [`architecture.md → Agent orchestration`](../../../architecture.md#agent-orchestration)
+   ("Classifier does NOT run on the opening entry").
 6. **No deltas written.** Per
    [baseline doc decision 10](../../../explorations/2026-04-29-story-definition-baseline.md),
    wizard creation is delta-log-exempt.
