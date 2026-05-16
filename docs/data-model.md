@@ -1551,6 +1551,21 @@ non-decreasing" claim splits by source:
   consumers read whatever value is stored and tolerate any
   non-negative `worldTime`.
 
+**User-action `worldTime` initialization.** The classifier doesn't
+run on `user_action` entries (see
+[`architecture.md → Classifier contract — metadata fields`](./architecture.md#classifier-contract--metadata-fields)).
+The action layer writes each new user_action with `metadata.worldTime`
+copied from the immediately preceding entry's `worldTime` —
+same-transaction inherit at write time, not a render-time derivation.
+User-actions consequently render the world-time footer (same label as
+the preceding entry) and accept manual edits on the same terms as AI
+and opening entries (see
+[`entry-card.md → World-time footer`](./ui/patterns/entry-card.md#world-time-footer)).
+The classifier's "delta added to prev `worldTime`" rule on the next
+AI reply picks up the inherited — or user-edited — base naturally,
+which is what enables a future user-triggered time-advance affordance
+without a structural exception.
+
 `stories.definition.worldTimeOrigin: TierTuple` — a `Record<string,
 number>` keyed by the active calendar's tier names — anchors
 `worldTime = 0` to a display moment. Earth's origin is `{ year,

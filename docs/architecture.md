@@ -398,6 +398,15 @@ populates the new entry's metadata:
   [`data-model.md → In-world time tracking`](./data-model.md#in-world-time-tracking)
   for the limitation.
 
+**User-action entries inherit at the action layer.** The classifier
+doesn't run on `user_action` entries; the action layer initializes
+each new user_action's `metadata.worldTime` from the immediately
+preceding entry's value at write time (see
+[`data-model.md → In-world time tracking`](./data-model.md#in-world-time-tracking)).
+The classifier's "delta added to prev `worldTime`" rule on the
+following AI reply picks up the inherited — or user-edited — base
+naturally; no walk-back logic in the delta-base lookup.
+
 ### Opening-entry classifier exception
 
 The classifier does NOT run on the opening entry (`kind='opening'`).

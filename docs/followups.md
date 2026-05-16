@@ -27,22 +27,6 @@ validation is next touched. Promoted from implicit assumption to
 explicit hard contract by
 [`explorations/2026-05-17-manual-worldtime-correction.md`](./explorations/2026-05-17-manual-worldtime-correction.md).
 
-### User-entry worldTime contract
-
-The classifier doesn't run on `user_action` entries, so their
-`metadata.worldTime` is never authored by the pipeline. Yet
-[`entry-card.md → World-time footer`](./ui/patterns/entry-card.md#world-time-footer)'s
-per-kind structure table lists the footer as "shown" on user
-entries — the rendering rule "hidden when `worldTimeLabel`
-undefined" silently handles the empty case, but the contract is
-not explicit. Open: is user-entry `worldTime` always undefined,
-does it inherit from the preceding AI entry, or will it eventually
-get classifier-tagged via a pass over user actions? The manual
-edit affordance
-([per-entry world-time footer click](./ui/screens/reader-composer/reader-composer.md#per-entry-world-time-footer))
-gates on `worldTime` presence regardless and isn't blocked by this
-ambiguity. Lands before reader-composer integration ships.
-
 ### Memory architecture — design landed
 
 The memory pipeline (cadence stratification, retrieval ranker,

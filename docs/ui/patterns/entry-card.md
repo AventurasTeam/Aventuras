@@ -175,9 +175,10 @@ on its own; the behavior is owned by the parent ScrollView.
 
 **Click-to-edit (interactive when editable).** The footer becomes
 interactive when the host supplies `onEditTime` + `worldTimeRaw` —
-in practice on AI and opening entries (classifier-authored or
-wizard-authored worldTime). Hover-brighten + cursor pointer signal
-the affordance. Click opens an edit overlay anchored to the footer:
+in practice on AI, opening, and user entries (classifier-authored,
+wizard-authored, or inherited-at-write `worldTime`; see
+[`data-model.md → In-world time tracking`](../../data-model.md#in-world-time-tracking)).
+Hover-brighten + cursor pointer signal the affordance. Click opens an edit overlay anchored to the footer:
 **Popover on desktop, Sheet on phone** (per
 [`patterns/overlays.md`](./overlays.md) and the
 [mobile decision tree](../foundations/mobile/layout.md)). Tablet
