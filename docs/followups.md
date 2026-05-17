@@ -60,59 +60,6 @@ deferred as a UI concern (independent of memory design) — until
 that UI lands, classifier writes description only at first
 introduction per the existing authorship contract.
 
-### undo_payload encoding for nested fields
-
-[`deltas.undo_payload`](./data-model.md#diagram) is described as
-"partial diff of changed fields with their PRE-change values"
-(per
-[Delta storage economy](./data-model.md#entry-mutability--rollback)),
-but the encoding for **nested field paths** is not pinned. A
-touch to `entity.state.traits` could be recorded as
-`{ state: { traits: [...] } }`, `{ "state.traits": [...] }`, or
-`{ state: <whole pre-state object> }`. The choice affects both
-the rollback merge function (applies `undo_payload` to a SQLite
-row) and the
-[delta diff cache walk](./architecture.md#delta-history-diff-resolution)
-(applies the same payload to an in-memory state object). Both
-paths depend on a shared, unspecified contract today.
-
-Resolution lands when the write layer is next touched —
-naturally alongside the
-[classifier delta validation](#classifier-delta-validation)
-Zod schema work or when classifier output validation needs the
-encoding to commit to a shape. Until then, both rollback and
-the diff cache work against the implicit "whatever the writer
-produces" contract.
-
-### Composite index — deltas (branch_id, target_id, log_position)
-
-The
-[delta diff cache walk](./architecture.md#delta-history-diff-resolution)
-issues a chain query per populated delta:
-
-```sql
-SELECT * FROM deltas
-WHERE branch_id = ?
-  AND target_table = ?
-  AND target_id = ?
-  AND log_position >= ?
-ORDER BY log_position DESC
-```
-
-Without a composite index covering `(branch_id, target_id,
-log_position)`, every populate scans the `deltas` table —
-degrading the cache from sub-100 ms hidden cost to noticeable
-latency on any non-trivial story (~5 MB deltas per
-[the storage ceiling estimate](./data-model.md#entry-mutability--rollback)).
-The index is mandatory for the cache to perform, not a
-nice-to-have.
-
-Lands either as a one-line addition to `data-model.md`'s deltas
-schema declaration or in whichever migration introduces SQLite
-indexes for `deltas` (whichever convention the project ends up
-using; not yet pinned). Either way, must land before history
-surfaces go interactive in v1.
-
 ### Classifier prompt — character-to-character relationship extraction
 
 [`character_relationships`](./data-model.md#character-to-character-relationships)

@@ -259,9 +259,11 @@ erDiagram
         text target_table "story_entries | entities | lore | threads | happenings | happening_involvements | happening_awareness | character_relationships | chapters | entry_assets | translations | branch_era_flips"
         text target_id "id in target_table"
         text op "create | update | delete"
-        json undo_payload "op=create: null; op=update: partial diff of changed fields with their PRE-change values; op=delete: full row to re-insert"
+        json undo_payload "op=create: null; op=update: nested-partial diff of changed paths with their PRE-change values per Entry mutability & rollback; op=delete: full row to re-insert"
+        integer encoding_version "writer-stamped encoding-contract version; defaults to 1 at v1. Reserved for future apply-time dispatch when delta-logged column shapes or encoding rules change. See Entry mutability & rollback"
         integer created_at
     }
+    %% INDEX deltas_chain_idx (branch_id, target_id, log_position) — chain-walk index for the diff cache walk and future rollback / CTRL-Z chain reads. See architecture.md → Delta history diff resolution. target_table excluded: the kind-prefixed UUID invariant makes target_id globally unique, so target_table stays in the query as a defensive post-filter rather than an index discriminator.
 
     vault_calendars {
         text id PK "UUID; user-authored calendars only — built-ins live in code/repo JSON loaded at boot"
@@ -1808,11 +1810,67 @@ are the only narrative-state mutations that bypass the log.
 **Delta storage economy.** Each delta stores only **undo** information in
 a single `undo_payload` column — no redundant "after" snapshot, since the
 live row already holds that. For `op=create` the payload is null (undo =
-delete target_id). For `op=update` it's a partial diff of only the fields
-that changed, with their pre-change values. For `op=delete` it's the full
-row JSON (needed to re-insert). This collapses storage by ~6-7x compared
-to storing full before+after snapshots, and prevents large state fields
-like portraits from polluting every unrelated update.
+delete target_id). For `op=update` it's a nested-partial diff of only the
+paths that changed, with their pre-change values (see encoding rule below).
+For `op=delete` it's the full row JSON (needed to re-insert). This
+collapses storage by ~6-7x compared to storing full before+after
+snapshots, and prevents large state fields like portraits from polluting
+every unrelated update.
+
+**`op=update` encoding rule.** The `undo_payload` mirrors the row's
+column structure: top-level keys are column names, values are the
+pre-change values of those columns. For nested-object JSON columns
+(`entities.state`, `story_entries.metadata`), the value is itself a
+nested partial populated only for changed sub-paths — recursive, so
+nested objects within nested objects follow the same rule. Flat-array
+JSON columns (`tags`, `keywords`) carry the full pre-change array
+(arrays go whole; partial encoding inside arrays would re-introduce
+absence-sentinel ambiguity at index granularity for no storage win).
+
+**The `null`-as-sentinel rule.** A `null` value in `undo_payload` is
+overloaded across three Zod node types, schema-discriminated at apply
+time:
+
+- **At a nullable scalar or nullable-object leaf** (e.g.
+  `metadata.currentLocationId: string | null`,
+  `state.lastSeenAt: {...} | null`) — `null` is a value to restore.
+- **At a record-typed dynamic-keyed leaf** (e.g.
+  `state.stackables: Record<string, number>`) — `null` means "this
+  sub-key was absent pre-change; delete it on apply."
+- **At an optional fixed-shape leaf** (e.g. `state.voice?: string`,
+  `state.visual.distinguishing?: string[]`) — `null` means "this key
+  was absent pre-change; delete it on apply."
+
+**Nullable-object transitions** have three cases. Going from
+non-null to non-null is the standard partial-diff case. Going from
+`null → non-null`, the `undo_payload` value is `null` (restore the
+null pre-state, ignore the new structure). Going from
+`non-null → null`, the value is the **full** pre-non-null object
+(there's no current shape to merge against on rollback, so the diff
+is the entire pre-state).
+
+**Hard schema invariants** the encoding's correctness depends on.
+Currently met across all delta-logged tables; any future Zod schema
+landing for a delta-logged column must preserve them:
+
+- Record-typed sub-fields must have non-nullable value types
+  (preserves the `null = delete-sub-key` unambiguity).
+- Sub-fields must not stack `z.optional()` over `z.nullable()` (the
+  stacked case would make a `null` payload value ambiguous between
+  "key was absent" and "value was null").
+
+**`encoding_version` stamp.** Every delta carries an `encoding_version`
+column, stamped at `1` by every writer at v1 and ignored by every
+reader at v1 (the apply function always applies v1 semantics). The
+column is reserved so a future migration that needs to change
+encoding rules — column rename, sub-field type change, encoding rule
+revision — can dispatch per-delta without retrofitting a version
+into existing rows. Cost is ~4 bytes per delta; the ~200 KB per large
+story at the storage ceiling is negligible.
+
+Full encoding contract, rejected alternatives, and apply-time
+semantics in
+[`explorations/2026-05-17-deltas-substrate.md`](./explorations/2026-05-17-deltas-substrate.md).
 
 **Delta scope: narrative state only.** Deltas cover the core narrative
 tables (`story_entries` row-level changes, `entities` narrative fields,

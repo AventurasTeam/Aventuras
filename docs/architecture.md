@@ -626,17 +626,29 @@ seeds the walk. For each `op=update` delta on the path:
 2. `old_partial = delta.undo_payload`.
 3. Cache `{ new: new_partial, old: old_partial }` keyed by
    `delta.id`.
-4. `state = merge(state, delta.undo_payload)` to step backward
-   one delta.
+4. `state = applyUndoPayload(state, delta.undo_payload)` to step
+   backward one delta.
 
-The `merge` step matches the semantics rollback already uses to
-apply `undo_payload` to a row — same observable behavior on the
-same input, not necessarily the same function. The exact
-encoding of nested-field changes inside `undo_payload` is a
-pre-existing data-model gap tracked under
-[followups](./followups.md#undo_payload-encoding-for-nested-fields);
-the cache walk and rollback both depend on whatever encoding the
-write layer pins.
+`pick` is column-key-only at the top level: `keys(delta.undo_payload)`
+returns column names (`['state', 'description']`), not nested paths,
+so `new.<column>` ends up being the whole live column value while
+`old.<column>` is the partial pre-change column. The asymmetry is
+load-bearing for the renderer (see below). The `applyUndoPayload`
+function is the same primitive rollback and CTRL-Z use to apply an
+`undo_payload` to a row — the encoding contract and apply semantics
+are pinned in
+[`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback).
+
+**Renderer iteration rule.** Consumers rendering rich diff prose
+from a cache entry must iterate `keys(old.<column>)` and look up
+corresponding paths in `new.<column>` — not the reverse. Walking
+`keys(new.<column>)` would emit spurious "changed" markers for
+every sub-field present in current state but absent in the partial
+pre-state. For a delta whose `undo_payload` is
+`{state: {traits: ["brave"]}}` against a current row where
+`state = {traits: ["brave", "former soldier"], drives: [...], voice: "low"}`,
+the renderer reads `keys(old.state)` → `["traits"]` and emits
+`Added "former soldier"` without touching `drives` or `voice`.
 
 `op=create` and `op=delete` never go through the cache —
 [`DeltaLogRow`](./ui/patterns/delta-log-row.md#summary) renders
@@ -666,12 +678,15 @@ design. `delta.id` is a globally-unique kind-prefixed UUID
 so cross-story and cross-branch sharing in the same cache is
 safe.
 
-The walk's chain query relies on a composite index
-`deltas (branch_id, target_id, log_position)` for acceptable
-performance on active stories — tracked under
-[followups](./followups.md#composite-index--deltas-branch_id-target_id-log_position).
-Without the index, every populate degrades to a `deltas`-wide
-scan.
+The walk's chain query relies on the
+[`deltas_chain_idx` composite index](./data-model.md#diagram)
+`(branch_id, target_id, log_position)` for acceptable performance
+on active stories. Without it, every populate degrades to a
+`deltas`-wide scan. `target_table` stays in the query as a
+defensive post-filter, not as an index column — the kind-prefixed
+UUID invariant ([`data-model.md → ID shape`](./data-model.md#id-shape--kind-prefixed-uuids-throughout))
+makes `target_id` globally unique, so the three-column form is
+strictly sufficient.
 
 ### Consumer flow
 
