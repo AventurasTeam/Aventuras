@@ -314,40 +314,6 @@ pass: orphan handling on import, soft-warn vs hard-block tradeoffs,
 what happens to `default_provider_id` if the referenced provider is
 deleted, etc.
 
-### CollisionResolveDialog
-
-- **Real DB-write drivers per resolution path.** Merge / Rename /
-  Keep drivers writing entities + happening_awareness +
-  happening_involvements + translations deltas under a single
-  `action_id`. World consumer (`app/(story)/world/...` route)
-  wires these. Dialog ships with stub drivers in stories only.
-- **Phone-tier prose clamp on merge body.** 3-line clamp +
-  tap-to-expand on long descriptions per
-  [`world.md → Merge`](./ui/screens/world/world.md#merge). Stories
-  cover desktop wrap; phone tier deferred to v1 mobile pass.
-
-### GenerationStatusPill
-
-- **Pipeline orchestrator wiring.** Real `currentPhase` source from
-  the per-turn + chapter-close pipelines per
-  [`generation-pipeline.md → Orchestrator topology`](./generation-pipeline.md#orchestrator-topology).
-  The compound takes `currentPhase` as a prop; consumers wire it from
-  the orchestrator state via a derived selector on `txState` (foreground-
-  first heuristic per the new doc).
-- **Memory error observation.** Surface `embedder-offline` from
-  staleness detection per
-  [`memory/model-management.md → Staleness UI`](./memory/model-management.md#staleness-ui),
-  `classifier-offline` from failed-persistent classifier state per
-  [`memory/classifier.md → Pill priority`](./memory/classifier.md#background-task-framing).
-  Consumer collapses simultaneous errors to one (embedder > classifier).
-- **Top-bar consumer wiring.** Render the pill on Reader, World,
-  Plot, Story Settings, Chapter Timeline per
-  [`principles.md → Universal in-story chrome`](./ui/principles.md#universal-in-story-chrome).
-- **World top-bar `⚠ N need review` pill.** Deferred from
-  collision-resolve work; now unblocked since `Tag tone="warning"`
-  is available. Sits beside (not inside) the generation pill — its
-  own slot on the top bar.
-
 ### Translation graceful degradation
 
 A translation phase fatal failure currently aborts the entire

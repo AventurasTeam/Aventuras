@@ -377,7 +377,7 @@ ships and the first in-story screen wires it.
 ### Multi-pill composition in `statusSlot`
 
 The
-[GenerationStatusPill followup](../followups.md#generationstatuspill)
+[GenerationStatusPill followup](../ui/patterns/generation-status-pill.md#open-items)
 already names a second pill — `⚠ N need review` for World — that
 sits beside the generation pill. With statusSlot as a single
 ReactNode, the consumer composes both pills in a flex-row before
@@ -435,7 +435,7 @@ ReactNode — but every DetailPane consumer will need it.
 No new entries from this design pass (all open questions either
 fold into existing followups or get answered at first-consumer
 implementation). The
-[GenerationStatusPill followup](../followups.md#generationstatuspill)
+[GenerationStatusPill followup](../ui/patterns/generation-status-pill.md#open-items)
 already covers the World review pill case that statusSlot needs to
 handle.
 

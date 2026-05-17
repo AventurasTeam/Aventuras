@@ -115,7 +115,8 @@ controls, the cluster mutually aligns at xs per the
 API (all orthogonal):
 
 - `removable?: boolean` + `onRemove?: () => void` — renders inline × button after the label. The × is its own touch target (44px floor on phone per [`touch.md`](../foundations/mobile/touch.md)).
-- `tone?: 'default' | 'soft'` — `soft` adds `bg-region` background tint (entity-ref usage). Default `default` (border only).
+- `tone?: 'default' | 'soft' | 'success' | 'warning' | 'danger' | 'accent'` — see [tone vocabulary](#tag--tone-vocabulary) below.
+- `leading?: React.ReactNode` — optional element rendered before the label, separated by the existing `gap-1`. Stays inside the `TextClassContext` so child text colors continue to cascade. Used by [`GenerationStatusPill`](./generation-status-pill.md) to inject a Spinner during active phases.
 - `dashed?: boolean` — solid border → dashed border. Used for **standalone add-affordance** in pre-existing chip rows ("+ relationship" on entity panes, quick-add UI in chip-only contexts). **Not** the right shape for tag-field entry — that pattern lives in [`forms.md → TagInput pattern`](./forms.md#taginput-pattern), which composes Tag + Input into a single tokenized-input surface. Mutually-exclusive with `removable` in practice (add vs. remove are different use cases).
 - `onPress?: () => void` — optional. Sets `role="button"` when present.
 - `disabled?: boolean` — `opacity-50`.
@@ -124,10 +125,22 @@ Visual contract:
 
 - `border-radius: var(--radius-full)` (9999px).
 - `px-2.5 py-0.5`, `text-xs` (no `font-medium`; tags are content, not chrome).
-- Default tone: `border border-border-strong text-fg-muted bg-bg-base`.
-- Soft tone: `border border-border-strong text-fg-muted bg-bg-region`.
+- All tones use the same geometry — only color tokens differ. No tone changes padding or radius.
 - Dashed: `border-dashed`.
 - Removable × button: small `text-fg-faint`, hover `text-fg-primary`, separate Pressable for dedicated touch target.
+
+### Tag — tone vocabulary
+
+| Tone      | Tokens                                                             | Row + chrome uses                                     |
+| --------- | ------------------------------------------------------------------ | ----------------------------------------------------- |
+| `default` | `border-border-strong text-fg-muted bg-bg-base`                    | active entity row, Active thread, neutral             |
+| `soft`    | `border-border-strong text-fg-muted bg-bg-region`                  | inline entity refs, tag chips                         |
+| `success` | translucent success tint + colored text and border                 | staged entity, Resolved thread                        |
+| `warning` | `bg-warning` (12% opacity overlay) + `border-warning text-warning` | retired entity, Pending thread, **status-pill error** |
+| `danger`  | translucent danger tint + colored text and border                  | Failed thread                                         |
+| `accent`  | translucent accent tint + colored text and border                  | status-pill **active phase** (paired with `leading`)  |
+
+The semantic tones (`success` / `warning` / `danger` / `accent`) mirror the project's overlay-tint pattern established in [`save-bar`](../../../components/compounds/save-bar.tsx). The active gen pill pairs `tone="accent"` with `leading={<Spinner size="sm" />}`; the error pill uses `tone="warning"` with no leading.
 
 ## Implementation
 

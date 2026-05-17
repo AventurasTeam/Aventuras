@@ -78,3 +78,14 @@ The split heuristic + when-to-add rules live in
   Onboarding · Step 4, App Settings · Embedding models · Add
   model, and Story Settings · Switch embedder. Resolves with
   `installed | declined | cancelled | error(reason)` to the host.
+- [`collision-resolve.md`](./collision-resolve.md) — co-designed
+  `CollisionListRow` (warn-tinted below-row strip) and
+  `CollisionResolveDialog` (three-mode resolution modal:
+  Merge / Rename / Keep as distinct). Surfaces and clears the
+  `name_collision_flag` on entity rows.
+- [`generation-status-pill.md`](./generation-status-pill.md) —
+  universal in-story top-bar pill surfacing active pipeline phase
+  (with click-to-cancel popover) or sticky memory error
+  (tap-to-route). Consumes Tag with the accent + warning tones;
+  owns the `active > error > hidden` priority machine and the
+  phase / error → copy mapping.
