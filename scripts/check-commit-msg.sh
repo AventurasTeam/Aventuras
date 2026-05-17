@@ -6,7 +6,7 @@
 set -eu
 
 msgfile="${1:?usage: check-commit-msg.sh <commit-msg-file>}"
-MAX_BODY_LINES=20
+MAX_BODY_LINES=6
 
 first_line=$(head -n1 "$msgfile" 2>/dev/null || true)
 case "$first_line" in
