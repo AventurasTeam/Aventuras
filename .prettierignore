@@ -12,3 +12,4 @@ pnpm-lock.yaml
 
 # Hand-authored low-fi wireframes — intentionally not prettier-formatted
 docs/**/*.html
+scripts/poc-embedder/
