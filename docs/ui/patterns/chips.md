@@ -34,6 +34,11 @@ Used by:
 - [Story Settings](../screens/story-settings/story-settings.md) — story tags (Tag).
 - [Vault calendars](../screens/vault/calendars/calendars.md) —
   filter chips (after wireframe reframe).
+- [App Settings](../screens/app-settings/app-settings.md) — warning-
+  toned Tag as broken-reference indicator on Profiles / Default
+  models / Agents (Assignments) rows when the row's provider /
+  profile reference is dangling per the
+  [deletion-semantics design](../../data-model.md#app-settings-storage).
 
 ## Chip — square, toggleable
 

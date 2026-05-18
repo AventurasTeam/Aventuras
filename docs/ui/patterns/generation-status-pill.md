@@ -36,7 +36,12 @@ and must stay in lockstep across consumers:
 ```ts
 type GenerationPhase = 'reasoning' | 'generating-narrative' | 'classifying' | 'closing-chapter'
 
-type ErrorState = { code: 'embedder-offline'; pendingRows: number } | { code: 'classifier-offline' }
+type ErrorState =
+  | { code: 'embedder-offline'; pendingRows: number }
+  | { code: 'classifier-offline' }
+  | { code: 'classifier-no-profile' }
+  | { code: 'classifier-profile-provider-missing' }
+  | { code: 'classifier-default-provider-missing' }
 
 type GenerationStatusPillProps = {
   activePhase?: GenerationPhase
@@ -75,10 +80,21 @@ The compound owns phase → copy and error → copy:
 | `classifying`          | `classifying…`          |
 | `closing-chapter`      | `closing chapter…`      |
 
-| Error code           | Label                                              |
-| -------------------- | -------------------------------------------------- |
-| `embedder-offline`   | `Embedder offline — {pendingRows} rows pending`    |
-| `classifier-offline` | `Classifier offline — retrieval coverage thinning` |
+| Error code                            | Label                                                                          |
+| ------------------------------------- | ------------------------------------------------------------------------------ |
+| `embedder-offline`                    | `Embedder offline — {pendingRows} rows pending`                                |
+| `classifier-offline`                  | `Classifier offline — retrieval coverage thinning`                             |
+| `classifier-no-profile`               | `Classifier has no profile — retrieval coverage thinning`                      |
+| `classifier-profile-provider-missing` | `Classifier profile's provider is missing — retrieval coverage thinning`       |
+| `classifier-default-provider-missing` | `Classifier default model's provider is missing — retrieval coverage thinning` |
+
+The three `classifier-*-missing` / `classifier-no-profile` variants
+come from periodic-classifier
+[config pre-flight failures](../../generation-pipeline.md#config-pre-flight-validation)
+— a broken provider/profile reference that the periodic classifier
+pre-flight catches at its scheduled fire time. Distinct from
+`classifier-offline` (transient runtime failure) — different cause,
+same consequence framing.
 
 ## Active variant
 
@@ -111,9 +127,16 @@ open state.
 
 No popover. Tap fires `onErrorTap(error.code)` directly; the
 consumer routes per
-[`reader-composer.md → Persistent state — top-bar status pill error variant`](../screens/reader-composer/reader-composer.md#persistent-state--top-bar-status-pill-error-variant)
-(`embedder-offline` → Story Settings · Memory's resolution panel;
-`classifier-offline` → Story Settings · Memory · Classifier panel).
+[`reader-composer.md → Persistent state — top-bar status pill error variant`](../screens/reader-composer/reader-composer.md#persistent-state--top-bar-status-pill-error-variant):
+
+- `embedder-offline` → Story Settings · Memory's resolution panel.
+- `classifier-offline` → Story Settings · Memory · Classifier panel.
+- `classifier-no-profile` → App Settings · Profiles · Assignments
+  (classifier row).
+- `classifier-profile-provider-missing` → App Settings · Profiles
+  (the broken profile's edit dialog).
+- `classifier-default-provider-missing` → App Settings · Default
+  models (classifier row).
 
 ## Tier-aware render
 

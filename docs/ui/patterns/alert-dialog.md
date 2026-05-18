@@ -15,6 +15,7 @@ Used by:
 - [Rollback confirm](../screens/reader-composer/rollback-confirm/rollback-confirm.md) — `Delete from entry <N>?` with bulleted impact list. Destructive CTA.
 - [Calendar swap-warning](./calendar-picker.md#combined-modal-shape) — `Switch calendar to <name>?` with three optional structured sub-warning blocks (W1 / W2 / W3). Default CTA.
 - [Crash recovery modal](../../generation-pipeline.md#recovery-modal) — `Last action reverted after interrupted shutdown` with kind-aware story-named copy. Single OK action; fires on the first user-facing surface after boot when startup recovery undid at least one orphan.
+- [Provider / profile deletion](../screens/app-settings/app-settings.md#provider-menu-) — confirm-with-impact dialog enumerating broken-reference counts (profile / agent-default), destructive CTA. Blocker-dialog variant (single OK action) fires when an active default or per-story embedder anchors the deletion. Rules in [data-model.md → App settings storage](../../data-model.md#app-settings-storage); UX surface in app-settings.md.
 - Branch delete, entity delete, and other "are you sure?" gates across the app.
 
 ## Modal-on-every-tier

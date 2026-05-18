@@ -1353,6 +1353,65 @@ exposure of the DB; the threat model that justifies encryption
 hasn't materialized. Tracked in
 [followups.md](./parked.md#encryption-at-rest-for-provider-keys).
 
+**Provider / profile deletion semantics.** Deliberate divergence
+from the calendar precedent below: providers and profiles are
+infrastructure plumbing (which endpoint a call hits, which
+parameter envelope a call uses), not data that shapes persistent
+story content. Deletion is permitted unless it removes an active
+default; dangling references stay as data and surface as visible
+errors at next use. No silent re-pointing, no cascade-deletes of
+dependent rows, no fallback chains.
+
+**Provider deletion is blocked** when any active embedder pointer
+or the app-level narrative default points at it. Specifically:
+
+- Provider equals `default_provider_id`.
+- Provider equals `app_settings.embedding_provider_id` AND the
+  app-level `embedding_backend` defaults to `provider`.
+- Any story has `settings.embedding_provider_id` matching the
+  provider AND `settings.embeddingBackend === 'provider'`. Per-story
+  embedder is load-bearing data: the story's vec0 vectors were
+  produced by this embedder, and the runtime needs the same
+  embedder to query them. The user runs
+  [Model swap UX](./memory/retrieval.md#model-swap-ux) on each
+  affected story before the delete is permitted, surfacing the
+  re-index cost where the user already expects it.
+
+The user changes the relevant defaults first, then retries. The
+`providers[].length ≥ 1` invariant falls out for free —
+`default_provider_id` always points into `providers[]`, and the
+pointed-at provider can't be deleted.
+
+**Profile deletion is blocked** when `kind === 'narrative'`
+(already enforced — the narrative profile is structurally required).
+Agent profiles are deletable.
+
+**On a permitted delete**, the row vanishes from
+`app_settings.providers[]` / `app_settings.profiles[]`. References
+to its id stay intact:
+
+- `profiles[].modelRef.providerId` matching a deleted provider →
+  left as-is; profile errors at next LLM-call time.
+- `default_models[agentId].providerId` matching → left as-is;
+  agent errors at next fire time.
+- `assignments[agentId]` matching a deleted profile → key removed
+  (assignment unset). Agent has no profile assigned; errors at next
+  fire time. **No fallback to the narrative profile** — the user
+  unassigned explicitly and gets to see the agent is unconfigured.
+
+Per-story model overrides (`stories.settings.models[agentId]`) are
+direct model id strings (not `{providerId, modelId}` composites)
+and don't reference providers — they have nothing to dangle from
+provider/profile deletion. Model-catalog freshness is handled by
+the pre-existing global broken-config banner, separate from this
+design.
+
+Resolver-time failure shape and the pre-flight validation that
+catches these before any LLM call fires are documented in
+[`generation-pipeline.md → Config pre-flight validation`](./generation-pipeline.md#config-pre-flight-validation);
+the visible-error contract in the reader (system entries) is in
+[`reader-composer.md → Error surface`](./ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill).
+
 ### Vault content storage
 
 **Decided:** non-story user content (calendars, future packs,
@@ -1395,9 +1454,9 @@ from creation onward.
 
 **Vault content deletion** is blocked when any story references the
 content's id; otherwise allowed. Calendars set this stricter
-precedent in v1; provider/profile deletion semantics — currently
-softer — are revisited separately per
-[`followups.md`](./followups.md#provider--profile--model-profile-deletion-semantics).
+precedent in v1. Provider/profile deletion is deliberately softer
+— see
+[App settings storage → Provider / profile deletion semantics](#app-settings-storage).
 
 **Why per-type, not polymorphic.** Future Vault content types have
 unrelated schemas — packs hold prompt template strings + variables,
@@ -2144,6 +2203,31 @@ gatekeepers.
    [Aventuras file envelope](#aventuras-file-format-avts) for
    version-tagged imports. Intended for sharing / archiving /
    migration.
+
+   **Per-story exports strip references to the exporter's
+   `app_settings`** — they're meaningless on another setup. Omitted
+   from the envelope:
+   - `stories.settings.models[agentId]` — exporter's per-agent
+     model overrides.
+   - `stories.settings.embedding_provider_id` — exporter's
+     app_settings provider reference.
+   - `stories.settings.embedding_model_id` — exporter's embedding
+     model choice; the importer uses their own.
+   - `vec0` vectors — reproducible cache, not source data.
+
+   **On import**, the stripped slots take the importer's local
+   defaults (`models = {}`, `embedding_*` copied from
+   `app_settings`, same path as new-story creation). The re-index
+   pipeline runs post-insert using the importer's embedder — same
+   compute as a deliberate
+   [Model swap UX](./memory/retrieval.md#model-swap-ux) pass. The
+   import dialog surfaces the re-index cost up front
+   ("Importing 'Story title'. Will index memory using your current
+   embedder (~N entries, ~M seconds).").
+
+   Consequence: imported stories never carry foreign references in
+   the first place; the provider/profile deletion-semantics design
+   has zero interaction with the per-story import flow.
 
 The two have genuinely different purposes and the old app's conflation
 into a single zip produced friction — users invoking "backup" got a

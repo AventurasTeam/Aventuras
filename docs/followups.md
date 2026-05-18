@@ -235,18 +235,27 @@ suggestions are produced, which constrains how categories can be
 filtered and how user-input guidance is fed into the call. Designing
 them together avoids painting into a corner.
 
-### Provider / profile / model-profile deletion semantics
+### Translation rows in per-story export / import
 
-No spec'd behavior for deleting a provider, profile, or model
-profile that's referenced by stories or assignments. Calendar
-deletion (designed in
-[`calendar-systems/spec.md`](./calendar-systems/spec.md), folded
-into [data-model.md → App settings storage](./data-model.md#app-settings-storage))
-sets the stricter precedent — block when references exist.
-Provider/profile probably want the same shape but worth a dedicated
-pass: orphan handling on import, soft-warn vs hard-block tradeoffs,
-what happens to `default_provider_id` if the referenced provider is
-deleted, etc.
+Per-story exports now strip `stories.settings.models`,
+`stories.settings.embedding_*`, and vec0 vectors (folded into
+[`data-model.md → Backup & export format`](./data-model.md#backup--export-format)
+during the provider/profile deletion-semantics design). Cached
+translation rows weren't addressed — open whether they travel with
+a per-story export and how they reconcile with the importer's
+translation backend + language settings on the receiving end.
+Lands at the next pass over translation pipeline / export format.
+
+### `prof_` ID prefix — confirm intent
+
+[`data-model.md → ID shape`](./data-model.md#id-shape--kind-prefixed-uuids-throughout)
+reserves three distinct ID prefixes for provider-side concepts —
+`prov_` (provider instance), `prof_`, and `mod_` (model profile) —
+but only `prov_` and `mod_` map to schema in active use. The `prof_`
+slot has no current consumer. Either remove (if the historical
+concept has been fully absorbed into `prov_` / `mod_`) or annotate
+the row as reserved-for-future. Investigation belongs with a
+doc-cleanup pass, not a design pass.
 
 ### Translation graceful degradation
 

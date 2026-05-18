@@ -170,9 +170,12 @@ the profile chain entirely:
 
 - Profile renamed / model changed / temperature changed → stories
   with override unaffected.
-- Profile deleted → blocked at App Settings while agents are
-  assigned; story-level overrides survive (they don't reference the
-  profile id).
+- Profile deleted → per the
+  [deletion-semantics design](../../../data-model.md#app-settings-storage),
+  the delete is permitted (not blocked) and assignments using that
+  profile are unset; the affected agents surface broken-reference
+  errors at next pipeline use. Story-level overrides survive
+  unchanged — they don't reference the profile id.
 - Model removed from provider catalog → triggers the global
   broken-config banner (rendered at the top of every screen — see
   [App Settings](../app-settings/app-settings.md) for the surface

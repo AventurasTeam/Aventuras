@@ -241,8 +241,28 @@ Models tab is just the capability-toggle layer.
 - **Set as default** — moves the ⭐ to this provider; replaces the
   current default (one default total). Triggers update of any
   "App default" sentinel resolutions.
-- **Remove** — confirmation prompt; profiles using this provider's
-  models surface broken-config errors after removal (not auto-deleted).
+- **Remove** — confirmation flow per the
+  [deletion-semantics design](../../../data-model.md#app-settings-storage).
+  Both shapes are
+  [AlertDialog](../../patterns/alert-dialog.md) consumers:
+  - **Blocker dialog** when an active default or embedder pointer
+    references this provider (full rule set in the deletion-semantics
+    design linked above). Copy points the user at the relevant surface
+    to change the anchor before retrying: App Settings →
+    Providers → Default for the narrative anchor, App Settings →
+    Memory for the app-level embedder, or
+    [Model swap UX](../../../memory/retrieval.md#model-swap-ux)
+    per-story for the per-story embedder case.
+  - **Confirm-with-impact dialog** otherwise — enumerates broken-
+    reference impact (profile count, agent-default count) by
+    walking `app_settings.profiles[]` and `app_settings.default_models`.
+    No story-side query — per-story embedder usage is provably
+    nonexistent (blocker dialog would have fired) and per-story
+    model overrides are pure model id strings that don't reference
+    providers. Destructive CTA, cancel default. After confirm:
+    references stay as data and surface as warning-Tag indicators
+    on this surface + system-entry errors at next pipeline use.
+    No auto-delete of dependent profiles, no fallback re-pointing.
 
 ### Default provider
 
@@ -250,6 +270,13 @@ One configured provider can be marked default (⭐ badge on the row).
 Set during [Onboarding](../onboarding/onboarding.md#what-gets-seeded-silently),
 editable here. The default provider seeds the Narrative profile
 model and "Reset to defaults" actions across the rest of the app.
+
+**Cannot be deleted while default.** The Remove action surfaces the
+blocker dialog ("This provider is the default … pick a different
+default before deleting"). User must move ⭐ to another provider in
+this same surface, then retry. Mirrors the deletion-semantics design
+linked above; the `providers[].length ≥ 1` invariant falls out for
+free.
 
 ### Storage
 
@@ -300,9 +327,17 @@ same fields as Narrative plus `structured output` (auto / force on
 - **force on / force off** override the auto logic.
 
 `+ New profile` adds a profile (name + description + standard fields).
-Profile `⋯` menu offers rename, duplicate, delete (delete is blocked
-when agents are still assigned — the user is prompted to reassign
-first).
+Profile `⋯` menu offers rename, duplicate, delete. Delete is permitted
+even when agents are assigned to the profile, per the
+[deletion-semantics design](../../../data-model.md#app-settings-storage):
+the confirm-with-impact dialog enumerates affected agents by name,
+and on confirm the assignments are **unset** (not auto-reassigned to
+another profile, not falling back to narrative). Affected agents
+surface as "No profile assigned" in the Assignments section and as
+system-entry errors at next pipeline use.
+
+The narrative profile is `kind: 'narrative'` and cannot be deleted —
+blocker dialog applies.
 
 **Default agent profiles seeded by
 [Onboarding](../onboarding/onboarding.md#what-gets-seeded-silently):**
@@ -339,12 +374,22 @@ error icon / inline error text:
 - "Provider key missing — open Keys"
 - "Model `gpt-4o` no longer in provider's catalog"
 - "No model selected"
+- "Provider missing" — the profile's `modelRef.providerId` references
+  a deleted provider (per the
+  [deletion-semantics design](../../../data-model.md#app-settings-storage)).
+  Same row-level vocabulary; warning-tone Tag in place of the provider
+  name, tappable to the profile edit dialog.
+
+Agent rows in **Assignments** likewise carry a warning indicator when
+`assignments[agentId]` is unset post-profile-delete: "⚠ No profile
+assigned" in place of the profile name, tappable to a profile picker.
 
 The **global error banner** above the main header aggregates all
-broken profiles: `N profiles have configuration errors. [Open settings →]`.
+broken profiles + unset assignments:
+`N profiles have configuration errors. [Open settings →]`.
 The action button deep-links to App Settings · Profiles with the
 first broken profile scrolled into view (or Keys if the issue is a
-missing key).
+missing key, or Assignments if the issue is an unset agent).
 
 ### Custom model id + favorites + fetch refresh
 
@@ -792,10 +837,6 @@ expression itself.
   app-level "reset everything"? Lean: per-profile reset only;
   app-level reset is too dangerous without a stronger confirmation
   flow.
-- **Provider deletion** — see
-  [`followups.md → Provider / profile / model-profile deletion semantics`](../../../followups.md#provider--profile--model-profile-deletion-semantics)
-  (the working lean — broken-config state, no auto-delete — is
-  recorded there pending the dedicated pass).
 - **Custom OpenAI-compatible endpoint UX** — separate "Configure
   endpoint" surface (URL + auth scheme + model list strategy)?
   Or inline in the Keys row? Defer until we have a concrete custom

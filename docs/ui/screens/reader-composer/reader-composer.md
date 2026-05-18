@@ -397,6 +397,10 @@ chrome blip.
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
 | **LLM call failed**                                                                                                                                                              | `Retry` · `View details` · `Dismiss`                |
 | **Embed call failed** mid-turn (the new-turn affordance disables until resolved per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle)) | `Retry` · `Switch embedder` · `Roll back this turn` |
+| **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                           | `Fix profile` · `View details` · `Dismiss`          |
+| **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                      | `Fix profile` · `View details` · `Dismiss`          |
+| **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                 | `Assign profile` · `View details` · `Dismiss`       |
+| **Agent default model's provider missing**                                                                                                                                       | `Fix default` · `View details` · `Dismiss`          |
 
 The embed-failure system entry follows the same visual shape as the
 LLM-failure entry — the contract is "transient pipeline failure
@@ -406,6 +410,21 @@ routes to Story Settings · Memory · Switch and fires the
 `Roll back this turn` reverse-replays the entire turn's deltas
 through the
 [rollback-confirm modal](./rollback-confirm/rollback-confirm.md).
+
+The four **broken-reference** variants come from the pipeline's
+[config pre-flight validation](../../../generation-pipeline.md#config-pre-flight-validation)
+(caught before phase 0 fires — no deltas written, so no
+`Roll back this turn` action), or, in the race case, from a
+resolver-time failure mid-turn. The user can't distinguish which
+layer caught it — same vocabulary either way. The
+[deletion-semantics design](../../../data-model.md#app-settings-storage)
+is what makes these resolver inputs go missing in the first place.
+Action buttons route to the relevant settings surface: profile /
+default / assignment. Per-story model overrides don't appear in
+this table — they're pure model id strings per
+[`story-settings.md → Models tab`](../story-settings/story-settings.md#models-tab--overrides-only),
+and broken-model-catalog cases surface via the existing global
+broken-config banner instead.
 
 ### Persistent state — top-bar status pill error variant
 

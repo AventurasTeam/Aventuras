@@ -481,6 +481,69 @@ lives in
 [`ui/principles.md → Edit restrictions during in-flight generation`](./ui/principles.md#edit-restrictions-during-in-flight-generation);
 this file is the implementation surface.
 
+### Config pre-flight validation
+
+Before phase 0 of any pipeline kind fires, the orchestrator walks
+the kind's declared `phases` and validates each phase's resolver
+inputs against `app_settings`. Validation is in-memory only (no
+network, no DB beyond the already-cached Zustand snapshot) and
+checks:
+
+- For each agent the pipeline would invoke: `assignments[agentId]`
+  resolves to an existing profile (or, for narrative, the
+  `kind: 'narrative'` profile exists).
+- For each resolved profile: `modelRef.providerId` resolves to an
+  existing `providers[]` entry.
+- For each agent fired by this pipeline: the provider for the
+  agent's resolved model (via `default_models[agentId].providerId`
+  when that entry is set) exists in `providers[]`. Story-level
+  model overrides (`stories.settings.models[agentId]`) are pure
+  model id strings and don't enter provider validation —
+  broken-model-catalog cases surface via the existing global
+  broken-config banner.
+
+Per-story embedder pointers (`stories.settings.embedding_provider_id`)
+are **not validated** here — they're an invariant maintained by
+[`data-model.md → Provider / profile deletion semantics`](./data-model.md#app-settings-storage)'s
+per-story embedder block, which prevents the backing provider from
+disappearing while any story uses it.
+
+What gets validated is **selective per pipeline kind** — the
+pre-flight walks only the resolver inputs of phases this pipeline
+actually fires. The new-turn pipeline validates retrieval +
+narrative + classifier (if a separate classifier call is in the
+phase list, e.g. piggyback mode is off) + suggestions (if
+`stories.settings.suggestionsEnabled`); the chapter-close pipeline
+validates the chapter-close agent's resolved config; the periodic
+classifier validates classifier's config at its scheduled fire
+time; the memory probe validates retrieval's config.
+
+**On failure**, the run halts before phase 0 fires — no LLM call
+goes out, no tokens spent, no deltas written. The orchestrator
+emits a `run_complete` event with `result.status === 'failed'` and
+an error payload identifying the first failing resolver in phase
+order (retrieval before narrative before classifier — avoids
+piling up multiple system entries when the user has multiple
+broken references).
+
+**Surfacing.** Pre-flight failure on **turn-blocking pipelines**
+(new-turn, chapter-close, memory probe) emits a system-kind entry
+into the affected story per
+[`reader-composer.md → Error surface`](./ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill).
+Pre-flight failure on **background pipelines** (periodic
+classifier) emits a sticky pill error variant per
+[`generation-status-pill.md`](./ui/patterns/generation-status-pill.md).
+
+**Runtime resolver failure is the safety net.** A race between
+pre-flight pass and the actual LLM call (config changed mid-turn)
+falls through to the same system-entry vocabulary at resolver
+time. Same copy, same actions; the user can't distinguish which
+layer caught it.
+
+The underlying deletion-semantics design — what makes resolver
+inputs go missing in the first place — lives in
+[`data-model.md → Provider / profile deletion semantics`](./data-model.md#app-settings-storage).
+
 ### Phase iteration
 
 ```ts
