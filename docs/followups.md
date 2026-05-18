@@ -246,6 +246,39 @@ a per-story export and how they reconcile with the importer's
 translation backend + language settings on the receiving end.
 Lands at the next pass over translation pipeline / export format.
 
+### Profile model picker — provider/model selection UX
+
+[`app-settings.md → Narrative profile`](./ui/screens/app-settings/app-settings.md#narrative-profile-always-present)
+spec'd the model selection as a single combined `provider/model`
+field — one dropdown grouped by provider, picking a model implicitly
+selects its provider (the `modelRef: { providerId, modelId }`
+composite is set by one widget). Discoverability degrades as
+provider + model counts grow; no way to filter by provider first
+before scanning models.
+
+Lean: split into **two separate selects** — provider first, then
+model filtered to that provider's catalog. Or a **bespoke
+provider/model picker** if the two-select shape feels clunky
+(inline expandable, dialog, drawer — TBD per design).
+
+Open questions for the design pass:
+
+- **Provider-change reset behavior** in the two-select shape. When
+  the user changes provider, does the model select clear, preserve
+  if still valid on the new provider, or reset to a default?
+- **Cross-surface consistency.** The same `{providerId, modelId}`
+  composite shape is set in App Settings → Profiles (narrative +
+  agent profile cards) AND App Settings → Default models (per-agent
+  model fallback). Migrate both together vs incrementally.
+- **Bespoke picker shape** if that's the direction. Modal, inline-
+  expandable, side drawer? Reuse across profiles + default-models,
+  or surface-specific?
+- **Story Settings → Models override** is unaffected — those are
+  pure model id strings (no provider component) per the
+  [deletion-semantics design](./data-model.md#app-settings-storage).
+
+Lands when the profile editor UI gets a focused pass.
+
 ### `prof_` ID prefix — confirm intent
 
 [`data-model.md → ID shape`](./data-model.md#id-shape--kind-prefixed-uuids-throughout)
