@@ -254,15 +254,19 @@ Models tab is just the capability-toggle layer.
     [Model swap UX](../../../memory/retrieval.md#model-swap-ux)
     per-story for the per-story embedder case.
   - **Confirm-with-impact dialog** otherwise — enumerates broken-
-    reference impact (profile count, agent-default count) by
-    walking `app_settings.profiles[]` and `app_settings.default_models`.
-    No story-side query — per-story embedder usage is provably
-    nonexistent (blocker dialog would have fired) and per-story
-    model overrides are pure model id strings that don't reference
-    providers. Destructive CTA, cancel default. After confirm:
-    references stay as data and surface as warning-Tag indicators
-    on this surface + system-entry errors at next pipeline use.
-    No auto-delete of dependent profiles, no fallback re-pointing.
+    reference impact (count of profiles whose `modelRef.providerId`
+    matches the to-be-removed provider) by walking
+    `app_settings.profiles[]`. No `default_models` walk — that
+    constant
+    [lives in code](../../../data-model.md#app-settings-storage),
+    references provider types not instance ids, and has nothing to
+    dangle. No story-side query — per-story embedder usage is
+    provably nonexistent (blocker dialog would have fired) and
+    per-story model overrides are pure model id strings that don't
+    reference providers. Destructive CTA, cancel default. After
+    confirm: references stay as data and surface as warning-Tag
+    indicators on this surface + system-entry errors at next pipeline
+    use. No auto-delete of dependent profiles, no fallback re-pointing.
 
 ### Default provider
 
@@ -343,12 +347,16 @@ system-entry errors at next pipeline use.
 The narrative profile is `kind: 'narrative'` and cannot be deleted —
 blocker dialog applies.
 
-**Default agent profiles seeded by
-[Onboarding](../onboarding/onboarding.md#what-gets-seeded-silently):**
-`Fast tasks` (cheap routine agents) and `Heavy reasoning` (lore-mgmt
-at chapter close). The names and exact assignment matrix are
-placeholder shapes; final templates land with implementation. User
-can rename / delete / extend.
+**Default agent profile set** seeded by
+[Onboarding](../onboarding/onboarding.md#what-gets-seeded-silently)
+and by the page-level [`Reset to defaults`](#reset-profiles-to-defaults)
+action — both source from the
+[`PROVIDER_DEFAULTS` code constant](../../../data-model.md#app-settings-storage).
+For the canonical native provider types this seeds `Fast tasks`
+(cheap routine agents) and `Heavy reasoning` (lore-mgmt at chapter
+close). The names and exact assignment matrix are placeholder shapes
+in the wireframe; final templates land with implementation. User can
+rename / delete / extend after seeding.
 
 ### Assignments
 
@@ -362,13 +370,46 @@ Each agent dropdown picks a profile. Agents currently in the system:
 
 Default assignment seeded by
 [Onboarding](../onboarding/onboarding.md#what-gets-seeded-silently)
-(typically all → `Fast tasks` except `lore-mgmt` →
-`Heavy reasoning`). Placeholder split — finalized with
+and by the page-level [`Reset to defaults`](#reset-profiles-to-defaults)
+action — both source from
+[`PROVIDER_DEFAULTS`](../../../data-model.md#app-settings-storage).
+Typical native-provider matrix: all → `Fast tasks` except
+`lore-mgmt` → `Heavy reasoning`. Placeholder split — finalized with
 implementation.
 
 Image generation is **deferred** as a feature; no `imageGen` agent
 entry until the feature lands. Tracked in
 [`followups.md`](../../../parked.md#image-generation).
+
+### Reset Profiles to defaults
+
+Single page-level action — `Reset to defaults` button at the top
+of the Profiles tab, right-aligned next to the tab title. Re-seeds
+both `app_settings.profiles[]` AND `app_settings.assignments` from
+[`PROVIDER_DEFAULTS`](../../../data-model.md#app-settings-storage)
+keyed on the current `default_provider_id`'s provider type. Wipes
+any user-added agent profiles plus the entire assignment matrix
+in one transaction.
+
+Gated behind an [AlertDialog](../../patterns/alert-dialog.md)
+confirm. Dialog body enumerates impact: how many current profiles
+will be discarded, that all current assignments will be replaced,
+and which provider type the new defaults source from. Destructive
+CTA copy: `Reset Profiles`. Cancel is the safe default.
+
+**When the default provider has no `PROVIDER_DEFAULTS` entry**
+(e.g. `openai-compatible`, where the right model varies per
+deployment), the action still runs but the result is a single
+empty narrative profile + empty assignments. The dialog warns
+explicitly: `<provider type> has no recommended defaults — reset
+will clear all profiles and assignments. You'll need to configure
+manually after reset.` Destructive CTA copy stays the same.
+
+The button mirrors the standard
+[`Reset to defaults` semantic](../../../data-model.md#app-settings-storage)
+that `default_provider_id` documents as seeding "Narrative + 'Reset
+to defaults' actions across the rest of the app." This is the
+Profiles surface's specific affordance for that semantic.
 
 ### Per-profile error states + global banner
 

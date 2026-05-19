@@ -493,14 +493,11 @@ checks:
   resolves to an existing profile (or, for narrative, the
   `kind: 'narrative'` profile exists).
 - For each resolved profile: `modelRef.providerId` resolves to an
-  existing `providers[]` entry.
-- For each agent fired by this pipeline: the provider for the
-  agent's resolved model (via `default_models[agentId].providerId`
-  when that entry is set) exists in `providers[]`. Story-level
-  model overrides (`stories.settings.models[agentId]`) are pure
-  model id strings and don't enter provider validation —
+  existing `providers[]` entry. (Story-level overrides at
+  `stories.settings.models[agentId]` are pure model id strings, no
+  provider component, so they don't enter provider validation —
   broken-model-catalog cases surface via the existing global
-  broken-config banner.
+  broken-config banner.)
 
 Per-story embedder pointers (`stories.settings.embedding_provider_id`)
 are **not validated** here — they're an invariant maintained by

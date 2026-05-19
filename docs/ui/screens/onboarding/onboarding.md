@@ -397,23 +397,33 @@ banner the user can dismiss when they're ready to act on it.
 
 Whether the user clicks `Finish` on a native provider or completes
 the OAI-compat path, the same set of `app_settings` records get
-written without any user-facing UI:
+written without any user-facing UI. The narrative profile, agent
+profile set, and assignment matrix all source from the
+[`PROVIDER_DEFAULTS` code constant](../../../data-model.md#app-settings-storage)
+keyed on the just-configured provider's type — the same source the
+App Settings · Profiles
+[`Reset to defaults`](../app-settings/app-settings.md#reset-profiles-to-defaults)
+action consults.
 
 - **Default provider** — the just-configured provider becomes
   `default_provider_id`.
 - **Narrative profile** — created with `kind: 'narrative'`, name
-  `Narrative`, model = the auto-picked default for native
-  providers, or `unset` for OAI-compat (filled in when the user
-  picks a model in Settings).
-- **Agent profiles** — two created from preset templates:
-  - `Fast tasks` — cheap routine agents.
-  - `Heavy reasoning` — chapter-close work.
+  `Narrative`, fields sourced from `PROVIDER_DEFAULTS[type].narrative`
+  for native providers, or left `unset` for OAI-compat (no
+  baked-in defaults; user picks a model in Settings after onboarding).
+- **Agent profiles** — created from `PROVIDER_DEFAULTS[type].agentProfiles`.
+  For canonical native providers: `Fast tasks` (cheap routine agents)
+  and `Heavy reasoning` (chapter-close work). OAI-compat: no agent
+  profiles seeded; user creates them after onboarding.
 - **Assignments** — every agent in the
   [agent registry](../../../data-model.md#app-settings-storage)
-  gets wired to one of the two profiles. Includes
-  `wizard-assist` (backs all AI calls fired from the
+  gets wired per `PROVIDER_DEFAULTS[type].defaultAssignments`
+  (resolves profile names to the just-generated profile UUIDs).
+  Includes `wizard-assist` (backs all AI calls fired from the
   [Story creation wizard](../wizard/wizard.md)), seeded to
-  the `Fast tasks` profile by default.
+  the `Fast tasks` profile by default on native providers. OAI-compat:
+  empty assignment matrix; agents surface broken-state until the user
+  configures profiles and assigns them.
 - **Embedder default** (Step 4) — when the user finishes Step 4
   with a curated pick or provider pick:
   - `app_settings.default_story_settings.embeddingBackend` set to

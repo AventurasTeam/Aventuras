@@ -280,7 +280,6 @@ erDiagram
         json profiles "Array<ModelProfile>; narrative + agent profiles for LLM call params"
         json assignments "Record<agentId, profileId>; which profile each agent uses by default"
         text default_provider_id "FK into providers[].id; seeds Narrative + 'Reset to defaults'"
-        json default_models "Record<agentId, { providerId, modelId }>; resolver fallback for un-overridden story.settings.models"
         text embedding_model_id "canonical embedding model id; filename-derived for local downloads (includes quant suffix), provider id for provider mode, user-supplied label for power-user file imports. Any textual change fires the re-index dialog unconditionally. See docs/memory/retrieval.md → Embedding infrastructure"
         text embedding_provider_id "FK into providers[].id when embedding_backend defaults to 'provider'; null when defaults to 'local'. Users may run a different provider for embeddings than for narrative LLM calls. Distinct from default_provider_id (narrative) — embedders have no LLM-profile parameter shape (no temperature, max output, thinking, structured-output) so they don't route through the Profiles tab."
         json default_story_settings "see 'Story settings shape' — copy-at-creation source for new stories"
@@ -1299,19 +1298,74 @@ list suggestions). One agent serves the whole wizard surface;
 splitting per-call-shape is a parked concern (see
 [parked.md → Wizard-assist agent profile splitting](./parked.md#wizard-assist-agent-profile-splitting)).
 
-**Default models — render-time resolver fallback.**
+**Reset-to-defaults seed map — code constant, not stored.**
+
+Onboarding's initial seed and the App Settings · Profiles `Reset to
+defaults` action both source from a baked-in code constant indexed
+by `(providerType, role)`:
 
 ```ts
-app_settings.default_models: Record<AgentId, { providerId: string; modelId: string }>
+type RoleDefaults = {
+  modelId: string
+  temperature?: number
+  maxOutput?: number
+  thinking?: number
+  timeout?: number
+  // structuredOutput on agent-profile entries
+}
+
+type ProviderTypeDefaults = {
+  narrative: RoleDefaults // seeds the narrative profile
+  agentProfiles: Array<{
+    // seeds the agent profile set
+    name: string // e.g. 'Fast tasks'
+    description: string
+    defaults: RoleDefaults
+  }>
+  defaultAssignments: Partial<Record<AgentId, string>>
+  // agentId → profile NAME from the
+  // seeded set above; resolved to
+  // generated UUIDs at seed time
+}
+
+const PROVIDER_DEFAULTS: Partial<Record<ProviderType, ProviderTypeDefaults>>
 ```
 
-This is the **override-at-render** target referenced by
-`stories.settings.models[agentId]`. When a story doesn't override
-an agent's model, the resolver returns the corresponding entry
-here. Changing a default propagates to every un-overridden story
-on next render. Distinct from `assignments` (which controls the
-LLM-call parameter envelope via profile lookup) — defaults are
-about model selection, profiles are about call configuration.
+Runtime resolution for an agent's model never consults this
+constant — it walks `stories.settings.models[agentId]` (override,
+modelId string) → `profile.modelRef` via `assignments[agentId]`.
+For narrative the chain is just `narrative_profile.modelRef`. The
+constant only fires at seed-time and on user-triggered `Reset to
+defaults` — it has no presence in the hot render path.
+
+**Reset-to-defaults semantics.** Look up
+`PROVIDER_DEFAULTS[providers[default_provider_id].type]`:
+
+- **Found.** Replace `app_settings.profiles[]` with the seeded
+  narrative + agent profiles (fresh UUIDs at seed time). Replace
+  `app_settings.assignments` with the seeded matrix (profile-name
+  → newly-generated id resolution).
+- **Undefined** (e.g. `openai-compatible`, where the right model
+  varies per deployment). `profiles[]` becomes a single empty
+  narrative profile (no `modelRef`, default params blank).
+  `assignments` becomes an empty Record. The standard broken-state
+  vocabulary surfaces at next fire time — profile cards render
+  warning trim, agent rows show `⚠ No profile assigned`, global
+  banner aggregates.
+
+`Reset to defaults` is a single page-level action on App Settings ·
+Profiles (not per-section), gated behind an AlertDialog confirm —
+it wipes any user-added agent profiles plus the entire assignment
+matrix, not just a single field.
+
+**Why a code constant, not stored data.** The defaults track
+provider-recommended models, which evolve as providers ship new
+models. Tracking them as code lets the recommendation set update
+with a release rather than a data migration. The user's stored
+state (`profiles[]`, `assignments`) snapshots whatever the constant
+returned at seed-time; subsequent constant updates don't propagate
+to already-seeded users — explicit `Reset to defaults` is the
+re-seed path.
 
 **Story Defaults (`default_story_settings`) — copy-at-creation source.**
 
@@ -1392,8 +1446,6 @@ to its id stay intact:
 
 - `profiles[].modelRef.providerId` matching a deleted provider →
   left as-is; profile errors at next LLM-call time.
-- `default_models[agentId].providerId` matching → left as-is;
-  agent errors at next fire time.
 - `assignments[agentId]` matching a deleted profile → key removed
   (assignment unset). Agent has no profile assigned; errors at next
   fire time. **No fallback to the narrative profile** — the user
