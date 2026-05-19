@@ -73,12 +73,13 @@ shifts into the gap on transitions.
 
 The compound owns phase → copy and error → copy:
 
-| Phase                  | Label                   |
-| ---------------------- | ----------------------- |
-| `reasoning`            | `reasoning…`            |
-| `generating-narrative` | `generating narrative…` |
-| `classifying`          | `classifying…`          |
-| `closing-chapter`      | `closing chapter…`      |
+| Phase                    | Label                     |
+| ------------------------ | ------------------------- |
+| `reasoning`              | `reasoning…`              |
+| `generating-narrative`   | `generating narrative…`   |
+| `classifying`            | `classifying…`            |
+| `closing-chapter`        | `closing chapter…`        |
+| `refreshing-suggestions` | `refreshing suggestions…` |
 
 | Error code                            | Label                                                                          |
 | ------------------------------------- | ------------------------------------------------------------------------------ |

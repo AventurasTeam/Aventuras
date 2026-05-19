@@ -1095,6 +1095,17 @@ stories.settings: {
   composerWrapPov: 'first' | 'third' // how composer modes wrap user input (NOT narration)
   suggestionsEnabled: boolean       // gates next-turn suggestion pane
 
+  // Next-turn suggestions — user-customizable category palette + literal count
+  suggestionCount: number           // chips per emission; default 3, range 1-6. Decoupled from #enabled categories: model picks per-slot from the enabled palette
+  suggestionCategories: {           // ordered palette; copied at story creation from app_settings.default_suggestion_categories[mode] (sibling field — per-mode shape doesn't fit Partial<StorySettings>)
+    id: string                      // stable per-story uuid
+    label: string                   // visible chip overline ("Action", "Confront", user-edited)
+    promptHint: string              // prose snippet fed to the suggestion agent for this slot
+    color: string                   // slot key from the curated accent palette (theme-resolved at render; not raw hex)
+    enabled: boolean                // emission gate; disabled-but-defined entries stay editable in settings
+    order: number                   // explicit ordering; user-draggable
+  }[]
+
   // Translation
   translation: {
     enabled: boolean
@@ -1117,7 +1128,7 @@ stories.settings: {
   // `memory-compaction` was dropped — chapter-close lore-mgmt subsumes its
   // role per the cadence stratification; see docs/memory/chapter-close.md.
   models: {
-    narrative?: string              // absent = use current global app-settings default at render time
+    narrative?: string              // optional override; absent = resolve through assignments[agentId] → profile.modelRef per docs/explorations/2026-05-19-default-models-authority.md
     classifier?: string
     translation?: string
     suggestion?: string
@@ -1187,11 +1198,15 @@ disentangles them and matches the UI's two-section structure.
    values; changing the global default does NOT propagate to existing
    stories.
 2. **Override-at-render** (`settings.models` only). Fields are
-   optional; absent means "use the global app-settings default at
-   render time." Changing the global propagates to every
+   optional; absent means "resolve the agent through the App Settings
+   profile chain at render time" — `assignments[agentId] → profile.modelRef`,
+   per
+   [`2026-05-19-default-models-authority.md`](./explorations/2026-05-19-default-models-authority.md).
+   Changing the global profile / assignment propagates to every
    un-overridden story. The UX difference (Models' dashed-italic "App
    default: X" sentinel vs copy-at-creation fields showing a concrete
-   value) derives directly from this pattern split.
+   value) derives directly from this pattern split. Unresolved
+   agents pre-flight-error at generation time.
 
 Most operational fields seed from `app_settings.default_story_settings`;
 a few — `default_provider_id`, `default_calendar_id` — sit as
@@ -1376,8 +1391,13 @@ app_settings.default_story_settings: Partial<StorySettings>
 Mirrors the operational
 [`stories.settings`](#story-settings-shape) shape — chapter threshold,
 auto-close, recent buffer, translation block, composer prefs,
-suggestions toggle. On story creation these copy into the new
-`stories.settings`; the story owns its values thereafter. Definitional fields (those in `stories.definition` —
+suggestions toggle, `suggestionCount`. On story creation these copy
+into the new `stories.settings`; the story owns its values thereafter.
+The per-mode `suggestionCategories` palette doesn't fit
+`Partial<StorySettings>` (story-side is a flat array, default-side
+needs adventure / creative branches) so it lives on
+`app_settings.default_suggestion_categories` as a sibling field
+(see below). Definitional fields (those in `stories.definition` —
 `mode`, `leadEntityId`, `narration`, `genre`, `tone`, `setting`,
 `calendarSystemId`, `worldTimeOrigin`) are absent from this default
 shape — they're wizard-authored per story with no global default.
@@ -1392,6 +1412,26 @@ A single-id pointer into the merged calendar registry. Calendar
 definitions themselves live in [`vault_calendars`](#vault-content-storage)
 (user-authored) + code (built-ins) — Vault content storage is
 documented in its own decision section below.
+
+**Default suggestion categories (per-mode).**
+
+```ts
+app_settings.default_suggestion_categories: {
+  adventure: SuggestionCategory[]   // shape per stories.settings.suggestionCategories
+  creative: SuggestionCategory[]
+}
+```
+
+Per-mode dict; sibling field on `app_settings` rather than nested
+inside `default_story_settings` because the per-mode shape doesn't
+fit `Partial<StorySettings>` (`stories.settings.suggestionCategories`
+is a flat array — the story's mode is fixed at creation and only
+the mode-matched default applies). Same placement rationale as
+`default_calendar_id`. Bundled curated initial values ship in code
+(genre/tone-preset-style JSON catalog); user-editable in App Settings
+→ Story Defaults → Suggestion categories. Full editor + emission
+contract in
+[`explorations/2026-05-19-next-turn-suggestions.md`](./explorations/2026-05-19-next-turn-suggestions.md).
 
 **Why one table, not several.** Providers, profiles, and
 assignments form one tightly-coupled config envelope — they're
@@ -1546,6 +1586,13 @@ story_entries.metadata: {
 
   // In-world time — classifier-authored, user-editable
   worldTime: number                 // physical seconds since story start; calendar-uniform. Storage invariant: ≥ 0. Classifier writes are monotonically non-decreasing (delta ≥ 0 hard); user manual edits may produce non-monotonic sequences which the UI flags and consumers tolerate. See "In-world time tracking" below.
+
+  // Next-turn suggestions — emission output for the chip strip displayed below this entry
+  nextTurnSuggestions?: {
+    items: { categoryId: string; text: string }[]  // 1..suggestionCount; categoryId references stories.settings.suggestionCategories[].id (orphans render with neutral fallback per reader-composer.md)
+    source: 'piggyback' | 'classifier' | 'refresh' // emission path that wrote this (diagnostic; dev-mode surfacing)
+    refreshGuidance?: string                        // present when source === 'refresh' and the composer-partial was passed; persisted so reload faithfully shows refresh-influenced chips
+  }
 }
 ```
 
@@ -1571,6 +1618,21 @@ metadata mutations write a delta. Consequence: a user correcting
 `worldTime` on an entry after the classifier over-advanced during a
 flashback produces a reversible delta, reachable via CTRL-Z or
 rollback. Same for `sceneEntities` / `currentLocationId` user-edits.
+`nextTurnSuggestions` rewrites (manual refresh, re-emission after
+rollback) write a delta the same way; rollback restores prior chips.
+
+**Next-turn suggestions emission.** `nextTurnSuggestions` is the
+per-entry persistence of the chip strip rendered below this entry.
+Three emission paths write it: narrative-fold under
+`piggybackMode='on'`, classifier-fold under `'off'`, and the
+dedicated `suggestion-refresh` pipeline for user-triggered re-roll.
+Translation rows for chip text are cached by
+`(target_language, hash(chip.text))` — content-addressable,
+self-invalidating across re-rolls and CTRL-Z. Full contract +
+emission shapes in
+[`explorations/2026-05-19-next-turn-suggestions.md`](./explorations/2026-05-19-next-turn-suggestions.md)
+and
+[`ui/screens/reader-composer/reader-composer.md → Next-turn suggestions`](./ui/screens/reader-composer/reader-composer.md#next-turn-suggestions).
 
 ### Opening entry
 

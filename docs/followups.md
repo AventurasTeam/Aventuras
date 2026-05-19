@@ -164,41 +164,6 @@ rail search-scope definition. Lean: include `traits` + `drives` +
 `agenda` immediately when implementing the new shape; defer
 `visual.*` until UX testing surfaces flooding-or-not-flooding signal.
 
-### Next-turn suggestions — design pass
-
-Reader / composer surfaces a next-turn suggestion affordance. Three
-open questions worth a joint design pass rather than ad-hoc
-decisions during the reader-composer detail pass:
-
-- **Customizable categories.** Whether the user can tailor what
-  categories of suggestion are surfaced (action / dialogue /
-  introspection / time-skip / scene-change / custom) and how that
-  customization persists (per-story setting, per-branch,
-  user-global) is unspec'd. Lean: per-story setting on
-  `stories.settings` with a sensible default category set; revisit
-  granularity on real signal.
-- **User input as guidance.** Letting partial input in the
-  composer's input box act as guidance for the suggestion engine
-  ("user typed 'Aria approaches the …' → suggest completions") is
-  an interaction model worth designing rather than retrofitting.
-  Affects refresh cadence (debounce, on-pause), placement relative
-  to the input cursor, commit semantics (tap to replace vs merge
-  with typed text), and how this composes with category filtering.
-- **Suggestion-emission piggyback — fold suggestions into the
-  narrative call.** The classifier-fold half is now answered by
-  [piggyback mode](./memory/piggyback.md) — capability-gated trailing
-  block on the narrative call, with periodic classifier as the
-  separate fallback. Suggestion-emission is the natural extension of
-  that pattern (lower stakes than classification, lives next to
-  narrative output anyway). Open: whether suggestions reuse the same
-  trailing block or live in a sibling block; how the suggestion
-  surface composes with category filtering and user-input guidance.
-
-The three questions interact: consolidation mode shapes how
-suggestions are produced, which constrains how categories can be
-filtered and how user-input guidance is fed into the call. Designing
-them together avoids painting into a corner.
-
 ### Translation rows in per-story export / import
 
 Per-story exports now strip `stories.settings.models`,

@@ -20,6 +20,8 @@ Used by:
 - [Diagnostics Hub](../screens/diagnostics/diagnostics.md#tab-strip)
   — five tabs (Memory probe, Per-turn inspector, Call log, Logs,
   Delta log).
+- [App Settings → Story Defaults → Suggestion categories](../screens/app-settings/app-settings.md#suggestion-categories)
+  — Adventure / Creative per-mode tabs.
 - Anywhere else a surface needs sibling-section navigation.
 
 ## Scope

@@ -469,6 +469,10 @@ as one row keyed by
 - Thread title + description
 - Happening title + description
 - (Chapter title/summary on chapter close)
+- Next-turn suggestion chip text — rides the `narrative` granular
+  toggle; cached by content-hash of chip text so re-rolls and CTRL-Z
+  reuse existing rows naturally (see
+  [`explorations/2026-05-19-next-turn-suggestions.md`](./explorations/2026-05-19-next-turn-suggestions.md))
 
 **Why centralize:**
 

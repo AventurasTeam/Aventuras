@@ -12,6 +12,7 @@ Used by:
 - [Reader Browse rail](../screens/reader-composer/reader-composer.md) — status-tier grouping (Active / Staged / Retired) on entity lists, via [`entity.md → Accordion grouping on "All" view`](./entity.md#accordion-grouping-on-all-view).
 - [World panel](../screens/world/world.md) — same status-tier grouping in the list pane.
 - [App Settings](../screens/app-settings/app-settings.md) — provider list (each provider expandable to reveal config) and profile list (each profile expandable to reveal model + parameters).
+- `SuggestionCategoriesEditor` — mobile expression collapses each per-category row into an Accordion item ([Story Settings → Suggestion categories](../screens/story-settings/story-settings.md#suggestion-categories), [App Settings → Story Defaults → Suggestion categories](../screens/app-settings/app-settings.md#suggestion-categories)).
 
 ## Card vs strip — composition
 

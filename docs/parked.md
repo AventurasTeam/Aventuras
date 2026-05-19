@@ -1476,3 +1476,75 @@ Skipped for v1: backgrounding mid-action is uncommon for the
 documented call-sites (save success, onboarding completion, wizard
 lead-unset). Surface again if users report missed toasts after
 returning to a backgrounded tab.
+
+### Recency-bias diversity mitigation for suggestion category mix
+
+v1 ships a prompt-level diversity nudge ("vary which categories you
+draw from") in all three suggestion emission paths
+([`explorations/2026-05-19-next-turn-suggestions.md`](./explorations/2026-05-19-next-turn-suggestions.md)).
+If field evidence shows the model rut-defaulting through the nudge —
+emitting the same one or two categories every turn regardless of
+the enabled palette — the stronger mitigation is to pass the
+previous entry's `nextTurnSuggestions.items[].categoryId` mix into
+the emission prompt with "prefer categories other than these unless
+none fit." Schema already supports it (prior-turn data lives on the
+preceding entry's metadata). Surface when real signal emerges.
+
+### Split granular translation toggle for suggestions
+
+Next-turn suggestion chip text rides
+`stories.settings.translation.granularToggles.narrative` in v1 —
+chips translate when narrative does. If real signal surfaces for
+split control (language-learning users wanting translated narrative
+
+- source-language chips for vocabulary practice, or the inverse for
+  some other use), add `granularToggles.suggestions: boolean` as its
+  own toggle. Lands on demand.
+
+### Split capability flag for `<suggestions>` parse reliability
+
+The piggyback + classifier emission paths reuse the existing tagged-
+block reliability capability flag on
+`app_settings.providers[].cachedModels[].capabilities` — a model
+that reliably emits `<state>` is presumed to emit `<suggestions>`
+reliably too. If field evidence shows a model reliable on
+`<state>` (structured extraction) but unreliable on `<suggestions>`
+(creative prose in a tagged block — potentially a different
+reliability axis), split into a dedicated `suggestionsBlock`
+capability flag. Surface on signal.
+
+### Re-roll cancel-and-restart on rapid double-click
+
+The `suggestion-refresh` pipeline's concurrency policy self-blocks,
+so a second refresh click while the first is still loading is a
+no-op. If users find the no-op unintuitive — they want the latest
+composer text to feed the in-flight re-roll without waiting — switch
+to cancel-previous-and-restart semantics. Adds cancel + restart
+machinery to the pipeline kind. Surface on signal.
+
+### Narrative quality empirical risk under suggestion fold
+
+When `piggybackMode='on'`, the narrative model emits prose AND
+`<state>` AND `<suggestions>` in one call. The design assumes
+narrative quality is unaffected by the suggestion-fold. Plausible
+empirical failure modes: shorter or shallower prose because the
+model is "saving room" for the trailing block, mid-prose drift from
+pre-composing distinct suggestion seeds, tagged-block leakage into
+prose. If signal emerges in v1 rollout, fall back to suggestion-
+agent-always (route on-turn emission through the dedicated
+`models.suggestion` agent instead of the narrative trailing block,
+regardless of `piggybackMode`). Monitor in field; act on signal.
+
+### Restore-draft mechanism for tap-after-typing on suggestion chips
+
+When the user has typed unsaved content in the composer and taps a
+suggestion chip, the chip text replaces the composer content and
+the typed draft is lost — composer input isn't delta-logged, so
+Cmd/Ctrl-Z does not recover it
+([`explorations/2026-05-19-next-turn-suggestions.md`](./explorations/2026-05-19-next-turn-suggestions.md)).
+v1 documents the wart explicitly. Mitigation options if real signal
+surfaces: a Toast with "Restore draft" action firing on
+tap-with-non-empty-composer, OR an AlertDialog "Replace your typed
+text?" confirm gate. Toast is lighter-weight and uses the existing
+[`patterns/toast.md`](./ui/patterns/toast.md) primitive; dialog is
+more explicit. Surface on user reports.

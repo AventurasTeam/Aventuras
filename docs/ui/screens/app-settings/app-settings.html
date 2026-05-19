@@ -1341,6 +1341,70 @@
             </div>
             <span class="toggle on"></span>
           </div>
+          <div class="field-row">
+            <div class="field-label">suggestion count
+              <span class="hint">chips per emission &middot; range 1&ndash;6 &middot; model picks category per slot</span>
+            </div>
+            <div class="input-select" style="min-width: 80px; max-width: 100px;"><span>3</span><span style="color: var(--ink-faint);">&#9662;</span></div>
+          </div>
+
+          <!-- Suggestion categories editor — per-mode tabs (Adventure / Creative); each binds to app_settings.default_suggestion_categories[mode]. -->
+          <div class="tab-section"><div class="tab-section-title">Story Defaults &middot; Suggestion categories</div></div>
+          <div class="tab-subtitle">Default palette feeding the next-turn chip strip. Per-mode tabs &mdash; edits here change defaults for <em>new</em> stories only; existing stories own their snapshot.</div>
+
+          <div class="segment" style="margin-bottom: 12px;">
+            <span class="seg active">Adventure</span><span class="seg">Creative</span>
+          </div>
+
+          <!-- Editor list — same SuggestionCategoriesEditor compound as Story Settings. Per-row: drag handle, enable toggle, label, color swatch, prompt hint, delete. -->
+          <div style="display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line-soft); border-radius: 4px; padding: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--line-soft);">
+              <span style="color: var(--ink-faint); cursor: grab;">&#8801;</span>
+              <span class="toggle on" style="flex-shrink: 0;"></span>
+              <div style="display: flex; flex-direction: column; flex: 1; gap: 2px;">
+                <span style="font-weight: 600; font-size: 13px;">Action</span>
+                <span style="font-size: 11px; color: var(--ink-muted);">A physical action the lead initiates against the present scene.</span>
+              </div>
+              <div class="color-swatch" style="background: #dbe6f2; flex-shrink: 0;" title="blue (curated slot)"></div>
+              <span style="color: var(--ink-faint); cursor: pointer;" title="delete">&#9881;</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--line-soft);">
+              <span style="color: var(--ink-faint); cursor: grab;">&#8801;</span>
+              <span class="toggle on" style="flex-shrink: 0;"></span>
+              <div style="display: flex; flex-direction: column; flex: 1; gap: 2px;">
+                <span style="font-weight: 600; font-size: 13px;">Dialogue</span>
+                <span style="font-size: 11px; color: var(--ink-muted);">Spoken or written communication initiated by the lead.</span>
+              </div>
+              <div class="color-swatch" style="background: #d6ebd8; flex-shrink: 0;" title="green (curated slot)"></div>
+              <span style="color: var(--ink-faint); cursor: pointer;" title="delete">&#9881;</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--line-soft);">
+              <span style="color: var(--ink-faint); cursor: grab;">&#8801;</span>
+              <span class="toggle on" style="flex-shrink: 0;"></span>
+              <div style="display: flex; flex-direction: column; flex: 1; gap: 2px;">
+                <span style="font-weight: 600; font-size: 13px;">Examine</span>
+                <span style="font-size: 11px; color: var(--ink-muted);">Close-observation of an entity, object, or scene detail.</span>
+              </div>
+              <div class="color-swatch" style="background: #e4d9ef; flex-shrink: 0;" title="purple (curated slot)"></div>
+              <span style="color: var(--ink-faint); cursor: pointer;" title="delete">&#9881;</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; padding: 6px 4px;">
+              <span style="color: var(--ink-faint); cursor: grab;">&#8801;</span>
+              <span class="toggle" style="flex-shrink: 0;"></span>
+              <div style="display: flex; flex-direction: column; flex: 1; gap: 2px;">
+                <span style="font-weight: 600; font-size: 13px; color: var(--ink-muted);">Move</span>
+                <span style="font-size: 11px; color: var(--ink-faint);">Repositioning the lead within or away from the current scene. <em>(disabled)</em></span>
+              </div>
+              <div class="color-swatch" style="background: #f2e7d0; flex-shrink: 0; opacity: 0.5;" title="amber (curated slot)"></div>
+              <span style="color: var(--ink-faint); cursor: pointer;" title="delete">&#9881;</span>
+            </div>
+            <div style="padding: 8px 4px; border-top: 1px solid var(--line-soft); margin-top: 4px;">
+              <span style="cursor: pointer; color: var(--ink-muted); font-size: 12px;">+ Add category</span>
+            </div>
+          </div>
+          <div style="font-size: 11px; color: var(--ink-faint); margin-top: 8px;">
+            Section overflow: <em>Reset to bundled defaults</em> (confirmation-gated; discards user edits for this mode).
+          </div>
         </div>
 
         <!-- APPEARANCE -->

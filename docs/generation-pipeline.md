@@ -22,12 +22,14 @@ pipeline concern in `architecture.md`).
 
 ## Pipelines, unified
 
-The framework drives two foreground pipeline kinds in v1 —
-`per-turn` and `chapter-close` — and is structured so that
-background work (the periodic classifier first; later style-review,
-suggestion regen, etc.) uses the same shape. Background pipelines
-and foreground pipelines share the framework; what distinguishes
-them is the concurrency contract.
+The framework drives three foreground pipeline kinds in v1 —
+`per-turn`, `chapter-close`, and `suggestion-refresh` (user-triggered
+chip re-roll from the reader; see
+[`explorations/2026-05-19-next-turn-suggestions.md`](./explorations/2026-05-19-next-turn-suggestions.md))
+— and is structured so that background work (the periodic
+classifier first; later style-review, etc.) uses the same shape.
+Background pipelines and foreground pipelines share the framework;
+what distinguishes them is the concurrency contract.
 
 The wizard is **not** pipeline-adjacent. It's a screen flow that
 issues one-shot LLM calls per user click and commits its results
@@ -54,7 +56,7 @@ type ConcurrencyPolicy = {
 }
 
 interface Pipeline {
-  kind: string // 'per-turn' | 'chapter-close' in v1
+  kind: string // 'per-turn' | 'chapter-close' | 'suggestion-refresh' in v1
   phases: readonly PhaseNode[]
   affordance: 'invisible' | 'pill-only' | 'pill-and-banner'
   gateBehavior: 'hard-gate' | 'no-gate' // 'scoped-gate' deferred

@@ -16,6 +16,9 @@ Used by:
 
 - [App Settings — Appearance · Accent override](../screens/app-settings/app-settings.md#app--appearance)
 - [Story Settings — About · Accent color](../screens/story-settings/story-settings.md#two-sections-under-one-roof--wizard-editable-vs-post-creation-tuning)
+- `SuggestionCategoriesEditor` — per-category color slot
+  ([Story Settings → Suggestion categories](../screens/story-settings/story-settings.md#suggestion-categories),
+  [App Settings → Story Defaults → Suggestion categories](../screens/app-settings/app-settings.md#suggestion-categories))
 
 ## API
 

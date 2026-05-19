@@ -602,7 +602,34 @@ stories keep their current picks.`
 ### Composer prefs
 
 Same form as Story Settings · Generation · Authoring aids — composer
-modes enabled, wrap POV (first / third), suggestions enabled.
+modes enabled, wrap POV (first / third), suggestions enabled,
+`suggestionCount` (1-6, default 3).
+
+### Suggestion categories
+
+Per-mode tabs (Adventure / Creative) using the
+[`Tabs`](../../patterns/tabs.md) primitive. Each tab binds to
+`app_settings.default_suggestion_categories[mode]` (sibling field on
+`app_settings`, not nested inside `default_story_settings` because
+the per-mode shape doesn't fit `Partial<StorySettings>` — see
+[`data-model.md → App settings storage`](../../../data-model.md#app-settings-storage)).
+
+Editor compound: the same `<SuggestionCategoriesEditor>` used in
+Story Settings (canonical anatomy + validation rules documented in
+[`story-settings.md → Suggestion categories`](../story-settings/story-settings.md#suggestion-categories)).
+Per-category row carries drag handle, enable toggle, label input,
+[`ColorPicker`](../../patterns/color-picker.md) swatch, prompt-hint
+textarea, delete button. `+ Add category` at the bottom.
+
+Reset action: `Reset to bundled defaults` in the section's overflow.
+Confirmation-gated; overwrites the current tab's list with the
+shipped curated values bundled in code. Discards any user-added or
+user-edited entries for that mode.
+
+Edits here change defaults for **new stories only** — the
+copy-at-creation rule means existing stories own their snapshot and
+don't reflect changes here. Stories edit their own palette in Story
+Settings → Composer → Suggestion categories.
 
 ## APP · Appearance
 

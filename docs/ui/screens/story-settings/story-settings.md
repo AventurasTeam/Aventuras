@@ -226,7 +226,8 @@ Houses three groupings, each with its own sub-section:
    the substantial preset+prose fields the AI consumes during
    generation.
 3. **Authoring aids** — composer modes toggle + wrap POV
-   (first/third) + suggestions toggle.
+   (first/third) + suggestions toggle + `suggestionCount` stepper +
+   [Suggestion categories](#suggestion-categories) editor.
 
 ### Orthogonal axes
 
@@ -272,6 +273,67 @@ warn-box at the top once any entry has been written; the actual
 confirmation lives at the save-session commit step. Lead is **not**
 flagged — lead-switching is a first-class action per
 [principles → Mode, lead, narration](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts).
+
+### Suggestion categories
+
+The user-customizable palette feeding the
+[reader chip strip](../reader-composer/reader-composer.md#next-turn-suggestions).
+Section is gated by the `suggestionsEnabled` master toggle (above)
+and the `suggestionCount` stepper (above, 1-6 range, default 3).
+When the master toggle is off, the editor below dims (visible-but-
+disabled — user can see what they'd be enabling).
+
+**Bound data.** `stories.settings.suggestionCategories` — flat
+ordered array. Seeded from
+`app_settings.default_suggestion_categories[story.mode]` at story
+creation per the copy-at-creation rule; story owns its values
+thereafter.
+
+**Editor row anatomy** (canonical — App Settings → Story Defaults
+reuses the same compound):
+
+- **Drag handle** updates `order` on save.
+- **Enable toggle** flips `enabled`. Disabled-but-defined entries
+  stay editable; they just don't emit.
+- **Label input** — short text. Validates non-empty + case-
+  insensitive unique within the list. Collision blocks save with
+  inline error on the conflicting row.
+- **[`ColorPicker`](../../patterns/color-picker.md)** — curated
+  swatches + `+ custom`. Stores palette slot key (theme-resolved at
+  render).
+- **Prompt hint** — multi-line textarea. The prose the suggestion
+  agent receives for this slot. Empty allowed (falls back to label
+  as sole hint, soft warning that emissions may be lower quality).
+- **Delete** — confirmation-gated. Orphan chips (entries that
+  already emitted with the deleted `categoryId`) render with
+  `(removed)` label per the reader-composer surface.
+
+**Mobile expression.** Row collapses into a vertical stack inside
+an [`Accordion`](../../patterns/accordion.md) item; the
+[`ColorPicker`](../../patterns/color-picker.md) becomes a
+[`Sheet`](../../patterns/overlays.md) per its narrow-tier routing.
+
+**Add affordance.** `+ Add category` at the bottom of the list
+spawns a row with empty label, palette default color, empty prompt
+hint, `enabled: true`, `order: items.length`.
+
+**Reset affordance.** `Reset to mode defaults` menu action in the
+section's overflow. Confirmation-gated; overwrites the current list
+with a fresh copy of
+`app_settings.default_suggestion_categories[story.mode]`. Discards
+user edits.
+
+**Save semantics.** Lives inside the existing
+[`save-sessions`](../../patterns/save-sessions.md) pattern of the
+Story Settings screen; no new save infrastructure. The
+`suggestionsEnabled` toggle, `suggestionCount` stepper, and category
+list share dirty state with the rest of the tab.
+
+Full emission contract + edge cases (orphan categories, parse
+failures, branch switch with chips in flight, refresh re-roll
+pipeline, rollback semantics, translation interaction, all-categories-
+disabled state) in
+[`explorations/2026-05-19-next-turn-suggestions.md`](../../../explorations/2026-05-19-next-turn-suggestions.md).
 
 ## Memory tab
 

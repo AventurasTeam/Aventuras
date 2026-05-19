@@ -454,49 +454,106 @@ animation. Single slot, multiple states, priority-ordered.
 ## Next-turn suggestions
 
 After an AI reply completes, a **suggestions panel** appears between
-the entries and the composer, offering 3-4 possible next turns. **UI
-shape is unified** across modes; **category sets are mode-specific**
-because adventure and creative frame the user differently.
+the entries and the composer, offering tappable chip seeds for the
+user's next turn. Full contract — schema, emission pipeline,
+categories editor, edge cases — in
+[`explorations/2026-05-19-next-turn-suggestions.md`](../../../explorations/2026-05-19-next-turn-suggestions.md);
+this section covers the reader-composer surface.
 
-**Categories per story mode:**
+**Categories are user-customizable per story.** The palette is
+authored in Story Settings → Composer → Suggestion categories;
+defaults seeded at story creation from
+`app_settings.default_suggestion_categories[mode]`. Adventure ships
+Action / Dialogue / Examine / Move; Creative ships Action / Dialogue
+/ Revelation / Twist. Users can add, edit, reorder, recolor, or
+disable categories. Custom categories carry their own
+[`ColorPicker`](../../patterns/color-picker.md) selection (curated
+palette + custom hex); the chip's color is theme-resolved at render
+from the stored palette slot.
 
-| Mode      | Categories                                  |
-| --------- | ------------------------------------------- |
-| Adventure | `Action`, `Dialogue`, `Examine`, `Move`     |
-| Creative  | `Action`, `Dialogue`, `Revelation`, `Twist` |
+**Chip count is decoupled from category count.**
+`stories.settings.suggestionCount` (default 3, range 1-6) drives
+literal chip count per emission. The model picks per-slot which
+category to use from the enabled palette — strict one-per-category
+is not the contract. A prompt-level diversity nudge encourages
+variation across slots; manual refresh + composer-guidance is the
+user's recovery loop if the model ruts.
 
-**Colors** (wireframe placeholders):
+**Three emission paths.** Suggestions persist on
+`story_entries.metadata.nextTurnSuggestions` on the AI entry that
+produced them — reload-safe, branch-safe, rollback-safe via the
+existing metadata delta-log:
 
-| Category     | Color  |
-| ------------ | ------ |
-| `Action`     | Blue   |
-| `Dialogue`   | Green  |
-| `Examine`    | Purple |
-| `Move`       | Amber  |
-| `Revelation` | Orange |
-| `Twist`      | Red    |
+- **Narrative fold** (`piggybackMode='on'`) — sibling `<suggestions>`
+  block in the narrative model's trailing emission, parsed
+  independently of `<state>`.
+- **Classifier fold** (`piggybackMode='off'`) — the per-turn
+  classifier pass emits both `<state>` and `<suggestions>` in one
+  call.
+- **Refresh re-roll** — user-triggered `suggestion-refresh` pipeline
+  using the dedicated `models.suggestion` agent (single-shot
+  emission + conditional translation; see
+  [`generation-pipeline.md`](../../../generation-pipeline.md)).
 
-**Suggestions are complete prose.** Click → composer text fills with
-the suggestion, composer mode is set to **`Free`** (suggestion is
+**Chip anatomy.** Per chip: category overline (label text, color-
+tinted background), suggestion prose body, left-edge color accent
+strip from the stored palette slot. Color is visual identity only;
+screen readers get the category label as accessible text.
+
+**Suggestions are complete prose.** Tap → composer text replaces
+with the suggestion, composer mode set to **`Free`** (suggestion is
 already finished prose; no further wrapping needed). User can edit
 text and/or override mode before sending.
+
+**Known UX wart — tap-after-typing loses typed text.** Composer
+input isn't delta-logged (it's pre-submit state), so no Cmd/Ctrl-Z
+recovers a draft replaced by a chip tap. Documented as a v1
+limitation; the
+[Restore-draft mechanism](../../../parked.md#restore-draft-mechanism-for-tap-after-typing-on-suggestion-chips)
+parked entry tracks the post-v1 design if real signal surfaces.
 
 **NOT coupled to composer mode categories.** Composer mode =
 prefix/suffix wrapping intent. Suggestion category = narrative-beat
 type. Different axes.
 
-**Mix is classifier-driven**, not strict one-of-each.
+**Chrome row** beneath the chip stack, right-aligned:
+
+- **⟳ refresh** — primary action. Fires the `suggestion-refresh`
+  pipeline with current composer text as `refreshGuidance` (empty
+  string if composer is empty). Strip enters `loading`; refresh icon
+  pulses; chips dim; taps no-op. Second click while loading is a
+  no-op (concurrency policy self-blocks; see
+  [`generation-pipeline.md`](../../../generation-pipeline.md)).
+- **⌄ collapse** — existing affordance; flips between `visible` and
+  `collapsed`. Chrome row persists when collapsed.
+
+Disabling the feature lives in Story Settings → Composer →
+Suggestions via the `suggestionsEnabled` master toggle, not inline.
+
+**Empty-state ⟳ Generate.** Terminal entries without
+`nextTurnSuggestions` (opening entries, `user_action` entries
+pre-AI-reply, `system` entries, legacy entries from before this
+feature landed) show a single ⟳ Generate button on the strip body.
+Click fires `suggestion-refresh` to produce chips ex nihilo. Same
+pipeline as the refresh button.
 
 **States:**
 
 - `visible` — normal
-- `loading` — suggestion LLM is regenerating (rows dim, regen icon
-  pulses)
+- `loading` — suggestion emission in flight (chip-strip emission OR
+  re-roll). Chips dim; refresh icon pulses
 - `error` — generation failed (inline error with Retry)
 - `collapsed` — user hid the list via chevron; chrome remains
 - `hidden` — user disabled suggestions in Story Settings
   (`stories.settings.suggestionsEnabled = false`); panel never
   appears
+- `empty-state` — terminal entry has no `nextTurnSuggestions`;
+  single ⟳ Generate affordance rendered where chips would be
+
+**Orphan categories.** A chip whose stored `categoryId` no longer
+resolves (user deleted the category since emission) renders with
+category label `(removed)`, neutral fallback color from the palette,
+and text intact. Tap still works. No auto-cleanup; lazy at render.
 
 ## Scroll behavior
 

@@ -914,7 +914,7 @@
     </div>
     </div>
 
-    <!-- Next-turn suggestions — shown after a completed AI reply, collapses when not needed -->
+    <!-- Next-turn suggestions — shown after a completed AI reply; emitted by piggyback, classifier fold, or refresh re-roll per data-model.md; collapses when not needed; falls back to empty-state Generate when terminal entry carries no nextTurnSuggestions. -->
     <div class="suggestions" id="suggestions-panel">
       <div class="suggestions-inner">
         <div class="suggestions-header">
@@ -923,11 +923,14 @@
             Suggestions
           </span>
           <div class="suggestions-actions">
-            <span class="suggestions-regen" id="suggestions-regen" title="Regenerate suggestions">&#8634; regenerate</span>
+            <span class="suggestions-regen" id="suggestions-regen" title="Refresh suggestions (uses current composer text as guidance)">&#8634; refresh</span>
           </div>
         </div>
         <div class="suggestions-list" id="suggestions-list">
-          <!-- Content swaps per story mode via review control: adventure = Action/Dialogue/Examine/Move; creative = Action/Dialogue/Revelation/Twist -->
+          <!-- Each chip renders with its category's stored color (palette slot, theme-resolved). The category palette is user-customizable per story via Story Settings → Composer → Suggestion categories; the sets shown here are the bundled mode defaults (Adventure: Action/Dialogue/Examine/Move; Creative: Action/Dialogue/Revelation/Twist) seeded at story creation. The number of chips per turn = stories.settings.suggestionCount (default 3, range 1-6). -->
+        </div>
+        <div class="suggestions-empty" style="display:none; padding: 8px 10px; text-align: center;">
+          <span style="cursor: pointer; color: var(--ink-muted); font-size: 12px;">&#8634; Generate suggestions</span>
         </div>
         <div class="suggestions-error">
           &#9888; Couldn't generate suggestions. <span style="text-decoration: underline; cursor: pointer;">Retry</span> or dismiss.
