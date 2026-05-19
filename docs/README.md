@@ -32,6 +32,12 @@ implementation, and the open questions tracked across the project.
   current milestone (v1) needs answered or that block v1 work.
 - **[parked.md](./parked.md)** — deferred items: post-v1 confirmed
   - parked-until-signal.
+- **[implementation/](./implementation/README.md)** — how
+  implementation work is decomposed and tracked. Authoring
+  conventions for milestones and slices live in
+  [conventions.md](./implementation/conventions.md); per-milestone
+  docs and slice work live under
+  [milestones/](./implementation/milestones/README.md).
 - **[ui/](./ui/README.md)** — UI design: principles + per-screen
   wireframes and docs.
 - **[explorations/](./explorations/README.md)** — dated session
