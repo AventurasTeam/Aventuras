@@ -132,25 +132,25 @@ Each provider carries:
   default URL for "any compatible endpoint."
 - **Custom headers** — optional key/value pairs for proxy auth or
   custom routing. Collapsed by default.
-- **Models** — visible list defaults to **pinned only** (a curated
+- **Models** — visible list defaults to **favorites only** (a curated
   short-list of the user's working set). Below it: a `View all N
 models →` toggle that expands to a search + filter view of the
   full catalog. Necessary for gateway providers like OpenRouter
   where 300+ models would be unusable as a flat list.
-  - **Pinned section** — always visible. Short by design; this is
+  - **Favorites section** — always visible. Short by design; this is
     the user's quick-access set.
   - **View all expanded** — search input (filter by name) + capability
-    filter chips (`🧠 reasoning`, `⚙ structured`, `★ pinned only`) +
+    filter chips (`🧠 reasoning`, `⚙ structured`, `★ favorites only`) +
     scrollable list. Virtualized for large catalogs per
     [patterns → Large lists](../../patterns/lists.md#large-lists--virtualization-rule)
-    (OpenRouter ships 340+ models). Pinned float to the top of the
+    (OpenRouter ships 340+ models). Favorites float to the top of the
     unified list.
-  - **Per-row actions** — pin star (☆ / ★), capability badges
+  - **Per-row actions** — favorite star (☆ / ★), capability badges
     (🧠 reasoning, ⚙ structured output where capability data is
     available), remove-from-cache (×).
   - **Threshold for showing "View all"** — providers with very few
     models (e.g., a local Ollama instance with 3 models) skip the
-    pinned/all distinction and just show the full list inline. The
+    favorites/all distinction and just show the full list inline. The
     smart pattern only earns its weight when the catalog is
     non-trivial.
 - **Add custom model id** — always available below the model list.
@@ -187,7 +187,7 @@ within its card:
 
 Both sections **default collapsed** showing only their head row
 (name + count + `Refresh`). The user expands a section to see
-the model list, pinned/full/search affordances, and add-custom-id.
+the model list, favorites/full/search affordances, and add-custom-id.
 Refetch is per-section: clicking `Refresh` on the head row
 refreshes only that capability category.
 
@@ -296,8 +296,12 @@ single most-edited profile. Cannot be deleted; can be reconfigured.
 
 Fields:
 
-- **provider/model** — dropdown grouped by provider; model items show
-  capability icons (🧠 reasoning, ⚙ structured output) inline.
+- **provider/model** —
+  [ProviderModelPicker primitive](../../patterns/provider-model-picker.md).
+  Sets `modelRef: {providerId, modelId}`. Trigger shows the modelId
+  - capability icons; the open picker carries type-to-search,
+    cross-provider Favorites, grouped provider sections, and a
+    sticky-footer custom-add composer.
 - **temperature** — 0–1 slider.
 - **max output** — slider with `[✎ custom]` for direct numeric input
   beyond the slider's range.
@@ -384,6 +388,14 @@ Agent rows in **Assignments** likewise carry a warning indicator when
 `assignments[agentId]` is unset post-profile-delete: "⚠ No profile
 assigned" in place of the profile name, tappable to a profile picker.
 
+The [ProviderModelPicker](../../patterns/provider-model-picker.md)
+trigger renders its own broken-state Tag inline when the model
+reference is the broken element — `⚠ Provider missing` or
+`⚠ <modelId>` depending on which side broke — composing within the
+profile card's overall red-border envelope. Both render together;
+the card's envelope says "this profile is broken," the picker's
+trigger Tag says "specifically, the model reference."
+
 The **global error banner** above the main header aggregates all
 broken profiles + unset assignments:
 `N profiles have configuration errors. [Open settings →]`.
@@ -393,15 +405,20 @@ missing key, or Assignments if the issue is an unset agent).
 
 ### Custom model id + favorites + fetch refresh
 
-Power-user features that earn their v1 weight:
+Power-user features owned by the
+[ProviderModelPicker primitive](../../patterns/provider-model-picker.md):
 
-- **Add custom model id** — bottom of the model dropdown, `+ Add custom…`
-  opens a small input for an id the fetched list doesn't contain
-  (custom OpenAI-compatible deployments, fine-tunes).
-- **Favorite / pin** — small star toggle on each dropdown item.
-  Pinned models float to the top of the list across all selectors.
-- **Refresh fetch** — `↻` button on the provider row in Keys,
-  per-dropdown manual refresh on the model picker.
+- **Add custom model** — sticky-footer composer at the bottom of
+  the open picker. `modelId` input + `Under:` provider dropdown +
+  Add. Stored as `app_settings.providers[].customModelIds`. Custom
+  entries render as ordinary rows inside the assigned provider's
+  section.
+- **Favorites** — `⭐` toggle on each row; favorited models surface
+  in a cross-provider Favorites section pinned at the top of the
+  picker. Stored as `app_settings.providers[].favoriteModelIds`.
+- **Refresh fetch** — `↻` action in each provider section's `⋯`
+  menu inside the picker. The same affordance also lives on the
+  provider row in App Settings · Providers · Keys.
 
 ## GENERATION · Embedding models
 

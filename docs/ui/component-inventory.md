@@ -93,7 +93,9 @@ for the rule.
 
 ### Compounds — build-ready
 
-_Empty — every build-ready compound has shipped._
+| Compound            | Folder                  | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ProviderModelPicker | `components/compounds/` | Searchable, grouped, rich-row picker for `{providerId, modelId}` composite. Trigger button (modelId + capability icons + chevron) + per-tier open surface (popover desktop / Sheet phone) carrying type-to-search, cross-provider Favorites pinned section, grouped provider sections with sticky headers, and a sticky-footer custom-add composer. Composes Autocomplete substrate. Spec: [provider-model-picker.md](./patterns/provider-model-picker.md). |
 
 ### Compounds — needs design
 

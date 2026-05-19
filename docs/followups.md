@@ -13,6 +13,60 @@ for the placement rule.
 
 ---
 
+## Data-model
+
+### Reconcile `default_models` authority — seed source vs runtime resolver
+
+`app_settings.default_models: Record<AgentId, {providerId, modelId}>`
+is described inconsistently across the docs:
+
+- [`data-model.md → App settings storage`](./data-model.md#app-settings-storage)
+  frames it as the "override-at-render target referenced by
+  `stories.settings.models[agentId]`" — implying default_models is
+  the runtime resolver authority for un-overridden stories. Adjacent
+  prose claims `default_models` and `profile.modelRef` are "distinct
+  — defaults are about model selection, profiles are about call
+  configuration."
+- The deletion-semantics section in the same file treats
+  `default_models[agentId].providerId` as having dangling-reference
+  semantics on provider delete — implying it's stored mutable state.
+- [`generation-pipeline.md → Config pre-flight validation`](./generation-pipeline.md#config-pre-flight-validation)
+  reads `default_models[agentId].providerId` directly during
+  pre-flight — treats it as runtime authority.
+
+Surfaced during the
+[ProviderModelPicker design](./explorations/2026-05-19-profile-model-picker.md):
+the intended model is **`default_models` is a baked-in
+per-provider code map**, consulted only at "Reset to defaults"
+time to seed `profile.modelRef`. Not user-mutable. Runtime
+resolution is `stories.settings.models[agentId]` (override) →
+`profile.modelRef` via `assignments[agentId]`. Under that model,
+`default_models` has no providerId-instance dangling-reference
+semantics (it references provider types, not instances), and no UI
+surface (deliberately).
+
+Reconciliation pass needs to:
+
+- Rewrite the `Default models` paragraph in
+  [`data-model.md → App settings storage`](./data-model.md#app-settings-storage)
+  to describe the baked-in code-map model.
+- Strip the `default_models[agentId].providerId` dangling-reference
+  bullet from the deletion-semantics section.
+- Update [`generation-pipeline.md → Config pre-flight validation`](./generation-pipeline.md#config-pre-flight-validation)
+  to validate `profile.modelRef.providerId` instead of
+  `default_models[agentId].providerId` for agents.
+- Sweep the
+  [provider/profile deletion exploration record](./explorations/2026-05-18-provider-profile-deletion.md)
+  for the same misframing — the exploration is historical and may
+  stay as-is, but cross-doc consistency calls for at least a
+  pointer / footnote.
+
+Lands at the resolution chain's own focused pass. No v1 blocker —
+the picker design ships with the right model in mind and writes
+only to `profile.modelRef`.
+
+---
+
 ## UX
 
 ### Classification awareness pattern
@@ -245,39 +299,6 @@ translation rows weren't addressed — open whether they travel with
 a per-story export and how they reconcile with the importer's
 translation backend + language settings on the receiving end.
 Lands at the next pass over translation pipeline / export format.
-
-### Profile model picker — provider/model selection UX
-
-[`app-settings.md → Narrative profile`](./ui/screens/app-settings/app-settings.md#narrative-profile-always-present)
-spec'd the model selection as a single combined `provider/model`
-field — one dropdown grouped by provider, picking a model implicitly
-selects its provider (the `modelRef: { providerId, modelId }`
-composite is set by one widget). Discoverability degrades as
-provider + model counts grow; no way to filter by provider first
-before scanning models.
-
-Lean: split into **two separate selects** — provider first, then
-model filtered to that provider's catalog. Or a **bespoke
-provider/model picker** if the two-select shape feels clunky
-(inline expandable, dialog, drawer — TBD per design).
-
-Open questions for the design pass:
-
-- **Provider-change reset behavior** in the two-select shape. When
-  the user changes provider, does the model select clear, preserve
-  if still valid on the new provider, or reset to a default?
-- **Cross-surface consistency.** The same `{providerId, modelId}`
-  composite shape is set in App Settings → Profiles (narrative +
-  agent profile cards) AND App Settings → Default models (per-agent
-  model fallback). Migrate both together vs incrementally.
-- **Bespoke picker shape** if that's the direction. Modal, inline-
-  expandable, side drawer? Reuse across profiles + default-models,
-  or surface-specific?
-- **Story Settings → Models override** is unaffected — those are
-  pure model id strings (no provider component) per the
-  [deletion-semantics design](./data-model.md#app-settings-storage).
-
-Lands when the profile editor UI gets a focused pass.
 
 ### Translation graceful degradation
 

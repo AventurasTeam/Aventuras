@@ -23,6 +23,11 @@ The split heuristic + when-to-add rules live in
   table state + no-results state.
 - [`forms.md`](./forms.md) — Select primitive (segment / dropdown /
   radio render-mode rule).
+- [`provider-model-picker.md`](./provider-model-picker.md) —
+  searchable, grouped, rich-row picker for `{providerId, modelId}`
+  composite. Trigger + popover/Sheet open surface with type-to-filter,
+  cross-provider Favorites, sticky-footer custom-add composer.
+  Composes Autocomplete substrate; owns grouped source + rich rows.
 - [`overlays.md`](./overlays.md) — Sheet and Popover primitive
   contracts: rn-primitives mapping, API surface, slot reshape, story
   shapes. Consumer-side decision tree (when to use Sheet vs Popover

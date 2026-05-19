@@ -1238,7 +1238,7 @@ app_settings.providers: Array<{
   apiKey: string                             // see encryption note below
   endpoint?: string                          // override default; required for openai-compatible
   customHeaders?: Record<string, string>     // proxy auth, custom routing
-  pinnedModelIds: string[]                   // user's working set; floats to top of selectors
+  favoriteModelIds: string[]                 // user's working set; floats to top of selectors
   cachedModels?: Array<{                     // result of /models fetch; survives offline restarts
     id: string
     capabilities?: {
@@ -1248,6 +1248,7 @@ app_settings.providers: Array<{
       matryoshkaDims?: number[]              // NEW: curated dim ladder declared by the model card (e.g., [256, 512, 1024, 1536, 2048, 3072]). Picker surfaces these first; Custom… accepts any N up to native.
     }
   }>
+  customModelIds?: string[]                  // user-added model ids not in the fetched catalog (custom OpenAI-compatible deployments, fine-tunes). Bare ids without capability data; picker walks cachedModels + customModelIds to compose its row source.
   cachedAt?: number                          // last successful /models fetch timestamp
 }>
 ```

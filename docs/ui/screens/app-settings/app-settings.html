@@ -118,14 +118,36 @@
       .toggle.on { background: var(--ok); }
       .toggle.on::after { left: 18px; }
 
-      /* model select with capability badges (badges right-aligned) */
-      .model-select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 13px; color: var(--ink); display: flex; align-items: center; gap: 8px; cursor: pointer; }
+      /* ProviderModelPicker trigger — modelId + capability badges + chevron */
+      .model-select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 13px; color: var(--ink); display: flex; align-items: center; gap: 8px; cursor: pointer; font-family: ui-monospace, monospace; position: relative; }
       .model-select .caps { margin-left: auto; display: inline-flex; gap: 4px; }
-      .model-select .dropdown-arrow { color: var(--ink-faint); }
+      .model-select .dropdown-arrow { color: var(--ink-faint); font-family: system-ui, sans-serif; }
       .cap-badge { font-size: 11px; color: var(--ink-faint); }
       .cap-badge.on { color: var(--ink); }
-      .ctx-info { font-size: 10px; color: var(--ink-faint); margin-top: 4px; line-height: 1.5; }
+      .ctx-info { font-size: 10px; color: var(--ink-faint); margin-top: 4px; line-height: 1.5; font-family: system-ui, sans-serif; }
       .ctx-info b { color: var(--ink-muted); }
+
+      /* ProviderModelPicker open surface — stubbed popover */
+      .pmp-popover { position: absolute; top: calc(100% + 4px); left: 0; width: 360px; max-height: 420px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); box-shadow: 0 6px 24px rgba(0,0,0,0.18); font-family: system-ui, sans-serif; z-index: 50; }
+      .pmp-search-bar { padding: 8px 10px; background: var(--bg-region); border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; gap: 8px; font-size: 12px; flex-shrink: 0; }
+      .pmp-search-bar .glyph { color: var(--ink-faint); }
+      .pmp-search-bar .ph { color: var(--ink-faint); font-style: italic; flex: 1; }
+      .pmp-search-bar .clear { color: var(--ink-faint); cursor: pointer; }
+      .pmp-scroll { overflow-y: auto; flex: 1; }
+      .pmp-section-head { padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--ink-muted); background: var(--bg-region); border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; gap: 8px; position: sticky; top: 0; }
+      .pmp-section-head.fav { color: var(--ink); }
+      .pmp-section-head .count { color: var(--ink-faint); font-weight: 400; }
+      .pmp-section-head .more { margin-left: auto; color: var(--ink-faint); cursor: pointer; font-weight: 400; }
+      .pmp-row { padding: 5px 10px 5px 22px; font-size: 12px; display: flex; align-items: center; gap: 8px; cursor: pointer; border-bottom: 1px dotted var(--line-soft); font-family: ui-monospace, monospace; position: relative; }
+      .pmp-row:hover { background: var(--bg-region); }
+      .pmp-row .sel { position: absolute; left: 8px; color: var(--ok); font-family: system-ui, sans-serif; }
+      .pmp-row .m-id { flex: 1; color: var(--ink); }
+      .pmp-row .caps { display: inline-flex; gap: 4px; min-width: 26px; justify-content: flex-end; }
+      .pmp-row .fav-toggle { color: var(--ink-faint); cursor: pointer; font-size: 13px; user-select: none; font-family: system-ui, sans-serif; }
+      .pmp-row .fav-toggle.on { color: #d8b04a; }
+      .pmp-row .provider-tag { font-size: 10px; color: var(--ink-faint); border: 1px solid var(--line-soft); border-radius: 2px; padding: 1px 4px; font-family: system-ui, sans-serif; }
+      .pmp-footer { padding: 8px 10px; font-size: 12px; color: var(--ink-muted); background: var(--bg-region); border-top: 1px solid var(--line-soft); cursor: pointer; flex-shrink: 0; }
+      .pmp-footer:hover { color: var(--ink); }
 
       /* provider rows on Keys tab */
       .prov-row { display: flex; align-items: flex-start; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line-soft); }
@@ -761,16 +783,79 @@
 
             <div class="field-row">
               <div class="field-label">model
-                <span class="hint">provider/model &middot; capability badges inline</span>
+                <span class="hint">ProviderModelPicker &middot; modelId + caps + chevron</span>
               </div>
               <div>
                 <div class="model-select">
-                  <span>Anthropic / claude-sonnet-4-7</span>
+                  <span>claude-sonnet-4-7</span>
                   <span class="caps">
                     <span class="cap-badge on" title="reasoning supported">&#129504;</span>
                     <span class="cap-badge on" title="structured output supported">&#9881;</span>
                   </span>
                   <span class="dropdown-arrow">&#9662;</span>
+
+                  <!-- Stubbed open-state popover; demonstrates the open surface. -->
+                  <div class="pmp-popover">
+                    <div class="pmp-search-bar">
+                      <span class="glyph">&#x1F50D;</span>
+                      <span class="ph">Search models&hellip;</span>
+                      <span class="clear">&times;</span>
+                    </div>
+                    <div class="pmp-scroll">
+                      <div class="pmp-section-head fav">&#11088; Favorites</div>
+                      <div class="pmp-row">
+                        <span class="m-id">claude-sonnet-4-7</span>
+                        <span class="provider-tag">Anthropic</span>
+                        <span class="caps"><span class="cap-badge on">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                        <span class="fav-toggle on">&#11088;</span>
+                      </div>
+                      <div class="pmp-row">
+                        <span class="m-id">gpt-5</span>
+                        <span class="provider-tag">OpenAI</span>
+                        <span class="caps"><span class="cap-badge on">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                        <span class="fav-toggle on">&#11088;</span>
+                      </div>
+                      <div class="pmp-section-head">Anthropic <span class="count">(4)</span><span class="more">&middot;&middot;&middot;</span></div>
+                      <div class="pmp-row">
+                        <span class="m-id">claude-opus-4-7</span>
+                        <span class="caps"><span class="cap-badge on">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                        <span class="fav-toggle">&#9734;</span>
+                      </div>
+                      <div class="pmp-row">
+                        <span class="sel">&#10003;</span>
+                        <span class="m-id">claude-sonnet-4-7</span>
+                        <span class="caps"><span class="cap-badge on">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                        <span class="fav-toggle on">&#11088;</span>
+                      </div>
+                      <div class="pmp-row">
+                        <span class="m-id">claude-sonnet-4-6</span>
+                        <span class="caps"><span class="cap-badge on">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                        <span class="fav-toggle">&#9734;</span>
+                      </div>
+                      <div class="pmp-row">
+                        <span class="m-id">claude-haiku-4-5</span>
+                        <span class="caps"><span class="cap-badge on">&#129504;</span></span>
+                        <span class="fav-toggle">&#9734;</span>
+                      </div>
+                      <div class="pmp-section-head">OpenAI <span class="count">(3)</span><span class="more">&middot;&middot;&middot;</span></div>
+                      <div class="pmp-row">
+                        <span class="m-id">gpt-5</span>
+                        <span class="caps"><span class="cap-badge on">&#129504;</span><span class="cap-badge on">&#9881;</span></span>
+                        <span class="fav-toggle on">&#11088;</span>
+                      </div>
+                      <div class="pmp-row">
+                        <span class="m-id">gpt-5-mini</span>
+                        <span class="caps"><span class="cap-badge on">&#9881;</span></span>
+                        <span class="fav-toggle">&#9734;</span>
+                      </div>
+                      <div class="pmp-row">
+                        <span class="m-id">gpt-4o-mini</span>
+                        <span class="caps"><span class="cap-badge on">&#9881;</span></span>
+                        <span class="fav-toggle">&#9734;</span>
+                      </div>
+                    </div>
+                    <div class="pmp-footer">+ Add custom model&hellip;</div>
+                  </div>
                 </div>
                 <div class="ctx-info">
                   <b>Reasoning:</b> supported &middot; <b>Structured output:</b> supported
@@ -852,7 +937,7 @@
                 <div class="field-label">model</div>
                 <div>
                   <div class="model-select">
-                    <span>OpenAI / gpt-4o-mini</span>
+                    <span>gpt-4o-mini</span>
                     <span class="caps">
                       <span class="cap-badge" title="reasoning not supported">&#129504;</span>
                       <span class="cap-badge on" title="structured output supported">&#9881;</span>
