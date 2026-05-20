@@ -192,6 +192,12 @@ computes the new cumulative seconds and invokes `onEditTime(next)`;
 the host writes one `op=update` delta against
 `entries.metadata.worldTime`. Cancel discards.
 
+On phone the Sheet variant carries a non-scrollable body
+(TierTupleInput is a fixed-shape form), so the Sheet's default
+`avoidKeyboard={true}` alone is sufficient — no
+`KeyboardAwareScrollView` wrap needed, per the consumer rule in
+[`overlays.md → Sheet — Keyboard handling`](./overlays.md#sheet--keyboard-handling).
+
 When `worldTimeMonotonicityBreak` is present, the overlay's body
 prepends a warning banner ("⚠ Earlier than previous entry
 (<previousLabel>)") above the input — this is the sole way the user

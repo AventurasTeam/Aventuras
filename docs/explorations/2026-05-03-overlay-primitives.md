@@ -189,13 +189,14 @@ prerequisite called out in the followup.
 
 - **Sheet keyboard-handling on mobile.** `KeyboardAvoidingView`
   inside `Sheet.Content` vs a Sheet primitive prop (e.g.
-  `avoidKeyboard`?). Lands at first Sheet implementation pass.
-  Filed under
-  [`followups.md` → UX](../followups.md#sheet-keyboard-handling-on-mobile).
+  `avoidKeyboard`?). Filed at the time; resolved 2026-05-21 — see
+  [`patterns/overlays.md` → Sheet — Keyboard handling](../ui/patterns/overlays.md#sheet--keyboard-handling).
 - **Sheet + Popover ARIA contract.** Roles, `aria-labelledby`,
-  `aria-describedby`, popover modality semantics. Lands at first
-  implementation pass. Filed under
-  [`followups.md` → UX](../followups.md#sheet--popover-aria-contract).
+  `aria-describedby`, popover modality semantics. Filed at the
+  time; resolved 2026-05-21 — see
+  [`patterns/overlays.md` → Sheet — ARIA contract](../ui/patterns/overlays.md#sheet--aria-contract)
+  and
+  [`patterns/overlays.md` → Popover — ARIA contract](../ui/patterns/overlays.md#popover--aria-contract).
 
 The [NativeWind transition followup](../ui/foundations/motion.md#nativewind-transition--on-native)
 is sharpened with a Sheet-specific dependency note rather than

@@ -359,6 +359,12 @@ primitive's gate is a direct consequence of that principle.
   closes the popover; search-bar focus on open when the search
   bar is present (see deferrals below). Inherits from Select /
   Picker base.
+- **Keyboard handling on phone.** Composes Autocomplete substrate
+  with a search input; on phone, the Sheet inherits
+  `avoidKeyboard={true}` from the Sheet primitive and the option
+  list wraps in `KeyboardAwareScrollView` per the consumer rule
+  in
+  [`overlays.md → Sheet — Keyboard handling`](./overlays.md#sheet--keyboard-handling).
 
 Resolved during the implementation pass: the picker rides Select
 via the `renderRow` / `renderTrigger` / `tailAction` extension

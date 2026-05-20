@@ -100,7 +100,12 @@ both.
 ## Sheet — API surface
 
 ```
-<Sheet open onOpenChange anchor size dismissable>
+<Sheet
+  open onOpenChange anchor size dismissable
+  avoidKeyboard
+  ariaLabel ariaLabelledBy ariaDescribedBy
+  onOpenAutoFocus onCloseAutoFocus
+>
   <Sheet.Trigger asChild>...</Sheet.Trigger>      // optional; controlled is canonical
   <Sheet.Content>{children}</Sheet.Content>
 </Sheet>
@@ -123,6 +128,17 @@ both.
 - `dismissable: boolean` (default `true`) — controls drag-down
   (bottom only), tap-outside, system-back / Escape behavior. Set
   `false` for sheets that must commit-or-cancel explicitly.
+- `avoidKeyboard?: boolean` — defaults `true` when `anchor='bottom'`;
+  ignored when `anchor='right'` (desktop-only, no soft keyboard in
+  scope). Drives the keyboard-avoidance wrap; see
+  [Sheet — Keyboard handling](#sheet--keyboard-handling) below.
+- `ariaLabel?: string` / `ariaLabelledBy?: string` /
+  `ariaDescribedBy?: string` — accessible-name and description
+  routing; see [Sheet — ARIA contract](#sheet--aria-contract) below.
+- `onOpenAutoFocus?: (event: FocusEvent) => void` /
+  `onCloseAutoFocus?: (event: FocusEvent) => void` —
+  focus-handling overrides; see
+  [Sheet — ARIA contract](#sheet--aria-contract).
 
 **Anatomy:**
 
@@ -159,12 +175,149 @@ Sheet-only specifics:
 - Motion — `--duration-base`, `--ease-emphasis` (token names
   finalize at the implementation pass).
 
+### Sheet — Keyboard handling
+
+Bottom-anchored sheets respond to on-screen keyboards via the
+[`react-native-keyboard-controller`](https://github.com/kirillzyusko/react-native-keyboard-controller)
+library (Reanimated 4 peer; lands at the first Sheet implementation
+pass). Native-only — Electron and RN Web get the library's
+documented no-op shim.
+
+**Outer wrap (primitive-owned).** When `avoidKeyboard` is true and
+`anchor='bottom'`, `Sheet.Content` wraps the consumer's child tree
+in `<KeyboardAvoidingView behavior='translate-with-padding' automaticOffset>`
+from the library. `translate-with-padding` is the library's own
+recommendation for complex layouts — GPU `translateY` during the
+keyboard animation, settling to padding once stationary.
+`automaticOffset` detects the Sheet's portal offset so consumers
+never pass `keyboardVerticalOffset` manually. The wrap is a single
+`flex:1` layer between `<Sheet.Content>` and consumer children;
+flex-based child layouts treat it as transparent. Manual override
+remains via a forthcoming `keyboardVerticalOffset` prop that is
+purely additive when `automaticOffset` is on — escape hatch, not
+recommended path.
+
+**Inner scroll (consumer-rendered).** `avoidKeyboard` handles outer
+layout; it does **not** scroll a focused input into view inside a
+scrollable Sheet body. For that, consumers wrap their scrollable
+list in
+[`KeyboardAwareScrollView`](https://github.com/kirillzyusko/react-native-keyboard-controller)
+from the same library, replacing any inner `<ScrollView>` or
+`<FlatList>`. Recommended props: `bottomOffset={16}` (one row-gap
+unit, aligns to `--spacing-row-gap-md`), `mode='insets'` (default,
+best perf, no layout reflow), `disableScrollOnKeyboardHide={false}`
+(default, preserves scroll position on keyboard dismiss).
+
+**Two-line consumer rule.**
+
+- Scrollable Sheet body (Select with search, Calendar picker, Peek
+  drawer hosting save-session edits) → wrap content in
+  `KeyboardAwareScrollView`.
+- Non-scrollable Sheet body (world-time edit Sheet with
+  TierTupleInput) → rely on `avoidKeyboard` alone.
+
+Sheet primitive does not ship a built-in scrollable wrapper —
+consumers already make per-consumer list-shape choices
+(virtualized vs not, search-bar position, sticky-footer) and a
+primitive-owned scrollable wrapper would conflict with those.
+
+**Drag × keyboard interaction.** While a keyboard is showing or
+shown, body-drag is suspended; the drag handle remains the explicit
+drag-to-dismiss surface in all keyboard states. Tap-outside, Esc,
+and system-back continue to dismiss as usual. The Sheet's gesture
+detector consults the library's keyboard-state hook (Android 21+
+and iOS) and short-circuits the body-drag's `onBegin` when the
+keyboard is up; the drag-handle detector ignores keyboard state.
+Rationale: the drag handle is the canonical drag surface per
+[`layout.md → Sheet behavior`](../foundations/mobile/layout.md#sheet-behavior--additional-rules);
+suspending body-drag during composition removes accidental dismiss
+and avoids competing with the iOS scroll-pulls-keyboard-down chain
+(consumers using `KeyboardAwareScrollView` should set
+`keyboardDismissMode='interactive'` for the scroll-chain feel
+inside the scroll surface).
+
+**Independent of `dismissable`.** `dismissable={false}` sheets can
+still host inputs (calendar swap warnings with a confirm field,
+save-session navigate-away guard with a textarea). `avoidKeyboard`
+defaults `true` regardless of `dismissable`.
+
+**Short-sheet quirk.** `size='short'` carries no special handling.
+`translate-with-padding` translates the sheet up by keyboard
+height; short-sheet height plus typical phone keyboard usually
+fits inside the viewport with margin. Very small viewport plus
+large keyboard may leave the sheet brushing the status bar — input
+remains visible. If visual breathing room matters more than the
+brief-affordance feel, consumer-side fix is bumping to
+`size='medium'`.
+
+**Translation note.** `ariaLabel` strings (see
+[ARIA contract](#sheet--aria-contract)) are translatable
+user-facing text. Consumers route them through whatever translation
+surface they use for visible UI copy.
+
+### Sheet — ARIA contract
+
+**Role.** Sheet renders `role="dialog"` always. The consent-gate
+shape lives on [`AlertDialog`](./alert-dialog.md); Sheet's
+`dismissable={false}` variant is a modal form (save-session,
+multi-field edit, calendar swap warning), not an alert.
+`dismissable` and ARIA role are independent axes.
+
+**Trigger ARIA.** `<Sheet.Trigger>` (when used; controlled-state
+is the canonical pattern) receives `aria-haspopup="dialog"`,
+`aria-expanded` synced to open state, and `aria-controls` pointing
+at the overlay content's element ID while open (omitted when
+closed). `asChild` slot-merge applies — the attributes merge onto
+the consumer's child via the primitive's slot logic.
+
+**Labelling.** Consumers supply an accessible name via either
+`ariaLabel?: string` (direct string, used when no visible header
+exists in the content) or `ariaLabelledBy?: string` (element ID
+inside the content, preferred when content has a visible header).
+`ariaDescribedBy?: string` is optional for descriptive body text;
+rarely needed. Convention: visible heading → use `ariaLabelledBy`
+(duplicating heading text into `ariaLabel` is a maintenance
+hazard); no visible heading → use `ariaLabel`. Passing neither
+logs a dev-mode warning; opt-out via explicit empty
+`ariaLabel=""`.
+
+**Focus management — close.** Default returns focus to the trigger
+element when one exists. Programmatic-open without a trigger child
+(Select drives Sheet via `open` prop directly) falls back to the
+element that held focus immediately before the open, per
+rn-primitives / Radix convention. Override via
+`onCloseAutoFocus?: (event) => void`:
+
+```tsx
+onCloseAutoFocus={(event) => {
+  event.preventDefault();
+  newlyCreatedRowRef.current?.focus();
+}}
+```
+
+**Focus management — open.** Default focuses the first focusable
+element inside content (rn-primitives / Radix default). Override
+via symmetric `onOpenAutoFocus?: (event) => void` using the same
+`preventDefault` pattern — typically used to focus an input
+directly or a heading marked `tabIndex={-1}`.
+
+**Focus trap.** Sheet traps focus inside the overlay
+(rn-primitives Dialog default — Tab cycles within content).
+Distinct from Popover (does not trap); see
+[Popover — ARIA contract](#popover--aria-contract).
+
 ## Popover — API surface
 
 ```
-<Popover onOpenChange>
+<Popover
+  onOpenChange
+  ariaLabel ariaLabelledBy ariaDescribedBy
+  onOpenAutoFocus onCloseAutoFocus
+>
   <PopoverTrigger asChild>...</PopoverTrigger>
-  <PopoverContent side align sideOffset>{children}</PopoverContent>
+  <PopoverContent side align sideOffset accessibilityRole>
+    {children}
+  </PopoverContent>
 </Popover>
 ```
 
@@ -187,6 +340,18 @@ namespace.
   No `'left'` / `'right'` side: rn-primitives popover positions on
   the vertical axis only. `sideOffset` (number, default `4`)
   fine-tunes the gap between trigger and content.
+- `<PopoverContent accessibilityRole?>` — defaults to `"dialog"`.
+  Consumer can override (e.g., `"menu"` for an Actions-menu adopter
+  with arrow-key menuitem navigation). Drives both Content's role
+  and Trigger's `aria-haspopup`; see
+  [Popover — ARIA contract](#popover--aria-contract) below.
+- `ariaLabel?: string` / `ariaLabelledBy?: string` /
+  `ariaDescribedBy?: string` — same routing as Sheet's; see
+  [Popover — ARIA contract](#popover--aria-contract).
+- `onOpenAutoFocus?: (event: FocusEvent) => void` /
+  `onCloseAutoFocus?: (event: FocusEvent) => void` —
+  focus-handling overrides; see
+  [Popover — ARIA contract](#popover--aria-contract).
 
 **Anatomy:**
 
@@ -216,6 +381,57 @@ Popover-only specifics:
 
 - Motion — `--duration-fast`, `--ease-out`.
 
+### Popover — ARIA contract
+
+**Role.** Popover renders `accessibilityRole="dialog"` by default,
+consumer-overridable via the `accessibilityRole` prop on
+`<PopoverContent>`. The standard RN cross-platform name; reshape
+audit at scaffold confirms rn-primitives Popover accepts it
+consistently. `role="menu"` carries strict obligations
+(`role="menuitem"` children, arrow-key navigation, Enter
+activation, Escape close); the default content trees in this
+codebase Tab through focusable children rather than navigating
+with arrow keys, so defaulting to `"menu"` would break that
+assumption. The
+[Actions menu broader-design pass](../../followups.md#actions-menu-broader-design-pass)
+is the natural future `"menu"` adopter once it ships proper
+menuitem semantics; for v1 even the Actions menu ships as
+`"dialog"` — under-claiming precision is safer than over-claiming
+menu semantics the implementation can't honor.
+
+**Trigger ARIA.** `<PopoverTrigger>` receives `aria-haspopup`
+matching the surface's role (`"dialog"` default, `"menu"` when
+consumer overrides), `aria-expanded` synced to open state, and
+`aria-controls` pointing at the overlay content's element ID
+while open. The single `accessibilityRole` prop on
+`<PopoverContent>` drives both Content's role and Trigger's
+`aria-haspopup`. `asChild` slot-merge applies — attributes merge
+onto the consumer's child via the primitive's slot logic.
+
+**Labelling.** Same shape as Sheet — `ariaLabel?: string`,
+`ariaLabelledBy?: string`, `ariaDescribedBy?: string`. Convention:
+visible heading → `ariaLabelledBy`; no visible heading →
+`ariaLabel`. Dev-mode warning when neither is passed; opt-out via
+explicit empty `ariaLabel=""`. Strings are translatable
+user-facing text; consumers route through their existing
+translation surface.
+
+**Focus management — close.** Default returns focus to the
+trigger element. Override via
+`onCloseAutoFocus?: (event) => void` with `event.preventDefault()`
+followed by an explicit focus call, mirroring Sheet's pattern.
+
+**Focus management — open.** Default focuses the first focusable
+element inside content (rn-primitives default). Override via
+symmetric `onOpenAutoFocus?: (event) => void`.
+
+**Focus trap — does not trap.** Distinct from Sheet. Tab can
+leave the popover into surrounding DOM (rn-primitives Popover
+default — non-modal supplementary surface). Consumers needing
+trap behavior (rare; possible for a content-rich Actions menu on
+desktop) opt in via rn-primitives Popover's `modal` prop
+equivalent at the implementation pass.
+
 ## Slot reshape — once at scaffold
 
 Both primitives go through the [`components.md` reshape audit](../components.md#sourcing--react-native-reusables-as-baseline)
@@ -237,8 +453,8 @@ ongoing maintenance does not require re-reshape.
 
 Per [`components.md` axes-driven rule](../components.md#storybook-story-conventions):
 
-- **Sheet** → Default · States (open, dismissing, with-tall-content)
-  · ThemeMatrix.
+- **Sheet** → Default · States (open, dismissing, with-tall-content,
+  with-input-inside) · ThemeMatrix.
 - **Popover** → Default · Sizes (anchored sizes — narrow / medium /
   wide) · States (open, modal, with-trigger, escape-dismissed) ·
   ThemeMatrix.
@@ -249,14 +465,13 @@ No Variants or Shapes section for either.
 
 Tracked in [`followups.md`](../../followups.md):
 
-- **Sheet keyboard handling on mobile.** When a Sheet contains an
-  Input and the keyboard opens, does the sheet shift up, shrink, or
-  get covered? rn-primitives/dialog ships no keyboard-aware
-  behavior. See [Sheet keyboard handling on mobile](../../followups.md#sheet-keyboard-handling-on-mobile).
-- **Sheet + Popover ARIA contract.** Roles, `aria-labelledby`,
-  `aria-describedby`, popover modality semantics. See [Sheet + Popover ARIA contract](../../followups.md#sheet--popover-aria-contract).
 - **Native motion parity.** Sheet's slide animation depends on
   the [NativeWind transition followup](../foundations/motion.md#nativewind-transition--on-native).
   Sheet is the v1 surface that forces resolution.
 
 These resolve at the first Sheet / Popover implementation pass.
+Keyboard handling and ARIA were resolved during the
+2026-05-21 design session — see
+[Sheet — Keyboard handling](#sheet--keyboard-handling),
+[Sheet — ARIA contract](#sheet--aria-contract), and
+[Popover — ARIA contract](#popover--aria-contract).

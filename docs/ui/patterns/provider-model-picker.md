@@ -363,16 +363,20 @@ column blank.
   header carries title + close ×; search bar sticky beneath; footer
   sticky at the bottom.
 
-**Sheet keyboard handling** defers to the unresolved
-[Sheet keyboard handling on mobile](../../followups.md#sheet-keyboard-handling-on-mobile)
-followup. The picker's search input is the trigger for keyboard
-avoidance; until that followup lands, the picker's mobile rendering
-inherits whatever the Sheet substrate provides.
+**Sheet keyboard handling.** Picker's sticky search input drives
+keyboard avoidance on phone. Sheet's default `avoidKeyboard={true}`
+handles the outer layout response; the picker's scrollable option
+list wraps in `KeyboardAwareScrollView` per the consumer rule in
+[`overlays.md → Sheet — Keyboard handling`](./overlays.md#sheet--keyboard-handling).
 
-**Sheet + Popover ARIA** defers to the unresolved
-[Sheet + Popover ARIA contract](../../followups.md#sheet--popover-aria-contract)
-followup. Picker adopts whatever roles + labelling that resolution
-pins.
+**Sheet + Popover ARIA.** Picker adopts the canonical roles and
+labelling per
+[`overlays.md → Sheet — ARIA contract`](./overlays.md#sheet--aria-contract)
+and
+[`overlays.md → Popover — ARIA contract`](./overlays.md#popover--aria-contract).
+Header text serves as `ariaLabelledBy` target; the picker passes
+that element's ID through to whichever overlay the host tier
+selects.
 
 ## Keyboard
 

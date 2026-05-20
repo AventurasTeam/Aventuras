@@ -384,6 +384,17 @@ Highlights:
   `@tanstack/react-virtual` (web) + `FlatList` (native phone
   Sheet). The dropdown stays virtualized regardless of source-list
   size.
+- **Keyboard handling on phone.** The phone Sheet inherits the
+  Sheet primitive's default `avoidKeyboard={true}` for the
+  outer layout response — no consumer change needed. Select
+  variants that host a search input wrap their option list in
+  `KeyboardAwareScrollView` (from
+  `react-native-keyboard-controller`) per
+  [`overlays.md → Sheet — Keyboard handling`](./overlays.md#sheet--keyboard-handling),
+  so the focused search input scrolls into view above the
+  keyboard. The Sheet's body-drag dismiss is automatically
+  suspended while the keyboard is shown; the drag handle
+  remains active.
 
 ---
 

@@ -95,11 +95,12 @@ re-evaluates for this entry and its successor on the next render.
 Sheet container with the same content. Tablet follows the standard
 breakpoint rule in
 [`foundations/mobile/layout.md`](../ui/foundations/mobile/layout.md).
-The phone path inherits the unresolved
-[Sheet keyboard followup](../followups.md#sheet-keyboard-handling-on-mobile);
-when that lands, this surface picks up the resolution automatically.
-Phone-edit is borderline-usable today without that resolution;
-desktop-edit works regardless.
+The phone path inherits the Sheet primitive's keyboard contract —
+resolved 2026-05-21, canonical at
+[`patterns/overlays.md` → Sheet — Keyboard handling](../ui/patterns/overlays.md#sheet--keyboard-handling).
+For this surface the body is non-scrollable (TierTupleInput is a
+fixed-shape form), so `avoidKeyboard={true}` alone is sufficient
+without a `KeyboardAwareScrollView` wrap.
 
 **Edit-restrictions interaction.** When the entry is `disabled`
 (in-flight generation, per
