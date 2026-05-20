@@ -15,6 +15,11 @@ when they ship.
 
 - **shipped** — component file + story exist in the folder dictated
   by [components.md → Directory layout](./components.md#directory-layout).
+- **needs-revision** — shipped, but the canonical contract evolved
+  post-ship; code work is queued against the next implementation
+  pass that touches the primitive (typically driven by a consumer
+  needing the new capability). Entry leaves when the revision
+  lands and the component re-enters `shipped` compliance.
 - **build-ready** — pattern / foundation / per-screen doc fully
   specs the contract; no further design pass needed before
   scaffolding.
@@ -34,6 +39,16 @@ Chip, Dialog, EmptyState, Heading, Icon, IconAction, InlineEditableName,
 Input, Popover, Select, Sheet, Skeleton, Spinner, Switch, SwitchVisual,
 Tabs, Tag, Textarea, Text, Toast. Plus the `NativeOnlyAnimatedView`
 utility wrapper.
+
+### Primitives — needs revision
+
+Shipped primitives whose canonical contract has evolved post-ship.
+Each row names the revision and points at the canonical spec.
+
+| Primitive | Revision                       | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sheet     | Keyboard layer + ARIA pipeline | Add `react-native-keyboard-controller` dep, `avoidKeyboard` prop with outer `KeyboardAvoidingView` wrap, body-drag suspension while keyboard up, `ariaLabel`/`ariaLabelledBy`/`ariaDescribedBy` pipeline, `onOpenAutoFocus`/`onCloseAutoFocus` overrides, `with-input-inside` Storybook story. Spec: [overlays.md → Sheet — Keyboard handling](./patterns/overlays.md#sheet--keyboard-handling) and [Sheet — ARIA contract](./patterns/overlays.md#sheet--aria-contract). Designed 2026-05-21. |
+| Popover   | ARIA pipeline                  | Add `accessibilityRole` override prop on `PopoverContent` (drives both Content's role and Trigger's `aria-haspopup`), `ariaLabel`/`ariaLabelledBy`/`ariaDescribedBy` pipeline, `onOpenAutoFocus`/`onCloseAutoFocus` overrides. Spec: [overlays.md → Popover — ARIA contract](./patterns/overlays.md#popover--aria-contract). Designed 2026-05-21.                                                                                                                                              |
 
 ### Primitives — build-ready
 

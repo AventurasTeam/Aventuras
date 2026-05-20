@@ -463,15 +463,15 @@ No Variants or Shapes section for either.
 
 ## Open implementation questions
 
-Tracked in [`followups.md`](../../followups.md):
-
 - **Native motion parity.** Sheet's slide animation depends on
-  the [NativeWind transition followup](../foundations/motion.md#nativewind-transition--on-native).
-  Sheet is the v1 surface that forces resolution.
+  the [NativeWind transition followup](../foundations/motion.md#nativewind-transition--on-native)
+  — open characterization tracked inline in
+  [`motion.md`](../foundations/motion.md). Sheet is the v1 surface
+  that forces resolution.
 
-These resolve at the first Sheet / Popover implementation pass.
-Keyboard handling and ARIA were resolved during the
-2026-05-21 design session — see
+Implementation of the keyboard layer and ARIA pipeline (designed
+2026-05-21 — see
 [Sheet — Keyboard handling](#sheet--keyboard-handling),
 [Sheet — ARIA contract](#sheet--aria-contract), and
-[Popover — ARIA contract](#popover--aria-contract).
+[Popover — ARIA contract](#popover--aria-contract)) is queued in
+[`component-inventory.md → Primitives — needs revision`](../component-inventory.md#primitives--needs-revision).
