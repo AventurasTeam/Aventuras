@@ -144,39 +144,6 @@ a per-story export and how they reconcile with the importer's
 translation backend + language settings on the receiving end.
 Lands at the next pass over translation pipeline / export format.
 
-### Translation graceful degradation
-
-A translation phase fatal failure currently aborts the entire
-per-turn pipeline (per the framework's "fatal phase → transaction
-abort" contract). User loses their AI response over a translation
-provider hiccup. Harsh — the narrative is the primary user value;
-translation is a display-time bonus.
-
-The fix: translation phase declares its failures as recoverable at
-the phase level (the narrative commits, the translation rows just
-don't land for this turn). On next render of an entity / entry, the
-translation lookup falls back to source language; the next opportunity
-to re-translate (e.g., user edits the entity, or a deliberate
-"re-translate this story" action) covers the gap.
-
-Open sub-questions:
-
-- **Where the soft-fail lives.** Inside the translation phase itself
-  (catch, log a recoverable_error, return completed with empty
-  `translationResult`) or via a wrapper that converts fatal-from-
-  translation into recoverable? Probably former — translation phase
-  knows its own degradation semantics.
-- **Re-translation triggers.** Render-time lazy retry (each missing
-  translation kicks off a one-off call) vs explicit user action
-  ("retranslate this story"). Render-time lazy gets expensive fast;
-  explicit user action is safer but loses the magic.
-- **UX surface for failures.** Toast? Silent? Status pill flag for
-  "some translations failed this turn"? Probably silent + diagnostic
-  in dev mode.
-
-Lands when translation phase is built. The framework already supports
-the degradation pattern; this followup pins the policy.
-
 ### Actions menu broader design pass
 
 The

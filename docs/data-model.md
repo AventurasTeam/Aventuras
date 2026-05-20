@@ -2227,17 +2227,34 @@ not author-input fields.
   duplicate translations per (source field, language)
 
 **Deltas participate.** `deltas.target_table` includes `translations`.
-Translation writes produce deltas under the same `action_id` as the
-originating action — so if the classifier creates a new entity that
-triggers a translation write, a single CTRL-Z reverses both the entity
-and its translation.
+Translation writes that **succeed** produce deltas under the same
+`action_id` as the originating action — so if the classifier creates
+a new entity that triggers a translation write, a single CTRL-Z
+reverses both the entity and its translation atomically.
+
+Translation calls that **fail** (per-call exhaustion in the
+`display-translation` phase, see
+[`architecture.md → Graceful degradation contract`](./architecture.md#graceful-degradation-contract))
+produce no delta — the source write stands without a translation row
+and render falls back to source. The promise weakens to **atomic when
+present**: rows that land reverse atomically with their source; rows
+that didn't land never existed; nothing to reverse.
+
+Retry-created rows from the `translation-retry` pipeline carry the
+retry pipeline's own `action_id`, not the originator's. CTRL-Z of
+the originating turn does not reverse retry-created translations —
+they become orphan rows, harmless under keyed lookup (a lookup
+against a reversed target finds nothing). Forward / redo of the
+originator restores the target; the orphan becomes a live translation
+again. Hard-delete of a source row cleans up via existing branch-
+cascade rules and per-row action-layer cleanup writes.
 
 **Runtime:** Zustand loads translations into an index
 `Map<(kind, id, field, lang), string>` for O(1) render-time lookup. UI
 renders translated text when a translation exists for the current
-language + field, else falls back to the source. Pipeline translation
-phase writes translation rows via Zustand actions, same pattern as
-every other state mutation.
+language + field, else falls back to the source. The
+`display-translation` phase writes translation rows via Zustand
+actions, same pattern as every other state mutation.
 
 **Scope reminder:** this table handles LLM-authored content only.
 Translation of the app's own UI strings (menus, buttons, settings) is a

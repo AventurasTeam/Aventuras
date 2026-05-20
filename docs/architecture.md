@@ -451,70 +451,166 @@ gate mechanism lives in
 
 ## Translation as a pipeline concern
 
-Translation of LLM-generated user-facing content is a pipeline phase,
-not a one-off feature. It runs after the narrative phase finishes
-(in parallel with classifier-piggyback parsing where applicable). The
-`translations` table (see `docs/data-model.md`) stores each translation
-as one row keyed by
-`(branch_id, target_kind, target_id, field, language)`.
+Translation of LLM-generated user-facing content runs as **two
+declared phases** in the per-turn pipeline, sharing the same call
+code and the same `translations` table (see
+[`data-model.md → Translation`](./data-model.md#translation)) but
+differing in position and failure semantics. Both write translation
+rows keyed by `(branch_id, target_kind, target_id, field, language)`.
 
-**What gets translated:**
+### `user-action-translation` (pre-narrative)
 
-- Narrative content (the AI reply itself)
-- User action content (so the LLM-facing log is monolingual even when
-  the UI shows the user's native tongue)
-- Entity name + description + state-specific fields as they're created
-  or modified
-- Lore title + body when created or edited
-- Thread title + description
-- Happening title + description
-- (Chapter title/summary on chapter close)
+Runs as the first phase of the per-turn pipeline, before retrieval.
+Direction is `target → source` — the user's submitted action arrives
+in the story's target language, the phase calls the translation
+provider to produce the source-language version, and that source-
+language text becomes the `story_entries.content` value the LLM
+sees. The user's original target-language text lands in `translations`
+as a row for display fallback. Both writes share the originating
+user-submit `action_id` — CTRL-Z reverses both atomically.
+
+**Same-language short-circuit.** If
+`settings.translation.targetLanguage === settings.translation.sourceLanguage`
+the phase skips the LLM call. No translation row is needed; the
+typed text goes directly to `content` and render falls back to
+source.
+
+**Failure is fatal.** `callWithRetry` exhaustion returns
+`{ status: 'failed' }`; the existing transaction-abort path
+reverses partial writes; the run emits `outcome: 'failed'`. User
+sees the standard pipeline-failed error UI and can retry the
+submission. The monolingual-log invariant (below) requires this
+critical-path treatment — degrading it would let target-language
+text leak into the LLM-facing log.
+
+### `display-translation` (post-narrative)
+
+Runs after the narrative phase, in the existing translation slot
+relative to classifier-piggyback work. Direction is
+`source → target`. Translates:
+
+- Narrative content (the AI reply itself).
+- Entity `name`, `description`, and state-specific fields as they're
+  created or modified.
+- Lore `title` and `body` when created or edited.
+- Thread `title` and `description`.
+- Happening `title` and `description`.
+- Chapter `title` and `summary` on chapter close.
 - Next-turn suggestion chip text — rides the `narrative` granular
   toggle; cached by content-hash of chip text so re-rolls and CTRL-Z
   reuse existing rows naturally (see
-  [`explorations/2026-05-19-next-turn-suggestions.md`](./explorations/2026-05-19-next-turn-suggestions.md))
+  [`explorations/2026-05-19-next-turn-suggestions.md`](./explorations/2026-05-19-next-turn-suggestions.md)).
 
-**Why centralize:**
+**Failure is per-call.** Each `(target_kind, target_id, field, language)`
+tuple succeeds or fails on its own; the phase always returns
+`{ status: 'completed' }`. See
+[Graceful degradation contract](#graceful-degradation-contract) below.
 
-- Old-app pattern of `translated_name` / `translated_description` columns
-  per table led to column proliferation AND hard-coded "one target
-  language" — lost prior translations on reconfig
-- Single table scales to multiple target languages without schema changes
-- Participates in the delta log uniformly (`deltas.target_table =
-'translations'`) — rollback reverses translations alongside their
-  source writes
+The phase is reused by `chapter-close` (translates the chapter title
+and summary) and by `translation-retry` (translates the outstanding-miss
+set on explicit user retry). All three contexts populate
+`intermediates.intendedTranslations` differently at phase entry; the
+phase iterates that single shape.
 
-**Runtime:** Zustand loads translations into a flat index for O(1)
-render-time lookup. Components that render user-facing text call a
-helper like `t(source, field)` that looks up the current language's
-translation and falls back to source.
+### Why centralize translations in one table
 
-**Display-only invariant — translations never feed back into prompts.**
-Translations are strictly one-way: `source → translated_text` for UI
-rendering. The pipeline, classifier, retrieval, and narrative layers
-always operate on the source-language content; the LLM-facing log is
-monolingual regardless of UI language. Narrative is generated in the
-source language; the classifier reads source-language entities;
-retrieval filters source-language text.
+- Old-app pattern of `translated_name` / `translated_description`
+  columns per table led to column proliferation and hard-coded "one
+  target language" — lost prior translations on reconfig.
+- Single table scales to multiple target languages without schema
+  changes.
+- Participates in the delta log uniformly
+  (`deltas.target_table = 'translations'`) — rollback reverses
+  translations alongside their source writes, subject to the
+  atomicity contract in
+  [`data-model.md → Translation`](./data-model.md#translation).
+
+### Runtime
+
+Zustand loads translations into a flat index for O(1) render-time
+lookup. Components that render user-facing text call a helper like
+`t(source, field)` that looks up the current language's translation
+and falls back to source. Missing rows (failed translations, rows
+not yet attempted) render as source automatically — no rendering
+branch for the failure case.
+
+### Display-only invariant — translations never feed back into prompts
+
+Translations are strictly one-way: `source → translated_text` for
+UI rendering. The pipeline, classifier, retrieval, and narrative
+layers always operate on source-language content; the LLM-facing
+log is monolingual regardless of UI language. Narrative is
+generated in the source language; the classifier reads source-language
+entities; retrieval filters source-language text.
+
+The `user-action-translation` phase exists to preserve this
+invariant under target-language input — its `target → source`
+translation normalizes the user's typed action into source-language
+before the LLM ever sees it. The two phases share the table and
+the call code; they differ in position (pre- vs post-narrative)
+and direction (target → source vs source → target).
 
 Consequences:
 
 - Switching `settings.translation.targetLanguage` does not invalidate
-  narrative coherence — nothing the LLM ever saw changes.
-- Translation of **user action content** (composed in the user's
-  target language) is the exception that proves the rule: that
-  translation runs in the OPPOSITE direction — target → source — so
-  the LLM-facing log stays source-language. Same `translations`
-  table, same phase, different translation direction.
+  narrative coherence — nothing the LLM ever saw changes. The new
+  language exposes a set of source rows lacking translations for
+  that language; the outstanding-miss machinery surfaces and fills
+  them on user retry.
 - Re-translating an already-translated field looks up the existing
   row before calling the translation model, so translation memory
   is per-field-per-language and naturally consistent across a story.
 
-**What translation CANNOT do:** change the language the AI writes in.
-If a user wants the narrative generated in Spanish, that's a distinct
-concept — a narrative-language / source-language setting — not
-translation. Not currently modeled; flagged for later if demand
-emerges. Translation is strictly a display-time surface.
+### Graceful degradation contract
+
+`display-translation` declares its failures **per-call**: each
+translation tuple succeeds or fails independently. The phase
+enumerates the tuples needing translation, iterates through them,
+and for each:
+
+1. Looks up the existing row; skips if present.
+2. Calls the provider via `callWithRetry` (the
+   [existing provider/parse retry tier](./generation-pipeline.md#two-retry-tiers-both-at-phase-level)).
+3. **On success:** dispatches the action-layer write under the
+   originator's `action_id`.
+4. **On `callWithRetry` exhaustion:** appends to
+   `translationResult.failures`, continues the loop. No throw, no
+   abort.
+
+Phase return is always `{ status: 'completed' }`. The phase emits a
+single rollup `display_translation_partial_completion` event at
+completion when any failures occurred — per-call detail stays in
+`translationResult.failures` for inspection.
+
+**Atomicity weakens to "atomic when present"** — translation rows
+that land carry the originator's `action_id` and CTRL-Z reverses
+them atomically with their source. Rows that fail never landed; the
+source write stands without a translation; render falls back to
+source. Full contract in
+[`data-model.md → Translation`](./data-model.md#translation).
+
+**User-driven retry.** Missing rows surface through a toast at run
+completion plus a sticky pill state in
+[`patterns/generation-status-pill.md`](./ui/patterns/generation-status-pill.md);
+both invoke a new `translation-retry` pipeline kind declared in
+[`generation-pipeline.md → V1 declarations`](./generation-pipeline.md#v1-declarations)
+that re-runs `display-translation` against the outstanding-miss set.
+
+**Wizard policy.** The wizard isn't a pipeline run
+([`generation-pipeline.md`](./generation-pipeline.md)); its
+opening-generation LLM call and its translation call are atomically
+required — if either fails, the entire wizard transaction rolls
+back and no story is created. No graceful degradation at wizard
+time; same atomicity discipline as `user-action-translation`,
+applied across the wizard's single SQLite transaction.
+
+### What translation CANNOT do
+
+Change the language the AI writes in. If a user wants the narrative
+generated in Spanish, that's a distinct concept — a narrative-language
+/ source-language setting — not translation. Not currently modeled;
+flagged for later if demand emerges. Translation is strictly a
+display-time surface.
 
 ---
 

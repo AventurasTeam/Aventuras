@@ -21,6 +21,10 @@ Used by:
 - [Onboarding](../screens/onboarding/onboarding.md) — completion
   confirmation.
 - [Wizard](../screens/wizard/wizard.md) — lead-unset cascade.
+- Per-turn / chapter-close completions where the
+  [`display-translation` phase](../../architecture.md#display-translation-post-narrative)
+  ended with missing rows — warning severity + Retry action firing
+  the `translation-retry` pipeline.
 
 Toasts deliberately do **not** cover:
 
@@ -41,17 +45,17 @@ convention for cross-tier consistency.
 
 ## Severity
 
-Three v1 severities mapped to existing color slots:
+Four v1 severities mapped to existing color slots:
 
-| Severity | Background tint    | Border      | Foreground     | Leading glyph        |
-| -------- | ------------------ | ----------- | -------------- | -------------------- |
-| success  | `--success` tinted | `--success` | `--success-fg` | lucide `Check`       |
-| error    | `--danger` tinted  | `--danger`  | `--danger-fg`  | lucide `AlertCircle` |
-| info     | `--info` tinted    | `--info`    | `--info-fg`    | lucide `Info`        |
+| Severity | Background tint    | Border      | Foreground     | Leading glyph          |
+| -------- | ------------------ | ----------- | -------------- | ---------------------- |
+| success  | `--success` tinted | `--success` | `--success-fg` | lucide `Check`         |
+| error    | `--danger` tinted  | `--danger`  | `--danger-fg`  | lucide `AlertCircle`   |
+| info     | `--info` tinted    | `--info`    | `--info-fg`    | lucide `Info`          |
+| warning  | `--warning` tinted | `--warning` | `--warning-fg` | lucide `AlertTriangle` |
 
-Adding a `warning` severity is additive — extra row + extra branch
-in the variant resolver. Specific lucide names land during the
-visual-identity pass; the slot wiring is the contract.
+Specific lucide names land during the visual-identity pass; the
+slot wiring is the contract.
 
 ## Auto-dismiss + manual close
 
@@ -59,9 +63,15 @@ Per-severity duration:
 
 - **success** — 3000ms.
 - **info** — 5000ms.
+- **warning** — 5000ms (the action-bearing toasts use warning; ample
+  time to click the action without holding attention as long as
+  errors do).
 - **error** — 7000ms (long enough to act on, still bounded — avoids
   the stuck-toast graveyard a manual-only sticky-error policy
   produces on flaky-network conditions).
+
+Toasts with an [action button](#action-button) keep their severity's
+default duration — the action doesn't extend dismissal.
 
 Always-visible × close button on every toast regardless of severity.
 Universal escape hatch; touch target ≥ 44px floor per
@@ -109,12 +119,46 @@ auto-timer.
   demands.
 - **No title / body split** for v1 — every documented call-site is
   single-message.
-- **No action button slot** for v1 — no documented use case. Adding
-  an `action` prop later is additive without breaking existing
-  sites.
+- **Optional [action button](#action-button)** on the right of the
+  message, before the × close. Used when the toast is announcing a
+  state the user can immediately do something about (e.g.,
+  translation-misses → Retry).
 - **No height cap.** Long copy wraps freely. Combined with the
   3-toast queue cap, worst-case stack height is bounded by viewport
   and by user dismissal.
+
+## Action button
+
+Optional single-action slot on a toast. Renders inline at the right
+of the message, before the × close. The action's label is the
+button's visible text and its `aria-label`.
+
+Shape:
+
+```ts
+type ToastAction = {
+  label: string
+  onPress: () => void
+}
+```
+
+Behavior:
+
+- Tap fires `onPress()` and dismisses the toast immediately —
+  acting on the toast is the natural end-of-life signal.
+- Auto-dismiss continues to run while the action is visible; the
+  action doesn't pause the timer. Users who don't act lose the
+  affordance when the toast dismisses; the durable counterpart
+  (e.g. the
+  [`translation-misses` pill state](./generation-status-pill.md))
+  carries the persistent surface.
+- Only one action per toast. Stacked queues don't multi-action.
+- Stylistic: the action is a tertiary-tone button at the message's
+  trailing edge; mobile preserves the same layout with a tighter
+  gap to fit narrower widths.
+
+Storybook: a `with-action` story per severity covers desktop,
+tablet, and phone layouts.
 
 ## API
 
@@ -126,10 +170,16 @@ import { toast } from '@/lib/toast'
 toast.success('Saved.')
 toast.error('Connection failed. Retry?')
 toast.info('Provider connected. Default model: <auto-pick>.')
+toast.warning('Translation: 3 rows missing', {
+  action: { label: 'Retry', onPress: () => runTranslationRetry() },
+})
 ```
 
-Reachable from anywhere without context plumbing; matches sonner /
-react-hot-toast / sonner-native conventions.
+The first argument is the message; the second optional argument is
+`{ action?: ToastAction }`. Severity methods are `.success`,
+`.info`, `.warning`, `.error`. Reachable from anywhere without
+context plumbing; matches sonner / react-hot-toast / sonner-native
+conventions.
 
 Backed by:
 
@@ -150,9 +200,11 @@ preview).
 - **`aria-live="assertive"`** for error — announced immediately.
 - **Dismiss × button** — `aria-label="Dismiss"`, focusable, 44px
   touch floor.
+- **Action button** (when present) — focusable, 44px touch floor,
+  `aria-label` matches its visible label. Tab order: action then ×.
 - **Focus management** — toasts are not keyboard-focused on mount
-  (would steal focus from the user's current task). The × is
-  focusable via Tab once the user reaches the toast region.
+  (would steal focus from the user's current task). The action / ×
+  are focusable via Tab once the user reaches the toast region.
 
 ## Cross-platform animation
 

@@ -1287,21 +1287,39 @@ const periodicClassifierPipeline: Pipeline = {
   gateBehavior: 'no-gate',
   concurrencyPolicy: { blockedBy: ['periodic-classifier', 'chapter-close'] },
 }
+
+const translationRetryPipeline: Pipeline = {
+  kind: 'translation-retry',
+  gateBehavior: 'hard-gate',
+  concurrencyPolicy: {
+    blockedBy: ['per-turn', 'chapter-close', 'translation-retry'],
+  },
+  // reuses display-translation phase against an explicit work-list
+  // populated from the outstanding-miss selector at run-start; see
+  // architecture.md → Graceful degradation contract.
+}
 ```
 
 ### Resolution table
 
-| Running               | Wants to start          | Resolution                                                     |
-| --------------------- | ----------------------- | -------------------------------------------------------------- |
-| (idle)                | per-turn                | starts                                                         |
-| per-turn              | periodic-classifier     | classifier's blockedBy lacks per-turn → starts                 |
-| periodic-classifier   | per-turn                | per-turn's blockedBy lacks classifier → starts; both run       |
-| per-turn              | chapter-close (manual)  | chapter-close's blockedBy includes per-turn → blocked          |
-| per-turn (committing) | chapter-close (chained) | chained path bypasses concurrencyPolicy → starts               |
-| chapter-close         | periodic-classifier     | classifier's blockedBy includes chapter-close → blocked        |
-| chapter-close         | per-turn                | gate blocks user trigger; defense in depth blocks regardless   |
-| periodic-classifier   | periodic-classifier     | blockedBy includes self → blocked                              |
-| classifier (running)  | chapter-close (chains)  | chapter-close starts; classifier keeps running (concurrent OK) |
+| Running               | Wants to start          | Resolution                                                                                                    |
+| --------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| (idle)                | per-turn                | starts                                                                                                        |
+| per-turn              | periodic-classifier     | classifier's blockedBy lacks per-turn → starts                                                                |
+| periodic-classifier   | per-turn                | per-turn's blockedBy lacks classifier → starts; both run                                                      |
+| per-turn              | chapter-close (manual)  | chapter-close's blockedBy includes per-turn → blocked                                                         |
+| per-turn (committing) | chapter-close (chained) | chained path bypasses concurrencyPolicy → starts                                                              |
+| chapter-close         | periodic-classifier     | classifier's blockedBy includes chapter-close → blocked                                                       |
+| chapter-close         | per-turn                | gate blocks user trigger; defense in depth blocks regardless                                                  |
+| periodic-classifier   | periodic-classifier     | blockedBy includes self → blocked                                                                             |
+| classifier (running)  | chapter-close (chains)  | chapter-close starts; classifier keeps running (concurrent OK)                                                |
+| per-turn              | translation-retry       | retry's blockedBy includes per-turn → blocked                                                                 |
+| chapter-close         | translation-retry       | retry's blockedBy includes chapter-close → blocked                                                            |
+| translation-retry     | per-turn                | per-turn user-trigger gated by retry's hard-gate; user can't submit                                           |
+| translation-retry     | chapter-close (manual)  | chapter-close user-trigger gated by retry's hard-gate                                                         |
+| translation-retry     | chapter-close (chained) | chained start originates from per-turn commit; per-turn can't run during retry, so chain can't fire           |
+| translation-retry     | periodic-classifier     | classifier's blockedBy lacks translation-retry → starts; both run (classifier doesn't write translation rows) |
+| translation-retry     | translation-retry       | blockedBy includes self → blocked                                                                             |
 
 `blockedBy` prevents NEW starts; it does NOT kill running pipelines.
 The architectural premise (`memory/cadence.md → Concurrency`) is that
@@ -1413,10 +1431,6 @@ to any of these alongside whatever causes the relaxation.
   action's SQLite commit and the `pipeline_runs` finish marker
   UPDATE. Tighten by coupling them in one txn when measurement
   shows it bites.
-- **Translation graceful degradation.** Today, a translation phase
-  fatal failure aborts entire per-turn. Should degrade
-  (narrative commits without translation; translation retried on
-  next view) rather than burn the AI response.
 - **Pack-defined pipeline kinds (post-v1).** Pack model assumes
   templates / macros only. `PipelineAction` kind set is closed
   (TypeScript union); pack-defined deltas would need a different

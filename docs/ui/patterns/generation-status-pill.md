@@ -34,7 +34,13 @@ and must stay in lockstep across consumers:
 ## Compound API
 
 ```ts
-type GenerationPhase = 'reasoning' | 'generating-narrative' | 'classifying' | 'closing-chapter'
+type GenerationPhase =
+  | 'reasoning'
+  | 'generating-narrative'
+  | 'classifying'
+  | 'closing-chapter'
+  | 'translating-display'
+  | 'retrying-translations'
 
 type ErrorState =
   | { code: 'embedder-offline'; pendingRows: number }
@@ -42,6 +48,7 @@ type ErrorState =
   | { code: 'classifier-no-profile' }
   | { code: 'classifier-profile-provider-missing' }
   | { code: 'classifier-default-provider-missing' }
+  | { code: 'translation-misses'; missingCount: number }
 
 type GenerationStatusPillProps = {
   activePhase?: GenerationPhase
@@ -52,9 +59,12 @@ type GenerationStatusPillProps = {
 ```
 
 Both `activePhase` and `error` are caller-derived. The consumer
-collapses simultaneous errors to one (embedder > classifier — bigger
-blocker first) and hands the result in. The compound imports no
-router; routing is a consumer concern, surfaced via `onErrorTap`.
+collapses simultaneous errors to one
+(`embedder-offline > classifier-* > translation-misses` — biggest
+blocker first; translation degradation is display-only and ranks
+below memory errors that degrade retrieval quality) and hands the
+result in. The compound imports no router; tap-handling is a
+consumer concern, surfaced via `onErrorTap`.
 
 ## Priority resolution
 
@@ -80,6 +90,8 @@ The compound owns phase → copy and error → copy:
 | `classifying`            | `classifying…`            |
 | `closing-chapter`        | `closing chapter…`        |
 | `refreshing-suggestions` | `refreshing suggestions…` |
+| `translating-display`    | `translating…`            |
+| `retrying-translations`  | `retrying translations…`  |
 
 | Error code                            | Label                                                                          |
 | ------------------------------------- | ------------------------------------------------------------------------------ |
@@ -88,6 +100,7 @@ The compound owns phase → copy and error → copy:
 | `classifier-no-profile`               | `Classifier has no profile — retrieval coverage thinning`                      |
 | `classifier-profile-provider-missing` | `Classifier profile's provider is missing — retrieval coverage thinning`       |
 | `classifier-default-provider-missing` | `Classifier default model's provider is missing — retrieval coverage thinning` |
+| `translation-misses`                  | `Translation: {missingCount} missing`                                          |
 
 The three `classifier-*-missing` / `classifier-no-profile` variants
 come from periodic-classifier
@@ -127,17 +140,26 @@ open state.
 ```
 
 No popover. Tap fires `onErrorTap(error.code)` directly; the
-consumer routes per
+consumer handles each code by either routing (memory errors point
+the user at the configuration that fixes them) or triggering a
+recovery action (`translation-misses` fires the retry pipeline
+directly). Per
 [`reader-composer.md → Persistent state — top-bar status pill error variant`](../screens/reader-composer/reader-composer.md#persistent-state--top-bar-status-pill-error-variant):
 
-- `embedder-offline` → Story Settings · Memory's resolution panel.
-- `classifier-offline` → Story Settings · Memory · Classifier panel.
-- `classifier-no-profile` → App Settings · Profiles · Assignments
-  (classifier row).
-- `classifier-profile-provider-missing` → App Settings · Profiles
-  (the broken profile's edit dialog).
-- `classifier-default-provider-missing` → App Settings · Default
-  models (classifier row).
+| Error code                            | Consumer response                                                                            |
+| ------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `embedder-offline`                    | Route to Story Settings · Memory's resolution panel.                                         |
+| `classifier-offline`                  | Route to Story Settings · Memory · Classifier panel.                                         |
+| `classifier-no-profile`               | Route to App Settings · Profiles · Assignments (classifier row).                             |
+| `classifier-profile-provider-missing` | Route to App Settings · Profiles (the broken profile's edit dialog).                         |
+| `classifier-default-provider-missing` | Route to App Settings · Default models (classifier row).                                     |
+| `translation-misses`                  | Fire `runPipeline('translation-retry', { branchId, targetLanguage, intendedTranslations })`. |
+
+The translation-misses tap is an in-place action rather than a
+route — the user already knows what's wrong (the count is in the
+copy), so the affordance offers the fix directly. The retry
+pipeline's standard `active` state then drives the pill through
+`translating…` while it runs.
 
 ## Tier-aware render
 

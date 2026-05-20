@@ -769,6 +769,48 @@ high-dim provider models hitting unworkable retrieval latency.
 
 ### UX (parked)
 
+#### Outage-mode fallback for user-action-translation
+
+[`architecture.md → user-action-translation`](./architecture.md#user-action-translation-pre-narrative)
+is critical-path: if the translation provider is down at submit
+time, the per-turn pipeline aborts and the user can't continue
+writing. Workaround for any individual outage is to set
+`settings.translation.targetLanguage` equal to the source language,
+which short-circuits the phase.
+
+A degraded fallback might write the user's typed action **in the
+target language directly** to `story_entries.content`, breaking
+the monolingual-log invariant for the duration of the outage. The
+LLM sees target-language input for those turns; narrative quality
+may suffer (most providers are multilingual but the source-language
+prompt presets weren't authored against mixed inputs). A
+background re-translate pass would clean up once the provider
+returned.
+
+Real signal driving this work would be sustained outage friction
+in production use — users reporting "can't write while the
+translator is flaky." Until then the v1 fatal-on-failure floor
+stands; the workaround is documented in app onboarding when
+translation is enabled.
+
+#### Translation-miss persistence or registry table
+
+[`architecture.md → Graceful degradation contract`](./architecture.md#graceful-degradation-contract)
+ships v1 with outstanding misses computed on story-open via a
+SQL join of translatable source content against the `translations`
+table, maintained incrementally via `delta_emitted` subscription.
+Sub-100ms expected on v1 story sizes.
+
+A persistent `translation_failures` table would carry
+`(branch_id, target_kind, target_id, field, language, attempted_at, error_kind)`
+per failure, removing the bootstrap query in favor of a cheap
+COUNT and giving diagnostics surfaces per-failure error metadata.
+Schema delta + cleanup obligations (cascade on source delete,
+removal on successful retry) make it heavier than v1 warrants.
+
+Lands if real-device data shows the bootstrap query causing a
+visible pause on story-open for large stories.
+
 #### Reader font-size scaling generalized to all body prose
 
 [`ui/foundations/typography.md → Reader font-size setting`](./ui/foundations/typography.md#reader-font-size-setting)
