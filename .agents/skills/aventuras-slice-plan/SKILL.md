@@ -22,7 +22,9 @@ agent can follow with much less discretion.
 - Do not edit canonical specs.
 - Do not put full execution plans in `docs/`.
 - Do not silently decide developer-owned questions.
-- Do not produce an approved plan with unresolved blockers.
+- Do not mark a plan `approved` unless its state is `ready` (or a
+  fully answered `needs-developer-decision`); an execution gate is
+  allowed, an unresolved planning blocker is not.
 - Do not add task checklists to slice docs.
 - Do not invoke `aventuras-design` from this skill; a `needs-design`
   state is handed back to the developer.
@@ -184,31 +186,66 @@ Map existing patterns before planning changes:
 
 ### 4. Readiness Gate
 
-Classify readiness:
+Classify the slice into one readiness state. Every state has a
+resolution path — a non-`ready` plan is a precise problem statement,
+not a dead end. Always write the plan file regardless of state.
 
-- `ready`: all blocking questions resolved; the plan can reach
-  `approved`.
-- `needs-developer-decision`: user must choose between viable options
-  before the plan can be approved.
-- `needs-design`: canonical product/architecture uncertainty — the
-  spec itself is unsettled.
-- `needs-slice-amendment`: slice doc is stale, contradictory, too
-  large, or missing critical scope.
-- `blocked`: dependency slice, toolchain, or environmental blocker.
+- `ready` — nothing blocks a correct, approvable plan.
+- `needs-developer-decision` — a choice within the slice's
+  implementation latitude is open; reaches `approved` once answered.
+- `needs-design` — a load-bearing canonical spec decision is
+  unsettled; `draft` only.
+- `needs-slice-amendment` — the slice doc is stale, contradictory,
+  mis-sized, or missing scope; `draft` only.
+- `blocked` — a dependency slice, toolchain, or environment stands in
+  the way; whether the plan can still reach `approved` depends on
+  which.
 
-Always write a plan file. Readiness sets how far it can go:
+Separate the two gates. The **planning gate** asks whether a correct,
+complete plan can be written. The **execution gate** asks whether
+execution can start. A plan can pass the first and fail the second —
+a slice planned against a pinned contract whose dependency has not
+merged is complete and approvable, with execution gated on the merge.
 
-- `ready`, or `needs-developer-decision` once the decisions are
-  answered — the plan can be completed and proposed for approval.
-- Any other state — write the plan as `Status: draft`, record the
-  specific obstacle and the recommended next action, then hand back
-  to the developer. Do not advance such a plan to `approved`.
+A non-`ready` plan records a `Resolution Path`: the obstacle, the
+resolution owner, the concrete action, and how work resumes. Two
+resumption routes:
 
-This skill never resolves a non-`ready` state itself: it does not
-invoke `aventuras-design`, does not amend the slice doc, and does not
-clear a blocker. It records what is needed and stops. The developer
-runs the design session, amends the slice, or unblocks, then re-runs
-planning.
+- **Re-plan** — re-run this skill against the corrected input, when
+  the resolution may move the implementation route.
+- **Clear the gate** — flip `Status` to `approved` without re-running,
+  only when the plan was already written against the correct
+  understanding and the resolution merely makes an input agree with
+  it.
+
+Resolution path per state:
+
+- `needs-developer-decision` — surface the decisions via the Question
+  Protocol (Step 5) with recommended defaults; resolved in-session
+  when the developer answers. If the developer is unavailable, the
+  draft records each decision and its default, and resumes when
+  answered.
+- `needs-design` — the draft records the exact canonical question,
+  the options, and why it is a spec decision rather than an
+  implementation choice. Owner: the developer, via an
+  `aventuras-design` session — this skill does not invoke it. That
+  session settles the canonical doc; then re-plan, since a spec
+  change can move the route.
+- `needs-slice-amendment` — the draft records a section-by-section
+  punch list of the stale slice-doc text and what it should become,
+  plus any milestone-doc knock-on. Owner: the developer (slice docs
+  are owner-authored). After amendment, clear the gate if the plan
+  already assumed the corrected slice; re-plan if the amendment
+  diverges from what the plan assumed.
+- `blocked` — a dependency slice not yet merged does not block
+  planning when the milestone pins the contract (doc-as-contract):
+  plan against that contract, reach `approved`, and record an
+  execution gate. With no pinned contract there is no fixed boundary
+  — the developer lands the dependency or pins the contract, then
+  re-plan. A toolchain or environment fault that blocks verifying the
+  plan's commands keeps the plan `draft` until fixed; one that only
+  blocks running execution leaves the plan approvable with an
+  execution gate.
 
 ### 5. Question Protocol
 
@@ -248,6 +285,11 @@ slice doc, but not a transcript of research.
 
 Before marking the plan approved:
 
+- Confirm the state is `ready` (or a fully answered
+  `needs-developer-decision`); any other state stays `draft`.
+- Confirm the plan does not contradict its slice doc or cited
+  canonical specs — a contradiction is `needs-slice-amendment` or
+  `needs-design`, not an approvable plan.
 - Re-read the slice's Scope: out and confirm the plan does not cross
   it.
 - Confirm every open question is resolved, explicitly delegated to the
@@ -255,6 +297,8 @@ Before marking the plan approved:
 - Confirm every acceptance criterion has evidence.
 - Confirm verification commands exist and are repo-valid.
 - Confirm the Skill Plan is plausible and not bloated.
+- An approved plan may still carry an execution gate (e.g. a
+  dependency awaiting merge); state the gate so the executor waits.
 - For complex plans, optionally spawn a read-only validation subagent
   to check file references, scope, and test strategy.
 
@@ -270,15 +314,20 @@ Update `Status: approved` only after explicit developer approval.
 
 ## Stop Conditions
 
-Stop and ask or redirect when:
+These conditions mean the plan cannot reach `approved` on this pass.
+Do not push past them — classify the readiness state, write the draft
+with its Resolution Path (Step 4), and hand back.
 
-- The slice is too large for one PR.
-- Required reading contradicts the slice doc.
-- The plan would require changing canonical specs.
-- A developer-decision item remains unanswered.
-- Verification cannot be made falsifiable.
-- Tooling or dependency state prevents implementation.
-- The implementation route would cross Scope: out.
+- Slice too large for one PR → `needs-slice-amendment`.
+- Required reading contradicts the slice doc → `needs-slice-amendment`.
+- The route would require changing a canonical spec → `needs-design`.
+- A developer-decision item is unanswered → `needs-developer-decision`.
+- Verification cannot be made falsifiable → fix the criterion, or
+  `needs-slice-amendment` if the acceptance criterion itself is wrong.
+- Tooling or dependency state prevents planning or execution →
+  `blocked`.
+- The route would cross Scope: out → re-plan within scope, or
+  `needs-slice-amendment` if the slice boundary itself is wrong.
 
 ## Success Criteria
 
@@ -286,6 +335,8 @@ Stop and ask or redirect when:
 - The plan names source milestone and slice docs.
 - Required reading has been checked at named anchors.
 - Developer decisions are resolved or the plan remains draft.
+- A non-`ready` plan carries a Resolution Path with obstacle, owner,
+  action, and resumption route.
 - Every acceptance criterion maps to evidence.
 - Skill usage is classified as recommended for execution or not
   needed.

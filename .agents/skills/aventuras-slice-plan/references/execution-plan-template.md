@@ -10,12 +10,36 @@ Status: draft
 Slice: [Slice 1.2](../docs/implementation/milestones/01-spine/slices/02-drizzle-schema.md)
 Milestone: [Milestone 1](../docs/implementation/milestones/01-spine/milestone.md)
 
+<!-- When State is not `ready`, open the plan with a blockquote
+callout: why it is not approvable, linking to ## Resolution Path. -->
+
 ## Readiness
 
+- State: ready | needs-developer-decision | needs-design |
+  needs-slice-amendment | blocked
 - Dependencies:
 - Worktree:
-- Required reading:
+- Required reading (checked):
+- Execution gate: none, or a condition that must hold before
+  execution starts (e.g. "Slice 1.1 merged")
 - Blockers:
+
+## Resolution Path
+
+Omit when State is `ready`. Names the obstacle and how the plan
+becomes executable.
+
+- Obstacle:
+- Resolution owner: developer | aventuras-design session | dependency
+  author | environment
+- Resolution action:
+- Resumption: re-plan, or clear the gate (flip Status) — which and why
+- Resumes when:
+
+For `needs-slice-amendment`, replace the bullets with a
+section-by-section punch list — Goal, Scope: in, Scope: out,
+Acceptance criteria, Tests, Open questions, milestone knock-on — each
+stating what is wrong and what it becomes.
 
 ## Decisions
 
