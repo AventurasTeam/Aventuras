@@ -2326,9 +2326,9 @@ gatekeepers.
 
 2. **Per-story export** — produces a single self-contained `.avts`
    file for one story: all its branches, entries, entities, lore,
-   threads, happenings + links, chapters, deltas, and entry→asset
-   references. Binary assets are embedded as base64 or sidecar files
-   (packaging shape parked, see
+   threads, happenings + links, chapters, deltas, translations, and
+   entry→asset references. Binary assets are embedded as base64 or
+   sidecar files (packaging shape parked, see
    [`parked.md → Backup / export packaging shape`](./parked.md#backup--export-packaging-shape)).
    Wrapped in the standard
    [Aventuras file envelope](#aventuras-file-format-avts) for
@@ -2359,6 +2359,23 @@ gatekeepers.
    Consequence: imported stories never carry foreign references in
    the first place; the provider/profile deletion-semantics design
    has zero interaction with the per-story import flow.
+
+   **Translation rows travel in full.** The branch-scoped
+   [`translations`](#translation) table is exported with the
+   story — every row, all branches, no language filtering.
+   Translation rows are paid LLM output, not a reproducible cache:
+   unlike `vec0` vectors they carry no provider or model reference,
+   so nothing setup-specific needs stripping. They are also
+   delta-logged (`deltas.target_table` includes `translations`), so
+   stripping them while keeping the delta log would corrupt
+   reverse-replay. `stories.settings.translation` (`enabled`,
+   `targetLanguage`, `granularToggles`) likewise travels untouched.
+   An imported story is therefore self-consistent — rows and
+   settings agree, it renders bilingually as authored, and the
+   outstanding-miss count is zero. New translations on the
+   importer's side use the importer's default translation agent;
+   pre-existing rows are backend-agnostic plain text and need no
+   reconciliation.
 
 The two have genuinely different purposes and the old app's conflation
 into a single zip produced friction — users invoking "backup" got a

@@ -260,10 +260,9 @@ source-language text only; the
 [`translations`](../../data-model.md#translation) table is
 display-only per locale. A reader on a translated locale searching
 a translated term won't match entities whose source state carries
-the concept. Future translation-aware search lands alongside the
-broader [`Translation rows in per-story
-export/import`](../../followups.md#translation-rows-in-per-story-export--import)
-followup.
+the concept. Future
+[translation-aware search](../../parked.md#translation-aware-search)
+is parked until translated-locale search friction proves real.
 
 ### Tooltip + ⓘ popover copy
 

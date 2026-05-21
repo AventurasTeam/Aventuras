@@ -178,10 +178,9 @@ work. v1 stays on LIKE + JSON1.
 language text only; the [`translations`](../data-model.md#translation)
 table is display-only per locale. A user reading a translation
 searching a translated term won't find entities whose source state
-carries the same concept. Future translation-aware search lands
-alongside the broader [`Translation rows in per-story
-export/import`](../followups.md#translation-rows-in-per-story-export--import)
-work, not as part of this design.
+carries the same concept. Future
+[translation-aware search](../parked.md#translation-aware-search) is
+its own parked item, not part of this design.
 
 ## Edge cases + adversarial findings
 

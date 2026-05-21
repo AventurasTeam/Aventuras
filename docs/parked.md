@@ -811,6 +811,18 @@ removal on successful retry) make it heavier than v1 warrants.
 Lands if real-device data shows the bootstrap query causing a
 visible pause on story-open for large stories.
 
+#### Translation-aware search
+
+Search runs over source-language text only; the
+[`translations`](./data-model.md#translation) table is display-only
+per locale. A user reading a translated locale who searches a
+translated term won't match entities whose source-language state
+carries the same concept. Translation-aware search would also query
+the `translations` table for the active locale. Until now this gap
+was tracked only by reference from the (since-resolved) translation
+export / import followup; it lands on its own if translated-locale
+search friction proves real.
+
 #### Reader font-size scaling generalized to all body prose
 
 [`ui/foundations/typography.md → Reader font-size setting`](./ui/foundations/typography.md#reader-font-size-setting)
