@@ -15,35 +15,6 @@ for the placement rule.
 
 ## UX
 
-### Theme-audit CI gate
-
-[`ui/foundations/color.md → Theme audit utility`](./ui/foundations/color.md#theme-audit-utility)
-ships `pnpm themes:audit` as a dev-only command — runs over the
-theme registry, prints pass/fail/warn per pair per theme, exits 0
-even on failures (never blocks). Wiring it into CI (or
-`pnpm test`) as a gate is **ripe for design** now that session 6
-landed the curated gallery (per
-[`ui/foundations/themes.md`](./ui/foundations/themes.md)). Real
-palette data informs the exempt-list shape: Catppuccin Latte and
-Catppuccin Mocha fail or sit close to AAA on body prose by
-canonical design and need to be marked exempt before the gate
-fires; other themes clear AAA with margin and don't.
-
-Decisions needed at gate-wiring time:
-
-- Which contrast targets gate (likely AA floors only; AAA target
-  stays warning).
-- Per-theme exempt list shape — a `theme.audit.exempt: [...]`
-  field on the theme module, an external allow-list, or
-  per-theme tags surfaced from the `Theme` type.
-- The accent-overridable derivation sweep — does it gate, or
-  stay informational-only?
-- Whether the gate runs in pre-commit, in `pnpm test`, or as a
-  dedicated CI job.
-
-Lands at the gate's own design pass — session 6's palette data
-is in hand, ready to inform the exempt-list shape.
-
 ### Translation rows in per-story export / import
 
 Per-story exports now strip `stories.settings.models`,

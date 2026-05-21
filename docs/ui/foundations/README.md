@@ -184,9 +184,7 @@ contract.
    Parchment).
    First-launch default `themeId: 'default-light'`. Per-theme
    slot values + audit expectations canonical at
-   [`themes.md`](./themes.md). Theme-audit CI gate followup
-   becomes ripe with this session's palette data; gate's own
-   design pass follows.
+   [`themes.md`](./themes.md).
 
 After session 6, foundations is feature-complete for v1. Component
 implementation begins consuming the contract; per-pattern visual

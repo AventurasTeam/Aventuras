@@ -353,7 +353,7 @@ not `fail`.
 
 None this session, but **two existing followups become ripe**:
 
-- **[Theme-audit CI gate](../followups.md#theme-audit-ci-gate)** —
+- **Theme-audit CI gate** —
   was deferred until session 6 lands. Now ripe for its own design
   pass with real palette data informing the gate's exempt-list
   shape (Catppuccin variants are the obvious exempt candidates).
@@ -401,7 +401,7 @@ for.
   Light, Default Dark, Parchment) with the full 10-theme dropdown.
   Each dropdown option's `data-*` attributes declare the slot
   values per the curated palettes.
-- **EDIT** [`../followups.md → Theme-audit CI gate`](../followups.md#theme-audit-ci-gate) —
+- **EDIT** `../followups.md → Theme-audit CI gate` —
   Update opening sentence: deferral is no longer "until session 6
   lands"; the gate is now ripe for its own design pass with real
   palette data.

@@ -476,9 +476,8 @@ introduces its own constant.
 Dev-only command that loads every registered theme, computes
 contrast on every documented pair, runs `deriveAccent` over a
 sample input set for accent-overridable themes, and prints a
-pass/fail/warn table. **No CI gate at v1** — see
-[Followups → Theme-audit CI gate](../../followups.md#theme-audit-ci-gate)
-for the deferral rationale.
+pass/fail/warn table. **No CI gate** — the audit is dev-only and
+advisory by design; it never blocks a commit or build.
 
 ### Invocation
 
@@ -527,9 +526,8 @@ per theme; **exit code 0 even on fails** (no CI gate).
 
 ### Out of scope
 
-- **CI integration.** Pending its own design pass — session 6's
-  palette data is in hand and the [theme-audit CI gate followup](../../followups.md#theme-audit-ci-gate)
-  becomes ripe with that data informing the exempt-list shape.
+- **CI integration.** The audit is dev-only and advisory by
+  design; it is not wired as a commit-time or CI gate.
 - **Multi-theme cross-check.** No "are these two themes
   consistent" check — themes are independent palettes.
 - **Visual regression.** Not the audit utility's job.

@@ -198,8 +198,7 @@ accent-override wrapper is wired.
 ### Theme-audit CI gate
 
 [`color.md → Theme audit utility`](../ui/foundations/color.md#theme-audit-utility)
-ships as a dev command in phase 1; CI gating is its own followup
-([Theme-audit CI gate](../followups.md#theme-audit-ci-gate)).
+ships as a dev command in phase 1; CI gating is its own followup.
 Independent of phase 2 primitive work but ripe for design now
 that real palette data is in hand. Could land in any phase 2
 slot or run as a parallel docs/CI workstream.
