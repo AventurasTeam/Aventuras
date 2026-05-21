@@ -823,6 +823,18 @@ was tracked only by reference from the (since-resolved) translation
 export / import followup; it lands on its own if translated-locale
 search friction proves real.
 
+#### User-controllable narrative language
+
+The AI generates narrative in English, the fixed source language
+([`architecture.md → What translation CANNOT do`](./architecture.md#what-translation-cannot-do)).
+Translation renders that English into a display target language but
+never changes what the AI writes. A user-controllable
+narrative-language setting — letting the author pick the language
+generation itself runs in — is a distinct concept from translation,
+not currently modeled. Lands if real demand emerges; until then
+English source plus display translation covers the multilingual
+case.
+
 #### Reader font-size scaling generalized to all body prose
 
 [`ui/foundations/typography.md → Reader font-size setting`](./ui/foundations/typography.md#reader-font-size-setting)

@@ -613,8 +613,8 @@ at English; there is no setting that re-points generation at
 another language. If a user wants the narrative generated in
 Spanish, that's a distinct concept — a user-controllable
 narrative-language setting — not translation, and not currently
-modeled; flagged for later if demand emerges. Translation is
-strictly a display-time surface.
+modeled — [parked until demand emerges](./parked.md#user-controllable-narrative-language).
+Translation is strictly a display-time surface.
 
 ---
 
