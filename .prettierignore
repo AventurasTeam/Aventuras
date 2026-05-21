@@ -13,3 +13,6 @@ pnpm-lock.yaml
 # Hand-authored low-fi wireframes — intentionally not prettier-formatted
 docs/**/*.html
 scripts/poc-embedder/
+
+# Vendored agent skills — kept verbatim, not project source (matches .remarkignore)
+.agents/
