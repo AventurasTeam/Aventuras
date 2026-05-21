@@ -114,9 +114,10 @@ cause is the server isn't running yet — start it and retry.
   commit when work is logically separable. Never amend committed
   work; create a new commit instead.
 - **Commit messages**: subject ≤ 72 chars. Body optional and
-  ≤ ~15 lines when present. Answer _why_; name what the diff
-  doesn't show. Length matches substance — `chore:` / `fix:`
-  commits rarely need a body.
+  ≤ 6 lines when present — the `commit-msg` hook counts blank
+  separators and the `Co-Authored-By` trailer toward the limit.
+  Answer _why_; name what the diff doesn't show. Length matches
+  substance — `chore:` / `fix:` commits rarely need a body.
 
   **Don't include**: diff restatement ("Updates X's prose about
   Y…"), adversarial-pass enumerations, drift-pass / pre-commit-hook
