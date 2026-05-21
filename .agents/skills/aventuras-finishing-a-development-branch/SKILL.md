@@ -23,7 +23,7 @@ Guide completion of development work by presenting clear options and handling ch
 
 ```bash
 # Run project's test suite
-npm test / cargo test / pytest / go test ./...
+pnpm test:run / cargo test / pytest / go test ./...
 ```
 
 **If tests fail:**

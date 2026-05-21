@@ -75,40 +75,47 @@ This structure informs the task decomposition. Each task should produce self-con
 
 **Files:**
 
-- Create: `exact/path/to/file.py`
-- Modify: `exact/path/to/existing.py:123-145`
-- Test: `tests/exact/path/to/test.py`
+- Create: `lib/feature/thing.ts`
+- Modify: `lib/feature/existing.ts:123-145`
+- Test: `lib/feature/thing.test.ts` (colocated with the module)
 
 - [ ] **Step 1: Write the failing test**
 
-```python
-def test_specific_behavior():
-    result = function(input)
-    assert result == expected
+```typescript
+import { describe, expect, it } from 'vitest'
+
+import { doThing } from './thing'
+
+describe('doThing', () => {
+  it('returns the expected value for a known input', () => {
+    expect(doThing(input)).toBe(expected)
+  })
+})
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/path/test.py::test_name -v`
-Expected: FAIL with "function not defined"
+Run: `pnpm test:run lib/feature/thing.test.ts`
+Expected: FAIL — `doThing is not a function` (or similar)
 
 - [ ] **Step 3: Write minimal implementation**
 
-```python
-def function(input):
-    return expected
+```typescript
+export function doThing(input: Input): Result {
+  return expected
+}
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/path/test.py::test_name -v`
+Run: `pnpm test:run lib/feature/thing.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tests/path/test.py src/path/file.py
-git commit -m "feat: add specific feature"
+git add lib/feature/thing.ts lib/feature/thing.test.ts
+git commit -m "feat: add doThing"
 ```
 ````
 
