@@ -469,10 +469,12 @@ sees. The user's original target-language text lands in `translations`
 as a row for display fallback. Both writes share the originating
 user-submit `action_id` — CTRL-Z reverses both atomically.
 
-**Same-language short-circuit.** If
-`settings.translation.targetLanguage === settings.translation.sourceLanguage`
-the phase skips the LLM call. No translation row is needed; the
-typed text goes directly to `content` and render falls back to
+**Same-language short-circuit.** English is the fixed source
+language — every AI-facing surface (prompt presets, the LLM-facing
+log, generated narrative) is English, and it is a constant, not a
+stored setting. If `settings.translation.targetLanguage` is `en`
+the phase skips the LLM call: no translation row is needed, the
+typed text goes directly to `content`, and render falls back to
 source.
 
 **Failure is fatal.** `callWithRetry` exhaustion returns
@@ -606,11 +608,13 @@ applied across the wizard's single SQLite transaction.
 
 ### What translation CANNOT do
 
-Change the language the AI writes in. If a user wants the narrative
-generated in Spanish, that's a distinct concept — a narrative-language
-/ source-language setting — not translation. Not currently modeled;
-flagged for later if demand emerges. Translation is strictly a
-display-time surface.
+Change the language the AI writes in. The source language is fixed
+at English; there is no setting that re-points generation at
+another language. If a user wants the narrative generated in
+Spanish, that's a distinct concept — a user-controllable
+narrative-language setting — not translation, and not currently
+modeled; flagged for later if demand emerges. Translation is
+strictly a display-time surface.
 
 ---
 
