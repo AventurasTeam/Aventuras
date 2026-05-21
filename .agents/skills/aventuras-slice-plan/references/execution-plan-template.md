@@ -48,9 +48,14 @@ Milestone: [Milestone 1](../docs/implementation/milestones/01-spine/milestone.md
 
 ## Task Clusters
 
+Batched by risk and verification boundary. Declare ordering with
+`Depends on`; clusters with no edge between them are parallel-safe —
+the execution skill decides how to dispatch them.
+
 1. Cluster name
    - Goal:
    - Files:
+   - Depends on:
    - Steps:
    - Verification:
 
@@ -73,16 +78,6 @@ Milestone: [Milestone 1](../docs/implementation/milestones/01-spine/milestone.md
 
 - Skill:
   - Reason:
-
-## Editing Workers
-
-Only if execution should be split across multiple editing workers.
-Define each worker's ownership; omit this section for a
-single-executor slice.
-
-- Worker:
-  - Owns (files / modules):
-  - Must not touch:
 
 ## Stop Conditions
 

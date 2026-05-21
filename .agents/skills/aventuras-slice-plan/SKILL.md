@@ -79,7 +79,9 @@ later assumptions.
 
 Avoid a plan that stacks several risky changes before the first
 verification point. If a cluster is too broad to verify cleanly, split
-it.
+it. Declare each cluster's ordering dependencies on other clusters;
+clusters with no dependency edge between them are parallelizable, which
+is the signal the execution skill needs to dispatch work.
 
 ### Map Evidence Before Work Starts
 
@@ -110,9 +112,12 @@ Use read-only subagents for independent codebase mapping, official-docs
 research, or plan validation when a slice is broad enough to benefit.
 Brief each subagent with a narrow question and expected output.
 
-Do not spawn subagents by default. Do not assign editing workers during
-planning. If the plan recommends editing workers for execution, define
-their file/module ownership and what they must not touch.
+Do not spawn subagents by default. Do not assign or define editing
+workers — worker count and file ownership are the execution skill's
+concern, not the plan's. The plan stops at the cluster decomposition
+(see Batch Work By Risk And Verification Boundary): the execution skill
+owns the worker role and maps clusters onto workers, sized to its own
+harness, at run time.
 
 ### Validate The Plan Like A Review
 
