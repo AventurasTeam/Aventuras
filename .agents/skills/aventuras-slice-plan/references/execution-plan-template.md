@@ -39,7 +39,10 @@ becomes executable.
 For `needs-slice-amendment`, replace the bullets with a
 section-by-section punch list — Goal, Scope: in, Scope: out,
 Acceptance criteria, Tests, Open questions, milestone knock-on — each
-stating what is wrong and what it becomes.
+stating what is wrong, what it becomes, and whether it is
+**mechanical** (text the skill may apply on approval) or
+**structural** (a split, renumber, or milestone-graph change the
+developer owns).
 
 ## Decisions
 

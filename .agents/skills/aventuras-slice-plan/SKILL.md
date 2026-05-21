@@ -6,7 +6,8 @@ description: >-
   "Slice 1.2" or "M01/02-drizzle-schema" into an approved execution
   plan. Reads the milestone, slice doc, required anchors, followups,
   and relevant code; resolves open questions with the developer;
-  writes the full plan to `.impl-plans/`; does not edit runtime code.
+  writes the full plan to `.impl-plans/`; may apply developer-approved
+  slice-doc amendments; does not edit runtime code or canonical specs.
 ---
 
 # Aventuras Slice Planning
@@ -28,8 +29,14 @@ agent can follow with much less discretion.
 - Do not add task checklists to slice docs.
 - Do not invoke `aventuras-design` from this skill; a `needs-design`
   state is handed back to the developer.
-- You may propose a brief `Implementation notes` addition to a slice
-  doc only for persistent rationale and only with user approval.
+- Do not make structural changes to slice or milestone docs —
+  splitting or renumbering a slice, editing the dependency graph,
+  creating or deleting slice files. Those are developer decisions;
+  recommend them in the Resolution Path.
+- You may edit a slice doc only to apply a developer-approved
+  amendment from a `needs-slice-amendment` Resolution Path, or to
+  propose a brief `Implementation notes` addition. Both require
+  explicit approval; neither is auto-committed.
 
 ## Direct External Skills
 
@@ -232,11 +239,13 @@ Resolution path per state:
   session settles the canonical doc; then re-plan, since a spec
   change can move the route.
 - `needs-slice-amendment` — the draft records a section-by-section
-  punch list of the stale slice-doc text and what it should become,
-  plus any milestone-doc knock-on. Owner: the developer (slice docs
-  are owner-authored). After amendment, clear the gate if the plan
-  already assumed the corrected slice; re-plan if the amendment
-  diverges from what the plan assumed.
+  punch list: each stale slice-doc item, what it should become, and
+  whether it is mechanical (text) or structural (a split, renumber,
+  or milestone-graph change). With explicit developer approval this
+  skill applies the mechanical items to the slice doc as working-tree
+  edits (see Step 7); structural items are recommended only and stay
+  developer-owned. Once the slice doc and plan agree, clear the gate;
+  re-plan only if applying surfaced something new.
 - `blocked` — a dependency slice not yet merged does not block
   planning when the milestone pins the contract (doc-as-contract):
   plan against that contract, reach `approved`, and record an
@@ -310,6 +319,15 @@ Please review the decisions, task clusters, evidence matrix, skill plan,
 and stop conditions. Execution should not begin until you approve this plan.
 ```
 
+When the plan is `needs-slice-amendment`, the review prompt also asks
+whether to apply the Resolution Path punch list. On explicit approval,
+apply the mechanical items as working-tree edits to the slice doc,
+preserving docs link discipline — if an amendment renames a heading,
+update inbound anchor references in the same edit; if that cannot be
+done safely, leave the item as a recommendation. Do not apply
+structural items and do not commit. Then re-check that the slice doc
+and plan now agree.
+
 Update `Status: approved` only after explicit developer approval.
 
 ## Stop Conditions
@@ -341,4 +359,6 @@ with its Resolution Path (Step 4), and hand back.
 - Skill usage is classified as recommended for execution or not
   needed.
 - Stop conditions are explicit.
+- Any slice-doc amendment was developer-approved, mechanical, and
+  left uncommitted.
 - No runtime code or canonical docs were edited.
