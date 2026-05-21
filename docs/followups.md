@@ -15,45 +15,6 @@ for the placement rule.
 
 ## UX
 
-### Custom-font theme support
-
-Themes can declare font-family overrides in their registry entry
-(e.g. Parchment maps `--font-reading` to a serif stack); the
-runtime swap mechanism applies these overrides at theme-swap time.
-**Verified during phase 1 native bring-up: the slot swap works,
-but the resolved typeface doesn't change** because the font stacks
-declared in [`themes.md`](./ui/foundations/themes.md) reference
-fonts that aren't bundled with the app. Both web (Electron, RN-Web
-in Storybook) and Android fall through to the same system
-sans-serif default for every theme.
-
-Open design questions:
-
-- **Bundling strategy.** Ship font files in the app bundle (larger
-  binary, fonts available immediately) or load lazily on first use
-  of a font-overridable theme (smaller binary, first-render
-  fallback flicker)?
-- **Web loading strategy.** `@font-face` in `global.css`, separate
-  font CSS, CDN-hosted variants, or accept system-fallback on web?
-  Each has different first-paint implications for Electron.
-- **Per-platform font-stack reconciliation.** A stack like
-  `Charter, "Iowan Old Style", "Source Serif", Georgia, ...` falls
-  through differently across iOS, Android, and web. Single stack
-  with hopeful fallbacks vs per-platform stacks in the registry?
-- **First-launch / reduced-data-mode UX.** What does the user see
-  before custom fonts finish loading? Acceptable to render system
-  sans first then re-flow once fonts arrive?
-
-License + bundle-size accounting (redistribution rights for
-Charter / Lora / etc., binary-weight impact) is implementation
-work that follows from the bundling-strategy decision.
-
-Lands when a v1 surface depends on a custom-font theme rendering
-correctly. Until then, themes that declare font overrides function
-as color-only themes — not a v1 blocker, but worth calling out so
-the gallery contract isn't misread as "font-customization works
-today."
-
 ### Theme-audit CI gate
 
 [`ui/foundations/color.md → Theme audit utility`](./ui/foundations/color.md#theme-audit-utility)

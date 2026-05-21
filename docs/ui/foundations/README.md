@@ -178,9 +178,10 @@ contract.
    cool-saturated dark), Royal (deep purple + gold fantasy-coded),
    Cyberpunk (neon palette, color-only port — animated CRT effects
    dropped per the flat depth metaphor), Fallen Down (pure-black +
-   neon yellow + monospace prose; bundled VT323 font dropped),
-   and Aventuras (deep navy + warm cream, keyed to the
-   app icon — two-color identity, paired inverse with Parchment).
+   neon yellow + monospace prose; bundled VT323 font dropped —
+   reinstated 2026-05-21), and Aventuras (deep navy + warm cream,
+   keyed to the app icon — two-color identity, paired inverse with
+   Parchment).
    First-launch default `themeId: 'default-light'`. Per-theme
    slot values + audit expectations canonical at
    [`themes.md`](./themes.md). Theme-audit CI gate followup

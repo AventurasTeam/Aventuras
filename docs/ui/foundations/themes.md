@@ -95,20 +95,22 @@ Two override:
 - **Parchment** — keeps the serif default but pins it explicitly
   in its `tokens.fonts` (the writing-app archetype demands serif).
 - **Fallen Down** — overrides `--font-reading` to a monospace
-  stack: `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`.
-  Stark / void / pixel-tribute identity demands monospace prose.
-  Bundled VT323 from old-app is **not** carried forward; the
-  system monospace stack approximates the aesthetic without
-  bundle cost.
+  stack headed by **VT323**, a bundled pixel face, with the system
+  monospace stack as the fallback tail. Stark / void /
+  pixel-tribute identity demands the authentic terminal face.
+  VT323 is SIL Open Font License 1.1 and roughly 3 KB — bundled
+  per [`typography.md → Bundled fonts`](./typography.md#bundled-fonts).
 
 ### `leadingMultiplier` per theme
 
 All 10 themes ship `leadingMultiplier: 1.0` for v1. The escape
 valve exists in the contract per
 [`typography.md → Per-font leading multiplier`](./typography.md#per-font-leading-multiplier);
-no current palette demands it. Revisitable per-theme if implementation
-testing surfaces a serif-vs-sans harmony issue on Parchment or
-similar.
+no current palette demands it at authoring time. Revisitable
+per-theme if implementation testing surfaces a leading-harmony
+issue — Fallen Down is the likeliest consumer, since its bundled
+VT323 pixel face has different vertical metrics from the system
+monospace stack the locked line-heights were calibrated against.
 
 ---
 
@@ -494,11 +496,16 @@ non-text. Focus-ring (neon yellow) × bg-base clears 3:1.
 `id: 'fallen-down'` · dark · opinionated · monospace-prose
 
 Pure-black canvas, pure-white text, neon-yellow accent.
-`--font-reading` overrides to system monospace. Stark / void /
-pixel-tribute identity. Old-app's bundled VT323 font is
-explicitly **not** carried forward; the system monospace stack
-approximates the aesthetic. Old-app's sharp-edge radius identity
-is also not preserved per session-4's structurally-locked radii.
+`--font-reading` overrides to a monospace stack headed by the
+bundled **VT323** pixel face. Stark / void / pixel-tribute
+identity — VT323 is the authentic terminal face, reinstated
+2026-05-21 after the session-6 "dropped for simplicity" call did
+not survive the licensing and bundle-size facts (SIL Open Font
+License 1.1, ~3 KB; see
+[`2026-05-21-cross-platform-fonts`](../../explorations/2026-05-21-cross-platform-fonts.md)).
+The system monospace stack remains the fallback tail. Old-app's
+sharp-edge radius identity is not preserved per session-4's
+structurally-locked radii.
 
 ```
 --bg-base:        #000000
@@ -530,7 +537,7 @@ is also not preserved per session-4's structurally-locked radii.
 --recently-classified-bg: #1a1a00
 ```
 
-`tokens.fonts.--font-reading: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'`
+`tokens.fonts.--font-reading: '"VT323", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'`
 
 **Audit expectations** — body prose `#ffffff` × `#000000` = 21:1
 (WCAG-maximum contrast); all targets clear with margin.

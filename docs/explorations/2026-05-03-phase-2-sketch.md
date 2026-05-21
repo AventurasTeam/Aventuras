@@ -141,8 +141,9 @@ These aren't "primitives" — they're the open contracts that phase
 
 Phase 1 found that the `--font-reading` slot swap fires correctly
 but the resolved typeface doesn't change because the named fonts
-aren't bundled. Tracked under
-[`followups.md → Custom-font theme support`](../followups.md#custom-font-theme-support).
+aren't bundled. Tracked as Custom-font theme support — resolved
+2026-05-21, see
+[`typography.md → Cross-platform font resolution`](../ui/foundations/typography.md#cross-platform-font-resolution).
 
 Decisions phase 2 needs:
 

@@ -97,11 +97,15 @@ Three slots — concrete default stacks locked at session 3 in
 - `--font-mono` — code, system-entry chrome, technical readouts
   (raw JSON viewer, delta log). Default: `ui-monospace` chain.
 
-**Font tokens declare stacks, not single names.** A theme
-introducing a custom font for `--font-reading` declares it as
-`"Lora", Charter, ..., serif` — never as `"Lora"` alone. Guards
-against font-load failures and platform variance (mobile native
-may not have the font bundled).
+**A font token's value is a CSS stack.** A theme introducing a
+custom font for `--font-reading` declares the bundled or preferred
+face first and an RN-honored generic keyword (`serif` /
+`sans-serif` / `monospace`) last — never a single name alone. On
+web the browser walks the stack directly; on native a resolver
+derives the single family name React Native requires from it (see
+[`typography.md → Cross-platform font resolution`](./typography.md#cross-platform-font-resolution)).
+The trailing generic keyword is not optional — it is the resolver's
+fallback when no earlier entry resolves.
 
 `--font-display` was evaluated and **skipped** at session 3 — v1
 surfaces are covered by `--text-2xl` / `-3xl` against `--font-ui`;

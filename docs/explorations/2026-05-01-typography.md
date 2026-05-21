@@ -130,8 +130,8 @@ with existing `appearance` invariants.
   `--font-reading` slot swap fires on both platforms but the
   resolved typeface doesn't visibly change for custom-font themes
   whose stacks reference unbundled fonts (Parchment in particular).
-  Tracked under
-  [`followups.md → Custom-font theme support`](../followups.md#custom-font-theme-support).
+  Tracked as Custom-font theme support — resolved 2026-05-21, see
+  [`typography.md → Cross-platform font resolution`](../ui/foundations/typography.md#cross-platform-font-resolution).
 - **`--font-display` skip is honest.** Re-verified surfaces — none
   demand hero-scale typography distinct from `--text-2xl` / `-3xl`.
   Verified.

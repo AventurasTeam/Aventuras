@@ -10,13 +10,14 @@ font-size user setting.
 
 ## Default font stacks
 
-System-fonts only for v1 — zero bundled fonts. Themes that need
-custom typography (Parchment with Lora, etc.) bundle their own
-assets at theme-author time and prepend their bundled name to the
-relevant stack; the system fallbacks below remain as the chain
-tail. Per the locked
+The three default slots use system fonts — no bundled assets.
+Individual themes may bundle a font (Fallen Down ships VT323);
+bundling and cross-platform resolution are specified in
+[Cross-platform font resolution](#cross-platform-font-resolution).
+Per the
 [`tokens.md → Font-family slots`](./tokens.md#font-family-slots)
-rule, font tokens declare stacks, never single names.
+rule, a font token's value is a CSS stack; the native resolver
+derives the single family name native requires from it.
 
 ### `--font-reading` — serif default
 
@@ -285,37 +286,106 @@ control labeled `S` / `M` / `L` / `XL`. Live preview is the
 reader itself; the Settings panel doesn't embed a sample
 paragraph.
 
-## Implementation notes
+## Cross-platform font resolution
 
-### Web / Electron (RN Web)
+A font token names one slot; web and native consume it
+differently, so the slot resolves to a different value shape on
+each platform. This mirrors the `--tint-hover` / `--tint-press`
+precedent — web gets a rich expression, native gets a pre-resolved
+concrete value, under one token name.
 
-Default font stacks are CSS custom property values; the browser
-handles font lookup against the platform's font registry. No
-`@font-face` declarations for v1 — system fonts only. Stacks fall
-through to the generic family keyword if no platform font resolves.
+### Web and native diverge
 
-### Native (Expo)
+- **Web / Electron (RN Web).** The token resolves to the full CSS
+  stack. The browser walks it against the platform font registry,
+  rendering the first available face and falling through to the
+  trailing generic keyword (`serif` etc.) if no named face
+  resolves. No `@font-face` is needed for the system-stack
+  defaults.
+- **Native (Expo).** React Native's `fontFamily` style takes a
+  single family name, never a comma-separated stack. Handed a
+  stack string it matches nothing and falls back to the system
+  default. So on native the token resolves to a single
+  pre-computed family name.
 
-RN's `fontFamily` style takes a single name, not a CSS-style stack.
-NativeWind 4's runtime swaps the `--font-reading` slot value
-correctly during phase 1 bring-up (
-[`theming.md → Switching mechanism`](./theming.md#switching-mechanism)),
-but custom-font themes whose stacks reference unbundled fonts
-(e.g. Parchment's serif stack) fall through to the platform default
-on both web and native — the slot swap fires; the resolved typeface
-doesn't change. Tracked under
-[`followups.md → Custom-font theme support`](../../followups.md#custom-font-theme-support).
+### Native resolver
 
-If NativeWind doesn't parse stacks at all: implementation falls back
-to a small JS helper that picks the first system-font name available
-on the platform from the stack at theme-application. Cross-platform
-parity preserved; small implementation cost. Decision lands as part
-of the Custom-font theme support followup.
+At theme-application — the hook the
+[accent derivation](./theming.md#accent-override-opt-in) already
+runs in — a resolver computes the single native family name for
+each slot and feeds it to NativeWind's `vars()`. The resolver
+walks the slot's stack left to right and returns the first entry
+that is either:
 
-### Future bundled-font themes
+1. a family in the [bundled-font registry](#bundled-fonts), or
+2. one of exactly `serif`, `sans-serif`, `monospace` — the three
+   generic families React Native honors as `fontFamily` values on
+   Android. CSS generics such as `system-ui` and `ui-monospace`
+   are not RN-honored and are skipped.
 
-When an opinionated theme (Parchment-with-Lora, etc.) ships with
-bundled fonts: the theme module declares fonts via `expo-font`'s
-`loadAsync` at theme registration; the bundled family name goes at
-the head of the stack; system fallback remains. No contract change
-needed; theme-author work.
+Well-formed stacks place a bundled font first and a generic
+keyword last, so the walk yields the bundled font when present and
+the generic family otherwise. If the walk matches neither, the
+resolver returns a per-slot terminal fallback — `--font-reading` →
+`serif`, `--font-ui` → `sans-serif`, `--font-mono` → `monospace` —
+so it never yields an empty value, even for a malformed
+user-authored stack.
+
+The three default slots therefore resolve correctly on Android
+with zero bundled fonts: each default stack ends in its generic
+keyword, and Android maps `serif` to Noto Serif, `sans-serif` to
+Roboto, `monospace` to Roboto Mono.
+
+### Bundled fonts
+
+A theme may bundle a font. A central bundled-font registry records
+each one — family name, asset, license — and drives three
+consumers: the web `@font-face` declarations, the native
+build-time embed, and the resolver's known-bundled set.
+
+- **Native embedding** uses the `expo-font` config plugin
+  (`app.json` → `plugins`). Fonts embed at build time and are
+  available immediately — no runtime load, no first-render
+  flicker. The Android object form pins an explicit family name so
+  it matches web and iOS; without it Android derives the name from
+  the filename.
+- **Web** declares `@font-face` against the bundled file. No CDN —
+  the app is offline-first and Electron loads from the local
+  bundle.
+- **Assets** ship under `assets/fonts/<family>/` with the font
+  file and the license text. A bundled font must carry a
+  redistribution-permitting license (SIL Open Font License or
+  equivalent).
+
+Lazy or on-demand font loading is rejected: it buys nothing for a
+small font, and a network dependency contradicts offline-first.
+Bundled fonts always ship in the binary.
+
+A bundled font with partial Unicode coverage degrades per-glyph —
+glyphs it lacks fall through to the stack on web and to the system
+font on native. A theme bundling a Latin-only display face accepts
+mixed rendering on non-Latin story content.
+
+Fallen Down is the v1 registry's only entry — VT323, per
+[`themes.md → Reading-font policy per theme`](./themes.md#reading-font-policy-per-theme).
+
+### iOS
+
+The resolver's generic-keyword output is correct on Android but
+not on iOS — iOS does not honor `serif` / `sans-serif` /
+`monospace` as `fontFamily` values and needs a concrete font name.
+Bundled fonts resolve correctly on iOS (they carry a real family
+name), so a theme like Fallen Down works; only the system-stack
+defaults mis-render. iOS is deferred for v1; system-stack
+resolution on iOS lands with the iOS bring-up, by extending the
+resolver with iOS-specific concrete names per slot.
+
+### Validation
+
+A check folded into
+[`pnpm themes:audit`](./color.md#theme-audit-utility) asserts
+every font stack in the registry resolves to a non-empty native
+family — each stack must contain an RN-honored generic keyword or
+a registered bundled font. The cross-platform reading-font defect
+shipped because nothing checked this; the check makes the failure
+build-time-visible.

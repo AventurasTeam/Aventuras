@@ -120,10 +120,12 @@ foundations bring-up. Findings:
   bring-up; the foundations explorer's MotionSamples gates
   animations to web only and renders static labeled bars on native.
   Tracked as a separate followup.
-- **Custom-font theme overrides** (e.g. Parchment's serif stack)
-  do not visibly change typeface on either web or native — the
-  `--font-reading` slot swaps but the resolved fonts in the stack
-  aren't bundled / installed. Tracked as a separate followup.
+- **Font tokens on native.** The `--font-reading` slot swaps
+  correctly, but React Native cannot consume a multi-family CSS
+  stack — handed the stack string, Android matches nothing and
+  falls back to the system default. Resolved by the native font
+  resolver in
+  [`typography.md → Cross-platform font resolution`](./typography.md#cross-platform-font-resolution).
 - **`data-theme-mode` attribute.** Not currently emitted; the
   app sets `data-theme="<id>"` and toggles `class="dark"` based on
   the theme's `mode`. The `data-theme-mode` design (intended for
