@@ -15,19 +15,6 @@ for the placement rule.
 
 ## UX
 
-### Per-story export format scope
-
-[`data-model.md → Backup & export format`](./data-model.md#backup--export-format)
-lists what a per-story `.avts` export includes and what it strips,
-but neither list is exhaustive. `probe_captures` — diagnostic data
-that branch-forking already drops — is never named, and the
-inclusion enumeration omits tables like `character_relationships`
-and `branch_era_flips`. Wants a short dedicated session that
-settles, table by table, what an `.avts` per-story export should
-carry. Surfaced while resolving the translation-rows export
-question (see
-[`explorations/2026-05-21-translation-export-import.md`](./explorations/2026-05-21-translation-export-import.md)).
-
 ### Actions menu broader design pass
 
 The

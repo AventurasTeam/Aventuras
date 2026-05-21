@@ -2325,61 +2325,152 @@ gatekeepers.
    since media lives on disk, not in SQLite.
 
 2. **Per-story export** — produces a single self-contained `.avts`
-   file for one story: all its branches, entries, entities, lore,
-   threads, happenings + links, chapters, deltas, translations, and
-   entry→asset references. Binary assets are embedded as base64 or
+   file for one story, wrapped in the standard
+   [Aventuras file envelope](#aventuras-file-format-avts) for
+   version-tagged imports. Binary assets are embedded as base64 or
    sidecar files (packaging shape parked, see
    [`parked.md → Backup / export packaging shape`](./parked.md#backup--export-packaging-shape)).
-   Wrapped in the standard
-   [Aventuras file envelope](#aventuras-file-format-avts) for
-   version-tagged imports. Intended for sharing / archiving /
-   migration.
-
-   **Per-story exports strip references to the exporter's
-   `app_settings`** — they're meaningless on another setup. Omitted
-   from the envelope:
-   - `stories.settings.models[agentId]` — exporter's per-agent
-     model overrides.
-   - `stories.settings.embedding_provider_id` — exporter's
-     app_settings provider reference.
-   - `stories.settings.embedding_model_id` — exporter's embedding
-     model choice; the importer uses their own.
-   - `vec0` vectors — reproducible cache, not source data.
-
-   **On import**, the stripped slots take the importer's local
-   defaults (`models = {}`, `embedding_*` copied from
-   `app_settings`, same path as new-story creation). The re-index
-   pipeline runs post-insert using the importer's embedder — same
-   compute as a deliberate
-   [Model swap UX](./memory/retrieval.md#model-swap-ux) pass. The
-   import dialog surfaces the re-index cost up front
-   ("Importing 'Story title'. Will index memory using your current
-   embedder (~N entries, ~M seconds).").
-
-   Consequence: imported stories never carry foreign references in
-   the first place; the provider/profile deletion-semantics design
-   has zero interaction with the per-story import flow.
-
-   **Translation rows travel in full.** The branch-scoped
-   [`translations`](#translation) table is exported with the
-   story — every row, all branches, no language filtering.
-   Translation rows are paid LLM output, not a reproducible cache:
-   unlike `vec0` vectors they carry no provider or model reference,
-   so nothing setup-specific needs stripping. They are also
-   delta-logged (`deltas.target_table` includes `translations`), so
-   stripping them while keeping the delta log would corrupt
-   reverse-replay. `stories.settings.translation` (`enabled`,
-   `targetLanguage`, `granularToggles`) likewise travels untouched.
-   An imported story is therefore self-consistent — rows and
-   settings agree, it renders bilingually as authored, and the
-   outstanding-miss count is zero. New translations on the
-   importer's side use the importer's default translation agent;
-   pre-existing rows are backend-agnostic plain text and need no
-   reconciliation.
+   Intended for sharing / archiving / migration. What it carries is
+   settled table by table below.
 
 The two have genuinely different purposes and the old app's conflation
 into a single zip produced friction — users invoking "backup" got a
 story export they didn't want, and vice versa. Split avoids that.
+
+**What a per-story export carries — the rule.** The strip / travel
+split is not ad hoc. It falls out of one invariant: **every
+delta-logged table must travel.** `deltas.target_table` enumerates
+twelve tables; stripping any of them while keeping the delta log
+corrupts reverse-replay (CTRL-Z, rollback, crash-recovery). So the
+strip set can only be drawn from **non-delta-logged** tables, and
+within those only the **derived** ones — reproducible caches and
+diagnostics, never story content. `embeddings` and `probe_captures`
+are exactly the non-delta-logged derived tables; both carry explicit
+"not delta-logged" schema comments. Stripping them is safe;
+stripping anything else is not.
+
+**The table-by-table manifest.** Every table in the schema has a row
+below. A schema addition is **incomplete until its export
+disposition is added here** — the forcing function that keeps the
+manifest exhaustive.
+
+| Table                     | Disposition               | Rationale                                                                                                                                                                   |
+| ------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stories`                 | Travels — fields stripped | The story row. `settings.models`, `settings.embedding_provider_id`, `settings.embedding_model_id` omitted (see below). All other `settings` and all of `definition` travel. |
+| `branches`                | Travels                   | All branches. Branch container — not delta-logged, but story content.                                                                                                       |
+| `story_entries`           | Travels                   | All entries, all branches; `metadata` JSON included.                                                                                                                        |
+| `entities`                | Travels                   | `embedding_stale` travels as-is; the post-import re-index reconciles it.                                                                                                    |
+| `lore`                    | Travels                   | Delta-logged story content.                                                                                                                                                 |
+| `threads`                 | Travels                   | Delta-logged story content.                                                                                                                                                 |
+| `happenings`              | Travels                   | Delta-logged story content.                                                                                                                                                 |
+| `happening_involvements`  | Travels                   | Delta-logged link table.                                                                                                                                                    |
+| `happening_awareness`     | Travels                   | Delta-logged link table; `retrieval_count` travels.                                                                                                                         |
+| `character_relationships` | Travels                   | Delta-logged story content.                                                                                                                                                 |
+| `chapters`                | Travels                   | Delta-logged story content.                                                                                                                                                 |
+| `branch_era_flips`        | Travels                   | Delta-logged narrative state.                                                                                                                                               |
+| `translations`            | Travels                   | Paid LLM output; carries no provider or model coupling (see below).                                                                                                         |
+| `entry_assets`            | Travels                   | Delta-logged link table.                                                                                                                                                    |
+| `deltas`                  | Travels                   | The delta log itself; every other table's integrity depends on it.                                                                                                          |
+| `assets`                  | Dependency — carried      | Referenced rows only, collected via `entry_assets` and `stories.cover_asset_id`. Binary embedded.                                                                           |
+| `vault_calendars`         | Dependency — carried      | The one referenced custom-calendar row, embedded (see below). Built-ins resolve by id and carry nothing.                                                                    |
+| `embeddings` (`vec0`)     | Stripped                  | Reproducible from source content; model-space-bound. Not delta-logged.                                                                                                      |
+| `probe_captures`          | Stripped                  | Diagnostic, not story state; not delta-logged; FIFO-evicted; deep-mode vectors model-bound. Branch-forking already drops them.                                              |
+| `app_settings`            | Does not travel           | Global singleton; sources the strip list, never itself exported.                                                                                                            |
+
+**Story-internal IDs import verbatim; dependency references
+resolve.** Story-scoped IDs — `branch_id`, delta `target_id`, the
+id-references buried in `entities.state` JSON — import unchanged,
+because the whole story scope imports together. The two
+**dependency** rows behave differently: `entry_assets.asset_id`
+resolves to the importer's existing asset on a content-hash match,
+and a custom `calendarSystemId` may be rewritten on calendar fork
+(see below). Dependency-table references resolve against the
+importer's rows; story-internal references do not.
+
+**Stripped `app_settings` references.** Three `stories.settings`
+fields plus the `vec0` vectors are meaningless on another setup and
+are omitted from the envelope: `stories.settings.models[agentId]`
+(per-agent model overrides), `stories.settings.embedding_provider_id`
+(app*settings provider reference), `stories.settings.embedding_model_id`
+(embedding model choice), and `vec0` vectors (reproducible cache,
+not source data). On import the stripped slots take the importer's
+local defaults (`models = {}`, `embedding*\*`copied from`app_settings`, same path as new-story creation). The re-index
+pipeline runs post-insert using the importer's embedder — same
+compute as a deliberate
+[Model swap UX](./memory/retrieval.md#model-swap-ux) pass; until it
+completes, imported embeddable rows have no `vec0`vectors and
+retrieval treats them as stale. The import dialog surfaces the
+re-index cost up front ("Importing 'Story title'. Will index memory
+using your current embedder (~N entries, ~M seconds)."). Imported
+stories therefore never carry foreign`app_settings` references in
+the first place; the provider / profile deletion-semantics design
+has zero interaction with the per-story import flow.
+
+**The calendar dependency.** A story's
+[`definition.calendarSystemId`](#story-settings-shape) resolves
+against the merged calendar registry — built-ins (in code, present
+on every install) or `vault_calendars` rows (local to the
+exporter). A built-in id resolves directly on the importer and
+carries nothing; this assumes the importer's set of built-in
+calendars covers the exporter's, so adding a built-in calendar is
+treated as a format-version change, not a silent addition. A
+**custom** calendar does not exist on the importer, so the export
+embeds it: when `calendarSystemId` resolves to a `vault_calendars`
+row, a `calendar` sub-object — `{ id, name, definition }`, the same
+shape as the standalone `aventuras-calendar` payload — rides inside
+the `aventuras-story` envelope. On import, for that embedded
+calendar:
+
+1. **No `vault_calendars` row with that `id`** — insert the embedded
+   calendar as a new row (`favorite = 0`). The story points at it.
+2. **Row exists and its `definition` structurally equals the
+   embedded `definition`** — dedup. The story points at the existing
+   row; the embedded copy is discarded. `name` and `favorite`
+   differences are ignored — they are per-user library preferences,
+   and worldtime display depends only on `definition`.
+3. **Row exists but its `definition` differs** — fork. A matching
+   `id` does not prove a matching calendar (both sides may have
+   edited a shared clone). Allocate a fresh `cal_` id, insert the
+   embedded calendar under it, and rewrite the story's
+   `calendarSystemId` to the new id. The importer's existing same-id
+   row is left untouched — a story import never mutates the
+   importer's library.
+
+Fork rather than reuse on divergence because
+`definition.worldTimeOrigin` is a `TierTuple` keyed to the
+exporter's calendar's tier shape, and `branch_era_flips` were
+authored against it; the embedded calendar is the one the story was
+authored under, so pointing at it keeps those consistent. Only
+`calendarSystemId` is rewritten.
+
+A newly inserted calendar (cases 1 and 3) gets ` (story import)`
+appended to its `name` — a one-time, user-editable default label
+for Vault transparency, appended only when the name does not already
+end with the suffix so the re-export chain cannot accumulate it. The
+import dialog notes when a custom calendar is added, worded as a
+divergence notice in the fork case. Export can always resolve a
+story's `calendarSystemId`: a custom calendar in use by a story
+cannot be deleted —
+[`calendars.md → Delete safety`](./ui/screens/vault/calendars/calendars.md#delete-safety)
+blocks deletion while `usage_count > 0`. When packs ship (post-v1),
+`stories.settings.activePackId` and `packVariables` will reference
+global pack content and inherit this same dependency-carry pattern;
+they are null at v1, so nothing is carried for them yet.
+
+**Translation rows travel in full.** The branch-scoped
+[`translations`](#translation) table is exported with the story —
+every row, all branches, no language filtering. Translation rows are
+paid LLM output, not a reproducible cache: unlike `vec0` vectors
+they carry no provider or model reference, so nothing setup-specific
+needs stripping. They are also delta-logged (`deltas.target_table`
+includes `translations`), so stripping them while keeping the delta
+log would corrupt reverse-replay. `stories.settings.translation`
+(`enabled`, `targetLanguage`, `granularToggles`) likewise travels
+untouched. An imported story is therefore self-consistent — rows and
+settings agree, it renders bilingually as authored, and the
+outstanding-miss count is zero. New translations on the importer's
+side use the importer's default translation agent; pre-existing rows
+are backend-agnostic plain text and need no reconciliation.
 
 ### Aventuras file format (`.avts`)
 
@@ -2416,6 +2507,11 @@ machine-side and to a human inspecting the JSON.
 
 Future kinds (`aventuras-pack`, `aventuras-scenario`, etc.) follow
 the same envelope as those features ship.
+
+The `aventuras-story` payload also carries an optional `calendar`
+sub-object when the story runs on a user-authored calendar — an
+additive, minor-version field; see
+[Backup & export format](#backup--export-format).
 
 **Version handling.** `formatVersion` is the load-bearing
 compatibility signal. Major bumps signal a hard break; minor bumps
