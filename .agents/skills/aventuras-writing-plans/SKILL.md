@@ -151,24 +151,21 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 
 ## Execution Handoff
 
-After saving the plan, offer execution choice:
+After saving the plan, recommend an executor — then let the developer choose.
+
+Assess the plan: a small, single-task, or tightly-coupled plan whose tasks must stay coherent suits inline execution; a larger, multi-task plan where fresh context per task and review between tasks de-risk the work suits subagent-driven execution. Record this recommendation and a one-line reason in the plan's Recommended Executor section.
+
+Then present both options with the recommendation:
 
 **"Plan complete and saved to `.impl-plans/<filename>.md`. Two execution options:**
 
-**1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
+**1. Subagent-Driven** — a fresh subagent per task, two-stage review between tasks, fast iteration.
 
-**2. Inline Execution** - Execute tasks in this session using aventuras-executing-plans, batch execution with checkpoints
+**2. Inline Execution** — tasks executed in this session, batched with review checkpoints.
 
-**Which approach?"**
+**I recommend [option] — [reason]. Which would you like?"**
 
-**If Subagent-Driven chosen:**
+Wait for the developer's answer; do not invoke an executor before they choose. Once they choose:
 
-- **REQUIRED SUB-SKILL:** Use aventuras-subagent-driven-development
-- Fresh subagent per task + two-stage review
-
-**If Inline Execution chosen:**
-
-- **REQUIRED SUB-SKILL:** Use aventuras-executing-plans
-- Batch execution with checkpoints for review
-
-Record the chosen executor and a one-line reason in the plan's Recommended Executor section before invoking the sub-skill.
+- **Subagent-Driven** → **REQUIRED SUB-SKILL:** Use aventuras-subagent-driven-development
+- **Inline Execution** → **REQUIRED SUB-SKILL:** Use aventuras-executing-plans
