@@ -35,7 +35,7 @@ Generic, single-purpose, reusable. Live in `components/ui/`.
 ### Primitives — shipped
 
 Accordion, AlertDialog, Autocomplete, Avatar, Button, Checkbox,
-Chip, Dialog, EmptyState, Heading, Icon, IconAction, InlineEditableName,
+Chip, ColorPicker, Dialog, EmptyState, Heading, Icon, IconAction, InlineEditableName,
 Input, Popover, Select, Sheet, Skeleton, Spinner, Switch, SwitchVisual,
 Tabs, Tag, Textarea, Text, Toast. Plus the `NativeOnlyAnimatedView`
 utility wrapper.
@@ -53,7 +53,6 @@ Each row names the revision and points at the canonical spec.
 
 | Primitive             | Baseline | Notes                                                                                                                                                                                                                                                                                                                                                                                                    |
 | --------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ColorPicker           | `_none_` | Curated swatch row + `(none)` fallback swatch + `+ custom` affordance opening a Popover (desktop) / Sheet (narrow) that hosts a cross-platform RN color picker library (lib TBD at implementation). Spec: [color-picker.md](./patterns/color-picker.md).                                                                                                                                                 |
 | SearchableOverlayList | `_none_` | Shared substrate for searchable overlays — per-tier Popover/Sheet dispatch, substrate-owned search input, virtualized sectioned list, keyboard nav. One structural mode (`searchPlacement: 'as-trigger' \| 'in-overlay'`); consumers supply trigger / rows / footer slots. Composes the Popover, Sheet, and Input primitives. Spec: [searchable-overlay-list.md](./patterns/searchable-overlay-list.md). |
 
 ### Primitives — needs design

@@ -25,6 +25,7 @@ const ROUTES = [
   { href: '/dev/json-viewer', label: 'JSONViewer' },
   { href: '/dev/importer-menu', label: 'ImporterMenu' },
   { href: '/dev/calendar-picker', label: 'CalendarPicker' },
+  { href: '/dev/color-picker', label: 'ColorPicker' },
   { href: '/dev/tag-input', label: 'TagInput' },
   { href: '/dev/toolbar', label: 'Toolbar' },
   { href: '/dev/delta-log-row', label: 'DeltaLogRow' },
