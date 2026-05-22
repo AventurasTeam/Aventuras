@@ -1,8 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useState } from 'react'
 import { View } from 'react-native'
 
 import { Button } from './button'
 import { Heading } from './heading'
+import { Input } from './input'
 import { Sheet, SheetContent, SheetTrigger } from './sheet'
 import { Text } from './text'
 
@@ -19,7 +21,7 @@ type Story = StoryObj<typeof Sheet>
 export const Default: Story = {
   render: () => (
     <View className="items-center justify-center p-8">
-      <Sheet>
+      <Sheet ariaLabel="Sheet">
         <SheetTrigger asChild>
           <Button>
             <Text>Open sheet</Text>
@@ -48,7 +50,7 @@ export const Anchors: Story = {
         `anchor=&quot;right&quot;`.
       </Text>
       <View className="flex-row gap-4">
-        <Sheet>
+        <Sheet ariaLabel="Bottom anchor">
           <SheetTrigger asChild>
             <Button variant="secondary">
               <Text>anchor=&quot;bottom&quot;</Text>
@@ -63,7 +65,7 @@ export const Anchors: Story = {
             </View>
           </SheetContent>
         </Sheet>
-        <Sheet>
+        <Sheet ariaLabel="Right anchor">
           <SheetTrigger asChild>
             <Button variant="secondary">
               <Text>anchor=&quot;right&quot;</Text>
@@ -92,7 +94,7 @@ export const Sizes: Story = {
         mapped to typical content shapes per foundations/mobile/layout.md.
       </Text>
       <View className="flex-row gap-4">
-        <Sheet>
+        <Sheet ariaLabel="Short sheet">
           <SheetTrigger asChild>
             <Button variant="secondary">
               <Text>short</Text>
@@ -107,7 +109,7 @@ export const Sizes: Story = {
             </View>
           </SheetContent>
         </Sheet>
-        <Sheet>
+        <Sheet ariaLabel="Medium sheet">
           <SheetTrigger asChild>
             <Button variant="secondary">
               <Text>medium</Text>
@@ -122,7 +124,7 @@ export const Sizes: Story = {
             </View>
           </SheetContent>
         </Sheet>
-        <Sheet>
+        <Sheet ariaLabel="Tall sheet">
           <SheetTrigger asChild>
             <Button variant="secondary">
               <Text>tall</Text>
@@ -140,6 +142,34 @@ export const Sizes: Story = {
       </View>
     </View>
   ),
+}
+
+export const WithInputInside: Story = {
+  render: () => {
+    const [value, setValue] = useState('')
+    return (
+      <View className="items-center justify-center p-8">
+        <Sheet ariaLabel="Add note">
+          <SheetTrigger asChild>
+            <Button>
+              <Text>Open sheet with input</Text>
+            </Button>
+          </SheetTrigger>
+          <SheetContent>
+            <View className="flex-col gap-3">
+              <Heading level={3}>Add note</Heading>
+              <Text variant="muted" size="sm">
+                Bottom sheets default to avoidKeyboard=true on native — the KeyboardAvoidingView
+                wrap from react-native-keyboard-controller lifts the panel so the focused input
+                stays visible. No-op on web.
+              </Text>
+              <Input value={value} onChangeText={setValue} placeholder="Type here…" />
+            </View>
+          </SheetContent>
+        </Sheet>
+      </View>
+    )
+  },
 }
 
 // No ThemeMatrix story for Sheet: the sheet content portals to document

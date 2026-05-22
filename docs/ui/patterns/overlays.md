@@ -476,10 +476,3 @@ No Variants or Shapes section for either.
   — open characterization tracked inline in
   [`motion.md`](../foundations/motion.md). Sheet is the v1 surface
   that forces resolution.
-
-Implementation of the keyboard layer and ARIA pipeline (designed
-2026-05-21 — see
-[Sheet — Keyboard handling](#sheet--keyboard-handling),
-[Sheet — ARIA contract](#sheet--aria-contract), and
-[Popover — ARIA contract](#popover--aria-contract)) is queued in
-[`component-inventory.md → Primitives — needs revision`](../component-inventory.md#primitives--needs-revision).

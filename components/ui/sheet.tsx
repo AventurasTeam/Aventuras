@@ -1,7 +1,16 @@
 import * as DialogPrimitive from '@rn-primitives/dialog'
-import { Fragment, useCallback, useMemo, type ComponentProps } from 'react'
+import {
+  createContext,
+  Fragment,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  type ComponentProps,
+} from 'react'
 import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import {
   FadeIn,
   FadeOut,
@@ -22,8 +31,25 @@ import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-vie
 import { TextClassContext } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 
-const Sheet = DialogPrimitive.Root
-const SheetTrigger = DialogPrimitive.Trigger
+type AutoFocusHandler = (event: Event) => void
+
+type SheetA11yValue = {
+  ariaLabel?: string
+  ariaLabelledBy?: string
+  ariaDescribedBy?: string
+  onOpenAutoFocus?: AutoFocusHandler
+  onCloseAutoFocus?: AutoFocusHandler
+}
+
+const SheetA11yContext = createContext<SheetA11yValue | null>(null)
+
+function useSheetA11y(): SheetA11yValue {
+  const value = useContext(SheetA11yContext)
+  if (!value) {
+    throw new Error('Sheet subcomponents must be rendered inside <Sheet>.')
+  }
+  return value
+}
 
 const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : Fragment
 
@@ -45,6 +71,8 @@ const BOTTOM_HEIGHT_PCT: Record<SheetSize, `${number}%`> = {
 const RIGHT_WIDTH_PX = 440
 const SAFE_AREA_GAP_PX = 8
 const DRAG_DISMISS_THRESHOLD_PX = 100
+
+const FLEX_1_STYLE: ViewStyle = { flex: 1 }
 
 function getNativePanelStyle(
   anchor: SheetAnchor,
@@ -81,6 +109,7 @@ type SheetPanelProps = ComponentProps<typeof DialogPrimitive.Content> & {
   slideEnter: LayoutAnimation
   slideExit: LayoutAnimation
   nativePanelStyle: ViewStyle
+  avoidKeyboard: boolean
 }
 
 function SheetPanel({
@@ -91,10 +120,13 @@ function SheetPanel({
   slideEnter,
   slideExit,
   nativePanelStyle,
+  avoidKeyboard,
   ...contentProps
 }: SheetPanelProps) {
   const { onOpenChange } = DialogPrimitive.useRootContext()
   const { height: screenHeight } = useWindowDimensions()
+  const { ariaLabel, ariaLabelledBy, ariaDescribedBy, onOpenAutoFocus, onCloseAutoFocus } =
+    useSheetA11y()
 
   const dragOffset = useSharedValue(0)
   const animatedDragStyle = useAnimatedStyle(
@@ -146,6 +178,20 @@ function SheetPanel({
     )
   ) : null
 
+  // aria-describedby and onCloseAutoFocus are web-only — absent from the native API surface.
+  const webExtras =
+    Platform.OS === 'web'
+      ? ({ 'aria-describedby': ariaDescribedBy, onCloseAutoFocus } as object)
+      : null
+
+  const body = avoidKeyboard ? (
+    <KeyboardAvoidingView behavior="translate-with-padding" automaticOffset style={FLEX_1_STYLE}>
+      {children}
+    </KeyboardAvoidingView>
+  ) : (
+    children
+  )
+
   return (
     <NativeOnlyAnimatedView
       entering={slideEnter}
@@ -154,6 +200,11 @@ function SheetPanel({
     >
       <TextClassContext.Provider value="text-fg-primary">
         <DialogPrimitive.Content
+          role="dialog"
+          aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledBy}
+          onOpenAutoFocus={onOpenAutoFocus}
+          {...webExtras}
           className={cn(
             'border border-border-strong bg-bg-overlay p-6 outline-none',
             Platform.select({
@@ -193,11 +244,19 @@ function SheetPanel({
           {...contentProps}
         >
           {handle}
-          {children}
+          {body}
         </DialogPrimitive.Content>
       </TextClassContext.Provider>
     </NativeOnlyAnimatedView>
   )
+}
+
+type SheetContentProps = ComponentProps<typeof DialogPrimitive.Content> & {
+  anchor?: SheetAnchor
+  size?: SheetSize
+  portalHost?: string
+  title?: string
+  avoidKeyboard?: boolean
 }
 
 function SheetContent({
@@ -206,20 +265,18 @@ function SheetContent({
   size = 'medium',
   portalHost,
   title = 'Sheet',
+  avoidKeyboard,
   children,
   ...props
-}: ComponentProps<typeof DialogPrimitive.Content> & {
-  anchor?: SheetAnchor
-  size?: SheetSize
-  portalHost?: string
-  title?: string
-}) {
+}: SheetContentProps) {
   const isBottom = anchor === 'bottom'
   const slideEnter = isBottom ? SlideInDown.duration(250) : SlideInRight.duration(250)
   const slideExit = isBottom ? SlideOutDown : SlideOutRight
   const insets = useSafeAreaInsets()
   const { height: screenHeight } = useWindowDimensions()
   const nativePanelStyle = getNativePanelStyle(anchor, size, insets.top, screenHeight)
+  // Default true for bottom; ignored entirely for right (desktop, no soft keyboard).
+  const effectiveAvoidKeyboard = isBottom && (avoidKeyboard ?? true)
 
   return (
     <DialogPrimitive.Portal hostName={portalHost}>
@@ -249,6 +306,7 @@ function SheetContent({
             slideEnter={slideEnter}
             slideExit={slideExit}
             nativePanelStyle={nativePanelStyle}
+            avoidKeyboard={effectiveAvoidKeyboard}
             className={className}
             {...props}
           >
@@ -261,6 +319,47 @@ function SheetContent({
       </FullWindowOverlay>
     </DialogPrimitive.Portal>
   )
+}
+
+type SheetProps = ComponentProps<typeof DialogPrimitive.Root> & SheetA11yValue
+
+function Sheet({
+  ariaLabel,
+  ariaLabelledBy,
+  ariaDescribedBy,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
+  children,
+  ...rootProps
+}: SheetProps) {
+  useEffect(() => {
+    if (__DEV__ && ariaLabel === undefined && ariaLabelledBy === undefined) {
+      console.warn(
+        'Sheet: pass `ariaLabel` or `ariaLabelledBy` for an accessible name, or `ariaLabel=""` to opt out.',
+      )
+    }
+  }, [ariaLabel, ariaLabelledBy])
+
+  const value = useMemo<SheetA11yValue>(
+    () => ({ ariaLabel, ariaLabelledBy, ariaDescribedBy, onOpenAutoFocus, onCloseAutoFocus }),
+    [ariaLabel, ariaLabelledBy, ariaDescribedBy, onOpenAutoFocus, onCloseAutoFocus],
+  )
+
+  return (
+    <SheetA11yContext.Provider value={value}>
+      <DialogPrimitive.Root {...rootProps}>{children}</DialogPrimitive.Root>
+    </SheetA11yContext.Provider>
+  )
+}
+
+function SheetTrigger(props: ComponentProps<typeof DialogPrimitive.Trigger>) {
+  const { open } = DialogPrimitive.useRootContext()
+  // aria-haspopup is a web-only DOM attribute; RN's prop types don't model it.
+  const webProps =
+    Platform.OS === 'web'
+      ? ({ 'aria-haspopup': 'dialog' as const, 'aria-expanded': open } as object)
+      : null
+  return <DialogPrimitive.Trigger {...webProps} {...props} />
 }
 
 export { Sheet, SheetContent, SheetTrigger }

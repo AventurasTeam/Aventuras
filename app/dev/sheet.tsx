@@ -1,12 +1,16 @@
+import { useState } from 'react'
 import { ScrollView, View } from 'react-native'
 
 import { ThemePicker } from '@/components/foundations/sections/theme-picker'
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
+import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 
 export default function SheetDevRoute() {
+  const [noteValue, setNoteValue] = useState('')
+
   return (
     <ScrollView className="flex-1 bg-bg-base">
       <ThemePicker />
@@ -14,7 +18,7 @@ export default function SheetDevRoute() {
         <View>
           <Heading level={3}>Default</Heading>
           <View className="mt-2">
-            <Sheet>
+            <Sheet ariaLabel="Sheet">
               <SheetTrigger asChild>
                 <Button>
                   <Text>Open sheet</Text>
@@ -39,7 +43,7 @@ export default function SheetDevRoute() {
             on narrow screens).
           </Text>
           <View className="mt-3 flex-row flex-wrap gap-2">
-            <Sheet>
+            <Sheet ariaLabel="Bottom anchor">
               <SheetTrigger asChild>
                 <Button variant="secondary">
                   <Text>bottom</Text>
@@ -54,7 +58,7 @@ export default function SheetDevRoute() {
                 </View>
               </SheetContent>
             </Sheet>
-            <Sheet>
+            <Sheet ariaLabel="Right anchor">
               <SheetTrigger asChild>
                 <Button variant="secondary">
                   <Text>right</Text>
@@ -77,7 +81,7 @@ export default function SheetDevRoute() {
             short ~33vh, medium ~60vh, tall ~95vh — applies to bottom anchor only.
           </Text>
           <View className="mt-3 flex-row flex-wrap gap-2">
-            <Sheet>
+            <Sheet ariaLabel="Short sheet">
               <SheetTrigger asChild>
                 <Button variant="secondary">
                   <Text>short</Text>
@@ -92,7 +96,7 @@ export default function SheetDevRoute() {
                 </View>
               </SheetContent>
             </Sheet>
-            <Sheet>
+            <Sheet ariaLabel="Medium sheet">
               <SheetTrigger asChild>
                 <Button variant="secondary">
                   <Text>medium</Text>
@@ -107,7 +111,7 @@ export default function SheetDevRoute() {
                 </View>
               </SheetContent>
             </Sheet>
-            <Sheet>
+            <Sheet ariaLabel="Tall sheet">
               <SheetTrigger asChild>
                 <Button variant="secondary">
                   <Text>tall</Text>
@@ -119,6 +123,33 @@ export default function SheetDevRoute() {
                   <Text variant="muted" size="sm">
                     ~95vh — rich detail (peek drawer, raw JSON viewer).
                   </Text>
+                </View>
+              </SheetContent>
+            </Sheet>
+          </View>
+        </View>
+        <View>
+          <Heading level={3}>With input inside</Heading>
+          <Text variant="muted" size="xs" className="mt-1">
+            Bottom-anchored sheet hosting a TextInput. On Android / iOS, KeyboardAvoidingView from
+            react-native-keyboard-controller lifts the panel so the focused input stays visible.
+            avoidKeyboard defaults true; opt out by passing avoidKeyboard=&#123;false&#125; on
+            SheetContent. No-op on web / Electron.
+          </Text>
+          <View className="mt-3">
+            <Sheet ariaLabel="Add note">
+              <SheetTrigger asChild>
+                <Button>
+                  <Text>Add note…</Text>
+                </Button>
+              </SheetTrigger>
+              <SheetContent anchor="bottom" size="medium">
+                <View className="flex-col gap-3">
+                  <Heading level={4}>Add note</Heading>
+                  <Text variant="muted" size="sm">
+                    Type to test keyboard avoidance on native.
+                  </Text>
+                  <Input value={noteValue} onChangeText={setNoteValue} placeholder="Type here…" />
                 </View>
               </SheetContent>
             </Sheet>
