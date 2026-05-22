@@ -129,6 +129,39 @@ export default function SheetDevRoute() {
           </View>
         </View>
         <View>
+          <Heading level={3}>Auto size</Heading>
+          <Text variant="muted" size="xs" className="mt-1">
+            size=&quot;auto&quot; — no fixed height; content drives the panel, capped at 95vh. Best
+            for short editors whose intrinsic height doesn&apos;t fit any rigid size
+            (ColorPicker&apos;s custom-color editor uses this).
+          </Text>
+          <View className="mt-3">
+            <Sheet ariaLabel="Confirm action">
+              <SheetTrigger asChild>
+                <Button variant="secondary">
+                  <Text>auto</Text>
+                </Button>
+              </SheetTrigger>
+              <SheetContent anchor="bottom" size="auto">
+                <View className="flex-col gap-3">
+                  <Heading level={4}>Auto-sized</Heading>
+                  <Text variant="muted" size="sm">
+                    Content drives the height. No dead space below the actions.
+                  </Text>
+                  <View className="flex-row justify-end gap-2">
+                    <Button variant="ghost">
+                      <Text>Cancel</Text>
+                    </Button>
+                    <Button>
+                      <Text>Confirm</Text>
+                    </Button>
+                  </View>
+                </View>
+              </SheetContent>
+            </Sheet>
+          </View>
+        </View>
+        <View>
           <Heading level={3}>With input inside</Heading>
           <Text variant="muted" size="xs" className="mt-1">
             Bottom-anchored sheet hosting a TextInput. On Android / iOS, KeyboardAvoidingView lifts

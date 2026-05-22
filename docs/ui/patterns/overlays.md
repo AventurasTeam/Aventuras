@@ -125,9 +125,15 @@ both.
   `'right'` is desktop-anchored (~440px wide, full height) per
   [`layout.md → Mapping`](../foundations/mobile/layout.md#mapping--desktop-to-mobile);
   `'bottom'` is the mobile / phone shape.
-- `size: 'short' | 'medium' | 'tall'` — applies to
-  `anchor='bottom'` only. Maps to viewport-percentage heights per
-  [`layout.md`](../foundations/mobile/layout.md). Right-anchored
+- `size: 'short' | 'medium' | 'tall' | 'auto'` — applies to
+  `anchor='bottom'` only. `short` / `medium` / `tall` map to fixed
+  viewport-percentage heights (33 / 60 / 95 vh) per
+  [`layout.md`](../foundations/mobile/layout.md). `auto` opts out of
+  a fixed height — content drives the panel via flexbox, capped at
+  95vh. Use for editors whose intrinsic height is small and
+  predictable but doesn't fit any rigid size (e.g. ColorPicker's
+  custom-color editor); use the rigid sizes when the sheet should
+  visually communicate its weight regardless of content. Right-anchored
   sheets are always full-height; `size` is ignored when
   `anchor='right'`.
 - `dismissable: boolean` (default `true`) — controls drag-down

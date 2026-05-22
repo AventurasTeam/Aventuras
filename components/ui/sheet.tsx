@@ -60,15 +60,17 @@ function useSheetA11y(): SheetA11yValue {
 const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : Fragment
 
 type SheetAnchor = 'bottom' | 'right'
-type SheetSize = 'short' | 'medium' | 'tall'
+type SheetSize = 'short' | 'medium' | 'tall' | 'auto'
 
+// `auto` opts out of a fixed height — content drives the panel, capped at 95vh.
 const BOTTOM_HEIGHT_CLASS_WEB: Record<SheetSize, string> = {
   short: 'h-[33vh]',
   medium: 'h-[60vh]',
   tall: 'h-[95vh]',
+  auto: 'max-h-[95vh]',
 }
 
-const BOTTOM_HEIGHT_PCT: Record<SheetSize, `${number}%`> = {
+const BOTTOM_HEIGHT_PCT: Record<Exclude<SheetSize, 'auto'>, `${number}%`> = {
   short: '33%',
   medium: '60%',
   tall: '95%',
@@ -89,14 +91,15 @@ function getNativePanelStyle(
   // Cap the panel so it never extends above the OS status bar / notch.
   const maxHeight = Math.max(screenHeight - insetTop - SAFE_AREA_GAP_PX, 0)
   if (anchor === 'bottom') {
-    return {
+    const base: ViewStyle = {
       position: 'absolute',
       bottom: 0,
       left: 0,
       right: 0,
-      height: BOTTOM_HEIGHT_PCT[size],
       maxHeight,
     }
+    if (size === 'auto') return base
+    return { ...base, height: BOTTOM_HEIGHT_PCT[size] }
   }
   return {
     position: 'absolute',

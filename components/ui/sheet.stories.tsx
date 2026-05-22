@@ -90,8 +90,9 @@ export const Sizes: Story = {
   render: () => (
     <View className="flex-col items-center gap-6 p-8">
       <Text variant="muted" size="xs">
-        Three size tokens for bottom-anchored sheets — short ~33vh, medium ~60vh, tall ~95vh —
-        mapped to typical content shapes per foundations/mobile/layout.md.
+        Three rigid size tokens for bottom-anchored sheets — short ~33vh, medium ~60vh, tall ~95vh —
+        mapped to typical content shapes per foundations/mobile/layout.md. Use
+        `size=&quot;auto&quot;` (separate story) for content-driven height.
       </Text>
       <View className="flex-row gap-4">
         <Sheet ariaLabel="Short sheet">
@@ -140,6 +141,38 @@ export const Sizes: Story = {
           </SheetContent>
         </Sheet>
       </View>
+    </View>
+  ),
+}
+
+export const AutoSize: Story = {
+  render: () => (
+    <View className="items-center justify-center p-8">
+      <Sheet ariaLabel="Confirm action">
+        <SheetTrigger asChild>
+          <Button>
+            <Text>Open auto-sized sheet</Text>
+          </Button>
+        </SheetTrigger>
+        <SheetContent anchor="bottom" size="auto">
+          <View className="flex-col gap-3">
+            <Heading level={4}>Auto-sized panel</Heading>
+            <Text variant="muted" size="sm">
+              size=&quot;auto&quot; lets short, content-driven sheets wrap their content with no
+              dead space. Max-height caps at 95vh so an oversized child still clips at the viewport
+              edge.
+            </Text>
+            <View className="flex-row justify-end gap-2">
+              <Button variant="ghost">
+                <Text>Cancel</Text>
+              </Button>
+              <Button>
+                <Text>Confirm</Text>
+              </Button>
+            </View>
+          </View>
+        </SheetContent>
+      </Sheet>
     </View>
   ),
 }
