@@ -11,4 +11,16 @@ the two files is normal as scope clarifies; see
 [`conventions.md → Followups vs parked`](./conventions.md#followups-vs-parked)
 for the placement rule.
 
-_No active follow-ups — the ledger is currently empty._
+## UX
+
+- **Sheet keyboard avoidance — swap to `react-native-keyboard-controller`.**
+  Sheet currently wraps content in RN's built-in `KeyboardAvoidingView`
+  because the spec target,
+  [`react-native-keyboard-controller`'s `KeyboardAvoidingView`](./ui/patterns/overlays.md#sheet--keyboard-handling)
+  (with `behavior='translate-with-padding'` + `automaticOffset`), ships a
+  TurboModule that needs the library's Expo config plugin in `app.json`
+  and a dev-client rebuild — adding it without that crashes Android at
+  module load (`KeyboardControllerNative.getConstants is not a function`).
+  Once the plugin lands in `app.json` and the dev client is rebuilt,
+  reinstall the library and swap the import in
+  [`components/ui/sheet.tsx`](../components/ui/sheet.tsx).

@@ -8,9 +8,15 @@ import {
   useMemo,
   type ComponentProps,
 } from 'react'
-import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
+import {
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import {
   FadeIn,
   FadeOut,
@@ -184,8 +190,13 @@ function SheetPanel({
       ? ({ 'aria-describedby': ariaDescribedBy, onCloseAutoFocus } as object)
       : null
 
+  // RN's built-in KeyboardAvoidingView — `react-native-keyboard-controller` is the
+  // spec target but needs an Expo config plugin + dev-client rebuild; followups.md.
   const body = avoidKeyboard ? (
-    <KeyboardAvoidingView behavior="translate-with-padding" automaticOffset style={FLEX_1_STYLE}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={FLEX_1_STYLE}
+    >
       {children}
     </KeyboardAvoidingView>
   ) : (

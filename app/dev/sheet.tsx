@@ -131,10 +131,9 @@ export default function SheetDevRoute() {
         <View>
           <Heading level={3}>With input inside</Heading>
           <Text variant="muted" size="xs" className="mt-1">
-            Bottom-anchored sheet hosting a TextInput. On Android / iOS, KeyboardAvoidingView from
-            react-native-keyboard-controller lifts the panel so the focused input stays visible.
-            avoidKeyboard defaults true; opt out by passing avoidKeyboard=&#123;false&#125; on
-            SheetContent. No-op on web / Electron.
+            Bottom-anchored sheet hosting a TextInput. On Android / iOS, KeyboardAvoidingView lifts
+            the panel so the focused input stays visible. avoidKeyboard defaults true; opt out by
+            passing avoidKeyboard=&#123;false&#125; on SheetContent. No-op on web / Electron.
           </Text>
           <View className="mt-3">
             <Sheet ariaLabel="Add note">

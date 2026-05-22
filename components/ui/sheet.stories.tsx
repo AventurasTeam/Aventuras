@@ -159,9 +159,9 @@ export const WithInputInside: Story = {
             <View className="flex-col gap-3">
               <Heading level={3}>Add note</Heading>
               <Text variant="muted" size="sm">
-                Bottom sheets default to avoidKeyboard=true on native — the KeyboardAvoidingView
-                wrap from react-native-keyboard-controller lifts the panel so the focused input
-                stays visible. No-op on web.
+                Bottom sheets default to avoidKeyboard=true on native — the wrapped
+                KeyboardAvoidingView lifts the panel so the focused input stays visible. No-op on
+                web.
               </Text>
               <Input value={value} onChangeText={setValue} placeholder="Type here…" />
             </View>
