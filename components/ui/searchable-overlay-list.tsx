@@ -28,6 +28,7 @@ import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
+import { useKeyboardHeight } from '@/hooks/use-keyboard-height'
 import { useTier } from '@/hooks/use-tier'
 import { cn } from '@/lib/utils'
 
@@ -227,6 +228,11 @@ function RowListNative<T>({
   className,
   style,
 }: RowListProps<T>) {
+  // Sheet variant pads the scroll content by keyboard height so the last rows /
+  // footer can scroll above the keyboard rather than sit behind it. The Sheet's
+  // KeyboardAvoidingView lifts the panel itself, but a tall list pinned at the
+  // bottom still needs scroll-into-view room. No-op for non-sheet variants.
+  const keyboardHeight = useKeyboardHeight()
   const isEmpty = sections.every((s) => s.rows.length === 0)
   if (isEmpty) {
     return (
@@ -250,6 +256,9 @@ function RowListNative<T>({
       keyboardShouldPersistTaps="handled"
       className={className}
       style={style}
+      contentContainerStyle={
+        variant === 'sheet' && keyboardHeight > 0 ? { paddingBottom: keyboardHeight } : undefined
+      }
       nativeID={listboxId}
       accessibilityRole={Platform.OS === 'web' ? undefined : 'list'}
       renderSectionHeader={({ section }) =>
@@ -382,6 +391,8 @@ type SearchInputProps = {
   showLeadingGlyph: boolean
   onKeyPress?: ComponentProps<typeof Input>['onKeyPress']
   onSubmitEditing?: ComponentProps<typeof Input>['onSubmitEditing']
+  onFocus?: ComponentProps<typeof Input>['onFocus']
+  onBlur?: ComponentProps<typeof Input>['onBlur']
   autoFocus?: boolean
   // Only set when the listbox is actually mounted in the DOM — aria-controls
   // referencing a missing id is an a11y violation.
@@ -402,6 +413,8 @@ function SearchInput({
   showLeadingGlyph,
   onKeyPress,
   onSubmitEditing,
+  onFocus,
+  onBlur,
   autoFocus,
   listboxId,
   expanded = true,
@@ -421,6 +434,8 @@ function SearchInput({
       autoCapitalize="none"
       onKeyPress={onKeyPress}
       onSubmitEditing={onSubmitEditing}
+      onFocus={onFocus}
+      onBlur={onBlur}
       aria-invalid={ariaInvalid}
       role="combobox"
       aria-expanded={expanded}
@@ -565,7 +580,9 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
         aria-expanded={open}
         aria-controls={triggerProps['aria-controls']}
         className={cn(
-          'h-control-md flex-row items-center justify-start rounded-md border border-border bg-bg-base px-3',
+          // min-w-32 keeps the tap-proxy visible at sensible width even when valueLabel
+          // is empty — consumers can override via the wrapping FormRow / flex parent.
+          'h-control-md min-w-32 flex-row items-center justify-start rounded-md border border-border bg-bg-base px-3',
           props.disabled && 'opacity-50',
           ariaInvalid && 'border-danger',
         )}
@@ -574,7 +591,7 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
           className={cn('text-sm', props.valueLabel ? 'text-fg-primary' : 'text-fg-muted')}
           numberOfLines={1}
         >
-          {props.valueLabel ?? props.searchPlaceholder ?? ''}
+          {props.valueLabel || props.searchPlaceholder || ''}
         </Text>
       </Pressable>
     )
@@ -616,7 +633,10 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
         variant={isPhone ? 'sheet' : 'inline'}
         listboxId={listboxId}
         rowIdPrefix={rowIdPrefix}
-        className="-mx-6 flex-1"
+        // Sheet has p-6 outer padding — bleed rows full-width via -mx-6 so dividers /
+        // tint hover reach the sheet edge. Popover has p-4 + lighter row chrome, so no
+        // bleed (rows respect the container padding; text aligns with the search field).
+        className={cn(isPhone ? '-mx-6' : '', 'flex-1')}
         style={STATIC_STYLES.flex1}
       />
       {renderFooter ? (
@@ -722,13 +742,26 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
     }
   }, [open, updateAnchor])
 
-  // Open seeds query from valueLabel (consumer expectation for combobox fields).
-  const wasOpenRef = useRef(open)
-  useEffect(() => {
-    if (open && !wasOpenRef.current) list.resetOnOpen()
-    if (!open && wasOpenRef.current) list.resetOnClose()
-    wasOpenRef.current = open
-  }, [open, list])
+  // Focus opens + seeds query from valueLabel (combobox idiom: the field shows the
+  // committed value, editable). Blur deferred-closes so a Pressable row press can
+  // register before the dropdown unmounts. Typing flows through onChangeText below —
+  // we explicitly do NOT seed on every open transition because typing-triggered opens
+  // would wipe the typed character.
+  const handleFocus = useCallback(() => {
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current)
+      blurTimerRef.current = null
+    }
+    if (disabled) return
+    list.resetOnOpen()
+    setOpen(true)
+  }, [disabled, list])
+  const handleBlur = useCallback(() => {
+    blurTimerRef.current = setTimeout(() => {
+      setOpen(false)
+      list.resetOnClose()
+    }, 200)
+  }, [list])
 
   const activate = useCallback(
     (row: Row<T>) => {
@@ -796,6 +829,8 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
         showLeadingGlyph={false}
         onKeyPress={onKeyPress}
         onSubmitEditing={onSubmit}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         // Listbox only exists in DOM while open; pass id (and expanded=true) only then.
         listboxId={open ? listboxId : undefined}
         expanded={open}
@@ -808,7 +843,6 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
           <View
             style={popoverStyle}
             className="overflow-hidden rounded-md border border-border bg-bg-overlay py-1"
-            role="dialog"
             aria-label={ariaLabel ?? 'Suggestions'}
           >
             <RowList
