@@ -391,10 +391,10 @@ class VaultEditorStore {
         (c) => c.action === 'create' || c.action === 'update',
       )
 
-      // Sort deletes/merges by descending entryIndex (or first entryIndex for merges)
+      // Sort deletes/merges by descending entryIndex (or highest entryIndex for merges)
       deletesAndMerges.sort((a, b) => {
-        const aIdx = a.action === 'delete' ? a.entryIndex : Math.min(...a.entryIndices)
-        const bIdx = b.action === 'delete' ? b.entryIndex : Math.min(...b.entryIndices)
+        const aIdx = a.action === 'delete' ? a.entryIndex : Math.max(...a.entryIndices)
+        const bIdx = b.action === 'delete' ? b.entryIndex : Math.max(...b.entryIndices)
         return bIdx - aIdx
       })
 
