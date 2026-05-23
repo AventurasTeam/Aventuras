@@ -23,6 +23,20 @@ for the placement rule.
   `SectionList` native) that this would build on — call
   `virtualizer.scrollToIndex(idx, { align: 'center' })` on open.
 
+- **`SuggestionCategoriesEditor` — non-virtualized mobile drag.**
+  The mobile path
+  ([`components/compounds/suggestion-categories-editor.tsx`](../components/compounds/suggestion-categories-editor.tsx))
+  uses `react-native-draggable-flatlist` which is a virtualized `FlatList`
+  underneath. RN warns and breaks drag auto-scroll when the editor is
+  nested in a parent `ScrollView` with the same orientation — the
+  shape every screen-level settings consumer will have. Today the
+  contract is "give the editor its own bounded-height container,"
+  documented at the `PhoneList` site. Long-term fix: category lists
+  are inherently short (3-10 entries typical), so swap to a custom
+  drag impl using `react-native-reanimated` + `react-native-gesture-handler`
+  rendering plain `View` rows — no virtualization, drops the
+  `react-native-draggable-flatlist` dep, removes the nest constraint.
+
 - **Sheet keyboard avoidance — swap to `react-native-keyboard-controller`.**
   Sheet currently wraps content in RN's built-in `KeyboardAvoidingView`
   because the spec target,

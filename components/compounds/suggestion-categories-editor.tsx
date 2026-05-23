@@ -589,6 +589,16 @@ function PhoneList({
   onReorder,
   categories,
 }: ListProps) {
+  // Consumer constraint on mobile: this branch renders a virtualized
+  // DraggableFlatList. RN warns (and breaks drag auto-scroll) if it's nested
+  // inside a parent ScrollView with the same orientation. Consumers on phone
+  // must give this editor its own bounded-height container — typically as the
+  // flex-1 child of a screen-level View, or as the ListHeader/ListFooter of a
+  // wrapping FlatList. The Story Settings consumer will need to follow this
+  // contract. Tracked: docs/followups.md → "Non-virtualized mobile drag for
+  // SuggestionCategoriesEditor" (long-term: swap to a reanimated +
+  // gesture-handler drag impl rendering plain Views, removes the constraint).
+
   // Accordion runs in single-open mode; reorder collapses the open row to keep
   // long-press drag from competing with a textarea inside an expanded panel.
   const handleDragEnd = useCallback(

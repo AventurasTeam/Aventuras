@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ScrollView, View } from 'react-native'
+import { View } from 'react-native'
 
 import {
   SuggestionCategoriesEditor,
@@ -54,7 +54,13 @@ export default function SuggestionCategoriesEditorDevRoute() {
   const [masterEnabled, setMasterEnabled] = useState(true)
 
   return (
-    <ScrollView className="flex-1 bg-bg-base">
+    // No outer ScrollView — the editor's mobile path uses a virtualized
+    // DraggableFlatList, and nesting it inside a parent ScrollView with the
+    // same orientation triggers RN's "VirtualizedLists should never be nested"
+    // warning and breaks the lib's drag auto-scroll. Tracked as a followup
+    // (see docs/followups.md → SuggestionCategoriesEditor non-virtualized
+    // mobile drag).
+    <View className="flex-1 bg-bg-base">
       <ThemePicker />
       <View className="flex-col gap-4 p-4">
         <Heading level={3}>SuggestionCategoriesEditor</Heading>
@@ -73,14 +79,6 @@ export default function SuggestionCategoriesEditorDevRoute() {
           <Text size="sm">Suggestions enabled (master toggle)</Text>
         </View>
 
-        <SuggestionCategoriesEditor
-          categories={categories}
-          onChange={setCategories}
-          swatches={SWATCHES}
-          fallbackColor={FALLBACK}
-          disabled={!masterEnabled}
-        />
-
         <View className="flex-row gap-2">
           <Button variant="secondary" size="sm" onPress={() => setCategories(SEED)}>
             <Text>Reset to seed</Text>
@@ -89,18 +87,16 @@ export default function SuggestionCategoriesEditorDevRoute() {
             <Text>Clear</Text>
           </Button>
         </View>
-
-        <View className="rounded-md border border-border bg-bg-overlay p-3">
-          <Text size="xs" variant="muted" className="font-medium">
-            Current order ({categories.length}):
-          </Text>
-          {categories.map((c, i) => (
-            <Text key={c.id} size="xs" variant="muted">
-              {i + 1}. {c.label || '(empty)'} {c.enabled ? '' : '— off'}
-            </Text>
-          ))}
-        </View>
       </View>
-    </ScrollView>
+      <View className="flex-1 px-4 pb-4">
+        <SuggestionCategoriesEditor
+          categories={categories}
+          onChange={setCategories}
+          swatches={SWATCHES}
+          fallbackColor={FALLBACK}
+          disabled={!masterEnabled}
+        />
+      </View>
+    </View>
   )
 }
