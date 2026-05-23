@@ -17,7 +17,6 @@
   import {
     ChevronLeft,
     Bot,
-    Send,
     Loader2,
     User,
     Brain,
@@ -39,16 +38,15 @@
     CircleUser,
   } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
-  import { Textarea } from '$lib/components/ui/textarea'
   import VaultDiffView from './VaultDiffView.svelte'
   import VaultEntityEditPanel from './VaultEntityEditPanel.svelte'
+  import VaultAssistantInput from './VaultAssistantInput.svelte'
   import { fade, slide } from 'svelte/transition'
   import { onMount, onDestroy, tick } from 'svelte'
   import * as Dialog from '$lib/components/ui/dialog'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { parseMarkdown } from '$lib/utils/markdown'
   import { cn } from '$lib/utils/cn'
-  import { isTouchDevice } from '$lib/utils/swipe'
   import { SvelteSet } from 'svelte/reactivity'
   import { createIsCompact } from '$lib/hooks/is-compact.svelte'
 
@@ -69,9 +67,14 @@
   // Service instance
   let service: InteractiveVaultService | null = $state(null)
 
+  // Tracks whether the component has finished mounting.
+  // Prevents spurious onOpenChange(false) events from immediately closing the
+  // assistant when it's re-opened after a previous close (bits-ui Dialog can
+  // fire an onOpenChange(false) during the initial render/mount cycle).
+  let mounted = $state(false)
+
   // UI State
   let messages = $state<ChatMessage[]>([])
-  let inputValue = $state('')
   let isGenerating = $state(false)
   let error = $state<string | null>(null)
   let messagesContainer = $state<HTMLDivElement | null>(null)
@@ -176,8 +179,9 @@
 
   // Initialize service on mount
   onMount(() => {
+    mounted = true
     initializeService()
-    loadConversationsList()
+    loadConversationsList().catch(() => {})
 
     // Auto-open focused entity if provided
     if (focusedEntity) {
@@ -209,6 +213,7 @@
 
   // Clean up on unmount
   onDestroy(() => {
+    mounted = false
     if (abortController) {
       abortController.abort()
       abortController = null
@@ -216,7 +221,7 @@
     vaultEditor.reset()
   })
 
-  function initializeService() {
+  function initializeService(focused: FocusedEntity | null = null) {
     try {
       service = new InteractiveVaultService('interactiveVault')
 
@@ -228,11 +233,12 @@
           totalEntryCount: allLorebooks.reduce((sum, lb) => sum + lb.entries.length, 0),
           scenarioCount: scenarioVault.items.length,
         },
-        focusedEntity ?? undefined,
+        focused ?? undefined,
       )
 
-      const greetingContent = focusedEntity
-        ? `Hello! I can see you were editing the ${focusedEntity.entityType} **${focusedEntity.entityName}**. What would you like to work on?`
+      const entityToUse = focused ?? focusedEntity
+      const greetingContent = entityToUse
+        ? `Hello! I can see you were editing the ${entityToUse.entityType} **${entityToUse.entityName}**. What would you like to work on?`
         : "Hello! I'm your Vault Assistant. I can help you manage characters, lorebooks, and scenarios in your vault.\n\nTry asking me to create a character, organize lorebook entries, or set up a new scenario."
 
       messages = [
@@ -328,11 +334,11 @@
   }
 
   function handleReferenceImage(imageId: string) {
-    const ref = `[Image: ${imageId}]`
-    inputValue = inputValue.trim() ? `${inputValue.trim()}\n${ref}` : ref
+    assistantInputRef?.appendText(`[Image: ${imageId}]`)
   }
 
   let editPanelRef = $state<ReturnType<typeof VaultEntityEditPanel> | null>(null)
+  let assistantInputRef = $state<ReturnType<typeof VaultAssistantInput> | null>(null)
 
   async function handleSetPortrait(imageId: string) {
     if (!activeCharacterEntity || !service) return
@@ -346,11 +352,9 @@
     editPanelRef?.setPortrait(dataUrl)
   }
 
-  async function handleSend() {
+  async function handleSend(userMessage: string) {
     if (!service || isGenerating) return
 
-    const userMessage = inputValue.trim()
-    inputValue = ''
     error = null
 
     if (userMessage) {
@@ -516,18 +520,6 @@
     }
   }
 
-  function handleKeyDown(e: KeyboardEvent) {
-    const isTouch = isTouchDevice()
-    const shouldSubmit = isTouch
-      ? e.key === 'Enter' && e.shiftKey
-      : e.key === 'Enter' && !e.shiftKey
-
-    if (shouldSubmit) {
-      e.preventDefault()
-      handleSend()
-    }
-  }
-
   function scrollToBottom() {
     if (messagesContainer) {
       messagesContainer.scrollTop = messagesContainer.scrollHeight
@@ -577,10 +569,32 @@
     onEditEntity?.(change)
   }
 
-  async function handleApproveAll() {
-    if (!service) return
+  async function handleApproveAll(): Promise<string | null> {
+    if (!service) return 'Service not initialized'
     const err = await vaultEditor.approveAll(service)
     if (err) error = err
+    return err
+  }
+
+  /**
+   * Handle Escape key in the modal:
+   * - If generating: abort the request and keep the assistant open
+   * - If not generating: let the modal close normally (onOpenChange handles this)
+   */
+  function handleEscapeKeydown(e: KeyboardEvent) {
+    if (isGenerating) {
+      e.preventDefault()
+      // Abort the ongoing request
+      if (abortController) {
+        abortController.abort()
+        abortController = null
+      }
+      isGenerating = false
+      isThinking = false
+      activeToolCalls = []
+      streamingChanges = []
+      error = 'Generation stopped'
+    }
   }
 </script>
 
@@ -643,6 +657,7 @@
             onApprove={(specificChange) =>
               handleApprove(specificChange ?? vaultEditor.activeChange!)}
             onReject={(change) => handleReject(change)}
+            onApproveAllAsync={handleApproveAll}
             onClose={() => vaultEditor.closeEditor()}
           />
         </div>
@@ -1127,42 +1142,12 @@
           {/if}
 
           <!-- Input area -->
-          <div
-            class="border-surface-700 bg-surface-900 border-t p-3"
-            style="padding-bottom: calc(0.75rem + var(--safe-bottom));"
-          >
-            <div class="flex items-end gap-2">
-              <Textarea
-                bind:value={inputValue}
-                onkeydown={handleKeyDown}
-                placeholder="Ask me to create characters, organize lorebooks, set up scenarios..."
-                rows={2}
-                class="border-surface-700 bg-surface-800 placeholder:text-surface-500 min-h-[2.5rem] resize-none rounded-xl text-sm"
-                disabled={isGenerating || !service}
-              />
-              <Button
-                size="icon"
-                class={cn(
-                  'h-10 w-10 shrink-0 rounded-xl',
-                  isGenerating ? 'opacity-70' : 'bg-accent-600 hover:bg-accent-500',
-                )}
-                onclick={handleSend}
-                disabled={!inputValue.trim() || isGenerating || !service}
-                title="Send message"
-              >
-                {#if isGenerating}
-                  <Loader2 class="h-5 w-5 animate-spin" />
-                {:else}
-                  <Send class="h-5 w-5" />
-                {/if}
-              </Button>
-            </div>
-            <div class="text-surface-500 mt-1.5 hidden text-center text-[10px] md:block">
-              {isTouchDevice()
-                ? 'Shift+Enter to send, Enter for new line'
-                : 'Enter to send, Shift+Enter for new line'}
-            </div>
-          </div>
+          <VaultAssistantInput
+            bind:this={assistantInputRef}
+            onSend={handleSend}
+            disabled={!service}
+            {isGenerating}
+          />
         {:else}
           <!-- Entity tab body (compact only) -->
           {#if vaultEditor.activeChange}
@@ -1174,6 +1159,7 @@
                 onApprove={(specificChange) =>
                   handleApprove(specificChange ?? vaultEditor.activeChange!)}
                 onReject={(change) => handleReject(change)}
+                onApproveAllAsync={handleApproveAll}
                 onClose={() => vaultEditor.closeEditor()}
               />
             </div>
@@ -1185,21 +1171,26 @@
 {/snippet}
 
 {#if isCompact.current}
-  <Dialog.Root open={true} onOpenChange={(open) => !open && onClose()}>
+  <Dialog.Root open={true} onOpenChange={(open) => !open && mounted && !isGenerating && onClose()}>
     <Dialog.Content
       class="flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-none p-0"
       style="padding-top: var(--safe-top);"
+      onEscapeKeydown={handleEscapeKeydown}
     >
       {@render assistantContent()}
     </Dialog.Content>
   </Dialog.Root>
 {:else}
-  <ResponsiveModal.Root open={true} onOpenChange={(open) => !open && onClose()}>
+  <ResponsiveModal.Root
+    open={true}
+    onOpenChange={(open) => !open && mounted && !isGenerating && onClose()}
+  >
     <ResponsiveModal.Content
       class={cn(
         'flex h-[90vh] w-full flex-col gap-0 overflow-hidden p-0',
         vaultEditor.editorOpen ? 'max-w-[90vw]' : 'max-w-2xl',
       )}
+      onEscapeKeydown={handleEscapeKeydown}
     >
       {@render assistantContent()}
     </ResponsiveModal.Content>

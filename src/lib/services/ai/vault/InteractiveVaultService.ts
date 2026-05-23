@@ -695,7 +695,13 @@ export class InteractiveVaultService extends BaseAIService {
       return
     }
 
-    const entries = [...lorebook.entries]
+    // Get a fresh copy of entries from the vault store
+    const currentLorebook = lorebookVault.getById(change.lorebookId)
+    if (!currentLorebook) {
+      log('Lorebook disappeared during change application', { lorebookId: change.lorebookId })
+      return
+    }
+    const entries = [...currentLorebook.entries]
 
     switch (change.action) {
       case 'create':
@@ -703,12 +709,36 @@ export class InteractiveVaultService extends BaseAIService {
         break
       case 'update':
         if (change.entryIndex >= 0 && change.entryIndex < entries.length) {
-          entries[change.entryIndex] = { ...entries[change.entryIndex], ...change.data }
+          // Strip empty strings from update data to avoid accidentally
+          // overwriting existing content (e.g. AI sending description: '')
+          const safeData = Object.fromEntries(
+            Object.entries(change.data ?? {}).filter(([_, v]) => v !== ''),
+          ) as Partial<VaultLorebookEntry>
+          entries[change.entryIndex] = { ...entries[change.entryIndex], ...safeData }
+        } else {
+          const error = `Update failed: index ${change.entryIndex} out of bounds (0-${entries.length - 1})`
+          log('Update entry index out of bounds', {
+            lorebookId: change.lorebookId,
+            entryIndex: change.entryIndex,
+            entriesLength: entries.length,
+            changeId: change.id,
+            changeData: change.data,
+          })
+          throw new Error(error)
         }
         break
       case 'delete':
         if (change.entryIndex >= 0 && change.entryIndex < entries.length) {
           entries.splice(change.entryIndex, 1)
+        } else {
+          const error = `Delete failed: index ${change.entryIndex} out of bounds (0-${entries.length - 1})`
+          log('Delete entry index out of bounds', {
+            lorebookId: change.lorebookId,
+            entryIndex: change.entryIndex,
+            entriesLength: entries.length,
+            changeId: change.id,
+          })
+          throw new Error(error)
         }
         break
       case 'merge':
@@ -727,6 +757,13 @@ export class InteractiveVaultService extends BaseAIService {
     }
 
     await lorebookVault.update(change.lorebookId, { entries })
+    log('Applied lorebook entry change', {
+      action: change.action,
+      lorebookId: change.lorebookId,
+      entryIndex:
+        change.action === 'update' || change.action === 'delete' ? change.entryIndex : undefined,
+      newEntriesCount: entries.length,
+    })
   }
 
   /**
