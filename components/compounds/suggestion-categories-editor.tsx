@@ -125,6 +125,11 @@ type RowContentProps = RowState &
     disabled?: boolean
     showDragHandle: boolean
     dragHandle?: ReactNode
+    // `stacked` flips the inner editor from a side-by-side label/color row
+    // into a vertical column. Phones can't fit ColorPicker's 8+ swatches next
+    // to a flex-1 Input on a 360-400px width, so the Accordion-expanded
+    // version always passes `stacked: true`.
+    stacked: boolean
   }
 
 // The inner editor body — used by both the desktop horizontal row and the phone
@@ -148,6 +153,7 @@ const RowContent = memo(function RowContent({
   disabled,
   showDragHandle,
   dragHandle,
+  stacked,
 }: RowContentProps) {
   const labelError = emptyLabel
     ? 'Label is required'
@@ -157,6 +163,51 @@ const RowContent = memo(function RowContent({
   // Last-row delete is allowed (zero-state is recoverable via + Add category);
   // showing the count keeps the contract visible.
   const deleteLabel = `Delete category${total === 1 ? ' (last one)' : ''}`
+  const labelField = (
+    <View className="min-w-0 flex-1 flex-col gap-1">
+      <Input
+        value={category.label}
+        onChangeText={(v) => onLabelChange(category.id, v)}
+        placeholder="Category label"
+        editable={!disabled}
+        aria-invalid={labelError != null}
+        autoCorrect={false}
+      />
+      {labelError ? (
+        <Text size="xs" className="text-danger">
+          {labelError}
+        </Text>
+      ) : null}
+    </View>
+  )
+  const colorField = (
+    <View className={stacked ? 'flex-col gap-1' : undefined}>
+      {stacked ? (
+        <Text size="xs" variant="muted">
+          Color
+        </Text>
+      ) : null}
+      <ColorPicker
+        swatches={swatches}
+        value={category.color}
+        onChange={(next) => onColorChange(category.id, next)}
+        fallbackColor={fallbackColor}
+        fallbackLabel={fallbackColorLabel}
+        allowCustom
+        disabled={disabled}
+      />
+    </View>
+  )
+  const promptField = (
+    <Textarea
+      value={category.promptHint}
+      onChangeText={(v) => onPromptHintChange(category.id, v)}
+      placeholder="Prompt hint (optional — label is used as the sole hint when blank)"
+      editable={!disabled}
+      style={textareaMinHeightStyle}
+      rows={3}
+    />
+  )
   return (
     <View className="flex-1 flex-row items-start gap-2">
       {showDragHandle ? dragHandle : null}
@@ -169,40 +220,21 @@ const RowContent = memo(function RowContent({
         />
       </View>
       <View className="flex-1 flex-col gap-2">
-        <View className="flex-row items-start gap-2">
-          <View className="min-w-0 flex-1 flex-col gap-1">
-            <Input
-              value={category.label}
-              onChangeText={(v) => onLabelChange(category.id, v)}
-              placeholder="Category label"
-              editable={!disabled}
-              aria-invalid={labelError != null}
-              autoCorrect={false}
-            />
-            {labelError ? (
-              <Text size="xs" className="text-danger">
-                {labelError}
-              </Text>
-            ) : null}
-          </View>
-          <ColorPicker
-            swatches={swatches}
-            value={category.color}
-            onChange={(next) => onColorChange(category.id, next)}
-            fallbackColor={fallbackColor}
-            fallbackLabel={fallbackColorLabel}
-            allowCustom
-            disabled={disabled}
-          />
-        </View>
-        <Textarea
-          value={category.promptHint}
-          onChangeText={(v) => onPromptHintChange(category.id, v)}
-          placeholder="Prompt hint (optional — label is used as the sole hint when blank)"
-          editable={!disabled}
-          style={textareaMinHeightStyle}
-          rows={3}
-        />
+        {stacked ? (
+          <>
+            {labelField}
+            {colorField}
+            {promptField}
+          </>
+        ) : (
+          <>
+            <View className="flex-row items-start gap-2">
+              {labelField}
+              {colorField}
+            </View>
+            {promptField}
+          </>
+        )}
       </View>
       <View className="pt-1">
         <IconAction
@@ -274,6 +306,7 @@ function SortableWebRow({
           disabled={disabled}
           showDragHandle
           dragHandle={dragHandle}
+          stacked={false}
         />
       </View>
     </div>
@@ -352,15 +385,18 @@ function PhoneAccordionRow({
       <View className="flex-row items-center gap-1">
         {/* Long-press anywhere on the drag handle picks up the row in
             DraggableFlatList; releases on touch-up. Keeps reorder distinct
-            from the Accordion's tap-to-expand. */}
+            from the Accordion's tap-to-expand. p-3 + size="md" + hitSlop=8
+            gives a ≥44px touch target (iOS HIG / Material minimum) so the
+            handle is reliably grabbable on phone. */}
         <Pressable
           onLongPress={dragHandleProps?.onLongPress}
           accessibilityRole="button"
           aria-label="Long-press to drag and reorder"
           disabled={disabled}
-          className="p-2"
+          hitSlop={8}
+          className="p-3"
         >
-          <Icon as={GripVertical} size="sm" className="text-fg-muted" />
+          <Icon as={GripVertical} size="md" className="text-fg-muted" />
         </Pressable>
         <View className="flex-1">
           <AccordionTrigger>
@@ -383,6 +419,7 @@ function PhoneAccordionRow({
             fallbackColorLabel={fallbackColorLabel}
             disabled={disabled}
             showDragHandle={false}
+            stacked
           />
         </View>
       </AccordionContent>
