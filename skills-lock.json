@@ -85,6 +85,12 @@
       "skillPath": "plugins/frontend-mobile-development/skills/react-state-management/SKILL.md",
       "computedHash": "7c63f9bf6ce2e2884b2da61e899a2701068b53ef6e87fc29e3c04a199e3092cb"
     },
+    "reanimated-dnd": {
+      "source": "entropyconquers/react-native-reanimated-dnd",
+      "sourceType": "github",
+      "skillPath": "skills/reanimated-dnd/SKILL.md",
+      "computedHash": "bad9ca3cf7038d96a3fd1558f07742ec3e4b4f9526e907cef99dfb655017bd7b"
+    },
     "secrets-management": {
       "source": "wshobson/agents",
       "sourceType": "github",

@@ -15,12 +15,17 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { ImpactFeedbackStyle, impactAsync } from 'expo-haptics'
 import { ChevronDown, GripVertical, Trash2 } from 'lucide-react-native'
 import { memo, useCallback, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { Platform, Pressable, View } from 'react-native'
-import Collapsible from 'react-native-collapsible'
-import Animated, { useAnimatedStyle, useDerivedValue, withTiming } from 'react-native-reanimated'
-import Sortable, { type SortableGridRenderItemInfo } from 'react-native-sortables'
+import Animated, {
+  useAnimatedStyle,
+  useDerivedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated'
+import { SortableItem, useSortableList } from 'react-native-reanimated-dnd'
 
 import { Button } from '@/components/ui/button'
 import { ColorPicker, type ColorValue } from '@/components/ui/color-picker'
@@ -65,13 +70,11 @@ type SuggestionCategoriesEditorProps = {
 }
 
 const DEFAULT_FALLBACK_LABEL = 'Default'
-// 180px ≈ 4 lines of monospace at the textarea's default size. Lets the prompt
-// hint breathe without dominating the row; user can still scroll if longer.
 const PROMPT_HINT_MIN_HEIGHT = 80
+const EXPAND_DURATION_MS = 200
+// Initial guess for a collapsed phone row; library swaps in measured heights once rendered.
+const ESTIMATED_COLLAPSED_ROW_HEIGHT = 56
 
-// Case-insensitive uniqueness check. Returns the set of category ids whose
-// label collides with another row's label. Empty labels are NOT flagged here
-// (the non-empty rule surfaces as its own per-row error).
 function findDuplicateLabelIds(categories: SuggestionCategory[]): ReadonlySet<string> {
   const seen = new Map<string, string[]>()
   for (const c of categories) {
@@ -89,9 +92,11 @@ function findDuplicateLabelIds(categories: SuggestionCategory[]): ReadonlySet<st
 }
 
 function defaultIdGen(): string {
-  // Cheap unique enough for in-session UI; host overrides with cuid / nanoid
-  // when persisted ids matter beyond the editor's lifetime.
   return `cat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function dotColorStyle(color: string) {
+  return { backgroundColor: color }
 }
 
 type RowState = {
@@ -118,10 +123,8 @@ type RowContentProps = RowState &
     disabled?: boolean
     showDragHandle: boolean
     dragHandle?: ReactNode
-    // `stacked` flips the inner editor from a side-by-side label/color row
-    // into a vertical column. Phones can't fit ColorPicker's 8+ swatches next
-    // to a flex-1 Input on a 360-400px width, so the expanded phone version
-    // always passes `stacked: true`.
+    // Phones can't fit ColorPicker swatches beside a flex-1 Input at 360-400px; stacked: true
+    // flips the inner layout to a vertical column.
     stacked: boolean
   }
 
@@ -148,8 +151,6 @@ const RowContent = memo(function RowContent({
     : duplicateLabel
       ? 'Label must be unique'
       : null
-  // Last-row delete is allowed (zero-state is recoverable via + Add category);
-  // showing the count keeps the contract visible.
   const deleteLabel = `Delete category${total === 1 ? ' (last one)' : ''}`
   const labelField = (
     <View className="min-w-0 flex-1 flex-col gap-1">
@@ -241,9 +242,6 @@ const RowContent = memo(function RowContent({
 const textareaMinHeightStyle = { minHeight: PROMPT_HINT_MIN_HEIGHT } as const
 const DIMMED_STYLE = { opacity: 0.5 } as const
 
-// Web: @dnd-kit/sortable item wrapper. Reads sortable transform/transition and
-// applies the standard reorder visual. Keyboard sensor uses
-// sortableKeyboardCoordinates so Space / arrow keys reorder accessibly.
 function SortableWebRow({
   rowState,
   handlers,
@@ -272,9 +270,6 @@ function SortableWebRow({
     <button
       type="button"
       aria-label="Drag to reorder"
-      // Spread sortable's listeners/attributes onto the handle so only the
-      // handle picks up gestures; the row body stays interactive (Input,
-      // Switch, ColorPicker, Textarea can be focused and edited freely).
       {...listeners}
       {...attributes}
       disabled={disabled}
@@ -302,9 +297,6 @@ function SortableWebRow({
   )
 }
 
-// Phone: collapsed-row summary — color dot, label, off-badge. Mirrors the
-// previous Accordion-based version's collapsed shape, but consumed by the
-// SimplePhoneRow expandable container below instead of an AccordionTrigger.
 function PhoneRowSummary({
   category,
   duplicateLabel,
@@ -346,40 +338,21 @@ function PhoneRowSummary({
   )
 }
 
-function dotColorStyle(color: string) {
-  return { backgroundColor: color }
-}
-
-const EXPAND_DURATION_MS = 200
-
-// Phone row used inside Sortable.Grid. Drag activation is owned by the
-// Sortable.Handle wrapper around the grip icon — the library handles
-// long-press detection + gesture binding internally (see customHandle on
-// Sortable.Grid below). No drag callback or isActive prop needed; the
-// library applies its own active-item decorations.
-//
-// Collapse animation: react-native-collapsible. Handles auto-sized-content
-// height transitions correctly across iOS/Android/Fabric — measures the
-// content's natural height internally and animates the wrapping View's
-// height between 0 and natural over `duration`. We previously tried
-// hand-rolling this with Reanimated LinearTransition + FadeIn/FadeOut, plus
-// a height-clip Animated.View with manual measurement, and each variant hit
-// a different layout edge case (20px reveal, bunched flex children, content
-// unmount racing the LinearTransition). Library-first applies here exactly
-// as it does for the drag-reorder lib (see
-// [[feedback-library-first-defaults]]).
-//
-// Chevron rotation: useAnimatedStyle on a wrapping Animated.View. Rotating
-// the Icon directly via className/style rotates the SVG around its (0,0)
-// origin, pushing the glyph off-screen — wrapping in a View rotates the
-// view (around its visual center) and the icon goes along for the ride.
-function SimplePhoneRow({
+// Snap-render the expanded content instead of animating it. The lib's official
+// DynamicHeightExample takes this approach — letting Collapsible animate height continuously
+// causes the sortable's per-item withSpring to chase a moving target every frame and visibly
+// lag behind. With a snap, onLayout fires once with the final height and rows below spring
+// once cleanly to their final positions.
+function PhoneRowShell({
   rowState,
   handlers,
   swatches,
   fallbackColor,
   fallbackColorLabel,
   disabled,
+  dragHandle,
+  expanded,
+  onToggleExpanded,
 }: {
   rowState: RowState
   handlers: RowHandlers
@@ -387,11 +360,12 @@ function SimplePhoneRow({
   fallbackColor: ColorValue
   fallbackColorLabel: string
   disabled?: boolean
+  dragHandle: ReactNode
+  expanded: boolean
+  onToggleExpanded: () => void
 }) {
-  const [expanded, setExpanded] = useState(false)
-  const toggleExpanded = useCallback(() => {
-    setExpanded((v) => !v)
-  }, [])
+  // Rotating the Icon directly rotates the SVG around (0,0) and pushes it off-screen.
+  // Wrapping in a View rotates around the view's visual center.
   const progress = useDerivedValue(
     () => withTiming(expanded ? 1 : 0, { duration: EXPAND_DURATION_MS }),
     [expanded],
@@ -402,20 +376,12 @@ function SimplePhoneRow({
   return (
     <View className="border-b border-border bg-bg-base">
       <View className="flex-row items-center gap-1">
-        <Sortable.Handle mode={disabled ? 'non-draggable' : 'draggable'}>
-          <View
-            accessibilityRole="button"
-            aria-label="Long-press to drag and reorder"
-            className="p-3"
-          >
-            <Icon as={GripVertical} size="md" className="text-fg-muted" />
-          </View>
-        </Sortable.Handle>
+        {dragHandle}
         <Pressable
           accessibilityRole="button"
           aria-label={expanded ? 'Collapse category' : 'Expand category'}
           aria-expanded={expanded}
-          onPress={toggleExpanded}
+          onPress={onToggleExpanded}
           disabled={disabled}
           className="flex-1 flex-row items-center gap-2 py-row-y-lg pr-3"
         >
@@ -430,14 +396,7 @@ function SimplePhoneRow({
           </Animated.View>
         </Pressable>
       </View>
-      <Collapsible collapsed={!expanded} duration={EXPAND_DURATION_MS} easing="easeOutCubic">
-        {/* flex-row wrapper is load-bearing: RowContent's outer is
-            `flex-1 flex-row` — in a flex-col parent, `flex-1` means
-            height-shrink, which makes Yoga squish the content when
-            Collapsible applies its measured height back to the wrapper.
-            flex-row context turns `flex-1` into width-grow, so the
-            content stays at natural height. Same fix as the dual-layer
-            measurement attempt. */}
+      {expanded ? (
         <View className="flex-row px-3 pb-3">
           <RowContent
             {...rowState}
@@ -450,10 +409,12 @@ function SimplePhoneRow({
             stacked
           />
         </View>
-      </Collapsible>
+      ) : null}
     </View>
   )
 }
+
+const dragHandleStaticStyle = { padding: 12 } as const
 
 function SuggestionCategoriesEditor({
   categories,
@@ -520,14 +481,14 @@ function SuggestionCategoriesEditor({
     <View className={cn('flex-col gap-2', className)} style={disabled ? DIMMED_STYLE : undefined}>
       {isPhone ? (
         <PhoneList
-          categories={categories}
-          duplicateIds={duplicateIds}
+          rowStates={rowStates}
           handlers={handlers}
           swatches={swatches}
           fallbackColor={fallbackColor}
           fallbackColorLabel={fallbackColorLabel}
           disabled={disabled}
           onReorder={onChange}
+          categories={categories}
         />
       ) : (
         <WebList
@@ -608,75 +569,279 @@ function WebList({
 }
 
 type PhoneListProps = {
-  categories: SuggestionCategory[]
-  duplicateIds: ReadonlySet<string>
+  rowStates: RowState[]
   handlers: RowHandlers
   swatches: ColorValue[]
   fallbackColor: ColorValue
   fallbackColorLabel: string
   disabled?: boolean
   onReorder: (next: SuggestionCategory[]) => void
+  categories: SuggestionCategory[]
 }
 
-function PhoneList({
-  categories,
-  duplicateIds,
+function PhoneList(props: PhoneListProps) {
+  // useSortableList only re-syncs measured heights on data changes, not the positions shared
+  // value. Keying by the id set (not order) forces a clean remount on add/delete while
+  // letting reorders pass through to the worklet without losing per-row expanded state.
+  const idSetKey = useMemo(
+    () =>
+      props.categories
+        .map((c) => c.id)
+        .sort()
+        .join('|'),
+    [props.categories],
+  )
+  return props.disabled ? (
+    <PhoneListStatic {...props} />
+  ) : (
+    <PhoneListSortable key={idSetKey} {...props} />
+  )
+}
+
+function PhoneListStatic({
+  rowStates,
   handlers,
   swatches,
   fallbackColor,
   fallbackColorLabel,
   disabled,
-  onReorder,
 }: PhoneListProps) {
-  // react-native-sortables: Reanimated 3 / Fabric-first; no internal
-  // VirtualizedList so no nested-scroll warning; built-in haptic feedback on
-  // drag activation. Replaced react-native-draggable-flatlist which had a
-  // Fabric-incompatible enableLayoutAnimationExperimental flag and a
-  // documented post-reorder flicker (CellRendererComponent's heldTanslate
-  // pattern paints rows at new_natural + stale_translate for one frame
-  // after the React commit, with no user-side workaround).
-  const total = categories.length
-  const keyExtractor = useCallback((item: SuggestionCategory) => item.id, [])
-  const renderItem = useCallback(
-    ({ item, index }: SortableGridRenderItemInfo<SuggestionCategory>) => {
-      const rowState: RowState = {
-        category: item,
-        duplicateLabel: duplicateIds.has(item.id),
-        emptyLabel: item.label.trim().length === 0,
-        index,
-        total,
-      }
-      return (
-        <SimplePhoneRow
+  const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(EMPTY_EXPANDED_SET)
+  const toggleExpanded = useToggleExpanded(setExpandedIds)
+  return (
+    <View className="overflow-hidden rounded-md border border-border bg-bg-base">
+      {rowStates.map((rowState) => (
+        <PhoneRowShell
+          key={rowState.category.id}
           rowState={rowState}
           handlers={handlers}
           swatches={swatches}
           fallbackColor={fallbackColor}
           fallbackColorLabel={fallbackColorLabel}
           disabled={disabled}
+          expanded={expandedIds.has(rowState.category.id)}
+          onToggleExpanded={() => toggleExpanded(rowState.category.id)}
+          dragHandle={
+            <View
+              accessibilityRole="image"
+              aria-label="Drag handle (disabled)"
+              style={dragHandleStaticStyle}
+            >
+              <Icon as={GripVertical} size="md" className="text-fg-muted" />
+            </View>
+          }
         />
-      )
+      ))}
+    </View>
+  )
+}
+
+const EMPTY_EXPANDED_SET: ReadonlySet<string> = new Set()
+
+function useToggleExpanded(
+  setExpandedIds: (updater: (prev: ReadonlySet<string>) => ReadonlySet<string>) => void,
+) {
+  return useCallback(
+    (id: string) => {
+      setExpandedIds((prev) => {
+        const next = new Set(prev)
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
+        return next
+      })
     },
-    [duplicateIds, handlers, swatches, fallbackColor, fallbackColorLabel, disabled, total],
+    [setExpandedIds],
+  )
+}
+
+// react-native-reanimated-dnd's Sortable component wraps an internal
+// GestureHandlerRootView + ScrollView with hardcoded flex:1 + white background; that breaks
+// embed-in-parent-ScrollView usage. Driving useSortableList + SortableItem ourselves keeps the
+// list as a plain themed View whose absolute-positioned items lay out inside an explicit height.
+function PhoneListSortable({
+  rowStates,
+  handlers,
+  swatches,
+  fallbackColor,
+  fallbackColorLabel,
+  onReorder,
+  categories,
+}: PhoneListProps) {
+  const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(EMPTY_EXPANDED_SET)
+  const toggleExpanded = useToggleExpanded(setExpandedIds)
+  const sortableList = useSortableList<SuggestionCategory>({
+    data: categories,
+    enableDynamicHeights: true,
+    estimatedItemHeight: ESTIMATED_COLLAPSED_ROW_HEIGHT,
+    itemKeyExtractor: (item) => item.id,
+  })
+
+  const itemHeightsSV = sortableList.itemHeights
+  // The lib's useSortable springs each item's `top` via withSpring (~500ms settle) on any
+  // height change. If our container's height snapped to the new sum instantly, an empty gap
+  // would appear at the bottom while rows below caught up — the perceived "rows lag behind
+  // their slot" symptom. Spring the container height at the same rate as the items so both
+  // arrive at the final layout together.
+  const targetHeight = useDerivedValue(() => {
+    let total = 0
+    const heights = itemHeightsSV.value
+    for (const id in heights) {
+      total += heights[id]
+    }
+    return total
+  })
+  const animatedHeight = useDerivedValue(() => withSpring(targetHeight.value))
+  const animatedHeightStyle = useAnimatedStyle(() => ({ height: animatedHeight.value }))
+
+  const rowStateById = useMemo(() => {
+    const map = new Map<string, RowState>()
+    for (const rs of rowStates) map.set(rs.category.id, rs)
+    return map
+  }, [rowStates])
+
+  const handleMove = useCallback(
+    (_id: string, from: number, to: number) => {
+      if (from === to) return
+      onReorder(arrayMove(categories, from, to))
+    },
+    [categories, onReorder],
   )
 
-  const onDragEnd = useCallback(
-    ({ data }: { data: SuggestionCategory[] }) => onReorder(data),
-    [onReorder],
-  )
+  const handleDragStart = useCallback(() => {
+    void impactAsync(ImpactFeedbackStyle.Medium)
+  }, [])
 
+  // SortableItem absolutely positions itself within its parent; the wrapper must declare an
+  // explicit height (the sum of measured row heights) so neighbors flow correctly.
   return (
-    <Sortable.Grid
-      columns={1}
-      data={categories}
-      keyExtractor={keyExtractor}
-      renderItem={renderItem}
-      onDragEnd={onDragEnd}
-      customHandle
-      hapticsEnabled
-      sortEnabled={!disabled}
-      dragActivationDelay={250}
-    />
+    <Animated.View
+      className="overflow-hidden rounded-md border border-border bg-bg-base"
+      style={animatedHeightStyle}
+    >
+      {categories.map((item, index) => {
+        const rowState = rowStateById.get(item.id)
+        if (!rowState) return null
+        const sortableProps = sortableList.getItemProps(item, index)
+        return (
+          <SortablePhoneRow
+            key={item.id}
+            item={item}
+            sortableProps={sortableProps}
+            rowState={rowState}
+            handlers={handlers}
+            swatches={swatches}
+            fallbackColor={fallbackColor}
+            fallbackColorLabel={fallbackColorLabel}
+            onMove={handleMove}
+            onDragStart={handleDragStart}
+            expanded={expandedIds.has(item.id)}
+            onToggleExpanded={toggleExpanded}
+          />
+        )
+      })}
+    </Animated.View>
+  )
+}
+
+// A large virtual container height that autoscroll never reaches. The lib's useSortable defaults
+// containerHeight=500; when positionY exceeds (containerHeight - itemHeight), it activates
+// autoscroll and starts animating scrollY toward a negative maxScroll value, making lowerBound
+// go negative and causing all items to spring to wrong positions — the drag-time shake.
+// Since this list has no internal scroll, we want autoscroll permanently disabled.
+const SORTABLE_VIRTUAL_CONTAINER_HEIGHT = 9999
+
+type SortablePhoneRowProps = {
+  item: SuggestionCategory
+  sortableProps: ReturnType<ReturnType<typeof useSortableList<SuggestionCategory>>['getItemProps']>
+  rowState: RowState
+  handlers: RowHandlers
+  swatches: ColorValue[]
+  fallbackColor: ColorValue
+  fallbackColorLabel: string
+  onMove: (id: string, from: number, to: number) => void
+  onDragStart: () => void
+  expanded: boolean
+  onToggleExpanded: (id: string) => void
+}
+
+// memo here is load-bearing for perf: useSortableList runs setDynamicContentHeight on every
+// layout tick (via the lib's scheduleHeightUpdate). Without memoization, PhoneListSortable
+// re-renders → every SortableItem re-renders → useSortable inside builds a fresh pan gesture
+// every render → SortableHandle's useEffect unregisters/re-registers each cycle. We split out
+// the row so memo can short-circuit when only sortableProps' identity changed but its fields
+// (all stable shared-value refs except itemsCount) are equivalent.
+const SortablePhoneRow = memo(function SortablePhoneRow({
+  item,
+  sortableProps,
+  rowState,
+  handlers,
+  swatches,
+  fallbackColor,
+  fallbackColorLabel,
+  onMove,
+  onDragStart,
+  expanded,
+  onToggleExpanded,
+}: SortablePhoneRowProps) {
+  const handleToggle = useCallback(() => onToggleExpanded(item.id), [item.id, onToggleExpanded])
+  return (
+    <SortableItem
+      data={item}
+      {...sortableProps}
+      containerHeight={SORTABLE_VIRTUAL_CONTAINER_HEIGHT}
+      onMove={onMove}
+      onDragStart={onDragStart}
+    >
+      <PhoneRowShell
+        rowState={rowState}
+        handlers={handlers}
+        swatches={swatches}
+        fallbackColor={fallbackColor}
+        fallbackColorLabel={fallbackColorLabel}
+        expanded={expanded}
+        onToggleExpanded={handleToggle}
+        dragHandle={
+          <SortableItem.Handle>
+            <View
+              accessibilityRole="button"
+              aria-label="Long-press to drag and reorder"
+              style={dragHandleStaticStyle}
+            >
+              <Icon as={GripVertical} size="md" className="text-fg-muted" />
+            </View>
+          </SortableItem.Handle>
+        }
+      />
+    </SortableItem>
+  )
+}, sortablePhoneRowPropsEqual)
+
+function sortablePhoneRowPropsEqual(prev: SortablePhoneRowProps, next: SortablePhoneRowProps) {
+  if (prev.item !== next.item) return false
+  if (prev.rowState !== next.rowState) return false
+  if (prev.handlers !== next.handlers) return false
+  if (prev.swatches !== next.swatches) return false
+  if (prev.fallbackColor !== next.fallbackColor) return false
+  if (prev.fallbackColorLabel !== next.fallbackColorLabel) return false
+  if (prev.onMove !== next.onMove) return false
+  if (prev.onDragStart !== next.onDragStart) return false
+  if (prev.expanded !== next.expanded) return false
+  if (prev.onToggleExpanded !== next.onToggleExpanded) return false
+  const ps = prev.sortableProps
+  const ns = next.sortableProps
+  // sortableProps is a fresh object each render (lib's getItemProps returns new), but its
+  // fields are stable shared-value refs except itemsCount.
+  return (
+    ps.id === ns.id &&
+    ps.itemsCount === ns.itemsCount &&
+    ps.isDynamicHeight === ns.isDynamicHeight &&
+    ps.estimatedItemHeight === ns.estimatedItemHeight &&
+    ps.positions === ns.positions &&
+    ps.lowerBound === ns.lowerBound &&
+    ps.autoScrollDirection === ns.autoScrollDirection &&
+    ps.itemHeights === ns.itemHeights &&
+    ps.scheduleHeightUpdate === ns.scheduleHeightUpdate &&
+    ps.itemHeight === ns.itemHeight
   )
 }
 
