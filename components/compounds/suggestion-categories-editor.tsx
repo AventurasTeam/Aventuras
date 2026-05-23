@@ -952,6 +952,10 @@ const SortablePhoneRow = memo(function SortablePhoneRow({
   )
 }, sortablePhoneRowPropsEqual)
 
+// Keep in sync with SortablePhoneRowProps. Adding a new prop without adding a comparison
+// here means stale renders won't update when only that prop changes — silent staleness, no
+// type error. If you find yourself adding many props, consider switching to a shallow-equal
+// helper instead of this manual list.
 function sortablePhoneRowPropsEqual(prev: SortablePhoneRowProps, next: SortablePhoneRowProps) {
   if (prev.item !== next.item) return false
   if (prev.rowState !== next.rowState) return false
