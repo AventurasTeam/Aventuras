@@ -134,10 +134,10 @@ export const FocusOpensDropdown: Story = {
   play: async ({ canvas }) => {
     const input = await canvas.findByPlaceholderText('Era name…')
     await userEvent.click(input)
-    await waitFor(() => expect(screen.getAllByRole('button').length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getAllByRole('option').length).toBeGreaterThan(0))
     // All five era names appear as suggestions when input is empty
     for (const era of ERA_NAMES) {
-      expect(screen.getByRole('button', { name: era })).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: era })).toBeInTheDocument()
     }
   },
 }
@@ -149,10 +149,10 @@ export const TypingFiltersSuggestions: Story = {
     await userEvent.click(input)
     await userEvent.type(input, 'sho')
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Showa' })).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: 'Showa' })).toBeInTheDocument()
     })
     // 'Reiwa' is filtered out
-    expect(screen.queryByRole('button', { name: 'Reiwa' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Reiwa' })).not.toBeInTheDocument()
   },
 }
 
@@ -163,7 +163,7 @@ export const TailCreateAppearsForUnknownTyped: Story = {
     await userEvent.click(input)
     await userEvent.type(input, 'Genroku')
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '+ Add new: "Genroku"' })).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: '+ Add new: "Genroku"' })).toBeInTheDocument()
     })
   },
 }
@@ -177,7 +177,7 @@ export const SuggestionPickCommitsCanonical: Story = {
     const input = await canvas.findByPlaceholderText('Era name…')
     await userEvent.click(input)
     await userEvent.type(input, 'reiw')
-    const suggestion = await screen.findByRole('button', { name: 'Reiwa' })
+    const suggestion = await screen.findByRole('option', { name: 'Reiwa' })
     await userEvent.click(suggestion)
     await waitFor(() => expect(args.onCommit).toHaveBeenCalledWith('Reiwa'))
   },
@@ -192,7 +192,7 @@ export const TailCreateCommitsTyped: Story = {
     const input = await canvas.findByPlaceholderText('Era name…')
     await userEvent.click(input)
     await userEvent.type(input, 'Genroku')
-    const tail = await screen.findByRole('button', { name: '+ Add new: "Genroku"' })
+    const tail = await screen.findByRole('option', { name: '+ Add new: "Genroku"' })
     await userEvent.click(tail)
     await waitFor(() => expect(args.onCommit).toHaveBeenCalledWith('Genroku'))
   },
@@ -298,16 +298,16 @@ export const VirtualizedManyRows: Story = {
     await userEvent.click(input)
     // First entry should be in the rendered window on focus.
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Entry 0001' })).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: 'Entry 0001' })).toBeInTheDocument()
     })
     // Far-off entry must NOT be in the DOM yet — the whole point
     // of virtualization is that it isn't mounted.
-    expect(screen.queryByRole('button', { name: 'Entry 0500' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Entry 0500' })).not.toBeInTheDocument()
     // Type a unique substring that matches one row deep in the
     // list — filter result is small, that row should now render.
     await userEvent.type(input, '0500')
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Entry 0500' })).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: 'Entry 0500' })).toBeInTheDocument()
     })
   },
 }
@@ -326,6 +326,6 @@ export const DisabledNoDropdown: Story = {
     fireEvent.focus(input)
     // No suggestion buttons should appear in disabled state
     await new Promise((r) => setTimeout(r, 100))
-    expect(screen.queryByRole('button', { name: 'Reiwa' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Reiwa' })).not.toBeInTheDocument()
   },
 }

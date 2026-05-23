@@ -137,19 +137,27 @@ function useSearchableList<T>(props: SearchableOverlayListProps<T>) {
   const enabledRows = useMemo(() => flattenEnabled(sections), [sections])
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
 
-  // Auto-highlight rule: non-empty query auto-highlights the first non-disabled row;
-  // empty query highlights nothing. Reapplied whenever query / sections change.
+  // Auto-highlight rule: when the query changes, non-empty auto-highlights the first
+  // non-disabled row; empty highlights nothing. We track the previous query so the
+  // rule only fires on actual query transitions — without this, every other render
+  // (e.g. after an ArrowDown manually set the highlight) would force-reset it to null
+  // for empty queries and wipe the user's keyboard navigation.
+  const prevQueryRef = useRef(query)
   useEffect(() => {
-    if (!query) {
-      setHighlightedId(null)
+    const queryChanged = prevQueryRef.current !== query
+    prevQueryRef.current = query
+    if (queryChanged) {
+      if (!query || enabledRows.length === 0) {
+        setHighlightedId(null)
+      } else {
+        setHighlightedId(enabledRows[0]!.id)
+      }
       return
     }
-    if (enabledRows.length === 0) {
-      setHighlightedId(null)
-      return
-    }
-    if (highlightedId == null || !enabledRows.some((r) => r.id === highlightedId)) {
-      setHighlightedId(enabledRows[0]!.id)
+    // Sections changed (consumer filter, in-flight disable, etc.): validate the
+    // current highlight still maps to an enabled row, else clear / re-anchor.
+    if (highlightedId != null && !enabledRows.some((r) => r.id === highlightedId)) {
+      setHighlightedId(enabledRows.length > 0 ? enabledRows[0]!.id : null)
     }
   }, [query, enabledRows, highlightedId])
 
@@ -573,6 +581,7 @@ type SearchInputProps = {
   // Override for the X clear button. When provided, X press calls this instead of
   // clearing the query directly — lets Shape 1 bundle close-popover + onClear-signal.
   onClear?: () => void
+  disabled?: boolean
   autoFocus?: boolean
   // Only set when the listbox is actually mounted in the DOM — aria-controls
   // referencing a missing id is an a11y violation.
@@ -617,6 +626,7 @@ function SearchInput({
   onFocus,
   onBlur,
   onClear,
+  disabled,
   autoFocus,
   listboxId,
   expanded = true,
@@ -625,12 +635,16 @@ function SearchInput({
   ariaInvalid,
   className,
 }: SearchInputProps) {
-  const activeDescendant = highlightedRowId ? `${rowIdPrefix}-${highlightedRowId}` : undefined
+  // aria-activedescendant must reference a DOM-mounted element — the listbox only
+  // exists while open, so gate on listboxId presence (the parent passes it only when open).
+  const activeDescendant =
+    listboxId != null && highlightedRowId ? `${rowIdPrefix}-${highlightedRowId}` : undefined
   return (
     <Input
       value={query}
       onChangeText={onQueryChange}
       placeholder={placeholder}
+      editable={!disabled}
       autoFocus={autoFocus}
       autoCorrect={false}
       autoCapitalize="none"
@@ -895,7 +909,6 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
     disabled,
     disabledReason,
     'aria-invalid': ariaInvalid,
-    ariaLabel,
     escClearsQueryFirst = false,
     className,
   } = props
@@ -994,12 +1007,22 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
     [onActivate],
   )
 
+  // Ref-stable highlight + sections snapshot so the keyboard handlers always see the
+  // latest values even when RN-Web caches the handler reference. Assignment happens
+  // during render (not in a useEffect) so the refs are synchronously current the moment
+  // the next event fires — the useEffect-update lag was failing the empty-Enter test
+  // because userEvent.keyboard dispatches Enter before the post-ArrowDown effect commits.
+  const highlightedIdRef = useRef(highlightedId)
+  const sectionsRef = useRef(sections)
+  highlightedIdRef.current = highlightedId
+  sectionsRef.current = sections
+
   const onSubmit = useCallback(() => {
-    if (highlightedId != null) {
-      const found = findRowSection(sections, highlightedId)
-      if (found && !found.row.disabled) activate(found.row)
-    }
-  }, [highlightedId, sections, activate])
+    const id = highlightedIdRef.current
+    if (id == null) return
+    const found = findRowSection(sectionsRef.current, id)
+    if (found && !found.row.disabled) activate(found.row)
+  }, [activate])
 
   const onKeyPress = useCallback(
     (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
@@ -1013,13 +1036,18 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
         e.preventDefault?.()
         setOpen(true)
         moveHighlight(-1)
+      } else if (key === 'Enter') {
+        // Enter handled here too — onSubmitEditing isn't always reliable on web
+        // (caches handler refs; some envs don't fire it for empty inputs).
+        e.preventDefault?.()
+        onSubmit()
       } else if (key === 'Escape') {
         e.preventDefault?.()
         if (escClearsQueryFirst && currentQuery.length > 0) setQuery('')
         else setOpen(false)
       }
     },
-    [moveHighlight, currentQuery, setQuery, escClearsQueryFirst],
+    [moveHighlight, currentQuery, setQuery, escClearsQueryFirst, onSubmit],
   )
 
   const popoverStyle: ViewStyle | undefined =
@@ -1054,6 +1082,7 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
         onSubmitEditing={onSubmit}
         onFocus={handleFocus}
         onBlur={handleBlur}
+        disabled={disabled}
         // Listbox only exists in DOM while open; pass id (and expanded=true) only then.
         listboxId={open ? listboxId : undefined}
         expanded={open}
@@ -1066,7 +1095,6 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
           <View
             style={popoverStyle}
             className="overflow-hidden rounded-md border border-border bg-bg-overlay py-1"
-            aria-label={ariaLabel ?? 'Suggestions'}
           >
             <RowList
               sections={sections}

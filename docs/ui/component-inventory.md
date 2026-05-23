@@ -42,12 +42,7 @@ utility wrapper.
 
 ### Primitives — needs revision
 
-Shipped primitives whose canonical contract has evolved post-ship.
-Each row names the revision and points at the canonical spec.
-
-| Primitive    | Revision                        | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ------------ | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Autocomplete | Compose `SearchableOverlayList` | The substrate extraction makes Autocomplete a `searchPlacement: 'as-trigger'` consumer — refactor `autocomplete.tsx` to compose `SearchableOverlayList`, keeping source-list semantics, casing normalization, and the `+ Add new` tail row as the domain layer. Spec: [searchable-overlay-list.md](./patterns/searchable-overlay-list.md), [forms.md → Autocomplete-with-create](./patterns/forms.md#autocomplete-with-create-primitive). Designed 2026-05-22. |
+_Empty — every shipped primitive is currently in canonical-contract compliance._
 
 ### Primitives — build-ready
 
