@@ -144,6 +144,24 @@ class VaultEditorStore {
           c.action === 'update',
       )
 
+      // Apply updates before deletes/merges so index references are stable
+      // (updates don't add/remove entries, so they don't shift positions)
+      for (const entryChange of updates) {
+        if (
+          typeof entryChange.entryIndex === 'number' &&
+          entryChange.entryIndex >= 0 &&
+          entryChange.entryIndex < copy.entries.length
+        ) {
+          const safeData = Object.fromEntries(
+            Object.entries(entryChange.data ?? {}).filter(([_, v]) => v !== ''),
+          ) as Partial<VaultLorebookEntry>
+          copy.entries[entryChange.entryIndex] = {
+            ...copy.entries[entryChange.entryIndex],
+            ...safeData,
+          }
+        }
+      }
+
       deletesAndMerges.sort((a, b) => {
         const aIdx = a.action === 'delete' ? a.entryIndex : Math.max(...a.entryIndices)
         const bIdx = b.action === 'delete' ? b.entryIndex : Math.max(...b.entryIndices)
@@ -172,22 +190,6 @@ class VaultEditorStore {
               copy.entries.push(entryChange.data)
             }
             break
-        }
-      }
-
-      for (const entryChange of updates) {
-        if (
-          typeof entryChange.entryIndex === 'number' &&
-          entryChange.entryIndex >= 0 &&
-          entryChange.entryIndex < copy.entries.length
-        ) {
-          const safeData = Object.fromEntries(
-            Object.entries(entryChange.data ?? {}).filter(([_, v]) => v !== ''),
-          ) as Partial<VaultLorebookEntry>
-          copy.entries[entryChange.entryIndex] = {
-            ...copy.entries[entryChange.entryIndex],
-            ...safeData,
-          }
         }
       }
 
