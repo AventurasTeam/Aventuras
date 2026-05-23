@@ -23,13 +23,13 @@ export function vaultEntryToEntryLike(vaultEntry: VaultLorebookEntry, index: num
     type: vaultEntry.type,
     description: vaultEntry.description,
     hiddenInfo: null,
-    aliases: vaultEntry.aliases,
+    aliases: vaultEntry.aliases ?? [],
     state: createDefaultState(vaultEntry.type),
     adventureState: null,
     creativeState: null,
     injection: {
       mode: vaultEntry.injectionMode,
-      keywords: vaultEntry.keywords,
+      keywords: vaultEntry.keywords ?? [],
       priority: vaultEntry.priority,
     },
     firstMentioned: null,
@@ -166,7 +166,10 @@ async function saveFile(content: string, defaultPath: string): Promise<boolean> 
   try {
     const filePath = await save({
       defaultPath,
-      filters: [{ name: 'Export', extensions: ['json', 'txt'] }],
+      filters: [
+        { name: 'JSON', extensions: ['json'] },
+        { name: 'Text', extensions: ['txt'] },
+      ],
     })
 
     if (!filePath) return false

@@ -59,11 +59,12 @@ export function exportToText(entries: Entry[]): string {
 
     for (const entry of typeEntries) {
       lines.push(`### ${entry.name}`)
-      if (entry.aliases.length > 0) {
-        lines.push(`Aliases: ${entry.aliases.join(', ')}`)
+      const aliases = entry.aliases ?? []
+      if (aliases.length > 0) {
+        lines.push(`Aliases: ${aliases.join(', ')}`)
       }
       lines.push('')
-      lines.push(entry.description)
+      lines.push(entry.description ?? '')
       if (entry.hiddenInfo) {
         lines.push('')
         lines.push(`Hidden: ${entry.hiddenInfo}`)
