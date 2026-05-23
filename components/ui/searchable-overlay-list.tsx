@@ -77,6 +77,13 @@ type SearchableOverlayListProps<T> = {
   // both the Favorites strip and its provider section.
   selectedRowIds?: readonly string[]
 
+  // Web-only opt-in: the Shape 2 popover sizes to its trigger's width (with a
+  // 240px floor so a narrow trigger doesn't crush content). Use for
+  // select-shaped consumers where the open surface should read as the trigger
+  // expanding. Leave off for command-menu consumers whose surface is dialog-
+  // scaled regardless of trigger. No-op on phone (Sheet covers width on its own).
+  matchTriggerWidth?: boolean
+
   onActivate: (row: Row<T>) => void
   // Optional consumer signal for the X clear button. In as-trigger mode this is the
   // "unset the committed value" gesture — wire to setPicked(null) or equivalent so
@@ -99,7 +106,10 @@ type SearchableOverlayListProps<T> = {
   className?: string
 }
 
-const ROW_BASE = 'flex-row items-center active:bg-tint-press'
+// w-full so the row Pressable spans its parent container — without it
+// RN-Web's View defaults make the Pressable size to its content, leaving
+// a flex-1 + trailing-aligned cell layout floating short of the right edge.
+const ROW_BASE = 'w-full flex-row items-center active:bg-tint-press'
 const ROW_DESKTOP = 'min-h-control-md px-row-x-md py-row-y-md'
 const ROW_PHONE = 'min-h-control-lg px-row-x-md py-row-y-md'
 
@@ -108,6 +118,16 @@ const STATIC_STYLES = {
   overlayChrome: {
     maxHeight: 480,
     overflow: 'hidden' as const,
+  } satisfies ViewStyle,
+  // Radix exposes `--radix-popover-trigger-width` on Content; honor it as the
+  // surface width with a 240px floor so a narrow trigger doesn't crush rows
+  // (modelId + caps + ★ need a reasonable minimum). Web-only — native phones
+  // route through Sheet which owns its own sizing.
+  overlayChromeMatchTrigger: {
+    maxHeight: 480,
+    overflow: 'hidden' as const,
+    width: 'var(--radix-popover-trigger-width)' as unknown as number,
+    minWidth: 240,
   } satisfies ViewStyle,
   pointerEventsNone: { pointerEvents: 'none' as const } satisfies ViewStyle,
 }
@@ -914,6 +934,11 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
   }
 
   // Desktop / tablet — rn-primitives Popover with the controlled-open bridge.
+  // Width: `matchTriggerWidth` swaps `w-80` for the Radix trigger-width CSS var;
+  // otherwise the popover is a fixed 320px (command-menu-shaped surfaces).
+  const popoverStyle = props.matchTriggerWidth
+    ? STATIC_STYLES.overlayChromeMatchTrigger
+    : STATIC_STYLES.overlayChrome
   return (
     <PopoverPrimitive.Root onOpenChange={setOpen}>
       <PopoverControlledBridge open={open} />
@@ -925,8 +950,11 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
           role="dialog"
           aria-label={ariaLabel}
           aria-labelledby={ariaLabelledBy}
-          className="z-50 w-80 rounded-md border border-border bg-bg-overlay p-4"
-          style={STATIC_STYLES.overlayChrome}
+          className={cn(
+            'z-50 rounded-md border border-border bg-bg-overlay p-4',
+            !props.matchTriggerWidth && 'w-80',
+          )}
+          style={popoverStyle}
         >
           {body}
         </PopoverPrimitive.Content>

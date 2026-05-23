@@ -38,6 +38,12 @@ function ensureWired(IconComponent: LucideIcon) {
       nativeStyleToProp: {
         color: true,
         opacity: true,
+        // Forward `fill-*` utility classes through to the lucide icon's `fill`
+        // SVG attribute. Required because `fill="currentColor"` is an SVG
+        // keyword that web honors but react-native-svg's Path doesn't resolve,
+        // leaving filled glyphs (e.g. favorited Star) rendering outline-only on
+        // native. With this mapping, `className="fill-warning"` works on both.
+        fill: true,
       },
     },
   })

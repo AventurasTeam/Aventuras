@@ -137,8 +137,7 @@ function FavoriteToggle({ isFavorite, onToggle }: FavoriteToggleProps) {
       <Icon
         as={Star}
         size="sm"
-        className={isFavorite ? 'text-warning' : 'text-fg-muted'}
-        fill={isFavorite ? 'currentColor' : 'none'}
+        className={isFavorite ? 'fill-warning text-warning' : 'text-fg-muted'}
       />
     </Pressable>
   )
@@ -492,6 +491,7 @@ function ProviderModelPicker({
         searchPlaceholder="Search models…"
         sections={sections}
         selectedRowIds={selectedRowIds}
+        matchTriggerWidth
         onQueryChange={setQuery}
         renderTrigger={renderTrigger}
         renderRow={renderRow}

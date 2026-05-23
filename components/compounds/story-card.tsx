@@ -156,10 +156,9 @@ export function StoryCard({
         <Icon
           as={Star}
           size="sm"
-          fill={story.favorited ? 'currentColor' : 'none'}
           className={cn(
             story.favorited
-              ? 'text-warning'
+              ? 'fill-warning text-warning'
               : cn(
                   'text-fg-muted',
                   Platform.select({
