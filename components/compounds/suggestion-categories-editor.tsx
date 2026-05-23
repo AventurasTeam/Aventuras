@@ -444,33 +444,52 @@ function SuggestionCategoriesEditor({
 
   const duplicateIds = useMemo(() => findDuplicateLabelIds(categories), [categories])
 
-  const handlers: RowHandlers = useMemo(
+  // Latest-state ref so `handlers` and `handleAdd` can stay stable across keystrokes. Without
+  // this they'd re-create on every `categories` change, breaking memo(RowContent) and
+  // memo(SortablePhoneRow) — every keystroke in any row would re-render every other row.
+  // Ref is updated synchronously in render so handlers always see the latest array.
+  const stateRef = useRef({ categories, onChange, generateId })
+  stateRef.current = { categories, onChange, generateId }
+
+  const handlers = useMemo<RowHandlers>(
     () => ({
-      onLabelChange: (id, label) =>
-        onChange(categories.map((c) => (c.id === id ? { ...c, label } : c))),
-      onPromptHintChange: (id, promptHint) =>
-        onChange(categories.map((c) => (c.id === id ? { ...c, promptHint } : c))),
-      onColorChange: (id, color) =>
-        onChange(categories.map((c) => (c.id === id ? { ...c, color } : c))),
-      onToggleEnabled: (id) =>
-        onChange(categories.map((c) => (c.id === id ? { ...c, enabled: !c.enabled } : c))),
-      onDelete: (id) => onChange(categories.filter((c) => c.id !== id)),
+      onLabelChange: (id, label) => {
+        const s = stateRef.current
+        s.onChange(s.categories.map((c) => (c.id === id ? { ...c, label } : c)))
+      },
+      onPromptHintChange: (id, promptHint) => {
+        const s = stateRef.current
+        s.onChange(s.categories.map((c) => (c.id === id ? { ...c, promptHint } : c)))
+      },
+      onColorChange: (id, color) => {
+        const s = stateRef.current
+        s.onChange(s.categories.map((c) => (c.id === id ? { ...c, color } : c)))
+      },
+      onToggleEnabled: (id) => {
+        const s = stateRef.current
+        s.onChange(s.categories.map((c) => (c.id === id ? { ...c, enabled: !c.enabled } : c)))
+      },
+      onDelete: (id) => {
+        const s = stateRef.current
+        s.onChange(s.categories.filter((c) => c.id !== id))
+      },
     }),
-    [categories, onChange],
+    [],
   )
 
   const handleAdd = useCallback(() => {
-    onChange([
-      ...categories,
+    const s = stateRef.current
+    s.onChange([
+      ...s.categories,
       {
-        id: generateId(),
+        id: s.generateId(),
         label: '',
         color: null,
         promptHint: '',
         enabled: true,
       },
     ])
-  }, [categories, generateId, onChange])
+  }, [])
 
   const rowStates: RowState[] = useMemo(
     () =>
