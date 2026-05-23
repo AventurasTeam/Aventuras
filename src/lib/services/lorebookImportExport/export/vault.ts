@@ -9,6 +9,7 @@ import type { VaultLorebook, VaultLorebookEntry, VaultCharacter, VaultScenario }
 import type { Entry, EntryType } from '$lib/types'
 import type { ExportFormat } from '../types'
 import { exportToAventura, exportToSillyTavern, exportToText } from './formats'
+import { getFormatInfo } from './metadata'
 
 /**
  * Convert a VaultLorebookEntry to an Entry-like structure for export.
@@ -116,7 +117,7 @@ export async function exportVaultLorebook(
   const baseFilename = lorebook.name || `lorebook-${new Date().toISOString().split('T')[0]}`
 
   let content: string
-  const extension = getFileExtension(format)
+  const extension = getFormatInfo(format).extension
 
   switch (format) {
     case 'aventura':
@@ -149,17 +150,6 @@ export async function exportVaultScenario(scenario: VaultScenario): Promise<bool
   const baseFilename = scenario.name || `scenario-${new Date().toISOString().split('T')[0]}`
   const content = JSON.stringify(scenario, null, 2)
   return await saveFile(content, `${baseFilename}.json`)
-}
-
-function getFileExtension(format: ExportFormat): string {
-  switch (format) {
-    case 'aventura':
-      return '.json'
-    case 'sillytavern':
-      return '.json'
-    case 'text':
-      return '.txt'
-  }
 }
 
 async function saveFile(content: string, defaultPath: string): Promise<boolean> {

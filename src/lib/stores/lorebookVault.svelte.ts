@@ -175,13 +175,13 @@ class LorebookVaultStore {
     return this.add({
       name: `${original.name} (Copy)`,
       description: original.description,
-      entries: original.entries.map((e) => ({ ...e })),
+      entries: structuredClone(original.entries),
       tags: [...original.tags],
       favorite: false,
       source: original.source,
       originalFilename: null,
       originalStoryId: null,
-      metadata: original.metadata ? { ...original.metadata } : null,
+      metadata: original.metadata ? structuredClone(original.metadata) : null,
     })
   }
 

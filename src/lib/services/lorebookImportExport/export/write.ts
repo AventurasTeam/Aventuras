@@ -4,19 +4,9 @@
 
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeTextFile } from '@tauri-apps/plugin-fs'
-import type { LorebookExportOptions, ExportFormat } from '../types'
+import type { LorebookExportOptions } from '../types'
 import { exportToAventura, exportToSillyTavern, exportToText } from './formats'
-
-function getFileExtension(format: ExportFormat): string {
-  switch (format) {
-    case 'aventura':
-      return '.json'
-    case 'sillytavern':
-      return '.json'
-    case 'text':
-      return '.txt'
-  }
-}
+import { getFormatInfo } from './metadata'
 
 async function saveFile(content: string, defaultPath: string): Promise<boolean> {
   try {
@@ -47,7 +37,7 @@ export async function exportLorebook(options: LorebookExportOptions): Promise<bo
 
   let content: string
   const baseFilename = filename ?? `lorebook-${new Date().toISOString().split('T')[0]}`
-  const extension = getFileExtension(format)
+  const extension = getFormatInfo(format).extension
 
   switch (format) {
     case 'aventura':

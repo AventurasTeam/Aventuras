@@ -89,7 +89,7 @@ class ScenarioVaultStore {
       name: `${original.name} (Copy)`,
       description: original.description,
       settingSeed: original.settingSeed,
-      npcs: original.npcs.map((npc) => ({ ...npc })),
+      npcs: structuredClone(original.npcs),
       primaryCharacterName: original.primaryCharacterName,
       firstMessage: original.firstMessage,
       alternateGreetings: [...(original.alternateGreetings || [])],
@@ -97,7 +97,7 @@ class ScenarioVaultStore {
       favorite: false,
       source: original.source,
       originalFilename: null,
-      metadata: original.metadata ? { ...original.metadata } : null,
+      metadata: original.metadata ? structuredClone(original.metadata) : null,
     })
   }
 

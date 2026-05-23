@@ -374,7 +374,11 @@
   // Duplicate handlers
   async function handleDuplicateLorebook(lorebook: VaultLorebook) {
     try {
-      await lorebookVault.duplicate(lorebook.id)
+      const result = await lorebookVault.duplicate(lorebook.id)
+      if (!result) {
+        ui.showToast('Original lorebook not found', 'error')
+        return
+      }
       ui.showToast('Lorebook duplicated', 'info')
     } catch (e) {
       console.error('Duplicate failed:', e)
@@ -384,7 +388,11 @@
 
   async function handleDuplicateCharacter(character: VaultCharacter) {
     try {
-      await characterVault.duplicate(character.id)
+      const result = await characterVault.duplicate(character.id)
+      if (!result) {
+        ui.showToast('Original character not found', 'error')
+        return
+      }
       ui.showToast('Character duplicated', 'info')
     } catch (e) {
       console.error('Duplicate failed:', e)
@@ -394,7 +402,11 @@
 
   async function handleDuplicateScenario(scenario: VaultScenario) {
     try {
-      await scenarioVault.duplicate(scenario.id)
+      const result = await scenarioVault.duplicate(scenario.id)
+      if (!result) {
+        ui.showToast('Original scenario not found', 'error')
+        return
+      }
       ui.showToast('Scenario duplicated', 'info')
     } catch (e) {
       console.error('Duplicate failed:', e)

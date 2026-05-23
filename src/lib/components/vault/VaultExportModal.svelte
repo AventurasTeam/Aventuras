@@ -8,6 +8,7 @@
   import { RadioGroup, RadioGroupItem } from '$lib/components/ui/radio-group'
   import { Label } from '$lib/components/ui/label'
   import { cn } from '$lib/utils/cn'
+  import { ui } from '$lib/stores/ui.svelte'
 
   type ExportFormat = LorebookImportExport.ExportFormat
   type EntityType = 'lorebook' | 'character' | 'scenario'
@@ -55,6 +56,7 @@
       }
     } catch (err) {
       console.error('[VaultExportModal] Export failed:', err)
+      ui.showToast('Export failed', 'error')
     } finally {
       exporting = false
     }

@@ -110,46 +110,48 @@ class VaultEditorStore {
       const copy = JSON.parse(JSON.stringify(lorebook)) as VaultLorebook
 
       // Overlay ALL pending changes for this lorebook onto the preview copy
-      for (const pendingChange of this.pendingChanges) {
-        if (
-          pendingChange.entityType !== 'lorebook-entry' ||
-          pendingChange.status !== 'pending' ||
-          (pendingChange as Extract<VaultPendingChange, { entityType: 'lorebook-entry' }>)
-            .lorebookId !== change.lorebookId
-        ) {
-          continue
-        }
+      // Process deletes/merges in descending index order to avoid shifting
+      const entryChanges = this.pendingChanges
+        .filter(
+          (c): c is Extract<VaultPendingChange, { entityType: 'lorebook-entry' }> =>
+            c.entityType === 'lorebook-entry' &&
+            c.status === 'pending' &&
+            (c as Extract<VaultPendingChange, { entityType: 'lorebook-entry' }>).lorebookId ===
+              change.lorebookId,
+        )
+        .map(
+          (c) =>
+            (this._editedChanges.get(c.id) ?? c) as Extract<
+              VaultPendingChange,
+              { entityType: 'lorebook-entry' }
+            >,
+        )
 
-        // Use edited version if available
-        const effectiveChange = this._editedChanges.get(pendingChange.id) ?? pendingChange
-
-        const entryChange = effectiveChange as Extract<
+      const deletesAndMerges = entryChanges.filter(
+        (
+          c,
+        ): c is Extract<
           VaultPendingChange,
-          { entityType: 'lorebook-entry' }
-        >
+          { entityType: 'lorebook-entry'; action: 'delete' | 'merge' }
+        > => c.action === 'delete' || c.action === 'merge',
+      )
+      const creates = entryChanges.filter(
+        (c): c is Extract<VaultPendingChange, { entityType: 'lorebook-entry'; action: 'create' }> =>
+          c.action === 'create',
+      )
+      const updates = entryChanges.filter(
+        (c): c is Extract<VaultPendingChange, { entityType: 'lorebook-entry'; action: 'update' }> =>
+          c.action === 'update',
+      )
 
+      deletesAndMerges.sort((a, b) => {
+        const aIdx = a.action === 'delete' ? a.entryIndex : Math.max(...a.entryIndices)
+        const bIdx = b.action === 'delete' ? b.entryIndex : Math.max(...b.entryIndices)
+        return bIdx - aIdx
+      })
+
+      for (const entryChange of deletesAndMerges) {
         switch (entryChange.action) {
-          case 'create':
-            // Skip if already persisted in the base lorebook (approved but not yet pruned from pending)
-            if (!copy.entries.some((e) => e.name === entryChange.data.name)) {
-              copy.entries.push(entryChange.data)
-            }
-            break
-          case 'update':
-            if (
-              typeof entryChange.entryIndex === 'number' &&
-              entryChange.entryIndex >= 0 &&
-              entryChange.entryIndex < copy.entries.length
-            ) {
-              const safeData = Object.fromEntries(
-                Object.entries(entryChange.data ?? {}).filter(([_, v]) => v !== ''),
-              ) as Partial<VaultLorebookEntry>
-              copy.entries[entryChange.entryIndex] = {
-                ...copy.entries[entryChange.entryIndex],
-                ...safeData,
-              }
-            }
-            break
           case 'delete':
             if (
               typeof entryChange.entryIndex === 'number' &&
@@ -170,6 +172,28 @@ class VaultEditorStore {
               copy.entries.push(entryChange.data)
             }
             break
+        }
+      }
+
+      for (const entryChange of updates) {
+        if (
+          typeof entryChange.entryIndex === 'number' &&
+          entryChange.entryIndex >= 0 &&
+          entryChange.entryIndex < copy.entries.length
+        ) {
+          const safeData = Object.fromEntries(
+            Object.entries(entryChange.data ?? {}).filter(([_, v]) => v !== ''),
+          ) as Partial<VaultLorebookEntry>
+          copy.entries[entryChange.entryIndex] = {
+            ...copy.entries[entryChange.entryIndex],
+            ...safeData,
+          }
+        }
+      }
+
+      for (const entryChange of creates) {
+        if (!copy.entries.some((e) => e.name === entryChange.data.name)) {
+          copy.entries.push(entryChange.data)
         }
       }
 
@@ -494,6 +518,7 @@ class VaultEditorStore {
   /**
    * Re-index remaining pending lorebook-entry changes after an approval
    * that modified the entries array (delete or merge).
+   * Mutates in-place so all refs (including snapshots in approveAll) stay current.
    */
   private _reindexAfterApproval(approvedChange: VaultPendingChange): void {
     // Only lorebook-entry changes need re-indexing
@@ -504,22 +529,7 @@ class VaultEditorStore {
       approvedChange.entityType === 'lorebook-entry' ? approvedChange.lorebookId : null
     if (!lorebookId) return
 
-    // Find all remaining pending changes for the same lorebook
-    const sameLorebookPending = this.pendingChanges.filter(
-      (c) =>
-        c.entityType === 'lorebook-entry' &&
-        c.status === 'pending' &&
-        c.id !== approvedChange.id &&
-        (c as Extract<VaultPendingChange, { entityType: 'lorebook-entry' }>).lorebookId ===
-          lorebookId,
-    ) as Extract<VaultPendingChange, { entityType: 'lorebook-entry' }>[]
-
-    if (sameLorebookPending.length === 0) return
-
-    // Collect changes that need updating
-    const updates: Array<{ index: number; change: VaultPendingChange }> = []
-
-    // Update pendingChanges and _editedChanges in place
+    // Update pendingChanges in-place (entries are $state proxy objects)
     for (let i = 0; i < this.pendingChanges.length; i++) {
       const c = this.pendingChanges[i]
       if (
@@ -534,25 +544,15 @@ class VaultEditorStore {
 
       const result = this._shiftIndexForApproval(approvedChange, entryChange)
       if (result !== null) {
-        // For delete/update, result is the new entryIndex
         if (entryChange.action === 'delete' || entryChange.action === 'update') {
-          updates.push({
-            index: i,
-            change: { ...entryChange, entryIndex: result },
-          })
+          entryChange.entryIndex = result
         }
-        // For merge, entryIndices was mutated in-place, so we just need to trigger reactivity
+        // For merge, entryIndices was already mutated in-place by _shiftIndexForApproval
       }
     }
 
-    // Apply updates to pendingChanges
-    for (const { index, change } of updates) {
-      this.pendingChanges[index] = change
-    }
-
-    // Also update _editedChanges if there are edited versions
-    const editedIds = [...this._editedChanges.keys()]
-    for (const id of editedIds) {
+    // Also update _editedChanges — SvelteMap values are proxied, mutate in-place
+    for (const id of [...this._editedChanges.keys()]) {
       const edited = this._editedChanges.get(id)
       if (
         !edited ||
@@ -567,9 +567,9 @@ class VaultEditorStore {
       const result = this._shiftIndexForApproval(approvedChange, entryEdited)
       if (result !== null) {
         if (entryEdited.action === 'delete' || entryEdited.action === 'update') {
-          this._editedChanges.set(id, { ...entryEdited, entryIndex: result })
+          entryEdited.entryIndex = result
         }
-        // For merge, entryIndices was mutated in-place
+        // For merge, entryIndices was already mutated in-place by _shiftIndexForApproval
       }
     }
   }
@@ -610,6 +610,7 @@ class VaultEditorStore {
       // Merge removes source entries (in descending order) then appends the result
       const removedIndices = [...approved.entryIndices].sort((a, b) => b - a) // descending
       let totalShift = 0
+      let mergeChanged = false
       for (const removedIdx of removedIndices) {
         if (pending.action === 'delete' || pending.action === 'update') {
           if (pending.entryIndex > removedIdx) {
@@ -617,16 +618,21 @@ class VaultEditorStore {
           }
         } else if (pending.action === 'merge') {
           // Shift indices in the merge's entryIndices array
+          const newIndices = pending.entryIndices.map((idx) => (idx > removedIdx ? idx - 1 : idx))
           ;(
             pending as Extract<
               VaultPendingChange,
               { entityType: 'lorebook-entry'; action: 'merge' }
             >
-          ).entryIndices = pending.entryIndices.map((idx) => (idx > removedIdx ? idx - 1 : idx))
+          ).entryIndices = newIndices
+          mergeChanged = true
         }
       }
       if ((pending.action === 'delete' || pending.action === 'update') && totalShift > 0) {
         return pending.entryIndex - totalShift
+      }
+      if (pending.action === 'merge' && mergeChanged) {
+        return 0
       }
     }
     return null
