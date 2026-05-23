@@ -19,8 +19,8 @@ import { ChevronDown, GripVertical, Trash2 } from 'lucide-react-native'
 import { memo, useCallback, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 import Collapsible from 'react-native-collapsible'
-import DraggableFlatList, { type RenderItemParams } from 'react-native-draggable-flatlist'
 import Animated, { useAnimatedStyle, useDerivedValue, withTiming } from 'react-native-reanimated'
+import Sortable, { type SortableGridRenderItemInfo } from 'react-native-sortables'
 
 import { Button } from '@/components/ui/button'
 import { ColorPicker, type ColorValue } from '@/components/ui/color-picker'
@@ -352,9 +352,11 @@ function dotColorStyle(color: string) {
 
 const EXPAND_DURATION_MS = 200
 
-// Phone row used inside DraggableFlatList. `drag` is the library's callback;
-// invoking it from the long-press of the handle activates the library's
-// reorder gesture.
+// Phone row used inside Sortable.Grid. Drag activation is owned by the
+// Sortable.Handle wrapper around the grip icon — the library handles
+// long-press detection + gesture binding internally (see customHandle on
+// Sortable.Grid below). No drag callback or isActive prop needed; the
+// library applies its own active-item decorations.
 //
 // Collapse animation: react-native-collapsible. Handles auto-sized-content
 // height transitions correctly across iOS/Android/Fabric — measures the
@@ -364,7 +366,7 @@ const EXPAND_DURATION_MS = 200
 // a height-clip Animated.View with manual measurement, and each variant hit
 // a different layout edge case (20px reveal, bunched flex children, content
 // unmount racing the LinearTransition). Library-first applies here exactly
-// as it did for the drag-reorder rewrite (see
+// as it does for the drag-reorder lib (see
 // [[feedback-library-first-defaults]]).
 //
 // Chevron rotation: useAnimatedStyle on a wrapping Animated.View. Rotating
@@ -378,8 +380,6 @@ function SimplePhoneRow({
   fallbackColor,
   fallbackColorLabel,
   disabled,
-  drag,
-  isActive,
 }: {
   rowState: RowState
   handlers: RowHandlers
@@ -387,8 +387,6 @@ function SimplePhoneRow({
   fallbackColor: ColorValue
   fallbackColorLabel: string
   disabled?: boolean
-  drag: () => void
-  isActive: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   const toggleExpanded = useCallback(() => {
@@ -402,19 +400,17 @@ function SimplePhoneRow({
     transform: [{ rotate: `${progress.value * 90 - 90}deg` }],
   }))
   return (
-    <View className={cn('border-b border-border bg-bg-base', isActive && 'opacity-70')}>
+    <View className="border-b border-border bg-bg-base">
       <View className="flex-row items-center gap-1">
-        <Pressable
-          accessibilityRole="button"
-          aria-label="Long-press to drag and reorder"
-          onLongPress={drag}
-          delayLongPress={250}
-          disabled={disabled || isActive}
-          hitSlop={8}
-          className="p-3"
-        >
-          <Icon as={GripVertical} size="md" className="text-fg-muted" />
-        </Pressable>
+        <Sortable.Handle mode={disabled ? 'non-draggable' : 'draggable'}>
+          <View
+            accessibilityRole="button"
+            aria-label="Long-press to drag and reorder"
+            className="p-3"
+          >
+            <Icon as={GripVertical} size="md" className="text-fg-muted" />
+          </View>
+        </Sortable.Handle>
         <Pressable
           accessibilityRole="button"
           aria-label={expanded ? 'Collapse category' : 'Expand category'}
@@ -632,17 +628,17 @@ function PhoneList({
   disabled,
   onReorder,
 }: PhoneListProps) {
-  // `scrollEnabled={false}` is the documented workaround for the
-  // VirtualizedList-in-ScrollView warning when the inner list is bounded-
-  // small (categories realistically cap at ~10-15 entries; virtualization
-  // would be over-engineering). The parent screen owns scroll. The library
-  // still drives drag-reorder correctly — only the FlatList's own scroll
-  // behavior is disabled.
+  // react-native-sortables: Reanimated 3 / Fabric-first; no internal
+  // VirtualizedList so no nested-scroll warning; built-in haptic feedback on
+  // drag activation. Replaced react-native-draggable-flatlist which had a
+  // Fabric-incompatible enableLayoutAnimationExperimental flag and a
+  // documented post-reorder flicker (CellRendererComponent's heldTanslate
+  // pattern paints rows at new_natural + stale_translate for one frame
+  // after the React commit, with no user-side workaround).
   const total = categories.length
   const keyExtractor = useCallback((item: SuggestionCategory) => item.id, [])
   const renderItem = useCallback(
-    ({ item, getIndex, drag, isActive }: RenderItemParams<SuggestionCategory>) => {
-      const index = getIndex() ?? 0
+    ({ item, index }: SortableGridRenderItemInfo<SuggestionCategory>) => {
       const rowState: RowState = {
         category: item,
         duplicateLabel: duplicateIds.has(item.id),
@@ -658,8 +654,6 @@ function PhoneList({
           fallbackColor={fallbackColor}
           fallbackColorLabel={fallbackColorLabel}
           disabled={disabled}
-          drag={drag}
-          isActive={isActive}
         />
       )
     },
@@ -672,16 +666,19 @@ function PhoneList({
   )
 
   return (
-    <DraggableFlatList
+    <Sortable.Grid
+      columns={1}
       data={categories}
       keyExtractor={keyExtractor}
       renderItem={renderItem}
       onDragEnd={onDragEnd}
-      scrollEnabled={false}
-      activationDistance={0}
+      customHandle
+      hapticsEnabled
+      sortEnabled={!disabled}
+      dragActivationDelay={250}
     />
   )
 }
 
 export { SuggestionCategoriesEditor }
-export type { SuggestionCategory, SuggestionCategoriesEditorProps }
+export type { SuggestionCategoriesEditorProps, SuggestionCategory }
