@@ -68,6 +68,10 @@ type SearchableOverlayListProps<T> = {
   renderFooter?: () => ReactNode
 
   onActivate: (row: Row<T>) => void
+  // Optional consumer signal for the X clear button. In as-trigger mode this is the
+  // "unset the committed value" gesture — wire to setPicked(null) or equivalent so
+  // X clears both the input text and the consumer's selection.
+  onClear?: () => void
 
   autofocusSearch?: 'always' | 'except-phone'
   escClearsQueryFirst?: boolean
@@ -416,6 +420,9 @@ type SearchInputProps = {
   onSubmitEditing?: ComponentProps<typeof Input>['onSubmitEditing']
   onFocus?: ComponentProps<typeof Input>['onFocus']
   onBlur?: ComponentProps<typeof Input>['onBlur']
+  // Override for the X clear button. When provided, X press calls this instead of
+  // clearing the query directly — lets Shape 1 bundle close-popover + onClear-signal.
+  onClear?: () => void
   autoFocus?: boolean
   // Only set when the listbox is actually mounted in the DOM — aria-controls
   // referencing a missing id is an a11y violation.
@@ -459,6 +466,7 @@ function SearchInput({
   onSubmitEditing,
   onFocus,
   onBlur,
+  onClear,
   autoFocus,
   listboxId,
   expanded = true,
@@ -493,7 +501,9 @@ function SearchInput({
       // its underlying DOM shape (bare TextInput vs wrapped) based on whether trailing
       // is present — conditionally rendering it would re-key the TextInput on first
       // keystroke and silently lose focus mid-type. Same pattern shipped Autocomplete uses.
-      trailing={<ClearButton visible={query.length > 0} onPress={() => onQueryChange('')} />}
+      trailing={
+        <ClearButton visible={query.length > 0} onPress={onClear ?? (() => onQueryChange(''))} />
+      }
       className={className}
     />
   )
@@ -726,6 +736,7 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
   const {
     sections,
     onActivate,
+    onClear,
     valueLabel,
     searchPlaceholder,
     renderRow,
@@ -806,6 +817,22 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
     blurTimerRef.current = setTimeout(() => setOpen(false), 200)
   }, [])
 
+  // X (the input's clear button) — combobox-clear gesture. Sets query to empty AND closes
+  // the popover AND signals the consumer to unset the committed value. The setTimeout(0)
+  // is defensive: RN-Web clicks inside the input wrapper can re-focus the input which
+  // triggers handleFocus → setOpen(true); deferring an extra setOpen(false) to the next
+  // microtask reliably overrides any focus-induced re-open.
+  const handleClearText = useCallback(() => {
+    setQuery('')
+    setOpen(false)
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current)
+      blurTimerRef.current = null
+    }
+    setTimeout(() => setOpen(false), 0)
+    onClear?.()
+  }, [setQuery, onClear])
+
   const activate = useCallback(
     (row: Row<T>) => {
       if (row.disabled) return
@@ -870,6 +897,7 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
           list.setQuery(v)
           if (!disabled) setOpen(true)
         }}
+        onClear={handleClearText}
         placeholder={searchPlaceholder ?? valueLabel}
         showLeadingGlyph={false}
         onKeyPress={onKeyPress}

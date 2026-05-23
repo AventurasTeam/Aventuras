@@ -153,6 +153,7 @@ export default function SearchableOverlayListDevRoute() {
                 </Text>
               )}
               onActivate={(row) => setPicked3(row.data)}
+              onClear={() => setPicked3(null)}
             />
             <Text size="xs" variant="muted">
               picked: {picked3 ? picked3.name : 'nothing'}

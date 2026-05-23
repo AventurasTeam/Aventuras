@@ -137,6 +137,7 @@ function AsTriggerDemo() {
           </View>
         )}
         onActivate={(row) => setPicked(row.data)}
+        onClear={() => setPicked(null)}
       />
       <Text variant="muted" size="xs">
         picked: {picked ? `${picked.name} (${picked.capital})` : 'nothing'}
