@@ -900,7 +900,8 @@ const SortablePhoneRow = memo(function SortablePhoneRow({
             <GestureDetector gesture={handlePanGestureHandler}>
               <Animated.View style={disabled ? dragHandleDisabledStyle : dragHandleStaticStyle}>
                 <View
-                  accessibilityRole={disabled ? 'image' : 'button'}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !!disabled }}
                   aria-label={
                     disabled ? 'Drag handle (disabled)' : 'Long-press to drag and reorder'
                   }
