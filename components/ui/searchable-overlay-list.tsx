@@ -210,15 +210,27 @@ type RowListProps<T> = {
   variant: 'inline' | 'sheet'
   listboxId: string
   rowIdPrefix: string
-  // When true, the consumer renders a sticky footer below the list — skip the
-  // keyboard-height bottom padding (the footer already anchors against the keyboard,
-  // doubling the padding produces a visible gap).
-  hasFooter?: boolean
   className?: string
   style?: ViewStyle
 }
 
 const ROW_DIVIDER = <View className="mx-3 h-px bg-border" />
+
+// Sheet content wrapper that pads the bottom by keyboard height on Android — the Sheet
+// primitive's RN built-in KeyboardAvoidingView only behaves correctly on iOS
+// (`behavior='padding'`); on Android (behavior=undefined) nothing lifts, so the footer
+// + last list rows end up behind the keyboard. Padding here lifts the whole body
+// (SearchInput + list + footer) together on Android while iOS continues to rely on
+// Sheet's KAV. No-op on web (useKeyboardHeight returns 0).
+function SheetKeyboardWrapper({ children }: { children: ReactNode }) {
+  const keyboardHeight = useKeyboardHeight()
+  const pad = Platform.OS === 'android' ? keyboardHeight : 0
+  return <View style={paddingBottomStyle(pad)}>{children}</View>
+}
+
+function paddingBottomStyle(value: number): ViewStyle {
+  return { paddingBottom: value }
+}
 
 // Native side uses SectionList for free sticky headers when any section requests them.
 function RowListNative<T>({
@@ -231,16 +243,12 @@ function RowListNative<T>({
   variant,
   listboxId,
   rowIdPrefix,
-  hasFooter,
   className,
   style,
 }: RowListProps<T>) {
-  // Sheet variant pads the scroll content by keyboard height so the last rows can
-  // scroll above the keyboard. When the consumer renders a sticky footer, the footer
-  // is already the bottom anchor and this padding double-counts (visible gap between
-  // last item and keyboard) — skip in that case.
-  const keyboardHeight = useKeyboardHeight()
-  const applyKeyboardPad = variant === 'sheet' && keyboardHeight > 0 && !hasFooter
+  // Keyboard avoidance is handled at the body level (SheetKeyboardWrapper, Android-only)
+  // rather than via list contentContainerStyle padding — the body-wrapper lifts the
+  // footer too, while list-level padding only helped the list itself.
   const isEmpty = sections.every((s) => s.rows.length === 0)
   if (isEmpty) {
     return (
@@ -264,7 +272,6 @@ function RowListNative<T>({
       keyboardShouldPersistTaps="handled"
       className={className}
       style={style}
-      contentContainerStyle={applyKeyboardPad ? { paddingBottom: keyboardHeight } : undefined}
       ItemSeparatorComponent={variant === 'sheet' ? () => ROW_DIVIDER : undefined}
       nativeID={listboxId}
       accessibilityRole={Platform.OS === 'web' ? undefined : 'list'}
@@ -656,7 +663,6 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
         variant={isPhone ? 'sheet' : 'inline'}
         listboxId={listboxId}
         rowIdPrefix={rowIdPrefix}
-        hasFooter={renderFooter != null}
         // Sheet has p-6 outer padding — bleed rows full-width via -mx-6 so dividers /
         // tint hover reach the sheet edge. Popover has p-4 + lighter row chrome, so no
         // bleed (rows respect the container padding; text aligns with the search field).
@@ -680,7 +686,7 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
           ariaLabelledBy={ariaLabelledBy}
         >
           <SheetContent anchor="bottom" size={sheetSize}>
-            {body}
+            <SheetKeyboardWrapper>{body}</SheetKeyboardWrapper>
           </SheetContent>
         </Sheet>
       </>
@@ -730,7 +736,7 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
   const list = useSearchableList(props)
   // Pull stable function refs out of `list` so downstream useCallbacks don't depend on the
   // whole-object reference (which is new every render) — preserves Input focus across renders.
-  const { setQuery, resetOnOpen, moveHighlight, query: currentQuery, highlightedId } = list
+  const { setQuery, moveHighlight, query: currentQuery, highlightedId } = list
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef<View>(null)
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -743,13 +749,6 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
     width: number
     height: number
   } | null>(null)
-
-  // Ref to the most recent valueLabel so deferred callbacks (blur timer, post-activate
-  // microtask) sync to the value committed AFTER React flushes consumer state updates.
-  const valueLabelRef = useRef(valueLabel)
-  useEffect(() => {
-    valueLabelRef.current = valueLabel
-  }, [valueLabel])
 
   useEffect(
     () => () => {
@@ -776,38 +775,40 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
     }
   }, [open, updateAnchor])
 
-  // Focus opens + seeds query from valueLabel (combobox idiom: the field shows the
-  // committed value, editable). Blur deferred-closes so a Pressable row press can
-  // register before the dropdown unmounts. Typing flows through onChangeText below —
-  // we explicitly do NOT seed on every open transition because typing-triggered opens
-  // would wipe the typed character.
+  // Combobox sync model: the input value tracks query (substrate state); query is
+  // updated by (a) user typing / clearing — preserved across focus cycles — and (b) an
+  // EXTERNAL commit, when the consumer's valueLabel changes from a pick. The earlier
+  // "reset to valueLabel on blur" actively undid the user's edits when they backspaced
+  // and clicked away; preserving typed text is the standard combobox UX.
+  useEffect(() => {
+    // Intentionally only watching valueLabel: typing / clearing updates query directly
+    // via setQuery and must not re-trigger this sync. setQuery itself is stable (useCallback
+    // with [onQueryChange] which is the consumer's stable setter).
+    setQuery(valueLabel ?? '')
+  }, [valueLabel, setQuery])
+
   const handleFocus = useCallback(() => {
     if (blurTimerRef.current) {
       clearTimeout(blurTimerRef.current)
       blurTimerRef.current = null
     }
     if (disabled) return
-    resetOnOpen()
     setOpen(true)
-  }, [disabled, resetOnOpen])
+  }, [disabled])
   const handleBlur = useCallback(() => {
-    blurTimerRef.current = setTimeout(() => {
-      setOpen(false)
-      // Combobox idiom: closed state shows the committed value, not the typed-discarded text.
-      setQuery(valueLabelRef.current || '')
-    }, 200)
-  }, [setQuery])
+    // Deferred close so a Pressable row press can register before the dropdown unmounts.
+    blurTimerRef.current = setTimeout(() => setOpen(false), 200)
+  }, [])
 
   const activate = useCallback(
     (row: Row<T>) => {
       if (row.disabled) return
       setOpen(false)
       onActivate(row)
-      // Enter-to-pick doesn't fire blur; defer one tick to let the consumer's state
-      // update propagate (valueLabelRef refreshes), then sync the input to it.
-      setTimeout(() => setQuery(valueLabelRef.current || ''), 0)
+      // Input sync happens via the valueLabel useEffect once the consumer's state propagates —
+      // works for both click-pick (after the blur timer's setOpen no-op) and Enter-pick.
     },
-    [onActivate, setQuery],
+    [onActivate],
   )
 
   const onSubmit = useCallback(() => {
