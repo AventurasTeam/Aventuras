@@ -210,9 +210,15 @@ type RowListProps<T> = {
   variant: 'inline' | 'sheet'
   listboxId: string
   rowIdPrefix: string
+  // When true, the consumer renders a sticky footer below the list — skip the
+  // keyboard-height bottom padding (the footer already anchors against the keyboard,
+  // doubling the padding produces a visible gap).
+  hasFooter?: boolean
   className?: string
   style?: ViewStyle
 }
+
+const ROW_DIVIDER = <View className="mx-3 h-px bg-border" />
 
 // Native side uses SectionList for free sticky headers when any section requests them.
 function RowListNative<T>({
@@ -225,14 +231,16 @@ function RowListNative<T>({
   variant,
   listboxId,
   rowIdPrefix,
+  hasFooter,
   className,
   style,
 }: RowListProps<T>) {
-  // Sheet variant pads the scroll content by keyboard height so the last rows /
-  // footer can scroll above the keyboard rather than sit behind it. The Sheet's
-  // KeyboardAvoidingView lifts the panel itself, but a tall list pinned at the
-  // bottom still needs scroll-into-view room. No-op for non-sheet variants.
+  // Sheet variant pads the scroll content by keyboard height so the last rows can
+  // scroll above the keyboard. When the consumer renders a sticky footer, the footer
+  // is already the bottom anchor and this padding double-counts (visible gap between
+  // last item and keyboard) — skip in that case.
   const keyboardHeight = useKeyboardHeight()
+  const applyKeyboardPad = variant === 'sheet' && keyboardHeight > 0 && !hasFooter
   const isEmpty = sections.every((s) => s.rows.length === 0)
   if (isEmpty) {
     return (
@@ -256,9 +264,8 @@ function RowListNative<T>({
       keyboardShouldPersistTaps="handled"
       className={className}
       style={style}
-      contentContainerStyle={
-        variant === 'sheet' && keyboardHeight > 0 ? { paddingBottom: keyboardHeight } : undefined
-      }
+      contentContainerStyle={applyKeyboardPad ? { paddingBottom: keyboardHeight } : undefined}
+      ItemSeparatorComponent={variant === 'sheet' ? () => ROW_DIVIDER : undefined}
       nativeID={listboxId}
       accessibilityRole={Platform.OS === 'web' ? undefined : 'list'}
       renderSectionHeader={({ section }) =>
@@ -343,8 +350,9 @@ function RowListWeb<T>({
               )}
             </View>
           ) : null}
-          {section.rows.map((row) => {
+          {section.rows.map((row, rowIdx) => {
             const highlighted = row.id === highlightedId
+            const isLastInSection = rowIdx === section.rows.length - 1
             return (
               <Pressable
                 key={row.id}
@@ -356,6 +364,8 @@ function RowListWeb<T>({
                 className={cn(
                   ROW_BASE,
                   rowClass,
+                  // Hairline divider under each row except the last in its section.
+                  !isLastInSection && 'border-b border-border',
                   highlighted && 'bg-tint-hover',
                   row.disabled && 'opacity-50',
                 )}
@@ -406,6 +416,27 @@ type SearchInputProps = {
   className?: string
 }
 
+// Always-rendered clear button with visibility-only toggle. The Input primitive
+// switches its internal DOM shape (bare TextInput vs wrapped) based on whether
+// trailing is present — conditionally rendering this would re-key the TextInput on
+// first keystroke and silently lose focus mid-type. Mirrors shipped Autocomplete.
+function ClearButton({ visible, onPress }: { visible: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!visible}
+      hitSlop={8}
+      accessibilityRole="button"
+      aria-label="Clear search"
+      accessibilityElementsHidden={!visible}
+      importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
+      className={cn('p-1 active:opacity-70', !visible && 'opacity-0')}
+    >
+      <Icon as={X} size="sm" className="text-fg-muted" />
+    </Pressable>
+  )
+}
+
 function SearchInput({
   query,
   onQueryChange,
@@ -445,19 +476,11 @@ function SearchInput({
       leading={
         showLeadingGlyph ? <Icon as={Search} size="sm" className="text-fg-muted" /> : undefined
       }
-      trailing={
-        query.length > 0 ? (
-          <Pressable
-            onPress={() => onQueryChange('')}
-            hitSlop={8}
-            accessibilityRole="button"
-            aria-label="Clear search"
-            className="p-1 active:opacity-70"
-          >
-            <Icon as={X} size="sm" className="text-fg-muted" />
-          </Pressable>
-        ) : undefined
-      }
+      // Always-rendered ClearButton, visibility-toggled. The Input primitive switches
+      // its underlying DOM shape (bare TextInput vs wrapped) based on whether trailing
+      // is present — conditionally rendering it would re-key the TextInput on first
+      // keystroke and silently lose focus mid-type. Same pattern shipped Autocomplete uses.
+      trailing={<ClearButton visible={query.length > 0} onPress={() => onQueryChange('')} />}
       className={className}
     />
   )
@@ -633,6 +656,7 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
         variant={isPhone ? 'sheet' : 'inline'}
         listboxId={listboxId}
         rowIdPrefix={rowIdPrefix}
+        hasFooter={renderFooter != null}
         // Sheet has p-6 outer padding — bleed rows full-width via -mx-6 so dividers /
         // tint hover reach the sheet edge. Popover has p-4 + lighter row chrome, so no
         // bleed (rows respect the container padding; text aligns with the search field).
@@ -704,6 +728,9 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
   } = props
 
   const list = useSearchableList(props)
+  // Pull stable function refs out of `list` so downstream useCallbacks don't depend on the
+  // whole-object reference (which is new every render) — preserves Input focus across renders.
+  const { setQuery, resetOnOpen, moveHighlight, query: currentQuery, highlightedId } = list
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef<View>(null)
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -716,6 +743,13 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
     width: number
     height: number
   } | null>(null)
+
+  // Ref to the most recent valueLabel so deferred callbacks (blur timer, post-activate
+  // microtask) sync to the value committed AFTER React flushes consumer state updates.
+  const valueLabelRef = useRef(valueLabel)
+  useEffect(() => {
+    valueLabelRef.current = valueLabel
+  }, [valueLabel])
 
   useEffect(
     () => () => {
@@ -753,31 +787,35 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
       blurTimerRef.current = null
     }
     if (disabled) return
-    list.resetOnOpen()
+    resetOnOpen()
     setOpen(true)
-  }, [disabled, list])
+  }, [disabled, resetOnOpen])
   const handleBlur = useCallback(() => {
     blurTimerRef.current = setTimeout(() => {
       setOpen(false)
-      list.resetOnClose()
+      // Combobox idiom: closed state shows the committed value, not the typed-discarded text.
+      setQuery(valueLabelRef.current || '')
     }, 200)
-  }, [list])
+  }, [setQuery])
 
   const activate = useCallback(
     (row: Row<T>) => {
       if (row.disabled) return
       setOpen(false)
       onActivate(row)
+      // Enter-to-pick doesn't fire blur; defer one tick to let the consumer's state
+      // update propagate (valueLabelRef refreshes), then sync the input to it.
+      setTimeout(() => setQuery(valueLabelRef.current || ''), 0)
     },
-    [onActivate],
+    [onActivate, setQuery],
   )
 
   const onSubmit = useCallback(() => {
-    if (list.highlightedId != null) {
-      const found = findRowSection(sections, list.highlightedId)
+    if (highlightedId != null) {
+      const found = findRowSection(sections, highlightedId)
       if (found && !found.row.disabled) activate(found.row)
     }
-  }, [list.highlightedId, sections, activate])
+  }, [highlightedId, sections, activate])
 
   const onKeyPress = useCallback(
     (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
@@ -786,18 +824,18 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
       if (key === 'ArrowDown') {
         e.preventDefault?.()
         setOpen(true)
-        list.moveHighlight(1)
+        moveHighlight(1)
       } else if (key === 'ArrowUp') {
         e.preventDefault?.()
         setOpen(true)
-        list.moveHighlight(-1)
+        moveHighlight(-1)
       } else if (key === 'Escape') {
         e.preventDefault?.()
-        if (escClearsQueryFirst && list.query.length > 0) list.setQuery('')
+        if (escClearsQueryFirst && currentQuery.length > 0) setQuery('')
         else setOpen(false)
       }
     },
-    [list, escClearsQueryFirst],
+    [moveHighlight, currentQuery, setQuery, escClearsQueryFirst],
   )
 
   const popoverStyle: ViewStyle | undefined =
