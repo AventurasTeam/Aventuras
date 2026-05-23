@@ -265,8 +265,16 @@ regardless of scroll position.
   miss can fall through to footer-click with the id already
   populated). Subsequent composer opens in the same session don't
   re-prefill — avoids state leakage.
-- **`Under:` dropdown** — provider selector. Default: current
-  selection's provider if any, otherwise the provider pointed to by
+- **`Under:` selector** — provider picker rendered as an inline
+  expandable dropdown: a trigger button (`Under: <Provider> ▾`) that
+  expands a panel directly below within the composer when tapped, no
+  Portal and no overlay. The panel caps at ~5 rows with internal
+  scroll so a long provider list can't push the Cancel / Add row
+  off-screen. The standard project `Select` is **not** used here —
+  on phone its Sheet would nest inside the picker's own Sheet (banned
+  by [`overlays.md`](./overlays.md)) and would land behind the
+  Input's keyboard regardless. Default: current selection's provider
+  if any, otherwise the provider pointed to by
   `app_settings.default_provider_id`. No auto-detection from
   modelId pattern — explicit pick only.
 - **`Cancel`** — return to rest state; discard typed input.
@@ -276,9 +284,10 @@ regardless of scroll position.
   picker re-renders with updated `providers` and the host's
   `onChange` selects the new row.
 
-**Cross-tier behavior.** On phone Sheet the composer reshapes the
-footer in place — no nested Sheet. `Under:`'s dropdown opens its
-own Select-on-Sheet per the existing per-tier rule.
+**Cross-tier behavior.** Identical on every tier: the inline
+expandable `Under:` (above) means the composer never opens a nested
+overlay. The desktop and phone surfaces differ only in the host
+overlay (Popover vs Sheet) the composer rides inside of.
 
 ## Search behavior
 

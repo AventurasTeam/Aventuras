@@ -1,6 +1,6 @@
-import { Brain, ChevronDown, Star, TriangleAlert, Wrench } from 'lucide-react-native'
+import { Brain, ChevronDown, ChevronUp, Star, TriangleAlert, Wrench } from 'lucide-react-native'
 import { useCallback, useMemo, useState, type Ref } from 'react'
-import { Pressable, View } from 'react-native'
+import { Pressable, ScrollView, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
@@ -11,7 +11,6 @@ import {
   type Section,
   type TriggerProps,
 } from '@/components/ui/searchable-overlay-list'
-import { Select, type SelectOption } from '@/components/ui/select'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
@@ -275,11 +274,6 @@ function CustomAddComposer({ providers, query, defaultProviderId, onCommit }: Co
     setModelIdInput('')
   }, [isValid, onCommit, providerId, trimmedModelId])
 
-  const providerOptions: SelectOption[] = useMemo(
-    () => providers.map((p) => ({ value: p.id, label: p.name })),
-    [providers],
-  )
-
   if (!expanded) {
     return (
       <Button variant="ghost" onPress={open}>
@@ -305,13 +299,7 @@ function CustomAddComposer({ providers, query, defaultProviderId, onCommit }: Co
           Under:
         </Text>
         <View className="flex-1">
-          <Select
-            options={providerOptions}
-            value={providerId}
-            onValueChange={setProviderId}
-            mode="dropdown"
-            size="sm"
-          />
+          <ProviderInlinePicker providers={providers} value={providerId} onChange={setProviderId} />
         </View>
       </View>
       <View className="flex-row justify-end gap-2">
@@ -325,6 +313,79 @@ function CustomAddComposer({ providers, query, defaultProviderId, onCommit }: Co
     </View>
   )
 }
+
+type ProviderInlinePickerProps = {
+  providers: ProviderSource[]
+  value: string
+  onChange: (id: string) => void
+}
+
+// Inline expandable provider picker. Looks like a Select trigger when closed;
+// tapping expands a panel directly below WITHIN the composer (no Portal, no
+// nested Sheet). The standard project Select would open a Sheet on phone —
+// nesting that inside the picker's own Sheet violates the Sheet-over-Sheet
+// ban from overlays.md and gets occluded by the keyboard regardless. This
+// stays in-flow, dismisses the Input's keyboard naturally when the user taps
+// the trigger (focus moves), and caps the panel at ~5 rows with internal
+// scroll so a long provider list can't push Add/Cancel off-screen.
+const INLINE_PANEL_MAX_HEIGHT = 180
+
+function ProviderInlinePicker({ providers, value, onChange }: ProviderInlinePickerProps) {
+  const [open, setOpen] = useState(false)
+  const selected = providers.find((p) => p.id === value)
+  return (
+    <View className="flex-col">
+      <Pressable
+        accessibilityRole="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onPress={() => setOpen((v) => !v)}
+        className="h-control-md flex-row items-center justify-between gap-2 rounded-md border border-border bg-bg-base px-3"
+      >
+        <Text size="sm" className="text-fg-primary" numberOfLines={1}>
+          {selected?.name ?? 'Pick a provider'}
+        </Text>
+        <Icon as={open ? ChevronUp : ChevronDown} size="sm" className="text-fg-muted" />
+      </Pressable>
+      {open ? (
+        <View
+          className="mt-1 overflow-hidden rounded-md border border-border bg-bg-overlay"
+          style={inlinePanelStyle}
+        >
+          <ScrollView keyboardShouldPersistTaps="handled">
+            {providers.map((p) => {
+              const isSelected = p.id === value
+              return (
+                <Pressable
+                  key={p.id}
+                  role="option"
+                  aria-selected={isSelected}
+                  onPress={() => {
+                    onChange(p.id)
+                    setOpen(false)
+                  }}
+                  className={cn(
+                    'w-full flex-row items-center gap-2 px-row-x-md py-row-y-md active:bg-tint-press',
+                    isSelected && 'bg-bg-sunken',
+                  )}
+                >
+                  <Text size="sm" className="w-4 text-fg-primary">
+                    {isSelected ? '✓' : ''}
+                  </Text>
+                  <Text size="sm" className="flex-1 text-fg-primary" numberOfLines={1}>
+                    {p.name}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </ScrollView>
+        </View>
+      ) : null}
+    </View>
+  )
+}
+
+const inlinePanelStyle = { maxHeight: INLINE_PANEL_MAX_HEIGHT } as const
 
 function ProviderModelPicker({
   value,
