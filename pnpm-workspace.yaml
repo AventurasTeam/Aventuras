@@ -10,3 +10,5 @@ onlyBuiltDependencies:
 # whose export map breaks the preset loader. Force the tree to a single copy.
 overrides:
   '@storybook/react-dom-shim': '10.3.5'
+patchedDependencies:
+  react-native-reanimated-dnd: patches/react-native-reanimated-dnd.patch

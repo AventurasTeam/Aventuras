@@ -36,6 +36,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated'
 import { useSortableList, useSortable as useSortableNative } from 'react-native-reanimated-dnd'
+import { runOnUISync } from 'react-native-worklets'
 
 import { Button } from '@/components/ui/button'
 import { ColorPicker, type ColorValue } from '@/components/ui/color-picker'
@@ -588,38 +589,20 @@ type PhoneListProps = {
   categories: SuggestionCategory[]
 }
 
-function PhoneList(props: PhoneListProps) {
-  const idSetKey = useMemo(
-    () =>
-      props.categories
-        .map((c) => c.id)
-        .sort()
-        .join('|'),
-    [props.categories],
-  )
-
-  return <PhoneListSortable key={idSetKey} {...props} />
-}
-
 const EMPTY_EXPANDED_SET: ReadonlySet<string> = new Set()
 
-function useToggleExpanded(
-  setExpandedIds: (updater: (prev: ReadonlySet<string>) => ReadonlySet<string>) => void,
-) {
-  return useCallback(
-    (id: string) => {
-      setExpandedIds((prev) => {
-        const next = new Set(prev)
-        if (next.has(id)) next.delete(id)
-        else next.add(id)
-        return next
-      })
-    },
-    [setExpandedIds],
-  )
+// Build the lib's positions map ({ [id]: index }) from the category array. Matches
+// react-native-reanimated-dnd's internal listToObject; inlined because the lib doesn't
+// re-export it.
+function buildPositions(categories: SuggestionCategory[]): { [id: string]: number } {
+  const positions: { [id: string]: number } = {}
+  for (let i = 0; i < categories.length; i++) {
+    positions[categories[i]!.id] = i
+  }
+  return positions
 }
 
-function PhoneListSortable({
+function PhoneList({
   rowStates,
   handlers,
   swatches,
@@ -630,7 +613,14 @@ function PhoneListSortable({
   disabled,
 }: PhoneListProps) {
   const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(EMPTY_EXPANDED_SET)
-  const toggleExpanded = useToggleExpanded(setExpandedIds)
+  const toggleExpanded = useCallback((id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
   const density = useDensity()
   const sortableList = useSortableList<SuggestionCategory>({
     data: categories,
@@ -638,6 +628,47 @@ function PhoneListSortable({
     estimatedItemHeight: COLLAPSED_ROW_HEIGHT_BY_DENSITY[density.resolved],
     itemKeyExtractor: (item) => item.id,
   })
+
+  // useSortableList initializes `positions` once and never updates it when `data` changes
+  // (the lib's data-effect only resyncs `itemHeights`). Without this sync, adding or deleting
+  // a category leaves the lib's positions map stale — the previous workaround was to remount
+  // the whole subtree via key={idSetKey}, which destroyed expanded state, replayed the chevron
+  // animation, and let `overflow-hidden` clip rows under the still-springing container height.
+  //
+  // The write MUST be synchronous and happen during render (before children mount). The lib's
+  // useSortable captures `initialTopVal = positions.get()[id] * estimatedItemHeight` in a
+  // useMemo with empty deps on the new row's first render — if positions doesn't include the
+  // new id at that moment, initialTopVal is 0 and the new row paints over row 0 until the
+  // user touches it (which forces the lib to re-resolve from positions on the UI thread).
+  //
+  // Plain `positionsSV.value = ...` from JS only SCHEDULES a UI-thread write (Reanimated 4
+  // mutables, see node_modules/.../mutables.js makeMutableNative). The subsequent .get() in
+  // the lib calls runOnUISync to fetch the UI-side value, which hasn't been updated yet, so
+  // the lib still sees the stale map. Using runOnUISync ourselves forces the write to happen
+  // synchronously on the UI thread before we proceed to render children.
+  //
+  // Safe to do here: drag is worklet-only and can't overlap an add/delete from the user. On
+  // reorder the lib has already written the new map, so the sort-keyed signature skips the
+  // redundant write for that path.
+  const positionsSV = sortableList.positions
+  const idSetSignature = useMemo(
+    () =>
+      categories
+        .map((c) => c.id)
+        .slice()
+        .sort()
+        .join('|'),
+    [categories],
+  )
+  const lastSyncedSignatureRef = useRef<string | null>(null)
+  if (lastSyncedSignatureRef.current !== idSetSignature) {
+    const next = buildPositions(categories)
+    runOnUISync(() => {
+      'worklet'
+      positionsSV.value = next
+    })
+    lastSyncedSignatureRef.current = idSetSignature
+  }
 
   const itemHeightsSV = sortableList.itemHeights
   const targetHeight = useDerivedValue(() => {
@@ -659,12 +690,31 @@ function PhoneListSortable({
     return map
   }, [rowStates])
 
+  // Latest-categories ref so handleMove validates against current state, not the closure-
+  // captured array. The lib re-creates its useAnimatedReaction when onMove changes, but the
+  // OLD reaction (with the old handleMove closure) can fire one last time during our
+  // runOnUISync write before React commits and tears it down. That stale closure sees the
+  // pre-delete array, so validations against `categories` pass spuriously and arrayMove
+  // reintroduces the deleted row. Updating the ref during render keeps it ahead of any
+  // queued onMove.
+  const categoriesRef = useRef(categories)
+  categoriesRef.current = categories
   const handleMove = useCallback(
-    (_id: string, from: number, to: number) => {
+    (id: string, from: number, to: number) => {
+      // The lib fires onMove for every position change, not just drags — including the
+      // index-shifts that ripple through remaining rows when we delete one (e.g. row at
+      // index 2 becomes index 1) AND the position-becomes-undefined event for the deleted
+      // row itself. Validate against the latest categories ref and reject non-number
+      // arguments (to=undefined when the deleted row's reaction fires).
+      if (typeof from !== 'number' || typeof to !== 'number') return
       if (from === to) return
-      onReorder(arrayMove(categories, from, to))
+      const current = categoriesRef.current
+      if (from < 0 || from >= current.length) return
+      if (to < 0 || to >= current.length) return
+      if (current[from]?.id !== id) return
+      onReorder(arrayMove(current, from, to))
     },
-    [categories, onReorder],
+    [onReorder],
   )
 
   const [draggedId, setDraggedId] = useState<string | null>(null)
