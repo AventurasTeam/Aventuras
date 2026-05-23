@@ -78,6 +78,29 @@ class ScenarioVaultStore {
     return this.scenarios.find((s) => s.id === id)
   }
 
+  /**
+   * Duplicate a scenario with a new ID and "(Copy)" suffix.
+   */
+  async duplicate(id: string): Promise<VaultScenario | null> {
+    const original = this.getById(id)
+    if (!original) return null
+
+    return this.add({
+      name: `${original.name} (Copy)`,
+      description: original.description,
+      settingSeed: original.settingSeed,
+      npcs: original.npcs.map((npc) => ({ ...npc })),
+      primaryCharacterName: original.primaryCharacterName,
+      firstMessage: original.firstMessage,
+      alternateGreetings: [...(original.alternateGreetings || [])],
+      tags: [...original.tags],
+      favorite: false,
+      source: original.source,
+      originalFilename: null,
+      metadata: original.metadata ? { ...original.metadata } : null,
+    })
+  }
+
   async search(query: string): Promise<VaultScenario[]> {
     if (!query.trim()) {
       return this.scenarios

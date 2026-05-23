@@ -2,7 +2,7 @@
   import { Card, CardContent } from '$lib/components/ui/card'
   import { Button } from '$lib/components/ui/button'
   import IconRow from '$lib/components/ui/icon-row.svelte'
-  import { Star, Pencil, Loader2 } from 'lucide-svelte'
+  import { Star, Pencil, Loader2, Download, Copy } from 'lucide-svelte'
   import { cn } from '$lib/utils/cn'
   import type { Snippet } from 'svelte'
 
@@ -17,6 +17,8 @@
     onEdit?: () => void
     onDelete?: () => void
     onToggleFavorite?: () => void
+    onExport?: () => void
+    onDuplicate?: () => void
     onSelect?: () => void
 
     // Styling
@@ -38,6 +40,8 @@
     onEdit,
     onDelete,
     onToggleFavorite,
+    onExport,
+    onDuplicate,
     onSelect,
     class: className,
     icon,
@@ -112,7 +116,7 @@
           </div>
 
           <!-- Actions -->
-          {#if !selectable && (onEdit || onDelete || onToggleFavorite)}
+          {#if !selectable && (onEdit || onDelete || onToggleFavorite || onExport || onDuplicate)}
             <IconRow class="-mt-2" size="icon" {onDelete}>
               {#if onToggleFavorite}
                 <Button
@@ -145,6 +149,34 @@
                     onEdit?.()
                   }}
                   title="Edit"
+                />
+              {/if}
+              {#if onExport}
+                <Button
+                  icon={Download}
+                  variant="ghost"
+                  size="icon"
+                  class="hover:text-foreground text-muted-foreground h-3.5 w-5 transition-all hover:bg-transparent"
+                  iconClass="h-3.5 w-3.5"
+                  onclick={(e) => {
+                    e.stopPropagation()
+                    onExport?.()
+                  }}
+                  title="Export"
+                />
+              {/if}
+              {#if onDuplicate}
+                <Button
+                  icon={Copy}
+                  variant="ghost"
+                  size="icon"
+                  class="hover:text-foreground text-muted-foreground h-3.5 w-5 transition-all hover:bg-transparent"
+                  iconClass="h-3.5 w-3.5"
+                  onclick={(e) => {
+                    e.stopPropagation()
+                    onDuplicate?.()
+                  }}
+                  title="Duplicate"
                 />
               {/if}
             </IconRow>
