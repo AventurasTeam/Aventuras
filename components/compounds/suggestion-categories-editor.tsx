@@ -24,7 +24,6 @@ import Animated, {
   LinearTransition,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated'
 import { runOnJS } from 'react-native-worklets'
@@ -383,8 +382,6 @@ type PhoneDragShared = {
   dragY: ReturnType<typeof useSharedValue<number>>
 }
 
-const SIBLING_SPRING = { damping: 22, stiffness: 240, mass: 0.7 } as const
-
 // Release transition: linear easing + matched durations on the row's layout
 // animation AND the worklet's translateY → 0 ramp let the two cancel out so
 // the dragged row visually holds still while the DOM reorder lands.
@@ -434,13 +431,14 @@ function PhoneAccordionRow({
     })
     .onUpdate((e) => {
       if (drag.activeId.value === id) {
-        // Snap-to-grid drag: the active row tracks the nearest target slot
-        // rather than the raw finger position. The finger is the intent
-        // indicator; the row indicates the discrete drop target. Crossing a
-        // row midpoint snaps to the next slot with a short withTiming so
-        // jumps don't feel jarring. This is what makes release motion zero —
-        // dragY is always exactly (V - A) * ROW_H at any moment, so the
-        // post-release layout+transform pair has nothing to cancel.
+        // Snap-to-grid drag, INSTANT (no withTiming). Any in-flight tween at
+        // release time would leave dragY at an intermediate value — the
+        // matched layout+transform release pair only cancels visually when
+        // dragY is exactly (V - A) * ROW_H. The smooth slide we'd get from
+        // withTiming here is the source of the "row moves on release" the
+        // user kept seeing: release-mid-tween left dragY mid-stride and the
+        // residual animated to zero post-release. Hard jumps look slightly
+        // less fluid mid-drag but make release visually motionless.
         const next = Math.max(
           0,
           Math.min(
@@ -450,11 +448,7 @@ function PhoneAccordionRow({
         )
         if (next !== drag.virtualIndex.value) {
           drag.virtualIndex.value = next
-          const snapped = (next - drag.activeStartIndex.value) * PHONE_ROW_HEIGHT_PX
-          drag.dragY.value = withTiming(snapped, {
-            duration: 120,
-            easing: Easing.out(Easing.quad),
-          })
+          drag.dragY.value = (next - drag.activeStartIndex.value) * PHONE_ROW_HEIGHT_PX
         }
       }
     })
@@ -508,8 +502,11 @@ function PhoneAccordionRow({
     let shift = 0
     if (V > A && index > A && index <= V) shift = -PHONE_ROW_HEIGHT_PX
     else if (V < A && index < A && index >= V) shift = PHONE_ROW_HEIGHT_PX
+    // Instant shift for the same reason dragY is instant in onUpdate: any
+    // in-flight spring at release would leave the sibling's transform at a
+    // non-exact value, breaking the matched cancellation.
     return {
-      transform: [{ translateY: withSpring(shift, SIBLING_SPRING) }],
+      transform: [{ translateY: shift }],
     }
   })
 
