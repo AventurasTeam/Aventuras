@@ -199,7 +199,7 @@ const RowContent = memo(function RowContent({
   return (
     <View className="flex-1 flex-row items-start gap-2">
       {showDragHandle ? dragHandle : null}
-      <View className="pt-2">
+      <View className="pt-3">
         <Switch
           checked={category.enabled}
           onCheckedChange={() => onToggleEnabled(category.id)}
@@ -224,7 +224,7 @@ const RowContent = memo(function RowContent({
           </>
         )}
       </View>
-      <View className="pt-1">
+      <View className="pt-2">
         <IconAction
           icon={Trash2}
           label={deleteLabel}
@@ -435,7 +435,14 @@ function SimplePhoneRow({
         </Pressable>
       </View>
       <Collapsible collapsed={!expanded} duration={EXPAND_DURATION_MS} easing="easeOutCubic">
-        <View className="px-3 pb-3">
+        {/* flex-row wrapper is load-bearing: RowContent's outer is
+            `flex-1 flex-row` — in a flex-col parent, `flex-1` means
+            height-shrink, which makes Yoga squish the content when
+            Collapsible applies its measured height back to the wrapper.
+            flex-row context turns `flex-1` into width-grow, so the
+            content stays at natural height. Same fix as the dual-layer
+            measurement attempt. */}
+        <View className="flex-row px-3 pb-3">
           <RowContent
             {...rowState}
             {...handlers}
