@@ -1,6 +1,7 @@
 import { cva, type VariantProps } from 'class-variance-authority'
 import type { LucideIcon } from 'lucide-react-native'
-import { Platform, Pressable, type PressableProps } from 'react-native'
+import type { Ref } from 'react'
+import { Platform, Pressable, type PressableProps, type View } from 'react-native'
 
 import { Icon, type IconSizeVariant } from '@/components/ui/icon'
 import { TextClassContext } from '@/components/ui/text'
@@ -111,6 +112,12 @@ type IconActionProps = Omit<PressableProps, 'children' | 'aria-label'> & {
    * [icon-actions.md → Disabled vs hidden](../../docs/ui/patterns/icon-actions.md#disabled-vs-hidden).
    */
   disabledReason?: string
+  /**
+   * Forwarded to the underlying Pressable. Required when an IconAction is
+   * used as a rn-primitives `<...Trigger asChild>` child — Floating UI
+   * anchors via the injected ref and drops the popover anchor without it.
+   */
+  ref?: Ref<View>
   className?: string
 }
 
@@ -133,6 +140,7 @@ export function IconAction({
   variant = 'default',
   disabled,
   disabledReason,
+  ref,
   className,
   ...props
 }: IconActionProps) {
@@ -141,6 +149,7 @@ export function IconAction({
   const pressable = (
     <TextClassContext.Provider value={iconColorVariants({ tone })}>
       <Pressable
+        ref={ref}
         accessibilityRole="button"
         accessibilityLabel={accessibleName}
         aria-label={accessibleName}
