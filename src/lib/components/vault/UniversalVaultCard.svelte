@@ -28,6 +28,8 @@
     onEdit?: () => void
     onDelete?: () => void
     onToggleFavorite?: () => void
+    onExport?: () => void
+    onDuplicate?: () => void
     selectable?: boolean
     onSelect?: () => void
   }
@@ -38,6 +40,8 @@
     onEdit,
     onDelete,
     onToggleFavorite,
+    onExport,
+    onDuplicate,
     selectable = false,
     onSelect,
   }: Props = $props()
@@ -88,6 +92,11 @@
       .filter(([_, count]) => count > 0)
       .map(([type, count]) => ({ type, count }))
   })
+
+  // Pre-sliced views to avoid per-render .slice() calls in template
+  const visibleTraits = $derived(asCharacter?.traits.slice(0, 3) ?? [])
+  const visibleEntryCounts = $derived(lorebookEntryCounts.slice(0, 4))
+  const visibleScenarioTags = $derived(scenarioTags.slice(0, 3))
 </script>
 
 <VaultCard
@@ -99,6 +108,8 @@
   {onDelete}
   {onToggleFavorite}
   {onSelect}
+  {onExport}
+  {onDuplicate}
 >
   {#snippet icon()}
     {#if asCharacter}
@@ -172,7 +183,7 @@
     {#if asCharacter}
       {#if asCharacter.traits.length > 0}
         <div class="flex flex-wrap gap-1">
-          {#each asCharacter.traits.slice(0, 3) as trait, i (i)}
+          {#each visibleTraits as trait, i (i)}
             <Badge
               variant="outline"
               class="text-muted-foreground/80 border-muted-foreground/20 min-h-4 px-1.5 py-0 text-[10px] leading-4 font-normal"
@@ -190,7 +201,7 @@
     {:else if asLorebook}
       {#if lorebookEntryCounts.length > 0}
         <div class="flex flex-wrap gap-1.5">
-          {#each lorebookEntryCounts.slice(0, 4) as { type, count } (type)}
+          {#each visibleEntryCounts as { type, count } (type)}
             {@const Icon = entryTypeIcons[type]}
             <div
               class="text-muted-foreground/80 bg-muted/50 border-border/50 flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[10px]"
@@ -237,7 +248,7 @@
             {asScenario.source === 'wizard' ? 'Created' : 'Imported'}
           </Badge>
         {/if}
-        {#each scenarioTags.slice(0, 3) as tag, i (i)}
+        {#each visibleScenarioTags as tag, i (i)}
           <TagBadge name={tag} color={tagStore.getColor(tag, 'scenario')} />
         {/each}
         {#if scenarioTags.length > 3}
