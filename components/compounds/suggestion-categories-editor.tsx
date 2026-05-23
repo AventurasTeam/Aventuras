@@ -807,6 +807,11 @@ function PhoneList({
   )
 }
 
+// useSortable uses containerHeight to compute its auto-scroll viewport bounds; the editor
+// lives inside a host ScrollView, so we disable internal auto-scroll by claiming an
+// effectively-infinite viewport. Number.MAX_SAFE_INTEGER would also work, but the lib
+// arithmetics on this value (clamp, withTiming target) — 9999 stays well under any overflow
+// risk while being clearly "infinite" by intent.
 const SORTABLE_VIRTUAL_CONTAINER_HEIGHT = 9999
 
 type SortablePhoneRowProps = {
