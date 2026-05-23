@@ -721,6 +721,17 @@ function PhoneList({
   const virtualIndex = useSharedValue(-1)
   const dragY = useSharedValue(0)
 
+  // Step 2 of release: array reorder + activeId clear, kicking off the
+  // matched layout+transform release transition. Runs from a UI-thread
+  // animation callback via runOnJS once the pre-reorder snap finishes.
+  const commitReorder = useCallback(
+    (fromIdx: number, toIdx: number) => {
+      if (toIdx !== fromIdx) onReorder(arrayMove(categories, fromIdx, toIdx))
+      activeId.value = null
+    },
+    [categories, onReorder, activeId],
+  )
+
   const finalizeReorder = useCallback(
     (fromId: string, toIdx: number) => {
       const fromIdx = categories.findIndex((c) => c.id === fromId)
@@ -729,16 +740,26 @@ function PhoneList({
         dragY.value = 0
         return
       }
-      // Clear shared values FIRST so sibling rows snap to translateY 0 in the
-      // same frame as the array reorder — they were already visually at their
-      // new positions via transform, and the reordered array puts them there
-      // naturally at translateY 0. Active row similarly: was visually at
-      // virtual position via dragY, now at virtual position naturally.
-      activeId.value = null
-      dragY.value = 0
-      if (toIdx !== fromIdx) onReorder(arrayMove(categories, fromIdx, toIdx))
+      // Pre-reorder snap: animate dragY from the finger-drop value to the
+      // exact target-V offset over 80ms. Without this, an off-center or
+      // past-the-edge drop leaves a residual translateY that the post-release
+      // layout+timing pair then animates back to 0, visually sliding the row
+      // across other rows' space. Setting the start frame's dragY = the
+      // exact target ((V - A) * ROW_H) means the release transition has zero
+      // distance to cancel — the row visually freezes in place when the
+      // reorder commits.
+      const snapTarget = (toIdx - fromIdx) * PHONE_ROW_HEIGHT_PX
+      dragY.value = withTiming(
+        snapTarget,
+        { duration: 80, easing: Easing.out(Easing.quad) },
+        (finished) => {
+          'worklet'
+          if (!finished) return
+          runOnJS(commitReorder)(fromIdx, toIdx)
+        },
+      )
     },
-    [categories, onReorder, activeId, dragY],
+    [categories, commitReorder, activeId, dragY],
   )
 
   const handlePickUp = useCallback(
