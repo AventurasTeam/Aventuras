@@ -16,6 +16,7 @@
   } = $props()
 
   let inputValue = $state('')
+  let textareaRef = $state<HTMLTextAreaElement | null>(null)
 
   function handleKeyDown(e: KeyboardEvent) {
     const isTouch = isTouchDevice()
@@ -32,6 +33,7 @@
     const msg = inputValue.trim()
     if (!msg) return
     inputValue = ''
+    if (textareaRef) textareaRef.scrollTop = 0
     onSend(msg)
   }
 
@@ -47,6 +49,7 @@
   <div class="flex items-end gap-2">
     <Textarea
       bind:value={inputValue}
+      bind:ref={textareaRef}
       onkeydown={handleKeyDown}
       placeholder="Ask me to create characters, organize lorebooks, set up scenarios..."
       rows={2}
