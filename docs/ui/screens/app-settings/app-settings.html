@@ -1207,16 +1207,26 @@
             </div>
           </div>
 
-          <div style="margin: 14px 0 6px;">
+          <div style="margin: 14px 0 6px; position: relative;">
             <span class="add-chip" style="padding: 5px 14px;">+ Add model</span>
-            <span style="font-size: 10px; color: var(--ink-faint); margin-left: 8px;">curated catalog &middot; or import custom files</span>
+            <span style="font-size: 10px; color: var(--ink-faint); margin-left: 8px;">click opens picker</span>
+            <!-- Inline depiction of the three-path picker the chip opens.
+                 Per app-settings.md → Embedding · Add model: curated catalog / HuggingFace id / import custom files. -->
+            <div style="margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-overlay); display: inline-block; font-size: 11px;">
+              <div style="font-weight: 600; margin-bottom: 6px; color: var(--ink);">Add embedding model</div>
+              <div style="display: flex; gap: 16px;">
+                <div><b>Curated catalog</b><div style="color: var(--ink-faint); margin-top: 2px;">licensed, recommended</div></div>
+                <div><b>By HuggingFace id</b><div style="color: var(--ink-faint); margin-top: 2px;">paste org/repo</div></div>
+                <div><b>Import custom files</b><div style="color: var(--ink-faint); margin-top: 2px;">.onnx + tokenizer</div></div>
+              </div>
+            </div>
           </div>
 
           <div class="panel-note" style="font-size: 11px; color: var(--ink-muted); padding: 8px 10px; background: var(--bg-highlight); border-left: 3px solid var(--border); margin: 14px 0 12px;">
             <b>Provider embedders</b> aren't installed; they live on the configured providers' embedding-models lists in <a href="#" data-tab-link="providers" style="color: var(--ink-muted);">Providers</a>. The default selection (which provider + model to use for new stories' embedder) lives in <a href="#" data-tab-link="memory" style="color: var(--ink-muted);">Memory</a>'s Embedder default card. This tab is for installed-local management.
           </div>
 
-          <div class="tab-section"><div class="tab-section-title">Embedding status &middot; across stories <span style="font-size: 10px; color: var(--ink-faint); font-weight: 400;">&middot; <a href="#" id="cross-staleness-toggle" style="color: var(--ink-faint);">show preview (3 stories)</a></span></div></div>
+          <div class="tab-section"><div class="tab-section-title">Embedding status &middot; across stories <span style="font-size: 10px; color: var(--ink-faint); font-weight: 400;">&middot; <a href="#" id="cross-staleness-toggle" style="color: var(--ink-faint);" title="wireframe-only — flips the demo between empty and populated">show preview (3 stories) — wireframe-only</a></span></div></div>
 
           <div id="cross-staleness-empty" style="font-size: 12px; color: var(--ink-muted); font-style: italic; padding: 10px 0;">No stories have pending re-embeds.</div>
 
@@ -1531,8 +1541,19 @@
           <div class="tab-title">Diagnostics</div>
           <div class="tab-subtitle">Power-user / debug surface.</div>
 
+          <!-- Master gate — gates every sub-toggle on this tab.
+               Bound to app_settings.diagnostics.enabled (observability.md).
+               When off, sub-rows render disabled (grey + pointer-events:none). -->
+          <div class="switch-row" role="switch" aria-checked="false" data-master-gate="diagnostics">
+            <div class="switch-row-text">
+              <div class="switch-row-label">Enable diagnostics capture <span style="font-size: 10px; color: var(--ink-faint); font-weight: 400;">&middot; master gate</span></div>
+              <div class="switch-row-hint">single switch controlling the entire diagnostics layer: log sinks, http capture, memory probe writes, the Diagnostics Hub Actions-menu entry, and ring-buffer wipe on flip-OFF. Persisted probe captures are NOT wiped — clear them explicitly. Bound to <code>app_settings.diagnostics.enabled</code>.</div>
+            </div>
+            <span class="toggle"></span>
+          </div>
+
           <div class="panel-note">
-            Heavier observability tooling (global delta-log browser with filters by source / target_table / action_id) is planned as its own panel — see <code>followups.md</code>.
+            Sub-rows below are gated by the master toggle. When the gate is off, every sub-row renders disabled.
           </div>
 
           <div class="switch-row" role="switch" aria-checked="false">
@@ -1543,34 +1564,30 @@
             <span class="toggle"></span>
           </div>
           <div class="field-row">
-            <div class="field-label">view logs</div>
-            <div><span class="prov-actions" style="display: inline-flex;"><span class="a">Open logs&hellip;</span></span></div>
-          </div>
-          <div class="field-row">
-            <div class="field-label">export raw settings</div>
-            <div><span class="prov-actions" style="display: inline-flex;"><span class="a">Export JSON&hellip;</span></span></div>
-          </div>
-          <div class="field-row">
             <div class="field-label">performance</div>
             <div style="font-size: 11px; color: var(--ink-muted); line-height: 1.6;">
               avg request: 1.4s &middot; cache hits: 84% &middot; SQLite size: 12.3 MB
             </div>
           </div>
+          <div class="field-row">
+            <div class="field-label">export raw settings</div>
+            <div><span class="prov-actions" style="display: inline-flex;"><span class="a">Export JSON&hellip;</span></span></div>
+          </div>
 
           <div class="tab-section">
-            <div class="tab-section-title">Memory probe mode <span style="font-size: 10px; color: var(--ink-faint); font-weight: 400;">&middot; master gate</span></div>
+            <div class="tab-section-title">Memory probe</div>
           </div>
 
           <div class="switch-row" role="switch" aria-checked="false">
             <div class="switch-row-text">
               <div class="switch-row-label">enable memory probe</div>
-              <div class="switch-row-hint">when on, stories whose Probe toggle is on capture per-turn retrieval state for diagnostic inspection. Off zeros that cost across the whole app. Existing captures stay inspectable when toggled off.</div>
+              <div class="switch-row-hint">when on, stories whose Probe toggle is on capture per-turn retrieval state for diagnostic inspection. Per-story toggle in Story Settings &middot; Memory. Existing captures stay inspectable when toggled off.</div>
             </div>
             <span class="toggle"></span>
           </div>
           <div class="field-row">
-            <div class="field-label">memory probe screen</div>
-            <div><span class="prov-actions" style="display: inline-flex;"><span class="a">Open memory probe &rarr;</span></span></div>
+            <div class="field-label">Diagnostics Hub</div>
+            <div><span class="prov-actions" style="display: inline-flex;"><span class="a">Open Diagnostics Hub &rarr;</span></span><div style="font-size: 10px; color: var(--ink-faint); margin-top: 4px;">Also available from any screen via Actions (&#x2932;) when the master gate is on.</div></div>
           </div>
         </div>
 

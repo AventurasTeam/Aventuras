@@ -64,6 +64,8 @@ rationale, and decisions live alongside.
 | 8   | Rollback confirmation       | [screens/reader-composer/rollback-confirm/](./screens/reader-composer/rollback-confirm/rollback-confirm.md) |
 | 9   | Plot (threads + happenings) | [screens/plot/](./screens/plot/plot.md)                                                                     |
 | 10  | Chapter Timeline            | [screens/chapter-timeline/](./screens/chapter-timeline/chapter-timeline.md)                                 |
+| 11  | Diagnostics Hub             | [screens/diagnostics/](./screens/diagnostics/diagnostics.md)                                                |
+| 12  | Memory probe                | [screens/memory-probe/](./screens/memory-probe/memory-probe.md)                                             |
 
 ### Power-user / deferred
 
@@ -77,14 +79,10 @@ rationale, and decisions live alongside.
 
 ### Cross-cutting states (not standalone screens)
 
-- Streaming / loading / error inside the reader (error surface
-  locked as system entries — see
-  [reader-composer.md → Error surface](./screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill))
-- Empty states for each list
+- Streaming / loading / error inside the reader — see
+  [reader-composer.md → Error surface](./screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill).
+- Empty states for each list — see
+  [`patterns/lists.md → Empty list / table state`](./patterns/lists.md#empty-list--table-state).
 - Mobile / responsive variants for every surface — contract +
   multi-session plan at
-  [`foundations/mobile/`](./foundations/mobile/README.md). Per-screen
-  retrofits are a session-7+ consumer pass; surfaces with
-  pre-foundations `## Mobile` sections (branch-navigator,
-  rollback-confirm) are interim until reconciled by their per-screen
-  retrofit.
+  [`foundations/mobile/`](./foundations/mobile/README.md).

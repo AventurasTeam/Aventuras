@@ -8,6 +8,12 @@ lives in
 This doc settles the **compound shapes**: component split, API,
 merge-body state machine, diff computation.
 
+Used by:
+
+- [World panel](../screens/world/world.md#collision-review-and-entity-merge)
+  — entity rows surface the collision flag; the Resolve action
+  routes through `CollisionResolveDialog`.
+
 - **`CollisionListRow`** — wraps the shipped
   [`ListRow`](../component-inventory.md#compounds--shipped) with
   a below-row warn-tinted collision strip carrying a `Resolve →`

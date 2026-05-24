@@ -1,7 +1,7 @@
 # Mobile foundations — navigation paradigm (session 2)
 
 Session 2 of the mobile-foundations design pass (per
-[`../ui/foundations/mobile/README.md → Sessions`](../ui/foundations/mobile/README.md#sessions)).
+[`../ui/foundations/mobile/sessions.md → Mobile-foundations sessions`](../ui/foundations/mobile/sessions.md#mobile-foundations-sessions)).
 Pins **how mobile users move around the app** — top-bar inheritance,
 cross-surface navigation, what new chrome (if any) phone gets, and
 how the existing desktop-side stack-aware Return + Settings-icon

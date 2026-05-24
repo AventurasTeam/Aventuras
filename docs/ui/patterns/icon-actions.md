@@ -32,6 +32,9 @@ Used by:
   (`[+]` add icon on the EntityListPane kind-selector row — tooltip
   tracks active kind; empty-state slot carries a labeled CTA to
   compensate for the minimalist icon when the list is empty)
+- [App Settings list-row actions](../screens/app-settings/app-settings.md)
+  (per-row edit / delete on the Providers, Profiles, Embedding
+  models, and Agent-assignments lists)
 
 Future row-shaped surfaces with per-row actions follow the same
 pattern.

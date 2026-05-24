@@ -15,6 +15,13 @@ This doc owns the menu's content, structure, and behavior. Design
 record:
 [`explorations/2026-05-22-actions-menu.md`](../../explorations/2026-05-22-actions-menu.md).
 
+Used by: every screen with chrome — reader-composer, world, plot,
+chapter-timeline, story-settings, app-settings, story-list,
+diagnostics. The curated-core zone renders on all of them; the
+contextual zone varies by surface (per
+[Contextual zone](#contextual-zone)
+below).
+
 ## The two zones
 
 The menu is a **hybrid**: a global **curated core** plus a

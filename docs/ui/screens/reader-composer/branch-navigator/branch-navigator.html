@@ -141,7 +141,8 @@
   .in-flight .gen-banner { display: block; }
   .in-flight .branch-row { opacity: 0.45; pointer-events: none; }
   .in-flight .branch-row .row-icon.delete { display: none; }
-  .in-flight .branch-row .row-icon.rename { opacity: 0.35; cursor: not-allowed; }
+  /* Rename is a metadata-only write — remains interactive during in-flight. */
+  .in-flight .branch-row .row-icon.rename { pointer-events: auto; opacity: 1; cursor: pointer; }
 
   /* =========================================================
      Tier overrides — container queries on .viewport.

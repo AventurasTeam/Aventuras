@@ -1133,7 +1133,7 @@ stories.settings: {
     translation?: string
     suggestion?: string
     'lore-mgmt'?: string             // kebab-case agent ids match the UI labels in app-settings + story-settings Models tabs
-    retrieval?: string               // mode-3 LLM-only retrieval agent OR keyword_llm fallback consumer
+    retrieval?: string               // mode-3 LLM-only retrieval agent OR auto-mode fallback consumer
   }
 
   // Pack
@@ -1170,7 +1170,7 @@ Wizard selection is **preset-driven** with snapshot copy:
 
 Preset catalog lives in code (bundled JSON, ~20-30 entries each for
 v1). User-authored presets in Vault are deferred —
-[Vault genre + tone preset content types](./parked.md#vault-genre--tone-preset-content-types)
+[Vault content types for genre / tone / setting templates](./parked.md#vault-content-types-for-genre--tone--setting-templates)
 captures the post-v1 path.
 
 #### Why two JSON columns, not promoting to columns
@@ -1445,7 +1445,7 @@ loaded once into Zustand at boot).
 the `providers[].apiKey` JSON. v1 is local with no network
 exposure of the DB; the threat model that justifies encryption
 hasn't materialized. Tracked in
-[followups.md](./parked.md#encryption-at-rest-for-provider-keys).
+[parked.md](./parked.md#encryption-at-rest-for-provider-keys).
 
 **Provider / profile deletion semantics.** Deliberate divergence
 from the calendar precedent below: providers and profiles are
@@ -1558,7 +1558,7 @@ subset of entity state. Forcing them through one row shape
 with only one type in flight. The unification question earns its
 weight when ≥2 content types ship and we can validate against
 actual schema overlap. Tracked in
-[`followups.md`](./parked.md#vault-content-storage-pattern).
+[`parked.md`](./parked.md#vault-content-storage-pattern).
 
 **Vault UI** is deferred per [`ui/README.md`](./ui/README.md); v1
 surfaces the calendar editor as the first sub-wireframe under a
@@ -1677,7 +1677,7 @@ context includes the opening prose verbatim (recent buffer covers
 it), so the AI grounds itself from prose regardless of metadata
 state. A separate tagging pass for user-written openings is parked
 in
-[`followups.md → Classifier-on-opening retrofit`](./parked.md#classifier-on-opening-retrofit).
+[`parked.md → Classifier-on-opening retrofit`](./parked.md#classifier-on-opening-retrofit).
 
 **Opening invariants** (enforced at the action layer):
 
@@ -2535,7 +2535,7 @@ and fail clearly:
    Contextual safety: you can't accidentally import a calendar into
    a story slot.
 2. **Universal import** (deferred — see
-   [followups.md](./parked.md#universal-import-surface)). One
+   [parked.md](./parked.md#universal-import-surface)). One
    dispatcher accepts any `.avts`, reads the `format` field, and
    routes to the matching creation flow. Useful for "I have this
    file, just import it." Not blocking v1; per-UI gated covers the
@@ -2543,7 +2543,7 @@ and fail clearly:
 
 **Legacy `.avt` import** (from the old app) is a separate migration
 path with its own format handling, tracked in
-[`followups.md`](./parked.md#legacy-avt-migration-import). Not
+[`parked.md`](./parked.md#legacy-avt-migration-import). Not
 part of this convention.
 
 **Extension policy.** `.avts` is canonical; UI file pickers

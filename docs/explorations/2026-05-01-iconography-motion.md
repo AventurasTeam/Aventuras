@@ -1,7 +1,7 @@
 # Visual identity — iconography + motion (session 5)
 
 Session 5 of the multi-session visual-identity design pass (per
-[`../ui/foundations/README.md → Sessions`](../ui/foundations/README.md#sessions)).
+[`../ui/foundations/sessions.md → Visual-identity sessions`](../ui/foundations/sessions.md#visual-identity-sessions)).
 Two distinct domains landing as separate canonical files:
 
 - **Iconography contract** — icon set, stroke weight, sizing
@@ -180,7 +180,7 @@ Files changed:
 - **EDIT** [`../parked.md`](../parked.md) — remove the
   **Per-entry icon-row composition with conditional 5th icon**
   entry (resolved at session 5).
-- **EDIT** [`../ui/foundations/README.md → Sessions`](../ui/foundations/README.md#sessions) —
+- **EDIT** [`../ui/foundations/sessions.md → Visual-identity sessions`](../ui/foundations/sessions.md#visual-identity-sessions) —
   flip session 5 from "pending" to "landed 2026-05-01" with
   link to this exploration record. Update Files inventory to add
   iconography.md + motion.md.

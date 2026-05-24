@@ -28,6 +28,9 @@ Cross-cutting principles that govern this panel are in
 - [Recently-classified row accent](../../patterns/entity.md#recently-classified-row-accent)
   (entities and lore on this panel; classifier writes both)
 - [Empty list / table state](../../patterns/lists.md#empty-list--table-state)
+- [Actions menu (contextual zone)](../../patterns/actions-menu.md#contextual-zone)
+  (World contributes per-entity / per-lore commands to the universal
+  `⚲` directory)
   (centered placeholder when the active scope has zero rows;
   applies to the list pane AND the detail-pane Involvements +
   History tabs)
@@ -124,7 +127,7 @@ at narrower (440px) width — same content, no duplicated design.
 **Non-default injection-mode chip — applies to every kind.** A small
 uppercase chip (`ALWAYS INJECTED` / `DISABLED`) sits inline next to
 the status pill when `injection_mode` is non-default. Hidden for
-the `keyword_llm` default to avoid noise on the common case;
+the `auto` default to avoid noise on the common case;
 surfaced for `always` and `disabled` because both diverge from
 default in opposite directions and are operationally consequential.
 Hover tooltip pulls from the same explanation as the Settings tab
@@ -335,7 +338,7 @@ Same fields for every kind:
 - `status` (enum select): `active` / `staged` / `retired`. Edits
   here propagate to the Overview status pill.
 - `injection_mode` (enum select with explanation): `always` /
-  `keyword_llm` (default) / `disabled`. Includes the standard
+  `auto` (default) / `disabled`. Includes the standard
   in-line explanation about scene-presence override.
 - `retired_reason` (text, conditional): only enabled when
   `status === 'retired'`.
@@ -493,18 +496,18 @@ and pair with entity tags for cross-kind parity.
 Three fields, top-down:
 
 - **`injection_mode`** (enum select with explanation): `always` /
-  `keyword_llm` (default) / `disabled`. Same select primitive
-  entities use, with the same in-line explanation about how each
-  mode interacts with retrieval.
+  `auto` (default) / `disabled`. Same select primitive entities
+  use, with the same in-line explanation about how each mode
+  interacts with retrieval.
   - `always` — force-injected into every prompt. Use sparingly
     (token cost).
-  - `keyword_llm` — surfaced when retrieval finds keyword overlap
-    with the current scene. Default.
+  - `auto` — surfaced when retrieval (keyword + embedding +
+    LLM-fallback) finds relevance with the current scene. Default.
   - `disabled` — never injected; lore is read-only reference
     material for the user.
-- **`priority`** (integer input, narrow). Default `0`. Tooltip
-  explains the working model: "Higher priority is preferred when
-  retrieval is token-budget-constrained. Ties break by recency.
+- **`priority`** (integer input, narrow; range `0..100`). Default `0`.
+  Tooltip explains the working model: "Higher priority is preferred
+  when retrieval is token-budget-constrained. Ties break by recency.
   Semantics firmed up in the memory design pass: priority is 0-100,
   integrated into the ranker as
   `sim_blend × (priority/100) + kw_boost`. See
@@ -838,7 +841,7 @@ nav reroutes to the Select primitive when the desktop tab strip
 overflows.
 
 - **Master-detail collapse on phone** per
-  [`mobile/collapse.md → World`](../../foundations/mobile/collapse.md#two-pane-navigation-surfaces-world-plot-settings).
+  [`mobile/collapse.md → Two-pane navigation surfaces (World, Plot, Settings)`](../../foundations/mobile/collapse.md#two-pane-navigation-surfaces-world-plot-settings).
   List visible by default; row tap navigates to detail as a
   full-screen route (back-on-left returns to list state). The
   master-detail sub-header (`Characters / Kael Vex`) sits below

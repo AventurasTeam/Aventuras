@@ -105,9 +105,11 @@
   /* Channel separation per patterns/entity.md → Edge vs tint:
      scene-presence owns the left-edge stripe (only); recently-classified
      owns the background tint (only). Both can fire on the same row
-     without contention because they target different primitives. */
+     without contention because they target different primitives.
+     Body[data-scene-presence="on"] surfaces the stripe on rows tagged
+     .in-scene so reviewers can see the four-channel separation. */
   .list-row { border-left: 3px solid transparent; }
-  .list-row.in-scene { border-left-color: var(--ok); }
+  body[data-scene-presence="on"] .list-row.in-scene { border-left-color: var(--ok); }
   .list-row.recent-1 { background: rgba(85,136,170,0.08); }
   .list-row.recent-2 { background: rgba(85,136,170,0.04); }
   .list-row.recent-1.selected, .list-row.recent-2.selected { background: var(--bg-highlight); }
@@ -826,7 +828,7 @@
         <div style="flex: 1; min-width: 0;">
           <!-- Status pill — top of card, content-state not chrome.
                Non-default injection_mode chip pairs inline when injection_mode is
-               'always' or 'disabled' (hidden for the 'keyword_llm' default).
+               'always' or 'disabled' (hidden for the 'auto' default).
                Demo shows 'always injected' to make the chip visible. -->
           <div style="margin-bottom: 14px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
             <span class="row-status-pill active" style="display: inline-block;">active</span>
@@ -1036,11 +1038,11 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
         </div>
         <div>
           <div class="input-select" title="How this entity reaches the prompt">
-            <span>keyword_llm <span style="color: var(--ink-faint); font-size: 11px;">(default &mdash; smart retrieval)</span></span>
+            <span>auto <span style="color: var(--ink-faint); font-size: 11px;">(default &mdash; smart retrieval)</span></span>
             <span style="color: var(--ink-faint);">&#9662;</span>
           </div>
           <div style="font-size: 10px; color: var(--ink-muted); margin-top: 4px; line-height: 1.5;">
-            <b>always</b>: unconditional &middot; <b>keyword_llm</b>: keyword match + LLM relevance &middot; <b>disabled</b>: excluded. Overridden for in-scene active entities.
+            <b>always</b>: unconditional &middot; <b>auto</b>: keyword + embedding + LLM-fallback &middot; <b>disabled</b>: excluded. Overridden for in-scene active entities.
           </div>
         </div>
       </div>
@@ -1341,7 +1343,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
   <span class="k">"description"</span><span class="p">:</span> <span class="s">"A weathered bounty-hunter with a grudge against the Warden&hellip;"</span><span class="p">,</span>
   <span class="k">"status"</span><span class="p">:</span> <span class="s">"active"</span><span class="p">,</span>
   <span class="k">"retired_reason"</span><span class="p">:</span> <span class="n">null</span><span class="p">,</span>
-  <span class="k">"injection_mode"</span><span class="p">:</span> <span class="s">"keyword_llm"</span><span class="p">,</span>
+  <span class="k">"injection_mode"</span><span class="p">:</span> <span class="s">"auto"</span><span class="p">,</span>
   <span class="k">"state"</span><span class="p">:</span> <span class="p">{</span>
     <span class="k">"visual"</span><span class="p">:</span> <span class="p">{</span>
       <span class="k">"physique"</span><span class="p">:</span> <span class="s">"tall, lean"</span><span class="p">,</span>

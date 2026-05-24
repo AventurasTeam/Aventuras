@@ -6,14 +6,14 @@ surfaces:
 [app-settings](../ui/screens/app-settings/app-settings.md), and
 [vault calendars](../ui/screens/vault/calendars/calendars.md).
 Fourth of four grouped consumer-pass sessions per
-[`mobile/README.md → Sessions`](../ui/foundations/mobile/README.md#sessions).
+[`mobile/sessions.md → Mobile-foundations sessions`](../ui/foundations/mobile/sessions.md#mobile-foundations-sessions).
 
 The **prompt-pack editor** is the missing fourth surface — its
 desktop spec hasn't landed, so there's nothing yet to retrofit.
 Tracked as a post-Group-D follow-up; once the editor's desktop
 design lands, the mobile expression and CodeMirror-fallback
 question (per
-[`mobile/README.md → Sessions`](../ui/foundations/mobile/README.md#sessions))
+[`mobile/sessions.md → Mobile-foundations sessions`](../ui/foundations/mobile/sessions.md#mobile-foundations-sessions))
 get their own pass.
 
 The substrate (sessions 1–6, plus Group C's `forms.md` amendment
@@ -293,7 +293,7 @@ commit.
   Vault need to come out of that list (they're now two-pane on
   desktop, collapse on phone). Chapter Timeline, Story list,
   Onboarding, Wizard remain.
-- [`mobile/README.md → Sessions`](../ui/foundations/mobile/README.md#sessions)
+- [`mobile/sessions.md → Mobile-foundations sessions`](../ui/foundations/mobile/sessions.md#mobile-foundations-sessions)
   Group D status updates from `(pending)` to `partial-landed
 2026-05-02` with a link to this exploration record. Prompt-pack
   editor remains pending (its desktop spec hasn't landed).

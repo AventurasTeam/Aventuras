@@ -10,6 +10,12 @@ Sister patterns: [`entity.md`](./entity.md) (entity forms that ride
 this), [`forms.md`](./forms.md), [`lists.md`](./lists.md),
 [`data.md`](./data.md).
 
+Used by: every detail-pane editing surface — World panel detail
+panes (entities, lore), Plot panel detail panes (threads,
+happenings), Story Settings, App Settings, Vault calendar editor,
+chapter-timeline expanded card edit, and any future detail-pane
+surface that gates writes behind explicit save.
+
 ---
 
 ## Why explicit save (not autosave-on-blur)

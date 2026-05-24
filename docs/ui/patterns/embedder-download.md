@@ -9,7 +9,9 @@ failure modes that can interrupt any of those steps. Three install
 paths share the dialog: **curated catalog** (the default), **HF id
 input** (power-user, fetches from any HuggingFace model that
 exposes the right files), and **custom file import** (filesystem-
-supplied). Single canonical component invoked from three surfaces:
+supplied).
+
+Used by (single canonical component invoked from three surfaces):
 
 - [Onboarding · Step 4 — Pick an embedder](../screens/onboarding/onboarding.md#step-4--pick-an-embedder),
   triggered when the user picks a curated entry and hits `Finish`.

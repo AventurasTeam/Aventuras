@@ -6,7 +6,7 @@ Per-screen retrofit pass for the three "reading flow" surfaces:
 and
 [rollback-confirm](../ui/screens/reader-composer/rollback-confirm/rollback-confirm.md).
 Second of four grouped consumer-pass sessions per
-[`mobile/README.md → Sessions`](../ui/foundations/mobile/README.md#sessions).
+[`mobile/sessions.md → Mobile-foundations sessions`](../ui/foundations/mobile/sessions.md#mobile-foundations-sessions).
 
 The substrate (sessions 1–6) carries every contract these surfaces
 consume; this pass is **mechanical retrofit plus reconciliation**.

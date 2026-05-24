@@ -7,7 +7,7 @@ existing stack-aware Return + Settings-icon scope rules carry over
 to mobile.
 
 This file is session 2 of the mobile-foundations multi-session pass
-(per [`./README.md → Sessions`](./README.md#sessions)). Sister to
+(per [`./sessions.md → Session list`](./sessions.md#session-list)). Sister to
 the [responsive contract](./responsive.md) — that file owns tier
 boundaries and artifact strategy; this file owns chrome shape and
 nav model.

@@ -6,7 +6,7 @@ surfaces:
 [plot](../ui/screens/plot/plot.md), and
 [chapter-timeline](../ui/screens/chapter-timeline/chapter-timeline.md).
 Third of four grouped consumer-pass sessions per
-[`mobile/README.md → Sessions`](../ui/foundations/mobile/README.md#sessions).
+[`mobile/sessions.md → Mobile-foundations sessions`](../ui/foundations/mobile/sessions.md#mobile-foundations-sessions).
 
 The substrate (sessions 1–6) carries every contract these surfaces
 consume. None of the three has a pre-foundations `## Mobile`
@@ -345,7 +345,7 @@ to update. Verified by grep on `world.md#mobile`,
   reflow in its own wireframe. Update the line to reflect that the
   collapse.html demo is now redundant for groups A, B, C and only
   Group D's surfaces remain.
-- [`mobile/README.md → Sessions`](../ui/foundations/mobile/README.md#sessions)
+- [`mobile/sessions.md → Mobile-foundations sessions`](../ui/foundations/mobile/sessions.md#mobile-foundations-sessions)
   Group C status updates from `(pending)` to `landed 2026-05-01`
   with a link to this exploration record.
 

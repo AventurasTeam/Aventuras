@@ -42,7 +42,16 @@ utility wrapper.
 
 ### Primitives — needs revision
 
-_Empty — every shipped primitive is currently in canonical-contract compliance._
+- **SearchableOverlayList** — add `initialScrollRowId`
+  (open-time scroll-into-view) per the
+  [substrate spec](./patterns/searchable-overlay-list.md#implementation-notes).
+  Tracked in [`followups.md`](../followups.md#ux).
+- **Sheet** — swap RN core `KeyboardAvoidingView` to
+  `react-native-keyboard-controller`'s `KeyboardAvoidingView` (per
+  [`overlays.md → Sheet — keyboard handling`](./patterns/overlays.md#sheet--keyboard-handling))
+  once the library's Expo config plugin lands in `app.json` and the
+  dev client is rebuilt. Tracked in
+  [`followups.md`](../followups.md#ux).
 
 ### Primitives — build-ready
 

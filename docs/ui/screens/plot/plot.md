@@ -21,6 +21,9 @@ Cross-cutting principles that govern this panel are in
 - [Bulk operations — deferred](../../principles.md#bulk-operations--deferred)
 - [Injection / retrieval rules](../../principles.md#injection--retrieval-rules-for-prompt-context)
   (`injection_mode` on threads)
+- [Actions menu (contextual zone)](../../patterns/actions-menu.md#contextual-zone)
+  (Plot contributes per-thread / per-happening commands to the
+  universal `⚲` directory)
 
 ## Layout
 
@@ -172,8 +175,8 @@ Affordances per the
   (free-form text). Add / remove rows.
 - **Awareness** — `happening_awareness` rows: character picker (kind
   = character only) + `learned_at_entry` (entry-ref picker) +
-  `salience` (0-1 numeric) + `source` (free-form text descriptor).
-  Add / remove rows.
+  `decay_resistance` (0-1 numeric — scales recency decay) +
+  `source` (free-form text descriptor). Add / remove rows.
 - **History** — delta log filtered to this happening.
 
 **Common-knowledge interaction with Awareness tab.** When the
@@ -278,7 +281,7 @@ Happenings segment toggle and the kind-specific filter chips
 inherit unchanged.
 
 - **Master-detail collapse on phone** per
-  [`mobile/collapse.md → Plot`](../../foundations/mobile/collapse.md#two-pane-navigation-surfaces-world-plot-settings).
+  [`mobile/collapse.md → Two-pane navigation surfaces (World, Plot, Settings)`](../../foundations/mobile/collapse.md#two-pane-navigation-surfaces-world-plot-settings).
   Same shape as World: list visible by default, row tap navigates
   to detail as a full-screen route, back-on-left returns to list.
   The master-detail sub-header (`Threads / Crown's bargain` or
@@ -359,8 +362,9 @@ inherit unchanged.
   needs a picker. Inline mini-list of recent entries? Searchable
   popover keyed on entry content? Deferred — same pattern likely
   reused across other entry-ref fields.
-- **Awareness `salience` UI** — numeric 0-1 input, slider, or stepped
-  preset (low / medium / high)? Defer to typed-state design pass.
+- **Awareness `decay_resistance` UI** — numeric 0-1 input, slider, or
+  stepped preset (low / medium / high)? Defer to typed-state design
+  pass.
 - **Empty states** — list pane uses the cross-cutting
   [empty list-pane state pattern](../../patterns/lists.md#empty-list--table-state).
   Per-kind shape: "No threads on this branch yet." / "No

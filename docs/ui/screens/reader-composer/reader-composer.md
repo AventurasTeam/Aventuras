@@ -26,12 +26,18 @@ Cross-cutting principles that govern this screen are in
 - [Composing virtualization with load-older](../../patterns/lists.md#composing-virtualization-with-load-older)
   (entry list at scale: virtualization layered on a loaded window
   per [Scroll behavior](#scroll-behavior) below)
+- [Actions menu (contextual zone)](../../patterns/actions-menu.md#contextual-zone)
+  (Reader contributes per-entry / chapter / branch commands to the
+  universal `⚲` directory)
+- [Generation status pill](../../patterns/generation-status-pill.md)
+  (top-bar status surface, click-to-cancel popover, sticky memory
+  error variant)
 
 ## Layout
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│ [logo] <title ✎> · Chapter ▾ · 🕒 time    [status][br][⎇][⛭][←]│ ← top bar (⛭ = Story Settings)
+│ [logo] <title ✎> · Chapter ▾ · 🕒 time    [status][⎇N][⚲][⛭][←]│ ← top bar (⛭ = Story Settings)
 ├───────────────────────────────────────────────────────────────┤
 │ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░  (chapter progress strip)              │
 ├───────────────────────────────────────┬───────────────────────┤
@@ -954,6 +960,11 @@ For non-character kinds (location / item / faction / lore / threads /
 happenings) the peek-head is unchanged — the affordance does not
 apply.
 
+**Thumbnail tap.** Character (or any kind's) portrait thumbnail in
+the peek head opens the
+[full-size image preview](../../patterns/image-preview.md) on
+click / tap — same universal pattern World uses.
+
 No confirmation modal. Lead-switching is a first-class action per
 [principles → Mode, lead, and narration](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts);
 the reader's narration and `You` anchor immediately re-anchor to the
@@ -983,7 +994,7 @@ operational signals from Settings**, top-down at 440px width:
 - **Operational chip row** — renders only when there are
   non-default signals to surface:
   - **Injection-mode chip** when `always` or `disabled` (hidden
-    for `keyword_llm` default). Same chip shape used on entity
+    for `auto` default). Same chip shape used on entity
     Overview.
   - **Category chip** when set. Distinct visual treatment from
     the injection chip — content tag, not operational signal.

@@ -1,7 +1,7 @@
 # Mobile foundations — collapse rule (session 4)
 
 Session 4 of the mobile-foundations design pass (per
-[`../ui/foundations/mobile/README.md → Sessions`](../ui/foundations/mobile/README.md#sessions)).
+[`../ui/foundations/mobile/sessions.md → Mobile-foundations sessions`](../ui/foundations/mobile/sessions.md#mobile-foundations-sessions)).
 Pins **how multi-pane surfaces collapse from desktop / tablet
 into phone-tier 1-pane expressions**. Universe is smaller than the
 multi-session plan initially sketched: there are zero 3-pane

@@ -23,6 +23,9 @@ implementation, and the open questions tracked across the project.
   context. Multi-file: cadence, piggyback contract, periodic
   classifier, chapter-close pipeline, retrieval (embeddings, queries,
   ranker, pinning, budgets), edge cases, schema impact + followups.
+- **[observability.md](./observability.md)** — diagnostics layer
+  contracts: logger, http call sink, turn-capture sink, master
+  gate, privacy and performance posture, cross-platform stance.
 - **[calendar-systems/](./calendar-systems/README.md)** — tiered-counter
   primitive for in-world date-time display, classifier vocabulary,
   and (eventually) user-authored fictional calendars. Design spec,

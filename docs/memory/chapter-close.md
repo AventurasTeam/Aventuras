@@ -37,7 +37,7 @@ constraint on `happening_awareness` plus upsert semantics in the
 classifier and user-edit paths. Embedding-driven retrieval lets the
 bench grow without performance pressure, and duplicates can't
 accumulate in the first place. The
-[Multi-axis salience parked entry](../parked.md#multi-axis-salience--long-term-memory-revisit)
+[Multi-axis salience parked entry](../parked.md#multi-axis-salience)
 flagged the cost of eager summarization losing detail; upsert is the
 cleaner shape than chapter-close sweeps.
 
@@ -371,7 +371,7 @@ state. Same path as any in-flight pipeline abort.
 
 **Crash recovery** during chapter-close is the same as any
 in-flight transaction — see
-[`followups.md → Crash recovery for in-flight transactions`](../generation-pipeline.md#crash-recovery-via-pipeline_runs-marker-table).
+[`generation-pipeline.md → Crash recovery via pipeline_runs marker table`](../generation-pipeline.md#crash-recovery-via-pipeline_runs-marker-table).
 
 ## Manual user-triggered close
 

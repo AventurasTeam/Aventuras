@@ -17,6 +17,15 @@ Cross-cutting principles that govern this surface are in
   (this surface is the source side; Story Settings is the override side)
 - [Form controls — Select primitive](../../patterns/forms.md#select-primitive)
 - [Save-session pattern](../../patterns/save-sessions.md)
+- [Icon-actions pattern](../../patterns/icon-actions.md)
+  (per-row edit / delete on the Providers, Profiles, Embedding
+  models, and Agent-assignments lists)
+- [Actions menu (contextual zone)](../../patterns/actions-menu.md#contextual-zone)
+  (App Settings contributes Diagnostics-Hub launch + tab-jump
+  commands to the universal `⚲` directory)
+- [Persistent app-level banners](../../patterns/banners.md)
+  (the global broken-config / unconfigured banners route to this
+  surface)
 
 ## Layout
 
@@ -367,6 +376,7 @@ Each agent dropdown picks a profile. Agents currently in the system:
 - `suggestion` — next-turn suggestion pane
 - `lore-mgmt` — chapter close
 - `retrieval` — retrieval phase (when designed)
+- `wizard-assist` — story-creation wizard AI-assist calls
 
 Default assignment seeded by
 [Onboarding](../onboarding/onboarding.md#what-gets-seeded-silently)

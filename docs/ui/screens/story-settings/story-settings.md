@@ -26,12 +26,15 @@ Cross-cutting principles that govern this screen are in
 - [Save-session pattern](../../patterns/save-sessions.md)
   (the same pattern applies here)
 - [Naming convention — World / Plot](../../principles.md#naming-convention--world--plot-and-their-panel-descriptor)
+- [Actions menu (contextual zone)](../../patterns/actions-menu.md#contextual-zone)
+  (Story Settings contributes tab-jump + reset commands to the
+  universal `⚲` directory)
 
 ## Layout
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ [logo] Aria's Descent / Story Settings  [status]   [⎇] [←] │ ← top bar
+│ [logo] Aria's Descent / Story Settings  [status]   [⚲] [←] │ ← top bar
 │ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │ ← chapter token-progress strip
 ├───────────────┬────────────────────────────────────────────┤
 │ STORY         │ About                                       │ ← pane header
@@ -152,6 +155,8 @@ their currently-resolved chain:
 - `suggestion` — Fast tasks → gpt-4o-mini
 - `lore-mgmt` — Heavy reasoning → claude-opus-4-7
 - `retrieval` — Fast tasks → gpt-4o-mini (when designed)
+- `wizard-assist` — Fast tasks → gpt-4o-mini (powers the AI-assist
+  calls inside the [story-creation wizard](../wizard/wizard.md))
 
 (Image generation is deferred — see
 [followups.md](../../../parked.md#image-generation).)
@@ -202,8 +207,9 @@ stories.settings.models: {
   classifier?: string;
   translation?: string;
   suggestion?: string;
-  loreMgmt?: string;
+  'lore-mgmt'?: string;
   retrieval?: string;
+  'wizard-assist'?: string;
 }
 ```
 
@@ -255,7 +261,7 @@ allowed — user can author label + prose from scratch.
 - **tone** — `{ label, promptBody }`. Same shape as genre.
 - **setting** — freeform prose only (no preset). The world / time /
   place. Future Vault setting templates are deferred per
-  [followups → Vault setting templates](../../../parked.md#vault-setting-templates).
+  [parked.md → Vault content types for genre / tone / setting templates](../../../parked.md#vault-content-types-for-genre--tone--setting-templates).
 
 **Soft warn-box at the top of the Generation tab** when narrative
 exists, copy along the lines of "Edits to genre / tone / setting
@@ -402,6 +408,15 @@ this section captures what the screen renders.
   indicator from
   [`memory/cadence.md → User-tunable knobs`](../../../memory/cadence.md#user-tunable-knobs)
   renders inline.
+- **`piggybackMode` capability gate.** The toggle is disabled when
+  the currently-resolved `models.narrative` lacks structured-output
+  capability (per
+  [`memory/cadence.md → Piggyback contract`](../../../memory/cadence.md)).
+  In that state the toggle reads as off, a one-line hint explains
+  the gate (`Requires a narrative model with structured-output
+capability`), and the periodic-classifier pass picks up the work
+  regardless. Swapping the narrative model to a capable profile
+  re-enables the toggle automatically.
 - **Status block** — current state for the active branch, one of
   _idle / running / retrying / failed-persistent_. Each state
   carries its own copy and inline actions; failed-persistent
@@ -433,7 +448,15 @@ Displayed:
   read-only — the dim was locked at story creation alongside
   `embedding_model_id`. Hidden when null (no truncation, model
   native dim).
-- `[Switch embedder]` button.
+- **Retrieval mode** — read-only indicator displaying
+  `stories.settings.retrievalMode` (`embedding` or `llm-only`).
+  Set at story creation (defaults to `embedding`; falls back to
+  `llm-only` when no embedder is configured at creation time) and
+  immutable thereafter. Single-line caption notes the immutability
+  so users don't expect a toggle. `llm-only` mode hides the
+  Embedder section's `Switch embedder` action since there's no
+  index to manage.
+- `[Switch embedder]` button (hidden when `retrievalMode = 'llm-only'`).
 
 When `embeddingBackend = 'provider'`, both the provider and the
 model id are displayed together — see
@@ -542,38 +565,42 @@ for the full invariant.
 ### Granular per-content-type toggles
 
 Not everything needs to render in the target language. Authors can
-pick:
+pick (matches schema `granularToggles` in
+[`data-model.md`](../../../data-model.md#story-settings-shape)):
 
-- Narrative content (the AI's reply text)
-- User action text
-- Entity fields (names, descriptions, kind-specific state)
-- Lore bodies
-- Threads + happenings (titles, descriptions)
-- Chapter summaries
+- `narrative` — the AI's reply text
+- `entityNames` — entity name fields
+- `entityDescriptions` — entity description fields
+- `lore` — lore bodies
+- `threads` — thread titles + descriptions
+- `happenings` — happening titles + descriptions
+- `chapterMeta` — chapter summaries / titles
 
 Each is an independent toggle. Default set (enabled on first
-turn-on): narrative + user actions + entity fields + lore bodies.
-Others off. User can flip.
+turn-on): `narrative` + `entityNames` + `entityDescriptions` +
+`lore`. Others off. User can flip.
 
-**User-action toggle runs inversely.** The display-only invariant
-holds for everything the AI produces: source is canonical, target
-is display alongside. User actions are the exception — when the
-user types in the target language, the system translates the input
-into the source language **before** sending so the AI always sees
-source-language input. The translated source becomes the entry's
-canonical content; the user's typed target text is stored as the
-translation row. The flow is the inverse of the AI's output path.
+**User-action translation is unconditional** when
+`targetLanguage !== sourceLanguage`. It is **not** a granular
+toggle — the load-bearing invariant is that the AI always sees
+source-language input. When the user types in the target language,
+the `user-action-translation` pre-narrative pipeline phase converts
+the input to source before the narrative agent ever sees it; the
+translated source becomes the entry's canonical content, and the
+user's typed target text is stored as the `translations` row.
+Failure of this phase is fatal to the turn (per
+[`architecture.md → Translation as a pipeline concern`](../../../architecture.md)).
 
-**Modified entries — translation refresh.** When the user edits an
-already-translated entry's content, we don't re-translate the
-entire story. Instead the pipeline interrogates the delta log for
-that entry's content-mutation history, re-runs translation only on
-the changed range, and writes a new `translations` row keyed to
-the new content state. Steady-state translations stay; edits
-trigger targeted refresh. (Concrete shape lands with the retrieval
-
-- memory agents — see
-  [`architecture.md → Translation as a pipeline concern`](../../../architecture.md).)
+**Modified entries — translation refresh.** Per the data-model
+side-channel exemption (see
+[`data-model.md → Story settings shape`](../../../data-model.md#story-settings-shape)),
+`story_entries.content` edits mutate the row directly without
+emitting per-column deltas, so there is no per-range edit history to
+interrogate. On user edit of an already-translated entry, the
+existing `translations` row is invalidated; the entry lazy-translates
+on next render (or eagerly if the entry is currently visible).
+Steady-state translations stay; edits trigger a single full-entry
+refresh. (Concrete shape lands with the retrieval + memory agents.)
 
 ### Data model note
 

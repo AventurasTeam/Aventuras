@@ -1,7 +1,7 @@
 # Visual identity — color system + accessibility (session 2)
 
 Session 2 of the multi-session visual-identity design pass (per
-[`../ui/foundations/README.md → Sessions`](../ui/foundations/README.md#sessions)).
+[`../ui/foundations/sessions.md → Visual-identity sessions`](../ui/foundations/sessions.md#visual-identity-sessions)).
 Output is the **color contract** — final slot inventory, per-pair
 WCAG contrast targets, focus / disabled / hover state recipes,
 accent-derivation algorithm with locked constants, recently-
@@ -202,7 +202,7 @@ Files changed:
   rules") with a link-out to
   [`color.md → Accent-derivation algorithm`](../ui/foundations/color.md#accent-derivation-algorithm).
   Keep the contract description (one input → 5 derived tokens).
-- **EDIT** [`../ui/foundations/README.md → Sessions`](../ui/foundations/README.md#sessions) —
+- **EDIT** [`../ui/foundations/sessions.md → Visual-identity sessions`](../ui/foundations/sessions.md#visual-identity-sessions) —
   flip session 2's status from "pending" to "landed 2026-05-01"
   with link to this exploration record. Same shape as session 1's
   row.

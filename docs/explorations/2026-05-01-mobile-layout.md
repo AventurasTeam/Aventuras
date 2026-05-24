@@ -1,7 +1,7 @@
 # Mobile foundations — layout primitives (session 3)
 
 Session 3 of the mobile-foundations design pass (per
-[`../ui/foundations/mobile/README.md → Sessions`](../ui/foundations/mobile/README.md#sessions)).
+[`../ui/foundations/mobile/sessions.md → Mobile-foundations sessions`](../ui/foundations/mobile/sessions.md#mobile-foundations-sessions)).
 Mints the canonical layout-primitive vocabulary that all per-screen
 mobile designs compose from, plus the desktop-to-mobile mapping
 rules. Existing project terms (`peek drawer`, `popover`, `modal`,

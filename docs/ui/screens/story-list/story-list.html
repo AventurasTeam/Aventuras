@@ -56,11 +56,17 @@
   .import-btn { padding: 8px 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-weight: 500; font-size: 13px; cursor: pointer; }
   .import-btn:hover { border-color: var(--ink); }
 
-  /* AI-not-configured banner — sits between topbar and main when app_settings.providers is empty */
+  /* Persistent app-level banners — mutual-exclusion priority resolver per principles.
+     no-providers (ai-unconfigured) > no-embedder > profile-errors. */
   .ai-banner { display: none; padding: 10px 32px; background: #fff8e6; border-bottom: 1px solid #e8d890; color: #7a6020; font-size: 13px; align-items: center; gap: 12px; }
   .ai-banner.show { display: flex; }
   .ai-banner .ai-banner-cta { color: #7a6020; text-decoration: underline; cursor: pointer; font-weight: 500; }
   .ai-banner .ai-banner-cta:hover { color: #5a4810; }
+  /* profile-errors variant — slightly redder accent to differentiate from the no-providers warning */
+  .profile-banner { display: none; padding: 10px 32px; background: #fcecec; border-bottom: 1px solid #e8b8b8; color: #862020; font-size: 13px; align-items: center; gap: 12px; }
+  .profile-banner.show { display: flex; }
+  .profile-banner .profile-banner-cta { color: #862020; text-decoration: underline; cursor: pointer; font-weight: 500; }
+  .profile-banner .profile-banner-cta:hover { color: #6a1a1a; }
 
   .toolbar { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
   .search-row { flex: 1; min-width: 220px; max-width: 360px; display: flex; gap: 4px; align-items: center; position: relative; }
@@ -181,9 +187,10 @@
     <button class="rb-btn" data-sort="title">title</button>
   </div>
   <div class="rb-group">
-    <span class="gl">ai:</span>
-    <button class="rb-btn active" data-ai="configured">configured</button>
-    <button class="rb-btn" data-ai="unconfigured">unconfigured</button>
+    <span class="gl">banner:</span>
+    <button class="rb-btn active" data-banner="none">none</button>
+    <button class="rb-btn" data-banner="ai-unconfigured">ai-unconfigured</button>
+    <button class="rb-btn" data-banner="profile-errors">profile-errors</button>
   </div>
   <span class="rb-note">click a card to "open" (no-op in wireframe)</span>
 </div>
@@ -205,10 +212,14 @@
   </div>
 </header>
 
-<!-- AI-not-configured banner — visible when app_settings.providers is empty -->
+<!-- Persistent app-level banners — mutual-exclusion via the priority resolver in principles -->
 <div class="ai-banner" id="ai-banner">
   <span>&#9888; AI generation not configured.</span>
   <span class="ai-banner-cta">Set up a provider &rarr;</span>
+</div>
+<div class="profile-banner" id="profile-banner">
+  <span>&#9888; One or more agent profiles reference missing models.</span>
+  <span class="profile-banner-cta">Open App Settings &middot; Assignments &rarr;</span>
 </div>
 
 <div class="main">
@@ -446,13 +457,15 @@
   }
   document.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', () => setSort(b.dataset.sort)));
 
-  // ai-config banner toggle
-  const banner = document.getElementById('ai-banner');
-  function setAi(s) {
-    banner.classList.toggle('show', s === 'unconfigured');
-    document.querySelectorAll('[data-ai]').forEach(b => b.classList.toggle('active', b.dataset.ai === s));
+  // Persistent app-level banner state — mutual-exclusion (one or none visible at a time)
+  const aiBanner = document.getElementById('ai-banner');
+  const profileBanner = document.getElementById('profile-banner');
+  function setBanner(s) {
+    aiBanner.classList.toggle('show', s === 'ai-unconfigured');
+    profileBanner.classList.toggle('show', s === 'profile-errors');
+    document.querySelectorAll('[data-banner]').forEach(b => b.classList.toggle('active', b.dataset.banner === s));
   }
-  document.querySelectorAll('[data-ai]').forEach(b => b.addEventListener('click', () => setAi(b.dataset.ai)));
+  document.querySelectorAll('[data-banner]').forEach(b => b.addEventListener('click', () => setBanner(b.dataset.banner)));
 
   // search-help popover
   const helpIcon = document.getElementById('search-help-icon');

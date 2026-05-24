@@ -118,85 +118,6 @@ Both questions live with the broader backup design pass — see
 [Backup / export consistency](#backup--export-consistency) for the
 gating concerns that share the same pass.
 
-#### Multi-axis salience — long-term memory revisit
-
-Most of the original "Top-K-by-salience" failure modes are now
-addressed by the memory design pass in
-[`docs/memory/`](./memory/README.md):
-
-- **"Decay-then-drop loses load-bearing facts"** — addressed by the
-  high-similarity bypass in the ranker
-  ([`retrieval.md → High-similarity bypass`](./memory/retrieval.md#high-similarity-bypass--revival-of-decayed-memories)),
-  which surfaces decayed rows when they're extremely relevant to
-  the current scene.
-- **"K is a hard cutoff"** — addressed by per-type token budgets +
-  MMR diversity + score-threshold termination
-  ([`retrieval.md → Budget-fill termination`](./memory/retrieval.md#budget-fill-termination)),
-  not a fixed-K cutoff.
-- **"Compaction summaries carry their own provenance"** — addressed
-  by replacing eager summarize-and-delete with upsert-at-write
-  (UNIQUE constraint on awareness rows) plus chapter-close
-  semantic-cluster consolidation that preserves provenance via
-  composite descriptions and earliest `learned_at_entry`. See
-  [`chapter-close.md → 3e happenings consolidation`](./memory/chapter-close.md#3e--happenings-consolidation).
-- **"Pinned forever" override** — `decay_resistance` on
-  `happening_awareness` (user toggle, classifier severity at
-  extraction, lore-mgmt at chapter close). See
-  [`retrieval.md → Pinning`](./memory/retrieval.md#pinning--decay_resistance).
-- **"Memory probe" affordance** — bumped to v1-blocking and
-  designed; contract + simulator math in
-  [`memory/probe.md`](./memory/probe.md), screen UX in
-  [`docs/ui/screens/memory-probe/memory-probe.md`](./ui/screens/memory-probe/memory-probe.md).
-  Implementation (capture writer, simulator module, screen wiring,
-  schema migrations) pending.
-
-**What's still parked:**
-
-- **Multi-axis salience.** Single-number `decay_resistance`
-  collapses orthogonal relevance dimensions ("emotionally resonant"
-  vs. "plot-relevant" vs. "character-defining"). Real signal where
-  retrieval misses load-bearing facts in scene-mismatched contexts
-  triggers the design. Tracked alongside the v1 limitations in
-  [`memory/edge-cases.md → v1 limitations`](./memory/edge-cases.md#v1-limitations).
-- **Pin contradiction reconciliation.** Auto-detection that a
-  `death` pin is invalidated by a later "actually alive" reveal.
-  v1 floor: manual unpin.
-
-#### Per-entity classifier-lock — user-curated fields the classifier may not touch
-
-The v1 policy across all entity-state fields is "classifier wins on
-prose evidence" — user edits stick only until the classifier reads
-contradicting prose (per
-[Manual user edit vs classifier overwrite](./data-model.md#world-state-storage)).
-[`character_relationships`](./data-model.md#character-to-character-relationships)
-inherits this lean.
-
-For deliberately-curated entities (a hero whose `traits` are
-authored, a faction with a hand-tuned `agenda`, a relationship the
-user typed precisely), this means classifier drift undoes the
-curation on the next contradicting entry. The parked v1.5 per-field
-provenance work addresses this globally; a complementary primitive
-worth tracking separately:
-
-- **Per-entity classifier-lock.** User can mark an individual
-  entity (or relationship row) as "classifier may not write/update
-  this row." Classifier skips the row's UPSERT; only user edits
-  affect it. Distinct from global per-field provenance — this is
-  per-row, all-or-nothing, opt-in.
-
-Use case: "this character is my protagonist, I've spent time
-authoring them precisely — don't let the per-turn classifier
-rewrite their traits because the LLM described them in a slightly
-different way." Locks scoped per entity, surfaced in the entity
-edit UI.
-
-Schema impact: small — a boolean `classifier_locked` column on
-`entities` (and on `character_relationships` if applied there too).
-Application-side gating in the classifier write path.
-
-Lands: alongside or after the v1.5 per-field provenance work, once
-real demand surfaces from users hand-curating specific entities.
-
 ### UX (post-v1)
 
 #### Prompt-pack editor (desktop spec + mobile retrofit)
@@ -329,20 +250,22 @@ all stories (deduped naturally by `content_hash`). Useful when a
 user wants to reuse an image they uploaded elsewhere without
 re-uploading. Defer until per-story lands and demand is real.
 
-#### Vault genre + tone preset content types
+#### Vault content types for genre / tone / setting templates
 
 The bundled preset library for `definition.genre` and
 `definition.tone` (preset+prose hybrid per
 [`data-model.md → Story settings shape`](./data-model.md#story-settings-shape))
-lives in code for v1. Post-v1, user-authored presets land in Vault
-as new content types — parallel to user-authored calendars in
+lives in code for v1, and `definition.setting` is freeform prose
+only. Post-v1, user-authored presets for all three land in Vault as
+new content types — parallel to user-authored calendars in
 `vault_calendars` (per
 [`data-model.md → Vault content storage`](./data-model.md#vault-content-storage)).
+
 Each preset row carries `displayName`, optional `tagline`, and
 `promptBody`. Per-type tables (`vault_genre_presets`,
-`vault_tone_presets`) follow the per-type-not-polymorphic precedent
-calendars set; the unification question revisits with multiple
-content types live (see
+`vault_tone_presets`, `vault_setting_templates`) follow the
+per-type-not-polymorphic precedent calendars set; the unification
+question revisits with multiple content types live (see
 [Vault content storage pattern](#vault-content-storage-pattern)).
 
 Built-in catalog stays in code for both v1 and post-v1; user
@@ -350,20 +273,11 @@ clones land in Vault. Selection at wizard time copies preset
 content into the story (fire-and-forget) — no preset id stored,
 no orphan handling.
 
-#### Vault setting templates
-
-`definition.setting` is freeform prose only in v1. Some users will
-want reusable setting prose across stories ("my Forgotten Realms
-homebrew", "the Aetherium cyberpunk stack I keep returning to"). A
-post-v1 Vault content type for setting templates fits the same
-shape as the genre/tone preset content types above. Setting
-templates are larger blobs typically — possibly with subsections
-for world-rules / atmosphere / key locations — though the v1
-freeform `setting: string` shape covers the common case without
-forcing structure.
-
-Lands when the genre/tone Vault content types are designed (the
-shapes and Vault-shell affordances are likely shared).
+**Setting templates note.** These are typically larger blobs than
+genre/tone presets — possibly with subsections for world-rules /
+atmosphere / key locations — though v1's freeform `setting: string`
+shape covers the common case without forcing structure. The
+sub-structure decision lands with this design pass.
 
 #### Vault parent shell
 
@@ -407,14 +321,6 @@ thousands of entries + their delta log) eventually need FTS5
 (SQLite's full-text-search virtual tables) to stay snappy.
 Mirror searchable text into an FTS index, triggers keep it in
 sync. Pending — revisit when a real story hits the wall.
-
-#### Backup / story export with user-authored calendars
-
-A story export references `calendarSystemId`. If the calendar is a
-user-authored clone, the importing system doesn't have it. Export
-needs to embed user-authored calendar definitions as a sidecar (or
-prompt for substitution on import). Built-in references resolve
-fine since built-ins ship with every install.
 
 #### Background-pipeline declarations
 
@@ -542,6 +448,22 @@ chapter-close compaction (does compaction reset provenance to
 "agent" or preserve original source?). Lands once v1 testing
 surfaces real signal that the policy gap (manual-edit-vs-overwrite,
 stale-tracking) bites.
+
+#### Per-entity classifier-lock
+
+Complementary to per-field provenance: a per-row, all-or-nothing,
+opt-in `classifier_locked` boolean on `entities` (and on
+`character_relationships` if applied there too) marks individual
+rows the classifier may not touch. Classifier skips the row's UPSERT;
+only user edits affect it.
+
+Use case: "this character is my protagonist, I've spent time
+authoring them precisely — don't let the per-turn classifier
+rewrite their traits because the LLM described them in a slightly
+different way."
+
+Lands alongside or after the per-field provenance work above, once
+real demand surfaces from users hand-curating specific entities.
 
 #### Structural one-level containers on `ItemState`
 
@@ -1232,37 +1154,23 @@ addresses this:
 
 Decision lands at scoped-gate's own design pass.
 
-#### Concurrent pipeline coordination — first consumer landed
+#### Multi-background-pipeline concurrency
 
-The single-writer invariant in
-[`ui/principles.md → Edit restrictions during in-flight generation`](./ui/principles.md#edit-restrictions-during-in-flight-generation)
-relaxes to **single-writer-per-write-set** with the periodic
-classifier landing as the first background pipeline whose
-`concurrencyPolicy` allows coexistence with foreground pipelines.
-See
-[`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency)
-and
-[`memory/classifier.md`](./memory/classifier.md).
+Two future background pipelines running simultaneously
+(style-review + standalone memory-compaction or similar). The
+cascading `concurrencyPolicy` interactions when multiple background
+pipelines overlap aren't covered by the periodic classifier alone
+(which is the v1 single background consumer). Owned by the first
+design pass that introduces a second concurrent background pipeline.
+Foundation in
+[`memory/cadence.md → Concurrency`](./memory/cadence.md#concurrency).
 
-The piggyback path and the periodic classifier write to disjoint
-field sets; per-field UPDATEs (no row-level read-modify-write)
-keep their writes independent at the SQLite level. Chapter-close
-holds the gate for its own duration and locks out the periodic
-classifier via the classifier's `concurrencyPolicy.blockedBy`
-(one-direction lock).
+#### Style-review pipeline
 
-What stays parked:
-
-- **Two future background pipelines simultaneously** (style-review +
-  standalone memory-compaction or similar). The cascading
-  `concurrencyPolicy` interactions when multiple background
-  pipelines overlap aren't covered by the periodic classifier alone.
-  Owned by the first design pass that introduces a second concurrent
-  background pipeline.
-- **Style-review specifically.** Mentioned in
-  [`generation-pipeline.md`](./generation-pipeline.md) as a future
-  consumer; its `gateBehavior` / `concurrencyPolicy` / phase list
-  get picked when style-review is designed.
+Mentioned in
+[`generation-pipeline.md`](./generation-pipeline.md) as a future
+consumer; its `gateBehavior` / `concurrencyPolicy` / phase list get
+picked when style-review is designed.
 
 #### Pack-defined pipeline kinds
 

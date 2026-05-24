@@ -3,7 +3,7 @@
 Form-factor tiers, breakpoint boundaries, and the wireframe artifact
 strategy that subsequent mobile-foundations sessions cite. This file
 is session 1's substantive deliverable per
-[`./README.md → Sessions`](./README.md#sessions); it carries the
+[`./sessions.md → Session list`](./sessions.md#session-list); it carries the
 contract everything else hangs off.
 
 ## Three tiers

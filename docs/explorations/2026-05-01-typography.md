@@ -1,7 +1,7 @@
 # Visual identity — typography (session 3)
 
 Session 3 of the multi-session visual-identity design pass (per
-[`../ui/foundations/README.md → Sessions`](../ui/foundations/README.md#sessions)).
+[`../ui/foundations/sessions.md → Visual-identity sessions`](../ui/foundations/sessions.md#visual-identity-sessions)).
 Output is the **typography contract** — default font stacks for
 the three locked slots, type scale + line-heights + weights,
 per-font leading multiplier escape valve, reader font-size user
@@ -170,7 +170,7 @@ Files changed:
   to the `app_settings.appearance` persistence shape. (c) extend
   the first-launch defaults paragraph to mention `readerFontScale`
   default `'md'`.
-- **EDIT** [`../ui/foundations/README.md → Sessions`](../ui/foundations/README.md#sessions) —
+- **EDIT** [`../ui/foundations/sessions.md → Visual-identity sessions`](../ui/foundations/sessions.md#visual-identity-sessions) —
   flip session 3 from "pending" to "landed 2026-05-01" with link
   to this exploration record.
 - **EDIT** [`../data-model.md`](../data-model.md) — line 230 ER

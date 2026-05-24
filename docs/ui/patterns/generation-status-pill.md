@@ -12,6 +12,13 @@ copy mapping, and tier-aware reshape live here. The error variant is
 deliberately the same chrome as the active variant with a warning
 tone instead of accent + animation.
 
+Used by: every in-story surface — reader-composer, world, plot,
+chapter-timeline, story-settings — as universal chrome per
+[`principles.md → Universal in-story chrome`](../principles.md#universal-in-story-chrome).
+App-level surfaces (story-list, app-settings, vault, diagnostics)
+do not render this pill since they sit outside the per-story
+pipeline context.
+
 ## Why a compound, not screen-side composition
 
 The pill renders on every in-story top bar (Reader, World, Plot,

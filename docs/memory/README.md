@@ -6,36 +6,9 @@ assembling the per-turn generation context.
 
 [`data-model.md`](../data-model.md) says what's stored;
 [`architecture.md`](../architecture.md) says how the pipeline runs
-end-to-end. This folder says how those tables stay consistent with
-the prose, what gets injected into each generation call, and how
-older content ranks against the current scene.
-
-Living docs. Many decisions in here landed across one long design
-session; rationale alongside the choice where useful.
-
----
-
-## What this doc owns
-
-"Memory" in this app is overloaded across distinct concepts:
-
-- **Per-turn scene metadata** — who is in the scene, where, when.
-- **In-context retrieval** — what beyond the structural floor gets
-  injected each call.
-- **Long-term character knowledge** — `happening_awareness` rows and
-  how they persist or decay.
-- **Slow-evolving identity** — `traits` / `drives` / `agenda` arrays
-  on entity state.
-- **Procedural memory** — the delta log itself (rollback path).
-
-This folder owns the **pipeline** between them: cadence (when does
-each agent run), retrieval (how is per-turn context assembled), and
-the contract each layer holds with the others. Storage tables stay
-canonical in [`data-model.md`](../data-model.md). UI affordances for
-user-facing knobs sit with the relevant Story Settings / App Settings
-screens.
-
----
+end-to-end. This folder owns the **pipeline** between them — see
+[`scope.md`](./scope.md) for the concept enumeration this folder
+covers and the external touchpoints it depends on.
 
 ## Doc tree
 
@@ -43,6 +16,10 @@ The design splits across topic files. Read in this order for a
 linear walk; each file is self-contained for reference once you know
 the shape.
 
+- **[scope.md](./scope.md)** — framing: what "memory" means in this
+  domain, what this folder owns vs delegates to canonical docs, and
+  the external `data-model.md` / `architecture.md` /
+  `generation-pipeline.md` cross-references the topic files lean on.
 - **[cadence.md](./cadence.md)** — three-layer cadence model
   (piggyback / periodic classifier / chapter-close), why each layer,
   user-tunable knobs (`recentBuffer` / `fullChapterInBuffer` /
@@ -68,42 +45,13 @@ the shape.
   disambiguation, staged-entity promotion, retirement, cutaway /
   multi-scene entries, v1 limitations.
 - **[probe.md](./probe.md)** — memory probe contract: per-turn
-  capture model (light default, deep opt-in), simulator math
-  (re-rank captured state under edited params), FIFO eviction at
-  100 captures/story, cross-cuts for branch fork / model swap /
-  failure capture / param drift. Embedding-mode only. Screen UX
-  in
+  capture model (light default, deep opt-in), simulator math,
+  FIFO eviction at 100 captures/story, cross-cuts for branch fork
+  / model swap / failure capture / param drift. Embedding-mode
+  only. Screen UX in
   [`docs/ui/screens/memory-probe/memory-probe.md`](../ui/screens/memory-probe/memory-probe.md).
 
 Memory-pipeline deferrals live in the top-level
 [`parked.md → Memory pipeline (parked)`](../parked.md#memory-pipeline-parked).
 Calibration and implementation followups are inline in the
 canonical docs above (retrieval.md, model-management.md, probe.md).
-
----
-
-## Cross-references — outside this folder
-
-Authoritative material in other docs that this folder depends on or
-extends:
-
-- [`data-model.md → World-state storage`](../data-model.md#world-state-storage)
-  — `entities` shape, status lifecycle, authorship contract.
-- [`data-model.md → Happenings & character knowledge`](../data-model.md#happenings--character-knowledge)
-  — `happenings`, `happening_involvements`, `happening_awareness`
-  shapes.
-- [`data-model.md → Chapters / memory system`](../data-model.md#chapters--memory-system)
-  — chapter trigger and atomic-commit shape.
-- [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)
-  — delta log, reverse-replay.
-- [`data-model.md → Injection modes`](../data-model.md#injection-modes--unified-enum--structural-invariant)
-  — the structural invariant for active+in-scene; the unified enum
-  this design renames.
-- [`architecture.md → Prompt templates and authoring`](../architecture.md#prompt-templates-and-authoring)
-  — the single-context principle and Liquid template model.
-- [`architecture.md → Retrieval / injection phase`](../architecture.md#retrieval--injection-phase)
-  — the structural floor and per-mode invariants.
-- [`generation-pipeline.md → Transaction lifecycle`](../generation-pipeline.md#transaction-lifecycle)
-  and [`generation-pipeline.md → Concurrency model`](../generation-pipeline.md#concurrency-model)
-  — single-writer invariant and the gate / concurrency declaration
-  shape this design's background classifier consumes.

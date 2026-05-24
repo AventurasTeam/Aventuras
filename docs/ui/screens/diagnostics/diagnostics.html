@@ -107,7 +107,12 @@
   body[data-mode="master-off"] .body-wrap { display: none; }
   body[data-mode="master-off"] .off-pane { display: flex; }
   body[data-mode="hub"] .off-pane,
-  body[data-mode="hub-empty"] .off-pane { display: none; }
+  body[data-mode="hub-empty"] .off-pane,
+  body[data-mode="hub-no-story"] .off-pane { display: none; }
+  /* hub-no-story: pre-fill the story picker prompt + suppress tab body */
+  body[data-mode="hub-no-story"] .ss-picker { color: var(--ink-faint); }
+  body[data-mode="hub-no-story"] .body-wrap { display: none; }
+  body[data-mode="hub-no-story"] .no-story-pane { display: flex; }
 
   body[data-mode="hub"] .tab-body-other { display: none; }
   body[data-mode="hub-empty"] .filter-row,
@@ -128,9 +133,10 @@
   <span class="rb-group">
     <button class="rb-btn active" data-mode-btn="hub">Hub (Logs tab active)</button>
     <button class="rb-btn" data-mode-btn="hub-empty">Buffers empty</button>
+    <button class="rb-btn" data-mode-btn="hub-no-story">Hub (no story picked)</button>
     <button class="rb-btn" data-mode-btn="master-off">Master toggle off</button>
   </span>
-  <span class="rb-note">Hub-level structural sketch. Per-tab bodies designed in their own detail passes.</span>
+  <span class="rb-note">Hub-level structural sketch. "Hub (no story picked)" demonstrates the off-story open path — story selector prompts a pick before story-anchored tabs render. Per-tab bodies designed in their own detail passes.</span>
 </div>
 
 <div class="vp-stage">
@@ -260,6 +266,12 @@
       <div class="off-pane">
         <p>Diagnostics is off.</p>
         <p style="font-size: 12px;">Turn on the master toggle in <a href="#">App Settings → Diagnostics</a> to enable capture across all hub tabs.</p>
+      </div>
+
+      <!-- Hub opened from off-story chrome — story picker prompts a pick before story-anchored tabs render -->
+      <div class="no-story-pane" style="display: none; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 60px 20px; color: var(--ink-muted); text-align: center;">
+        <p style="margin: 0; font-style: italic;">Pick a story above to render the story-anchored tab (Memory probe, Pipeline runs).</p>
+        <p style="font-size: 12px; margin: 0;">App-wide tabs (Logs, HTTP calls) work without a story; tabs that operate on per-story state require a selection.</p>
       </div>
 
     </div>

@@ -7,7 +7,7 @@ to exactly one of the four primitives below: Popover, Modal,
 Sheet, Full-screen route.
 
 This file is session 3 of the mobile-foundations multi-session pass
-(per [`./README.md → Sessions`](./README.md#sessions)). Sister to
+(per [`./sessions.md → Session list`](./sessions.md#session-list)). Sister to
 [`./responsive.md`](./responsive.md) (tier boundaries) and
 [`./navigation.md`](./navigation.md) (chrome layers).
 

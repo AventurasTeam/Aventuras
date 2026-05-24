@@ -6,7 +6,7 @@ conventions. Different shape from prior foundations files: less
 on each platform" with concrete RN library bindings.
 
 This file is session 6 of the mobile-foundations multi-session pass
-(per [`./README.md → Sessions`](./README.md#sessions)). Sister to
+(per [`./sessions.md → Session list`](./sessions.md#session-list)). Sister to
 all other mobile-foundations files; the platform mechanism this
 file pins is the implementation glue under their behavior
 contracts.
@@ -147,7 +147,12 @@ rule doesn't mislead implementers.
 ## Keyboard avoidance
 
 Session 5's save-bar contract (hide while keyboard open, reappear
-on field blur) requires platform-specific keyboard handling.
+on field blur) requires platform-specific keyboard handling. This
+is the **screen-level baseline** for general phone surfaces; the
+Sheet primitive's keyboard handling is more specific and lives in
+[`patterns/overlays.md → Sheet — keyboard handling`](../../patterns/overlays.md#sheet--keyboard-handling)
+(targets `react-native-keyboard-controller` once the Expo config
+plugin lands; see [`followups.md`](../../../followups.md)).
 
 **`KeyboardAvoidingView`** with platform-aware `behavior`:
 

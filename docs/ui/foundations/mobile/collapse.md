@@ -8,7 +8,7 @@ desktop verbatim per
 the meaningful collapse happens at the phone boundary (< 640 px).
 
 This file is session 4 of the mobile-foundations multi-session pass
-(per [`./README.md → Sessions`](./README.md#sessions)). Sister to
+(per [`./sessions.md → Session list`](./sessions.md#session-list)). Sister to
 [`./responsive.md`](./responsive.md) (tier boundaries),
 [`./navigation.md`](./navigation.md) (chrome layers), and
 [`./layout.md`](./layout.md) (primitives).

@@ -247,5 +247,5 @@ The demo proves both the **architecture** (runtime swap, slot
 cascade, derivation) and the **concrete gallery** (the 10
 palettes themes.md commits). Vanilla JS, no framework, no build —
 same conventions as the rest of the project's wireframes (with
-the [foundations wireframe-exemption](./README.md#wireframe-convention-exemption)
+the [foundations wireframe-exemption](./sessions.md#wireframe-convention-exemption)
 on monochrome).

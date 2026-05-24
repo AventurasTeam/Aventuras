@@ -2,7 +2,7 @@
 
 Session 1 of a multi-session mobile-foundations design pass. Sister
 contract to the visual-identity foundations (per
-[`../ui/foundations/README.md → Sessions`](../ui/foundations/README.md#sessions))
+[`../ui/foundations/sessions.md → Visual-identity sessions`](../ui/foundations/sessions.md#visual-identity-sessions))
 — same level of cross-cutting scope, orthogonal axis. Visual
 identity carries the **what things look like** contract; mobile
 foundations carries the **what shape things take across form

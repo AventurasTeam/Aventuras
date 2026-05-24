@@ -46,6 +46,16 @@ are organized and what rules apply.
   treat them like function renames. Grep for inbound references and
   update in the same commit.
 
+### Sub-screen indexing
+
+Every directory under `docs/ui/screens/` (including sub-screen
+directories like `branch-navigator/`, `rollback-confirm/`) that
+ships a `.md` + `.html` pair must appear in either the
+[ui/README screens table](./ui/README.md#screens) or its
+deferred / power-user list. New screens that land without an index
+entry are orphans by definition; the audit's "files exist but
+aren't indexed" check fires on the next pass.
+
 ### Per-screen docs
 
 Every per-screen doc opens with:
@@ -125,6 +135,33 @@ READMEs) is **navigation only**. No substantive content. Keeps the
 file refactorable without breaking inbound anchor links — there's
 nothing to anchor to. This applies to the project root index too;
 substantive structural content lives in this conventions doc.
+
+### Multi-session design tracks
+
+A topic that spans several design sessions (visual identity, mobile
+foundations, etc.) gets a dedicated `sessions.md` companion next to
+the topic's other files — not a `## Sessions` section inside its
+`README.md` (which would violate the index-only rule above). The
+companion carries the per-session chronicle (date landed, exploration
+record link, scope summary); the topic's README lists `sessions.md`
+as one of its files.
+
+### Exploration records
+
+Dated `YYYY-MM-DD-<topic>.md` records under `docs/explorations/`
+capture design discussions before integration into canonical docs.
+The date prefix is the intentional exception to the no-prefix
+naming rule above — chronological order is the primary axis.
+
+- **When to write one.** Sessions that produce a non-trivial design
+  and warrant a written trail before integration. Quick fixes, lint
+  sweeps, and small edits go straight into canonical docs without
+  an exploration record.
+- **When to delete one.** Records are kept as historical reasoning;
+  canonical-doc landing supersedes rather than deletes. If a record
+  is provably obsolete (the design was abandoned, not just
+  superseded), it can be removed with a commit message that explains
+  why.
 
 ### Followups vs parked
 

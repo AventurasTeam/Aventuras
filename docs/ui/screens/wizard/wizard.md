@@ -54,7 +54,7 @@ Wizard-specific:
   Window/tab close has identical semantics.
 - **`New story · step N of 5`** centered — title with step counter.
   Replaces the usual story-title breadcrumb (no story exists yet).
-- **No `Actions ⎇` menu, no `⚙` Settings gear.** Wizard isn't a
+- **No `Actions ⚲` menu, no `⚙` Settings gear.** Wizard isn't a
   story context, the chrome IS the action surface, and a
   near-empty Actions menu would be worse than no menu.
 
@@ -211,6 +211,16 @@ No swap warning modal here (unlike Story Settings) — wizard's
 swap is always re-pick during construction; no in-flight story
 state to protect.
 
+**Era picker.** When the picked calendar has `eras !== null`, the
+wizard surfaces the same inline era selector the canonical
+[calendar picker](../../patterns/calendar-picker.md) uses — the
+chosen era flips at `at_worldtime = 0` (the story's origin
+boundary) per
+[`data-model.md → Era flips`](../../../data-model.md#era-flips).
+Display reformat follows the swapped calendar's tier shape. No
+warning modal for the swap itself (covered above); the era step
+is purely additive on calendars that need it.
+
 ### Validation gate on `Next`
 
 All required tiers must have valid values per their `rollover`
@@ -276,7 +286,7 @@ Single textarea, AI-suggest only (no preset). Same prose-result UX.
 
 ┌─ Magic systems ─────────────────────────────────┐  ✕
 │ Magic flows from sealed wells across the realm…│
-│ category: cosmology · keyword_llm              │
+│ category: cosmology · auto                     │
 └─────────────────────────────────────────────────┘
 
 ┌─ The Old Empire ────────────────────────────────┐  ✕
@@ -294,11 +304,11 @@ Category        [_____________________________]
 
 ▼ More options
   Tags           [chip input]
-  Injection mode [keyword_llm ▾]
+  Injection mode [auto ▾]
   Priority       [0]
 ```
 
-Defaults sensible (`keyword_llm`, priority `0`, no tags / category).
+Defaults sensible (`auto`, priority `0`, no tags / category).
 80%+ skip the disclosure.
 
 **Long scroll** — no pagination chrome on the lore list, per the

@@ -42,8 +42,14 @@ The split heuristic + when-to-add rules live in
   [`../foundations/mobile/layout.md`](../foundations/mobile/layout.md).
 - [`toast.md`](./toast.md) — top-anchored ephemeral notification
   primitive. Severity variants, queue cap, swipe-up dismiss + ×,
-  cross-platform animation dispatch. Banners (the persistent
-  counterpart) stay surface-specific.
+  cross-platform animation dispatch.
+- [`banners.md`](./banners.md) — persistent app-level warn bars
+  on the story-list surface: AI not configured, Embedder not
+  configured, Profile errors, with the
+  `no-providers > no-embedder > profile-errors` priority resolver.
+- [`image-preview.md`](./image-preview.md) — tap-a-thumbnail Modal:
+  trigger threshold, fit-to-viewport Modal-at-every-tier surface
+  routing, `zoom-in` cursor, read-vs-edit gesture split.
 - [`tabs.md`](./tabs.md) — horizontal segmented navigation
   primitive (underline style, optional per-tab count). Strip-only;
   consumers substitute Select at narrow tiers per the Group C rule.
@@ -57,10 +63,18 @@ The split heuristic + when-to-add rules live in
   Modal-on-every-tier; rich content via composition; destructive
   CTA via Button variant (asChild). Distinct from Sheet (navigation
   surface) — AlertDialog is for "are you sure?" gates.
+- [`inline-delete-confirm.md`](./inline-delete-confirm.md) — per-row
+  destructive-action confirm that collapses the row body in place.
+  Sister to alert-dialog; used inside overlays / panels where a
+  modal-on-modal would feel heavy.
 - [`calendar-picker.md`](./calendar-picker.md) — calendar-system
   selector shared across App Settings, Story Settings, and Wizard:
   rich rows, summary panel, swap warnings (origin / eras / display),
   edit-restrictions gating.
+- [`color-picker.md`](./color-picker.md) — curated swatch row +
+  optional custom-hex affordance. UI primitive shared across the
+  per-story accent picker, suggestion-category color slot, and
+  theme accent override.
 - [`toolbar.md`](./toolbar.md) — list-pane chrome compound: search
   with scope, filter chips, conditional sort. Cross-tier overflow
   rule (search-on-own-row at narrow tiers, single horizontal row

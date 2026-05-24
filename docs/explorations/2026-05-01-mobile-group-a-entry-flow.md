@@ -5,7 +5,7 @@ Per-screen retrofit pass for the three "entry flow" surfaces:
 [wizard](../ui/screens/wizard/wizard.md), and
 [onboarding](../ui/screens/onboarding/onboarding.md). First of four
 grouped consumer-pass sessions per
-[`mobile/README.md → Sessions`](../ui/foundations/mobile/README.md#sessions).
+[`mobile/sessions.md → Mobile-foundations sessions`](../ui/foundations/mobile/sessions.md#mobile-foundations-sessions).
 
 The substrate (sessions 1–6) already carries every contract these
 three surfaces consume. This pass is **mechanical retrofit** —
@@ -254,7 +254,7 @@ needs to change to support the citations.
   forms, lists, calendar-picker) keep their existing surface
   citations; no per-screen cites a pattern it didn't already cite.
 - **Wireframe convention** stays monochrome per
-  [`mobile/README.md → Wireframe convention`](../ui/foundations/mobile/README.md#wireframe-convention).
+  [`mobile/sessions.md → Wireframe convention`](../ui/foundations/mobile/sessions.md#wireframe-convention).
 
 **Missing perspective.**
 

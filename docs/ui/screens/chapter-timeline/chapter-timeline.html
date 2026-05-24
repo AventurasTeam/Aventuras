@@ -148,6 +148,8 @@
   /* gen-in-flight: disable Close-chapter + per-card save buttons (per principles → Edit restrictions) */
   body[data-gen-state="in-flight"] .close-chapter-btn { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
   body[data-gen-state="in-flight"] .save-btn { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
+  /* gen-status pill is visible only during in-flight phases (per generation-status-pill pattern) */
+  body[data-gen-state="idle"] .gen-status { display: none; }
 
   /* empty-state hide closed cards */
   body[data-empty="yes"] .chapter-card:not(.in-progress) { display: none; }

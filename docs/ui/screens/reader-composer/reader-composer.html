@@ -52,8 +52,12 @@
   header.topbar { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
   .logo { width: 28px; height: 28px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--ink-muted); }
   .crumbs { display: flex; align-items: baseline; gap: 10px; min-width: 0; position: relative; }
-  .crumb-primary { font-size: 15px; font-weight: 600; color: var(--ink); border-bottom: 1px dotted var(--line-soft); padding-bottom: 1px; cursor: text; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 320px; }
-  .crumb-primary::after { content: "  ✎"; color: var(--ink-faint); font-size: 10px; font-weight: 400; }
+  /* Title is click-to-edit per reader-composer.md → Top-bar — chapter navigation.
+     Hover surfaces a real interactive ✎ button; the decorative pseudo-element
+     was non-interactive and misrepresented the affordance. */
+  .crumb-primary { font-size: 15px; font-weight: 600; color: var(--ink); border-bottom: 1px dotted var(--line-soft); padding-bottom: 1px; cursor: text; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 320px; display: inline-flex; align-items: baseline; gap: 6px; }
+  .crumb-edit { background: none; border: none; padding: 0; margin: 0; color: var(--ink-faint); font-size: 10px; cursor: pointer; opacity: 0.6; font-family: inherit; }
+  .crumb-edit:hover { opacity: 1; color: var(--ink); }
   .crumb-sep { font-size: 11px; color: var(--ink-faint); flex-shrink: 0; }
   .crumb-chapter { font-size: 12px; color: var(--ink); cursor: pointer; padding: 3px 8px; border: 1px solid transparent; border-radius: 3px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
   .crumb-chapter:hover, .crumb-chapter.open { border-color: var(--line-soft); background: var(--bg); }
@@ -690,7 +694,7 @@
 <header class="topbar">
   <div class="logo">A</div>
   <div class="crumbs">
-    <span class="crumb-primary">Aria's Descent</span>
+    <span class="crumb-primary">Aria's Descent<button type="button" class="crumb-edit" title="Edit story title">✎</button></span>
     <span class="crumb-sep">&middot;</span>
     <span class="crumb-chapter" id="chapter-crumb" title="Chapter navigator">
       Chapter 3

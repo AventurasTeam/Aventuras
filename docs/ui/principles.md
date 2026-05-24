@@ -142,16 +142,19 @@ The gear glyph's scope is determined by the screen's class:
 
 - **Regular gear ⚙** opens **App Settings**. Renders only on
   app-level surfaces (story-list, Vault). Absent from in-story
-  chrome.
+  chrome. Also deliberately absent from **Diagnostics** — the
+  Diagnostics top-bar is intentionally lean (`[←] [Diagnostics]
+[⚲]`); the App Settings shortcut lives in the Actions menu
+  rather than duplicating chrome.
 - **A dedicated story-scoped icon** (specific glyph picked at
   visual identity) opens **Story Settings**. Renders only on
   in-story surfaces (reader, World, Plot, Chapter Timeline).
   Absent on Story Settings itself (self-reference).
 
-App Settings remains reachable from in-story screens via the
-Actions menu rather than chrome. Visual identity must pick glyphs
-that read clearly different at glance — both icons being "geary"
-defeats the rule's purpose.
+App Settings remains reachable from in-story screens (and from
+Diagnostics) via the Actions menu rather than chrome. Visual
+identity must pick glyphs that read clearly different at glance —
+both icons being "geary" defeats the rule's purpose.
 
 **Scratch glyph vocabulary** for top-bar / chrome (placeholders
 pending visual identity; chosen so wireframe ASCII and HTML mocks
@@ -276,17 +279,20 @@ Implementation contract is in
 
 ### Two pipelines covered
 
-- **Per-turn pipeline** — Pre → Retrieval → Narrative →
-  `[Classification ‖ Translation]` → Post. Triggered by user send /
-  regenerate. User is actively waiting; the existing reader-chrome
-  status pill plus the streaming narrative are sufficient
-  affordance.
-- **Chapter-close pipeline** — Boundary → Chapter metadata → Lore
-  management → Memory compaction. Triggered by token-threshold
-  cross at turn-commit time, or by explicit user close. Decided
-  as a **blocking pipeline**: the user is gated for its full
-  duration with a banner affordance (no streaming surface to
-  anchor attention).
+- **Per-turn pipeline** — `user-action-translation` → Pre →
+  Retrieval → Narrative → `[Classification ‖ display-translation]`
+  → Post. Triggered by user send / regenerate. User is actively
+  waiting; the existing reader-chrome status pill plus the streaming
+  narrative are sufficient affordance. Phase contracts in
+  [`architecture.md → Translation as a pipeline concern`](../architecture.md).
+- **Chapter-close pipeline** — Five phases under one `actionId`:
+  catch-up classifier → boundary → chapter metadata → lore-mgmt
+  (with sub-jobs 3a–3e) → lifecycle review. Triggered by
+  token-threshold cross at turn-commit time, or by explicit user
+  close. Decided as a **blocking pipeline**: the user is gated for
+  its full duration with a banner affordance (no streaming surface
+  to anchor attention). Phase detail in
+  [`memory/chapter-close.md`](../memory/chapter-close.md).
 
 Both transactions are atomic per their `action_id` (see
 [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback))
@@ -331,7 +337,11 @@ transaction start / end.
 
 **Banner (below chrome — chapter-close only).** A sticky banner
 appears below the top bar for the duration of a chapter-close
-transaction; dismissed on commit / abort:
+transaction; dismissed on commit / abort. **Rendered on every
+in-story surface** (reader-composer, world, plot, story-settings,
+chapter-timeline) — the banner is universal in-story chrome that
+the surface itself doesn't have to opt into; whatever screen the
+user is on when chapter-close starts shows it.
 
 ```
 Closing chapter: 2 of 4 — generating chapter metadata… [Cancel]
@@ -482,7 +492,7 @@ is the single source of truth (centralized; per
 [`data-model.md → App settings storage`](../data-model.md#app-settings-storage));
 the override pattern is identical regardless of which agents exist.
 Image generation is deferred past v1; see
-[followups.md → Image generation](../parked.md#image-generation).
+[parked.md → Image generation](../parked.md#image-generation).
 
 UI surface lives in
 [Story Settings · Models tab](./screens/story-settings/story-settings.md#models-tab--overrides-only)
@@ -615,7 +625,7 @@ wizard-authored per story (no global default, no copy-at-creation).
   genuinely unique per story; preset clustering doesn't fit. A
   future Vault content type for reusable setting templates is
   parked in
-  [`followups.md → Vault setting templates`](../parked.md#vault-setting-templates).
+  [`parked.md → Vault content types for genre / tone / setting templates`](../parked.md#vault-content-types-for-genre--tone--setting-templates).
 
 ### No-modal-on-edit rule
 
@@ -646,7 +656,7 @@ branches of a story share the same genre / tone / setting / mode /
 narration. Editing definition propagates to all branches. A user
 wanting tonal experimentation across narrative paths uses a separate
 story, not a branch. Per-branch override is parked in
-[`followups.md → Per-branch definition override`](../parked.md#per-branch-definition-override).
+[`parked.md → Per-branch definition override`](../parked.md#per-branch-definition-override).
 
 ---
 
@@ -745,19 +755,18 @@ stored** on the entry — the final wrapped content is canonical.
 `lore`, `entities`, and `threads` carry an `injection_mode` field
 that the UI exposes as a dropdown:
 
-| Mode          | Meaning                                                 |
-| ------------- | ------------------------------------------------------- |
-| `always`      | Unconditional injection (the explicit override)         |
-| `keyword_llm` | Keyword match + LLM relevance check (the smart default) |
-| `disabled`    | Exists in data, never reaches the prompt                |
+| Mode       | Meaning                                                      |
+| ---------- | ------------------------------------------------------------ |
+| `always`   | Unconditional injection (the explicit override)              |
+| `auto`     | Keyword + embedding + LLM-fallback retrieval (smart default) |
+| `disabled` | Exists in data, never reaches the prompt                     |
 
-**Default: `keyword_llm`.** `happenings` deliberately don't expose
-this — the `happening_awareness` graph IS their structural injection
-rule.
+**Default: `auto`.** `happenings` deliberately don't expose this —
+the `happening_awareness` graph IS their structural injection rule.
 
 **Where the dropdown surfaces:**
 
-- World panel · Overview tab — for entities and lore
+- World panel · Settings tab — for entities and lore
 - Plot panel · Overview tab — for threads (not happenings)
 
 **Structural invariant** (UI implication): active + in-scene entities
@@ -766,10 +775,10 @@ only governs off-scene/inactive rows. Whether (and how) the UI
 surfaces this — e.g., a "structurally pinned" indicator on
 active+in-scene rows so users know the mode is moot for them — is
 parked in
-[`followups.md → Structurally-pinned indicator`](../parked.md#structurally-pinned-indicator).
+[`parked.md → Structurally-pinned indicator`](../parked.md#structurally-pinned-indicator).
 
-Mechanics (how `keyword_llm` retrieval works, token budgets, the
-in-scene-bypass) live in
+Mechanics (how `auto` retrieval works — keyword + embedding +
+LLM-fallback — token budgets, the in-scene-bypass) live in
 [`architecture.md → Retrieval / injection phase`](../architecture.md).
 
 ---
@@ -781,98 +790,26 @@ Same applies to other list surfaces (story list cards, plot rows).
 Bulk ops (multi-select, batch status change, batch tag, batch
 retire, batch export) are deferred pending their own design pass —
 see
-[`followups.md → Bulk operations on entities`](../parked.md#bulk-operations-on-entities)
+[`parked.md → Bulk operations on entities`](../parked.md#bulk-operations-on-entities)
 for the parked sub-questions.
 
 ---
 
 ## Persistent app-level banners
 
-Some app states warrant a persistent warn bar above the main
-content of the **story list** screen — the only app-level surface
-that sees them. Two banner shapes are defined today:
-
-- **AI not configured** — fires when `app_settings.providers` is
-  empty (user skipped onboarding, or deleted the last provider).
-  Copy: `⚠ AI generation not configured. [Set up a provider →]`.
-  CTA routes to
-  [App Settings · Providers](./screens/app-settings/app-settings.md#generation--providers).
-  Never re-opens the onboarding wizard — that path is intentionally
-  one-shot (see
-  [Onboarding → Skip behavior](./screens/onboarding/onboarding.md#skip-behavior)).
-- **Embedder not configured** — fires when no embedder default is
-  set (user skipped Onboarding · Step 4, or removed all installed
-  models without configuring a provider embedder). Copy:
-  `⚠ Memory not configured — set up an embedder to create stories. [Open settings →]`.
-  CTA routes to
-  [App Settings · Embedding models](./screens/app-settings/app-settings.md#generation--embedding-models).
-  Story creation is hard-gated until resolved.
-- **Profile errors** — fires when at least one profile has a
-  configuration error (e.g., references a model that's no longer
-  in the provider's catalog). Copy:
-  `⚠ N profiles have configuration errors. [Open settings →]`.
-
-**Mutual exclusion + priority.** Multiple banners can be true at
-the same time — a user who skipped onboarding might have no
-provider AND no embedder AND leftover profile errors from a prior
-session. Only one renders, with the priority order:
-**no-providers > no-embedder > profile-errors**. Provider must
-exist before embedder can be configured (provider mode) or
-referenced (local mode also needs a provider for narrative); both
-must exist before profile errors are downstream-meaningful. When
-the user fixes the higher-priority state, the next-priority banner
-takes over if still applicable.
-
-**Provider-only misconfiguration** (e.g., a key the user typed
-wrong, but no profile references that provider yet) does **not**
-trigger any banner. Per-row indicators on the Providers list
-surface that lower-stakes case. A misconfigured provider only
-escalates to banner status once a profile references it.
-
-**Why no "Resume setup" CTA.** Once the user crosses the wizard's
-skip threshold, onboarding is over; the banner sends them to App
-Settings, where the affordances are richer and the hand-hold isn't
-needed. Re-opening the wizard would duplicate paths and create
-state-recovery questions we don't want.
+Full component spec lives in [`patterns/banners.md`](./patterns/banners.md):
+three variants (AI not configured, Embedder not configured, Profile
+errors), mutual-exclusion priority resolver
+(`no-providers > no-embedder > profile-errors`), and the
+provider-only-misconfiguration carve-out that keeps lower-stakes
+cases off the banner channel.
 
 ---
 
 ## Tap a thumbnail to see it full-size
 
-Any inline thumbnail or avatar in the app — entity portraits in
-detail-pane Overview / Identity / peek, asset thumbnails in the
-Assets tab, image-typed values in raw JSON viewer — opens a
-**full-size image preview Modal** on click / tap. Pattern is
-universal: small visual = compressed glance, click = full
-fidelity.
-
-- **Trigger:** any image rendered at < ~200 px on its longest edge.
-  Larger renderings (e.g., a hero portrait that already fills the
-  detail-pane head) don't need the affordance — the thumbnail-
-  click pattern is for "I want to see what's there at real size."
-- **Surface:** Modal at every tier per
-  [`mobile/layout.md → Modal`](./foundations/mobile/layout.md#modal).
-  Modal centers the image at its natural size up to the viewport
-  cap; supports tap-to-dismiss on the backdrop, Esc on desktop,
-  drag-down on phone (Modal-not-Sheet because the image is the
-  focus, not browse-and-pick).
-- **Cursor:** `cursor: zoom-in` on hover for desktop. Phone has
-  no hover state — tap fires directly. Discoverability rests on
-  the convention being universal across the app, plus the standard
-  per-affordance always-visible rule from
-  [`patterns/icon-actions.md`](./patterns/icon-actions.md).
-- **Edit affordances stay separate.** Click on the thumbnail =
-  view full-size (read action). Edit / replace / remove the image
-  uses the icon-actions overlay (per `icon-actions.md`) on hover
-  or always-visible-muted at touch tier. Distinct gestures: tap
-  the image itself (view) versus tap the explicit icon (edit).
-- **No additional zoom-pan inside the modal in v1.** The full-size
-  preview is "fit to viewport"; image manipulation (crop, zoom in
-  further, pan) is parked. If real demand surfaces — particularly
-  for asset images at high resolution — extending the modal to a
-  full image viewer is a follow-up, not a contract amendment.
-
-Used by entity portraits ([World detail head](./screens/world/world.md#detail-head-structure)
-and [peek-drawer](./screens/reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters)),
-asset thumbnails ([Assets tab](./screens/world/world.md#assets-involvements-history)),
-and any future surface that surfaces small images.
+Full component spec lives in
+[`patterns/image-preview.md`](./patterns/image-preview.md): trigger
+threshold (< ~200 px longest edge), Modal-at-every-tier surface
+routing, `zoom-in` cursor, the read-vs-edit gesture split, and the
+v1 deferral on zoom-pan inside the preview.

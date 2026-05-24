@@ -4,12 +4,23 @@
 
 Power-user diagnostic surface for inspecting per-turn retrieval state
 and re-tuning ranker parameters against captured state. Embedding-
-mode only; gated behind a two-level toggle (App Settings · Advanced ·
-Probe mode + Story Settings · Memory · Probe). Off by default.
+mode only; gated behind a two-level toggle (App Settings · Diagnostics
+master gate + Story Settings · Memory · Probe). Off by default.
 
 The capture model and simulator math contract live in
 [`docs/memory/probe.md`](../../../memory/probe.md). This doc owns the
 screen UX.
+
+Cross-cutting patterns this screen consumes:
+
+- [`patterns/chips.md`](../../patterns/chips.md) — filter chips
+  in the capture-list filter row.
+- [`patterns/forms.md → Select primitive`](../../patterns/forms.md#select-primitive)
+  — sort dropdown + branch dropdown.
+- [`patterns/lists.md`](../../patterns/lists.md) — large capture
+  table virtualization + empty / no-results states.
+- [`patterns/alert-dialog.md`](../../patterns/alert-dialog.md) —
+  `Clear all captures` destructive confirm.
 
 Cross-refs:
 
@@ -25,8 +36,8 @@ Cross-refs:
   — applies to "Apply to story settings" from the simulator.
 - [`reader-composer.md`](../reader-composer/reader-composer.md) —
   per-turn probe entry point lives there.
-- [`app-settings.md`](../app-settings/app-settings.md) — Probe-mode
-  master flag in Advanced.
+- [`app-settings.md`](../app-settings/app-settings.md) — diagnostics
+  master gate under the Diagnostics tab governs probe writes.
 - [`story-settings.md`](../story-settings/story-settings.md) — per-
   story Probe activation + capture-list entry point in Memory tab.
 
@@ -78,7 +89,7 @@ States:
 - `Probe mode: OFF (story) · N existing captures · X MB` — app-
   level on, story-level off. Captures stop; existing inspectable.
 - `Probe mode: OFF (app) · N existing captures · X MB` — app-level
-  off. Same behavior; click → opens App Settings · Advanced.
+  off. Same behavior; click → opens App Settings · Diagnostics.
 - `Probe mode never on · no captures` — never enabled. Empty state
   with link to enable.
 
@@ -423,7 +434,12 @@ edit.
   param diff vs current story settings ("These 4 params will change
   on this story"). On confirm, writes the simulated params to
   `stories.settings` and exits simulate mode (returning to inspect
-  on the same capture, with the drift badge updated).
+  on the same capture, with the drift badge updated). **Disabled
+  during in-flight generation** per
+  [Edit restrictions during in-flight generation](../../principles.md#edit-restrictions-during-in-flight-generation)
+  — the write would compete with the active pipeline for the
+  single-writer gate; tooltip explains and routes to "wait for
+  generation to finish."
 - **Save snapshot** — persists the current simulator state
   alongside the parent capture (counts toward the FIFO cap as a
   separate row pointing at the parent). Useful for "I want to
@@ -540,17 +556,22 @@ budgets, classifier cadence, etc.):
 - "Clear all captures" button (destructive, confirm).
 
 When the app-level flag is off, the per-story toggle is disabled
-with a hint linking to App Settings · Advanced · Probe mode.
+with a hint linking to App Settings · Diagnostics.
 
-### From App Settings · Advanced
+### From App Settings · Diagnostics
 
-Master flag toggle. Lives in Advanced (not in the standard Memory
-tab) — Probe mode is a developer / power-user feature, not a daily
-control. A short paragraph explains:
+The master diagnostics gate (`app_settings.diagnostics.enabled`)
+governs probe writes alongside the rest of the diagnostics layer
+(log sinks, http capture sinks, Actions-menu Hub entry). When the
+gate is on, memory-probe captures accumulate; when it flips off,
+in-memory ring buffers clear immediately, but persisted
+`probe_captures` rows stay until explicitly cleared.
 
-- What probe mode does.
-- That it adds per-turn capture cost (small).
-- That existing captures persist when toggled off.
+The Diagnostics panel surfaces:
+
+- What the gate covers (probe captures plus the diagnostics layer).
+- That capture adds per-turn cost (small).
+- That existing probe captures persist when the gate is toggled off.
 - Link to memory-probe screen (top-level, opens story-list and a
   probe-scope picker if no current story).
 

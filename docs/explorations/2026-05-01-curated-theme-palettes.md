@@ -1,7 +1,7 @@
 # Visual identity — curated theme palettes (session 6)
 
 Final session of the multi-session visual-identity design pass (per
-[`../ui/foundations/README.md → Sessions`](../ui/foundations/README.md#sessions)).
+[`../ui/foundations/sessions.md → Visual-identity sessions`](../ui/foundations/sessions.md#visual-identity-sessions)).
 Sessions 1–5 locked the architecture, slot inventory, contrast
 targets, derivation algorithm, font stacks, type scale, spacing,
 radii, depth metaphor, iconography vocabulary, and motion budget.
@@ -382,7 +382,7 @@ for.
   canonical curated-gallery contract: roster, first-launch default,
   authoring conventions, per-theme intent + slot values + audit
   expectations, theme-author guidance for v1.5+ additions.
-- **EDIT** [`../ui/foundations/README.md → Sessions`](../ui/foundations/README.md#sessions) —
+- **EDIT** [`../ui/foundations/sessions.md → Visual-identity sessions`](../ui/foundations/sessions.md#visual-identity-sessions) —
   flip session 6 from "pending" to "landed 2026-05-01" with link
   to this exploration record. Update Files inventory to add
   `themes.md`. Update closing note (foundations is feature-complete
@@ -426,7 +426,7 @@ None.
 ### Wireframes updated
 
 - **theming.html** — 10-theme dropdown replaces 3-palette stub.
-  Per the [foundations wireframe-exemption](../ui/foundations/README.md#wireframe-convention-exemption),
+  Per the [foundations wireframe-exemption](../ui/foundations/sessions.md#wireframe-convention-exemption),
   this demo is allowed to render real palettes (the rest of
   `screens/` stays monochrome).
 

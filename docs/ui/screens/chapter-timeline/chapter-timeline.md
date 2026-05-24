@@ -23,12 +23,15 @@ Cross-cutting principles that govern this screen are in
   card edits and the `Close chapter…` action disable while a
   generation pipeline is in flight; the chapter-close pipeline
   itself surfaces the banner affordance specified in the principle.
+- [Actions menu (contextual zone)](../../patterns/actions-menu.md#contextual-zone) —
+  Chapter Timeline contributes close / re-open / chapter-jump
+  commands to the universal `⚲` directory.
 
 ## Layout
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ [logo] Aria's Descent / Chapters    [status]  [⎇][⛭][←]    │ ← top bar
+│ [logo] Aria's Descent / Chapters    [status]  [⚲][⛭][←]    │ ← top bar
 │ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │ ← chapter token-progress strip
 ├────────────────────────────────────────────────────────────┤
 │ Chapters · 4 closed + 1 in progress                          │

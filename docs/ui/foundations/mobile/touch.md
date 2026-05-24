@@ -6,7 +6,7 @@ keyboard, status pill tap, chip-strip safe zone, and the scope of
 tooltips and keyboard shortcuts.
 
 This file is session 5 of the mobile-foundations multi-session pass
-(per [`./README.md → Sessions`](./README.md#sessions)). Sister to
+(per [`./sessions.md → Session list`](./sessions.md#session-list)). Sister to
 [`./responsive.md`](./responsive.md),
 [`./navigation.md`](./navigation.md),
 [`./layout.md`](./layout.md), and
@@ -107,7 +107,7 @@ The save bar (per
 [`patterns/save-sessions.md`](../../patterns/save-sessions.md))
 sits at the bottom of detail panes on desktop. On phone, the
 detail is a full-screen route per
-[`./collapse.md → World`](./collapse.md#two-pane-navigation-surfaces-world-plot-settings).
+[`./collapse.md → Two-pane navigation surfaces (World, Plot, Settings)`](./collapse.md#two-pane-navigation-surfaces-world-plot-settings).
 
 Behavior contract on phone:
 

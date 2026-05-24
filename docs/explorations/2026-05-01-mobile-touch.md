@@ -1,7 +1,7 @@
 # Mobile foundations — touch grammar (session 5)
 
 Session 5 of the mobile-foundations design pass (per
-[`../ui/foundations/mobile/README.md → Sessions`](../ui/foundations/mobile/README.md#sessions)).
+[`../ui/foundations/mobile/sessions.md → Mobile-foundations sessions`](../ui/foundations/mobile/sessions.md#mobile-foundations-sessions)).
 Pins **how desktop interactions translate to touch** — hover
 replacement, gesture vocabulary, save bar behavior with the
 keyboard, status pill tap, chip-strip safe zone, tooltip and

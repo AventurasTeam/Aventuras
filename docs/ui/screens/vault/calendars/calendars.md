@@ -17,10 +17,13 @@ editing**, clone-from-built-in, JSON import, and delete safety. L3
 from-scratch authoring is deferred.
 
 **Vault is unreachable from inside an open story.** Reaching the
-editor requires leaving the story, which cancels in-flight generation
-and unloads story state from memory. Calendar edits committed here
-are observed by stories on next load — no live propagation, no
-mid-generation interaction.
+editor requires leaving the story. If a generation is in flight,
+the navigation goes through the standard
+[abort-confirm modal](../../../principles.md#edit-restrictions-during-in-flight-generation)
+(`Stay` / `Cancel & leave`) — the user explicitly opts in to
+aborting and unloading story state from memory; nothing happens
+silently. Calendar edits committed here are observed by stories on
+next load — no live propagation, no mid-generation interaction.
 
 ## Cross-cutting principles
 
