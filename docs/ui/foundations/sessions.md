@@ -1,19 +1,19 @@
 # Visual-identity sessions
 
-Multi-session chronicle for the foundations visual-identity track —
-six design sessions, all landed. Tracks what shipped, when, and where
-the exploration record lives. Mobile / responsive sessions are
-chronicled separately at
+Retrospective chronicle for the foundations visual-identity track.
+All six design sessions landed 2026-04-30 → 2026-05-01; the
+substrate is feature-complete for v1. Mobile / responsive sessions
+are chronicled separately at
 [`mobile/sessions.md`](./mobile/sessions.md).
 
 ## Session list
 
-The visual identity contract spans six design sessions. They land
-sequentially; each session updates this list with its status and a
-link to its exploration record. Sessions that follow may be
-collapsed (e.g. 4+5 into one pass) or split further as scope
-becomes concrete; the list reflects the current plan, not a fixed
-contract.
+Six design sessions landed between 2026-04-30 and 2026-05-01 and
+shipped the visual-identity contract. Foundations is
+feature-complete for v1; the list below is a retrospective
+chronicle (what landed, when, with what scope) — not a plan. Per
+session: date landed, exploration record, scope summary, files
+produced.
 
 1. **Foundations / theme architecture** — landed 2026-04-30
    ([exploration record](../../explorations/2026-04-30-visual-identity-foundations.md)).
@@ -118,10 +118,9 @@ contract.
    slot values + audit expectations canonical at
    [`themes.md`](./themes.md).
 
-After session 6, foundations is feature-complete for v1. Component
-implementation begins consuming the contract; per-pattern visual
-specs (the "how" each pattern looks under the foundations) layer
-on as components ship.
+Component implementation consumes the contract going forward;
+per-pattern visual specs (the "how" each pattern looks under the
+foundations) layer on as components ship.
 
 ## Wireframe convention exemption
 

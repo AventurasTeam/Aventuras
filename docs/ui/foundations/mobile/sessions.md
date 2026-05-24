@@ -1,16 +1,23 @@
 # Mobile-foundations sessions
 
-Multi-session chronicle for the mobile / responsive contract — seven
-sessions, six landed (substrate) plus session 7's grouped per-screen
-retrofit pass. Visual-identity sessions are chronicled separately at
+Retrospective chronicle for the mobile / responsive contract.
+Substrate sessions 1–6 landed 2026-05-01; the substrate is
+feature-complete for v1. Session 7 is the grouped per-screen
+retrofit pass — groups A / B / C landed 2026-05-01, group D
+landed 2026-05-02 (3 surfaces — story-settings, app-settings,
+vault calendars; the fourth, prompt-pack editor, is deferred
+past v1). Mobile foundations work is feature-complete for v1.
+Visual-identity sessions are chronicled separately at
 [`../sessions.md`](../sessions.md).
 
 ## Session list
 
-The mobile contract spans seven sessions. Sessions 2–6 each pin a
-specific cross-cutting concern; session 7 starts the per-screen
-consumer pass. Each session lands its own file(s); the list below
-reflects the current plan and updates as work progresses.
+Six substrate sessions (1–6) landed 2026-05-01, pinning the cross-
+cutting mobile contract. Session 7 is the per-screen consumer
+pass — four surface-family groups, A / B / C landed 2026-05-01,
+D landed 2026-05-02 (prompt-pack editor surface deferred past v1).
+Per session below: date landed, exploration record, scope summary,
+files produced.
 
 1. **Scaffolding + multi-session plan** — landed 2026-05-01
    ([exploration record](../../../explorations/2026-05-01-mobile-foundations.md)).
@@ -134,7 +141,9 @@ reflects the current plan and updates as work progresses.
    deep links, splash screen config, web-target concerns.
    Files: [`platform.md`](./platform.md),
    [`platform.html`](./platform.html).
-7. **Per-screen retrofits (grouped)** — in progress.
+7. **Per-screen retrofits (grouped)** — landed
+   (A / B / C done 2026-05-01; D done 2026-05-02 with the three
+   v1 surfaces; prompt-pack editor surface deferred past v1).
    ~13 surfaces upgrade to render the responsive contract
    (viewport toggle, container-query reflow, mobile expression
    in per-screen `.md` docs, reconciliation of pre-foundations
@@ -194,9 +203,9 @@ reflects the current plan and updates as work progresses.
      amended to retire the dangling "responsive pass finalizes"
      note and pin phone-tier dropdown surface bindings; World
      and Plot added to its Used-by list.
-   - **D — Settings + power-user** — partial-landed 2026-05-02
+   - **D — Settings + power-user** — landed 2026-05-02
      ([exploration record](../../../explorations/2026-05-02-mobile-group-d-settings.md)).
-     Three of four surfaces — story-settings, app-settings, vault
+     The three v1 surfaces — story-settings, app-settings, vault
      calendars — gain `## Mobile expression` sections and
      viewport-toggle wireframes. Settings (story-settings,
      app-settings) collapse list-first on phone per the extended
@@ -209,21 +218,21 @@ reflects the current plan and updates as work progresses.
      **Substantive substrate touch**: `collapse.md` reframes its
      "World" section to "Two-pane navigation surfaces (World, Plot,
      Settings)" with one shared rule; the Settings family joins
-     the master-detail collapse contract. Prompt-pack editor —
-     the fourth surface — is post-v1 (no desktop spec yet);
-     parked at
-     [`parked.md → UX (post-v1) → Prompt-pack editor`](../../../parked.md#prompt-pack-editor-desktop-spec--mobile-retrofit).
+     the master-detail collapse contract. The prompt-pack editor
+     surface is deferred past v1 (no desktop spec yet); tracked in
+     [`parked.md → UX (post-v1) → Prompt-pack editor`](../../../parked.md#prompt-pack-editor-desktop-spec--mobile-retrofit)
+     and will retrofit when the desktop spec lands.
 
    Cross-cutting pattern docs (`patterns/icon-actions.md`,
    `save-sessions.md`, `calendar-picker.md`, `data.md`,
-   `lists.md`, `forms.md`, `entity.md`) get touched as needed
+   `lists.md`, `forms.md`, `entity.md`) got touched as needed
    during per-screen passes; minor edits only, not separate
    sessions.
 
-After session 6, the substrate is feature-complete for v1.
-Session 7's grouped consumer pass mechanically applies the
-contract to every surface; once all four groups land, mobile
-foundations work is fully done.
+The substrate (sessions 1–6) is feature-complete for v1; session
+7's consumer pass is complete across every surface v1 ships.
+The prompt-pack editor mobile retrofit will land alongside its
+post-v1 desktop spec.
 
 ## Wireframe convention
 
