@@ -50,6 +50,15 @@ inspectable when either toggle flips off; only new-capture writes
 stop. Removing captures is always explicit (per-capture delete or
 "clear all").
 
+**Build-mode gating is intentionally NOT in scope.** The probe
+code ships in production bundles; the two runtime gates above
+(both default false) are the floor. Opt-in twice plus explicit
+clear-all per
+[`observability.md`](../observability.md) make the storage cost a
+user-controllable choice — see also the per-story toggle's
+storage-cost help text in
+[`story-settings.md → Memory`](../ui/screens/story-settings/story-settings.md).
+
 ---
 
 ## Capture model

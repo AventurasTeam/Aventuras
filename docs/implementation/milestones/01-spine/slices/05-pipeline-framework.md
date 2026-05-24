@@ -253,6 +253,15 @@ adds it.
     deltas); `recoverInFlightRuns()` reverse-replays the
     dirty orphans, deletes the clean ones, returns a
     `RecoveryReport`.
+  - **Chained-transition synchronicity** — after
+    `commitRun(predecessor)` with a defined `chainsTo`, an
+    immediate synchronous read of `txState.runs` shows the
+    successor present — no empty intermediate state. Pins
+    the load-bearing invariant from
+    [`generation-pipeline.md → Chained transition`](../../../../generation-pipeline.md#chained-transition--no-user-edit-window)
+    (the "no-user-edit-window" guarantee depends on Zustand's
+    `setState` being synchronous). If a state-library swap
+    ever breaks the invariant, this test catches it.
 - Storybook stories for the stub LLM scenario picker if a
   developer-facing affordance is useful in Slice 1.7's smoke
   trigger; otherwise no UI ships here.

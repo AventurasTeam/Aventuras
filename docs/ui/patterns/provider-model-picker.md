@@ -236,6 +236,14 @@ warning Tag treatment the trigger uses. Click still commits
 (consumer's profile-level error state then surfaces the broken
 reference). User favorited intentionally; hiding loses information.
 
+Surfacing is **deliberately picker-open-only**, both v1 and post-v1.
+If the broken favorite is also the active assignment (per
+[`app-settings.md → Per-profile error states + global banner`](../screens/app-settings/app-settings.md#per-profile-error-states--global-banner)),
+the global error banner fires through the existing pre-flight
+path. A standalone broken favorite — favorited but not assigned
+anywhere — is informational only; the user notices when they
+reach for it. No push-surface needed.
+
 **Toggle propagation.** Toggling favorite in either the Favorites
 pinned section OR its source-section mirror flips the same data
 point. Both rows reflect instantly.

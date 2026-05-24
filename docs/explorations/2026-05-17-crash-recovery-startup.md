@@ -70,27 +70,22 @@ Running recovery after migrations guarantees stale-encoding orphans
 fail-into that dispatcher when it lands rather than fail in
 mysterious ways before it.
 
-### Zustand-rehydrate invariant
+### Zustand-rehydrate invariant — withdrawn
 
-The post-construct ordering above is safe only if the data-model
-Zustand slices (entries, entities, lore, happenings, threads,
-deltas, etc.) do **not** rehydrate from SQLite at construct time.
-They query lazily on first surface read. Otherwise a slice with
-construct-time persist rehydration picks up pre-recovery state and
-stays stale until invalidated.
+An earlier draft proposed an invariant that data-model Zustand
+slices (entries, entities, lore, deltas, etc.) must not rehydrate
+from SQLite at construct time, to avoid picking up pre-recovery
+state. Withdrawn on review: the architecture makes the race
+unreachable. Data-model slices are **story-scoped** — they
+construct when the user opens a story, which happens long after
+boot (after migrations, after `recoverInFlightRuns`, after the
+story list renders). The boot-time stale-state window the
+invariant guarded against does not exist because the stores in
+question do not exist at boot.
 
-This invariant matches the local-storage design (SQLite is
-source-of-truth, Zustand is a query-result cache), but no canonical
-doc spelled it out before this commit. The invariant is pinned
-inline within
-[`generation-pipeline.md → Startup recovery pass`](../generation-pipeline.md#startup-recovery-pass)
-rather than a separate architecture section, since that's where it's
-load-bearing (the dedicated data-flow section in `architecture.md`
-doesn't exist yet — it's listed as not-yet-covered).
-
-UI-pref slices (theme id, last-opened-story id, etc.) may rehydrate
-at construct — they don't depend on deltas and are not affected by
-reverse-replay.
+UI-pref slices (theme id, last-opened-story id, etc.) construct at
+boot but don't depend on deltas; reverse-replay leaves them
+untouched.
 
 ## Invocation contract
 

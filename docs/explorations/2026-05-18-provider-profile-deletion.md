@@ -286,6 +286,13 @@ Joins the existing
 [reader-composer.md → Error surface](../ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill)
 vocabulary as new variants of "transient pipeline failure":
 
+> The `default_models[agentId]` row below is superseded by the May
+> 19 default-models-authority redesign
+> ([exploration](./2026-05-19-default-models-authority.md)) — the
+> construct no longer exists; the resolver walks story-override →
+> `assignments[agentId]` → `profile.modelRef`, full stop. Row kept
+> for historical context.
+
 | Resolver failure                                     | System-entry copy                                                      | Actions                                       |
 | ---------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------- |
 | Narrative profile's `modelRef.providerId` is missing | "Couldn't generate — the Narrative profile's provider is missing."     | `Fix profile` · `View details` · `Dismiss`    |
@@ -328,6 +335,10 @@ turn, and matches the established
 "failed-persistent classifier" pill precedent.
 
 Pill copy combines cause + consequence:
+
+> The `default_models['classifier']` row below is superseded by the
+> May 19 default-models-authority redesign — see the note above the
+> system-entry table.
 
 | Periodic classifier pre-flight failure               | Pill copy                                                                      |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------ |

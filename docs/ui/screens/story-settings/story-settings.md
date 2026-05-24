@@ -519,7 +519,10 @@ with a hint linking to App Settings · Diagnostics.
 
 **Section content:**
 
-- **Probe mode toggle** for this story.
+- **Probe mode toggle** for this story. Help text under the toggle:
+  _"Probe captures retrieval state per turn (gzipped JSON). Useful
+  for debugging memory behavior; costs storage proportional to
+  turns captured. Clear from Diagnostics Hub."_
 - **Capture stats** — count, total compressed size, oldest /
   newest pointer (chapter + turn). Updates live as turns capture
   or evict.

@@ -805,6 +805,14 @@ has nothing to undo for the entry itself. The orphan placeholder
 row is dropped by `abortStreamingEntry(entryId)` (side-channel
 removal, no delta) in the abort handler.
 
+The streaming placeholder lives in `useStoryStore` (Zustand) only
+during the stream — SQLite first sees the entry at the
+`commitStreamingEntry` delta_emit. **Mid-stream crash therefore has
+nothing to orphan**: Zustand state is lost with the process, SQLite
+never received an `op=create`, and crash recovery sees zero deltas
+under the turn's `actionId` (it just marks the `pipeline_runs` row
+resolved with no reverse-replay work).
+
 ### Atomicity per action
 
 Each action's persisted write is one SQLite transaction:
@@ -975,16 +983,13 @@ async function recoverInFlightRuns(): Promise<RecoveryReport> {
 }
 ```
 
-The post-Zustand-construct ordering is safe because of a
-load-bearing invariant: **data-model Zustand slices (entries,
-entities, lore, happenings, threads, deltas, etc.) do not
-rehydrate from SQLite at construct time; they query lazily on
-first surface read.** Only UI-pref slices (theme id,
-last-opened-story id, etc.) may rehydrate at construct. Without
-this invariant, a data-model slice with construct-time
-rehydration would pick up pre-recovery state and stay stale until
-invalidated. With it, the first surface to render after recovery
-hydrates fresh from the post-recovery rows.
+The post-Zustand-construct ordering is safe by virtue of the
+architecture: data-model slices (entries, entities, lore, deltas,
+etc.) are **story-scoped** — they construct when the user opens a
+story, which is long after boot's recovery pass has completed.
+There's no boot-time race for them to lose. UI-pref slices
+(theme id, last-opened-story id, etc.) construct at boot but
+don't depend on deltas; reverse-replay leaves them untouched.
 
 The recovery hook's specific module path (where `recoverInFlightRuns`
 lives in the codebase) lands with the broader startup-flow design
@@ -1234,14 +1239,56 @@ reading outcome.
 
 ```ts
 type PipelineError =
-  | { kind: 'provider'; reason: 'auth' | 'network' | 'timeout' | 'unknown'; detail?: string }
-  | { kind: 'phase-logic'; detail: string } // malformed output, contract violation
-  | { kind: 'action-layer'; detail: string } // schema/constraint failure on persisted write
+  | {
+      kind: 'provider'
+      reason: 'auth' | 'network' | 'timeout' | 'unknown'
+      detail?: string
+      possibleCapabilityMismatch?: string // best-effort substring extraction
+    }
+  | {
+      kind: 'phase-logic'
+      detail: string // malformed output, contract violation
+      phaseName?: string // orchestrator auto-fills
+      subsystem?: string // 'classifier' | 'narrative-parse' | 'placeholder-substitute' | ...
+      targetRef?: { kind: string; id: string } // entity/lore/happening being processed
+      retryAttempt?: number // 0-indexed attempt within callWithRetry
+    }
+  | {
+      kind: 'action-layer'
+      detail: string // schema/constraint failure on persisted write
+      tableName?: string // which target_table
+      targetId?: string
+      constraintViolated?: string // 'UNIQUE' | 'CHECK' | 'FK' | etc.
+    }
   | { kind: 'orchestrator'; detail: string } // abort-path wrap (catches DeltaReplayError, etc.)
 ```
 
 Categories drive how UI surfaces them — toast for transient,
 banner / dialog for persistent.
+
+**`provider.possibleCapabilityMismatch`** (best-effort hint, A5).
+The orchestrator's provider-error mapper does keyword matching
+against the response body for capability-shaped substrings
+(`tool_use`, `thinking`, `streaming`, `vision`, etc.). When a hit
+lands, the field carries the substring; otherwise omitted.
+Best-effort only — provider error messages are not standardised;
+the field is a hint for the UI, never an assertion that a user
+override was wrong. UI copy reflects this uncertainty (e.g.,
+"Provider returned an error. The response mentioned
+`<possibleCapabilityMismatch>`, which can mean a capability
+override is wrong — check Story Settings · Models. It can also
+mean the provider rejected the request for other reasons."). See
+[`app-settings.md → Override semantic — trust-the-user`](./ui/screens/app-settings/app-settings.md#override-semantic--trust-the-user).
+
+**Structured-context fields on `phase-logic` and `action-layer`**
+(O4). All optional so existing call sites keep compiling.
+Orchestrator auto-populates `phaseName` and `retryAttempt` when
+wrapping phase-emitted errors (it owns that context). `subsystem`
+and `targetRef` are call-site populated when the failing code
+knows them. `tableName` / `targetId` / `constraintViolated` for
+the action-layer variant come from the SQLite error mapper.
+Diagnostics UI renders structured fields when present, falls back
+to `detail` alone otherwise.
 
 ---
 

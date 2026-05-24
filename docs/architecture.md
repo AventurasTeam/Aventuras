@@ -126,7 +126,9 @@ Every macro is created with a **context group tag**. The group drives:
    macros tagged with G or `staticContent` (the zero-variable fallback
    for truly group-free macros like output-format directives). The
    editor flags mismatches at author time; a runtime validator catches
-   them on pack load
+   them on pack load. Full validator contract (when it runs, what it
+   validates, failure surface) lands with pack-design — see
+   [`parked.md → Pack validation contract`](./parked.md#pack-validation-contract)
 
 Example built-in macros:
 
@@ -139,6 +141,31 @@ Example built-in macros:
   instruction block for narrative generation
 - `macros/output_format_json` (`staticContent`) — generic JSON output
   directive
+
+### Empty retrieval buckets — author contract
+
+A type's bucket can be empty — cold stories (no entries yet for
+the classifier to extract from), narrow scenes (no candidate
+scored above
+[`min_score_threshold`](./memory/retrieval.md#per-type-retrieval-budgets)),
+or post-rollback states. Templates iterating over a retrieval
+bundle MUST conditionally render their section header and
+surrounding prose:
+
+```liquid
+{% if retrievedLore.size > 0 %}
+  ## Relevant lore
+  {% for lore in retrievedLore %}...{% endfor %}
+{% endif %}
+```
+
+A template that emits the section header unconditionally produces
+a dangling label with nothing under it, which the LLM may
+interpret as a meaningful absence ("the world has no lore"). This
+is a pack-author bug, not a runtime concern. The deferred
+[pack validator](./parked.md#pack-validation-contract) warns when
+any `{% for x in retrieved* %}` lacks a sibling or wrapping
+`{% if size > 0 %}` guard.
 
 ### The pack model: full replacement, not override
 
@@ -282,10 +309,14 @@ Several shapes feed into it:
      copied into the new `stories.settings`; the story owns them
      thereafter. Changing the global does NOT propagate to existing
      stories. This is the **copy-at-creation scope pattern**.
-   - **Global model defaults** (`defaultModels.narrative`,
-     `defaultModels.classifier`, ...) — resolved live at render time
-     via the models resolver (see below). This is the
-     **override-at-render scope pattern**.
+   - **Agent assignments** (`assignments[agentId]` → profile id) —
+     each agent (narrative, classifier, embedder, …) points at a
+     provider-profile. Resolved live at render time via the models
+     resolver (see below). This is the **override-at-render scope
+     pattern**. No "global default model" constant exists — the
+     resolver walks story-override → app-assignment → profile, full
+     stop. Authority redesign:
+     [`explorations/2026-05-19-default-models-authority.md`](./explorations/2026-05-19-default-models-authority.md).
    - **App-only settings** — global concerns that never appear
      per-story (API keys, classifier truncation caps, diagnostics
      toggles).
@@ -322,12 +353,43 @@ its default filled in, and no `??` fallback should appear in the
 context getter or anywhere else. If a value is missing from the
 persisted JSON, that's the parse's job to fix, not the reader's.
 
+**Zod-parse failure at load.** Three load-time JSON-parse sites can
+fail: `app_settings` (master config), `stories.definition`,
+`stories.settings` (per-story). Recovery contract:
+
+- **`app_settings` parse failure.** App blocks at a recovery screen —
+  _"Couldn't load settings. Open the corrupted file?"_ with two
+  actions: `Open file` (deep-links the SQLite file in the OS file
+  manager) and `Reset settings` (writes a fresh default
+  `app_settings` row, preserving everything else). No silent crash;
+  no automatic reset because losing user-configured providers + keys
+  is destructive.
+- **`stories.definition` or `stories.settings` parse failure.** The
+  affected story fails to open; user sees a per-story error badge in
+  the story list (_"Couldn't open — settings corrupted"_). Other
+  stories unaffected. Same `Open file` + `Reset to defaults for this
+story` actions. Reset destroys per-story knobs but preserves all
+  delta-replayable narrative content.
+
+Recovery contract applies when Zod-using code lands — Zod isn't a
+v1 dependency yet (see
+[`parked.md → Drizzle schemas as source of truth`](./parked.md#drizzle-schemas-as-source-of-truth-for-typed-enum-unions)
+for scope).
+
 **The models resolver is the one deliberate exception** to "no `??` at
 read sites" — because models use override-at-render, the context
-getter calls a named `resolveModel(feature)` function that does
-`story.settings.models[feature] ?? appSettings.defaultModels[feature]`.
-Single, typed, named — not ambient `??` scattered everywhere. Every
-other setting read is a direct property access off the parsed story
+getter calls a named `resolveModel(agentId)` function that walks
+`stories.settings.models[agentId]` (per-story override, a model id
+string) → `app_settings.assignments[agentId]` (the assigned profile)
+→ `profile.modelRef` (the profile's `(providerId, modelId)`). No
+fallback constant: per the May 19 `default_models` authority redesign
+([exploration](./explorations/2026-05-19-default-models-authority.md)),
+the absence of a valid model at any step is an error state, not a
+recoverable case. Pre-flight halt per
+[`provider-profile-deletion.md → Section 4 — Visible-error contract at use time`](./explorations/2026-05-18-provider-profile-deletion.md#section-4--visible-error-contract-at-use-time)
+surfaces it as a system-entry plus the global error banner. Single,
+typed, named — not ambient `??` scattered everywhere. Every other
+setting read is a direct property access off the parsed story
 settings.
 
 The generation store doesn't own settings storage — it reads via
@@ -654,6 +716,19 @@ current narrative revolves around. Excluding one on a user-set
 the narrator keeps addressing?"). The mode setting is respected
 everywhere the entity isn't structurally necessary.
 
+**Bundled-pack test scope.** The bundled pack's entity-injection
+template is held to this invariant via a dedicated test scenario
+(flagged for whichever slice ships the bundled pack): construct a
+context fixture with an entity carrying `injection_mode: 'disabled'`
+AND present in `sceneEntities`; render the bundled template;
+assert the entity appears in the rendered output. Catches a refactor
+of the bundled pack that accidentally makes the active+in-scene
+iteration conditional on `injection_mode`. User-authored packs are
+not held to this floor — the deferred
+[pack validator](./parked.md#pack-validation-contract) emits a
+best-effort warning instead of a blocking error (user freedom
+takes precedence).
+
 ### Injection mode — non-structural cases
 
 After the structural floor seats, remaining candidate rows (lore,
@@ -843,9 +918,15 @@ ships.
 On walk failure (DB error, corrupt state with target row missing
 and no `op=delete` in the chain), `populate` rejects; the host
 falls back permanently to the `undo_payload`-keys summary for
-that row and emits a `debug`-level log per
+that row and emits a `warn`-level log (delta id + error reason)
+per
 [`observability.md → Logger contract`](./observability.md#logger-contract).
-The row stays usable.
+The row stays usable. The warn level keeps the entry visible in
+Diagnostics Hub Logs without requiring the debug-level master
+toggle, so users investigating "why is this delta log row less
+detailed than the others" can find the cause. No UI signal on the
+fallback row itself in v1 — adding a small `⚠` marker is
+overdesign until the failure mode proves common.
 
 ### Search is orthogonal
 
@@ -885,14 +966,19 @@ Flag for future sessions:
   (calibrated against the
   [scale-assumed pool sizes](./memory/retrieval.md#scale-assumptions)
   once test stories exist).
-- **Startup + migration flow** — first-boot initialization, schema
-  migration on version bump, loading current story on app launch.
-  Crash recovery is now pinned end-to-end in
-  [`generation-pipeline.md → Crash recovery`](./generation-pipeline.md#crash-recovery-via-pipeline_runs-marker-table)
-  (marker table, boot-ordering slot, `recoverInFlightRuns` contract,
-  modal UX, failure policy); only the recovery hook's specific
-  module path is unspecified, landing alongside the rest of the
-  startup-flow design.
+- **Boot-time orchestration** — the interaction between Drizzle's
+  `migrate()` (per
+  [Slice 1.2](./implementation/milestones/01-spine/slices/02-drizzle-schema.md)),
+  store hydration, and crash-recovery
+  ([crash-recovery-startup exploration](./explorations/2026-05-17-crash-recovery-startup.md)
+  and
+  [`generation-pipeline.md → Crash recovery`](./generation-pipeline.md#crash-recovery-via-pipeline_runs-marker-table)).
+  The substrate is in place — schema migrations run idempotently
+  at boot, marker-table replay is spec'd end-to-end — what's
+  missing is the canonical ordering doc that names the precise
+  sequence (migrations → store hydration → recovery →
+  first render) and the recovery hook's module path. Lands with
+  the broader startup-slice when it's written.
 - **Secrets storage** — API keys in SQLite (per data strategy), whether
   encrypted at rest, how they flow from settings UI into AI SDK calls
 - **Observability + debugging** — substrate designed in

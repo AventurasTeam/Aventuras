@@ -186,7 +186,9 @@ Deletion is a single SQL cascade per the
 every branch-scoped row with that `branch_id` goes (entries,
 entities, lore, threads, happenings, chapters, deltas, etc.).
 Assets are reference-counted via `entry_assets`; orphaned assets
-are GC'd in a separate sweep, not inline.
+enter the trash-can flow (`assets.pending_delete_at` flag, trash
+sweep, rollback restoration) per
+[`data-model.md → Assets`](../../../../data-model.md#assets-images--future-media).
 
 **Implementation note:** the row's expansion from "compact" to
 "row + confirmation buttons" is functional as drawn, but the

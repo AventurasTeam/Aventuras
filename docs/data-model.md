@@ -197,6 +197,7 @@ erDiagram
         integer size_bytes
         text content_hash "sha256 for dedup"
         integer created_at
+        integer pending_delete_at "unix seconds; NULL = active, non-NULL = in trash, sweeper unlinks past retention window. See Assets (images & future media) → Cleanup on delete — trash-can pattern"
     }
 
     entry_assets {
@@ -264,6 +265,7 @@ erDiagram
         integer created_at
     }
     %% INDEX deltas_chain_idx (branch_id, target_id, log_position) — chain-walk index for the diff cache walk and future rollback / CTRL-Z chain reads. See architecture.md → Delta history diff resolution. target_table excluded: the kind-prefixed UUID invariant makes target_id globally unique, so target_table stays in the query as a defensive post-filter rather than an index discriminator.
+    %% UNIQUE INDEX deltas_log_position_uniq (branch_id, log_position) — backstop. The action-layer's MAX+1 assignment is the primary mechanism (see "log_position assignment" below); this index catches buggy writers at insert time. Can't double-up deltas_chain_idx because target_id sits between branch_id and log_position.
 
     vault_calendars {
         text id PK "UUID; user-authored calendars only — built-ins live in code/repo JSON loaded at boot"
@@ -664,6 +666,24 @@ entity where `kind=location`, giving locations a containment hierarchy
 (this place is part of that place). Prompt rendering walks the parent
 chain at runtime (e.g. `Aria is in [Shop in Town Square in City]`).
 Cycle prevention is app-layer — SQLite can't enforce it.
+
+**Cycle guard owner.** The action-layer mutator that writes
+`entities.state.parent_location_id` (per
+[`generation-pipeline.md → Narrow action functions`](./generation-pipeline.md#narrow-action-functions-over-write-set-declarations))
+validates pre-commit: walks the proposed parent chain
+(`new_parent → its parent → ...`) within the same branch's
+location entities and rejects if the walk visits the entity being
+updated. Depth-cap at 100 with an error log on cap-hit (shouldn't
+happen in real data).
+
+**Failure mode.** Rejected writes return
+`{ status: 'rejected', reason: 'parent-cycle' }` (mirrors the
+gate-rejection shape at
+[`generation-pipeline.md → Action rejection`](./generation-pipeline.md#action-rejection--defense-in-depth)).
+Classifier writes hitting the rejection surface as a phase-level
+`recoverable_error` (the retry tier handles LLM mistakes). User
+edits surface as a form-validation error in the World panel —
+user fixes or leaves it.
 
 **Why so few fields.** Locations are dramatically less dynamic than
 characters. Type, appearance, atmosphere, landmark features all
@@ -1078,6 +1098,7 @@ stories.settings: {
   piggybackMode: 'on' | 'off'       // capability-gated; on = narrative emits structured trailing block; off = separate per-turn classifier pass
   embeddingBackend: 'provider' | 'local'   // embedding runtime (provider endpoint OR bundled local ONNX); both produce identical retrieval algorithm
   embedding_model_id: string        // canonical embedding model id; copied from app_settings.embedding_model_id at story creation. Locked thereafter unless the user explicitly re-indexes via the model swap UX. Different stories may carry different model ids; vec0 partitions per branch. See docs/memory/retrieval.md → Storage and Model swap UX
+  embedding_swap_target?: string    // model id of the in-flight re-index target. Non-null while a stage-then-flip swap is in progress; cleared atomically with the swap's Phase 2 commit. Crash recovery on story open surfaces a resume/cancel prompt when this is set. See docs/memory/retrieval.md → Model swap UX
   embedding_provider_id?: string    // required when embeddingBackend === 'provider'; FK into app_settings.providers[].id picking which provider supplies the embedding endpoint. Distinct from the narrative-side provider routing (a user may run e.g. OpenAI for narrative and a local embedding provider, or vice versa). Null / undefined when embeddingBackend === 'local'.
   retrievalMode: 'embedding' | 'llm-only'  // set at story creation, immutable thereafter; llm-only is the embedding-unavailable fallback regime
   retrievalBudgets: {                // per-type token budgets, hard partitions in v1 (no spillover); see docs/memory/retrieval.md → Per-type retrieval budgets
@@ -1985,6 +2006,24 @@ This is the second delta-scope exemption alongside the
 `story_entries.content` text-edit side-channel above; together they
 are the only narrative-state mutations that bypass the log.
 
+**`log_position` assignment.** Computed at insert time inside the
+same SQLite transaction as the delta row:
+`COALESCE(MAX(log_position), 0) + 1 WHERE branch_id = ?`.
+Single-writer-per-branch (per the pipeline gate model — see
+[`generation-pipeline.md → Concurrency model`](./generation-pipeline.md#concurrency-model))
+makes this race-free at the action layer. SQLite has no per-branch
+autoincrement primitive (`AUTOINCREMENT` is table-global, not
+partitioned), so the assignment lives in the delta-creating
+mutator, not as a column default.
+
+Invariant: monotonically increasing within branch. Gaps are fine
+(rollback, fork copy, delete deltas — so gaps occur naturally; the
+`>=`, `<`, `MAX` operations all tolerate them), but duplicates
+within branch break chain-walk ordering. The
+`UNIQUE INDEX deltas_log_position_uniq (branch_id, log_position)`
+backstop on the deltas table (see Diagram) catches buggy writers
+at insert time.
+
 **Delta storage economy.** Each delta stores only **undo** information in
 a single `undo_payload` column — no redundant "after" snapshot, since the
 live row already holds that. For `op=create` the payload is null (undo =
@@ -2568,7 +2607,38 @@ operationally cheap despite image-heavy stories.
 **Assets are story/branch-agnostic.** Content-hash keying means identical
 content naturally dedups. No benefit to scoping tighter.
 
-**Cleanup on delete.** When an `entry_assets` row is removed (rollback,
-branch deletion, entry deletion), check if the referenced asset has any
-remaining `entry_assets` rows. If none, delete the `assets` row AND the
-file on disk. Immediate cleanup, no orphan-GC job needed.
+**Cleanup on delete — trash-can pattern.** When an `entry_assets`
+row is removed (rollback, branch deletion, entry deletion) and the
+referenced asset's inbound-reference count drops to 0, the same
+action sets `assets.pending_delete_at = now()` and atomically
+renames the file from `<appdata>/assets/<asset_id>` to
+`<appdata>/.trash/<asset_id>`. The `assets` row stays in place so
+rollback can resurrect cleanly. From the user's perspective the
+asset is gone immediately (no inbound references means no surface
+ever finds it); the deferred unlink is a rollback-safety
+implementation detail.
+
+**Rollback restoration.** When a delta-replay reinserts an
+`entry_assets` row, the action layer checks the target asset's
+flag; if `pending_delete_at IS NOT NULL` and refcount > 0
+post-insert, it clears the flag and renames the file back from
+trash to live. Files already swept (past retention window) are
+gone — rollback degrades to "row restored, bytes missing,"
+surfaced to the user as a non-fatal warning.
+
+**Trash sweep.** Boot-time pass:
+`SELECT id FROM assets WHERE pending_delete_at IS NOT NULL AND pending_delete_at < (now - retentionSeconds)`;
+for each, unlink the trash file and
+`DELETE FROM assets WHERE id = ?`. Retention window TBD (lean
+toward generous — 24+ hours, or tied to CTRL-Z chain depth bound).
+
+**Orphan GC — separate boot pass.** Enumerate `<appdata>/assets/`
+(the live dir, not trash); for each file with no row in `assets`,
+unlink. Catches crash-between-disk-write-and-DB-commit and
+re-upload-over-existing failure modes.
+
+**Caller discipline.** No SQL filter on `pending_delete_at` is
+needed in any v1 query path — trashed assets have no inbound
+`entry_assets` rows by definition (that's what triggered the
+trash), so existing joins through `entry_assets` already exclude
+them. The flag is for the sweeper and rollback paths only.

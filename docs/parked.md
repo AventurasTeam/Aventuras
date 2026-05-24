@@ -24,7 +24,7 @@ commit that resolves an item carries the resolution narrative.
 
 ### Data-model (post-v1)
 
-#### Zod schemas as source of truth for typed-enum unions
+#### Drizzle schemas as source of truth for typed-enum unions
 
 Several compound APIs duplicate enum unions from the data-model
 spec by hand:
@@ -40,21 +40,24 @@ spec by hand:
 Today each compound types its own union, manually kept in sync
 with the data-model spec. Drift risk is small but real.
 
-The fix lands when centralized Zod schemas for the data model
-exist (Zod isn't currently a dependency; no code imports it
-yet). Once Zod schemas are the runtime+typing source of truth
-for the data model, compound API unions should derive via
-`z.infer<typeof xSchema>['source']` (or equivalent) rather than
-re-typing the enum independently. Eliminates the duplication
-without changing compound shapes.
+The fix lands once Drizzle's schema definitions exist (per
+[Slice 1.2](./implementation/milestones/01-spine/slices/02-drizzle-schema.md))
+with `text({ enum: [...] })` shapes on the four columns above
+(`deltas.source`, `deltas.op`, `story_entries.kind`,
+`stories.mode`). Compound APIs then derive via
+`typeof schema.deltas.$inferSelect['source']` (or equivalent)
+rather than re-typing the enum independently — eliminates the
+duplication without changing compound shapes.
 
-Lands: alongside whichever first body of work introduces Zod as
-a dep — likely the import / export validation surfaces (already
-hinted at in the
+**Zod's scope is separate.** Zod (when it joins the dep list)
+owns JSON column contents (`entities.state`, `stories.settings`,
+`stories.definition`, `app_settings` JSON), runtime LLM-output
+validation, and import / export validation — not the direct-DB
+column enums above. Adjacent design surfaces (importer JSON
+validation hinted at in the
 [Importer needs-design row](./ui/component-inventory.md#compounds--needs-design)
-as "zod-validated parse"). At that point the data-model schemas
-get authored as Zod, and the compound APIs that mirror them
-switch to inferred types.
+as "zod-validated parse", structured-output schemas) drive Zod's
+adoption when they ship.
 
 #### Multi-version `undo_payload` apply-dispatcher
 
@@ -145,6 +148,42 @@ Surfaced during Group D mobile retrofit
 The other three Group D surfaces (story-settings, app-settings,
 vault calendars) landed; this one was always pending its desktop
 design and is now confirmed post-v1 in scope.
+
+#### Pack validation contract
+
+[`architecture.md → Prompt templates and authoring`](./architecture.md#prompt-templates-and-authoring)
+mentions that "a runtime validator catches macro include
+mismatches on pack load" without specifying:
+
+- **When it runs** — pack activation (story creation,
+  story-settings swap, app start with active pack)? Per-call?
+- **What it validates** — macro resolution, Liquid parse,
+  required-variable presence in each template's targeted
+  context-kind. Plus:
+  - **Empty-bundle guards** — any `{% for x in retrieved* %}`
+    has a sibling or wrapping `{% if size > 0 %}` (or
+    equivalent guard). Catches the dangling-section-header
+    bug from M10.
+  - **Active+in-scene injection** — best-effort detection of
+    templates that appear to apply `injection_mode` filtering
+    to the active+in-scene iteration. Flag for the design
+    pass; harder to mechanically detect than the empty-bundle
+    case.
+- **What it surfaces — severity: warnings, not errors.** The
+  validator surfaces issues as warnings in the editor; never
+  blocks save or pack activation on user-authored packs. User
+  freedom takes precedence — if a user deliberately breaks an
+  invariant in their own pack, that's their call. The bundled
+  pack is held to a higher bar via its own test suite (see
+  A7's bundled-pack test scope).
+
+Applies even with v1's bundled / vault-only pack workflow —
+whenever a pack is loaded, malformed templates surface as
+runtime generation failures with no actionable path back to
+"the pack's template is broken." Owned by the first pack
+design pass (editor or pack-format, whichever lands first);
+cross-references the
+[Prompt-pack editor entry](#prompt-pack-editor-desktop-spec--mobile-retrofit).
 
 #### Bulk operations on entities
 

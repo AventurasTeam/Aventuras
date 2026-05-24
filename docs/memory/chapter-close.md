@@ -90,8 +90,13 @@ resolution, or narrative pause.
 
 **Validation.** `end_entry_id` must satisfy
 `previous_chapter.end_entry_id < end_entry_id <= current_head`.
-Invalid output triggers one retry with a stricter prompt; persistent
-failure falls back to "current head as end."
+Invalid output triggers the standard `callWithRetry` same-prompt
+retry (per
+[`generation-pipeline.md → Error, cancel, and retry`](../generation-pipeline.md#error-cancel-and-retry));
+persistent failure across the retry budget falls back to "current
+head as end." (Prompts aren't generated on the fly — the retry
+contract is "same prompt, sampling variance catches transient
+malformed output.")
 
 The chapter `start_entry_id` is automatically the entry after the
 previous chapter's `end_entry_id` (or position 1 if first chapter).
@@ -360,7 +365,7 @@ User edits are blocked; pipeline phase failures cascade as follows:
 | Phase                       | Failure mode                                                                                                                                                            |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **0** (catch-up classifier) | Retry once, then proceed with what's classified. Worse retrieval input for downstream phases but not catastrophic.                                                      |
-| **1** (boundary selection)  | Retry once with stricter prompt; final fallback uses head-as-end.                                                                                                       |
+| **1** (boundary selection)  | `callWithRetry` same-prompt retry; final fallback uses head-as-end.                                                                                                     |
 | **2** (metadata)            | Placeholder content; chapter row still creates.                                                                                                                         |
 | **3** (lore-mgmt)           | Per-emission validation; rejected emissions skipped, accepted ones commit. Phase as a whole may produce zero successful emissions on bad output — chapter still closes. |
 | **4** (lifecycle review)    | Skip; not critical.                                                                                                                                                     |

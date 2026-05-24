@@ -79,11 +79,19 @@ probe's existing rule, unrelated to this slice).
 - Create `lib/diagnostics/` as the second `lib/*` module under
   Slice 1.1's discipline:
   - **Public API in `index.ts`**: `logger` (with
-    `error` / `warn` / `debug` methods); `useDiagnosticsStore`
-    selectors for read-only access from UI; types (`LogEntry`,
-    `LogLevel`, `LogSubsystem`, `LogKind`, plus stub types for
-    `HttpCall`, `TurnCapture`, `PhaseEvent` so slices 1.4 / 1.5
-    have target shapes to fill).
+    `error` / `warn` / `debug` methods; threads the ambient
+    `actionId` per
+    [`observability.md → Ambient actionId mechanism`](../../../../observability.md#ambient-actionid-mechanism));
+    `loggerWithoutTurn` (same methods, explicit no-turn paths
+    only — boot, hydration, background workers outside any
+    run); `useDiagnosticsStore` selectors for read-only access
+    from UI; types (`LogEntry`, `LogLevel`, `LogSubsystem`,
+    `LogKind`, plus stub types for `HttpCall`, `TurnCapture`,
+    `PhaseEvent` so slices 1.4 / 1.5 have target shapes to
+    fill). Raw sink primitives stay internal. Slices 1.4 and
+    1.5 add `httpCallSink` / `turnCaptureSink` to the public
+    API following the same split (turn-threading default plus
+    a `*WithoutTurn` variant each).
   - Internal organization is the implementer's call. Likely
     shape: `store.ts` (Zustand store), `logger.ts` (emission
     plus mirroring), `gate.ts` (master + debug gates), `kinds.ts`

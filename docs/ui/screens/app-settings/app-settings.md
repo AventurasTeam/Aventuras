@@ -234,6 +234,27 @@ The badge itself is the only knob here — actual per-story dim
 selection happens at [story creation](../wizard/wizard.md#memory-cost--matryoshka-effective-dim);
 Models tab is just the capability-toggle layer.
 
+### Override semantic — trust-the-user
+
+Capability overrides are trust-the-user. Auto-detection is
+advisory; the user may override either direction (mark a
+claimed-supported capability as off, or force-on a capability the
+provider didn't advertise). The app makes requests as-configured
+and surfaces whatever the provider returns. No runtime pre-check,
+no probe call, no override-time warning dialog — providers
+themselves are unreliable about capability reporting, so we don't
+pretend we can validate intent.
+
+If a request later fails for what looks like a capability mismatch,
+the orchestrator's provider-error mapper does best-effort keyword
+matching against the response body (`tool_use`, `thinking`,
+`streaming`, `vision`, etc.) and threads the substring through
+`PipelineError.provider.possibleCapabilityMismatch` (see
+[`generation-pipeline.md → Fatal error categories`](../../../generation-pipeline.md#fatal-error-categories)).
+The error surface phrases it as a hint, never an assertion — "the
+provider mentioned X; here's where to look if that's relevant" —
+because provider error strings aren't standardized.
+
 ### Model fetching strategy
 
 - **Refresh on app launch** — automatic on startup, **staggered**

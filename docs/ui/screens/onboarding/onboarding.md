@@ -197,12 +197,23 @@ setup and fix later in Settings.` **Does not block `Finish`** —
 1. Writes the provider to `app_settings.providers` with `displayName`
    defaulted to the provider type.
 2. Marks it as `default_provider_id`.
-3. Auto-fetches the model catalog (background, non-blocking).
-4. Seeds the [silent profile/assignment defaults](#what-gets-seeded-silently).
-5. Marks `onboarding_completed_at`.
-6. Routes to **Story list**. Brief [toast](../../patterns/toast.md)
-   confirms:
-   `<Provider> connected. Default model: <auto-pick>. Change anytime in Settings.`
+3. **Foreground model-catalog fetch with a brief loading state**
+   (matches the OpenAI-compatible pattern below). Three outcomes:
+   - **Success.** Continue to step 4 — seed
+     [silent profile / assignment defaults](#what-gets-seeded-silently),
+     mark `onboarding_completed_at`, route to **Story list** with
+     the success toast:
+     `<Provider> connected. Default model: <auto-pick>. Change anytime in Settings.`
+   - **Fetch error / timeout (30s).** Inline error on Step 3:
+     _"Couldn't reach <provider>. Check your connection and try
+     again."_ `Retry` re-fires the fetch. `Skip for now` follows
+     the existing skip path (onboarding marked complete, warning
+     banner on Story list). Step 3 stays in the error state; the
+     flow doesn't advance until success or skip.
+   - **Empty model list.** Should not occur for native providers
+     in practice (curated set always returns something), but if it
+     does, treat as fetch error so the user gets a recovery affordance
+     rather than an empty downstream picker.
 
 ### OpenAI-compatible
 
@@ -252,7 +263,12 @@ setup and fix later in Settings.` **Does not block `Finish`** —
      [App Settings · Providers](../app-settings/app-settings.md#generation--providers)
      with this provider's row pre-expanded and the
      `+ Add custom model id` affordance highlighted. The user adds
-     a model id manually, then can navigate to Profiles.
+     a model id manually, then can navigate to Profiles. Some
+     OpenAI-compatible providers don't expose a `/models` endpoint
+     at all (custom server implementations, certain local-model
+     frontends) — this same routing handles that case gracefully:
+     the user lands on the manual model-id form rather than seeing
+     an error to fix.
 5. Marks `onboarding_completed_at`.
 6. The Story list banner does **not** fire on this path until the
    user actually navigates there — they're already in Settings,

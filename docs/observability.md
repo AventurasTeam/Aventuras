@@ -406,9 +406,17 @@ subsystem fails to thread, correlations break silently (entries
 appear in the global log without a turn pointer; no error, no
 warning, just missing data).
 
-A lint rule banning sink calls that bypass the ambient provider
-is a worthwhile guardrail (tracked as an implementation
-followup).
+Enforcement is via module public-API discipline per
+[Slice 1.1](./implementation/milestones/01-spine/slices/01-code-conventions.md)'s
+`eslint-plugin-boundaries` rule. The `lib/diagnostics/` module's
+`index.ts` exposes only turn-threading wrappers (`logger`,
+`httpCallSink`, `turnCaptureSink`) and explicit-bypass variants
+(`loggerWithoutTurn`, etc., for paths that legitimately have no
+ambient turn — boot, hydration, background workers outside any
+run). The raw sink primitives stay internal and unreachable from
+outside the module. External code physically cannot bypass the
+ambient provider; the `WithoutTurn` naming distinction makes
+intentional bypass reviewable.
 
 ## Gating model
 

@@ -305,15 +305,51 @@ moves a story to a different model — either via Story Settings
 whose model differs from the current app default. AlertDialog
 surfaces three options:
 
-- **Re-index this story.** Default. Background job re-embeds all
-  of this story's rows under the new model — `DELETE` the story's
-  rows from each `*_vec` table (scoped by `branch_id`), re-embed,
-  re-insert. Other stories' rows in those tables are untouched.
-  While the job runs, this story's retrieval is in a degraded
-  state; the system surfaces a "re-indexing X / N — retrieval
-  limited" indicator. Progress visible; cancellable. On cancel,
-  the story's recorded model id rolls back to the previous value
-  so retrieval recovers full quality.
+- **Re-index this story.** Default. The swap is crash-safe via a
+  stage-then-flip flow tracked by
+  `stories.settings.embedding_swap_target`:
+  1. **Swap-start (transaction).** Set
+     `stories.settings.embedding_swap_target = NEW_MODEL_ID`.
+     Commit. From this moment, the marker is the source of truth
+     for "swap in flight; expect partial NEW-model rows."
+  2. **Phase 1 — re-embed non-destructively.** Foreground job
+     (re-index runs in the user's view, not a background queue)
+     embeds each row under the new model and INSERTs alongside
+     existing rows (`model_id = NEW` next to `model_id = OLD`).
+     Each row's insert is its own small SQLite write. Old vectors
+     stay intact throughout; retrieval keeps working under the
+     old model. Vec tables temporarily ~2x size for swap-affected
+     rows. Progress indicator: "re-indexing X / N — retrieval
+     limited."
+  3. **Phase 2 — atomic flip (transaction).** Single SQLite txn:
+     - `DELETE FROM *_vec WHERE branch_id IN (...) AND model_id = OLD`
+     - `UPDATE stories SET settings = jsonb_set(settings, '$.embedding_model_id', NEW_MODEL_ID)`
+     - `UPDATE stories SET settings = jsonb_remove(settings, '$.embedding_swap_target')`
+
+     Commit. Story is now consistently on NEW.
+
+  **Crash recovery.** On story open, if `embedding_swap_target`
+  is set, surface a resume / cancel prompt:
+  - **Resume.** If any rows lack a `model_id = NEW` counterpart,
+    continue Phase 1 (skip rows that already have one). Then run
+    Phase 2.
+  - **Cancel.**
+    `DELETE FROM *_vec WHERE branch_id IN (...) AND model_id = NEW; clear embedding_swap_target;`
+    Story stays on old model.
+
+  **Cancel during a live swap (not a crash)** follows the same
+  Cancel path — partial NEW vectors are deleted, marker cleared.
+
+  **Block second swap while marker is set.** Re-index is a
+  foreground job, so the in-app flow naturally prevents a second
+  initiation — but the invariant is spec-pinned: while
+  `embedding_swap_target` is non-null, the UI surfaces the
+  resume / cancel prompt on next picker-open and disables "Change
+  embedding model for this story" until resolved.
+  Belt-and-braces against any future surface (Diagnostics
+  override, MCP, scripted migration) that might try to start a
+  parallel swap.
+
 - **Keep on the current model.** Don't change anything. Story
   stays on its existing model; the "current model differs from app
   default" prompt stops nagging until the next manual swap
@@ -326,10 +362,13 @@ surfaces three options:
   Disclaimer shown that this is the user's assertion; if the new
   id actually points to a different model, retrieval quality
   silently degrades and the system has no way to detect that.
+  Instantaneous; no swap-target marker (nothing to crash through).
 
 A standalone "Re-index this story now" button stays available in
 the same Story Settings panel for users who want to force a
-re-index without changing the model.
+re-index without changing the model. It uses the same
+stage-then-flip flow (target = current model, same crash-recovery
+contract).
 
 ### Matryoshka effective dim
 
