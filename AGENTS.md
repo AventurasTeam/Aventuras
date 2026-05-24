@@ -1,1 +1,1 @@
-/home/failerko/_LLM/Aventura/_v2/Aventuras/CLAUDE.md
+CLAUDE.md

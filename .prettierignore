@@ -16,3 +16,6 @@ scripts/poc-embedder/
 
 # Vendored agent skills — kept verbatim, not project source (matches .remarkignore)
 .agents/
+
+# Symlink to CLAUDE.md — prettier errors on symbolic links; the target gets formatted instead.
+AGENTS.md

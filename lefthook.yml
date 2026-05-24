@@ -12,6 +12,9 @@ pre-commit:
   commands:
     prettier:
       glob: '*.{js,jsx,ts,tsx,mjs,cjs,json,md,css,yml,yaml}'
+      # AGENTS.md is a symlink to CLAUDE.md; prettier errors on explicitly-named
+      # symlinks even when .prettierignore lists them.
+      exclude: 'AGENTS.md'
       run: node_modules/.bin/prettier --write {staged_files}
       stage_fixed: true
     eslint:

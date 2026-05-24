@@ -9,4 +9,5 @@ electron/dist/
 scripts/poc-embedder/.venv/
 .agents/
 .claude/
+_tmp/
 AGENTS.md
