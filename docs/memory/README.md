@@ -22,7 +22,8 @@ the shape.
   `generation-pipeline.md` cross-references the topic files lean on.
 - **[cadence.md](./cadence.md)** — three-layer cadence model
   (piggyback / periodic classifier / chapter-close), why each layer,
-  user-tunable knobs (`recentBuffer` / `fullChapterInBuffer` /
+  user-tunable knobs (`fullChapterInBuffer` /
+  `partialChapterBuffer` / `protectedBuffer` /
   `classifierCadence`), concurrency contract.
 - **[piggyback.md](./piggyback.md)** — per-turn writes contract:
   trailing tagged block, computed bookkeeping, jsonrepair fallback,

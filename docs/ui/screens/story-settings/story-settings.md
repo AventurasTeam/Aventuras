@@ -116,7 +116,8 @@ card `⋯ → Edit info` routes to `About` directly.
 **Settings section** (operational — post-creation knobs):
 
 - **Models** — per-feature override picks (see below)
-- **Memory** — chapter threshold (with presets), recent buffer size
+- **Memory** — chapter threshold (with presets), full-chapter
+  toggle + partial chapter buffer, protected buffer
 - **Translation** — master enable, target language, granular
   per-content-type toggles
 - **Pack** — active pack + pack-declared variables (see below)
@@ -367,26 +368,46 @@ Memory is the form component reused across both surfaces.
 
 ### Prompt context
 
-**Recent buffer.** Per-story setting
-`stories.settings.recentBuffer: number` (entries). Default 10.
-Governs how many entries from the **previous chapter** spill over
-into prompt context once a chapter has closed; current-chapter
-entries are always injected verbatim regardless of this value.
+Three knobs control how the current and previous chapter feed
+into prompt context. Canonical contract in
+[`memory/cadence.md → User-tunable knobs`](../../../memory/cadence.md#user-tunable-knobs);
+this section captures what the screen renders.
 
-Concretely: if you're on entry 5 of a new chapter with
-`recentBuffer: 10`, you get those 5 plus the last 5 entries of the
-just-closed previous chapter (5 + 5 = 10 entries verbatim). On
-entry 20 of the same chapter you get those 20 alone — the buffer
-has been "absorbed" by the current chapter. The setting therefore
-shapes the early-chapter handoff, not steady-state.
-
-**Full chapter in buffer.** Per-story toggle
+**Chapter buffer mode.** Per-story toggle
 `stories.settings.fullChapterInBuffer: boolean`. Default `false`.
-When on, the current chapter is always verbatim in addition to
-`recentBuffer`. Trades token cost (current-chapter prose may grow
-large near threshold) for guaranteed in-context coverage. UI shows
-projected token cost at the chapter threshold inline with the
-toggle.
+The two-mode axis:
+
+- **Off (partial mode)** — the LLM gets the last
+  `partialChapterBuffer` entries of the current chapter (see
+  below). Token cost bounded by the partial buffer size; cadence
+  warnings apply.
+- **On (full mode)** — the LLM gets the entire current chapter
+  verbatim. UI shows projected token cost at the chapter threshold
+  inline with the toggle. Cadence warnings suppressed (chapter-
+  close phase 0 catches up unclassified entries).
+
+**Partial chapter buffer.** Per-story setting
+`stories.settings.partialChapterBuffer: number` (entries). Default 10. Size of the current-chapter slice in partial mode. Greyed when
+`fullChapterInBuffer = true`; the value is preserved for when the
+mode flips back.
+
+**Protected buffer.** Per-story setting
+`stories.settings.protectedBuffer: number` (entries). Default 10.
+Chapter-boundary spillover floor that applies in **both** modes:
+if the current chapter has fewer entries than this floor, fill
+from the previous chapter to satisfy it. Prevents a fresh chapter
+from starting the LLM with no recent history — without this
+spillover, chapter 3 with 2 entries would give the LLM only those
+2, risking writing-style and continuity drift.
+
+Concretely: with both buffers at default 10 and the mode irrelevant:
+
+- Chapter 3 has 2 entries → 2 current + 8 previous = 10 total
+- Chapter 3 has 10 entries → 10 current (floor satisfied by current)
+- Chapter 3 has 50 entries, partial mode → last 10 current (no
+  spillover; partial window > floor)
+- Chapter 3 has 50 entries, full mode → all 50 current (floor
+  trivially exceeded)
 
 The structural floor — active+in-scene entities, current-location
 lore, awareness-driven happenings, always-injection rows — is not
@@ -448,15 +469,7 @@ Displayed:
   read-only — the dim was locked at story creation alongside
   `embedding_model_id`. Hidden when null (no truncation, model
   native dim).
-- **Retrieval mode** — read-only indicator displaying
-  `stories.settings.retrievalMode` (`embedding` or `llm-only`).
-  Set at story creation (defaults to `embedding`; falls back to
-  `llm-only` when no embedder is configured at creation time) and
-  immutable thereafter. Single-line caption notes the immutability
-  so users don't expect a toggle. `llm-only` mode hides the
-  Embedder section's `Switch embedder` action since there's no
-  index to manage.
-- `[Switch embedder]` button (hidden when `retrievalMode = 'llm-only'`).
+- `[Switch embedder]` button.
 
 When `embeddingBackend = 'provider'`, both the provider and the
 model id are displayed together — see
@@ -537,11 +550,6 @@ Disabled-state hint when the master flag is off:
 > Probe mode is disabled at the app level. Enable in
 > `App Settings · Diagnostics → Memory probe mode` to start
 > capturing per-turn retrieval state.
-
-When the story is configured for LLM-only retrieval
-(`retrievalMode = 'llm-only'`), the section renders disabled with
-a one-liner: "Probe mode covers embedding-mode retrieval only.
-Mode-3 stories don't currently have a per-turn ranker to inspect."
 
 ## Translation tab — display-only, opt-in, single target
 

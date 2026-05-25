@@ -485,8 +485,10 @@ rather than via a classifier pass:
 - **User-written openings** start with empty metadata
   (`worldTime: 0`, `sceneEntities: []`,
   `currentLocationId: null`). The first AI reply's prompt context
-  includes the opening prose verbatim (recent buffer covers it),
-  so turn-2 classifier picks up scene presence going forward.
+  includes the opening prose verbatim (protected buffer covers it
+  — chapter 1 has only the opening entry, so the protected floor
+  pulls the opening into context), so turn-2 classifier picks up
+  scene presence going forward.
 
 A separate tagging pass for user-written openings is parked in
 [`parked.md → Classifier-on-opening retrofit`](./parked.md#classifier-on-opening-retrofit)
@@ -697,11 +699,19 @@ depends on.
 These structural injects bypass the ranker; they consume budget
 unconditionally before per-type retrieval allocates the remainder:
 
-- **Recent buffer.** Last `stories.settings.recentBuffer` entries
-  verbatim, regardless of chapter boundaries. With
-  `fullChapterInBuffer=true`, the current chapter is also verbatim
-  in addition. See
+- **Prompt buffer.** Mode-dependent injection:
+  - **Partial mode** (`fullChapterInBuffer = false`): last
+    `stories.settings.partialChapterBuffer` entries from the
+    current chapter verbatim, with previous-chapter spillover
+    to satisfy the `protectedBuffer` floor when the current
+    chapter is shorter than that floor.
+  - **Full mode** (`fullChapterInBuffer = true`): entire current
+    chapter verbatim, with previous-chapter spillover to satisfy
+    the `protectedBuffer` floor.
+
+  Full composition rule + examples in
   [`memory/cadence.md → User-tunable knobs`](./memory/cadence.md#user-tunable-knobs).
+
 - **Active + in-scene entities.** `entities.status='active' AND id ∈
 metadata.sceneEntities` are ALWAYS injected, regardless of
   `injection_mode`. `currentLocationId` gets the same treatment.

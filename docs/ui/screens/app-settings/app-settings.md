@@ -750,8 +750,33 @@ independent.
 Operational data actions. Each is destructive or large-impact, so
 each has a confirmation step:
 
-- **Full backup** — `VACUUM INTO`-based snapshot, includes the assets
-  directory. Per data-model.
+- **Full backup** — `VACUUM INTO`-based snapshot, includes the
+  assets directory. Per data-model. Triggers an
+  [`AlertDialog`](../../patterns/alert-dialog.md) before producing
+  the file:
+
+  > **Create full backup?**
+  >
+  > The backup file contains:
+  >
+  > - All your stories, settings, and assets.
+  > - Your provider API keys, stored as plain text (per the v1
+  >   design — see
+  >   [`data-model.md → App settings storage`](../../../data-model.md#app-settings-storage)
+  >   for the unencrypted-keys decision, and the parked
+  >   [encryption-at-rest entry](../../../parked.md#encryption-at-rest-for-provider-keys)
+  >   for the post-v1 plan).
+  >
+  > Keep the backup file on a trusted device or drive. Treat it
+  > like the keys themselves — anyone with the file can use your
+  > API quota.
+  >
+  > `Cancel` · `Create backup`
+  >
+  > Routes to a file-save picker on confirm. Same AlertDialog
+  > pattern as the Restore confirmation below; consistent
+  > destructive-action framing.
+
 - **Restore** — file picker; confirmation modal warning that the
   current DB will be replaced. Lists what'll be overwritten.
 - **Export all stories** — bulk per-story export.

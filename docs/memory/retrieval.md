@@ -27,25 +27,6 @@ The user picks one or the other in App Settings → Memory; both drive
 identical retrieval behavior. The choice affects only the embedding
 model, not the algorithm.
 
-### Mode-3 fallback — story-creation regime
-
-If a story is configured with neither a provider embedding nor the
-local embedder available (or the user explicitly opts out), retrieval
-degrades to **LLM-only mode** — a dedicated retrieval agent makes
-per-turn LLM calls to pick what to inject from the candidate pool.
-Slow, expensive, but works without embedding infrastructure.
-
-Mode-3 is **set at story creation, no mid-story switching**. The two
-regimes (embedding-driven vs. LLM-only) produce different memory
-behavior — different cost-per-turn, different failure modes, different
-retrieval-quality curve on long stories. Switching mid-story would
-invalidate the prior memory model. The story remembers which mode it
-ran in; the [memory probe](./probe.md) currently covers embedding-
-mode only. Mode-3 stories don't have a numeric ranker to inspect, so
-debugging falls back to per-turn LLM-call logs until a mode-3-shaped
-probe surface lands (parked; see
-[`probe.md → Followups`](./probe.md#followups)).
-
 ### Storage
 
 The conceptual / logical shape is a polymorphic FK mirroring the
@@ -398,10 +379,10 @@ stories.settings.effectiveDim?: number
   embedding model doesn't declare Matryoshka support.
 - `<N>` — store and query at N dim, truncated from the model's
   native output. Set at story creation; **locked thereafter** with
-  the same lock semantics as `embedding_model_id` and
-  `retrievalMode`. Changing it would invalidate every stored
-  vector under the old dim and force a full re-index — same
-  trade-off as a model swap, exposed through the same UX path.
+  the same lock semantics as `embedding_model_id`. Changing it
+  would invalidate every stored vector under the old dim and force
+  a full re-index — same trade-off as a model swap, exposed
+  through the same UX path.
 
 #### Capability flags — provider-side
 
@@ -525,10 +506,6 @@ the load-bearing axis.
 relabel` path is already user-attested-only. Effective dim
   joins `embedding_model_id` in the locked-set the relabel
   asserts unchanged.
-- **Story configured for `retrievalMode = 'llm-only'`.**
-  `effectiveDim` is moot — no vectors are stored. The wizard
-  suppresses the picker for these stories. Schema-wise the field
-  stays writable but defaults to null.
 - **Bulk re-index (model swap).** Re-index uses the story's
   current `effectiveDim` (the one stored at creation, not a
   per-swap input). A model swap that changes the underlying model
@@ -639,13 +616,13 @@ The retrieval pool per type after the structural floor is satisfied.
 
 ### Structural floor — always inject
 
-| Source                         | Notes                                                                                                               |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| Recent buffer                  | Last `recentBuffer` entries verbatim; with `fullChapterInBuffer=true`, current chapter is also verbatim in addition |
-| Active + in-scene entities     | `entities.status='active' AND id ∈ sceneEntities` — short-circuits `injection_mode`                                 |
-| Current location entity        | `currentLocationId` — same short-circuit                                                                            |
-| Active threads                 | `threads.status='active'` — must-inject as structural framing                                                       |
-| `injection_mode='always'` rows | Across entities / lore / threads — user-intent override                                                             |
+| Source                         | Notes                                                                                                                                                                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Prompt buffer                  | Partial mode: last `partialChapterBuffer` entries of current chapter. Full mode: entire current chapter. Both modes: previous-chapter spillover to satisfy `protectedBuffer` floor. See [`cadence.md → User-tunable knobs`](./cadence.md#user-tunable-knobs) |
+| Active + in-scene entities     | `entities.status='active' AND id ∈ sceneEntities` — short-circuits `injection_mode`                                                                                                                                                                          |
+| Current location entity        | `currentLocationId` — same short-circuit                                                                                                                                                                                                                     |
+| Active threads                 | `threads.status='active'` — must-inject as structural framing                                                                                                                                                                                                |
+| `injection_mode='always'` rows | Across entities / lore / threads — user-intent override                                                                                                                                                                                                      |
 
 ### Chapter summaries pool
 

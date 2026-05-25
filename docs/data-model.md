@@ -427,10 +427,8 @@ including its change history. On creation from entry N (where
 `L = min(log_position)` among entry (N+1)'s deltas, or the head if N is
 the latest entry):
 
-1. Copy parent's CURRENT rows for every branch-scoped table (entities,
-   lore, threads, happenings, happening_involvements, happening_awareness,
-   chapters, branch_era_flips, story_entries 1..N, entry_assets tied to
-   those entries) into the new branch.
+1. Copy parent's CURRENT rows for every branch-scoped table per the
+   manifest below into the new branch.
 2. Copy parent's deltas with `log_position < L` into the new branch — so
    the new branch carries the complete history up to the fork point and
    rollback on the new branch can reach any entry 1..N.
@@ -440,9 +438,30 @@ the latest entry):
    NOT copied — their only purpose was to rewind, and keeping them would
    contradict the rewound state.
 
-Assets are never copied — `entry_assets` rows copy (tiny) but point at
-the same asset IDs on disk. Hard-fork for narrative data, shared-by-reference
-for binary media.
+**Branch-copy manifest.** Every branch-scoped table behaves the same
+way at fork unless flagged otherwise:
+
+| Table                     | Behavior           | Notes                                                                                                                                                                                                                           |
+| ------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `story_entries`           | Copy 1..N          | Entries N+1..head are not in the fork (the new branch reaches them via the reverse-replay step on the post-fork deltas, which themselves don't copy).                                                                           |
+| `entities`                | Copy current rows  | Per-branch state after step-3 rewind reflects state at entry N.                                                                                                                                                                 |
+| `lore`                    | Copy current rows  | —                                                                                                                                                                                                                               |
+| `threads`                 | Copy current rows  | —                                                                                                                                                                                                                               |
+| `happenings`              | Copy current rows  | —                                                                                                                                                                                                                               |
+| `happening_involvements`  | Copy current rows  | —                                                                                                                                                                                                                               |
+| `happening_awareness`     | Copy current rows  | —                                                                                                                                                                                                                               |
+| `character_relationships` | Copy current rows  | Branch-scoped per the schema.                                                                                                                                                                                                   |
+| `chapters`                | Copy current rows  | —                                                                                                                                                                                                                               |
+| `branch_era_flips`        | Copy current rows  | —                                                                                                                                                                                                                               |
+| `translations`            | Copy current rows  | Composite PK includes `branch_id`; translations fork with branches.                                                                                                                                                             |
+| `entry_assets`            | Copy rows 1..N     | Tiny rows; point at the same `assets[id]` on disk (share-by-reference).                                                                                                                                                         |
+| `assets`                  | Share by reference | Hard-fork for narrative data; shared-by-reference for binary media. See [Cleanup on delete — trash-can pattern](#assets-images--future-media).                                                                                  |
+| `*_vec` (embeddings)      | Copy current rows  | vec0 tables partition by `branch_id`; new branch needs its own vectors so post-fork edits stay branch-local. Cost is 2x storage at fork moment; per-branch re-embed on edits stays clean. Storage-optimization followup parked. |
+| `deltas`                  | Per step 2 above   | Special case — pre-fork log copies (step 2), post-fork deltas reverse-apply onto copies then are NOT copied (step 3). Not a "current rows" copy.                                                                                |
+
+If a branch-scoped table is added to the schema later, it MUST get a
+row here in the same commit. New branch-scoped table without a
+manifest row is a bug.
 
 Reads on the new branch are always fast because state is pre-materialized
 — no lineage walk, no copy-on-write. Branch creation cost is linear in
@@ -1092,15 +1111,15 @@ stories.settings: {
   // Full design in docs/memory/cadence.md and docs/memory/retrieval.md.
   chapterTokenThreshold: number     // default 24000
   chapterAutoClose: boolean         // auto-close at threshold; off = threshold is guidance only, user wraps manually; default true
-  recentBuffer: number              // last N entries verbatim in LLM context, regardless of chapter boundaries; default 10
-  fullChapterInBuffer: boolean      // current chapter always verbatim in LLM context, in addition to recentBuffer; default false
-  classifierCadence: number          // turns between periodic classifier runs in the background; entry-counted to match recentBuffer's units
+  fullChapterInBuffer: boolean      // default false; two-mode axis — true = full current chapter verbatim, false = last partialChapterBuffer entries of current chapter
+  partialChapterBuffer: number       // default 10; entries from current chapter when fullChapterInBuffer = false. See docs/memory/cadence.md → User-tunable knobs
+  protectedBuffer: number            // default 10; chapter-boundary spillover floor — applies to BOTH modes. If current chapter has fewer entries, fill from previous chapter up to this floor. See docs/memory/cadence.md → User-tunable knobs
+  classifierCadence: number          // turns between periodic classifier runs in the background; entry-counted. Cadence-vs-window overlap warning only fires in partial mode (full mode catches up unclassified entries at chapter close)
   piggybackMode: 'on' | 'off'       // capability-gated; on = narrative emits structured trailing block; off = separate per-turn classifier pass
   embeddingBackend: 'provider' | 'local'   // embedding runtime (provider endpoint OR bundled local ONNX); both produce identical retrieval algorithm
   embedding_model_id: string        // canonical embedding model id; copied from app_settings.embedding_model_id at story creation. Locked thereafter unless the user explicitly re-indexes via the model swap UX. Different stories may carry different model ids; vec0 partitions per branch. See docs/memory/retrieval.md → Storage and Model swap UX
   embedding_swap_target?: string    // model id of the in-flight re-index target. Non-null while a stage-then-flip swap is in progress; cleared atomically with the swap's Phase 2 commit. Crash recovery on story open surfaces a resume/cancel prompt when this is set. See docs/memory/retrieval.md → Model swap UX
   embedding_provider_id?: string    // required when embeddingBackend === 'provider'; FK into app_settings.providers[].id picking which provider supplies the embedding endpoint. Distinct from the narrative-side provider routing (a user may run e.g. OpenAI for narrative and a local embedding provider, or vice versa). Null / undefined when embeddingBackend === 'local'.
-  retrievalMode: 'embedding' | 'llm-only'  // set at story creation, immutable thereafter; llm-only is the embedding-unavailable fallback regime
   retrievalBudgets: {                // per-type token budgets, hard partitions in v1 (no spillover); see docs/memory/retrieval.md → Per-type retrieval budgets
     entities: number
     lore: number
@@ -1108,7 +1127,7 @@ stories.settings: {
     threads: number
     chapters: number                 // chapter summaries pool
   }
-  effectiveDim?: number              // Matryoshka effective dim — null = use model native dim, <N> = truncate stored vectors and queries to N. Set at story creation, locked thereafter same as embedding_model_id and retrievalMode. Provider-only (local model is small enough that truncation isn't worth the quality tail). See docs/memory/retrieval.md → Matryoshka effective dim
+  effectiveDim?: number              // Matryoshka effective dim — null = use model native dim, <N> = truncate stored vectors and queries to N. Set at story creation, locked thereafter same as embedding_model_id. Provider-only (local model is small enough that truncation isn't worth the quality tail). See docs/memory/retrieval.md → Matryoshka effective dim
   probe_mode_active: boolean        // per-story activation of the memory probe. No-op while app_settings.diagnostics.enabled is off. Default false. See docs/memory/probe.md and docs/observability.md → Gating model
 
   // Composer
@@ -1154,7 +1173,7 @@ stories.settings: {
     translation?: string
     suggestion?: string
     'lore-mgmt'?: string             // kebab-case agent ids match the UI labels in app-settings + story-settings Models tabs
-    retrieval?: string               // mode-3 LLM-only retrieval agent OR auto-mode fallback consumer
+    retrieval?: string               // auto-mode injection fallback consumer — LLM call to resolve marginal embedding+keyword candidates with injection_mode='auto'
   }
 
   // Pack
@@ -1411,8 +1430,8 @@ app_settings.default_story_settings: Partial<StorySettings>
 
 Mirrors the operational
 [`stories.settings`](#story-settings-shape) shape — chapter threshold,
-auto-close, recent buffer, translation block, composer prefs,
-suggestions toggle, `suggestionCount`. On story creation these copy
+auto-close, protected buffer + partial chapter buffer, translation
+block, composer prefs, suggestions toggle, `suggestionCount`. On story creation these copy
 into the new `stories.settings`; the story owns its values thereafter.
 The per-mode `suggestionCategories` palette doesn't fit
 `Partial<StorySettings>` (story-side is a flat array, default-side
@@ -1694,9 +1713,10 @@ constrained.
 openings start with empty metadata (`worldTime: 0`,
 `sceneEntities: []`, `currentLocationId: null`); turn 2's classifier
 populates scene presence going forward. The first AI reply's prompt
-context includes the opening prose verbatim (recent buffer covers
-it), so the AI grounds itself from prose regardless of metadata
-state. A separate tagging pass for user-written openings is parked
+context includes the opening prose verbatim (protected buffer
+covers it — chapter 1 has only the opening entry, so the protected
+floor pulls the opening into context), so the AI grounds itself
+from prose regardless of metadata state. A separate tagging pass for user-written openings is parked
 in
 [`parked.md → Classifier-on-opening retrofit`](./parked.md#classifier-on-opening-retrofit).
 

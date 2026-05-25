@@ -126,7 +126,7 @@ stories {
   // Memory (existing)
   chapterTokenThreshold: number
   chapterAutoClose: boolean
-  recentBuffer: number
+  recentBuffer: number          // later renamed to protectedBuffer; a sibling partialChapterBuffer was added — see canonical schema in docs/data-model.md → Story settings shape and docs/memory/cadence.md → User-tunable knobs
   compactionDetail: string
 
   // Composer (existing)
@@ -342,9 +342,12 @@ inline-emitted metadata is what the opening starts with. User-written
 openings get empty metadata (`worldTime: 0`, `sceneEntities: []`,
 `currentLocationId: null`); turn 2's classifier pass populates scene
 presence going forward. The first AI reply's prompt context includes
-the opening prose verbatim (recent buffer covers it), so the AI
-grounds itself from prose regardless of whether metadata is
-populated.
+the opening prose verbatim (the chapter-boundary protected buffer
+covers it — chapter 1 has only the opening entry, so the floor
+pulls the opening into context; renamed from `recentBuffer` —
+see docs/memory/cadence.md → User-tunable knobs for the current
+shape), so the AI grounds itself from prose regardless of whether
+metadata is populated.
 
 A future
 [classifier-on-opening retrofit](../followups.md) adds a separate

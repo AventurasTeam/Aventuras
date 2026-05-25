@@ -27,12 +27,11 @@ Cross-refs:
 
 ## Scope
 
-Embedding-mode retrieval only. The probe does not run on stories
-configured for LLM-only retrieval (the
-[mode-3 fallback](./retrieval.md#mode-3-fallback--story-creation-regime));
-those stories don't have a numeric ranker to inspect. Mode-3 probe
-support is out of scope for this design — if mode-3 stays in v1 it
-gets its own probe shape later.
+Embedding-mode retrieval only — v1 embedder is hard-required at
+story creation, so every story has a numeric ranker to inspect.
+LLM-only retrieval (Mode-3) is out of v1; if it returns post-v1
+the probe needs a different per-row body — see
+[`parked.md → Mode-3 (LLM-only retrieval)`](../parked.md#mode-3-llm-only-retrieval).
 
 Off by default, opt-in via a two-level gate:
 
@@ -94,8 +93,9 @@ Per capture:
 - **Params snapshot.** Full block of every retrieval-tunable knob
   (per-type `λ`, `λ_div`, `kw_boost`, `τ_revive`, `w_action`,
   `w_digest`, `w_prose`, `min_score_threshold`, `chapter_boost`
-  magnitude, per-type budgets, `recentBuffer`,
-  `fullChapterInBuffer`). Frozen to capture-time values; the
+  magnitude, per-type budgets, `fullChapterInBuffer`,
+  `partialChapterBuffer`, `protectedBuffer`). Frozen to
+  capture-time values; the
   simulator diffs against current story params at inspect time.
 - **Three queries.** Q1 / Q2 / Q3 text content, plus per-query
   metadata: token count, source pointer (which entry / structural
@@ -125,7 +125,8 @@ Per capture:
   `pre_filtered_size` (capped at 200 per
   [pre-filter rule](./retrieval.md#diversity--mmr)), `mmr_size`,
   `selected_count`, `tokens_used`, `type_budget`.
-- **Structural floor.** List of must-inject rows (recent buffer,
+- **Structural floor.** List of must-inject rows (prompt buffer
+  per the mode-dependent rule + protected-buffer spillover,
   active+in-scene entities, their location, active threads,
   `injection_mode='always'` rows) and their token cost. Surfaces
   what budget the per-type pools actually competed over.
@@ -271,9 +272,10 @@ itself. The pool composition depends on:
 
 These are captured-state, not parameter-state. The simulator
 operates on the pool that **was** there. Tuning that affects pool
-composition (e.g., adjusting `recentBuffer`, switching
-`fullChapterInBuffer`) requires fresh turns — the simulator surfaces
-those params as read-only with a "regenerate to test" hint.
+composition (e.g., switching `fullChapterInBuffer`, adjusting
+`partialChapterBuffer` or `protectedBuffer`) requires fresh
+turns — the simulator surfaces those params as read-only with a
+"regenerate to test" hint.
 
 ### Cross-capture aggregation — out of scope for v1
 
@@ -423,10 +425,10 @@ delta-logged.
   metrics across N captures (mean selection size, mean tokens used,
   delta vs baseline). Lands if single-capture simulation proves
   insufficient for the empirical-tuning pass.
-- **Mode-3 probe shape.** If LLM-only retrieval ships in v1 or
-  later, the probe needs a different per-row body (LLM verdict +
-  reasoning text instead of score table). Different content, same
-  outer shell.
+- **Mode-3 probe shape.** Tracked under
+  [`parked.md → Mode-3 (LLM-only retrieval)`](../parked.md#mode-3-llm-only-retrieval)
+  — probe support returns alongside Mode-3 itself if it ships
+  post-v1.
 - **Multi-turn simulator playback.** Simulate a parameter change
   forward across the next N captured turns to see how cumulative
   retrieval evolves. Heavier; not in v1.

@@ -48,9 +48,20 @@ be current with the chapter boundary. Otherwise lore-mgmt operates
 on a partial happening graph (recent turns un-classified) and dedup
 can't find rows the classifier hasn't written yet.
 
-Phase 0 runs the classifier synchronously over any unclassified
-entries in the open region. Bounded by the cadence overlap window —
-typically a few turns of un-classified content, fast.
+**Drain in-flight periodic classifier first.** Phase 0 entry awaits
+any periodic-classifier run that was in flight when chapter-close
+started — `await drainRunningPeriodicClassifier()` blocks until the
+in-flight `actionId` resolves (commit or abort). The wait happens
+under chapter-close's `gateBehavior: 'hard-gate'`, so user input is
+blocked the whole time; the user can't sneak in a new turn between
+the classifier finishing and phase 0 starting. Periodic-classifier
+runs are bounded by the cadence overlap window (a few turns), so the
+drain is short.
+
+After drain, phase 0 runs the classifier synchronously over any
+remaining unclassified entries in the open region. Bounded by the
+cadence overlap window — typically a few turns of un-classified
+content, fast.
 
 **Concurrency.** The background classifier's
 `concurrencyPolicy.blockedBy` includes `'chapter-close'` — it cannot
@@ -60,7 +71,11 @@ the user-edit gate via `gateBehavior: 'hard-gate'` per
 user edits and new classifier starts are both blocked. One-direction
 lock — chapter-close blocks the background classifier; piggyback's
 per-turn writes can't be in flight because chapter-close runs between
-turns by construction.
+turns by construction. The drain step above closes the remaining
+window: a classifier that was already running when chapter-close
+chained-started finishes its own work before phase 0 starts its
+classifier pass, so neither writer is concurrent with the other on
+`entities.status` / `happenings` / `happening_awareness` rows.
 
 ## Phase 1 — boundary selection
 

@@ -41,32 +41,55 @@ them.
 
 ## User-tunable knobs
 
-Three orthogonal user-tunable settings per story. Defaults copied
-from `app_settings.default_story_settings` at story creation.
+Three knobs per story. Defaults copied from
+`app_settings.default_story_settings` at story creation.
 
-| Knob                            | Effect                                                                                      | Foot-shooting check                                                                                                       |
-| ------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `recentBuffer` (entries)        | Last N entries verbatim in LLM context, regardless of chapter boundaries                    | None directly; interacts with classifier cadence                                                                          |
-| `fullChapterInBuffer` (boolean) | Current chapter always verbatim in LLM context, **in addition to** the `recentBuffer` slice | UI shows token cost at threshold ("at the chapter threshold this consumes ~X tokens")                                     |
-| `classifierCadence` (turns)     | When the periodic classifier runs in the background                                         | UI warns when cadence > buffer eviction horizon for un-classified turns; cadence relaxes when `fullChapterInBuffer` is on |
+| Knob                             | Effect                                                                                                                                                            | Foot-shooting check                                                                                                                                                |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `fullChapterInBuffer` (boolean)  | Two-mode axis. `true` = full current chapter verbatim. `false` = last `partialChapterBuffer` entries of current chapter.                                          | UI shows token cost at chapter threshold when on ("at the chapter threshold this consumes ~X tokens"). Off-mode token cost is bounded by `partialChapterBuffer`.   |
+| `partialChapterBuffer` (entries) | Size of the current-chapter slice when `fullChapterInBuffer = false`. Ignored in full mode.                                                                       | Interacts with `classifierCadence` — see Buffer-aware cadence indicator below.                                                                                     |
+| `protectedBuffer` (entries)      | Chapter-boundary spillover floor. Applies in **both** modes. If the current chapter has fewer entries than this floor, fill from the previous chapter to satisfy. | Floor for fresh-chapter "the LLM has no recent history" risk; keeps writing style consistent across boundaries. Set too low and a fresh chapter starts threadbare. |
+| `classifierCadence` (turns)      | When the periodic classifier runs in the background.                                                                                                              | UI warns in partial mode when cadence > `partialChapterBuffer` (unclassified turns slide out of the window before classifier catches up). Suppressed in full mode. |
 
-The two buffer settings compose orthogonally. With
-`fullChapterInBuffer = true` and `recentBuffer = 10`, the LLM gets
-the entire current chapter verbatim plus the last 10 entries before
-it (spillover from the previous chapter). With
-`fullChapterInBuffer = false` and `recentBuffer = 10`, just the last
-10 entries.
+### Composition rule
 
-**Buffer-aware cadence indicator.** When `fullChapterInBuffer = false`,
-the cadence has to keep pace with recent-buffer eviction so unclassified
-turns don't fall out of LLM coverage before the classifier catches up.
-Story Settings UI shows the relationship: "with current buffer = 10
-entries and cadence = 8 turns, you have 2 turns of coverage overlap."
-Drop overlap below zero, get a warning chip.
+- **Partial mode** (`fullChapterInBuffer = false`): LLM gets the
+  last `partialChapterBuffer` entries from the current chapter. If
+  the current chapter has fewer entries than `protectedBuffer`,
+  fill from the previous chapter to satisfy the `protectedBuffer`
+  floor. Total entries =
+  `max(partialChapterBuffer, protectedBuffer)` once the chapter
+  is past `protectedBuffer` entries; before that, total =
+  `protectedBuffer` (with previous-chapter spillover making up
+  the gap).
+- **Full mode** (`fullChapterInBuffer = true`): LLM gets ALL
+  entries in the current chapter. If the current chapter has
+  fewer entries than `protectedBuffer`, fill from the previous
+  chapter to satisfy the `protectedBuffer` floor. Total entries =
+  `max(current_chapter_size, protectedBuffer)`.
 
-**fullChapterInBuffer relaxation.** When on, the classifier's urgency
-drops to "before chapter close." Foot-shooting indicator hides because
-the prose is always in LLM context regardless of cadence.
+**Examples** (both buffers at default 10):
+
+- partial, chapter 3 has 2 entries → 2 current + 8 previous = 10
+- partial, chapter 3 has 10 entries → 10 current
+- partial, chapter 3 has 50 entries → last 10 current (no spillover)
+- full, chapter 3 has 2 entries → 2 current + 8 previous = 10
+- full, chapter 3 has 50 entries → all 50 current (chapter size
+  exceeds protected floor; no spillover needed)
+
+### Buffer-aware cadence indicator — partial mode only
+
+In partial mode, the cadence has to keep pace with the partial
+window so unclassified turns don't fall out of LLM coverage
+before the classifier catches up. Story Settings UI shows the
+relationship: "with partial chapter buffer = 10 entries and
+cadence = 8 turns, you have 2 turns of coverage overlap." Drop
+overlap below zero, get a warning chip.
+
+**Full mode suppresses the warning.** Full mode keeps the entire
+current chapter in context, and chapter-close phase 0 catches up
+any unclassified entries before lore-mgmt runs. No eviction risk;
+the cadence warning is hidden entirely.
 
 ### Where these live
 
@@ -74,9 +97,10 @@ the prose is always in LLM context regardless of cadence.
 
 ```ts
 {
-  recentBuffer: number,           // entries; default 10
-  fullChapterInBuffer: boolean,   // default false
-  classifierCadence: number       // turns; v1 ships entry-counted only — see parked.md → Token-trigger classifier cadence
+  fullChapterInBuffer: boolean,    // default false
+  partialChapterBuffer: number,    // entries; default 10
+  protectedBuffer: number,         // entries; default 10
+  classifierCadence: number        // turns; v1 ships entry-counted only — see parked.md → Token-trigger classifier cadence
   // existing memory knobs continue: chapterTokenThreshold, chapterAutoClose
 }
 ```
@@ -95,23 +119,33 @@ bias prompts more rigorously.
 ## Concurrency
 
 The piggyback agent and the periodic classifier write to disjoint
-field sets, even when they share row identifiers.
+field sets, with one documented overlap on `entities.status`.
 
-| Field                                                                    | Piggyback | Classifier                                           |
-| ------------------------------------------------------------------------ | --------- | ---------------------------------------------------- |
-| `story_entries.metadata` (current entry)                                 | ✓         | —                                                    |
-| `entities.state.visual.*`                                                | ✓         | —                                                    |
-| `entities.state` (location, equipped, inventory, stackables, lastSeenAt) | ✓         | —                                                    |
-| `entities.status`                                                        | —         | ✓ (staged → active, active → retired)                |
-| `entities.description`                                                   | —         | ✓ (first introduction only; see authorship contract) |
-| `happenings`                                                             | —         | ✓                                                    |
-| `happening_involvements`                                                 | —         | ✓                                                    |
-| `happening_awareness`                                                    | —         | ✓                                                    |
+| Field                                                                    | Piggyback                                           | Classifier                                           |
+| ------------------------------------------------------------------------ | --------------------------------------------------- | ---------------------------------------------------- |
+| `story_entries.metadata` (current entry)                                 | ✓                                                   | —                                                    |
+| `entities.state.visual.*`                                                | ✓                                                   | —                                                    |
+| `entities.state` (location, equipped, inventory, stackables, lastSeenAt) | ✓                                                   | —                                                    |
+| `entities.status`                                                        | ✓ (staged → active only, on `sceneEntities` ID hit) | ✓ (staged → active slow path; active → retired)      |
+| `entities.description`                                                   | —                                                   | ✓ (first introduction only; see authorship contract) |
+| `happenings`                                                             | —                                                   | ✓                                                    |
+| `happening_involvements`                                                 | —                                                   | ✓                                                    |
+| `happening_awareness`                                                    | —                                                   | ✓                                                    |
 
-The only shared row is `entities`, and field-level disjointness holds.
-With **per-field UPDATEs** (no row-level read-modify-write cycles),
-SQLite serializes the two writes without clobbering. The discipline at
-the action layer:
+**Field-overlap invariant.** `entities.status` is the only field
+both writers touch. They never collide on the same entity at the
+same time because the staged→active transition is monotonic:
+whichever writer arrives first lands `status='active'`; the other
+reads `active` and no-ops. Piggyback never writes active→retired
+(classifier-only). So while concurrent runs CAN write the same
+field, they cannot write the same row to different values.
+
+The only shared row is `entities`, and field-level disjointness
+holds for everything except the `status`-overlap above. With
+**per-field UPDATEs** (no row-level read-modify-write cycles) and
+the monotonic-status invariant, SQLite serializes the writes
+without clobbering even when both writers target the same row.
+The discipline at the action layer:
 
 ```ts
 // Yes — independent UPDATE statements:

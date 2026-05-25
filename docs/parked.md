@@ -611,9 +611,9 @@ was a discriminated union — `{ mode: 'turns' | 'token-trigger',
 value: number }` — but the token-trigger variant was dropped from
 v1 because the buffer-aware overlap UX
 ([`memory/cadence.md → User-tunable knobs`](./memory/cadence.md#user-tunable-knobs))
-pairs cadence with `recentBuffer`, which is entry-counted; pairing
-those across two different units (turns vs tokens) is hard to
-reason about and the indicator math gets noisy.
+pairs cadence with `partialChapterBuffer`, which is entry-counted;
+pairing those across two different units (turns vs tokens) is hard
+to reason about and the indicator math gets noisy.
 
 Real signal that token-trigger is wanted (long entries pushing
 classifier work too far apart, or short entries running classifier
@@ -628,6 +628,54 @@ Subsystem-scoped deferrals for the memory pipeline (retrieval,
 classifier cadence, chapter-close, embedding). All parked-until-
 signal — v1 ships without them and they revisit only when real
 usage produces concrete evidence the gap bites.
+
+#### vec0 copy-on-fork storage optimization
+
+Each branch owns its own `*_vec` rows per the
+[branch-copy manifest](./data-model.md#branch-model). At fork the
+new branch duplicates every vector — 2x storage for the fork's
+lineage. For typical story sizes (hundreds of rows × KB-scale per
+vector) this is MB-scale and cheap.
+
+If real users routinely make many short-lived exploratory branches
+and total embeddings storage becomes a concern, evaluate a
+content-hash-keyed vec0 schema: `(target_kind, target_id,
+content_hash)` — vectors stored once per content version, branches
+reference by hash, edits add a new row instead of overwriting.
+Cost: every retrieval computes content_hash to pick the right row.
+Signal: user complaints about disk usage from prolific branching,
+or embedding storage exceeding narrative storage by orders of
+magnitude on real stories.
+
+#### Mode-3 (LLM-only retrieval)
+
+Stripped from v1 — embedder is hard-required at story creation
+per
+[`memory/model-management.md → Onboarding`](./memory/model-management.md#onboarding).
+Return depends on how embedder-driven retrieval performs in
+practice; that's the signal that gates revisit.
+
+The original spec (frozen here so a future revisit doesn't
+reinvent it):
+
+- Story-creation regime, no mid-story switching. Two regimes
+  (embedding-driven vs LLM-only) produce different memory
+  behavior — different cost-per-turn, different failure modes,
+  different retrieval-quality curve on long stories. Switching
+  mid-story would invalidate the prior memory model.
+- A dedicated retrieval agent makes per-turn LLM calls to pick
+  what to inject from the candidate pool. Slow, expensive, but
+  works without embedding infrastructure.
+- Set at story creation via `stories.settings.retrievalMode`
+  (`'embedding' | 'llm-only'`), immutable thereafter. The
+  `retrieval` agent slot in `stories.settings.models` is the
+  model the LLM-only ranker uses.
+
+Probe support also parked: Mode-3 stories don't have a numeric
+ranker to inspect — probe surface would need a different
+per-row body (LLM verdict + reasoning text instead of score
+table). Different content, same outer shell. Returns alongside
+Mode-3 itself if it ships.
 
 #### Multi-axis salience
 
@@ -923,6 +971,12 @@ Provider API keys live in SQLite (per data strategy). Encryption
 mechanism deferred — not blocking v1 since this is a local app
 with no network exposure of the DB. Lean: explore once a real
 threat model surfaces (export-leak, multi-user shared machine, etc.).
+
+v1 user-facing risk acknowledgment lands in the Full backup
+AlertDialog — see
+[`app-settings.md → APP · Data`](./ui/screens/app-settings/app-settings.md#app--data)
+— since backup is the one user-initiated action that takes the
+unencrypted keys outside the local-only threat model.
 
 #### Granular per-story model controls
 

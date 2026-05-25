@@ -727,8 +727,8 @@ load-bearing axis for the user's decision.
 
 **Lock semantics.** The chosen dim writes to
 `stories.settings.effectiveDim` at Finish, locked thereafter
-along with `embedding_model_id` and `retrievalMode`. Same
-re-index ramp applies if the user later wants a different dim —
+along with `embedding_model_id`. Same re-index ramp applies if
+the user later wants a different dim —
 exposed via the
 [Model swap UX](../../../memory/retrieval.md#model-swap-ux)
 since dim changes have the same vector-space invalidation

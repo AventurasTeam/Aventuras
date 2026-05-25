@@ -614,18 +614,6 @@ App-level flag flips off:
 
 Story-level flag flips off: same behavior, scoped to one story.
 
-### Retrieval mode is mode-3 / LLM-only
-
-Probe surface shows:
-
-> This story is configured for LLM-only retrieval. The probe surface
-> doesn't apply — there's no numeric ranker to inspect.
-
-Capture writes don't run on mode-3 stories. The Probe-mode toggle
-in Story Settings shows as disabled with the same explanation.
-Mode-3 probe support is parked; see
-[`memory/probe.md → Followups`](../../../memory/probe.md#followups).
-
 ### Failed retrieval capture
 
 A capture with a non-null `failure_reason` renders with a banner at

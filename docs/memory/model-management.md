@@ -93,7 +93,9 @@ A new screen joins the first-launch flow after provider
 configuration. Hard-gated: story creation is blocked until the user
 either configures an embedder (curated download, custom import, or
 provider embedder) or explicitly skips into Settings. There is no
-silent retrieval fallback in v1.
+retrieval fallback in v1 — embedder is required to create a story.
+LLM-only retrieval is post-v1 parked-until-signal, see
+[`parked.md → Mode-3 (LLM-only retrieval)`](../parked.md#mode-3-llm-only-retrieval).
 
 Layout sketch:
 

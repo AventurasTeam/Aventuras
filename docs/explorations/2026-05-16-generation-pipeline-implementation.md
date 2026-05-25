@@ -563,6 +563,13 @@ Side-channel actions:
 - Do NOT append a delta
 - Do NOT take a `source` field — only the orchestrator calls them
 
+> The "(SQLite + store update)" bullet above is superseded — the
+> shipped contract is Zustand-only during the stream; SQLite
+> first sees the entry at the `commitStreamingEntry` delta_emit.
+> See `generation-pipeline.md → Path B — stream_chunk → side-channel`
+> for the corrected version. Crash recovery has nothing to clean
+> for mid-stream aborts (no SQLite row was written).
+
 The entry's `op=create` delta is deferred until stream completion,
 when the narrative phase yields `delta_emitted { kind: 'commitStreamingEntry' }`
 — Path A then writes the create delta with full content.

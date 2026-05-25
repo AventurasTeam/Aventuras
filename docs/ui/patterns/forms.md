@@ -139,8 +139,8 @@ vault-calendar form rendering. Earlier wireframes inconsistently
 applied `max-width: 380px` (and 260 / 280 / 320) caps on Select
 triggers and select-style numeric inputs for desktop visual
 balance — those caps drop; inputs fill their column. Settings
-numerics like `chapter token threshold` and `recent buffer` are
-full-width on every tier; the user types a 3-5 char value into a
+numerics like `chapter token threshold`, `protected buffer`, and
+`partial chapter buffer` are full-width on every tier; the user types a 3-5 char value into a
 field that's the same width as its label-row neighbors.
 
 ### Inline-row exceptions
@@ -336,7 +336,7 @@ for the cross-primitive size landscape.
   needs to compare presets at a glance). Implemented as
   `.chip-row` with `.add-chip` cells — wraps naturally at narrow
   tiers. Not yet abstracted into its own primitive; if more
-  preset+custom hybrids surface (e.g., recent buffer size,
+  preset+custom hybrids surface (e.g., protected buffer size,
   timeout windows), promote it to a named pattern.
 
 ### Storybook (Select)
