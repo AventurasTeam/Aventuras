@@ -13,10 +13,7 @@ type TextareaProps = ComponentProps<typeof TextInput> & {
    */
   rows?: number
   /**
-   * Maximum rows before scrolling kicks in. Default 10. Together
-   * with `rows` defines the height envelope: web grows via CSS
-   * `field-sizing-content`, native grows via `onContentSizeChange`
-   * clamped to the same envelope.
+   * Maximum rows before scrolling kicks in. Default 10.
    */
   maxRows?: number
   className?: string

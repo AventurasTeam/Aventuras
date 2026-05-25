@@ -19,8 +19,7 @@ import {
   Pressable,
   SectionList,
   View,
-  type NativeSyntheticEvent,
-  type TextInputKeyPressEventData,
+  type TextInputKeyPressEvent,
   type ViewStyle,
 } from 'react-native'
 
@@ -803,7 +802,7 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
   }, [list.highlightedId, sections, activate])
 
   const onKeyPress = useCallback(
-    (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+    (e: TextInputKeyPressEvent) => {
       if (Platform.OS !== 'web') return
       const key = e.nativeEvent.key
       if (key === 'ArrowDown') {
@@ -1100,7 +1099,7 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
   }, [activate])
 
   const onKeyPress = useCallback(
-    (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+    (e: TextInputKeyPressEvent) => {
       if (Platform.OS !== 'web') return
       const key = e.nativeEvent.key
       if (key === 'ArrowDown') {

@@ -1,11 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import {
-  Platform,
-  TextInput,
-  View,
-  type NativeSyntheticEvent,
-  type TextInputKeyPressEventData,
-} from 'react-native'
+import { Platform, TextInput, View, type TextInputKeyPressEvent } from 'react-native'
 
 import { Tag } from '@/components/ui/tag'
 import { cn } from '@/lib/utils'
@@ -139,7 +133,7 @@ export function TagInput({
   // onKeyPress doesn't fire for Backspace on an already-empty
   // input — accepted as best-effort per the pattern doc.
   const handleKeyPress = useCallback(
-    (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+    (e: TextInputKeyPressEvent) => {
       const key = e.nativeEvent.key
       if (key === 'Backspace' && typed === '' && value.length > 0) {
         e.preventDefault?.()

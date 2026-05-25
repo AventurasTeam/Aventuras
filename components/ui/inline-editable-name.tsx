@@ -7,39 +7,11 @@ import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 
-/**
- * InlineEditableName — single-line text affordance that swaps to an
- * `Input` on user request and writes back on commit.
- *
- * Read state shows the value as `<Text>` paired with a Pencil
- * `IconAction` on the right. Per the icon-action convention the
- * pencil sits at `text-fg-secondary` and brightens to
- * `text-fg-primary` on row (`group`) hover/focus on web — so a touch
- * surface always sees the pencil receded-but-visible and a desktop
- * surface gets the hover-reveal cue. Tap on the row body or the
- * pencil enters edit state.
- *
- * Edit state mounts an `<Input>` sized to match the read label, with
- * its in-progress value buffered locally. **Blur** and **Enter**
- * commit the buffer to `onChange` (only if it changed from `value`).
- * **Escape** on web cancels and reverts.
- *
- * Sizing maps onto sibling primitive sizes:
- *  - `sm` → `<Text size="sm">` + `<Input size="sm">`
- *  - `md` → `<Text size="base">` + `<Input size="md">`
- *  - `lg` → `<Text size="lg">` + `<Input size="lg">`
- *
- * Truncation is intentionally a consumer concern — DetailPane's head
- * handles overflow at the row level. The component renders names in
- * full.
- */
-
 type InlineEditableNameSize = 'sm' | 'md' | 'lg'
 
 type InlineEditableNameProps = {
   value: string
   onChange: (next: string) => void
-  /** Shown in read state when `value === ''` and as the Input placeholder while editing. */
   placeholder?: string
   disabled?: boolean
   /**
@@ -80,19 +52,8 @@ export function InlineEditableName({
 }: InlineEditableNameProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
-  // Escape, Enter, and disabled-mid-edit each exit edit mode by
-  // unmounting the Input, which fires a synthetic blur on the way
-  // out. Without a guard, blur would fire a redundant `onChange`
-  // (Enter case — already committed) or commit an Escape-discarded
-  // buffer. The ref short-circuits the post-exit blur. Refs avoid
-  // an extra render pass.
   const exitedRef = useRef(false)
 
-  // When the consumer toggles `disabled` mid-edit, drop edit state to
-  // keep the affordance consistent with the spec ("when disabled, row
-  // not tappable"). Treat as a cancel — the in-progress draft is
-  // discarded, not committed, because the consumer's disable signal
-  // overrides the user's edit intent.
   useEffect(() => {
     if (disabled && editing) {
       exitedRef.current = true
@@ -134,11 +95,6 @@ export function InlineEditableName({
     setDraft(value)
     setEditing(false)
   }, [value])
-
-  // Focus + select-all on entering edit state is handled by the
-  // freshly-mounted `<Input>` via `autoFocus` + `selectTextOnFocus`.
-  // The Input primitive doesn't expose a ref, so we lean on the
-  // mount lifecycle rather than imperative focus.
 
   const handleKeyPress = (e: TextInputKeyPressEvent) => {
     if (Platform.OS !== 'web') return
@@ -185,10 +141,6 @@ export function InlineEditableName({
     )
   }
 
-  // Read state: row is a Pressable `group` so the IconAction's
-  // group-hover modifier brightens the pencil whenever the row is
-  // hovered (web). Native gets no hover; pencil stays at
-  // text-fg-secondary (visible per spec).
   return (
     <Pressable
       onPress={enterEdit}

@@ -47,18 +47,7 @@ function disabledClasses(): string {
 
 type InputProps = ComponentProps<typeof TextInput> & {
   size?: InputSize
-  /**
-   * Slot before the text input — typically a leading Icon (search
-   * glyph, etc.). Renders inside the input frame, padded against
-   * the input edge. Pass `<Icon as={Search} size="sm" />` shaped.
-   */
   leading?: ReactNode
-  /**
-   * Slot after the text input — typically a trailing affordance
-   * (password show/hide toggle, clear button, info popover trigger).
-   * Treat as interactive: wrap in `<Pressable>` if it should respond
-   * to taps without focusing the input.
-   */
   trailing?: ReactNode
   className?: string
   /**

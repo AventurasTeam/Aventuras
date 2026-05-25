@@ -39,10 +39,6 @@ function AccordionItem({
 }: ComponentProps<typeof AccordionPrimitive.Item>) {
   return (
     <AccordionPrimitive.Item
-      // Note: no `last:border-b-0` — that override clipped the
-      // bottom edge of the last card in card-style composition.
-      // Strip-style accepts a trailing 1px line on the last item;
-      // it reads as a natural separator before whatever's below.
       className={cn('border-b border-border', className)}
       value={value}
       asChild={Platform.OS !== 'web'}
@@ -69,10 +65,6 @@ function AccordionTrigger({
 }) {
   const { isExpanded } = AccordionPrimitive.useItemContext()
 
-  // Wireframe convention: ChevronDown reads as ChevronRight when
-  // collapsed (-90°), rotates to natural ChevronDown (0°) when
-  // expanded. Reads as "expand → reveal content below" — inverts
-  // the rn-reusables baseline's 0°→180° rotation.
   const progress = useDerivedValue(
     () => (isExpanded ? withTiming(1, { duration: 250 }) : withTiming(0, { duration: 200 })),
     [isExpanded],
@@ -87,14 +79,6 @@ function AccordionTrigger({
       <AccordionPrimitive.Header>
         <AccordionPrimitive.Trigger {...props} asChild>
           <Trigger
-            // Inline `pointerEvents` on disabled web triggers —
-            // same root cause as Tabs (a7a2504): the
-            // rn-primitives Trigger2 wrapper forwards disabled
-            // to the inner Pressable + radix.Trigger, but radix
-            // attaches its onClick to the same DOM element via
-            // Slot, and Pressable.disabled doesn't gate the
-            // radix-side handler. Inline pointer-events: none is
-            // the foolproof DOM-level block.
             style={
               Platform.OS === 'web' && props.disabled
                 ? ({ pointerEvents: 'none' } as never)
@@ -102,10 +86,6 @@ function AccordionTrigger({
             }
             className={cn(
               'flex-row items-start justify-between gap-4 rounded-md py-row-y-lg',
-              // `disabled:opacity-50` (Tailwind disabled variant)
-              // never fires because `Trigger` is a View on web,
-              // which doesn't accept the `disabled` DOM
-              // attribute. Drive opacity off the prop directly.
               props.disabled && 'opacity-50',
               Platform.select({
                 web: cn(
@@ -145,10 +125,6 @@ function AccordionContent({
       <AccordionPrimitive.Content
         className={cn(
           'overflow-hidden',
-          // Web entry/exit driven by radix's data-state +
-          // `--radix-accordion-content-height` CSS var. Native
-          // gets the same animation via reanimated layout
-          // transitions on the wrapping Animated.View.
           Platform.select({
             web: isExpanded ? 'animate-accordion-down' : 'animate-accordion-up',
           }),

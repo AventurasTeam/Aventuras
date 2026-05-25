@@ -166,12 +166,6 @@ function PhoneSheetPanel({
       })
   }, [dragOffset, closeFromGesture, screenHeight])
 
-  // Drag handle: gesture wrapper covers ONLY the handle (matching
-  // Sheet primitive's pattern — see sheet.tsx for the full
-  // rationale). Web gets no gesture; the panel uses backdrop +
-  // Escape. Hit area is `py-6` (~52 px tall, full panel width via
-  // `-mx-4 px-4`) so the handle is comfortably grabbable while the
-  // visible bar stays at the iOS-standard 4 × 40.
   const handleVisible = <View className="mx-auto h-1 w-10 rounded-full bg-fg-muted opacity-40" />
   const handle =
     Platform.OS === 'web' ? (
@@ -291,12 +285,6 @@ function PopoverContent({
           <TextClassContext.Provider value="text-fg-primary">
             <NativeOnlyAnimatedView className="z-[100]" entering={FadeIn} exiting={FadeOut}>
               <SelectBase.Content
-                // z-[100] (matches Toast convention) sits above modal
-                // primitives (Dialog / AlertDialog / Sheet all at z-50) so a
-                // Select inside a modal renders its popover above the modal
-                // panel. Inline style mirrors the class — guards against
-                // Tailwind purging the arbitrary value or HMR not picking up
-                // the new class.
                 style={Platform.select({ web: { zIndex: 100 } })}
                 className={cn(
                   'relative z-[100] min-w-[8rem] rounded-md border border-border bg-bg-overlay',
@@ -316,13 +304,6 @@ function PopoverContent({
                     position === 'popper' &&
                       cn(
                         'w-full',
-                        // Lock viewport width to the trigger so rich
-                        // content (chips, multi-line rows) can't
-                        // overflow past the anchor and overlap
-                        // adjacent layout (e.g. summary panels in
-                        // side-by-side hosts). Plain-label Select
-                        // usage was already content-narrower than
-                        // trigger, so this is a no-op there.
                         Platform.select({
                           web: 'h-[var(--radix-select-trigger-height)] w-[var(--radix-select-trigger-width)]',
                         }),
@@ -364,10 +345,6 @@ function Content({
   tailAction?: { label: string; onPress: () => void }
 }) {
   const tier = useTier()
-  // Sheet shape is a touch idiom (large pull-down picker on a small
-  // touchscreen). On web, even at narrow widths (Electron resized
-  // small), the user is still on mouse — popover is the appropriate
-  // idiom there. Gate sheet dispatch on native-only.
   const usesSheet = Platform.OS !== 'web' && tier === 'phone'
   if (usesSheet) {
     return (
@@ -384,11 +361,6 @@ function Content({
   return <PopoverContent tailAction={tailAction} {...props} />
 }
 
-// Pressable row pinned at the bottom of the popover / sheet — the
-// `Manage in Vault →` style escape hatch surfaced via Select's
-// `tailAction` prop. Closes the dropdown on press in addition to
-// firing the caller's handler so navigation can take over without
-// the popover lingering.
 function TailActionRow({ label, onPress }: { label: string; onPress: () => void }) {
   const { onOpenChange } = SelectBase.useRootContext()
   return (
@@ -426,49 +398,16 @@ function Item({
   ...props
 }: ComponentProps<typeof SelectBase.Item> & {
   children?: ReactNode
-  /**
-   * When true, the default `<ItemText />` is suppressed and the
-   * selection-indicator wrapper repositions to the LEFT of the row
-   * (`absolute left-2`) so caller-rendered content can occupy the
-   * trailing edge for chips, badges, etc. Caller is responsible for
-   * the visible text — Item's `label` prop still drives the
-   * accessible-name + value semantics.
-   */
   customContent?: boolean
 }) {
-  // Tier-conditional row treatment: phone-tier Sheet rows need
-  // touch-sized min-height (`control-lg`) and a top border on the
-  // first row so the list visually anchors against the Sheet chrome.
-  // Both phone and tablet/desktop variants render INSET inside the
-  // panel — no `-mx-4` edge-to-edge bleed. The earlier bleed pattern
-  // forced `pl-8` / `pr-10` gymnastics to keep content off the panel
-  // edges, and broke down for `customContent` rows where rich content
-  // wanted the trailing edge for chips. Inset rows leave the panel's
-  // padding cushion intact, the selected-bg reads as a clean inset
-  // highlight rather than fighting the rounded corners, and the row
-  // contract no longer differs between phone and other tiers.
   const tier = useTier()
   const isPhone = Platform.OS !== 'web' && tier === 'phone'
   return (
     <SelectBase.Item
       className={cn(
         'group relative flex w-full flex-row items-center gap-2 rounded-sm border-b border-b-border py-row-y-md active:bg-bg-sunken',
-        // Reserve gutter only on the default-content path: the
-        // selected check sits at `right-3` and needs `pr-10` to keep
-        // text from overlapping. `customContent` rows drop the check
-        // entirely (bg-tint signals selection — see below) so the
-        // row uses standard horizontal padding on both sides.
         customContent ? 'px-row-x-md' : 'pl-row-x-md pr-10',
         isPhone ? 'min-h-control-lg first:border-t first:border-t-border' : 'last:border-b-0',
-        // Selected-row affordance:
-        // - Default content: the absolute Check icon is the signal.
-        // - Custom content: rich rows often carry their own
-        //   trailing chips/badges; an extra check competes for the
-        //   left edge, and surface tint reads cleaner. Use Radix's
-        //   `data-state="checked"` attribute (web) /
-        //   `accessibilityState.selected` mapping (native) — which
-        //   the rn-primitives wrapper drives — to drop the bg tint
-        //   on the selected row.
         customContent && 'data-[state=checked]:bg-bg-sunken',
         Platform.select({
           web: 'cursor-default outline-none hover:bg-bg-sunken focus:bg-bg-sunken data-[disabled]:pointer-events-none [&_svg]:pointer-events-none',
@@ -570,57 +509,40 @@ export type SelectProps = {
    * Override the auto-derivation cascade: by default Select picks
    * `'segment'` (≤3 short options, no descriptions, desktop tier),
    * `'radio'` (4–7 options or any have descriptions), or
-   * `'dropdown'` (8+, or mobile, or grouped). Set explicitly to
-   * lock a specific shape regardless of count. See
-   * [`forms.md → Auto-derivation cascade`](../../docs/ui/patterns/forms.md#auto-derivation-cascade).
+   * `'dropdown'` (8+, or mobile, or grouped).
    */
   mode?: SelectMode
   /**
    * Mobile sheet height: `'short'` (33 %), `'medium'` (60 %), or
    * `'auto'` (sized by option count). Only applies when `mode`
-   * resolves to `'dropdown'` on the phone tier.
+   * resolves to `'dropdown'` on the phone.
    */
   sheetSize?: SelectSheetSize
   placeholder?: string
   /**
    * Field label. On phone (when `mode` resolves to `'dropdown'`),
-   * surfaces as the visible title at the top of the bottom Sheet —
-   * the Sheet is the entire editing context and any surrounding
-   * FormRow label isn't visible inside it. Optional; falls through
-   * to no title when omitted. Desktop / tablet popover doesn't
-   * render the label (the surrounding FormRow handles that).
+   * it's a visible title at the top of the bottom Sheet.
    */
   label?: string
   disabled?: boolean
   className?: string
 
   /**
-   * Trigger height tier — `'xs'` (`h-control-xs`, dense chrome),
+   * Trigger height tier — `'xs'` (`h-control-xs`, dense controls),
    * `'sm'` (`h-control-sm`, compact form), or `'md'` (`h-control-md`,
    * default form row). Only affects the trigger button on every
    * tier; Sheet sizing on phone is unaffected (driven by option
-   * count via `sheetSize`). Ignored for `segment` and `radio` modes
-   * — those render their own non-trigger surfaces.
+   * count via `sheetSize`). Ignored for `segment` and `radio` modes.
    */
   size?: TriggerSize
 
   /**
-   * Custom row renderer for `dropdown` mode. When provided, replaces
-   * the default `<ItemText />` rendering for each option — used by
-   * compounds (e.g. `CalendarPicker`) that need rich two-line rows
-   * with chips, sub-line tier paths, etc. Selection indicator
-   * automatically flips to the row's left edge so caller-supplied
-   * trailing content (chips, badges) doesn't clash. Ignored for
-   * `segment` and `radio` modes.
+   * Custom row renderer for `dropdown` mode.
    */
   renderRow?: (args: { option: SelectOption; selected: boolean }) => ReactNode
 
   /**
-   * Custom trigger content for `dropdown` mode. Replaces the
-   * default `<Value placeholder=… />` rendering. Used by compounds
-   * that need to display the selected option with auxiliary content
-   * (chips, badges, secondary labels). The chevron remains at the
-   * right edge regardless. Ignored for `segment` and `radio` modes.
+   * Custom trigger content for `dropdown` mode.
    */
   renderTrigger?: (args: {
     selected: SelectOption | undefined
@@ -630,9 +552,7 @@ export type SelectProps = {
   /**
    * Optional fixed action surfaced at the bottom of the popover /
    * sheet, after the option list. Closes the dropdown on press in
-   * addition to firing the caller's handler. Used for
-   * `Manage in Vault →` style escape hatches that route the user
-   * out of selection. Ignored for `segment` and `radio` modes.
+   * addition to firing the caller's handler.
    */
   tailAction?: { label: string; onPress: () => void }
 }
@@ -655,10 +575,6 @@ function autoSheetSize(options: SelectOption[]): ContentSheetSize {
   return 'short'
 }
 
-// Bucket options into ordered groups, preserving first-seen order
-// of group names and option order within each group. Ungrouped
-// options collect under a `null` key and surface without a Label
-// in the rendered list.
 function groupOptions(options: SelectOption[]): {
   name: string | null
   options: SelectOption[]
@@ -809,13 +725,6 @@ function DropdownBranch({
         sheetSize={resolvedSheetSize}
         label={label}
         tailAction={tailAction}
-        // Rich custom rows are roughly twice the height of label-only
-        // rows; the default `max-h-52` (208 px) clips at ~3 rows on
-        // the popover. Lift to `max-h-96` (384 px) when `renderRow`
-        // is set. **Web only** — native phone takes the Sheet branch
-        // where `sheetSize` controls height; passing a max-h here
-        // would cap the sheet panel below `sheetSize` and leave a
-        // visible gap below it on the screen.
         className={
           renderRow != null ? (Platform.select({ web: 'max-h-96' }) ?? undefined) : undefined
         }

@@ -25,8 +25,7 @@ type AutocompleteProps = {
   onCommit?: (value: string) => void
   /**
    * Suggestions source. Empty / absent → no suggestions; the dropdown shows
-   * only the `+ Add new` row when the user has typed something. Component
-   * degrades cleanly to free-form input.
+   * only the `+ Add new` row when the user has typed something.
    */
   sourceList?: readonly string[]
   /**
@@ -42,21 +41,11 @@ type AutocompleteProps = {
   /** Customize the tail-create row label. Default: `+ Add new: "<typed>"`. */
   createTailLabel?: (typed: string) => string
   placeholder?: string
-  /**
-   * Field label. Drives the accessible name of the substrate's trigger and
-   * sheet (ARIA). Falls back to `placeholder` when not provided. Was
-   * previously rendered as a visible Heading at the top of the phone Sheet —
-   * the visible-label slot is a SearchableOverlayList follow-up
-   * ([renderHeader](../../docs/followups.md)); until then, wrap with FormRow
-   * for visible labels on desktop / tablet.
-   */
   label?: string
   disabled?: boolean
   /**
    * When provided alongside `disabled`, surfaces as the browser-native
-   * `title` tooltip on web. Same affordance IconAction uses for "temporarily
-   * unavailable" / edit-restriction-tooltip per
-   * [`principles.md → Edit restrictions during in-flight generation`](../../docs/ui/principles.md#edit-restrictions-during-in-flight-generation).
+   * `title` tooltip on web.
    */
   disabledReason?: string
   /** Marks the input invalid for ARIA + visual error styling. */
@@ -108,9 +97,6 @@ export function Autocomplete({
   'aria-invalid': ariaInvalid,
   className,
 }: AutocompleteProps) {
-  // Filter once; build the substrate's section data on each value change.
-  // Substring case-insensitive match preserves source order; the tail row
-  // appears whenever the trimmed input doesn't exactly match a source entry.
   const sections = useMemo<Section<AutocompleteRowData>[]>(() => {
     const trimmed = value.trim()
     const lc = trimmed.toLowerCase()

@@ -1,9 +1,3 @@
-// Toast primitive — top-anchored, auto-dismissing notification
-// surface. See [`docs/ui/patterns/toast.md`](../../docs/ui/patterns/toast.md)
-// for the full contract (placement, severity, queue, dismiss).
-//
-// Mount <Toaster /> once at the app root; fire toasts via the
-// imperative API in `lib/toast`.
 import { AlertCircle, CheckCircle, Info, X } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Platform, Pressable, View, type ViewStyle } from 'react-native'
@@ -116,9 +110,6 @@ function Toast({ item }: ToastProps) {
       style={Platform.select({ native: animatedDragStyle as ViewStyle })}
     >
       <View
-        // role="status" + aria-live route the announcement through
-        // assistive tech; on native, RN announces via accessible
-        // description, so the visible text suffices.
         aria-live={ARIA_LIVE[item.severity]}
         role="status"
         className={cn(
@@ -168,10 +159,6 @@ export function Toaster() {
 
   return (
     <View
-      // Top-center, full-width-with-gutters on phone, max-w-[400px]
-      // on desktop. z-100 sits above Sheet (z-50) and AlertDialog
-      // (z-50). pointerEvents="box-none" so the wrapper doesn't
-      // block clicks below it.
       pointerEvents="box-none"
       className={cn(
         'absolute left-0 right-0 top-4 z-[100] mx-4 items-center gap-2',

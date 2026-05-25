@@ -12,9 +12,7 @@ import { cn } from '@/lib/utils'
 
 type SkeletonProps = ViewProps & {
   /**
-   * Dimensions are className-driven (`h-4 w-32`, `size-10`), not a
-   * variant prop — skeleton blocks compose to mimic real loading
-   * layouts (avatar circles, text-line bars, paragraph stacks).
+   * Dimensions are className-driven (`h-4 w-32`, `size-10`).
    * `rounded-md` is the default; override per-use.
    */
   className?: string
@@ -34,9 +32,6 @@ export function Skeleton({ className, ...props }: SkeletonProps) {
   return <NativeSkeleton className={className} {...props} />
 }
 
-// Native-only branch. Lives behind the `Platform.OS === 'web'`
-// guard above so reanimated worklets don't mount on RN-Web (where
-// the same animate-pulse CSS does the work natively).
 function NativeSkeleton({ className, ...props }: SkeletonProps) {
   const opacity = useSharedValue(1)
   useEffect(() => {

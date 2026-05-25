@@ -53,16 +53,12 @@ type TagProps = {
    */
   tone?: TagTone
   /**
-   * Replaces the solid border with a dashed border. Used for
-   * add-affordance buttons ("+ tag", "+ relationship").
-   * Mutually-exclusive with `removable` in practice (add vs. remove
-   * are different use cases).
+   * Replaces the solid border with a dashed border.
    */
   dashed?: boolean
   /**
    * When true, renders an inline × button after the label that calls
-   * `onRemove` when pressed. The × is its own touch target (44px
-   * floor on phone).
+   * `onRemove` when pressed.
    */
   removable?: boolean
   onRemove?: () => void
@@ -71,15 +67,7 @@ type TagProps = {
   disabled?: boolean
   className?: string
   /**
-   * Optional element rendered before the label, separated by the
-   * existing `gap-1`. Used by GenerationStatusPill to inject a
-   * Spinner during active phases; available to any future consumer
-   * needing a small leading indicator.
-   *
-   * Note: Spinner / Icon children that take their own color slot
-   * (not the text-color cascade) must be passed the matching slot
-   * for the tone — e.g. `<Spinner size="sm" colorSlot="--accent-fg" />`
-   * inside a `tone="accent"` tag.
+   * Optional element rendered before the label, separated by `gap-1`.
    */
   leading?: ReactNode
   children?: ReactNode
@@ -99,15 +87,9 @@ export function Tag({
   const interactive = onPress != null
   const toneClasses = TONE_CLASSES[tone]
   const baseClass = cn(
-    // `group` hooks the Pressable so the label can hover-lift via
-    // group-hover through TextClassContext (direct hover: doesn't
-    // cascade to inherited text colors).
     'group flex-row items-center gap-1 rounded-full border px-row-x-xs py-row-y-xs',
     toneClasses.container,
     dashed && 'border-dashed',
-    // Saturated bg surfaces absorb `bg-tint-*` overlays, so filled
-    // tones need opacity-based hover/press feedback while neutral
-    // tones use the state-layer tints.
     interactive && (toneClasses.filled ? 'active:opacity-90' : 'active:bg-tint-press'),
     Platform.select({
       web: cn(
@@ -124,8 +106,6 @@ export function Tag({
   const labelClass = cn(
     'text-xs',
     toneClasses.label,
-    // `group-hover` lift only on neutral tones — filled tones already
-    // saturate the foreground via `*-fg` and have no second-tier color.
     interactive &&
       !toneClasses.filled &&
       Platform.select({ web: 'transition-colors group-hover:text-fg-primary' }),
@@ -147,12 +127,7 @@ export function Tag({
       aria-label="Remove"
       onPress={onRemove}
       disabled={disabled}
-      // Keep × reachable as its own touch target without bloating
-      // the chip body. hitSlop provides the 44px tap area on phone
-      // without affecting layout.
       hitSlop={8}
-      // `group/x` scopes a separate group so the × hover doesn't
-      // bleed into the body's group-hover (and vice versa).
       className={cn(
         'group/x -mr-1 ml-0.5 size-5 items-center justify-center rounded-full',
         Platform.select({

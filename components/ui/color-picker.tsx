@@ -55,8 +55,6 @@ function fillStyle(color: string): ViewStyle {
 
 // YIQ contrast heuristic — converts the swatch background to perceived
 // brightness and decides whether the overlaid Check should be dark or light.
-// Cheaper than WCAG relative luminance and well within tolerance for picking
-// a foreground glyph color against a solid swatch.
 function isLightColor(hex: string): boolean {
   const raw = hex.startsWith('#') ? hex.slice(1) : hex
   let r = 0
@@ -120,16 +118,7 @@ function SwatchButton({
   const ringClass = selected ? 'border-border-strong' : 'border-border'
   const dashed = kind === 'none' ? 'border-dashed' : ''
   const isEmpty = kind === 'custom-empty'
-  // Show the Check overlay on any swatch that represents a committable value
-  // when it's the current selection — both curated palette swatches and the
-  // 'none' fallback chip (selected when value === null). The 'custom-empty'
-  // chip is the editor trigger, never a selection target, so it stays as '+'.
   const showCheck = selected && !isEmpty && color != null
-  // Color routed through `style`, not the `color` prop: Icon's cssInterop
-  // wires `nativeStyleToProp: { color }`, which extracts color from the
-  // resolved style and overrides any explicit `color` prop on native — the
-  // className-derived `text-fg-primary` would otherwise win and paint the
-  // check white on every swatch.
   const checkStyle = {
     color: color != null && isLightColor(color) ? '#000000' : '#ffffff',
     opacity: CHECK_OVERLAY_OPACITY,
@@ -149,9 +138,6 @@ function SwatchButton({
         ringClass,
         dashed,
       )}
-      // Slot props spread last so PopoverTrigger.asChild can inject its ref + click
-      // handler onto the underlying Pressable — without this, Floating UI can't anchor
-      // the popover (renders unanchored at the viewport edge with collapsed height).
       {...slotProps}
     >
       {isEmpty ? <Text size="sm">+</Text> : null}
@@ -290,9 +276,6 @@ function CustomChip({
     )
   }
 
-  // Desktop / tablet — uncontrolled Popover. Apply / Cancel wrap in PopoverPrimitive.Close
-  // (slotted onto the Button) so each press closes the popover via the rn-primitives
-  // root context; the explicit onPress on Apply still fires to commit the hex.
   return (
     <Popover ariaLabel="Custom color">
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>

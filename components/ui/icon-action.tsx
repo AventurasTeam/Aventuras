@@ -7,35 +7,6 @@ import { Icon, type IconSizeVariant } from '@/components/ui/icon'
 import { TextClassContext } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 
-/**
- * IconAction — discrete row-action icon button.
- *
- * Per [icon-actions.md](../../docs/ui/patterns/icon-actions.md):
- * always rendered, color-tiered to read as receded-but-visible by
- * default and full-strength on hover/focus. The default brightens
- * to `fg-primary` on row (`group`) hover and on self-hover (web),
- * with self-hover additionally surfacing `bg-tint-hover`. Touch
- * sits at the receded color and taps trigger normally.
- *
- * **Color tiers, not opacity tiers.** An earlier draft used
- * opacity-based muting (per the original spec wording) — opacity
- * doesn't compose reliably with hover modifiers on RN-Web because
- * `opacity` is extracted to a style prop via cssInterop, so
- * `hover:opacity-100` never fires through CSS-driven hover state.
- * Color classes (`text-fg-secondary` / `text-fg-primary` /
- * `text-fg-muted`) work as ordinary CSS and compose cleanly with
- * `hover:` and `group-hover:` modifiers. Spec was updated to match.
- *
- * Destructive variant shifts the icon color to `text-danger` on
- * self-hover via a named group, overriding the row-hover cue.
- *
- * `disabledReason` upgrades the disabled state with a `cursor-help`
- * cue and the browser-native `title` tooltip on web, distinguishing
- * "temporarily unavailable, here's why" from a plain disabled
- * state. A dedicated Tooltip primitive isn't in the system yet;
- * when it lands, replace the title-attribute fallback with a real
- * tooltip.
- */
 const iconActionVariants = cva(
   cn(
     'group/icon-action shrink-0 items-center justify-center rounded-sm',
@@ -108,8 +79,6 @@ type IconActionProps = Omit<PressableProps, 'children' | 'aria-label'> & {
   /**
    * When provided alongside `disabled`, surfaces as the accessible
    * name on hover and as the browser-native `title` tooltip on web.
-   * Use for "temporarily unavailable" cases per
-   * [icon-actions.md → Disabled vs hidden](../../docs/ui/patterns/icon-actions.md#disabled-vs-hidden).
    */
   disabledReason?: string
   /**
@@ -168,11 +137,6 @@ export function IconAction({
       </Pressable>
     </TextClassContext.Provider>
   )
-  // RN-Web's Pressable runs its props through a DOM-attribute allowlist
-  // that doesn't include `title`, so a direct prop spread never reaches
-  // the rendered element. Wrapping in a raw div on web — the runtime
-  // is React DOM there — gives the browser-native tooltip until a
-  // dedicated Tooltip primitive lands.
   if (disabled && disabledReason && Platform.OS === 'web') {
     return (
       <div title={disabledReason} className="inline-flex">

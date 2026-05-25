@@ -32,9 +32,7 @@ type AvatarProps = ComponentProps<typeof AvatarPrimitive.Root> & {
   src?: string
   /**
    * Rendered when no `src` or when the image fails to load. Pass a
-   * `string` for centered initials text (e.g. `"DV"`) or a ReactNode
-   * for a custom shape — typical: an `<Icon as={User} />` for an
-   * entity-kind glyph. Inherits muted color via TextClassContext.
+   * `string` for centered initials text (e.g. `"DV"`) or a ReactNode.
    */
   fallback?: ReactNode | string
   imageClassName?: string

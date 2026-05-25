@@ -60,9 +60,6 @@ function DialogContent({
     <DialogPortal hostName={portalHost}>
       <DialogOverlay>
         <DialogPrimitive.Content
-          // `relative` anchors the absolutely-positioned DialogClose × to the
-          // panel's top-right; without it the × anchors to the Overlay (the
-          // nearest positioned ancestor) and ends up off the panel.
           className={cn(
             'relative z-50 mx-auto flex w-full max-w-[calc(100%-2rem)] flex-col gap-4 rounded-lg border border-border bg-bg-overlay p-6 shadow-lg shadow-black/5 sm:max-w-lg',
             Platform.select({ web: 'animate-fade-in' }),

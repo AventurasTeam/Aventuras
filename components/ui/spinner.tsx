@@ -17,9 +17,7 @@ type SpinnerProps = {
   size?: SpinnerSize | number
   /**
    * Theme slot driving the spinner color (e.g. `'--fg-primary'`,
-   * `'--accent'`, `'--danger-fg'`). Slot-based rather than className
-   * because native ActivityIndicator can't pick up `text-*` via CSS
-   * cascade (no DOM on RN). Defaults to `--fg-primary`.
+   * `'--accent'`, `'--danger-fg'`).
    */
   colorSlot?: keyof ThemeColorSlots
   className?: string

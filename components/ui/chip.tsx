@@ -5,18 +5,7 @@ import { Text, TextClassContext } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 
 type ChipProps = {
-  /**
-   * When true, the chip renders the filled "active" state — primary
-   * fill on a primary border, inverted text. When false / undefined,
-   * the chip renders the outline + muted-text default. Only meaningful
-   * when `onPress` is also supplied (filter use case).
-   */
   selected?: boolean
-  /**
-   * Optional press handler. When present, the chip becomes interactive
-   * (cursor-pointer + hover + role="button" + aria-pressed). When
-   * absent, the chip renders as a static visual indicator.
-   */
   onPress?: () => void
   disabled?: boolean
   className?: string
@@ -26,19 +15,8 @@ type ChipProps = {
 export function Chip({ selected = false, onPress, disabled, className, children }: ChipProps) {
   const interactive = onPress != null
   const baseClass = cn(
-    // `group` hooks the wrapper so group-hover can lift the
-    // label color on inactive interactive chips (direct hover:
-    // doesn't cascade through TextClassContext).
     'group h-control-xs flex-row items-center justify-center rounded-sm border px-row-x-sm',
     selected ? 'border-fg-primary bg-fg-primary' : 'border-border-strong bg-bg-base',
-    // Hover/press: state-layer tint on the unselected (neutral)
-    // bg, opacity reduction on the selected (filled) bg. The
-    // state-layer pattern relies on the tint replacing a
-    // neutral background — applying it to a filled surface
-    // visually inverts (tint is light over light fg-primary,
-    // dark over dark, etc.). Opacity is the project's
-    // filled-surface hover convention; matches Button's
-    // `destructive` variant.
     interactive && (selected ? 'active:opacity-90' : 'active:bg-tint-press'),
     Platform.select({
       web: cn(

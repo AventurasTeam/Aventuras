@@ -16,15 +16,13 @@ type IconSizeVariant = keyof typeof ICON_SIZE_PX
 type IconProps = Omit<LucideProps, 'size'> & {
   /**
    * The Lucide icon component to render. Pass the imported component
-   * itself, not a string name: `<Icon as={Settings} />`. See
-   * [`iconography.md`](../../docs/ui/foundations/iconography.md) for
-   * the canonical glyph vocabulary.
+   * itself, not a string name: `<Icon as={Settings} />`.
    */
   as: LucideIcon
   /**
    * Sizing token: `'sm'` (16 px, inline with body text), `'md'` (20 px,
    * default chrome), `'lg'` (24 px, emphasis chrome). Numeric override
-   * accepted for the rare non-canonical case; justify at use site.
+   * accepted.
    */
   size?: IconSizeVariant | number
 }
@@ -38,11 +36,6 @@ function ensureWired(IconComponent: LucideIcon) {
       nativeStyleToProp: {
         color: true,
         opacity: true,
-        // Forward `fill-*` utility classes through to the lucide icon's `fill`
-        // SVG attribute. Required because `fill="currentColor"` is an SVG
-        // keyword that web honors but react-native-svg's Path doesn't resolve,
-        // leaving filled glyphs (e.g. favorited Star) rendering outline-only on
-        // native. With this mapping, `className="fill-warning"` works on both.
         fill: true,
       },
     },

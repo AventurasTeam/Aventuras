@@ -235,12 +235,6 @@ function SheetPanel({
             Platform.select({
               web: cn(
                 'absolute z-50',
-                // Web entry animation — native plays this via
-                // reanimated SlideInDown/SlideInRight; web would
-                // snap-in without this since
-                // NativeOnlyAnimatedView is a passthrough on web.
-                // Radix only mounts Content while open, so the
-                // animation fires unconditionally on mount.
                 isBottom ? 'animate-slide-in-from-bottom' : 'animate-slide-in-from-right',
                 isBottom
                   ? cn(
@@ -256,15 +250,6 @@ function SheetPanel({
             }),
             className,
           )}
-          // @rn-primitives/dialog's native Content unconditionally
-          // returns `onStartShouldSetResponder={() => true}`, which
-          // makes Content claim the touch responder before any
-          // descendant can — that breaks vertical scrolling for any
-          // ScrollView nested inside the panel (the responder bubble
-          // never lets ScrollView claim move-pan). Overriding to
-          // `false` here lets ScrollView capture pans normally.
-          // Tap-outside dismissal is owned by DialogPrimitive.Overlay,
-          // not Content, so this doesn't affect modal close semantics.
           onStartShouldSetResponder={() => false}
           {...contentProps}
         >

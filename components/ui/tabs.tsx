@@ -81,7 +81,5 @@ function TabsContent({ className, ...props }: ComponentProps<typeof TabsPrimitiv
   )
 }
 
-// Re-export for cases where consumers need raw View access on the
-// list (e.g. wrapping tabs with sticky positioning chrome).
 export { Tabs, TabsContent, TabsList, TabsTrigger }
 export type { TabsTriggerProps }

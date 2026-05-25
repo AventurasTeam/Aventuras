@@ -111,11 +111,6 @@ function AlertDialogDescription({
   )
 }
 
-// Default action — primary Button styling. When the consumer uses
-// `asChild` to swap in a Button directly, defer all styling +
-// text-color cascade to that Button (otherwise the wrapper's
-// default buttonVariants() fights with the Button's variant
-// classes via Slot's className merge, mangling the visual).
 function AlertDialogAction({
   className,
   asChild,
@@ -131,8 +126,6 @@ function AlertDialogAction({
   )
 }
 
-// Cancel — secondary Button styling (bordered, neutral). Same
-// asChild behavior as Action: defer to the consumer's Button.
 function AlertDialogCancel({
   className,
   asChild,
