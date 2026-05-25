@@ -16,9 +16,7 @@ type CalendarOption = {
   /**
    * Pre-formatted tier path used in the option row, e.g.
    * `year → month → day → hour → minute → second`. Truncates with
-   * ellipsis when the row width can't fit the full string —
-   * pathologically deep calendars (8+ tiers) lose tail tiers in the
-   * row; the summary always recovers the full structure.
+   * ellipsis when the row width can't fit the full string.
    */
   tierPath: string
 }
@@ -62,32 +60,22 @@ type CalendarPickerProps = {
 
   /**
    * Render the `Manage calendars in Vault →` row at the popover /
-   * sheet bottom. Default `true`; Wizard hides it (`false`) per
-   * spec — Vault routing mid-creation requires preserving wizard
-   * state, broader problem than this primitive solves.
+   * sheet bottom. Default `true`; Wizard hides it (`false`)
    */
   showVaultTail?: boolean
   onManageInVault?: () => void
 
   /**
    * Render the `Edit in Vault →` action inside the summary panel.
-   * Default `true`; surfaces that don't host a Vault editor (or
-   * gate that affordance entirely) pass `false`.
+   * Default `true`;
    */
   showEditAction?: boolean
   /** Override the action label (`Edit in Vault →`). */
   editActionLabel?: string
   onEditInVault?: () => void
-
-  /**
-   * Disables the picker trigger AND the Edit action. Used by the
-   * edit-restrictions principle — surfaces gate when generation is
-   * in flight. The summary itself stays visible and read-only.
-   */
   disabled?: boolean
   /**
-   * Web-only browser tooltip surfaced on disabled controls. Pattern
-   * spec calls out `Generation is in flight. Cancel to edit.`
+   * Web-only browser tooltip surfaced on disabled controls.
    */
   disabledReason?: string
 
@@ -122,8 +110,6 @@ export function CalendarPicker({
   const tier = useTier()
   const stacked = layout === 'stacked' || tier === 'phone'
 
-  // Index by id so renderTrigger / renderRow can resolve back to
-  // the rich CalendarOption the caller passed in. Cheap to recompute.
   const optsById = useMemo(() => new Map(options.map((o) => [o.id, o])), [options])
 
   const selectOptions: SelectOption[] = useMemo(
@@ -152,8 +138,6 @@ export function CalendarPicker({
       sheetSize="medium"
       disabled={disabled}
       placeholder="Select a calendar…"
-      // Phone-tier bottom sheet uses `label` as the visible heading —
-      // matches the convention the spec calls out for picker-on-phone.
       label={tier === 'phone' ? 'Calendars' : undefined}
       renderTrigger={({ selected, placeholder }) => {
         const cal = selected != null ? optsById.get(selected.value) : undefined
@@ -193,9 +177,6 @@ export function CalendarPicker({
   )
 }
 
-// Trigger content — shown between the trigger's left edge and the
-// chevron. Select.Trigger's outer chrome (border, height, focus ring)
-// stays; we only own the inner row.
 function CalendarTriggerContent({
   option,
   placeholder,
@@ -213,9 +194,6 @@ function CalendarTriggerContent({
   )
 }
 
-// Two-line option row: name + type chip on top, tier-path below.
-// Lives inside Select.Item's `customContent` slot — selection
-// indicator (check) sits on the left edge automatically.
 function CalendarRowContent({ option }: { option: CalendarOption }) {
   const row = (
     <View className="flex-1 flex-col gap-0.5">
@@ -230,8 +208,6 @@ function CalendarRowContent({ option }: { option: CalendarOption }) {
       </Text>
     </View>
   )
-  // Native `title` attr on web for the full tier path —
-  // pathologically deep calendars (8+ tiers) overflow the row.
   if (Platform.OS === 'web') {
     return (
       <div title={option.tierPath} className="flex w-full">

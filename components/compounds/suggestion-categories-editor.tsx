@@ -188,10 +188,6 @@ const RowContent = memo(function RowContent({
     </View>
   )
   const colorField = (
-    // Inline layout pins the swatch row to the Input's vertical center via
-    // `min-h-control-md` + `justify-center`. Without this, `items-start` on the
-    // parent row leaves the (shorter) swatches floating at the top of the
-    // (taller) Input, and `items-center` drifts mid-(input + error message).
     <View className={stacked ? 'flex-col gap-1' : 'min-h-control-md justify-center'}>
       {stacked ? (
         <Text size="xs" variant="muted">
@@ -647,11 +643,6 @@ function PhoneList({
     })
   }, [])
 
-  // Auto-expand only when exactly one new id appears — the "user clicked Add" case. Bulk
-  // changes (Reset to defaults, load saved settings) introduce many ids at once and would
-  // otherwise expand them all, overflowing the lib's cumulative-Y layout before measurements
-  // land. Also prune ghost ids: a row removed from categories must leave expandedIds, or a
-  // same-id Reset re-mounts the row already "expanded" with no body fitting the container.
   const prevIdsRef = useRef<Set<string>>(new Set(categories.map((c) => c.id)))
   useEffect(() => {
     const currentIds = new Set(categories.map((c) => c.id))
@@ -685,11 +676,6 @@ function PhoneList({
     itemKeyExtractor: (item) => item.id,
   })
 
-  // Sync positions on add/delete AND on order change: the lib initialises `positions` once and
-  // never re-syncs from props. Must be runOnUISync during render — plain `.value = X` is async
-  // on RN4 and the new row's `useSortable` reads positions in a useMemo([]) at mount, so an
-  // effect-based write misses the first frame. Ordered signature so parent-controlled order
-  // changes (Reset, load saved) reach the lib; label edits don't shift the signature.
   const positionsSV = sortableList.positions
   const idSetSignature = useMemo(() => categories.map((c) => c.id).join('|'), [categories])
   const lastSyncedSignatureRef = useRef<string | null>(null)
@@ -726,9 +712,6 @@ function PhoneList({
   const categoriesRef = useRef(categories)
   categoriesRef.current = categories
 
-  // Render the dragged row last in the DOM and hold that status for DROP_HOLD_MS after the
-  // gesture ends: the lib drops `zIndex: 1` at gesture end but its withSpring keeps animating
-  // for ~300ms, so without the DOM-last hold the row paints under siblings mid-settle.
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const dropTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
@@ -741,11 +724,6 @@ function PhoneList({
     setDraggedId(id)
     void impactAsync(ImpactFeedbackStyle.Medium)
   }, [])
-  // Commit the final order from the positions snapshot the lib passes on drop. Avoids the
-  // batched-setState race that occurs if we commit per-onMove during the drag (multiple
-  // setCategories in one microtask + non-functional onChange = last write wins). We also
-  // skip wiring `onMove` at all, which removes the spurious lib reactions our prior fix
-  // had to filter out.
   const handleDrop = useCallback(
     (_id: string, _finalPosition: number, allPositions?: { [id: string]: number }) => {
       if (dropTimerRef.current) clearTimeout(dropTimerRef.current)

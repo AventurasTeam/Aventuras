@@ -18,11 +18,7 @@ type ActionEntry = {
   label: string
   /**
    * When true, the entry renders dimmed and is skipped by keyboard nav. Pair
-   * with `disabledReason` to surface a web title-tooltip explaining _why_ —
-   * the in-flight gating contract from
-   * [`actions-menu.md → Gating`](../../docs/ui/patterns/actions-menu.md#gating)
-   * and the broader
-   * [edit-restrictions principle](../../docs/ui/principles.md#edit-restrictions-during-in-flight-generation).
+   * with `disabledReason` to surface a web title-tooltip explaining why.
    */
   disabled?: boolean
   disabledReason?: string
@@ -61,8 +57,7 @@ type ActionsMenuProps = {
   /**
    * When true, both the trigger and the `Cmd/Ctrl-K` shortcut are inert. Pass
    * this from the surface owner whenever a modal / AlertDialog / Sheet is
-   * blocking — Sheet-over-Sheet is disallowed per `overlays.md`, so the menu
-   * silently no-ops rather than queueing or stacking.
+   * blocking — Sheet-over-Sheet is disallowed
    */
   blocked?: boolean
 }
@@ -127,9 +122,6 @@ function ActionsTrigger({
   disabled,
   ...slotProps
 }: ActionsTriggerOwnProps) {
-  // Single web tooltip combining the action name and its shortcut — the icon
-  // itself stays platform-neutral (icon vocabulary rationale in
-  // iconography.md → Actions menu glyph rationale).
   const accessibleLabel = shortcutHint ? `${label} (${shortcutHint})` : label
   return (
     <IconAction
@@ -141,11 +133,6 @@ function ActionsTrigger({
       aria-haspopup={p['aria-haspopup']}
       aria-expanded={p['aria-expanded']}
       aria-controls={p['aria-controls']}
-      // Forward asChild Slot-injected props (event handlers, data-state, the
-      // popover's own ref-merge target). asChild clones THIS wrapper, not the
-      // inner IconAction, so without a pass-through here the slot props never
-      // reach the Pressable and Floating UI can't anchor — popover renders
-      // with collapsed height. Same fix the ColorPicker SwatchButton uses.
       {...slotProps}
     />
   )
@@ -163,10 +150,6 @@ function ActionsMenu({
   const [query, setQuery] = useState('')
   const shortcutHint = useShortcutHint()
 
-  // Global Cmd/Ctrl-K keybind. The menu owns the shortcut per spec — the
-  // substrate only supports controlled `open`. Bound on web only; native
-  // route is the trigger tap. Capture phase so it wins over field handlers,
-  // mirroring SaveBar's ⌘S binding.
   useEffect(() => {
     if (Platform.OS !== 'web') return
     const handler = (e: KeyboardEvent) => {
@@ -181,9 +164,6 @@ function ActionsMenu({
     return () => window.removeEventListener('keydown', handler, true)
   }, [blocked])
 
-  // Build substrate sections: contextual first, then core groups. Per-group
-  // entries flow through a case-insensitive substring filter; groups whose
-  // entries all drop are removed entirely (no orphan headers).
   const sections = useMemo<Section<MenuRowData>[]>(() => {
     const out: Section<MenuRowData>[] = []
     const collectGroup = (g: ActionGroup): Section<MenuRowData> | null => {
@@ -213,8 +193,6 @@ function ActionsMenu({
     return out
   }, [contextual, coreGroups, query])
 
-  // Substrate closes the overlay before this fires — safe to perform
-  // navigation / open further surfaces / run the command synchronously.
   const handleActivate = useCallback((row: Row<MenuRowData>) => {
     if (row.data.disabled) return
     row.data.onActivate()
@@ -260,4 +238,4 @@ function ActionsMenu({
 }
 
 export { ActionsMenu }
-export type { ActionsMenuProps, ActionEntry, ActionGroup }
+export type { ActionEntry, ActionGroup, ActionsMenuProps }

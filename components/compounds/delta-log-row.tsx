@@ -48,9 +48,6 @@ const OP_STYLES: Record<DeltaOp, { container: string; label: string }> = {
   delete: { container: 'bg-danger', label: 'text-danger-fg' },
 }
 
-// Source enum → label. Owned by the compound (5 bounded values per
-// pattern doc). Host sends the raw enum; compound renders the
-// human-readable label uniformly across surfaces.
 const SOURCE_LABEL: Record<DeltaSource, string> = {
   ai_classifier: 'classifier',
   user_edit: 'user',
@@ -77,8 +74,6 @@ export function DeltaLogRow({ delta, onPress, className }: DeltaLogRowProps) {
       aria-label={`${delta.op} ${delta.targetDisplayName}`}
       className={cn(
         'flex-row items-start gap-2.5 px-row-x-md py-row-y-md',
-        // State-layer tints only fire when interactive — read-only
-        // rows don't need hover/press affordance.
         interactive && 'active:bg-tint-press',
         Platform.select({ web: interactive ? 'cursor-pointer hover:bg-tint-hover' : '' }),
         className,

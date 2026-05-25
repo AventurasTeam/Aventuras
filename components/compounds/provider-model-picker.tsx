@@ -109,10 +109,6 @@ function matchesQuery(
   return false
 }
 
-// Reserved trailing column. Width is the eyeballed fit for two icons + gap-1;
-// kept fixed (even when one or zero icons render) so model-name columns align
-// vertically across rows regardless of capability presence — the "reserved
-// column for missing capability data" contract from the picker spec.
 function CapabilityIcons({ capabilities }: { capabilities?: Capabilities }) {
   return (
     <View className="w-12 flex-row items-center justify-end gap-1">
@@ -158,15 +154,9 @@ type PickerRowProps = {
 function PickerRow({ row, onFavoriteToggle }: PickerRowProps) {
   const { modelRef, providerName, capabilities, isFavorite, source, brokenFavorite } = row.data
   return (
-    // w-full so the inner View claims the Pressable's full width — otherwise it
-    // sizes to content and the trailing-aligned caps column floats short of the
-    // right edge (the flex-1 below only redistributes _remaining_ space, which
-    // is zero when the parent itself is auto-width).
     <View className="w-full flex-row items-center gap-2">
       <FavoriteToggle isFavorite={isFavorite} onToggle={() => onFavoriteToggle(modelRef)} />
       {brokenFavorite ? <Icon as={TriangleAlert} size="sm" className="text-warning" /> : null}
-      {/* min-w-0 lets the flex child shrink past its text intrinsic width so
-          numberOfLines truncation actually kicks in inside the popover. */}
       <View className="min-w-0 flex-1 flex-col">
         <Text size="sm" className="text-fg-primary" numberOfLines={1}>
           {modelRef.modelId}
@@ -260,9 +250,6 @@ function CustomAddComposer({ providers, query, defaultProviderId, onCommit }: Co
 
   const open = useCallback(() => {
     setExpanded(true)
-    // Pre-fill modelId from the current search query (the "type a miss, fall through
-    // to footer" path). Subsequent reopens in the same session keep whatever the user
-    // last typed in the composer.
     setModelIdInput((prev) => (prev.length > 0 ? prev : query))
     setProviderId((prev) => prev || defaultProviderId || providers[0]?.id || '')
   }, [defaultProviderId, providers, query])
@@ -328,14 +315,6 @@ type ProviderInlinePickerProps = {
   onChange: (id: string) => void
 }
 
-// Inline expandable provider picker. Looks like a Select trigger when closed;
-// tapping expands a panel directly below WITHIN the composer (no Portal, no
-// nested Sheet). The standard project Select would open a Sheet on phone —
-// nesting that inside the picker's own Sheet violates the Sheet-over-Sheet
-// ban from overlays.md and gets occluded by the keyboard regardless. This
-// stays in-flow, dismisses the Input's keyboard naturally when the user taps
-// the trigger (focus moves), and caps the panel at ~5 rows with internal
-// scroll so a long provider list can't push Add/Cancel off-screen.
 const INLINE_PANEL_MAX_HEIGHT = 180
 
 function ProviderInlinePicker({ providers, value, onChange }: ProviderInlinePickerProps) {
@@ -363,11 +342,6 @@ function ProviderInlinePicker({ providers, value, onChange }: ProviderInlinePick
           <ScrollView keyboardShouldPersistTaps="handled">
             {providers.map((p) => {
               const isSelected = p.id === value
-              // Row shape matches Select's default-content pattern: text on the
-              // left, right-aligned Check icon at right-3 inside a reserved
-              // size-5 box, pr-10 reserves the gutter so long names don't
-              // overlap the icon. Single source of "this is selected" so we
-              // don't duplicate the cue with a row tint.
               return (
                 <Pressable
                   key={p.id}
@@ -586,4 +560,4 @@ function ProviderModelPicker({
 }
 
 export { ProviderModelPicker }
-export type { ProviderModelPickerProps, ModelRef, Capabilities, ModelEntry, ProviderSource }
+export type { Capabilities, ModelEntry, ModelRef, ProviderModelPickerProps, ProviderSource }

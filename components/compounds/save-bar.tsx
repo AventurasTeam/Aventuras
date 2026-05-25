@@ -17,24 +17,19 @@ type SaveBarProps = {
   /**
    * Total dirty change count. Defaults to `dirtyFields.length`.
    * Override when a single field accumulates multiple distinct
-   * changes that should count individually (rare).
+   * changes that should count individually.
    */
   dirtyCount?: number
   /**
    * Optional informational note. Renders as a `⚠` icon after the
    * field list with the text shown via web tooltip / aria-label.
-   * Used by surface-specific propagation warnings (calendar swap,
-   * model deletion, etc.) per
-   * [`save-sessions.md → Visual`](../../docs/ui/patterns/save-sessions.md#visual).
    */
   notice?: string
   onSave: () => void
   onDiscard: () => void
   /**
    * Saving in flight — disables both actions and suppresses the
-   * keyboard shortcut. Caller flips back to `false` after the
-   * persistence call resolves; SaveBar typically unmounts at that
-   * point because the session is no longer dirty.
+   * keyboard shortcut.
    */
   saving?: boolean
   className?: string
@@ -88,7 +83,6 @@ export function SaveBar({
       />
 
       <View className="min-w-0 shrink flex-row items-center gap-2">
-        {/* State dot — full-saturation warning, 8 px circle. */}
         <View className="h-2 w-2 shrink-0 rounded-full bg-warning" aria-hidden />
         <Text size="xs" numberOfLines={1} className="shrink">
           <Text size="xs" className="font-semibold text-fg-primary">

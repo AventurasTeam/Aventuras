@@ -12,38 +12,28 @@ type ListRowProps = {
   /**
    * Optional secondary line below the label — short blurb,
    * description, role label. Truncates to two lines when long.
-   * Leave undefined to render a single-line row.
    */
   description?: string
   /**
-   * Slot before the label — typically `<EntityKindIcon>` for entity
-   * rows. Renders inside the row's tap surface so taps on it still
-   * fire `onPress`. Surfaces without a kind concept leave this null.
+   * Slot before the label
    */
   leading?: ReactNode
   /**
-   * Inline-after-label slot — typically the gold lead-badge pill
-   * for the character lead. Sits adjacent to the label text on the
-   * same line.
+   * Inline-after-label slot
    */
   meta?: ReactNode
   /**
-   * Trailing-edge slot — typically a status pill. Per-domain
-   * components own the pill itself (entity status enum ≠ thread
-   * status enum); ListRow only slots it.
+   * Trailing-edge slot
    */
   trailing?: ReactNode
   /**
-   * Scene-presence channel — 3 px green left-edge stripe. Per the
-   * channel separation rule in entity.md, left-edge is reserved
-   * for this signal alone.
+   * Scene-presence channel — 3 px green left-edge stripe.
    */
   inScene?: boolean
   /**
    * Recently-classified channel — info-blue background tint.
    * `'fresh'` is the just-touched state; `'fading'` decays it via
-   * reduced opacity. Spec lives in entity.md → Recently-classified
-   * row accent.
+   * reduced opacity.
    */
   recentlyClassified?: RecentlyClassified
   /**

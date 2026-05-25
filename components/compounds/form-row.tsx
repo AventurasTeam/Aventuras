@@ -9,29 +9,18 @@ type FormRowProps = {
   /** Field label. Always rendered; shape depends on layout mode. */
   label: string
   /**
-   * Inline help text below the field. Replaced by `error` when an
-   * error is set — never shown alongside it. Keep short — long
-   * explanatory copy belongs in a separate disclosure, not the
-   * row chrome.
+   * Inline help text below the field. Replaced by `error` when an error is set.
    */
   hint?: string
   /**
-   * Validation error string. Displayed in danger color in the same
-   * slot as `hint`. The control inside is responsible for its own
-   * `aria-invalid` styling — FormRow does not reach into children.
-   * Pass any `string | undefined`; this is form-library agnostic.
+   * Validation error string.
    */
   error?: string
   /** Renders a `*` indicator next to the label. Visual only. */
   required?: boolean
   className?: string
   /**
-   * Override the auto layout. Use when the container width
-   * heuristic doesn't fit — most commonly tablet-portrait
-   * master-detail surfaces where the rail consumes width but
-   * `useWindowDimensions` reports the full screen. Pass
-   * `stacked={true}` to force the narrow shape regardless of
-   * measured container width.
+   * Override the auto layout.
    */
   stacked?: boolean
   /** The control (Input, Select, Autocomplete, Textarea, …). */

@@ -18,20 +18,13 @@ type Story = {
   /** From `definition.genre.label`. Renders as the uppercase overline. */
   genreLabel: string | null
   mode: StoryMode
-  /**
-   * `stories.accent_color` override. When null, falls back to the
-   * mode-derived default. Compound owns the mode→color mapping
-   * because no canonical constant exists yet (followup tracks
-   * pinning these to themed tokens).
-   */
   accentColor: string | null
   favorited: boolean
   archived: boolean
-  /** Unfinished wizard session or explicit save-as-draft. */
   isDraft: boolean
-  /** Pre-formatted "Chapter 3"; null on drafts (host responsibility). */
+  /** Pre-formatted "Chapter 3". */
   chapterLabel: string | null
-  /** Pre-formatted "2h ago" — same opaque contract as DeltaLogRow's createdAtRelative. */
+  /** Pre-formatted "2h ago". */
   lastOpenedRelative: string
 }
 

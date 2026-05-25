@@ -1,6 +1,3 @@
-// Placeholder types — refined when real driver implementations land.
-// CatalogEntry / ImportBundle reflect the dialog's input shape only.
-// ExecutionProvider is the platform-specific ONNX runtime EP label.
 export type ExecutionProvider = string
 
 export type CatalogEntry = {

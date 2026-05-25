@@ -18,15 +18,11 @@ type ImporterMenuOption = {
   description?: string
   disabled?: boolean
   /**
-   * Web-only browser tooltip when the option is disabled. Mirrors
-   * IconAction's `disabledReason` affordance — a real Tooltip
-   * primitive lands later.
+   * Web-only browser tooltip when the option is disabled.
    */
   disabledReason?: string
   /**
    * Caller-supplied action. Menu auto-closes after invocation.
-   * Receiving `undefined` is allowed (handy for stub options) — the
-   * menu still closes; nothing else fires.
    */
   onPress?: () => void
 }
@@ -37,9 +33,7 @@ type ImporterMenuProps = {
   /** Action items rendered in the popover, in order. */
   options: readonly ImporterMenuOption[]
   /**
-   * Trigger Button variant. Defaults to `primary` since these are
-   * the prominent surface-level actions (`+ New X`, `+ Add Y`,
-   * `Import …`).
+   * Trigger Button variant.
    */
   variant?: 'primary' | 'secondary' | 'ghost'
   size?: 'sm' | 'md' | 'lg'

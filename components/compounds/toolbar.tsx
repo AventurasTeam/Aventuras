@@ -43,9 +43,6 @@ function ScopeHelpTrigger({ scope, disabled }: { scope: readonly string[]; disab
           disabled={disabled}
           accessibilityRole="button"
           aria-label="Search scope"
-          // hitSlop extends the tap area past the icon's 16 px
-          // footprint without bloating layout. Phone touch-floor
-          // (44 px) is met even though the visible icon is `sm`.
           hitSlop={12}
           className={cn(
             'p-1',
@@ -92,9 +89,6 @@ function ToolbarSearch({
     />
   )
 
-  // Web disabled-reason tooltip: same raw-`<div title>` workaround
-  // Input / Autocomplete use. RN-Web's TextInput allowlist filters
-  // arbitrary HTML attrs, so `title` doesn't reach the DOM otherwise.
   if (disabled && disabledReason && Platform.OS === 'web') {
     return (
       <div title={disabledReason} className="w-full">
@@ -172,11 +166,6 @@ function ToolbarRoot({ className, children }: ToolbarProps) {
   const isNarrow =
     containerWidth != null ? containerWidth < NARROW_THRESHOLD_PX : initialTier !== 'desktop'
 
-  // Slot detection — type-check via stable sub-component references.
-  // Unknown children pass through as-is (escape hatch for surface-
-  // specific extras), but the canonical three are the named ones.
-  // Chips slot is typed explicitly so the narrow-tier layout can
-  // reach into its children without TS narrowing failures.
   let searchSlot: ReactNode = null
   let chipsSlot: ReactElement<{ children?: ReactNode }> | null = null
   let sortSlot: ReactNode = null

@@ -8,39 +8,6 @@ import { TextClassContext } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { cn } from '@/lib/utils'
 
-/**
- * ScreenShell — variant-driven chrome wrapper for every app screen
- * except Onboarding (chromeless) and Wizard (own minimal chrome).
- *
- * Owns:
- * - **Left slot**. Logo on `app-root`, `[←]` Return everywhere else.
- *   Return wires to `onBack` if passed; otherwise no-op. Stack-aware
- *   behavior is the consumer's concern (router / nav hook).
- * - **Right cluster**. Derived from `variant` + `hideSelfReferentialIcon`
- *   per the consumer table in
- *   [`docs/explorations/2026-05-14-shells-design.md → ScreenShell`](../../docs/explorations/2026-05-14-shells-design.md#shell-1--screenshell).
- * - **Token-progress strip** (in-story only). Always rendered for
- *   layout stability — 0 % at minimum per the spec's open-questions
- *   lean.
- * - **Banner stack** above the bar. Slot is consumer-rendered;
- *   shell just positions.
- * - **`centerExtras` tier reshuffle** via `useTier()`. Phone:
- *   migrates to a chip strip below the progress strip with
- *   `mobileChipAction` right-anchored. Tablet / desktop: inline
- *   beside title.
- *
- * Does NOT own: title content, master-detail sub-header (lives in
- * `children`), statusSlot wiring, body composition. See the spec
- * for the full does-NOT-own list.
- *
- * Iconography placeholders per
- * [`foundations/iconography.md → Top-bar / chrome`](../../docs/ui/foundations/iconography.md#top-bar--chrome):
- * `Settings` for ⚙ App Settings, `SlidersVertical` for ⛭ Story
- * Settings, `MoreVertical` for ⚲ Actions, `ArrowLeft` for ← Return,
- * `BookOpen` as the temporary logo placeholder until the real logo
- * asset lands.
- */
-
 type ScreenShellVariant = 'app-root' | 'app' | 'in-story'
 
 type ScreenShellProps = {
@@ -48,8 +15,6 @@ type ScreenShellProps = {
 
   /**
    * Page-provided breadcrumb / title content for the title slot.
-   * Consumers will eventually pass a BreadcrumbTitle compound; for
-   * now any ReactNode is accepted.
    */
   title?: ReactNode
 
@@ -68,9 +33,8 @@ type ScreenShellProps = {
   mobileChipAction?: ReactNode
 
   /**
-   * In-story only. Composes one or more status indicators
-   * (GenerationStatusPill, future World review pill, etc.). Shell
-   * wraps in a flex-row; consumer arranges contents.
+   * In-story only. Composes one or more status indicators.
+   * Shell wraps in a flex-row; consumer arranges contents.
    */
   statusSlot?: ReactNode
 
@@ -82,9 +46,8 @@ type ScreenShellProps = {
   chapterProgress?: number
 
   /**
-   * Banner stack above the bar (AI-not-configured, profile-errors,
-   * future). Shell positions the slot; per-screen logic decides
-   * what's in it.
+   * Banner stack above the bar (AI-not-configured, profile-errors).
+   * Shell positions the slot; per-screen logic decides what's in it.
    */
   banners?: ReactNode
 
@@ -173,11 +136,8 @@ export function ScreenShell({
 
   return (
     <View className="flex-1 bg-bg-base">
-      {/* Banner stack above the bar. */}
       {banners != null ? <View className="flex-col">{banners}</View> : null}
 
-      {/* Top bar. h-control-md = 44 px @ regular density, matches the
-          navigation.md phone wireframe's ~44 px top bar. */}
       <View
         className={cn(
           'h-control-md flex-row items-center gap-2 border-b border-border bg-bg-base px-3',
@@ -185,14 +145,6 @@ export function ScreenShell({
       >
         {leftSlot}
         <View className="min-w-0 flex-1 flex-row items-center gap-3">
-          {/*
-            leading-none collapses the line-box; translate-y-[0.08em]
-            then optically re-centers the glyph against its
-            font-metric ascender bias. Same pattern as avatar.tsx —
-            fonts reserve a bit more space above than below the
-            cap-height, which leaves an unbalanced gap at this row's
-            height even with line-height: 1.
-          */}
           <TextClassContext.Provider value="!leading-none translate-y-[0.08em]">
             <View className="min-w-0 flex-shrink flex-row items-center">{title}</View>
           </TextClassContext.Provider>
@@ -203,9 +155,6 @@ export function ScreenShell({
         {rightCluster}
       </View>
 
-      {/* Token-progress strip — in-story only, always rendered for
-          layout stability. 3 px tall horizontal bar; fill width =
-          chapterProgress %. */}
       {isInStory ? (
         <View
           accessibilityRole="progressbar"
@@ -219,8 +168,6 @@ export function ScreenShell({
         </View>
       ) : null}
 
-      {/* Phone-only chip strip — state chips left, mobileChipAction
-          right-anchored via flex-1 spacer. */}
       {isPhone && (chipStripCenterExtras != null || mobileChipAction != null) ? (
         <View className="flex-row items-center gap-2 border-b border-border bg-bg-base px-3 py-2">
           <View className="flex-row items-center gap-2">{chipStripCenterExtras}</View>
@@ -229,7 +176,6 @@ export function ScreenShell({
         </View>
       ) : null}
 
-      {/* Body. Consumer territory — no scroll wrapping. */}
       <View className="flex-1">{children}</View>
     </View>
   )

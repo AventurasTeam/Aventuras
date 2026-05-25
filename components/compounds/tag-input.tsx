@@ -102,12 +102,6 @@ export function TagInput({
     setTyped('')
   }, [typed, value, onChange, maxCount, maxTagLength])
 
-  // onChangeText handles separator-bearing input (comma / newline /
-  // pasted multi-tag content). Trailing fragment after the last
-  // separator stays as the new typed value — covers both the
-  // "type sci-fi, fa" mid-typing case and the "paste sci-fi,
-  // fantasy" case (user can press Enter/comma to commit the
-  // trailing fragment).
   const handleChangeText = useCallback(
     (raw: string) => {
       const hasSep = raw.includes(',') || raw.includes('\n')
@@ -128,10 +122,6 @@ export function TagInput({
     [value, onChange, maxCount, maxTagLength],
   )
 
-  // Backspace-on-empty removes the last chip. Web fires onKeyPress
-  // for Backspace reliably; native iOS has a known RN gotcha where
-  // onKeyPress doesn't fire for Backspace on an already-empty
-  // input — accepted as best-effort per the pattern doc.
   const handleKeyPress = useCallback(
     (e: TextInputKeyPressEvent) => {
       const key = e.nativeEvent.key
