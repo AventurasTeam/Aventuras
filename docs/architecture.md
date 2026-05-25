@@ -562,8 +562,7 @@ relative to classifier-piggyback work. Direction is
 - Chapter `title` and `summary` on chapter close.
 - Next-turn suggestion chip text — rides the `narrative` granular
   toggle; cached by content-hash of chip text so re-rolls and CTRL-Z
-  reuse existing rows naturally (see
-  [`explorations/2026-05-19-next-turn-suggestions.md`](./explorations/2026-05-19-next-turn-suggestions.md)).
+  reuse existing rows naturally.
 
 **Failure is per-call.** Each `(target_kind, target_id, field, language)`
 tuple succeeds or fails on its own; the phase always returns

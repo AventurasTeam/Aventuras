@@ -336,11 +336,10 @@ Story Settings screen; no new save infrastructure. The
 `suggestionsEnabled` toggle, `suggestionCount` stepper, and category
 list share dirty state with the rest of the tab.
 
-Full emission contract + edge cases (orphan categories, parse
-failures, branch switch with chips in flight, refresh re-roll
-pipeline, rollback semantics, translation interaction, all-categories-
-disabled state) in
-[`explorations/2026-05-19-next-turn-suggestions.md`](../../../explorations/2026-05-19-next-turn-suggestions.md).
+Reader-surface emission, refresh pipeline, and edge cases (parse
+failure, branch switch, rollback, translation interaction, zero-
+enabled categories, mid-story toggle) live in
+[`reader-composer.md → Next-turn suggestions`](../reader-composer/reader-composer.md#next-turn-suggestions).
 
 ## Memory tab
 

@@ -460,10 +460,11 @@ animation. Single slot, multiple states, priority-ordered.
 
 After an AI reply completes, a **suggestions panel** appears between
 the entries and the composer, offering tappable chip seeds for the
-user's next turn. Full contract — schema, emission pipeline,
-categories editor, edge cases — in
-[`explorations/2026-05-19-next-turn-suggestions.md`](../../../explorations/2026-05-19-next-turn-suggestions.md);
-this section covers the reader-composer surface.
+user's next turn. Schema lives in
+[`data-model.md → story_entries.metadata`](../../../data-model.md);
+the categories editor lives in
+[`story-settings.md → Suggestion categories`](../story-settings/story-settings.md#suggestion-categories);
+this section covers the reader surface end-to-end.
 
 **Categories are user-customizable per story.** The palette is
 authored in Story Settings → Composer → Suggestion categories;
@@ -559,6 +560,50 @@ pipeline as the refresh button.
 resolves (user deleted the category since emission) renders with
 category label `(removed)`, neutral fallback color from the palette,
 and text intact. Tap still works. No auto-cleanup; lazy at render.
+
+**Disabled-but-defined category.** A chip whose `categoryId` still
+resolves but the category is `enabled: false` renders normally —
+label, color, prompt hint all resolve. Disable is an emission gate,
+not a deletion.
+
+### Edge cases
+
+- **Parse failure on emission.** `<state>` and `<suggestions>`
+  parse independently. If both fail, state recovers through the
+  classifier fallback (per-turn classifier on narrative-fold, next
+  periodic classifier on classifier-fold); the suggestions field
+  stays undefined and the strip falls back to empty-state ⟳
+  Generate.
+- **Branch switch with chips in flight.** Per-turn pipelines commit
+  before a branch switch fires (existing reader transaction
+  behavior). A `suggestion-refresh` in flight aborts on branch
+  switch — non-transactional, cancellable.
+- **Rollback semantics.** `story_entries.metadata.nextTurnSuggestions`
+  rolls back via the existing metadata delta-log. After rollback,
+  the new terminal entry's chips become the active strip. The
+  user's rut-escape via rollback sees prior-turn chips again; no
+  recency-bias hint computed across rollbacks.
+- **Translation.** Chip text rides
+  `stories.settings.translation.granularToggles.narrative` (translates
+  when narrative does); split toggle is parked. Translation rows are
+  cached by `(target_language, hash(chip.text))` so re-rolls and
+  CTRL-Z naturally reuse cached rows. Soft-fail policy inherits the
+  translation phase's graceful-degradation contract.
+- **`suggestionsEnabled` toggled mid-story.** `false → true` makes
+  new turns emit chips; existing empty fields don't backfill.
+  `true → false` stops emission and hides the strip; previously
+  persisted `nextTurnSuggestions` data stays on entries and
+  reappears if the toggle is flipped back.
+- **Zero enabled categories.** Emission produces an empty
+  `<suggestions>` block (or omits the fragment from the prompt).
+  The strip still respects historical `nextTurnSuggestions` data on
+  the terminal entry; orphan-label handling covers the now-disabled
+  category ids. Equivalent to `suggestionsEnabled: false` only when
+  no chips have ever emitted on the terminal entry.
+- **Re-roll cancel during translation stage.** Translation-stage
+  cancellation discards in-progress translation rows; the stage-1
+  emission has already committed. Chips display in source language
+  until the next translation pass picks them up.
 
 ## Scroll behavior
 

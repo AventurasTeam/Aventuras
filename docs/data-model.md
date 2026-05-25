@@ -1463,9 +1463,10 @@ is a flat array — the story's mode is fixed at creation and only
 the mode-matched default applies). Same placement rationale as
 `default_calendar_id`. Bundled curated initial values ship in code
 (genre/tone-preset-style JSON catalog); user-editable in App Settings
-→ Story Defaults → Suggestion categories. Full editor + emission
-contract in
-[`explorations/2026-05-19-next-turn-suggestions.md`](./explorations/2026-05-19-next-turn-suggestions.md).
+→ Story Defaults → Suggestion categories. Editor lives in
+[`story-settings.md → Suggestion categories`](./ui/screens/story-settings/story-settings.md#suggestion-categories);
+emission and edge cases in
+[`reader-composer.md → Next-turn suggestions`](./ui/screens/reader-composer/reader-composer.md#next-turn-suggestions).
 
 **Why one table, not several.** Providers, profiles, and
 assignments form one tightly-coupled config envelope — they're

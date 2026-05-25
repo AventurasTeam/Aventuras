@@ -24,8 +24,8 @@ pipeline concern in `architecture.md`).
 
 The framework drives three foreground pipeline kinds in v1 —
 `per-turn`, `chapter-close`, and `suggestion-refresh` (user-triggered
-chip re-roll from the reader; see
-[`explorations/2026-05-19-next-turn-suggestions.md`](./explorations/2026-05-19-next-turn-suggestions.md))
+chip re-roll from the reader; full contract at
+[`reader-composer.md → Next-turn suggestions`](./ui/screens/reader-composer/reader-composer.md#next-turn-suggestions))
 — and is structured so that background work (the periodic
 classifier first; later style-review, etc.) uses the same shape.
 Background pipelines and foreground pipelines share the framework;
