@@ -95,6 +95,7 @@
   let isRawActionChoice = $state(false)
   let stopRequested = false
   let activeAbortController: AbortController | null = null
+  let textareaRef: HTMLTextAreaElement | null = $state(null)
   let lastImageGenContext = $state<ImageGenerationContext | null>(null)
   let isManualImageGenRunning = $state(false)
 
@@ -786,7 +787,6 @@
       ui.setGenerating(false)
       ui.setGenerationStatus('')
       activeAbortController = null
-      stopRequested = false
 
       // Android: always stop the foreground service when generation ends
       if (useBackgroundService) {
@@ -969,6 +969,7 @@
 
     isRawActionChoice = false
     inputValue = ''
+    if (textareaRef) textareaRef.scrollTop = 0
 
     const embeddedImages = await database.getEmbeddedImagesForStory(story.currentStory.id)
     ui.createRetryBackup(
@@ -1005,7 +1006,7 @@
   }
 
   async function handleStopGeneration() {
-    if (!ui.isGenerating || ui.isRetryingLastMessage) return
+    if (stopRequested || ui.isRetryingLastMessage) return
 
     stopRequested = true
     activeAbortController?.abort()
@@ -1236,6 +1237,7 @@
         <div class="relative min-w-0 flex-1">
           <textarea
             bind:value={inputValue}
+            bind:this={textareaRef}
             use:autoResize={inputValue}
             onkeydown={handleKeydown}
             placeholder="Describe what happens next in the story..."
@@ -1297,6 +1299,7 @@
         <div class="relative min-w-0 flex-1 self-center">
           <textarea
             bind:value={inputValue}
+            bind:this={textareaRef}
             use:autoResize={inputValue}
             onkeydown={handleKeydown}
             placeholder={actionType === 'story'
