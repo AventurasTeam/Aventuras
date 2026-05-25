@@ -198,17 +198,29 @@ documented no-op shim.
 
 **Outer wrap (primitive-owned).** When `avoidKeyboard` is true and
 `anchor='bottom'`, `Sheet.Content` wraps the consumer's child tree
-in `<KeyboardAvoidingView behavior='translate-with-padding' automaticOffset>`
-from the library. `translate-with-padding` is the library's own
-recommendation for complex layouts — GPU `translateY` during the
-keyboard animation, settling to padding once stationary.
-`automaticOffset` detects the Sheet's portal offset so consumers
-never pass `keyboardVerticalOffset` manually. The wrap is a single
-`flex:1` layer between `<Sheet.Content>` and consumer children;
-flex-based child layouts treat it as transparent. Manual override
-remains via a forthcoming `keyboardVerticalOffset` prop that is
-purely additive when `automaticOffset` is on — escape hatch, not
-recommended path.
+in a `flex:1` `Animated.View` whose `paddingBottom` is driven
+directly off `useReanimatedKeyboardAnimation()`'s `height`
+SharedValue (negative when the keyboard is open; `paddingBottom`
+applied as `-height.value`). The wrap is a single layer between
+`<Sheet.Content>` and consumer children; flex-based child layouts
+treat it as transparent.
+
+The library's bundled `<KeyboardAvoidingView>` with `automaticOffset`
+was tried first and rejected: its frame measurement runs once on
+mount via `viewPositionInWindow`, which fires while the Sheet's
+Reanimated layout-entering animation is still mid-slide-in,
+capturing a stale screen position that the lib never re-measures
+(transform-only animations don't re-trigger `onLayout`). The result
+was a first-keyboard-open flicker after every Sheet open — the
+KAV computed `paddingBottom` against the wrong position, the
+resulting reflow triggered a fresh `onLayout`, and the second pass
+corrected. Since the Sheet is anchored at `bottom:0`, keyboard
+overlap is always exactly the keyboard height — no screen-position
+math needed, no frame measurement, no race. The library's
+`KeyboardContext` is still re-provided inside the rn-primitives
+Portal (the Portal drops React contexts on native), so
+`useReanimatedKeyboardAnimation()` resolves to the real shared
+values inside the portaled tree.
 
 **Inner scroll (consumer-rendered).** `avoidKeyboard` handles outer
 layout; it does **not** scroll a focused input into view inside a
@@ -254,14 +266,44 @@ still host inputs (calendar swap warnings with a confirm field,
 save-session navigate-away guard with a textarea). `avoidKeyboard`
 defaults `true` regardless of `dismissable`.
 
-**Short-sheet quirk.** `size='short'` carries no special handling.
-`translate-with-padding` translates the sheet up by keyboard
-height; short-sheet height plus typical phone keyboard usually
-fits inside the viewport with margin. Very small viewport plus
-large keyboard may leave the sheet brushing the status bar — input
-remains visible. If visual breathing room matters more than the
-brief-affordance feel, consumer-side fix is bumping to
-`size='medium'`.
+**Size selection × keyboard interaction.** The `paddingBottom`
+mechanism behaves differently depending on whether the panel has a
+fixed height:
+
+- **`size='auto'`** — panel has no fixed `height`, only `maxHeight`.
+  The inner `flex:1` wrap has no parent height to fill, so it sizes
+  to its content. `paddingBottom = keyboardHeight` then _grows_ the
+  wrap (and therefore the panel) by the keyboard height — content
+  visually translates upward, panel rises above the keyboard. Works
+  for any content whose intrinsic height is smaller than
+  `screenHeight − keyboardHeight − safeArea`.
+- **`size='short' | 'medium' | 'tall'`** — panel pins to a fixed
+  percentage of screen height (33% / 60% / 95%). The inner `flex:1`
+  wrap fills that fixed space. `paddingBottom = keyboardHeight`
+  then _shrinks_ the content area inside the fixed bounds — content
+  reflows within the panel's existing position. The panel does
+  **not** translate; it stays anchored at `bottom:0`. Works only
+  when the panel is meaningfully taller than the keyboard.
+
+**Consumer rule of thumb:**
+
+- **Forms, input-bearing sheets, single-purpose edits** (custom-color
+  picker, "add note", world-time correction, save-session
+  navigate-away guard with a textarea) → use `size='auto'`. The
+  panel hugs the content and rises with the keyboard.
+- **Scrollable lists, picker surfaces, content that adapts to
+  whatever space is available** (Select with search, Autocomplete,
+  Calendar picker, multi-item lists) → use `short` / `medium` /
+  `tall`. The list shrinks gracefully when the keyboard takes part
+  of the panel, and `KeyboardAwareScrollView` (per the
+  [Two-line consumer rule](#sheet--keyboard-handling) above) keeps
+  the focused input visible while the list scrolls.
+
+`size='short'` is **not suitable for input-bearing sheets** — a
+typical mobile keyboard is taller than 33vh, so the
+`paddingBottom = keyboardHeight` math leaves zero or negative
+content area inside the panel and the input gets clipped above the
+panel's top edge. Use `auto` for any short input form.
 
 **Translation note.** `ariaLabel` strings (see
 [ARIA contract](#sheet--aria-contract)) are translatable

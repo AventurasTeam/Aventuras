@@ -8,16 +8,14 @@ import {
   useMemo,
   type ComponentProps,
 } from 'react'
-import {
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-  type ViewStyle,
-} from 'react-native'
+import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import {
+  KeyboardContext,
+  useKeyboardContext,
+  useReanimatedKeyboardAnimation,
+} from 'react-native-keyboard-controller'
+import Animated, {
   FadeIn,
   FadeOut,
   SlideInDown,
@@ -79,8 +77,6 @@ const BOTTOM_HEIGHT_PCT: Record<Exclude<SheetSize, 'auto'>, `${number}%`> = {
 const RIGHT_WIDTH_PX = 440
 const SAFE_AREA_GAP_PX = 8
 const DRAG_DISMISS_THRESHOLD_PX = 100
-
-const FLEX_1_STYLE: ViewStyle = { flex: 1 }
 
 function getNativePanelStyle(
   anchor: SheetAnchor,
@@ -204,15 +200,17 @@ function SheetPanel({
       ? ({ 'aria-describedby': ariaDescribedBy, onCloseAutoFocus } as object)
       : null
 
-  // RN's built-in KeyboardAvoidingView — `react-native-keyboard-controller` is the
-  // spec target but needs an Expo config plugin + dev-client rebuild; followups.md.
+  // Direct Reanimated paddingBottom — KeyboardAvoidingView's `automaticOffset` races with
+  // the Sheet's layout-entering animation (measures viewPositionInWindow once, mid-slide-in,
+  // caches a stale screen position). Sheet is anchored at bottom:0, so keyboard overlap is
+  // always exactly the keyboard height. `height` from the lib is negative when open.
+  const keyboard = useReanimatedKeyboardAnimation()
+  const animatedBodyStyle = useAnimatedStyle(() => ({
+    flex: 1,
+    paddingBottom: avoidKeyboard ? -keyboard.height.value : 0,
+  }))
   const body = avoidKeyboard ? (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={FLEX_1_STYLE}
-    >
-      {children}
-    </KeyboardAvoidingView>
+    <Animated.View style={animatedBodyStyle}>{children}</Animated.View>
   ) : (
     children
   )
@@ -290,50 +288,54 @@ function SheetContent({
   // Resolved BEFORE the portal — rn-primitives' native Portal drops custom contexts.
   const { ariaLabel, ariaLabelledBy, ariaDescribedBy, onOpenAutoFocus, onCloseAutoFocus } =
     useSheetA11y()
+  // KeyboardContext is dropped by the same portal — re-provide inside so KAV sees real shared values.
+  const keyboardContext = useKeyboardContext()
 
   return (
     <DialogPrimitive.Portal hostName={portalHost}>
       <FullWindowOverlay>
-        <View
-          className={Platform.OS === 'web' ? 'fixed inset-0' : ''}
-          style={Platform.select({ native: StyleSheet.absoluteFill })}
-          pointerEvents="box-none"
-        >
-          <NativeOnlyAnimatedView
-            entering={FadeIn.duration(200)}
-            exiting={FadeOut}
+        <KeyboardContext.Provider value={keyboardContext}>
+          <View
+            className={Platform.OS === 'web' ? 'fixed inset-0' : ''}
             style={Platform.select({ native: StyleSheet.absoluteFill })}
+            pointerEvents="box-none"
           >
-            <DialogPrimitive.Overlay
-              className={cn(
-                'absolute inset-0 bg-black/40',
-                // Web fade-in — native uses reanimated FadeIn.
-                Platform.select({ web: 'animate-fade-in' }),
-              )}
+            <NativeOnlyAnimatedView
+              entering={FadeIn.duration(200)}
+              exiting={FadeOut}
               style={Platform.select({ native: StyleSheet.absoluteFill })}
-            />
-          </NativeOnlyAnimatedView>
-          <SheetPanel
-            isBottom={isBottom}
-            size={size}
-            slideEnter={slideEnter}
-            slideExit={slideExit}
-            nativePanelStyle={nativePanelStyle}
-            avoidKeyboard={effectiveAvoidKeyboard}
-            ariaLabel={ariaLabel}
-            ariaLabelledBy={ariaLabelledBy}
-            ariaDescribedBy={ariaDescribedBy}
-            onOpenAutoFocus={onOpenAutoFocus}
-            onCloseAutoFocus={onCloseAutoFocus}
-            className={className}
-            {...props}
-          >
-            {Platform.OS === 'web' ? (
-              <DialogPrimitive.Title className="sr-only">{title}</DialogPrimitive.Title>
-            ) : null}
-            {children}
-          </SheetPanel>
-        </View>
+            >
+              <DialogPrimitive.Overlay
+                className={cn(
+                  'absolute inset-0 bg-black/40',
+                  // Web fade-in — native uses reanimated FadeIn.
+                  Platform.select({ web: 'animate-fade-in' }),
+                )}
+                style={Platform.select({ native: StyleSheet.absoluteFill })}
+              />
+            </NativeOnlyAnimatedView>
+            <SheetPanel
+              isBottom={isBottom}
+              size={size}
+              slideEnter={slideEnter}
+              slideExit={slideExit}
+              nativePanelStyle={nativePanelStyle}
+              avoidKeyboard={effectiveAvoidKeyboard}
+              ariaLabel={ariaLabel}
+              ariaLabelledBy={ariaLabelledBy}
+              ariaDescribedBy={ariaDescribedBy}
+              onOpenAutoFocus={onOpenAutoFocus}
+              onCloseAutoFocus={onCloseAutoFocus}
+              className={className}
+              {...props}
+            >
+              {Platform.OS === 'web' ? (
+                <DialogPrimitive.Title className="sr-only">{title}</DialogPrimitive.Title>
+              ) : null}
+              {children}
+            </SheetPanel>
+          </View>
+        </KeyboardContext.Provider>
       </FullWindowOverlay>
     </DialogPrimitive.Portal>
   )

@@ -1148,6 +1148,17 @@ Open sub-questions:
 v1 ships with no cleanup, accepts storage drift. Lands when
 session storage shows real accumulation in usage signal.
 
+#### `SearchableOverlayList` — `initialScrollRowId`
+
+The
+[substrate spec](./ui/patterns/searchable-overlay-list.md#implementation-notes)
+describes `initialScrollRowId` (open-time scroll-into-view, mid-viewport) for
+consumers that want to anchor a particular row in view when the overlay opens
+(favorites, active model, etc.). Not implemented in v1. The shipped substrate
+already has the virtualization plumbing (`@tanstack/react-virtual` web,
+`SectionList` native) that this would build on — call
+`virtualizer.scrollToIndex(idx, { align: 'center' })` on open.
+
 #### Calendar picker search-bar threshold
 
 The [calendar picker pattern's](./ui/patterns/calendar-picker.md)

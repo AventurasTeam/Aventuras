@@ -150,8 +150,8 @@ on field blur) requires platform-specific keyboard handling. This
 is the **screen-level baseline** for general phone surfaces; the
 Sheet primitive's keyboard handling is more specific and lives in
 [`patterns/overlays.md → Sheet — keyboard handling`](../../patterns/overlays.md#sheet--keyboard-handling)
-(targets `react-native-keyboard-controller` once the Expo config
-plugin lands; see [`followups.md`](../../../followups.md)).
+(uses `react-native-keyboard-controller`'s `KeyboardAvoidingView`
+with `behavior='translate-with-padding'` + `automaticOffset`).
 
 **`KeyboardAvoidingView`** with platform-aware `behavior`:
 

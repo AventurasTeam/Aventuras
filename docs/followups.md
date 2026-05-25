@@ -13,24 +13,4 @@ for the placement rule.
 
 ## UX
 
-- **`SearchableOverlayList` — `initialScrollRowId`.**
-  The
-  [substrate spec](./ui/patterns/searchable-overlay-list.md#implementation-notes)
-  describes `initialScrollRowId` (open-time scroll-into-view, mid-viewport) for
-  consumers that want to anchor a particular row in view when the overlay opens
-  (favorites, active model, etc.). Not implemented in v1. The shipped substrate
-  already has the virtualization plumbing (`@tanstack/react-virtual` web,
-  `SectionList` native) that this would build on — call
-  `virtualizer.scrollToIndex(idx, { align: 'center' })` on open.
-
-- **Sheet keyboard avoidance — swap to `react-native-keyboard-controller`.**
-  Sheet currently wraps content in RN's built-in `KeyboardAvoidingView`
-  because the spec target,
-  [`react-native-keyboard-controller`'s `KeyboardAvoidingView`](./ui/patterns/overlays.md#sheet--keyboard-handling)
-  (with `behavior='translate-with-padding'` + `automaticOffset`), ships a
-  TurboModule that needs the library's Expo config plugin in `app.json`
-  and a dev-client rebuild — adding it without that crashes Android at
-  module load (`KeyboardControllerNative.getConstants is not a function`).
-  Once the plugin lands in `app.json` and the dev client is rebuilt,
-  reinstall the library and swap the import in
-  [`components/ui/sheet.tsx`](../components/ui/sheet.tsx).
+_No active UX followups._

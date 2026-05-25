@@ -188,13 +188,13 @@ export const WithInputInside: Story = {
               <Text>Open sheet with input</Text>
             </Button>
           </SheetTrigger>
-          <SheetContent>
+          <SheetContent size="auto">
             <View className="flex-col gap-3">
               <Heading level={3}>Add note</Heading>
               <Text variant="muted" size="sm">
-                Bottom sheets default to avoidKeyboard=true on native — the wrapped
-                KeyboardAvoidingView lifts the panel so the focused input stays visible. No-op on
-                web.
+                Input-bearing sheets use size=&quot;auto&quot; so the panel hugs its content and
+                rises with the keyboard on native. Fixed-percentage sizes are for scrollable lists
+                that adapt to available space. No-op on web.
               </Text>
               <Input value={value} onChangeText={setValue} placeholder="Type here…" />
             </View>

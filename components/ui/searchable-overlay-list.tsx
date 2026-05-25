@@ -27,7 +27,6 @@ import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
-import { useKeyboardHeight } from '@/hooks/use-keyboard-height'
 import { useTier } from '@/hooks/use-tier'
 import { cn } from '@/lib/utils'
 
@@ -271,28 +270,6 @@ type RowListProps<T> = {
 
 const ROW_DIVIDER = <View className="mx-3 h-px bg-border" />
 
-// Sheet content wrapper that pads the bottom by keyboard height on Android — the Sheet
-// primitive's RN built-in KeyboardAvoidingView only behaves correctly on iOS
-// (`behavior='padding'`); on Android (behavior=undefined) nothing lifts, so the footer
-// + last list rows end up behind the keyboard. Padding here lifts the whole body
-// (SearchInput + list + footer) together on Android while iOS continues to rely on
-// Sheet's KAV. No-op on web (useKeyboardHeight returns 0).
-function SheetKeyboardWrapper({ children }: { children: ReactNode }) {
-  const keyboardHeight = useKeyboardHeight()
-  const pad = Platform.OS === 'android' ? keyboardHeight : 0
-  // flex-1 is essential — without it the wrapper sizes to content, the RowList
-  // inside has nothing to flex against, and the list renders 0-height (no rows visible).
-  return (
-    <View className="flex-1" style={paddingBottomStyle(pad)}>
-      {children}
-    </View>
-  )
-}
-
-function paddingBottomStyle(value: number): ViewStyle {
-  return { paddingBottom: value }
-}
-
 // Native side uses SectionList for free sticky headers when any section requests them.
 function RowListNative<T>({
   sections,
@@ -308,9 +285,6 @@ function RowListNative<T>({
   className,
   style,
 }: RowListProps<T>) {
-  // Keyboard avoidance is handled at the body level (SheetKeyboardWrapper, Android-only)
-  // rather than via list contentContainerStyle padding — the body-wrapper lifts the
-  // footer too, while list-level padding only helped the list itself.
   const isEmpty = sections.every((s) => s.rows.length === 0)
   if (isEmpty) {
     return (
@@ -931,7 +905,7 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
           ariaLabelledBy={ariaLabelledBy}
         >
           <SheetContent anchor="bottom" size={sheetSize}>
-            <SheetKeyboardWrapper>{body}</SheetKeyboardWrapper>
+            {body}
           </SheetContent>
         </Sheet>
       </View>

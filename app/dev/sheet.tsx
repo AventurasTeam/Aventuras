@@ -10,6 +10,7 @@ import { Text } from '@/components/ui/text'
 
 export default function SheetDevRoute() {
   const [noteValue, setNoteValue] = useState('')
+  const [shortNoteValue, setShortNoteValue] = useState('')
 
   return (
     <ScrollView className="flex-1 bg-bg-base">
@@ -162,11 +163,12 @@ export default function SheetDevRoute() {
           </View>
         </View>
         <View>
-          <Heading level={3}>With input inside</Heading>
+          <Heading level={3}>With input inside (auto — canonical)</Heading>
           <Text variant="muted" size="xs" className="mt-1">
-            Bottom-anchored sheet hosting a TextInput. On Android / iOS, KeyboardAvoidingView lifts
-            the panel so the focused input stays visible. avoidKeyboard defaults true; opt out by
-            passing avoidKeyboard=&#123;false&#125; on SheetContent. No-op on web / Electron.
+            Input-bearing sheets use size=&quot;auto&quot;. The panel hugs its content, and the
+            body&apos;s paddingBottom grows it by keyboard height when the keyboard opens — the
+            whole panel rises above the keyboard. avoidKeyboard defaults true on bottom anchor.
+            No-op on web / Electron.
           </Text>
           <View className="mt-3">
             <Sheet ariaLabel="Add note">
@@ -175,13 +177,41 @@ export default function SheetDevRoute() {
                   <Text>Add note…</Text>
                 </Button>
               </SheetTrigger>
-              <SheetContent anchor="bottom" size="medium">
+              <SheetContent anchor="bottom" size="auto">
                 <View className="flex-col gap-3">
                   <Heading level={4}>Add note</Heading>
                   <Text variant="muted" size="sm">
                     Type to test keyboard avoidance on native.
                   </Text>
                   <Input value={noteValue} onChangeText={setNoteValue} placeholder="Type here…" />
+                </View>
+              </SheetContent>
+            </Sheet>
+          </View>
+        </View>
+        <View>
+          <Heading level={3}>Short with input inside (anti-pattern)</Heading>
+          <Text variant="muted" size="xs" className="mt-1">
+            size=&quot;short&quot; with an input is **not supported** — a typical phone keyboard is
+            taller than 33vh, so the body&apos;s paddingBottom exceeds the panel and the input gets
+            clipped above the panel&apos;s top edge. Demo kept as a reference for what NOT to do.
+            Use size=&quot;auto&quot; (above) for any input-bearing sheet.
+          </Text>
+          <View className="mt-3">
+            <Sheet ariaLabel="Quick note">
+              <SheetTrigger asChild>
+                <Button>
+                  <Text>Quick note (broken)…</Text>
+                </Button>
+              </SheetTrigger>
+              <SheetContent anchor="bottom" size="short">
+                <View className="flex-col gap-3">
+                  <Heading level={4}>Quick note</Heading>
+                  <Input
+                    value={shortNoteValue}
+                    onChangeText={setShortNoteValue}
+                    placeholder="Type here…"
+                  />
                 </View>
               </SheetContent>
             </Sheet>
