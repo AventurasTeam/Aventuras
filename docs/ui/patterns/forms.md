@@ -40,6 +40,10 @@ Used by:
   detail-pane tab navigation when the desktop tab strip overflows
   on narrow tiers; Input + Textarea for entity edits; TagInput
   pattern on entity + lore tags fields)
+- [Diagnostics Hub · Delta log tab](../screens/diagnostics/diagnostics.md#filters-delta-log)
+  (Select primitive: 2-segment "Branch scope" pick `[This branch |
+All branches]` as a semantic two-option pick; dropdown-mode
+  "Time range" with preset windows in the Toolbar.Sort slot)
 
 ---
 

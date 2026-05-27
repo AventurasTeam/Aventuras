@@ -1668,6 +1668,62 @@ class, driven by a one-shot animation triggered when the option's
 selection state changes via the nudge code path (distinguishable
 from user-driven toggles).
 
+#### Diagnostics Delta log — absolute date-range picker
+
+The [Time range filter](./ui/screens/diagnostics/diagnostics.md#filters-delta-log)
+ships v1 with relative preset windows only (`Last 5m / Last 15m /
+Last 1h / Last 6h / Last 24h / All time`). Absolute date-range
+picking (`From [date] To [date]`) was considered and parked —
+power-user shape with low v1 demand for a self-inspecting
+writing tool. Surface again if real users want to scope to
+specific past sessions or windows that don't match the relative
+presets (e.g., "show me the deltas from last week's writing
+session").
+
+The work: extend the Time range Select with a `Custom range…`
+option that opens a date-range picker (composing a new
+DateRangePicker primitive or reusing an existing one if one
+lands). Two anchors needed (start + end timestamps); zone
+defaults to local wall-clock-zone consistent with the relative
+presets' "now" anchor.
+
+#### Diagnostics Delta log — cross-hub-out detail-pane navigation
+
+The [Tab 5 row-body tap](./ui/screens/diagnostics/diagnostics.md#row-tap-behavior)
+opens the Raw JSON viewer Sheet (stays in hub for `undo_payload`
+inspection). World/Plot wire DeltaLogRow's `onPress` differently
+— "open in target detail pane" — exiting to the entity / lore /
+thread / happening surface. Tab 5 could add a separate "navigate
+to target home" affordance — likely a hover-revealed icon button
+(`↗`) on the row's right edge that jumps to the target's home
+in World/Plot.
+
+Cost: adds chrome to a row that already has a tap target on the
+body + a nested actionId chip + (on arrival) a Turn Tag chip in
+the filter row. Three interactive elements per row is busy.
+Surface again if users report needing to navigate from a
+diagnostics inspection to a target's home surface frequently
+(currently they can search/list at the target's home).
+
+#### Diagnostics Call log — streaming partial-content visible during in-flight expand
+
+The [Tab 3 in-flight expanded body](./ui/screens/diagnostics/diagnostics.md#row-expansion--tablet-call-log)
+shows the request section + a `Waiting for response…` placeholder
+in the response slot. For streaming responses (LLM responses
+that arrive chunk by chunk), the user might want to see partial
+chunks accumulate live during the in-flight period. v1 shows
+the request only until the call resolves; partial-content
+visibility is parked alongside the existing
+[`progressCall`](#observability--progresscall-for-streaming-live-byte-count)
+followup that proposes the upstream `httpCallSink` API extension
+needed to surface streaming chunks to the recording layer.
+
+Surface again if users report the in-flight expand being less
+useful than expected (e.g., "I can't see what the model is
+actually outputting until it's done"). Implementation depends
+on the `progressCall` API landing first; rendering is small
+once the data flows.
+
 ### Two-stage touch feedback (light hover + stronger press)
 
 Some mobile apps (Discord noted) ship a two-stage feedback on

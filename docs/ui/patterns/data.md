@@ -25,6 +25,13 @@ Used by:
 - [Diagnostics Hub · Logs tab — row expansion](../screens/diagnostics/diagnostics.md#row-expansion--tablet)
   (JSONBlock inline-use on tablet+ for expanded row payloads;
   Raw JSON viewer Sheet on phone tap-to-open)
+- [Diagnostics Hub · Call log — row expansion](../screens/diagnostics/diagnostics.md#row-expansion--tablet-call-log)
+  (JSONBlock inline-use on tablet+ with Request / Response /
+  Error sub-section split; Raw JSON viewer Sheet on phone
+  tap-to-open with state-adaptive content)
+- [Diagnostics Hub · Delta log — undo_payload inspection](../screens/diagnostics/diagnostics.md#row-tap-behavior)
+  (Raw JSON viewer Sheet on row body tap, both desktop and
+  phone; header `Delta · <op> · <target> · <time>`)
 
 ---
 

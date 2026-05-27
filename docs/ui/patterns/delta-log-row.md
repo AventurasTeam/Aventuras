@@ -26,6 +26,11 @@ Used by:
   delta log filtered to threads and happenings.
 - [Diagnostics Hub · Delta log tab](../screens/diagnostics/diagnostics.md#tab-5--delta-log)
   — story-scoped (branch-scoped by default), unscoped across rows.
+  First consumer adopting the table-type `targetDisplayName`
+  prefixing variant (`Entity · Kael`, `Thread · Iron Pact`, etc.);
+  host wires `onPress` to open the [Raw JSON viewer Sheet](./data.md#raw-json-viewer--shared-modal-pattern)
+  with the row's `undo_payload`, diverging from World/Plot's
+  open-in-detail-pane wiring.
 
 ## Compound API
 

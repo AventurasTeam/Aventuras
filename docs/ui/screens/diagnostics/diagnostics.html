@@ -138,6 +138,72 @@
   .log-row-phone .lrp-kind { grid-column: 1 / -1; grid-row: 2; font-family: ui-monospace, monospace; font-size: 12px; color: var(--ink); }
   .log-row-phone .lrp-kind .kind-sub { color: var(--ink-muted); }
 
+  /* Tab 3 (Call log) row — 7-column grid: chevron, time, method, URL, status slot, duration, actionId */
+  .call-row { display: grid; grid-template-columns: 24px 80px 50px 1fr 70px 70px 90px; align-items: center; gap: 12px; padding: 8px 20px; border-bottom: 1px solid var(--line-soft); font-size: 12px; cursor: pointer; }
+  .call-row:hover { background: var(--bg-highlight); }
+  .call-row .cr-chevron { color: var(--ink-faint); font-size: 10px; transform: rotate(-90deg); align-self: center; }
+  .call-row .cr-time { font-family: ui-monospace, monospace; color: var(--ink-muted); font-size: 11px; }
+  .call-row .cr-method { font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink); font-weight: 600; }
+  .call-row .cr-url { font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .call-row .cr-status { font-family: ui-monospace, monospace; font-size: 10px; padding: 1px 6px; border-radius: 3px; text-align: center; border: 1px solid; font-weight: 600; align-self: center; }
+  .call-row .cr-status.s-2xx { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+  .call-row .cr-status.s-3xx { background: var(--info-bg); color: var(--info); border-color: var(--info); }
+  .call-row .cr-status.s-4xx { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+  .call-row .cr-status.s-5xx { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
+  .call-row .cr-status.s-err { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
+  .call-row .cr-pulse { width: 14px; height: 14px; border-radius: 50%; background: var(--ink-muted); animation: cr-pulse 1.5s ease-in-out infinite; margin: 0 auto; }
+  @keyframes cr-pulse { 0%, 100% { opacity: 0.4; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } }
+  .call-row .cr-duration { font-family: ui-monospace, monospace; color: var(--ink-muted); font-size: 11px; text-align: right; }
+  .call-row .cr-duration.empty { color: var(--ink-faint); }
+  .call-row .cr-action { font-family: ui-monospace, monospace; font-size: 11px; padding: 1px 6px; border: 1px solid var(--info); border-radius: 3px; background: var(--info-bg); color: var(--info); text-align: center; cursor: pointer; align-self: center; }
+  .call-row .cr-action.empty { border: 1px dashed var(--line-soft); background: transparent; color: var(--ink-faint); cursor: default; }
+
+  /* Tab 5 (Delta log) DeltaLogRow visualization */
+  .delta-row { padding: 10px 20px; border-bottom: 1px solid var(--line-soft); font-size: 12px; cursor: pointer; display: grid; grid-template-columns: 1fr 90px; gap: 10px; align-items: start; }
+  .delta-row:hover { background: var(--bg-highlight); }
+  .delta-row .dr-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .delta-row .dr-target-line { display: flex; align-items: center; gap: 8px; }
+  .delta-row .dr-op { font-family: ui-monospace, monospace; font-size: 9px; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; flex-shrink: 0; }
+  .delta-row .dr-op.create { background: var(--ok-bg); color: var(--ok); }
+  .delta-row .dr-op.update { background: var(--info-bg); color: var(--info); }
+  .delta-row .dr-op.delete { background: var(--danger-bg); color: var(--danger); }
+  .delta-row .dr-target { font-size: 12px; color: var(--ink); font-weight: 500; }
+  .delta-row .dr-target-prefix { color: var(--ink-muted); font-weight: normal; }
+  .delta-row .dr-field { color: var(--ink-muted); font-family: ui-monospace, monospace; font-size: 11px; }
+  .delta-row .dr-summary { font-size: 12px; color: var(--ink); line-height: 1.4; }
+  .delta-row .dr-meta { font-size: 11px; color: var(--ink-muted); }
+  .delta-row .dr-meta .dr-meta-sep { color: var(--ink-faint); margin: 0 4px; }
+  .delta-row .dr-action { font-family: ui-monospace, monospace; font-size: 11px; padding: 1px 6px; border: 1px solid var(--info); border-radius: 3px; background: var(--info-bg); color: var(--info); text-align: center; cursor: pointer; align-self: start; }
+  .delta-row .dr-action.empty { border: 1px dashed var(--line-soft); background: transparent; color: var(--ink-faint); cursor: default; }
+
+  /* Branch segment (Tab 5 filter) — 2-segment Select */
+  .branch-segment { display: inline-flex; height: 24px; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+  .branch-segment .seg { padding: 4px 10px; font-size: 11px; color: var(--ink-muted); background: var(--bg-region); cursor: pointer; border-right: 1px solid var(--line); }
+  .branch-segment .seg:last-child { border-right: none; }
+  .branch-segment .seg.active { background: var(--ink); color: #fff; }
+
+  /* Time range Select trigger (Tab 5 filter — Toolbar.Sort slot) */
+  .time-trigger { padding: 4px 10px; height: 24px; box-sizing: border-box; border-radius: 3px; border: 1px solid var(--line); background: var(--bg-region); font-size: 11px; color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .time-trigger .tt-label { color: var(--ink-muted); }
+  .time-trigger .tt-caret { color: var(--ink-faint); }
+
+  /* Tab body switching — show only the active tab body */
+  .tab-body { display: none; }
+  body[data-active-tab="logs"] .tab-body-logs,
+  body:not([data-active-tab]) .tab-body-logs { display: block; }
+  body[data-active-tab="call-log"] .tab-body-call-log { display: block; }
+  body[data-active-tab="delta-log"] .tab-body-delta-log { display: block; }
+
+  /* Active tab strip highlight follows the tab switcher */
+  body[data-active-tab="call-log"] .tab-logs { color: var(--ink-muted); border-bottom-color: transparent; font-weight: normal; }
+  body[data-active-tab="call-log"] .tab-calls { color: var(--ink); border-bottom-color: var(--ink); font-weight: 500; }
+  body[data-active-tab="delta-log"] .tab-logs { color: var(--ink-muted); border-bottom-color: transparent; font-weight: normal; }
+  body[data-active-tab="delta-log"] .tab-delta { color: var(--ink); border-bottom-color: var(--ink); font-weight: 500; }
+
+  /* Delta log story-anchored: story strip visible (only when delta-log tab active and not in master-off) */
+  body[data-active-tab="delta-log"]:not([data-mode="master-off"]) .story-strip { display: flex; }
+  body[data-active-tab="delta-log"]:not([data-mode="master-off"]) .ss-picker.placeholder { color: var(--ink); }
+
   /* Empty / message panes */
   .empty-pane { padding: 50px 20px; text-align: center; color: var(--ink-muted); }
   .empty-pane p { margin: 0 0 12px; font-style: italic; font-size: 13px; }
@@ -211,9 +277,15 @@
 </style>
 </head>
 <body data-mode="hub">
-<div class="screen-label">Wireframe · <strong>Diagnostics Hub</strong> · <strong>Tab 4 (Logs) detail pass</strong> · hub shell + Logs body</div>
+<div class="screen-label">Wireframe · <strong>Diagnostics Hub</strong> · <strong>Tabs 3 / 4 / 5 detail pass</strong> · hub shell + per-tab body</div>
 
 <div class="review-bar">
+  <span class="rb-label">Tab</span>
+  <span class="rb-group">
+    <button class="rb-btn" data-tab-btn="call-log">Call log (Tab 3)</button>
+    <button class="rb-btn active" data-tab-btn="logs">Logs (Tab 4)</button>
+    <button class="rb-btn" data-tab-btn="delta-log">Delta log (Tab 5)</button>
+  </span>
   <span class="rb-label">Mode</span>
   <span class="rb-group">
     <button class="rb-btn active" data-mode-btn="hub">Hub (collapsed rows)</button>
@@ -225,7 +297,7 @@
     <button class="rb-btn" data-mode-btn="hub-no-story">Story-anchored, no story</button>
     <button class="rb-btn" data-mode-btn="master-off">Master toggle off</button>
   </span>
-  <span class="rb-note">Logs tab body at detail-pass fidelity. Hub shell unchanged from the surface inventory pass.</span>
+  <span class="rb-note">Mode states apply to the Logs (Tab 4) body. Tabs 3 + 5 show their default body — the close-out details state variants in prose at <strong>diagnostics.md</strong>.</span>
 </div>
 
 <div class="vp-stage">
@@ -271,8 +343,11 @@
         </select>
       </div>
 
-      <!-- Body wrapper — Logs tab body -->
+      <!-- Body wrapper — switches body content per active tab -->
       <div class="body-wrap">
+
+        <!-- Tab 4 (Logs) body — wraps the existing Logs example -->
+        <div class="tab-body tab-body-logs">
 
         <!-- Filter row — Toolbar pattern composition -->
         <div class="toolbar">
@@ -430,6 +505,192 @@
           </div>
         </div>
 
+        </div><!-- end .tab-body-logs -->
+
+        <!-- Tab 3 (Call log) body — basic example, no state variants here -->
+        <div class="tab-body tab-body-call-log">
+
+          <!-- Filter row — Toolbar pattern (Search + State chips + Source MS + Status MS) -->
+          <div class="toolbar">
+            <div class="tb-primary">
+              <span class="tb-primary-label">URL / body</span>
+              <input type="text" placeholder="filter URL or body…">
+            </div>
+            <div class="tb-secondary">
+              <span class="tb-secondary-label">State</span>
+              <span class="chip active">in-flight</span>
+              <span class="chip active" style="background: var(--ok); border-color: var(--ok); color: #fff;">completed</span>
+              <span class="chip danger active">failed</span>
+            </div>
+            <div class="tb-secondary">
+              <button class="ms-trigger"><span class="ms-label">Source:</span> 3 of 8 <span class="ms-caret">▾</span></button>
+            </div>
+            <div class="tb-secondary">
+              <button class="ms-trigger"><span class="ms-label">Status:</span> 4 of 5 <span class="ms-caret">▾</span></button>
+            </div>
+          </div>
+
+          <!-- Call list — examples of each row state -->
+          <div class="log-list">
+            <div class="call-row">
+              <span class="cr-chevron">▾</span>
+              <span class="cr-time">14:02:18</span>
+              <span class="cr-method">POST</span>
+              <span class="cr-url">api.anthropic.com/v1/messages</span>
+              <span class="cr-pulse" title="in-flight"></span>
+              <span class="cr-duration empty">——</span>
+              <span class="cr-action">tr_a3kf</span>
+            </div>
+            <div class="call-row">
+              <span class="cr-chevron">▾</span>
+              <span class="cr-time">14:02:17</span>
+              <span class="cr-method">POST</span>
+              <span class="cr-url">api.anthropic.com/v1/messages</span>
+              <span class="cr-status s-2xx">200</span>
+              <span class="cr-duration">1.84s</span>
+              <span class="cr-action">tr_a3kf</span>
+            </div>
+            <div class="call-row">
+              <span class="cr-chevron">▾</span>
+              <span class="cr-time">14:02:16</span>
+              <span class="cr-method">POST</span>
+              <span class="cr-url">api.anthropic.com/v1/messages</span>
+              <span class="cr-status s-5xx">503</span>
+              <span class="cr-duration">12.3s</span>
+              <span class="cr-action">tr_a3kf</span>
+            </div>
+            <div class="call-row">
+              <span class="cr-chevron">▾</span>
+              <span class="cr-time">14:01:58</span>
+              <span class="cr-method">POST</span>
+              <span class="cr-url">api.anthropic.com/v1/messages</span>
+              <span class="cr-status s-err">ERR</span>
+              <span class="cr-duration">8.42s</span>
+              <span class="cr-action">tr_92mp</span>
+            </div>
+            <div class="call-row">
+              <span class="cr-chevron">▾</span>
+              <span class="cr-time">13:58:04</span>
+              <span class="cr-method">GET</span>
+              <span class="cr-url">api.anthropic.com/v1/messages/embed</span>
+              <span class="cr-status s-4xx">404</span>
+              <span class="cr-duration">0.34s</span>
+              <span class="cr-action empty">—</span>
+            </div>
+            <div class="call-row">
+              <span class="cr-chevron">▾</span>
+              <span class="cr-time">13:51:12</span>
+              <span class="cr-method">POST</span>
+              <span class="cr-url">api.openai.com/v1/embeddings</span>
+              <span class="cr-status s-2xx">200</span>
+              <span class="cr-duration">0.71s</span>
+              <span class="cr-action empty">—</span>
+            </div>
+          </div>
+
+        </div><!-- end .tab-body-call-log -->
+
+        <!-- Tab 5 (Delta log) body — basic example, no state variants here -->
+        <div class="tab-body tab-body-delta-log">
+
+          <!-- Filter row — Toolbar pattern (Search + Source MS + Target MS + Branch segment + Time Select) -->
+          <div class="toolbar">
+            <div class="tb-primary">
+              <span class="tb-primary-label">Filter</span>
+              <input type="text" placeholder="filter by name or field path…">
+            </div>
+            <div class="tb-secondary">
+              <button class="ms-trigger"><span class="ms-label">Source:</span> 3 of 8 <span class="ms-caret">▾</span></button>
+            </div>
+            <div class="tb-secondary">
+              <button class="ms-trigger"><span class="ms-label">Target:</span> 2 of 6 <span class="ms-caret">▾</span></button>
+            </div>
+            <div class="tb-secondary">
+              <span class="branch-segment">
+                <span class="seg active">This branch</span>
+                <span class="seg">All branches</span>
+              </span>
+            </div>
+            <div class="tb-secondary" style="margin-left: auto;">
+              <button class="time-trigger"><span class="tt-label">Time:</span> Last 1h <span class="tt-caret">▾</span></button>
+            </div>
+          </div>
+
+          <!-- Delta list — DeltaLogRow examples across ops, targets, sources -->
+          <div class="log-list">
+            <div class="delta-row">
+              <div class="dr-body">
+                <div class="dr-target-line">
+                  <span class="dr-op update">update</span>
+                  <span class="dr-target"><span class="dr-target-prefix">Entity ·</span> Kael</span>
+                  <span class="dr-field">· state.traits</span>
+                </div>
+                <div class="dr-summary">Added "former soldier"; was ["brave", "loyal"]</div>
+                <div class="dr-meta">classifier <span class="dr-meta-sep">·</span> entry #47 <span class="dr-meta-sep">·</span> 2h ago</div>
+              </div>
+              <span class="dr-action">tr_a3kf</span>
+            </div>
+            <div class="delta-row">
+              <div class="dr-body">
+                <div class="dr-target-line">
+                  <span class="dr-op create">create</span>
+                  <span class="dr-target"><span class="dr-target-prefix">Happening ·</span> The Bridge Collapse</span>
+                </div>
+                <div class="dr-summary">Created</div>
+                <div class="dr-meta">classifier <span class="dr-meta-sep">·</span> entry #47 <span class="dr-meta-sep">·</span> 2h ago</div>
+              </div>
+              <span class="dr-action">tr_a3kf</span>
+            </div>
+            <div class="delta-row">
+              <div class="dr-body">
+                <div class="dr-target-line">
+                  <span class="dr-op update">update</span>
+                  <span class="dr-target"><span class="dr-target-prefix">Thread ·</span> Iron Pact</span>
+                  <span class="dr-field">· state</span>
+                </div>
+                <div class="dr-summary">state: pending → active</div>
+                <div class="dr-meta">lore agent <span class="dr-meta-sep">·</span> chapter close <span class="dr-meta-sep">·</span> 4h ago</div>
+              </div>
+              <span class="dr-action empty">—</span>
+            </div>
+            <div class="delta-row">
+              <div class="dr-body">
+                <div class="dr-target-line">
+                  <span class="dr-op delete">delete</span>
+                  <span class="dr-target"><span class="dr-target-prefix">Lore ·</span> Forgotten ritual</span>
+                </div>
+                <div class="dr-summary">Deleted</div>
+                <div class="dr-meta">user <span class="dr-meta-sep">·</span> 6h ago</div>
+              </div>
+              <span class="dr-action empty">—</span>
+            </div>
+            <div class="delta-row">
+              <div class="dr-body">
+                <div class="dr-target-line">
+                  <span class="dr-op update">update</span>
+                  <span class="dr-target"><span class="dr-target-prefix">Entity ·</span> Aria</span>
+                  <span class="dr-field">· state.current_location_id</span>
+                </div>
+                <div class="dr-summary">Modified current_location_id (resolving — diff cache pending)</div>
+                <div class="dr-meta">classifier <span class="dr-meta-sep">·</span> entry #46 <span class="dr-meta-sep">·</span> 6h ago</div>
+              </div>
+              <span class="dr-action">tr_92mp</span>
+            </div>
+            <div class="delta-row">
+              <div class="dr-body">
+                <div class="dr-target-line">
+                  <span class="dr-op create">create</span>
+                  <span class="dr-target"><span class="dr-target-prefix">Translation ·</span> entry #47 (es)</span>
+                </div>
+                <div class="dr-summary">Created</div>
+                <div class="dr-meta">translation <span class="dr-meta-sep">·</span> entry #47 <span class="dr-meta-sep">·</span> 2h ago</div>
+              </div>
+              <span class="dr-action empty">—</span>
+            </div>
+          </div>
+
+        </div><!-- end .tab-body-delta-log -->
+
       </div>
 
       <!-- Pick-a-story pane (gated by hub-no-story mode; demonstrates the Per-turn inspector tab being inactive without a story selection. Logs renders normally regardless, since it's app-global.) -->
@@ -449,11 +710,21 @@
 </div>
 
 <script>
+  // Mode switcher (state variants on the active tab body)
   document.querySelectorAll('[data-mode-btn]').forEach(btn => {
     btn.addEventListener('click', () => {
       const mode = btn.dataset.modeBtn;
       document.body.dataset.mode = mode;
       document.querySelectorAll('[data-mode-btn]').forEach(b => b.classList.toggle('active', b === btn));
+    });
+  });
+
+  // Tab switcher (which tab body to render)
+  document.querySelectorAll('[data-tab-btn]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tabBtn;
+      document.body.dataset.activeTab = tab;
+      document.querySelectorAll('[data-tab-btn]').forEach(b => b.classList.toggle('active', b === btn));
     });
   });
 </script>

@@ -26,6 +26,18 @@ Used by:
 - [Diagnostics Hub · Logs tab — Subsystem filter](../screens/diagnostics/diagnostics.md#filters--toolbar-composition) —
   first consumer. Subsystem multi-select against the open-ended
   `LogSubsystem` union.
+- [Diagnostics Hub · Call log tab — Source + Status range filters](../screens/diagnostics/diagnostics.md#filters-call-log) —
+  Source multi-select against provider/embedder enum; Status
+  range multi-select against five HTTP status buckets
+  (`1xx / 2xx / 3xx / 4xx / 5xx`). Status range adopts a
+  per-row severity-color dot inside the overlay (consumer-side
+  styling; primitive remains policy-neutral).
+- [Diagnostics Hub · Delta log tab — Source + Target table filters](../screens/diagnostics/diagnostics.md#filters-delta-log) —
+  Source multi-select against the deltas source enum
+  (`classifier / lore_mgmt / user_edit / chapter_close / …`);
+  Target table multi-select against the deltas target_table
+  enum (`entities / lore / happenings / threads / translations /
+…`).
 
 ## When to pick MultiSelect over Chip row
 

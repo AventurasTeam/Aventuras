@@ -36,6 +36,15 @@ Used by:
   [MultiSelect](./multi-select.md) trigger as secondary chrome.
   First consumer adopting a MultiSelect alongside Chip in the
   secondary cluster.
+- [Diagnostics Hub · Call log tab](../screens/diagnostics/diagnostics.md#filters-call-log) —
+  URL/body free-text (Toolbar.Search), State filter chips
+  (3 severity-coded chips), Source MultiSelect + Status range
+  MultiSelect as secondary chrome.
+- [Diagnostics Hub · Delta log tab](../screens/diagnostics/diagnostics.md#filters-delta-log) —
+  free-text on target names + field paths (Toolbar.Search),
+  Source + Target table MultiSelects, Branch scope segment
+  (2-option Select), Time range Select as Toolbar.Sort.
+  Six-dimension filter row — densest in the hub.
 
 ## What's in scope
 

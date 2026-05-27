@@ -1,9 +1,10 @@
 # Diagnostics Hub · Tab 4 (Logs) — detail-pass close-out
 
 Session record, 2026-05-27. Partially resolves the
-[`Diagnostics hub — per-tab body design passes`](../followups.md#diagnostics-hub--per-tab-body-design-passes-for-tabs-2-3-5)
-followup — narrows the active entry from "tabs 2-5" to "tabs 2, 3, 5"
-once Tab 4 lands. Canonical spec changes land in
+[`Diagnostics hub — per-tab body design pass`](../followups.md#diagnostics-hub--per-tab-body-design-pass-for-tab-2)
+followup — narrowed the active entry from "tabs 2-5" to "tabs 2, 3, 5"
+once Tab 4 landed (subsequently narrowed further to "tab 2" once
+Tabs 3 + 5 landed in the sibling 2026-05-27 close-out). Canonical spec changes land in
 [`ui/screens/diagnostics/diagnostics.md`](../ui/screens/diagnostics/diagnostics.md);
 the Subsystem multi-select decisions promote to a new
 [`ui/patterns/multi-select.md`](../ui/patterns/multi-select.md);

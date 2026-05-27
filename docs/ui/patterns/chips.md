@@ -45,6 +45,15 @@ Used by:
   Tag's `removable` slot on a filter row (vs the tag-input
   TagInput composition which also uses removable Tags inside the
   input surface).
+- [Diagnostics Hub · Call log tab — State filter chips + Turn
+  Tag chip](../screens/diagnostics/diagnostics.md#filters-call-log) —
+  three severity-coded State Chips (`in-flight` neutral,
+  `completed` success, `failed` danger) in Toolbar.FilterChips
+  slot; accent-toned removable Turn Tag chip on cross-tab arrival.
+- [Diagnostics Hub · Delta log tab — Turn Tag chip](../screens/diagnostics/diagnostics.md#cross-tab-nav-delta-log) —
+  accent-toned removable Turn Tag chip on cross-tab arrival.
+  Same shape as the Logs/Call log Tag chip; no State chips on
+  Delta log (no severity dimension).
 
 ## Chip — square, toggleable
 
