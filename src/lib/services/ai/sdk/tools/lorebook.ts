@@ -256,7 +256,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         index: z.number().describe('Index of the entry to update'),
         name: z.string().optional().describe('New name'),
         type: entryTypeSchema.optional().describe('New type'),
-        description: z.string().optional().describe('New description (omit if not changing)'),
+        description: z.string().optional().describe('New description (only send if changing)'),
         keywords: z.array(z.string()).optional().describe('New keywords (replaces existing)'),
         aliases: z.array(z.string()).optional().describe('New aliases (replaces existing)'),
         injectionMode: injectionModeSchema.optional().describe('New injection mode'),
