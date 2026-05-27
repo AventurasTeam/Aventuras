@@ -26,3 +26,6 @@ export { importEntries } from './import/orchestrator'
 // Export operations
 export { exportLorebook } from './export/write'
 export { getFormatInfo } from './export/metadata'
+
+// Vault export operations
+export { exportVaultLorebook, exportVaultCharacter, exportVaultScenario } from './export/vault'

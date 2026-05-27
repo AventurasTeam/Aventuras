@@ -92,10 +92,10 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
 
         return {
           entries: filtered.map((e) => {
-            // Find original index in full entries array
-            const originalIndex = entries.indexOf(e)
+            // Map to the full targetEntries array index
+            const fullIndex = targetEntries.indexOf(e)
             return {
-              index: originalIndex,
+              index: fullIndex,
               name: e.name,
               type: e.type,
               description: e.description.slice(0, 200) + (e.description.length > 200 ? '...' : ''),
@@ -256,7 +256,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         index: z.number().describe('Index of the entry to update'),
         name: z.string().optional().describe('New name'),
         type: entryTypeSchema.optional().describe('New type'),
-        description: z.string().optional().describe('New description'),
+        description: z.string().optional().describe('New description (only send if changing)'),
         keywords: z.array(z.string()).optional().describe('New keywords (replaces existing)'),
         aliases: z.array(z.string()).optional().describe('New aliases (replaces existing)'),
         injectionMode: injectionModeSchema.optional().describe('New injection mode'),
@@ -306,9 +306,10 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         const previous = targetEntries[index]
         const changeId = generateId()
 
-        // Filter out undefined values
+        // Filter out undefined and empty-string values to prevent
+        // accidental overwrites (e.g. the AI sending description: "")
         const cleanUpdates = Object.fromEntries(
-          Object.entries(updates).filter(([_, v]) => v !== undefined),
+          Object.entries(updates).filter(([_, v]) => v !== undefined && v !== ''),
         ) as Partial<VaultLorebookEntry>
 
         const pendingChange: LorebookEntryPendingChangeSchema = {

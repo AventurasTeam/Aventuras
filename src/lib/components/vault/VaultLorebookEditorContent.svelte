@@ -22,10 +22,13 @@
     Pencil,
     GitMerge,
     Bot,
+    Download,
   } from 'lucide-svelte'
   import TagInput from '$lib/components/tags/TagInput.svelte'
   import VaultLorebookEntryFields from './VaultLorebookEntryFields.svelte'
   import VaultPendingOperations, { type PendingOperation } from './VaultPendingOperations.svelte'
+  import { LorebookImportExport } from '$lib/services/lorebookImportExport'
+  import { ui } from '$lib/stores/ui.svelte'
 
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
@@ -49,6 +52,7 @@
     onRejectEntry?: (change: VaultPendingChange) => void
     onUpdatePendingChange?: (change: VaultPendingChange, newData: VaultLorebookEntry) => void
     onOpenAssistant?: (entity: FocusedEntity) => void
+    onApproveAllAsync?: () => Promise<string | null>
     hideHeader?: boolean
   }
 
@@ -65,6 +69,7 @@
     onRejectEntry,
     onUpdatePendingChange,
     onOpenAssistant,
+    onApproveAllAsync,
     hideHeader = false,
   }: Props = $props()
 
@@ -439,6 +444,17 @@
     }
   }
 
+  async function handleExport() {
+    try {
+      const success = await LorebookImportExport.exportVaultLorebook(lorebook, 'aventura')
+      if (success) {
+        ui.showToast('Lorebook exported successfully', 'info')
+      }
+    } catch (e) {
+      ui.showToast(e instanceof Error ? e.message : 'Export failed', 'error')
+    }
+  }
+
   function handleAddEntry() {
     newEntryDraft = {
       name: '',
@@ -502,7 +518,11 @@
         case 'update': {
           const idx = change.entryIndex
           if (idx >= 0 && idx < entries.length) {
-            entries[idx] = { ...entries[idx], ...(change.data as Partial<VaultLorebookEntry>) }
+            const raw = change.data as Partial<VaultLorebookEntry> | undefined
+            const safeData = Object.fromEntries(
+              Object.entries(raw ?? {}).filter(([_, v]) => v !== ''),
+            ) as Partial<VaultLorebookEntry>
+            entries[idx] = { ...entries[idx], ...safeData }
             entries = [...entries]
           }
           break
@@ -590,12 +610,22 @@
     }
   }
 
-  /** Approve all pending operations — snapshot first to avoid index-shifting bugs */
-  function handleApproveAll() {
-    if (!onApproveEntry) return
+  /** Approve all pending operations — use batch approval when available */
+  async function handleApproveAll() {
     selectedOperationId = null
-    // Snapshot: handleApproveEntry mutates entries[] which shifts indices,
-    // so we collect all changes first and delegate to parent without optimistic splicing
+    if (onApproveAllAsync) {
+      const err = await onApproveAllAsync()
+      if (err) {
+        error = err
+        return
+      }
+      // After batch approval, resync local state from the vault
+      entries = JSON.parse(JSON.stringify(lorebook.entries))
+      locallyDeleted = new Set()
+      return
+    }
+    if (!onApproveEntry) return
+    // Fallback: iterate and approve one by one
     const changes = [...pendingOperations].map((op) => op.primaryChange)
     for (const change of changes) {
       onApproveEntry(change)
@@ -1080,6 +1110,16 @@
           <span class="hidden sm:inline">Ask Assistant</span>
         </Button>
       {/if}
+      <Button
+        variant="outline"
+        class="border-surface-600 h-8 text-xs"
+        onclick={handleExport}
+        disabled={saving || entries.length === 0}
+        title="Export lorebook"
+      >
+        <Download class="h-3.5 w-3.5" />
+        <span class="hidden sm:inline">Export</span>
+      </Button>
       <div class="flex flex-1 items-center justify-end gap-2">
         <Button
           variant="outline"

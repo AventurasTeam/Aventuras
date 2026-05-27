@@ -166,6 +166,26 @@ class LorebookVaultStore {
   }
 
   /**
+   * Duplicate a lorebook with a new ID and "(Copy)" suffix.
+   */
+  async duplicate(id: string): Promise<VaultLorebook | null> {
+    const original = this.getById(id)
+    if (!original) return null
+
+    return this.add({
+      name: `${original.name} (Copy)`,
+      description: original.description,
+      entries: JSON.parse(JSON.stringify(original.entries)),
+      tags: [...original.tags],
+      favorite: false,
+      source: original.source,
+      originalFilename: null,
+      originalStoryId: null,
+      metadata: original.metadata ? JSON.parse(JSON.stringify(original.metadata)) : null,
+    })
+  }
+
+  /**
    * Search vault lorebooks.
    */
   async search(query: string): Promise<VaultLorebook[]> {

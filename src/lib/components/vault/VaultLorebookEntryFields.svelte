@@ -15,6 +15,12 @@
 
   let { data, onUpdate, changedFields }: Props = $props()
 
+  let textareaRef = $state<HTMLTextAreaElement | null>(null)
+  $effect(() => {
+    void data
+    textareaRef?.scrollTo(0, 0)
+  })
+
   const changed = (field: string) =>
     changedFields?.has(field)
       ? 'border-l-2 border-l-blue-400/50 bg-blue-500/5 pl-3 -ml-3 rounded-lg'
@@ -100,6 +106,7 @@
     <Label>Description / Content</Label>
     <Textarea
       bind:value={data.description}
+      bind:ref={textareaRef}
       oninput={handleInput}
       class="min-h-[200px] font-mono text-sm leading-relaxed"
       placeholder="Enter the lore content here..."

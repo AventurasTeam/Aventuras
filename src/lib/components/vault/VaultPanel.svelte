@@ -35,6 +35,7 @@
   import PromptPackList from './prompts/PromptPackList.svelte'
   import PromptPackEditor from './prompts/PromptPackEditor.svelte'
   import ImportPreviewDialog from './prompts/ImportPreviewDialog.svelte'
+  import VaultExportModal from './VaultExportModal.svelte'
   import {
     importExportService,
     type ImportValidationResult,
@@ -62,7 +63,15 @@
 
   // State
   let activeTab = $state<VaultTab>(ui.vaultTab)
+  let searchInput = $state('')
   let searchQuery = $state('')
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined
+  $effect(() => {
+    clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(() => {
+      searchQuery = searchInput
+    }, 300)
+  })
   let showFavoritesOnly = $state(false)
   let selectedTags = $state<string[]>([])
   let filterLogic = $state<'AND' | 'OR'>('OR')
@@ -89,6 +98,10 @@
   let discoveryMode = $state<VaultType>('character')
   let showVaultAssistant = $state(false)
   let assistantFocusedEntity = $state<FocusedEntity | null>(null)
+
+  // Export modal state
+  let exportEntity = $state<VaultLorebook | VaultCharacter | VaultScenario | null>(null)
+  let exportEntityType = $state<'lorebook' | 'character' | 'scenario' | null>(null)
 
   async function openAssistantWithEntity(entity: FocusedEntity) {
     showCharForm = false
@@ -216,6 +229,14 @@
     return result
   }
 
+  // Memoised filtered items per tab — only recomputes when deps change
+  let filteredByTab = $derived.by(() => ({
+    characters: getFilteredItems(characterVault.items as AnyVaultItem[]),
+    lorebooks: getFilteredItems(lorebookVault.items as AnyVaultItem[]),
+    scenarios: getFilteredItems(scenarioVault.items as AnyVaultItem[]),
+    prompts: [],
+  }))
+
   // Load on mount
   $effect(() => {
     if (!characterVault.isLoaded) characterVault.load()
@@ -324,14 +345,6 @@
     if (type === 'character') openEditCharForm(item as VaultCharacter)
     else if (type === 'lorebook') editingLorebook = item as VaultLorebook
     else if (type === 'scenario') editingScenario = item as VaultScenario
-  }
-
-  async function handleDelete(id: string, store: any) {
-    await store.delete(id)
-  }
-
-  async function handleToggleFavorite(id: string, store: any) {
-    await store.toggleFavorite(id)
   }
 
   function handleOpenPack(packId: string) {
@@ -535,7 +548,7 @@
     <div class="flex items-center gap-2">
       <Input
         type="text"
-        bind:value={searchQuery}
+        bind:value={searchInput}
         placeholder={`Search ${activeTab}...`}
         class="bg-muted/40 flex-1"
         leftIcon={SearchIcon}
@@ -590,7 +603,7 @@
               {/each}
             </div>
           {:else}
-            {@const filteredItems = getFilteredItems(section.store.items as AnyVaultItem[])}
+            {@const filteredItems = filteredByTab[section.id]}
 
             {#if filteredItems.length === 0}
               <div in:fade class="flex flex-1 flex-col items-center justify-center">
@@ -626,8 +639,31 @@
                     item={item as AnyVaultItem}
                     type={section.type}
                     onEdit={() => handleEdit(item, section.type)}
-                    onDelete={() => handleDelete(item.id, section.store)}
-                    onToggleFavorite={() => handleToggleFavorite(item.id, section.store)}
+                    onDelete={() => section.store.delete(item.id)}
+                    onToggleFavorite={() => section.store.toggleFavorite(item.id)}
+                    onExport={() => {
+                      exportEntity = item
+                      exportEntityType = section.type
+                    }}
+                    onDuplicate={async () => {
+                      try {
+                        const result = await section.store.duplicate(item.id)
+                        if (!result) {
+                          ui.showToast(
+                            `Original ${section.singularLabel.toLowerCase()} not found`,
+                            'error',
+                          )
+                          return
+                        }
+                        ui.showToast(`${section.singularLabel} duplicated`, 'info')
+                      } catch (e) {
+                        console.error('Duplicate failed:', e)
+                        ui.showToast(
+                          `Failed to duplicate ${section.singularLabel.toLowerCase()}`,
+                          'error',
+                        )
+                      }
+                    }}
                   />
                 {/each}
               </div>
@@ -716,6 +752,17 @@
     onClose={() => {
       showVaultAssistant = false
       assistantFocusedEntity = null
+    }}
+  />
+{/if}
+<!-- Export Modal -->
+{#if exportEntity && exportEntityType}
+  <VaultExportModal
+    entity={exportEntity}
+    entityType={exportEntityType}
+    onClose={() => {
+      exportEntity = null
+      exportEntityType = null
     }}
   />
 {/if}

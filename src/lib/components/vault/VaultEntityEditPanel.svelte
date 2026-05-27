@@ -17,11 +17,19 @@
     change: VaultPendingChange
     onApprove: (change?: VaultPendingChange) => void
     onReject?: (change: VaultPendingChange) => void
+    onApproveAllAsync?: () => Promise<string | null>
     onClose: () => void
     hideHeader?: boolean
   }
 
-  let { change, onApprove, onReject, onClose, hideHeader = false }: Props = $props()
+  let {
+    change,
+    onApprove,
+    onReject,
+    onApproveAllAsync,
+    onClose,
+    hideHeader = false,
+  }: Props = $props()
 
   // Local state for the editable data (character / scenario)
   let charData = $state<VaultCharacterInput | null>(null)
@@ -209,6 +217,7 @@
             data: newData,
           } as VaultPendingChange)
         }}
+        {onApproveAllAsync}
         {hideHeader}
       />
     {/key}
