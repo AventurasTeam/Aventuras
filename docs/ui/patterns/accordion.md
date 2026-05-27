@@ -13,6 +13,7 @@ Used by:
 - [World panel](../screens/world/world.md) — same status-tier grouping in the list pane.
 - [App Settings](../screens/app-settings/app-settings.md) — provider list (each provider expandable to reveal config) and profile list (each profile expandable to reveal model + parameters).
 - `SuggestionCategoriesEditor` — mobile expression collapses each per-category row into an Accordion item ([Story Settings → Suggestion categories](../screens/story-settings/story-settings.md#suggestion-categories), [App Settings → Story Defaults → Suggestion categories](../screens/app-settings/app-settings.md#suggestion-categories)).
+- [Diagnostics Hub · Logs tab — row expansion](../screens/diagnostics/diagnostics.md#row-expansion--tablet) — per-row accordion on tablet+ (single-open, `type="single"`) for in-place JSON inspection of log entries. Phone tier swaps the inline expansion for a [Raw JSON viewer Sheet](./data.md#raw-json-viewer--shared-modal-pattern) tap-to-open.
 
 ## Card vs strip — composition
 

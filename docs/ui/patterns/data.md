@@ -21,8 +21,10 @@ Used by:
 - [Story list · Story import](../screens/story-list/story-list.md#story-import)
   (import counterparts for stories)
 - [Diagnostics Hub · Per-turn inspector](../screens/diagnostics/diagnostics.md#tab-2--per-turn-inspector)
-  (raw JSON viewer for classifier output + expanded row payloads
-  on Call log + Logs tabs)
+  (raw JSON viewer for classifier output)
+- [Diagnostics Hub · Logs tab — row expansion](../screens/diagnostics/diagnostics.md#row-expansion--tablet)
+  (JSONBlock inline-use on tablet+ for expanded row payloads;
+  Raw JSON viewer Sheet on phone tap-to-open)
 
 ---
 
@@ -51,6 +53,26 @@ component reused everywhere; no per-surface variants.
 deferred to a follow-up.
 
 Esc / × closes the drawer.
+
+### JSON content block — inline use
+
+The drawer / Sheet body content (pretty-printed JSON + Copy
+icon-action at top-right) is the reusable shape; the drawer chrome
+(header, footer hint) wraps it. The same content block also lands
+inline as the expanded body of accordion-style row expansion —
+notably [Diagnostics Logs row-expand on tablet+](../screens/diagnostics/diagnostics.md#row-expansion--tablet)
+— without the drawer wrapper.
+
+Inline use renders the JSON content directly within the host row's
+expanded area: no header (the host row supplies the identifier),
+no footer hint, no close affordance (the accordion chevron handles
+collapse). Copy button stays. Same monospace + indentation + low-fi
+syntax styling as the drawer.
+
+Implementation note: factor the JSON content into a `JSONBlock`
+sub-component (its own file under `components/ui/`) that both the
+inline use and the drawer / Sheet wrap. Single source of truth for
+the formatting + Copy affordance.
 
 ---
 

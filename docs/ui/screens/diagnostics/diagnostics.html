@@ -14,6 +14,7 @@
     --bg: #fafafa;
     --bg-region: #fff;
     --bg-highlight: #eef;
+    --bg-raised: #f3f3f3;
     --warn: #c94;
     --warn-bg: #fdf3e3;
     --danger: #c66;
@@ -22,6 +23,8 @@
     --ok-bg: #ecf6f1;
     --info: #4060a0;
     --info-bg: #e8eef8;
+    --accent: #5b7;
+    --accent-bg: #eef7f2;
   }
   html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
   body { min-height: 100vh; display: flex; flex-direction: column; }
@@ -31,16 +34,17 @@
 
   .review-bar { padding: 8px 16px; background: #f5f0e6; border-bottom: 1px solid #e3d8c0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; }
   .review-bar .rb-label { text-transform: uppercase; letter-spacing: 0.08em; color: #7a6a40; font-weight: 600; font-size: 10px; }
-  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; }
+  .review-bar .rb-group { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
   .rb-btn { padding: 3px 9px; border: 1px solid #d8c99a; border-radius: 3px; background: #fff; color: #5a4820; font-size: 11px; cursor: pointer; }
   .rb-btn.active { background: #7a6a40; color: #fff; border-color: #7a6a40; }
   .rb-note { margin-left: auto; font-size: 10px; color: #967; font-style: italic; }
 
   .vp-stage { flex: 1; padding: 12px; background: var(--bg); display: flex; justify-content: center; box-sizing: border-box; min-height: 0; }
   .vp-stage-wrap { display: flex; flex-direction: column; gap: 6px; align-items: center; width: 100%; min-height: 0; flex: 1; }
-  .vp-stage-meta { font-size: 11px; color: var(--ink-muted); font-family: monospace; }
+  .vp-stage-meta { font-size: 11px; color: var(--ink-muted); font-family: monospace; text-align: center; padding: 0 12px; }
   .vp-stage-meta strong { color: var(--ink); }
   .viewport { container-type: inline-size; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; width: 100%; max-width: 1280px; transition: max-width 0.25s ease; overflow: hidden; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  body[data-mode="hub-phone"] .viewport { max-width: 380px; }
 
   /* top-bar — app-level chrome */
   .topbar { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
@@ -49,94 +53,179 @@
   .topbar-right { margin-left: auto; display: flex; gap: 8px; }
   .icon-btn { width: 30px; height: 30px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 14px; }
 
-  /* story selector — story-anchored tabs */
+  /* story selector — visible only when a story-anchored tab is active. Hidden for app-global tabs (Logs / Call log). */
   .story-strip { display: flex; align-items: center; gap: 10px; padding: 8px 20px; border-bottom: 1px solid var(--line-soft); background: var(--bg); font-size: 12px; }
   .story-strip .ss-label { color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; }
   .story-strip .ss-picker { padding: 3px 8px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); color: var(--ink); cursor: pointer; }
   .story-strip .ss-picker:hover { background: var(--bg-highlight); }
+  /* hide story strip when Logs (app-global) is active, except in the story-anchored-no-story demo */
+  body[data-mode="hub-no-story"] .story-strip { display: flex; }
+  body:not([data-mode="hub-no-story"]) .story-strip { display: none; }
 
   /* tab strip */
-  .tabs { display: flex; gap: 0; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--bg-region); position: relative; }
-  .tab { padding: 10px 14px; font-size: 13px; color: var(--ink-muted); border-bottom: 2px solid transparent; cursor: pointer; display: flex; align-items: center; gap: 6px; margin-bottom: -1px; }
+  .tabs { display: flex; gap: 0; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--bg-region); position: relative; overflow-x: auto; }
+  .tab { padding: 10px 14px; font-size: 13px; color: var(--ink-muted); border-bottom: 2px solid transparent; cursor: pointer; display: flex; align-items: center; gap: 6px; margin-bottom: -1px; white-space: nowrap; }
   .tab:hover { color: var(--ink); }
   .tab.active { color: var(--ink); border-bottom-color: var(--ink); font-weight: 500; }
   .tab .tab-count { font-size: 11px; color: var(--ink-faint); background: var(--bg); border-radius: 999px; padding: 1px 7px; }
   .tab.active .tab-count { color: var(--ink-muted); }
-  .tab.warn-count .tab-count { background: var(--warn-bg); color: var(--warn); }
+  .tab.count-warn .tab-count { background: var(--warn-bg); color: var(--warn); }
+  .tab.count-danger .tab-count { background: var(--danger-bg); color: var(--danger); }
+  .tab.count-zero .tab-count { color: var(--ink-faint); }
 
   /* tab-body wrapper */
   .body-wrap { flex: 1; overflow: auto; padding: 0; }
 
-  /* filter row (Logs tab body) */
-  .filter-row { display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-bottom: 1px solid var(--line-soft); background: var(--bg); flex-wrap: wrap; font-size: 12px; }
-  .filter-row .fr-group { display: flex; align-items: center; gap: 6px; }
-  .filter-row .fr-label { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; }
-  .filter-row select, .filter-row input { padding: 3px 6px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font: inherit; color: var(--ink); }
-  .filter-row input.search { width: 180px; }
-  .filter-row .fr-chips { display: flex; gap: 4px; flex-wrap: wrap; }
-  .fr-chip { padding: 2px 8px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 11px; color: var(--ink-muted); cursor: pointer; }
-  .fr-chip.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  /* Toolbar-pattern filter row */
+  .toolbar { display: flex; gap: 10px; padding: 10px 20px; border-bottom: 1px solid var(--line-soft); background: var(--bg); flex-wrap: wrap; align-items: center; font-size: 12px; }
+  .toolbar .tb-primary { flex: 1; min-width: 220px; display: flex; align-items: center; gap: 6px; }
+  .toolbar .tb-primary-label { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .toolbar .tb-primary input { flex: 1; padding: 8px 10px; height: 30px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font: inherit; color: var(--ink); }
+  .toolbar .tb-secondary { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .toolbar .tb-secondary-label { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
 
-  /* log entry list */
+  /* Chip (square, toggleable) */
+  .chip { padding: 4px 10px; height: 24px; box-sizing: border-box; border-radius: 3px; border: 1px solid var(--line); background: var(--bg-region); font-size: 11px; color: var(--ink-muted); cursor: pointer; line-height: 1.4; display: inline-flex; align-items: center; }
+  .chip.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .chip.warn.active { background: var(--warn); border-color: var(--warn); }
+  .chip.danger.active { background: var(--danger); border-color: var(--danger); }
+
+  /* MultiSelect trigger */
+  .ms-trigger { padding: 4px 10px; height: 24px; box-sizing: border-box; border-radius: 3px; border: 1px solid var(--line); background: var(--bg-region); font-size: 11px; color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .ms-trigger:hover { border-color: var(--ink-muted); }
+  .ms-trigger .ms-label { color: var(--ink-muted); }
+  .ms-trigger .ms-caret { color: var(--ink-faint); }
+
+  /* Tag (pill, removable) */
+  .tag { padding: 3px 4px 3px 10px; height: 24px; box-sizing: border-box; border-radius: 999px; border: 1px solid var(--accent); background: var(--accent-bg); font-size: 11px; color: var(--accent); display: inline-flex; align-items: center; gap: 6px; }
+  .tag .tag-x { width: 16px; height: 16px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: var(--accent); cursor: pointer; }
+  .tag .tag-x:hover { background: var(--accent); color: var(--accent-bg); }
+
+  /* Log entry list — desktop / tablet (six columns including chevron) */
   .log-list { display: flex; flex-direction: column; }
-  .log-row { display: grid; grid-template-columns: 80px 80px 1fr 120px 90px; align-items: baseline; gap: 12px; padding: 8px 20px; border-bottom: 1px solid var(--line-soft); font-size: 12px; cursor: pointer; }
+  .log-row { display: grid; grid-template-columns: 24px 80px 64px 1fr 1.2fr 90px; align-items: baseline; gap: 12px; padding: 8px 20px; border-bottom: 1px solid var(--line-soft); font-size: 12px; cursor: pointer; position: relative; }
   .log-row:hover { background: var(--bg-highlight); }
+  .log-row .lr-chevron { color: var(--ink-faint); font-size: 10px; transform: rotate(-90deg); transition: transform 150ms; align-self: center; }
+  .log-row.expanded .lr-chevron { transform: rotate(0deg); color: var(--ink-muted); }
+  .log-row.expanded { background: var(--bg-raised); }
   .log-row .lr-time { font-family: ui-monospace, monospace; color: var(--ink-muted); font-size: 11px; }
-  .log-row .lr-level { padding: 1px 6px; border-radius: 3px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; text-align: center; }
+  .log-row .lr-level { padding: 1px 6px; border-radius: 3px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; text-align: center; align-self: start; }
   .log-row .lr-level.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn); }
   .log-row .lr-level.error { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger); }
   .log-row .lr-level.debug { background: var(--bg); color: var(--ink-muted); border: 1px solid var(--line-soft); }
   .log-row .lr-kind { font-family: ui-monospace, monospace; font-size: 12px; color: var(--ink); }
   .log-row .lr-kind .kind-sub { color: var(--ink-muted); }
   .log-row .lr-fields { font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .log-row .lr-action { font-family: ui-monospace, monospace; font-size: 11px; padding: 1px 6px; border: 1px solid var(--info); border-radius: 3px; background: var(--info-bg); color: var(--info); text-align: center; cursor: pointer; }
+  .log-row .lr-action { font-family: ui-monospace, monospace; font-size: 11px; padding: 1px 6px; border: 1px solid var(--info); border-radius: 3px; background: var(--info-bg); color: var(--info); text-align: center; cursor: pointer; align-self: start; }
   .log-row .lr-action.empty { border: 1px dashed var(--line-soft); background: transparent; color: var(--ink-faint); cursor: default; }
+  .log-row .lr-action:hover:not(.empty) { background: var(--info); color: #fff; }
 
-  /* empty state */
-  .empty-pane { padding: 60px 20px; text-align: center; color: var(--ink-muted); }
-  .empty-pane p { margin: 0 0 12px; font-style: italic; }
-  .empty-pane .empty-cta { padding: 6px 14px; border: 1px solid var(--ink); border-radius: 3px; background: var(--ink); color: #fff; cursor: pointer; }
+  /* Expanded JSON block — inline accordion content */
+  .json-block { padding: 12px 20px 12px 56px; background: var(--bg-raised); border-bottom: 1px solid var(--line-soft); position: relative; }
+  .json-block .jb-copy { position: absolute; top: 8px; right: 16px; padding: 3px 8px; font-size: 10px; border: 1px solid var(--line); background: var(--bg-region); color: var(--ink-muted); cursor: pointer; border-radius: 3px; }
+  .json-block .jb-copy:hover { color: var(--ink); border-color: var(--ink-muted); }
+  .json-block pre { margin: 0; font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink); white-space: pre; }
 
-  /* tab placeholder (other tabs) */
-  .tab-placeholder { padding: 40px 20px; text-align: center; color: var(--ink-faint); font-style: italic; font-size: 12px; }
-  .tab-placeholder strong { color: var(--ink-muted); font-style: normal; }
+  /* Phone-tier two-line row */
+  .log-row-phone { display: grid; grid-template-columns: auto auto 1fr auto; grid-template-rows: auto auto; column-gap: 8px; row-gap: 2px; padding: 10px 16px; border-bottom: 1px solid var(--line-soft); font-size: 12px; cursor: pointer; }
+  .log-row-phone:hover { background: var(--bg-highlight); }
+  .log-row-phone .lrp-time { grid-column: 1; grid-row: 1; font-family: ui-monospace, monospace; color: var(--ink-muted); font-size: 11px; }
+  .log-row-phone .lrp-level { grid-column: 2; grid-row: 1; padding: 1px 6px; border-radius: 3px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; text-align: center; align-self: start; }
+  .log-row-phone .lrp-level.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn); }
+  .log-row-phone .lrp-level.error { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger); }
+  .log-row-phone .lrp-action { grid-column: 4; grid-row: 1; font-family: ui-monospace, monospace; font-size: 10px; padding: 1px 6px; border: 1px solid var(--info); border-radius: 3px; background: var(--info-bg); color: var(--info); align-self: start; }
+  .log-row-phone .lrp-action.empty { border: 1px dashed var(--line-soft); background: transparent; color: var(--ink-faint); }
+  .log-row-phone .lrp-kind { grid-column: 1 / -1; grid-row: 2; font-family: ui-monospace, monospace; font-size: 12px; color: var(--ink); }
+  .log-row-phone .lrp-kind .kind-sub { color: var(--ink-muted); }
 
-  /* mode visibility */
+  /* Empty / message panes */
+  .empty-pane { padding: 50px 20px; text-align: center; color: var(--ink-muted); }
+  .empty-pane p { margin: 0 0 12px; font-style: italic; font-size: 13px; }
+  .empty-pane .empty-sub { font-size: 11px; font-style: normal; color: var(--ink-faint); margin: 0 0 14px; }
+  .empty-pane .empty-actions { display: flex; gap: 8px; justify-content: center; }
+  .empty-pane .empty-action { padding: 5px 12px; border: 1px solid var(--ink); border-radius: 3px; background: var(--bg-region); color: var(--ink); cursor: pointer; font-size: 12px; }
+  .empty-pane .empty-action:hover { background: var(--ink); color: #fff; }
+
+  /* Pick-a-story pane (for story-anchored tabs without a story) */
+  .no-story-pane { display: none; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 60px 20px; color: var(--ink-muted); text-align: center; }
+  .no-story-pane p { margin: 0; font-style: italic; }
+  .no-story-pane .ns-sub { font-size: 11px; font-style: normal; color: var(--ink-faint); }
+
+  /* Master-off pane */
+  .off-pane { display: none; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 60px 20px; color: var(--ink-muted); text-align: center; }
+  .off-pane p { margin: 0; font-style: italic; }
+  .off-pane a { color: var(--ink); text-decoration: underline; }
+
+  /* Mode gating */
   body[data-mode="master-off"] .story-strip,
   body[data-mode="master-off"] .tabs,
   body[data-mode="master-off"] .body-wrap { display: none; }
   body[data-mode="master-off"] .off-pane { display: flex; }
-  body[data-mode="hub"] .off-pane,
-  body[data-mode="hub-empty"] .off-pane,
-  body[data-mode="hub-no-story"] .off-pane { display: none; }
-  /* hub-no-story: pre-fill the story picker prompt + suppress tab body */
-  body[data-mode="hub-no-story"] .ss-picker { color: var(--ink-faint); }
+
+  /* hub-no-story demo: switches the active tab to a story-anchored tab (Per-turn inspector) and shows the Pick-a-story pane. Logs (app-global) renders normally regardless of story selection — gating is per-tab. */
   body[data-mode="hub-no-story"] .body-wrap { display: none; }
   body[data-mode="hub-no-story"] .no-story-pane { display: flex; }
+  body[data-mode="hub-no-story"] .ss-picker.placeholder { color: var(--ink-faint); }
+  body[data-mode="hub-no-story"] .tab-perturn { color: var(--ink); border-bottom-color: var(--ink); font-weight: 500; }
+  body[data-mode="hub-no-story"] .tab-logs { color: var(--ink-muted); border-bottom-color: transparent; font-weight: normal; }
 
-  body[data-mode="hub"] .tab-body-other { display: none; }
-  body[data-mode="hub-empty"] .filter-row,
-  body[data-mode="hub-empty"] .log-list { display: none; }
-  body[data-mode="hub-empty"] .empty-pane { display: block; }
-  body[data-mode="hub"] .empty-pane { display: none; }
+  /* Mode-specific visibility for log-list contents */
+  body[data-mode="hub-empty"] .log-list,
+  body[data-mode="hub-empty"] .toolbar { display: none; }
+  body[data-mode="hub-empty"] .empty-buffer-pane { display: block; }
 
-  .off-pane { display: none; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 60px 20px; color: var(--ink-muted); text-align: center; }
-  .off-pane p { margin: 0; font-style: italic; }
-  .off-pane a { color: var(--ink); text-decoration: underline; }
+  body[data-mode="hub-no-match"] .log-list { display: none; }
+  body[data-mode="hub-no-match"] .empty-no-match-pane { display: block; }
+
+  body[data-mode="hub-arrived"] .turn-tag-chip { display: inline-flex; }
+  body[data-mode="hub-arrived"] .log-row-arrived { background: var(--bg-raised); }
+  body[data-mode="hub-arrived"] .log-row-arrived .lr-chevron { transform: rotate(0deg); color: var(--ink-muted); }
+  body[data-mode="hub-arrived"] .log-row-arrived-expansion { display: block; }
+  body[data-mode="hub-arrived"] .chip-level-warn-nudged { background: var(--warn); border-color: var(--warn); color: #fff; }
+
+  body[data-mode="hub-expanded"] .log-row-target { background: var(--bg-raised); }
+  body[data-mode="hub-expanded"] .log-row-target .lr-chevron { transform: rotate(0deg); color: var(--ink-muted); }
+  body[data-mode="hub-expanded"] .log-row-target-expansion { display: block; }
+
+  /* Phone tier */
+  body[data-mode="hub-phone"] .log-list,
+  body[data-mode="hub-phone"] .story-strip { display: none; }
+  body[data-mode="hub-phone"] .log-list-phone { display: flex; flex-direction: column; }
+  body[data-mode="hub-phone"] .toolbar { padding: 8px 12px; }
+  body[data-mode="hub-phone"] .toolbar .tb-primary { width: 100%; flex-basis: 100%; }
+  body[data-mode="hub-phone"] .topbar { padding: 10px 12px; }
+  body[data-mode="hub-phone"] .tabs { padding: 0 12px; }
+  /* simulate Tabs primitive → Select substitution at phone tier */
+  body[data-mode="hub-phone"] .tabs { display: none; }
+  body[data-mode="hub-phone"] .tabs-phone { display: flex; padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
+  body[data-mode="hub-phone"] .tabs-phone select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font: inherit; color: var(--ink); }
+
+  /* Show-only-in-mode utilities */
+  .log-row-arrived-expansion { display: none; }
+  .log-row-target-expansion { display: none; }
+  .empty-buffer-pane { display: none; }
+  .empty-no-match-pane { display: none; }
+  .turn-tag-chip { display: none; }
+  .log-list-phone { display: none; }
+  .tabs-phone { display: none; }
 </style>
 </head>
 <body data-mode="hub">
-<div class="screen-label">Wireframe · <strong>Diagnostics Hub</strong> · low-fidelity surface inventory · <strong>Logs tab</strong> shown as representative body · per-tab detail passes follow</div>
+<div class="screen-label">Wireframe · <strong>Diagnostics Hub</strong> · <strong>Tab 4 (Logs) detail pass</strong> · hub shell + Logs body</div>
 
 <div class="review-bar">
   <span class="rb-label">Mode</span>
   <span class="rb-group">
-    <button class="rb-btn active" data-mode-btn="hub">Hub (Logs tab active)</button>
-    <button class="rb-btn" data-mode-btn="hub-empty">Buffers empty</button>
-    <button class="rb-btn" data-mode-btn="hub-no-story">Hub (no story picked)</button>
+    <button class="rb-btn active" data-mode-btn="hub">Hub (collapsed rows)</button>
+    <button class="rb-btn" data-mode-btn="hub-expanded">Row expanded</button>
+    <button class="rb-btn" data-mode-btn="hub-arrived">Cross-tab arrived</button>
+    <button class="rb-btn" data-mode-btn="hub-no-match">Filter hides all</button>
+    <button class="rb-btn" data-mode-btn="hub-empty">Buffer empty</button>
+    <button class="rb-btn" data-mode-btn="hub-phone">Phone tier</button>
+    <button class="rb-btn" data-mode-btn="hub-no-story">Story-anchored, no story</button>
     <button class="rb-btn" data-mode-btn="master-off">Master toggle off</button>
   </span>
-  <span class="rb-note">Hub-level structural sketch. "Hub (no story picked)" demonstrates the off-story open path — story selector prompts a pick before story-anchored tabs render. Per-tab bodies designed in their own detail passes.</span>
+  <span class="rb-note">Logs tab body at detail-pass fidelity. Hub shell unchanged from the surface inventory pass.</span>
 </div>
 
 <div class="vp-stage">
@@ -145,7 +234,7 @@
 
     <div class="viewport">
 
-      <!-- Top-bar — app-level chrome -->
+      <!-- Top-bar — app-level chrome, no story chrome -->
       <div class="topbar">
         <div class="icon-back">←</div>
         <div class="crumbs">Diagnostics</div>
@@ -154,70 +243,100 @@
         </div>
       </div>
 
-      <!-- Story selector strip (only for story-anchored tabs; visible always in this sketch) -->
+      <!-- Story selector — visible only when a story-anchored tab is active (hidden for Logs default). Renders in the hub-no-story demo. -->
       <div class="story-strip">
         <span class="ss-label">Story</span>
-        <button class="ss-picker">The Tower of Aria ▾</button>
+        <button class="ss-picker placeholder">Pick a story ▾</button>
         <span class="ss-label" style="margin-left: 16px;">Branch</span>
-        <button class="ss-picker">main ▾</button>
+        <button class="ss-picker placeholder">— ▾</button>
       </div>
 
-      <!-- Tab strip -->
+      <!-- Tab strip (desktop) -->
       <div class="tabs">
-        <div class="tab">Memory probe</div>
-        <div class="tab">Per-turn inspector <span class="tab-count">12</span></div>
-        <div class="tab">Call log <span class="tab-count">87</span></div>
-        <div class="tab active warn-count">Logs <span class="tab-count">3</span></div>
-        <div class="tab">Delta log</div>
+        <div class="tab tab-memory">Memory probe</div>
+        <div class="tab tab-perturn">Per-turn inspector <span class="tab-count">12</span></div>
+        <div class="tab tab-calls">Call log <span class="tab-count">87</span></div>
+        <div class="tab active count-danger tab-logs">Logs <span class="tab-count">42</span></div>
+        <div class="tab tab-delta">Delta log</div>
       </div>
 
-      <!-- Body wrapper -->
+      <!-- Tab strip — phone tier (Select substitution per Group C cardinality cascade) -->
+      <div class="tabs-phone">
+        <select>
+          <option>Logs (42)</option>
+          <option>Memory probe</option>
+          <option>Per-turn inspector (12)</option>
+          <option>Call log (87)</option>
+          <option>Delta log</option>
+        </select>
+      </div>
+
+      <!-- Body wrapper — Logs tab body -->
       <div class="body-wrap">
 
-        <!-- Filters (Logs tab) -->
-        <div class="filter-row">
-          <div class="fr-group">
-            <span class="fr-label">Level</span>
-            <div class="fr-chips">
-              <span class="fr-chip active">warn</span>
-              <span class="fr-chip active">error</span>
-              <span class="fr-chip">debug</span>
-            </div>
+        <!-- Filter row — Toolbar pattern composition -->
+        <div class="toolbar">
+          <div class="tb-primary">
+            <span class="tb-primary-label">Kind</span>
+            <input type="text" placeholder="filter by kind…">
           </div>
-          <div class="fr-group">
-            <span class="fr-label">Subsystem</span>
-            <div class="fr-chips">
-              <span class="fr-chip active">classifier</span>
-              <span class="fr-chip active">retrieval</span>
-              <span class="fr-chip active">provider</span>
-              <span class="fr-chip">embedder</span>
-              <span class="fr-chip">pipeline</span>
-              <span class="fr-chip">+3 more</span>
-            </div>
+          <div class="tb-secondary">
+            <span class="tb-secondary-label">Level</span>
+            <span class="chip warn active chip-level-warn-nudged">warn</span>
+            <span class="chip danger active">error</span>
+            <span class="chip">debug</span>
           </div>
-          <div class="fr-group">
-            <span class="fr-label">Kind</span>
-            <input class="search" type="text" placeholder="filter by kind…">
+          <div class="tb-secondary">
+            <button class="ms-trigger"><span class="ms-label">Subsystem:</span> 4 of 8 <span class="ms-caret">▾</span></button>
           </div>
+          <!-- Cross-tab arrived: Turn Tag chip (shown only in hub-arrived mode) -->
+          <span class="tag turn-tag-chip">Turn: tr_a3kf <span class="tag-x">×</span></span>
         </div>
 
-        <!-- Log entries -->
+        <!-- Log list — desktop / tablet (six columns including chevron) -->
         <div class="log-list">
-          <div class="log-row">
+          <!-- Target row for the "hub-expanded" demo -->
+          <div class="log-row log-row-target">
+            <span class="lr-chevron">▾</span>
             <span class="lr-time">14:02:18</span>
             <span class="lr-level warn">warn</span>
             <span class="lr-kind"><span class="kind-sub">classifier.</span>delta_clamped</span>
             <span class="lr-fields">{ originalDelta: -1800, finalDelta: 0, entryId: "e_…ka4" }</span>
             <span class="lr-action" title="Open per-turn inspector">tr_a3kf</span>
           </div>
-          <div class="log-row">
+          <!-- Inline expanded JSON block (gated by hub-expanded mode) -->
+          <div class="json-block log-row-target-expansion">
+            <button class="jb-copy">📋 Copy</button>
+            <pre>{
+  "originalDelta": -1800,
+  "finalDelta": 0,
+  "entryId": "e_1234ka4",
+  "reason": "exceeded_max_delta",
+  "appliedAtSeconds": 1734567890
+}</pre>
+          </div>
+
+          <!-- Target row for the "hub-arrived" demo (auto-expanded via cross-tab nav) -->
+          <div class="log-row log-row-arrived">
+            <span class="lr-chevron">▾</span>
             <span class="lr-time">14:02:17</span>
             <span class="lr-level warn">warn</span>
             <span class="lr-kind"><span class="kind-sub">provider.</span>retry_succeeded</span>
             <span class="lr-fields">{ attempt: 2, latencyMs: 1840, status: 200 }</span>
             <span class="lr-action" title="Open per-turn inspector">tr_a3kf</span>
           </div>
+          <div class="json-block log-row-arrived-expansion">
+            <button class="jb-copy">📋 Copy</button>
+            <pre>{
+  "attempt": 2,
+  "latencyMs": 1840,
+  "status": 200,
+  "source": "provider:anthropic-main"
+}</pre>
+          </div>
+
           <div class="log-row">
+            <span class="lr-chevron">▾</span>
             <span class="lr-time">14:02:16</span>
             <span class="lr-level error">error</span>
             <span class="lr-kind"><span class="kind-sub">retrieval.</span>knn_error</span>
@@ -225,6 +344,7 @@
             <span class="lr-action" title="Open per-turn inspector">tr_a3kf</span>
           </div>
           <div class="log-row">
+            <span class="lr-chevron">▾</span>
             <span class="lr-time">13:58:04</span>
             <span class="lr-level warn">warn</span>
             <span class="lr-kind"><span class="kind-sub">retrieval.</span>row_skipped_stale</span>
@@ -232,6 +352,7 @@
             <span class="lr-action" title="Open per-turn inspector">tr_92mp</span>
           </div>
           <div class="log-row">
+            <span class="lr-chevron">▾</span>
             <span class="lr-time">13:58:04</span>
             <span class="lr-level warn">warn</span>
             <span class="lr-kind"><span class="kind-sub">retrieval.</span>row_skipped_stale</span>
@@ -239,6 +360,7 @@
             <span class="lr-action" title="Open per-turn inspector">tr_92mp</span>
           </div>
           <div class="log-row">
+            <span class="lr-chevron">▾</span>
             <span class="lr-time">13:51:12</span>
             <span class="lr-level warn">warn</span>
             <span class="lr-kind"><span class="kind-sub">embedder.</span>staleness_detected</span>
@@ -246,6 +368,7 @@
             <span class="lr-action empty">—</span>
           </div>
           <div class="log-row">
+            <span class="lr-chevron">▾</span>
             <span class="lr-time">13:48:09</span>
             <span class="lr-level warn">warn</span>
             <span class="lr-kind"><span class="kind-sub">provider.</span>rate_limited</span>
@@ -254,24 +377,71 @@
           </div>
         </div>
 
-        <!-- Empty buffer state (mode: hub-empty) -->
-        <div class="empty-pane">
+        <!-- Phone-tier log list (two-line rows) -->
+        <div class="log-list-phone">
+          <div class="log-row-phone">
+            <span class="lrp-time">14:02:18</span>
+            <span class="lrp-level warn">warn</span>
+            <span></span>
+            <span class="lrp-action">tr_a3kf</span>
+            <span class="lrp-kind"><span class="kind-sub">classifier.</span>delta_clamped</span>
+          </div>
+          <div class="log-row-phone">
+            <span class="lrp-time">14:02:17</span>
+            <span class="lrp-level warn">warn</span>
+            <span></span>
+            <span class="lrp-action">tr_a3kf</span>
+            <span class="lrp-kind"><span class="kind-sub">provider.</span>retry_succeeded</span>
+          </div>
+          <div class="log-row-phone">
+            <span class="lrp-time">14:02:16</span>
+            <span class="lrp-level error">error</span>
+            <span></span>
+            <span class="lrp-action">tr_a3kf</span>
+            <span class="lrp-kind"><span class="kind-sub">retrieval.</span>knn_error</span>
+          </div>
+          <div class="log-row-phone">
+            <span class="lrp-time">13:58:04</span>
+            <span class="lrp-level warn">warn</span>
+            <span></span>
+            <span class="lrp-action">tr_92mp</span>
+            <span class="lrp-kind"><span class="kind-sub">retrieval.</span>row_skipped_stale</span>
+          </div>
+          <div class="log-row-phone">
+            <span class="lrp-time">13:51:12</span>
+            <span class="lrp-level warn">warn</span>
+            <span></span>
+            <span class="lrp-action empty">—</span>
+            <span class="lrp-kind"><span class="kind-sub">embedder.</span>staleness_detected</span>
+          </div>
+        </div>
+
+        <!-- Empty state — buffer empty -->
+        <div class="empty-pane empty-buffer-pane">
           <p>No log entries captured yet.</p>
-          <p style="font-size: 11px;">Trigger a turn or wait for a background event to populate the log.</p>
+          <p class="empty-sub">Trigger a turn or wait for a background event to populate the log.</p>
+        </div>
+
+        <!-- Empty state — filters hide all (non-actionId variant) -->
+        <div class="empty-pane empty-no-match-pane">
+          <p>No entries match your filters.</p>
+          <div class="empty-actions">
+            <button class="empty-action">Clear filters</button>
+          </div>
         </div>
 
       </div>
 
-      <!-- Master-off state -->
+      <!-- Pick-a-story pane (gated by hub-no-story mode; demonstrates the Per-turn inspector tab being inactive without a story selection. Logs renders normally regardless, since it's app-global.) -->
+      <div class="no-story-pane">
+        <p>Pick a story above to render the Per-turn inspector tab.</p>
+        <p class="ns-sub">Story-anchored tabs (Memory probe, Per-turn inspector, Delta log) require a selection. App-global tabs (Call log, Logs) render regardless.</p>
+      </div>
+
+      <!-- Master-off pane -->
       <div class="off-pane">
         <p>Diagnostics is off.</p>
         <p style="font-size: 12px;">Turn on the master toggle in <a href="#">App Settings → Diagnostics</a> to enable capture across all hub tabs.</p>
-      </div>
-
-      <!-- Hub opened from off-story chrome — story picker prompts a pick before story-anchored tabs render -->
-      <div class="no-story-pane" style="display: none; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 60px 20px; color: var(--ink-muted); text-align: center;">
-        <p style="margin: 0; font-style: italic;">Pick a story above to render the story-anchored tab (Memory probe, Pipeline runs).</p>
-        <p style="font-size: 12px; margin: 0;">App-wide tabs (Logs, HTTP calls) work without a story; tabs that operate on per-story state require a selection.</p>
       </div>
 
     </div>
@@ -279,7 +449,6 @@
 </div>
 
 <script>
-  // Review-bar mode switching
   document.querySelectorAll('[data-mode-btn]').forEach(btn => {
     btn.addEventListener('click', () => {
       const mode = btn.dataset.modeBtn;

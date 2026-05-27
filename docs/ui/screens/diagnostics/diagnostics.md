@@ -10,11 +10,11 @@ off, the hub entry is absent from the
 [Actions menu](../../principles.md#top-bar-design-rule) — the
 toggle itself is the discovery point.
 
-Surface inventory only at this design stage. **Per-tab body
-designs land in their own per-tab detail passes** when each is
-built; this doc names the structural pieces (top-bar, tab strip,
-story-anchor selector, cross-tab nav, empty states, mobile
-expression).
+Surface inventory plus Tab 4 (Logs) detail. **Per-tab body
+designs for tabs 2, 3, and 5 land in their own detail passes** when
+each is built; this doc names the structural pieces (top-bar, tab
+strip, story-anchor selector, cross-tab nav, empty states, mobile
+expression) plus the full body spec for Tab 4 below.
 
 ## Top-bar
 
@@ -63,9 +63,11 @@ Five tabs, in order:
 
 Tab strip renders via the
 [Tabs primitive](../../patterns/tabs.md); optional per-tab count
-badges render to the right of each label (Logs typically shows
-`warn+error` count; Call log shows in-flight count; per-turn
-inspector shows turn count). Configurable per-consumer.
+badges render to the right of each label. Each tab pins its own
+count source and color rule at its detail pass. Tab 4 (Logs) ships
+**unfiltered buffer count, always rendered, colored by max severity
+present** — see [Tab 4 → Count badge](#count-badge). Other tabs
+pick their own source + color when designed.
 
 ### Tab 1 — Memory probe
 
@@ -132,27 +134,256 @@ response `Set-Cookie`) render as `'***'` per the
 ### Tab 4 — Logs
 
 App-global. Sources `logEntries` slice. Single-list,
-reverse-chronological by `emittedAt`. Row shape:
+reverse-chronological by `emittedAt`.
+
+#### Row shape — desktop and tablet
+
+Six-column grid: chevron, time, level, kind, fields-preview,
+actionId chip.
 
 ```
-[14:02:18]  [warn]  classifier.delta_clamped  { originalDelta: -1800, … }  [tr_a3kf →]
+[▸] 14:02:18  warn  classifier.delta_clamped  { originalDelta: -1800, … }  tr_a3kf
+[▾] 14:02:17  warn  provider.retry_succeeded  { attempt: 2, latencyMs: 1840 }  tr_a3kf
+    └─ expanded JSON block (see below)
+[▸] 14:02:16  error retrieval.knn_error       { reason: "vec0_index_corrupt", … }  tr_a3kf
 ```
 
-Click expands to show full `fields` JSON.
+Visual treatment:
 
-Filters:
+- **Chevron** — left edge, 24px column. Rotates -90° collapsed →
+  0° expanded per [`patterns/accordion.md → Chevron direction`](../../patterns/accordion.md#chevron-direction).
+- **Time** — `ui-monospace`, `--fg-muted`, formatted `HH:MM:SS`.
+- **Level** — uppercase short tag (`WARN`, `ERROR`, `DEBUG`), tone
+  per severity. `warn` → `--warn`; `error` → `--danger`; `debug` →
+  neutral.
+- **Kind** — `ui-monospace`. Sub-namespace prefix (`classifier.`)
+  renders muted; suffix (`delta_clamped`) renders at `--fg-primary`.
+  Conveys the namespace/event split visually.
+- **Fields preview** — `ui-monospace`, `--fg-muted`, truncates
+  with ellipsis at column width.
+- **ActionId chip** — labeled box, `--info` toned when present,
+  `—` placeholder dashed-border when empty. Tap behavior: see
+  [Cross-tab nav](#cross-tab-nav-logs).
 
-- **Level multi-select** — `warn | error` always available;
-  `debug` listed only when `debug_level_enabled` is on.
-- **Subsystem multi-select** — iterates the `LogSubsystem` union
-  from [`observability.md → Kind namespace`](../../../observability.md#kind-namespace)
-  directly. Adding a subsystem to the union surfaces a new filter
-  chip with no UI plumbing.
-- **Kind free-text** — substring match against the kind string.
-- **ActionId** — implicit chip when navigated from per-turn
-  inspector.
+Whole row is the [accordion trigger](../../patterns/accordion.md) —
+tap anywhere on the row toggles expansion. ActionId chip is a
+distinct tap target nested inside the row (per the
+[SwitchRow tap-plumbing convention](../../patterns/forms.md#switchrow-pattern):
+inner target takes its own tap, doesn't bubble to the row).
 
-Cross-tab nav: actionId chip → per-turn inspector.
+#### Row expansion — tablet+
+
+Single-open accordion (`type="single"`). Opening a row collapses
+any previously expanded row. Reasoning: log inspection is
+per-entry; multi-open creates dense vertical noise on a list that
+may carry hundreds of rows.
+
+Expanded body renders a `JSONBlock` containing the full `fields`
+JSON:
+
+```
+┌────────────────────────────────────────────────────┐
+│ [▾] 14:02:17  warn  …                              │
+├────────────────────────────────────────────────────┤
+│                                          [📋 Copy] │
+│ {                                                  │
+│   "attempt": 2,                                    │
+│   "latencyMs": 1840,                               │
+│   "status": 200,                                   │
+│   "source": "provider:anthropic-main"              │
+│ }                                                  │
+└────────────────────────────────────────────────────┘
+```
+
+Pretty-printed JSON, monospace, full-width within the row. Copy
+icon-action at top-right. Reuses the
+[Raw JSON viewer body content shape](../../patterns/data.md#json-content-block--inline-use)
+(JSONBlock) — the inline use is the same content as the Sheet body,
+sans drawer chrome.
+
+**Empty fields case**: row still expandable; body renders `{}`
+plus a muted line "No fields recorded for this entry." No special
+row treatment.
+
+#### Row shape — phone
+
+Two-line row, no chevron. Whole row tappable; tap opens the
+[Raw JSON viewer Sheet](../../patterns/data.md#raw-json-viewer--shared-modal-pattern)
+(bottom, tall ~95%).
+
+```
+14:02:18  warn                                       tr_a3kf
+classifier.delta_clamped
+─────────────────────────────────────────────────────────────
+14:02:17  warn                                       tr_a3kf
+provider.retry_succeeded
+```
+
+Top line: time, level, actionId chip (right-aligned). Bottom line:
+kind (full, no truncation). Fields preview is dropped on phone —
+users tap to see the full payload in the Sheet, not a teaser in
+the row.
+
+Sheet header for the opened entry: `Log fields · <kind> · <time>`
+(e.g., `Log fields · classifier.delta_clamped · 14:02:17`).
+Disambiguates which entry the Sheet is for.
+
+#### Filters — Toolbar composition
+
+The filter row composes the [Toolbar pattern](../../patterns/toolbar.md).
+Three filter dimensions slot in:
+
+- **Kind** (free-text substring match against `kind`) — fills the
+  `Toolbar.Search` slot. Primary input at `md` height.
+- **Level** (multi-select chips: `warn`, `error`, `debug`) —
+  fills `Toolbar.FilterChips`. Each chip uses the severity-coded
+  [Chip primitive](../../patterns/chips.md) — warn-tone, danger-tone,
+  neutral respectively. `debug` chip listed only when
+  `debug_level_enabled` is on.
+- **Subsystem** (multi-select against the
+  [`LogSubsystem` union](../../../observability.md#kind-namespace)) —
+  renders as a [MultiSelect](../../patterns/multi-select.md) trigger
+  (`Subsystem: 4 of 8 ▾`) in the secondary chrome cluster. Replaces
+  the chip-row treatment from the prior surface inventory: as the
+  union grows, the trigger stays constant-width, the overlay
+  scrolls.
+
+Desktop (≥ 1024px) renders as one horizontal row:
+
+```
+Kind: [filter by kind………]   Level [warn][error][debug]   [Subsystem: 4 of 8 ▾]
+```
+
+Phone / narrow tablet (< 1024px) follows Toolbar's cross-tier
+overflow rule: Kind on its own row at `md`, Level chips + Subsystem
+trigger wrap below at `xs`.
+
+#### Cross-tab nav (Logs)
+
+Two arrival shapes coexist via the shared `actionId` deep-link
+param:
+
+| Route                                                                                         | Behavior                                                                                                                                                   |
+| --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `actionId=X, focusEntryId=Y` (specific log entry clicked from per-turn inspector)             | Apply actionId filter. Nudge other filters to make Y visible (see [Nudge rule](#nudge-rule)). Auto-scroll to Y; auto-expand the row.                       |
+| `actionId=X` only (broad nav: per-turn inspector overall actionId, or Call log actionId chip) | Apply actionId filter. User's other filters preserved as-is. If intersection is empty: arrived-empty empty-state (see [Empty states](#empty-states-logs)). |
+
+##### Nudge rule
+
+When `focusEntryId` is provided and existing filters would hide
+the entry, nudge filters minimally to make the entry visible.
+Splits by filter type:
+
+- **Multi-select chips and dropdowns (Level, Subsystem)**: ADD the
+  focus entry's value to the selected set if missing. Always
+  additive — never removes from the selection.
+- **Free-text Kind input**: does NOT auto-clear. If Kind would
+  hide the focus entry, fall through to the
+  [Filters-hide-with-Kind empty-state](#empty-states-logs) — user
+  decides whether to drop their typed value.
+
+Nudge is silent. The Turn Tag chip's presence (see below) is the
+explicit signal that filter state was modified by the route. Toast
+on every nudge would create noise on repeated nav; the chip is
+enough.
+
+##### Turn Tag chip
+
+A [Tag](../../patterns/chips.md#tag--pill-labeled-content), accent-
+toned, appended to the secondary chrome cluster of the filter row:
+
+```
+… Level [warn][error][debug]   [Subsystem: 4 of 8 ▾]   [Turn: tr_a3kf ×]
+```
+
+Uses the user-facing term "Turn" — the schema's internal `actionId`
+maps to the hub's "Story + turn" anchor in the tab table.
+
+Tap × removes the actionId filter. Nudged-in filter values stay
+(the user's filter state is theirs once they're in Logs). No
+"undo the nav arrival" behavior — explicit toggling is the floor.
+
+Tag chip position on phone-tier wrap-flow is positionally flexible
+— accent tone provides the visual disambiguation, not spatial
+pinning.
+
+##### Outbound nav
+
+Tap the actionId chip on a Log row → open per-turn inspector
+focused on that turn (per the cross-tab nav substrate).
+
+#### Count badge
+
+Two semantically distinct decisions:
+
+- **Count source**: unfiltered total of the in-memory `logEntries`
+  buffer. Always rendered, even when 0. Decouples the badge from
+  filter state — the badge is a buffer-level indicator. User
+  filtering narrowly sees the filtered list, but the badge tells
+  them how many entries are in the buffer overall.
+- **Color rule**: matches the chip color of the highest severity
+  level present in the buffer. `error` > `warn` > `debug` (neutral).
+  Empty buffer → neutral, count 0. Shares the severity-to-color
+  palette with the Level filter chips.
+
+When the buffer has any `error` entries the badge is danger-toned
+even if the user is filtered to debug-only — informing them that a
+high-severity entry exists but is currently hidden by filters.
+
+#### Empty states (Logs)
+
+Three flavors:
+
+- **Buffer empty** (master on, no logs captured yet): "No log
+  entries captured yet — trigger a turn or wait for a background
+  event to populate the log."
+- **Filters hide all, no actionId**: "No entries match your filters
+  · `[Clear filters]`."
+- **Filters hide all, actionId arrival**: "No entries match your
+  filters for Turn `tr_a3kf` · `[Clear other filters]`
+  `[Clear actionId]`."
+
+The last two render below the filter row, replacing the log list
+area. `Clear filters` resets Level / Subsystem / Kind to their
+defaults; `Clear actionId` removes the Turn Tag chip; `Clear other
+filters` preserves the Turn chip while resetting the others.
+
+#### State persistence
+
+Filter state + single-open expand state **persist as long as
+master is on**. Closing the hub via back-arrow preserves state;
+reopening finds it intact. State clears on master toggle-off
+(consistent with the in-memory ring-buffer wipe semantics from
+[`observability.md → Wipe semantics`](../../../observability.md#wipe-semantics)).
+
+#### Mobile expression (Logs)
+
+Logs is app-global. On phone with Logs active, both the story
+selector and branch picker hide entirely — Logs doesn't care about
+story selection, and showing them would be misleading chrome.
+Saves ~32px of phone chrome.
+
+Filter row follows the [Toolbar cross-tier overflow rule](../../patterns/toolbar.md#cross-tier-overflow-rule)
+(Kind own row, Level chips + Subsystem trigger wrap below). Row
+layout follows the [phone two-line shape](#row-shape--phone). Tab
+strip renders via the [Tabs primitive's](../../patterns/tabs.md)
+phone substitution to Select at narrow tiers.
+
+#### Implementation notes (Logs)
+
+Not design decisions, but worth surfacing for the eventual
+scaffolder:
+
+- **Log list needs virtualization** per [`patterns/lists.md`](../../patterns/lists.md)
+  — buffer can grow to hundreds of entries during heavy inspection.
+- **Single-open accordion state lives in a controlled `openItemId`
+  ref on the tab body**, not per-AccordionItem state. Virtualized
+  scroll unmounts off-screen rows; per-item state would lose
+  expansion when the user scrolls out and back. Controlled state
+  from above survives the unmount.
+- **Cross-tab nav routing** uses the shared `actionId` deep-link
+  param; `focusEntryId` is an additional optional parameter that
+  drives the auto-focus + auto-expand arrival shape.
 
 ### Tab 5 — Delta log
 
@@ -208,10 +439,18 @@ turn. Query needs `LIMIT` + virtualization per
 
 Tabs share an `actionId` deep-link parameter. A tab transition
 that includes an actionId sets this parameter and auto-focuses
-the appropriate row in the destination tab. State persists across
-tab switches within a hub session; clears on master toggle-off
-(consistent with the in-memory ring-buffer wipe semantics from
-[`observability.md → Wipe semantics`](../../../observability.md#wipe-semantics)).
+the appropriate row in the destination tab. An optional
+`focusEntryId` parameter narrows the arrival to a specific row
+(driving auto-scroll + auto-expand behavior at the destination —
+see [Tab 4 → Cross-tab nav](#cross-tab-nav-logs) for the worked
+example).
+
+Per-tab filter and view state (active filter chips, expand state,
+selected row) **persist as long as master is on** — closing the
+hub via back-arrow preserves state, reopening finds it intact.
+State clears on master toggle-off, consistent with the in-memory
+ring-buffer wipe semantics from
+[`observability.md → Wipe semantics`](../../../observability.md#wipe-semantics).
 
 ## Empty states
 
@@ -241,7 +480,10 @@ existing mobile design carries over unchanged.
 Story selector strip on phone collapses to a single-row affordance
 showing only the active story name with a tap-to-switch picker;
 branch picker moves to the per-tab filter row when a
-story-anchored tab is active.
+story-anchored tab is active. When an **app-global** tab is active
+(Logs, Call log) both story selector and branch picker hide
+entirely — saves ~32px of phone chrome; the app-global tabs don't
+care about story selection and showing them would be misleading.
 
 ## Screen-specific open questions
 
@@ -260,9 +502,14 @@ story-anchored tab is active.
   [Cross-window aggregator](../../../parked.md#observability--cross-window-aggregator-on-electron).
   Until then: open the hub in the window where the work is
   happening.
-- **Tab count badge calculation semantics** — total buffer count
-  vs filter-applied count. Probably total (filter is a view), but
-  worth a per-tab decision when each ships.
+- **Tab count badge calculation semantics for tabs 2, 3, 5** —
+  Tab 4 (Logs) resolves to unfiltered buffer count colored by max
+  severity present (see [Tab 4 → Count badge](#count-badge)). The
+  pattern generalizes to severity-bearing tabs (Tab 3 Call log:
+  `error` if any 5xx, `warn` if any 4xx, neutral otherwise; Tab 2
+  per-turn inspector: outcome `failed > aborted > completed`).
+  Tab 5 (Delta log) has no severity dimension. Each tab confirms
+  its count source and color rule at its detail pass.
 - **Memory probe tab relocation question.** This design pass
   references the existing
   [`memory-probe.md`](../memory-probe/memory-probe.md) rather

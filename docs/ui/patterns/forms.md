@@ -613,10 +613,11 @@ focus-visible:ring-focus-ring/50`.
 Boolean affordance distinct from Switch — for multi-select lists
 and "I agree" gating shapes that don't fit a SwitchRow.
 
-> **Speculative — no v1 wireframe consumer.** Checkbox shipped
-> ahead of demand to round out the choice-primitive set. If a real
-> consumer doesn't surface during phase 3 implementation, candidate
-> for park-or-drop.
+First v1 consumer: [`MultiSelect`](./multi-select.md) overlay rows.
+Per-row Checkboxes inside the MultiSelect dropdown compose the
+multi-select-of-N pattern; [Diagnostics Logs Subsystem filter](../screens/diagnostics/diagnostics.md#filters--toolbar-composition)
+is the first surface to consume it. "I agree" gating shapes and
+other speculative uses remain pending real surfaces.
 
 Box dimensions bind to active density; same rationale as Switch.
 

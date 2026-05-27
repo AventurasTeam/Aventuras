@@ -1619,6 +1619,55 @@ Lands when real demand surfaces from users running the app across
 multiple devices — not before. v1 single-device floor is the
 right default for the assumed common case.
 
+#### MultiSelect — searchable opt-in
+
+The [MultiSelect pattern](./ui/patterns/multi-select.md) ships v1
+without an inline search input inside its overlay. Today's first
+consumer ([Diagnostics Logs Subsystem filter](./ui/screens/diagnostics/diagnostics.md#filters--toolbar-composition))
+runs against ~8 options — well below the threshold where typing-
+to-filter earns its weight.
+
+A `searchable: true` opt-in prop would compose
+[`SearchableOverlayList`](./ui/patterns/searchable-overlay-list.md)
+in `searchPlacement: 'within'` mode inside the overlay, gaining
+type-to-filter on the option list. Re-evaluate when one of:
+
+- The `LogSubsystem` union grows past ~15 entries (subsystem
+  filtering becomes hard to scan).
+- A downstream MultiSelect consumer surfaces with a larger
+  enum (Tab 3 Call log `source` filter, for example, could exceed
+  the threshold once multiple providers + embedders are listed).
+- User feedback on existing consumers reports scanning friction.
+
+The work itself is small — the substrate plumbing exists; the
+opt-in adds the search input rendering + filter logic. Deferred
+because the addition is cheap to do once needed, and adding it
+preemptively pollutes the simple overlay shape.
+
+#### Diagnostics cross-tab arrived state — visual-pulse on nudged chips
+
+The [Logs cross-tab arrived state](./ui/screens/diagnostics/diagnostics.md#nudge-rule)
+silently nudges multi-select filter values when a route-driven
+`focusEntryId` would otherwise be hidden. The Turn Tag chip's
+presence is the explicit indicator that filter state was modified;
+the chip changes themselves are silent.
+
+A visual pulse refinement — 1-1.5s ease-in-out background tint on
+the specific chips / dropdown options that the nudge just added,
+fading back to normal selected state — would give an observant
+user explicit feedback that nudging happened. Considered for v1,
+ruled marginal: the Tag chip already communicates "arrived via
+nav," and adding a per-chip pulse increases motion chrome on a
+power-user surface where users will trigger nav frequently.
+
+Surface again if real-world feedback shows users losing track of
+filter state changes across cross-tab arrivals (e.g., "wait, why
+is `warn` selected? I had only `debug` enabled before").
+Implementation: per-Chip / per-MultiSelect-option transient pulse
+class, driven by a one-shot animation triggered when the option's
+selection state changes via the nudge code path (distinguishable
+from user-driven toggles).
+
 ### Two-stage touch feedback (light hover + stronger press)
 
 Some mobile apps (Discord noted) ship a two-stage feedback on

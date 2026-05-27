@@ -39,6 +39,12 @@ Used by:
   models / Agents (Assignments) rows when the row's provider /
   profile reference is dangling per the
   [deletion-semantics design](../../data-model.md#app-settings-storage).
+- [Diagnostics Hub · Logs tab — Turn Tag chip](../screens/diagnostics/diagnostics.md#turn-tag-chip) —
+  accent-toned removable Tag (`Turn: tr_a3kf ×`) surfacing the
+  cross-tab-arrived `actionId` filter. First consumer of the
+  Tag's `removable` slot on a filter row (vs the tag-input
+  TagInput composition which also uses removable Tags inside the
+  input surface).
 
 ## Chip — square, toggleable
 

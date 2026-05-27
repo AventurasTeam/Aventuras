@@ -31,6 +31,11 @@ Used by:
 - [Reader Browse rail](../screens/reader-composer/reader-composer.md#browse-rail--search-scope) —
   search, filter chips. Host wraps Toolbar with a 7-way kind-selector
   coupled to the rail-collapse mode.
+- [Diagnostics Hub · Logs tab](../screens/diagnostics/diagnostics.md#filters--toolbar-composition) —
+  Kind free-text (Toolbar.Search), Level filter chips, Subsystem
+  [MultiSelect](./multi-select.md) trigger as secondary chrome.
+  First consumer adopting a MultiSelect alongside Chip in the
+  secondary cluster.
 
 ## What's in scope
 

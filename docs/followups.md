@@ -13,17 +13,20 @@ for the placement rule.
 
 ## UX
 
-### Diagnostics hub — per-tab body design passes
+### Diagnostics hub — per-tab body design passes for tabs 2, 3, 5
 
-[`diagnostics.md`](./ui/screens/diagnostics/diagnostics.md) is
-at "surface inventory only" — the hub shell (top-bar, tab strip,
-story selector, cross-tab nav, empty states, mobile expression)
-is designed, plus tab 1 (memory probe) which is the existing
-spec. Tabs 2–5 (per-turn inspector / call log / logs / delta
-log) each have body content described but at the "what's in
-this tab" level, not pixel-level interaction. Each needs its
-own per-tab detail design pass before
+[`diagnostics.md`](./ui/screens/diagnostics/diagnostics.md) has
+the hub shell (top-bar, tab strip, story selector, cross-tab nav,
+empty states, mobile expression) designed, plus tab 1 (memory
+probe — existing spec) and tab 4 (logs — closed out at
+[2026-05-27 exploration](./explorations/2026-05-27-diagnostics-tab4-logs-close-out.md)).
+Tabs 2, 3, and 5 (per-turn inspector / call log / delta log) each
+have body content described but at the "what's in this tab" level,
+not pixel-level interaction. Each needs its own per-tab detail
+design pass before
 [M7.3](./implementation/roadmap.md#m7--app-settings--diagnostics--onboarding)
 can scaffold it. The passes can sequence (one per tab) or batch;
 likely owned by the implementer of M7.3 with design support
-per tab.
+per tab. Tab 4's close-out extracts the
+[MultiSelect pattern](./ui/patterns/multi-select.md) that tabs
+2 / 3 / 5 will inherit for their multi-select filter dimensions.
