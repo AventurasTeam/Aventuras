@@ -347,73 +347,6 @@
     else if (type === 'scenario') editingScenario = item as VaultScenario
   }
 
-  async function handleDelete(id: string, store: any) {
-    await store.delete(id)
-  }
-
-  async function handleToggleFavorite(id: string, store: any) {
-    await store.toggleFavorite(id)
-  }
-
-  // Export handlers
-  function handleExportLorebook(lorebook: VaultLorebook) {
-    exportEntity = lorebook
-    exportEntityType = 'lorebook'
-  }
-
-  function handleExportCharacter(character: VaultCharacter) {
-    exportEntity = character
-    exportEntityType = 'character'
-  }
-
-  function handleExportScenario(scenario: VaultScenario) {
-    exportEntity = scenario
-    exportEntityType = 'scenario'
-  }
-
-  // Duplicate handlers
-  async function handleDuplicateLorebook(lorebook: VaultLorebook) {
-    try {
-      const result = await lorebookVault.duplicate(lorebook.id)
-      if (!result) {
-        ui.showToast('Original lorebook not found', 'error')
-        return
-      }
-      ui.showToast('Lorebook duplicated', 'info')
-    } catch (e) {
-      console.error('Duplicate failed:', e)
-      ui.showToast('Failed to duplicate lorebook', 'error')
-    }
-  }
-
-  async function handleDuplicateCharacter(character: VaultCharacter) {
-    try {
-      const result = await characterVault.duplicate(character.id)
-      if (!result) {
-        ui.showToast('Original character not found', 'error')
-        return
-      }
-      ui.showToast('Character duplicated', 'info')
-    } catch (e) {
-      console.error('Duplicate failed:', e)
-      ui.showToast('Failed to duplicate character', 'error')
-    }
-  }
-
-  async function handleDuplicateScenario(scenario: VaultScenario) {
-    try {
-      const result = await scenarioVault.duplicate(scenario.id)
-      if (!result) {
-        ui.showToast('Original scenario not found', 'error')
-        return
-      }
-      ui.showToast('Scenario duplicated', 'info')
-    } catch (e) {
-      console.error('Duplicate failed:', e)
-      ui.showToast('Failed to duplicate scenario', 'error')
-    }
-  }
-
   function handleOpenPack(packId: string) {
     promptsViewState = { mode: 'editing', packId }
   }
@@ -706,22 +639,30 @@
                     item={item as AnyVaultItem}
                     type={section.type}
                     onEdit={() => handleEdit(item, section.type)}
-                    onDelete={() => handleDelete(item.id, section.store)}
-                    onToggleFavorite={() => handleToggleFavorite(item.id, section.store)}
+                    onDelete={() => section.store.delete(item.id)}
+                    onToggleFavorite={() => section.store.toggleFavorite(item.id)}
                     onExport={() => {
-                      if (section.type === 'lorebook') handleExportLorebook(item as VaultLorebook)
-                      else if (section.type === 'character')
-                        handleExportCharacter(item as VaultCharacter)
-                      else if (section.type === 'scenario')
-                        handleExportScenario(item as VaultScenario)
+                      exportEntity = item
+                      exportEntityType = section.type
                     }}
-                    onDuplicate={() => {
-                      if (section.type === 'lorebook')
-                        handleDuplicateLorebook(item as VaultLorebook)
-                      else if (section.type === 'character')
-                        handleDuplicateCharacter(item as VaultCharacter)
-                      else if (section.type === 'scenario')
-                        handleDuplicateScenario(item as VaultScenario)
+                    onDuplicate={async () => {
+                      try {
+                        const result = await section.store.duplicate(item.id)
+                        if (!result) {
+                          ui.showToast(
+                            `Original ${section.singularLabel.toLowerCase()} not found`,
+                            'error',
+                          )
+                          return
+                        }
+                        ui.showToast(`${section.singularLabel} duplicated`, 'info')
+                      } catch (e) {
+                        console.error('Duplicate failed:', e)
+                        ui.showToast(
+                          `Failed to duplicate ${section.singularLabel.toLowerCase()}`,
+                          'error',
+                        )
+                      }
                     }}
                   />
                 {/each}
