@@ -12,6 +12,7 @@ const ROUTES = [
   { href: '/dev/popover', label: 'Popover' },
   { href: '/dev/sheet', label: 'Sheet' },
   { href: '/dev/select', label: 'Select' },
+  { href: '/dev/multi-select', label: 'MultiSelect' },
   { href: '/dev/input', label: 'Input + Textarea' },
   { href: '/dev/choice', label: 'Switch + Checkbox' },
   { href: '/dev/visual', label: 'Icon + Avatar' },
