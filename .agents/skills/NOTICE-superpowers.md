@@ -14,11 +14,11 @@ ported from the corresponding Superpowers skill. Adaptations: skill
 names are prefixed `aventuras-`, cross-references are renamed to
 match, harness-specific tool names are made generic, and two skills
 are materially customized for this project's milestone/slice
-workflow (`aventuras-brainstorming` is retargeted onto slice docs;
+workflow (`aventuras-plan-slice` is retargeted onto slice docs;
 `aventuras-test-driven-development` softens the iron law to this
 project's calibrated test policy).
 
-- `aventuras-brainstorming` (← `brainstorming`, materially adapted)
+- `aventuras-plan-slice` (← `brainstorming`, materially adapted)
 - `aventuras-writing-plans` (← `writing-plans`)
 - `aventuras-using-git-worktrees` (← `using-git-worktrees`)
 - `aventuras-subagent-driven-development` (← `subagent-driven-development`)

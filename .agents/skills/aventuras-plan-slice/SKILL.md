@@ -1,11 +1,11 @@
 ---
-name: aventuras-brainstorming
+name: aventuras-plan-slice
 description: Use before implementing any Aventuras slice — when starting work from a slice doc, preparing a slice for implementation, or when a slice has open questions, ambiguous scope, or underspecified seams that need resolving before code is written.
 ---
 
 <!-- Adapted from Superpowers (https://github.com/obra/superpowers), MIT-licensed. See .agents/skills/NOTICE-superpowers.md. -->
 
-# Brainstorming a Slice Into Implementation Questions
+# Planning a Slice Into Implementation Questions
 
 Take an approved slice doc and iron out every open implementation question with the developer before any code is written. The slice doc is the contract; this skill resolves what the contract leaves open, then hands off to aventuras-writing-plans.
 
@@ -34,7 +34,7 @@ You MUST create a task for each of these items and complete them in order:
 ## Process Flow
 
 ```dot
-digraph brainstorming {
+digraph planning {
     "Read slice doc + milestone + conventions" [shape=box];
     "Resolve required-reading anchors" [shape=box];
     "Surface open questions" [shape=box];
