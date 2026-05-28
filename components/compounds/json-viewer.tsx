@@ -1,10 +1,9 @@
-import { setStringAsync as setClipboardString } from 'expo-clipboard'
 import { X } from 'lucide-react-native'
-import { useCallback, useMemo } from 'react'
-import { Platform, ScrollView, View } from 'react-native'
+import { useCallback } from 'react'
+import { ScrollView, View } from 'react-native'
 
-import { Button } from '@/components/ui/button'
 import { IconAction } from '@/components/ui/icon-action'
+import { JSONBlock } from '@/components/ui/json-block'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
@@ -28,29 +27,6 @@ export function JSONViewer({ open, onOpenChange, name, data, className }: JSONVi
   const anchor = tier === 'phone' ? 'bottom' : 'right'
   const showCloseButton = anchor !== 'bottom'
 
-  const formatted = useMemo(() => {
-    try {
-      return JSON.stringify(data, null, 2)
-    } catch {
-      // JSON.stringify throws on circular refs. Coercing to String
-      // keeps the drawer functional rather than crashing the host
-      // surface; the result will be `[object Object]` or similar,
-      // which is the right "something's off" signal until edit-mode
-      // adds proper validation.
-      return String(data)
-    }
-  }, [data])
-
-  const handleCopy = useCallback(() => {
-    if (Platform.OS === 'web') {
-      if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        navigator.clipboard.writeText(formatted).catch(() => {})
-      }
-      return
-    }
-    setClipboardString(formatted).catch(() => {})
-  }, [formatted])
-
   const handleClose = useCallback(() => onOpenChange(false), [onOpenChange])
 
   return (
@@ -68,18 +44,15 @@ export function JSONViewer({ open, onOpenChange, name, data, className }: JSONVi
               {name}
             </Text>
           </View>
-          <View className="shrink-0 flex-row items-center gap-1">
-            <Button variant="secondary" size="sm" onPress={handleCopy}>
-              <Text>Copy</Text>
-            </Button>
-            {showCloseButton ? (
+          {showCloseButton ? (
+            <View className="shrink-0">
               <IconAction icon={X} label="Close raw JSON viewer" onPress={handleClose} />
-            ) : null}
-          </View>
+            </View>
+          ) : null}
         </View>
 
         <ScrollView className="flex-1">
-          <Text className="py-3 font-mono text-xs text-fg-secondary">{formatted}</Text>
+          <JSONBlock data={data} />
         </ScrollView>
 
         <View className="border-t border-border pt-3">
