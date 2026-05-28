@@ -100,17 +100,23 @@ memory pipeline (M3) needs to tune against.
   in M7 alongside the providers settings tab. Extends the M1.4
   redaction vitest suite with OAI-compat scenarios — value-match
   catches the key in OAI-compat's auth headers without per-
-  provider configuration.
+  provider configuration. `Zod` install lands here as the first
+  consumer (per [`tech-stack.md`](../tech-stack.md)).
 - M2.2 — Entry data layer: `story_entries` + the entry kinds the
   M2 loop exercises (`opening`, `user_action`, `ai_reply`); `system`
   stub. CRUD actions through the action layer. Full enum per
-  [`data-model.md`](../data-model.md).
+  [`data-model.md`](../data-model.md). Action layer enforces the
+  opening-entry position invariants and the `undo_payload` /
+  `log_position` / `encoding_version` delta-encoding rules per
+  [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback).
 - M2.3 — Story creation, minimum-viable wizard: step 1
   (definition + model + pack picks), step 2 (calendar — bundled
   calendars only), step 5 (opening generation via real provider),
   wizard auto-save + draft persistence. Steps 3 (lore) and 4
   (cast) deferred to M3 alongside the data layers they manipulate;
-  refine / regenerate on opening deferred to M3.
+  refine / regenerate on opening deferred to M3. `react-hook-form`
+  install lands with wizard step 1 (per
+  [`tech-stack.md`](../tech-stack.md)).
 - M2.4 — Story list as a real surface: list real stories, navigate
   to reader, basic store.
 - M2.5 — Reader-composer minimum: entry list rendering (with
@@ -140,7 +146,24 @@ memory pipeline (M3) needs to tune against.
   needs a rendered prompt. Bundled-pack `active+in-scene-entity`
   injection invariant test (per
   [`architecture.md → Structural floor — always inject`](../architecture.md#structural-floor--always-inject))
-  lands alongside the bundled pack.
+  lands alongside the bundled pack. Substrate that lands
+  alongside: ID placeholder substitution (`IdBiMap`,
+  `substituteIds`, reverse-substitution on parse) per
+  [`generation-pipeline.md → ID placeholder substitution`](../generation-pipeline.md#id-placeholder-substitution);
+  per-pipeline-kind config pre-flight scope with
+  `run_complete(failed)` emission before phase 0 per
+  [`generation-pipeline.md → Config pre-flight validation`](../generation-pipeline.md#config-pre-flight-validation);
+  crash-recovery modal (`pendingRecoveryReport` slot, boot
+  ordering migrations → stores → recovery → render) per
+  [`generation-pipeline.md → Recovery modal`](../generation-pipeline.md#recovery-modal);
+  pack include-compatibility validator at pack load per
+  [`architecture.md → Macros`](../architecture.md#macros--reusable-liquid-snippets-not-code-side-formatters);
+  settings parse-failure recovery surfaces (`app_settings`
+  blocking screen, per-story badge with `Open file` /
+  `Reset settings`) per
+  [`architecture.md → Settings`](../architecture.md#settings-strict-types-defaults-at-load).
+  `jsonrepair` install lands with the structured-output parse
+  path (per [`tech-stack.md`](../tech-stack.md)).
 
 **Parallel paths after M2.1 + M2.2.** {M2.3, M2.4} || {M2.5}, then
 M2.6 wires.
@@ -179,6 +202,13 @@ to render against.
   `embedding_swap_target` two-phase stage-then-flip pipeline +
   crash-recovery resume / cancel prompt on story-open (per
   [`memory/retrieval.md → Model swap UX`](../memory/retrieval.md#model-swap-ux)).
+  Adds Matryoshka effective-dim machinery (capability flags
+  `matryoshkaSupported` / `matryoshkaDims`, `effectiveDim`,
+  truncation + renorm at every embed-write) per
+  [`memory/retrieval.md → Matryoshka effective dim`](../memory/retrieval.md#matryoshka-effective-dim)
+  and the top-bar staleness pill + Settings · Memory per-story
+  resolution panel per
+  [`memory/model-management.md → Staleness UI`](../memory/model-management.md#staleness-ui).
   Embedder management UI extends in M7.1.
 - M3.2 — Piggyback layer: inline structured tool calls during
   main generation; scene metadata writes;
@@ -193,15 +223,27 @@ to render against.
   3-strike failed-persistent state per
   [`memory/classifier.md → Auto-retry policy`](../memory/classifier.md#auto-retry-policy))
   - per-branch `classifier_status` persistence.
+    `entities.name_collision_flag INTEGER` column lands here
+    (drives the M4 collision-review surface) per
+    [`memory/classifier.md → Disambiguation`](../memory/classifier.md#disambiguation-on-new-character-mentions).
 - M3.4 — Retrieval: embedding queries; ranker; budgets;
   context-bundle assembly into the per-turn prompt. Memory pack
   templates extend the Liquid engine to inject retrieved bundles.
   Per-injection `retrieval_count` increment on awareness rows
   (load-bearing for chapter-close phase 3d in M5.2 per
   [`memory/chapter-close.md → 3d awareness pin tuning`](../memory/chapter-close.md#3d--awareness-pin-tuning)).
+  Schema adds the `lore.keywords TEXT` column (distinct from
+  `lore.tags`) per
+  [`memory/retrieval.md → Keywords schema`](../memory/retrieval.md#keywords-schema).
+  `js-tiktoken` install lands here as the first budget-accounting
+  consumer (per [`tech-stack.md`](../tech-stack.md)).
 - M3.5 — Minimal developer-only retrieval probe: log / inspect
   retrieval scores during impl. User-facing probe surface
-  deferred to M7.
+  deferred to M7. Schema delta lands here: `probe_captures`
+  table + `app_settings.diagnostics.enabled` +
+  `stories.settings.probe_mode_active` per
+  [`memory/probe.md → Schema delta`](../memory/probe.md#schema-delta).
+  Simulator-vs-prod-pass parity test ships alongside.
 - M3.6 — Wizard step 3 (lore editor) + step 4 (full bespoke cast
   editor — all 4 per-kind editors with `▼ Visual` / `▼ More
 options` disclosures, status / lead / staged logic,
@@ -217,6 +259,11 @@ options` disclosures, status / lead / staged logic,
   [`reader-composer.md → Next-turn suggestions`](../ui/screens/reader-composer/reader-composer.md#next-turn-suggestions)),
   reader-composer suggestions panel between AI replies and the
   next composer input, `suggestionsEnabled` story setting toggle.
+  Adds `app_settings.default_suggestion_categories` and the
+  Story Settings · Composer categories editor (consuming the
+  shipped `SuggestionCategoriesEditor`) plus a
+  `kind: 'suggestion-refresh'` pipeline declaration per
+  [`next-turn-suggestions exploration`](../explorations/2026-05-19-next-turn-suggestions.md).
   Suggestion agent profile slot in app-settings extends M7.1.
 - M3.8 — Per-entry worldTime click-to-edit overlay (TierTupleInput)
   - monotonicity-break flag (O(N) walk feeding
@@ -266,6 +313,15 @@ chapter-management is M5.
 - M4.2 — Entity detail surface: overview tab, state tab, per-kind
   fields per
   [`docs/ui/screens/world/world.md`](../ui/screens/world/world.md).
+  Collision-review + entity-merge driver wires the shipped
+  `CollisionResolveDialog` against `name_collision_flag` rows
+  per [`patterns/collision-resolve.md`](../ui/patterns/collision-resolve.md).
+  `LocationState.parent_location_id` cycle-guard (action-layer
+  pre-commit walk, depth-cap 100) per
+  [`data-model.md → LocationState`](../data-model.md#locationstate-shape).
+  Entity search scope across `state` JSON via `json_extract` /
+  `json_each` per
+  [`patterns/entity.md → Search scope`](../ui/patterns/entity.md#search-scope).
 - M4.3 — Plot panel shell + threads tab + happenings tab; happenings
   list with awareness tab on detail per
   [`docs/ui/screens/plot/plot.md`](../ui/screens/plot/plot.md).
@@ -278,8 +334,12 @@ chapter-management is M5.
 - M4.4 — Story settings real (basic): model overrides + basic
   per-story config — the settings depth users need with real data
   flowing. Deep settings tabs land in M7.
+- M4.5 — Reader-composer awareness affordances: peek drawer +
+  awareness chips on entries per
+  [`reader-composer.md → Peek drawer`](../ui/screens/reader-composer/reader-composer.md#peek-drawer--lead-affordance-for-characters).
+  Gates on M3.3 awareness writes.
 
-**Parallel paths.** {M4.1, M4.2} || {M4.3} || {M4.4}.
+**Parallel paths.** {M4.1, M4.2} || {M4.3} || {M4.4} || {M4.5}.
 
 **Gates.** M3 (no entities without classifier; no awareness
 without classifier; no retrieval scores without retrieval).
@@ -363,7 +423,10 @@ churn.
   branch's lineage).
 - M6.3 — Reader branch picker + branch creation flow.
 - M6.4 — Diff cache: query layer, eviction, deps on branch +
-  entry events.
+  entry events. Renderer iteration walks `keys(old.<column>)`
+  (not `keys(new.<column>)`), and cache-miss path falls back to
+  an `undo_payload`-keys-only summary per
+  [`architecture.md → Delta history diff resolution`](../architecture.md#delta-history-diff-resolution).
 - M6.5 — Multi-story branching: story list shows branch count,
   navigation handles the branch-aware URL shape.
 - M6.6 — Story duplicate (overflow menu on story cards): clone
@@ -406,15 +469,24 @@ the underlying configuration surfaces.
   catalogs like OpenRouter 340+, capability badge click-to-
   override, per-section staggered refresh, `Add custom model id`,
   provider `⋯` menu with deletion-semantics AlertDialog,
-  reset-profiles action); **embedder tab** full surface
-  (curated catalog + HF-id import + custom-file import paths,
-  per-model EP picker, cross-story staleness aggregate, download
-  dialog with license fetch + SHA256 verify + `.attestation`,
-  remove / test flows); **models tab** (agent-to-profile
-  assignments including the `suggestion` slot from M3.7);
-  **appearance tab** (theme picker + density toggle + reader
-  font scale); **data tab** (backup / export / restore / clear
-  caches).
+  reset-profiles action) — deletion runs the full embedding-story
+  block + `assignments` key removal + `profiles.length ≥ 1`
+  invariant per
+  [`data-model.md → App settings storage`](../data-model.md#app-settings-storage);
+  **embedder tab** full surface (curated catalog + HF-id import +
+  custom-file import paths, per-model EP picker, cross-story
+  staleness aggregate, download dialog with license fetch +
+  SHA256 verify + `.attestation`, remove / test flows);
+  **models tab** (agent-to-profile assignments including the
+  `suggestion` slot from M3.7); **appearance tab** (theme picker
+  - density toggle + reader font scale + `deriveAccent`
+    implementation with `accentFg` auto-flip per
+    [`accent-hover-contrast exploration`](../explorations/2026-05-21-accent-hover-contrast.md));
+    **diagnostics tab** (master toggle + `debug_level_enabled` +
+    Actions-menu `Open Diagnostics Hub` entry hidden when toggle
+    is off, per
+    [`observability.md → UI placement`](../observability.md#ui-placement));
+    **data tab** (backup / export / restore / clear caches).
 - M7.2 — Story settings deep: pack tab, definition tab, models
   tab, awareness tab, calendar tab, **Advanced tab** (story id,
   timestamps, branch info, export JSON, view raw settings per
@@ -422,7 +494,13 @@ the underlying configuration surfaces.
   Era-flip reader affordances (time-chip popover, per-entry
   icon, Actions menu entry, flip-era modal) land here paired
   with the calendar tab's era-flips list + `branch_era_flips`
-  table.
+  table. Memory tab adds the classifier panel (cadence in-place
+  edit, buffer-aware cadence indicator, status block,
+  `[Run classifier now]`, top-bar error pill routed back) per
+  [`memory/classifier.md → Settings · Memory · Classifier panel`](../memory/classifier.md#settings--memory--classifier-panel).
+  Pack tab gates on the `templateContextMap.ts` integrity
+  validator per
+  [`architecture.md → Variable registry`](../architecture.md#variable-registry-for-the-prompt-editor).
 - M7.3 — Diagnostics screen per
   [`docs/ui/screens/diagnostics/diagnostics.md`](../ui/screens/diagnostics/diagnostics.md).
 - M7.4 — Onboarding flow per
@@ -478,7 +556,13 @@ already-shipped calendar editor.
   sticky generation-status-pill surface for user-driven retry
   (invokes the `translation-retry` pipeline from M8.1).
 - M8.3 — Vault parent shell: vault home navigation, vault entry
-  point from story list, vault chrome.
+  point from story list, vault chrome. Vault calendar editor
+  adds `displayFormat` preview-on-save plus a render-time
+  fallback (raw integer + warning chip on template throw), and
+  a "this story's origin needs re-confirmation" affordance
+  when a tier add / remove invalidates an in-use
+  `worldTimeOrigin`, per
+  [`calendar-systems/spec.md → Adversarial check`](../calendar-systems/spec.md#adversarial-check).
 - M8.4 — Translation-aware retrieval / classifier-on-translation
   edge cases per
   [`memory/edge-cases.md`](../memory/edge-cases.md).
@@ -525,11 +609,16 @@ isn't a per-feature concern.
   passes per
   [`data-model.md → Assets`](../data-model.md#assets-images--future-media)
   (prevents disk leaks from rolled-back / branch-deleted asset
-  rows).
+  rows). First sub-design pass: backup / export packaging shape
+  (JSON sidecar location, asset base64-inline vs sidecar) per
+  [`parked.md → Backup / export packaging shape`](../parked.md#backup--export-packaging-shape).
 - M9.4 — Per-story export `.avts` envelope; per-story import
   `.avts` (story list `[Import story…]` affordance routes through
   the `ImportDialog` compound landed at M4); cross-version
-  resilience.
+  resilience. Bulk-import embed batching with progress UI for
+  `.avts` import and DB-migration paths per
+  [`memory/retrieval.md → Compute lifecycle`](../memory/retrieval.md#compute-lifecycle)
+  (naive 100k rows would take ~16 min).
 - M9.5 — Cross-platform parity smoke (Linux desktop + Android),
   performance budget audit, accessibility audit
   ([`accessibility skill`](./conventions.md) checks).
@@ -639,7 +728,10 @@ explicit.
   [`patterns/calendar-picker.md`](../ui/patterns/calendar-picker.md)).
   - **M2.3** — Calendar registry (built-ins from code only;
     no `vault_calendars` merging yet); calendar-picker primitive;
-    bundled calendar definitions in code.
+    bundled calendar definitions in code. `lib/calendar/`
+    arithmetic substrate (`worldTimeToTuple`, era arithmetic,
+    per-year cumulative-day cache) scaffolds here per
+    [`spec.md → Rendering pipeline`](../calendar-systems/spec.md#rendering-pipeline).
   - **M2.5** — Renderer (`worldTime + worldTimeOrigin → tier-tuple
 → Liquid render`) for reader chrome. Exercised meaningfully
     only after M3.3 begins writing non-zero `worldTime` values.
@@ -687,8 +779,12 @@ explicit.
   - **M3 / M5** — Per-pipeline-kind turn-capture shape extends
     for memory + chapter-close pipelines (classifier / retrieval
     / chapter-close phases each contribute capture content).
-  - **M7.3** — Diagnostics screen consumes `logEntries`,
-    `httpCallSink` history, run timeline.
+  - **M7.1 / M7.3** — Settings-side controls land in M7.1's
+    diagnostics tab (master + `debug_level_enabled` toggles,
+    Actions-menu `Open Diagnostics Hub` entry) per
+    [`observability.md → UI placement`](../observability.md#ui-placement);
+    diagnostics screen consumes `logEntries`, `httpCallSink`
+    history, run timeline in M7.3.
   - **M7.5** — Memory probe consumes `turnCaptureSink`
     retrieval-score content for per-turn inspection.
 - **Undo / rollback system**
@@ -712,7 +808,11 @@ explicit.
   - **M4** — First consumer: World / Plot per-row entity import.
     Implementation prerequisite: add `expo-document-picker` +
     `expo-file-system` and trigger a dev-client rebuild before
-    the slice runs (web has no native-build step).
+    the slice runs (web has no native-build step). Adds per-row
+    `.avts` envelope kinds (`aventuras-entity`,
+    `aventuras-lore`, `aventuras-thread`, `aventuras-happening`)
+    with kind-narrowed Zod payload schemas per
+    [`data-model.md → Aventuras file format`](../data-model.md#aventuras-file-format-avts).
   - **M8.3** — Vault calendars import.
   - **M9.4** — Story `.avts` import on the story list.
 
