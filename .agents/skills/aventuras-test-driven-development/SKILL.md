@@ -9,8 +9,6 @@ description: Use when implementing any feature or bugfix, before writing impleme
 
 ## Overview
 
-**Project convention:** for code work, read [`docs/code-conventions.md`](../../../docs/code-conventions.md) — module structure (`lib/*` public-API rule), state placement, action layer, component taxonomy, testing — and check the [lessons-learned index](../../../docs/implementation/lessons-learned/README.md) before touching the substrate an entry references.
-
 Write the test first. Watch it fail. Write minimal code to pass.
 
 **Core principle:** If you didn't watch the test fail, you don't know if it tests the right thing.
@@ -34,6 +32,10 @@ Write the test first. Watch it fail. Write minimal code to pass.
 For a carve-out, the slice doc's Tests section and the execution plan's evidence matrix name the evidence that stands in for a test — a typecheck, a lint, a Storybook story, a manual smoke. Test coverage is calibrated to the slice's risk profile, per `docs/implementation/conventions.md`.
 
 If your work is behavior-bearing and you're thinking "skip TDD just this once" — Stop. That's rationalization. The carve-outs above are the ONLY exceptions.
+
+## Project code conventions
+
+For code work, read [`docs/code-conventions.md`](../../../docs/code-conventions.md) — module structure (`lib/*` public-API rule), state placement, action layer, component taxonomy, testing — and check the [lessons-learned index](../../../docs/implementation/lessons-learned/README.md) before touching the substrate an entry references.
 
 ## The Iron Law
 

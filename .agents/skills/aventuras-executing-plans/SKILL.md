@@ -15,6 +15,10 @@ Load plan, review critically, execute all tasks, report when complete.
 
 **Note:** Tell your human partner that this workflow works much better with access to subagents. The quality of its work will be significantly higher if run on a platform with subagent support (such as Claude Code or Codex). If subagents are available, use aventuras-subagent-driven-development instead of this skill.
 
+## Project code conventions
+
+For code work, read [`docs/code-conventions.md`](../../../docs/code-conventions.md) — module structure (`lib/*` public-API rule), state placement, action layer, component taxonomy, testing — and check the [lessons-learned index](../../../docs/implementation/lessons-learned/README.md) before touching the substrate an entry references.
+
 ## The Process
 
 ### Step 1: Load and Review Plan

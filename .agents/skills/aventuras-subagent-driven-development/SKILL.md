@@ -42,6 +42,10 @@ digraph when_to_use {
 - Two-stage review on review-tier tasks: spec compliance first, then code quality
 - Faster iteration (no human-in-loop between tasks)
 
+## Project code conventions
+
+For code work, read [`docs/code-conventions.md`](../../../docs/code-conventions.md) — module structure (`lib/*` public-API rule), state placement, action layer, component taxonomy, testing — and check the [lessons-learned index](../../../docs/implementation/lessons-learned/README.md) before touching the substrate an entry references.
+
 ## The Process
 
 ```dot

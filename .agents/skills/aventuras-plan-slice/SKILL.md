@@ -15,6 +15,10 @@ This is not design work. Product and architecture decisions already live in the 
 Do NOT invoke aventuras-writing-plans, write any code, or take any implementation action until every developer-decision open question has been resolved with the developer. This applies to EVERY slice regardless of perceived simplicity.
 </HARD-GATE>
 
+## Project code conventions
+
+For code work, read [`docs/code-conventions.md`](../../../docs/code-conventions.md) — module structure (`lib/*` public-API rule), state placement, action layer, component taxonomy, testing — and check the [lessons-learned index](../../../docs/implementation/lessons-learned/README.md) before touching the substrate an entry references.
+
 ## Anti-Pattern: "This Slice Is Too Simple To Need Planning"
 
 Every slice goes through this process. A config-only slice, a one-table migration, a single component — all of them. "Simple" slices are where unexamined assumptions cause the most wasted work. If a slice genuinely has no open questions, this skill is fast: confirm that with the developer, then hand off. But you MUST check first.

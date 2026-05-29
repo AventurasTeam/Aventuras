@@ -21,6 +21,10 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 - `.impl-plans/` is git-ignored. The plan is run-specific working state shared between the developer and the executing agent — not project documentation.
 
+## Project code conventions
+
+For code work, read [`docs/code-conventions.md`](../../../docs/code-conventions.md) — module structure (`lib/*` public-API rule), state placement, action layer, component taxonomy, testing — and check the [lessons-learned index](../../../docs/implementation/lessons-learned/README.md) before touching the substrate an entry references.
+
 ## Input
 
 The input is one slice doc plus the open questions resolved in `aventuras-brainstorming`. Read the slice doc, its parent milestone, and the decisions carried over from brainstorming.
