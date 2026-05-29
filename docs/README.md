@@ -50,3 +50,6 @@ implementation, and the open questions tracked across the project.
   structure rules, naming, cross-references, principles-vs-patterns
   split, README-as-index, followups hygiene, wireframe authoring,
   tooling, common pitfalls.
+- **[code-conventions.md](./code-conventions.md)** — code conventions:
+  module structure (`lib/*` public-API rule), state placement, action
+  layer, component taxonomy, i18n, testing, forms, pnpm and patches.

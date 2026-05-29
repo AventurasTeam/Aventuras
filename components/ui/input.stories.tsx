@@ -3,7 +3,7 @@ import { Eye, EyeOff, Search } from 'lucide-react-native'
 import { useState } from 'react'
 import { Pressable, View } from 'react-native'
 
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { Icon } from './icon'
 import { Input } from './input'

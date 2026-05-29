@@ -33,20 +33,23 @@ introduced; the first new module (`lib/db/`) ships in Slice 1.2.
 Each subdirectory of `lib/` is a module: internal files import each
 other freely via relative paths; any importer outside the module
 reaches it only through the module's `index.ts`. "Outside the
-module" includes code outside `lib/` entirely — app routes,
-components, scripts — so those source roots are declared as
-boundaries elements too, which is what makes the entry-point check
-fire for every importer. The rule is silent on imports from files
-that match no element, so leaving importers unclassified would
-silently exempt them. Tests inside a module may deep-import; tests
-and scripts outside use the public API only. Types are part of the
-public API — deep type imports are banned the same as value imports.
+module" includes code outside `lib/` entirely — app routes and
+components — so a catch-all element classifies them as known, which
+is what makes the dependencies rule check their imports. The rule is
+silent on imports from files that match no element, so leaving
+importers unclassified would silently exempt them. Tests inside a
+module may deep-import; tests outside use the public API only. Build
+scripts are the deliberate exception — exempt, since they run under
+`tsx` and cannot import the React-Native-coupled barrels. Types are
+part of the public API — deep type imports are banned the same as
+value imports.
 
 V1 introduced a narrower version of this at warn-level near the end
 of that codebase (`boundaries/dependencies` scoped to
 `src/lib/services/*`) and never finished the migration. V2 raises
 it to `'error'`, applies it to `lib/*`, and expresses index-only
-entry through the plugin's `boundaries/entry-point` rule. The v2
+entry through the plugin's `boundaries/dependencies` rule (v6
+deprecates the older `entry-point` rule). The v2
 trunk already carries three foundation modules (`density`,
 `themes`, `toast`) from the mobile-foundations track; this slice
 retrofits them rather than starting from an empty `lib/`.
@@ -68,42 +71,48 @@ retrofits them rather than starting from an empty `lib/`.
 
 ## Scope: in
 
-- Add `eslint-plugin-boundaries` (v6 — object-based selectors; the
-  v1 `boundaries/dependencies` + `internalPath` shape is retired)
-  and `eslint-import-resolver-typescript` to dev dependencies;
-  install with `pnpm`.
+- Add `eslint-plugin-boundaries` (v6) and
+  `eslint-import-resolver-typescript` to dev dependencies; install
+  with `pnpm`.
 - Extend `eslint.config.js`:
   - Register the `boundaries` plugin. Add an `import/resolver`
     setting (`typescript: { alwaysTryTypes: true }`) so boundaries
     resolves `@/` aliases (tsconfig maps `@/* → ./*`) and
     bare-directory imports to `index.ts`. Do not blanket-spread the
     plugin's `recommended` ruleset — it enables `element-types` /
-    `no-unknown` enforcement this slice scopes out; configure
-    `entry-point` à la carte.
+    `no-unknown` enforcement this slice scopes out; configure the
+    one rule à la carte.
   - Declare `boundaries/elements`: `lib-module` (pattern `lib/*`,
-    mode `folder`) as the encapsulated unit, `lib-file` for bare
-    top-level files (`lib/*.ts`, e.g. `utils.ts`), and a catch-all
-    element for the rest of the source tree (app, components,
-    hooks, electron, scripts, `.storybook`, types, constants) so no
-    importer is an unmatched ("unknown") file — boundaries rules
-    only check imports that originate from a known element.
-  - Add `boundaries/entry-point` at `'error'` severity (this is the
-    rule that does index-only enforcement; `dependencies` cannot
-    restrict to a file within an element): `lib-module` targets
-    allow only `index.ts`; `lib-file` and the catch-all allow `'*'`.
-    Omit `importKind` on the `lib-module` allow so it covers value
-    and type imports alike — deep type imports are banned the same
-    as value imports.
+    mode `folder`) so a module's whole subtree is one element and
+    intra-module imports stay internal; `lib-file` (`lib/*.ts`, mode
+    `file`) for bare helpers like `utils.ts`; and a catch-all
+    `app-code` (pattern `!(lib)/**`, mode `full`) that makes every
+    source file outside `lib/` a known element. The catch-all
+    excludes `lib/` so it does not shadow `lib-module` — boundaries
+    matches path segments deepest-first, so a catch-all that also
+    matched lib files would win and silently disable the rule — and
+    it is needed because the rule skips imports originating from
+    unknown files.
+  - Add `boundaries/dependencies` at `'error'` (v6 deprecates
+    `entry-point` and folds index-only enforcement into this rule):
+    `default: 'allow'` with one `disallow` whose target is a
+    `lib-module` internal file (`internalPath: '!index.ts'`). No
+    `dependency.kind` filter, so value and type deep imports are
+    both banned. Exempt `scripts/**` with a `'boundaries/dependencies':
+'off'` override — build scripts run under `tsx` and cannot
+    import the React-Native-coupled barrels.
 - Bring the existing foundation modules into compliance:
   - Add `lib/density/index.ts` and `lib/themes/index.ts` barrels
     exporting each module's public API (derived from current
     consumers — e.g. `themes`, `useTheme`, `COLOR_SLOT_KEYS`,
-    `Theme`, `ThemeProvider`, `contrastRatio` for `themes`).
+    `Theme`, `ThemeColorSlots`, `ThemeProvider`, `contrastRatio` for
+    `themes`).
   - Extend `lib/toast/index.ts` to also export `toastStore` (the
     `toast` API and severity types are already exported).
-  - Redirect every external deep-import (~50 sites across
-    `components/`, `app/`, `.storybook/`, `scripts/`, and story
-    files) to the module public API. The `.native.tsx` provider
+  - Redirect every external deep-import (~72 import lines across
+    ~58 files in `components/`, `app/`, `.storybook/`, and story
+    files) to the module public API. `scripts/` keeps its
+    React-free deep imports (exempt). The `.native.tsx` provider
     variants must keep resolving per-platform through the barrel.
 - Create `docs/code-conventions.md` covering:
   - **Module structure** — `lib/*` public-API rule (any importer
@@ -178,13 +187,12 @@ retrofits them rather than starting from an empty `lib/`.
   in Slice 1.2. The existing `density` / `themes` / `toast`
   foundation modules are retrofitted here — see Scope: in.
 - No policing of inter-element coupling beyond the `lib-module`
-  entry-point. Non-`lib` elements are declared only so the
-  entry-point check fires for their imports; which component may
-  import which, or app-vs-electron boundaries, stays unrestricted
-  (every non-`lib` element allows any entry point). Tightening
-  those is a future slice if cross-domain coupling becomes a
-  concern.
-- No new lint rules beyond the boundaries entry-point. The
+  public-API boundary. The catch-all `app-code` element is declared
+  only so the dependencies rule sees those importers; which
+  component may import which, or app-vs-electron boundaries, stays
+  unrestricted. Tightening those is a future slice if cross-domain
+  coupling becomes a concern.
+- No new lint rules beyond the boundaries dependencies rule. The
   `no-console` ban already landed as scaffolding (it is in
   `eslint.config.js`); the logger that gives it a real target
   ships in Slice 1.3.
@@ -211,8 +219,9 @@ retrofits them rather than starting from an empty `lib/`.
   devDependencies and locked in `pnpm-lock.yaml`.
 - `eslint.config.js` registers the plugin, sets the
   `import/resolver` typescript setting, declares the elements, and
-  includes the `boundaries/entry-point` rule at `'error'` severity
-  restricting `lib-module` imports to `index.ts`.
+  includes the `boundaries/dependencies` rule at `'error'` severity
+  restricting `lib-module` imports to its root `index.ts`
+  (`scripts/**` exempt).
 - `lib/density/index.ts` and `lib/themes/index.ts` exist and
   export each module's public API; `lib/toast/index.ts` also
   exports `toastStore`. No file outside a module deep-imports its
@@ -227,7 +236,7 @@ retrofits them rather than starting from an empty `lib/`.
   wildcards remain end-to-end in `code.md`.
 - All `aventuras-*` dev skills listed under Scope: in cite
   `docs/code-conventions.md` in their preflight.
-- `pnpm lint` passes: the entry-point rule is live at `'error'`
+- `pnpm lint` passes: the dependencies rule is live at `'error'`
   and the compliance refactor leaves zero violations. A deliberate
   deep-import of a module internal fails lint.
 - `pnpm typecheck` passes and the existing `density` / `themes`
@@ -242,36 +251,35 @@ and the existing `density` / `themes` vitest suites already cover
 the modules' behaviour; those must stay green through the import
 redirects. The rule is validated immediately and concretely: the
 compliance refactor passing `pnpm lint` at `'error'` proves the
-entry-point check accepts public-API imports, and a deliberate
-deep-import proves it rejects internals. Cross-platform smoke
+rule accepts public-API imports, and a deliberate deep-import
+(value or type) proves it rejects internals. Cross-platform smoke
 (web + native) confirms the `index.ts` barrels preserve the
 `.native.tsx` provider resolution.
 
 ## Open questions
 
-- **v6 config shape — verify against 6.x empirically.** The
-  approach is fixed: `boundaries/entry-point` at `'error'`,
-  `lib-module → index.ts` only, catch-all so outside-`lib/`
-  importers are "known". Confirm with `pnpm lint` that (a) the
-  catch-all actually makes those importers trigger the check, and
-  (b) the resolver picks `index.ts` for bare-dir imports. The v6
-  object-selector syntax is the live shape; the retired
-  `internalPath` form must not be copied from the v1 config.
-- **Import resolver.** boundaries resolves through
-  `eslint-import-resolver-typescript` (currently only a transitive
-  dep) plus the `import/resolver` setting. Add it as a direct dev
-  dep; without it `@/`-alias and bare-dir → `index.ts` resolution
-  fail and the rule misfires.
-- **`.native.tsx` resolution through the barrels.** Re-exporting
-  `density-provider` / `theme-provider` from `index.ts` must keep
-  the bundler picking the `.native` variant on native and the base
-  variant on web. Verify on both platforms.
+- **`.native.tsx` resolution through the barrels.** The `index.ts`
+  barrels re-export the bare `density-provider` / `theme-provider` /
+  `use-theme` specifiers, so Metro's platform resolution stays
+  transparent (the `.native` variant on native, base on web).
+  Typecheck and web resolution check out; a native run still owes
+  the final smoke.
 
-Resolved during planning: `lib/*` mode `folder` is correct
-(top-level subdirectories are modules; bare files like `utils.ts`
-are a separate `lib-file` element). No synthetic `lib/_smoke/`
-fixture — the existing foundation modules and the compliance
+Resolved during implementation: the rule is `boundaries/dependencies`
+at `'error'` (v6 deprecates `entry-point` and folds index-only
+enforcement into it), with `lib-module` as a folder-mode element, an
+`!(lib)/**` full-mode catch-all so importers outside `lib/` are
+"known" without shadowing `lib-module` (boundaries matches segments
+deepest-first), and a `disallow` on `lib-module` internals
+(`internalPath: '!index.ts'`) covering value and type imports.
+`eslint-import-resolver-typescript` plus the `import/resolver`
+setting resolve `@/` aliases and bare-dir → `index.ts`; `scripts/**`
+is exempt. Verified with `pnpm lint`: the compliance refactor is
+clean and a deliberate value or type deep-import fails. `lib/*`
+folder mode confirmed (a module's subtree is one element; `utils.ts`
+is a separate `lib-file`). No synthetic `lib/_smoke/` fixture — the
+existing foundation modules and the compliance
 refactor exercise the rule live. Inter-element coupling stays out
-of scope: non-`lib` elements are declared but allow any entry
-point, so this slice does not police which component imports which;
-that is a future slice if cross-domain coupling becomes a concern.
+of scope: the `disallow` only targets `lib-module` internals, so
+this slice does not police which component imports which; that is a
+future slice if cross-domain coupling becomes a concern.

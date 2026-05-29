@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
 
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { Chip } from './chip'
 import { Text } from './text'

@@ -46,7 +46,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
-import { useDensity } from '@/lib/density/use-density'
+import { useDensity } from '@/lib/density'
 import { cn } from '@/lib/utils'
 
 type SuggestionCategory = {

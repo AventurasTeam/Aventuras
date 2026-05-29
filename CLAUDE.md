@@ -17,6 +17,9 @@ vars, no BaaS.
 - [`docs/architecture.md`](./docs/architecture.md) — prompt
   templates and authoring, settings, agent orchestration overview,
   translation, retrieval invariants.
+- [`docs/code-conventions.md`](./docs/code-conventions.md) — code
+  conventions: module structure, state placement, action layer,
+  component taxonomy, i18n, testing, forms, pnpm.
 - [`docs/generation-pipeline.md`](./docs/generation-pipeline.md) —
   pipeline framework: phases, orchestrator, action layer, event bus,
   transactions, concurrency model.

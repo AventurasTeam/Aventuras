@@ -2,9 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect } from 'react'
 import { View } from 'react-native'
 
-import { themes } from '@/lib/themes/registry'
-import { toast } from '@/lib/toast'
-import { toastStore, type ToastItem } from '@/lib/toast/store'
+import { themes } from '@/lib/themes'
+import { toast, toastStore, type ToastItem } from '@/lib/toast'
 
 import { Button } from './button'
 import { Text } from './text'

@@ -1,7 +1,6 @@
 import { Platform, View } from 'react-native'
 
-import type { DensityValue } from '@/lib/density/types'
-import { useDensity } from '@/lib/density/use-density'
+import { useDensity, type DensityValue } from '@/lib/density'
 import { cn } from '@/lib/utils'
 
 const TRACK_CLASSES: Record<DensityValue, string> = {

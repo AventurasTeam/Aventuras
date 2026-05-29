@@ -2,7 +2,7 @@ import { ScrollView, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
-import { useTheme } from '@/lib/themes/use-theme'
+import { useTheme } from '@/lib/themes'
 
 export function ThemePicker() {
   const { theme, setTheme, themes } = useTheme()

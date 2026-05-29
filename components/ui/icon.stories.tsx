@@ -28,7 +28,7 @@ import {
 } from 'lucide-react-native'
 import { View } from 'react-native'
 
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { Icon } from './icon'
 import { Text } from './text'

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
 
 import { Text } from '@/components/ui/text'
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { MasterDetailLayout } from './master-detail-layout'
 

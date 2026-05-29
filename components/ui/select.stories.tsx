@@ -11,7 +11,7 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState, type ComponentProps } from 'react'
 import { View } from 'react-native'
 
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { Select, type SelectOption } from './select'
 import { Text } from './text'

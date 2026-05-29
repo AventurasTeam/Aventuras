@@ -4,7 +4,7 @@ import { Platform, Pressable, type PressableProps } from 'react-native'
 
 import { Spinner } from '@/components/ui/spinner'
 import { TextClassContext } from '@/components/ui/text'
-import type { ThemeColorSlots } from '@/lib/themes/types'
+import type { ThemeColorSlots } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(

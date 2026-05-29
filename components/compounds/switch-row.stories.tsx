@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { View } from 'react-native'
 
 import { Text } from '@/components/ui/text'
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { SwitchRow } from './switch-row'
 

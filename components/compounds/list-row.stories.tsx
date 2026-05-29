@@ -5,7 +5,7 @@ import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 import { EntityKindIcon } from '@/components/entity/entity-kind-icon'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { ListRow } from './list-row'
 

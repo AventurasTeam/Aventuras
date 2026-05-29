@@ -3,7 +3,7 @@ import { View } from 'react-native'
 
 import { EntityKindIcon } from '@/components/entity/entity-kind-icon'
 import { Text } from '@/components/ui/text'
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { CollisionListRow } from './collision-list-row'
 

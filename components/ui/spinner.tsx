@@ -1,8 +1,7 @@
 import { ActivityIndicator, Platform, View } from 'react-native'
 import Svg, { Circle } from 'react-native-svg'
 
-import type { ThemeColorSlots } from '@/lib/themes/types'
-import { useTheme } from '@/lib/themes/use-theme'
+import { useTheme, type ThemeColorSlots } from '@/lib/themes'
 
 const SPINNER_PX = {
   sm: 16,

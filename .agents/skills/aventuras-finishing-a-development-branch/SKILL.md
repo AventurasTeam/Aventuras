@@ -9,6 +9,8 @@ description: Use when implementation is complete, all tests pass, and you need t
 
 ## Overview
 
+**Project convention:** for code work, read [`docs/code-conventions.md`](../../../docs/code-conventions.md) — module structure (`lib/*` public-API rule), state placement, action layer, component taxonomy, testing — and check the [lessons-learned index](../../../docs/implementation/lessons-learned/README.md) before touching the substrate an entry references.
+
 Guide completion of development work by presenting clear options and handling chosen workflow.
 
 **Core principle:** Verify tests → Detect environment → Present options → Execute choice → Clean up.

@@ -17,7 +17,7 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 import { InputComponentContext } from '@/components/ui/input'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { TextClassContext } from '@/components/ui/text'
-import { useTheme } from '@/lib/themes/use-theme'
+import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
 type AutoFocusHandler = (event: Event) => void

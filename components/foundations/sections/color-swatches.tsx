@@ -1,8 +1,7 @@
 import { View } from 'react-native'
 
 import { Text } from '@/components/ui/text'
-import { COLOR_SLOT_KEYS } from '@/lib/themes/types'
-import { useTheme } from '@/lib/themes/use-theme'
+import { COLOR_SLOT_KEYS, useTheme } from '@/lib/themes'
 
 export function ColorSwatches() {
   const { theme } = useTheme()

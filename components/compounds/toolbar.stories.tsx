@@ -5,7 +5,7 @@ import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Chip } from '@/components/ui/chip'
 import { Text } from '@/components/ui/text'
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { Toolbar } from './toolbar'
 

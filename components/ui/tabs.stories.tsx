@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState, type ReactNode } from 'react'
 import { View } from 'react-native'
 
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './tabs'
 import { Text } from './text'

@@ -24,7 +24,7 @@ import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { Text, TextClassContext } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
-import { useTheme } from '@/lib/themes/use-theme'
+import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
 const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : Fragment

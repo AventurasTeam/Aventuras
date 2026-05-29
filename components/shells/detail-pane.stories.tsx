@@ -11,7 +11,7 @@ import { InlineEditableName } from '@/components/ui/inline-editable-name'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { DetailPane } from './detail-pane'
 

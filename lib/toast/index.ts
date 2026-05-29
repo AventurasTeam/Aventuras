@@ -14,4 +14,5 @@ export const toast = {
   dismiss: (id: string) => toastStore.dismiss(id),
 }
 
+export { toastStore } from './store'
 export type { ToastItem, ToastSeverity } from './store'

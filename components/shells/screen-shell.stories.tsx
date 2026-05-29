@@ -4,7 +4,7 @@ import { View } from 'react-native'
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { ScreenShell } from './screen-shell'
 

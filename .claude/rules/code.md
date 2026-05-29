@@ -101,3 +101,65 @@ When converting an existing wildcard import to named imports, grep
 the file for `<Namespace>.member` references and pull each one into
 the named-import list. Don't leave dangling `React.foo` references
 after the import line changes.
+
+## Module structure
+
+`lib/*` modules expose a public API through their root `index.ts`;
+code outside the module (including outside `lib/`) imports only from
+there, enforced by `boundaries/dependencies`. Intra-module imports
+are free, types are public, and `scripts/**` is exempt. See
+[code-conventions.md → Module structure](../../docs/code-conventions.md#module-structure).
+
+## State placement
+
+Component-local `useState`; cross-component ephemeral in
+`lib/stores/ui/`; domain-class Zustand stores expose mutators only —
+no `setState` from outside the store or action layer. See
+[code-conventions.md → State placement](../../docs/code-conventions.md#state-placement).
+
+## Action layer
+
+Cross-cutting transactional writes route through `lib/actions/<domain>/`,
+mediating Zustand and SQLite as one unit. See
+[code-conventions.md → Action layer](../../docs/code-conventions.md#action-layer).
+
+## Component folder taxonomy
+
+Primitives in `components/ui/`, domain-agnostic compounds in
+`components/compounds/`, single-domain compounds in
+`components/<domain>/`, shells in `components/shells/`. See
+[code-conventions.md → Component folder taxonomy](../../docs/code-conventions.md#component-folder-taxonomy).
+
+## i18n discipline
+
+No raw user-facing strings; chrome routes through `t()`.
+Convention-only until `i18next` lands (Slice 1.7). See
+[code-conventions.md → i18n discipline](../../docs/code-conventions.md#i18n-discipline).
+
+## Testing discipline
+
+Unit-test logic (`lib/*`, pure functions, reducers, state machines,
+parsers); UI behavior via smoke / Storybook / manual; no coverage
+thresholds. See
+[code-conventions.md → Testing discipline](../../docs/code-conventions.md#testing-discipline).
+
+## Forms
+
+Input clusters with a submit button use `react-hook-form`; inline
+single inputs stay component-local. Convention-only until
+`react-hook-form` lands (Slice 2.3). See
+[code-conventions.md → Forms](../../docs/code-conventions.md#forms).
+
+## pnpm and patches
+
+pnpm is the only supported package manager, enforced by
+`engines.pnpm`, `engine-strict=true`, and the `only-allow`
+preinstall guard. Patches live under `patches/`. See
+[code-conventions.md → pnpm and patches](../../docs/code-conventions.md#pnpm-and-patches).
+
+## Lessons learned
+
+Check
+[lessons-learned](../../docs/implementation/lessons-learned/README.md)
+before touching the substrate an entry references. See
+[code-conventions.md → Lessons learned](../../docs/code-conventions.md#lessons-learned).

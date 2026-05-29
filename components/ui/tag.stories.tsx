@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { View } from 'react-native'
 
 import { Spinner } from '@/components/ui/spinner'
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { Tag } from './tag'
 import { Text } from './text'

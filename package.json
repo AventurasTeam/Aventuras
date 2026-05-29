@@ -111,6 +111,8 @@
     "eslint": "^9.39.4",
     "eslint-config-expo": "~55.0.0",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-boundaries": "^6.0.2",
     "eslint-plugin-react-native": "^5.0.0",
     "eslint-plugin-storybook": "10.3.5",
     "eslint-plugin-unused-imports": "^4.4.1",

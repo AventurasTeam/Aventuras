@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { Flag, MapPin, Package, User } from 'lucide-react-native'
 import { View } from 'react-native'
 
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { Avatar } from './avatar'
 import { Icon } from './icon'

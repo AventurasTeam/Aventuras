@@ -4,8 +4,7 @@ import type { ComponentProps } from 'react'
 import { Platform } from 'react-native'
 
 import { Icon } from '@/components/ui/icon'
-import type { DensityValue } from '@/lib/density/types'
-import { useDensity } from '@/lib/density/use-density'
+import { useDensity, type DensityValue } from '@/lib/density'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_HIT_SLOP = 24

@@ -5,12 +5,8 @@ import { useEffect, type ReactNode } from 'react'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 
-import { DensityProvider } from '@/lib/density/density-provider'
-import type { DensitySetting } from '@/lib/density/types'
-import { useDensity } from '@/lib/density/use-density'
-import { themes as registryThemes } from '@/lib/themes/registry'
-import { ThemeProvider } from '@/lib/themes/theme-provider'
-import { useTheme } from '@/lib/themes/use-theme'
+import { DensityProvider, useDensity, type DensitySetting } from '@/lib/density'
+import { themes as registryThemes, ThemeProvider, useTheme } from '@/lib/themes'
 
 import '../global.css'
 

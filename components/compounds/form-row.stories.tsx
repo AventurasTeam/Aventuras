@@ -5,7 +5,7 @@ import { expect, screen } from 'storybook/test'
 
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { FormRow } from './form-row'
 

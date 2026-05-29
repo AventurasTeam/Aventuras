@@ -4,7 +4,7 @@ import { View } from 'react-native'
 import { fn } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { EmbedderDownloadDialogView } from './embedder-download-dialog'
 import type {

@@ -15,7 +15,7 @@ import { runOnJS } from 'react-native-worklets'
 
 import { Icon } from '@/components/ui/icon'
 import { Text } from '@/components/ui/text'
-import { toastStore, type ToastItem, type ToastSeverity } from '@/lib/toast/store'
+import { toastStore, type ToastItem, type ToastSeverity } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 
 import { NativeOnlyAnimatedView } from './native-only-animated-view'

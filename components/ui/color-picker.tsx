@@ -12,8 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
-import type { DensityValue } from '@/lib/density/types'
-import { useDensity } from '@/lib/density/use-density'
+import { useDensity, type DensityValue } from '@/lib/density'
 import { cn } from '@/lib/utils'
 
 type ColorValue = string

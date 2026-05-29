@@ -1,8 +1,7 @@
 import { useState, type ComponentProps } from 'react'
 import { Platform, TextInput, type StyleProp, type TextStyle } from 'react-native'
 
-import { densityTokens } from '@/lib/density/registry'
-import { useDensity } from '@/lib/density/use-density'
+import { densityTokens, useDensity } from '@/lib/density'
 import { cn } from '@/lib/utils'
 
 import { clamp, computeTextareaEnvelope } from './textarea-envelope'

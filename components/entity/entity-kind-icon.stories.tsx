@@ -3,7 +3,7 @@ import { View } from 'react-native'
 import { expect, screen } from 'storybook/test'
 
 import { Text, TextClassContext } from '@/components/ui/text'
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { EntityKindIcon, type EntityKind } from './entity-kind-icon'
 

@@ -3,7 +3,7 @@ import { CalendarClock, GitBranch, Pencil, RotateCw, Trash2 } from 'lucide-react
 import { View } from 'react-native'
 import { expect, fireEvent, fn, userEvent, waitFor } from 'storybook/test'
 
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { IconAction } from './icon-action'
 import { Text } from './text'

@@ -5,8 +5,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 
 import '@/global.css'
-import { DensityProvider } from '@/lib/density/density-provider'
-import { ThemeProvider } from '@/lib/themes/theme-provider'
+import { DensityProvider } from '@/lib/density'
+import { ThemeProvider } from '@/lib/themes'
 
 export default function RootLayout() {
   return (

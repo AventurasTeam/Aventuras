@@ -5,7 +5,7 @@ import { screen, userEvent } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
-import { themes } from '@/lib/themes/registry'
+import { themes } from '@/lib/themes'
 
 import { CollisionResolveDialog } from './collision-resolve-dialog'
 import type { EntitySummary, Resolution } from './collision-resolve-diff'
