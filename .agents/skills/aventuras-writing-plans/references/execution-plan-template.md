@@ -42,7 +42,10 @@ Carried from the aventuras-brainstorming session that preceded this plan.
 
 ### Task 1: [Component name]
 
-[One `### Task N` per task — a Files block plus bite-sized steps, exactly as the Task Structure section of SKILL.md specifies. Repeat for every task.]
+**Model:** cheap | standard | capable — <why>
+**Verification:** automated | review — <why>
+
+[One `### Task N` per task — the Model and Verification tier lines, a Files block, then bite-sized steps, exactly as the Task Structure section of SKILL.md specifies. Repeat for every task.]
 
 ---
 

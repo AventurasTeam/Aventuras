@@ -64,12 +64,32 @@ This structure informs the task decomposition. Each task should produce self-con
 - "Run the tests and make sure they pass" - step
 - "Commit" - step
 
+## Per-task tiers: model and verification
+
+Every task carries two tiers the executor honors. Assign them now — you see all the tasks and their nature at once, so the call is cheaper and more honest here than mid-execution.
+
+**Model** — the least powerful model that can do the task (mirrors the subagent skill's Model Selection):
+
+- `cheap` — mechanical: 1-2 files, complete spec, no design judgment. Most well-specified tasks.
+- `standard` — integration: multiple files, pattern-matching, debugging.
+- `capable` — design judgment or broad codebase understanding.
+
+**Verification** — how the task's acceptance is confirmed:
+
+- `automated` — fully covered by deterministic gates (typecheck, lint, existing tests, a completeness grep). The executor runs the named commands and reports the evidence; the implementer's self-review covers spec-compliance. No reviewer subagents. Eligible only when no behavioral judgment is needed — and any runtime-only risk (a change that passes the gates but could behave differently at runtime, e.g. platform variants or timing) is named as a smoke / monitor, not waved through.
+- `review` — anything with new logic, behavioral assertions, or an ambiguous spec. Gets the full two-stage review (spec compliance, then code quality) in the subagent skill.
+
+When unsure, pick `review` and `standard` — over-verifying is cheaper than a silent miss. The developer sees both tiers in the plan and can push any task up before execution starts.
+
 ## Task Structure
 
 Each entry in the plan's Tasks section follows this format:
 
 ````markdown
 ### Task N: [Component Name]
+
+**Model:** cheap | standard | capable — <one-line why>
+**Verification:** automated | review — <one-line why>
 
 **Files:**
 
@@ -147,6 +167,8 @@ After writing the complete plan, look at the slice doc with fresh eyes and check
 
 **4. Evidence coverage:** Does every slice acceptance criterion have an Evidence Matrix row naming a real command or check — not a generic "run tests"?
 
+**5. Tier assignment:** Does every task carry a Model and a Verification tier with a one-line reason? An `automated` task must name the commands that fully cover it; if it can't, it's `review`.
+
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a slice requirement with no task, add the task.
 
 ## Execution Handoff
@@ -159,7 +181,7 @@ Then present both options with the recommendation:
 
 **"Plan complete and saved to `.impl-plans/<filename>.md`. Two execution options:**
 
-**1. Subagent-Driven** — a fresh subagent per task, two-stage review between tasks, fast iteration.
+**1. Subagent-Driven** — a fresh subagent per task, two-stage review on review-tier tasks, fast iteration.
 
 **2. Inline Execution** — tasks executed in this session, batched with review checkpoints.
 

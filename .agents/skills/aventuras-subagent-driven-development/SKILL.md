@@ -7,11 +7,11 @@ description: Use when executing implementation plans with independent tasks in t
 
 # Subagent-Driven Development
 
-Execute plan by dispatching fresh subagent per task, with two-stage review after each: spec compliance review first, then code quality review.
+Execute plan by dispatching a fresh subagent per task. Review-tier tasks get a two-stage review after each: spec compliance review first, then code quality review. Automated-tier tasks are confirmed by running the plan's named verification commands instead (see Per-task verification tier).
 
 **Why subagents:** You delegate tasks to specialized agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed at their task. They should never inherit your session's context or history — you construct exactly what they need. This also preserves your own context for coordination work.
 
-**Core principle:** Fresh subagent per task + two-stage review (spec then quality) = high quality, fast iteration
+**Core principle:** Fresh subagent per task + verification calibrated to the task's tier (two-stage review where it earns its cost) = high quality, fast iteration
 
 **Continuous execution:** Do not pause to check in with your human partner between tasks. Execute all tasks from the plan without stopping. The only reasons to stop are: BLOCKED status you cannot resolve, ambiguity that genuinely prevents progress, or all tasks complete. "Should I continue?" prompts and progress summaries waste their time — they asked you to execute the plan, so execute it.
 
@@ -39,7 +39,7 @@ digraph when_to_use {
 
 - Same session (no context switch)
 - Fresh subagent per task (no context pollution)
-- Two-stage review after each task: spec compliance first, then code quality
+- Two-stage review on review-tier tasks: spec compliance first, then code quality
 - Faster iteration (no human-in-loop between tasks)
 
 ## The Process
@@ -89,7 +89,18 @@ digraph process {
 }
 ```
 
+## Per-task verification tier
+
+The per-task loop above is the **`review`-tier** flow. Each task's tier comes from the plan (writing-plans assigns a `Verification:` tier); honor it:
+
+- **`review`** — run the full loop: implementer → spec-compliance reviewer → code-quality reviewer → fix loops → complete.
+- **`automated`** — the acceptance is fully covered by deterministic gates. Skip the two reviewer subagents; instead **run the task's named verification commands yourself and report the evidence** (the actual command output, not "looks fine"). The implementer's self-review stands in for spec-compliance. If a runtime-only risk was flagged, record it as a smoke / monitor rather than treating it as covered.
+
+The **final whole-implementation code reviewer runs regardless of tier** — it is the backstop for cross-task and holistic issues. Substituting controller verification is legitimate **only** when the plan marks the task `automated`; doing it on a `review`-tier task, or without the plan saying so, is the silent-skip red flag below.
+
 ## Model Selection
+
+**The model tier is set per task in the plan** (writing-plans assigns each task a `Model:` tier). Dispatch every task at its assigned tier — pass it as the `model` field of the implementer dispatch. If the plan predates this field or omits it, assign a tier using the signals below and state it in the dispatch; do not silently inherit the controller's model. (Mechanical work running on the most capable model — the costly default this prevents — is the common failure.)
 
 Use the least powerful model that can handle each role to conserve cost and increase speed.
 
@@ -248,7 +259,7 @@ Done!
 **Never:**
 
 - Start implementation on main/master branch without explicit user consent
-- Skip reviews (spec compliance OR code quality)
+- Skip the two-stage review on a review-tier task, or silently substitute controller verification on a task the plan didn't mark automated (declare the tier — never swap it quietly)
 - Proceed with unfixed issues
 - Dispatch multiple implementation subagents in parallel (conflicts)
 - Make subagent read plan file (provide full text instead)
