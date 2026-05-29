@@ -27,9 +27,10 @@ before they pick up breadth work.
 ## Narrative / overview
 
 The spine is built bottom-up with one exception: the code
-conventions slice goes first so the very first `lib/` module lands
-under the public-API discipline rather than getting retrofitted
-into it later. After conventions, the database layer lands as the
+conventions slice goes first so the rule is in place before any new
+`lib/` module lands, and the pre-existing foundation modules
+(`density`, `themes`, `toast`) are brought into compliance up front
+rather than later. After conventions, the database layer lands as the
 foundation; observability builds on it (the logger gates against
 `app_settings.diagnostics.enabled`); the AI SDK wrapper layers on
 top with `httpCallSink` integrated from its first emission; the
@@ -53,10 +54,11 @@ through logger + sinks, and writes a `pipeline_runs` row.
 
 Cross-cutting decisions landed across this milestone:
 
-- Every `lib/*` module created adheres to the public-API
-  convention from day 1; the `eslint-plugin-boundaries` rule lands
-  at `error` level before any module exists, so the first module
-  sets the pattern.
+- Every `lib/*` module adheres to the public-API convention; the
+  `eslint-plugin-boundaries` rule lands at `error` level in 1.1,
+  which also retrofits the pre-existing foundation modules, so
+  every later module is built under it. The rule enforces
+  index-only entry for importers outside `lib/` too.
 - Logger routing is established before the AI SDK and pipeline
   slices begin, so every subsystem that needs to emit does so
   through `logger.<level>` from its first commit. Direct
@@ -82,10 +84,11 @@ Slice docs land as each slice is authored (one per slice under
 `./slices/`). The list below is the canonical inventory and order.
 
 1. **Slice 1.1 — Code conventions.** `lib/*` public-API rule via
-   `eslint-plugin-boundaries`, the `docs/code-conventions.md`
-   doc, `.claude/rules/code.md` extension citing it. No modules
-   yet; the rule lands first so the first module sets the
-   pattern.
+   `eslint-plugin-boundaries` (index-only entry, enforced for
+   importers outside `lib/` too), the `docs/code-conventions.md`
+   doc, `.claude/rules/code.md` extension citing it. Retrofits the
+   pre-existing `density` / `themes` / `toast` foundation modules
+   to the rule; new modules from 1.2 on are built under it.
 
 2. **Slice 1.2 — Drizzle and minimal schema.** Tables needed by
    this milestone (including `app_settings` for diagnostics
@@ -179,8 +182,8 @@ required.
 - App boots on Electron desktop and Android emulator.
 - All primary routes navigable from the empty landing screen:
   landing → reader-composer → settings.
-- `lib/*` public-API rule enforced at `error` level; CI fails on
-  internal-import violations.
+- `lib/*` public-API rule enforced at `error` level; CI fails when
+  any importer deep-imports a module's internals.
 - Logger writes flow into `diagnosticsStore.logEntries`; direct
   `console.*` outside the logger module is lint-banned.
 - One stub-LLM pipeline run completes end-to-end: triggered from
