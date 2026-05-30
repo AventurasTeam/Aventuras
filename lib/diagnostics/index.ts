@@ -1,3 +1,11 @@
+export {
+  redactHeaderValue,
+  redactHeaders,
+  redactResponseHeaders,
+  redactUrl,
+  setHttpCallKnownSecretValues,
+} from './http-redaction'
+export { httpCallSink } from './http-call-sink'
 export { logger, loggerWithoutTurn } from './logger'
 export { useDiagnosticsStore } from './store'
 export { useDiagnosticsHydration } from './use-diagnostics-hydration'

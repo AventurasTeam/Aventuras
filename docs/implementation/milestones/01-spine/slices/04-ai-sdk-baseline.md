@@ -276,4 +276,15 @@ modelId): LanguageModelV1` — given a provider instance ID
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- Targeted stable AI SDK 6 APIs: `getModel(...)` returns `LanguageModel`
+  from `ai`, and Anthropic providers are created with `createAnthropic`
+  plus the stable custom `fetch` option. Earlier `LanguageModelV1` /
+  `customFetch` wording in the slice brief was stale.
+- Header redaction uses value-matching only. The older per-provider
+  auth-header registration question was stale after
+  `docs/observability.md` moved to matching known secret values at the
+  sink boundary.
+- M1.4 intentionally uses an internal temporary provider/key registry in
+  `lib/ai` instead of reading `app_settings.providers` directly. Slice
+  1.6 must replace that registry source with hydrated app-settings store
+  access and keep feeding the diagnostics secret set for redaction.
