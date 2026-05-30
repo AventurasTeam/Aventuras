@@ -112,23 +112,47 @@
 
     untrack(() => {
       const vaultByName = new Map(vaultLorebook.entries.map((e) => [e.name, e]))
-      const localNames = new Set(entries.map((e) => e.name))
 
       let changed = false
-      let updated = entries.map((localEntry) => {
+
+      // Track which vault indices are already matched to avoid duplicates
+      // when an entry was renamed and a later index-based match would conflict.
+      const matchedVaultIndices: number[] = []
+
+      const isMatched = (i: number) => matchedVaultIndices.includes(i)
+      const markMatched = (i: number) => matchedVaultIndices.push(i)
+
+      let updated = entries.map((localEntry, i) => {
+        // Prefer name-based matching (preserves local content when vault unchanged)
         const vaultEntry = vaultByName.get(localEntry.name)
         if (vaultEntry && !locallyDeleted.has(vaultEntry.name)) {
+          markMatched(vaultLorebook.entries.indexOf(vaultEntry))
           if (JSON.stringify(vaultEntry) !== JSON.stringify(localEntry)) {
             changed = true
             return JSON.parse(JSON.stringify(vaultEntry))
           }
+          return localEntry
         }
+
+        // Name not found — check if entry at same index was renamed in vault
+        if (
+          i < vaultLorebook.entries.length &&
+          !isMatched(i) &&
+          !locallyDeleted.has(vaultLorebook.entries[i].name)
+        ) {
+          changed = true
+          markMatched(i)
+          return JSON.parse(JSON.stringify(vaultLorebook.entries[i]))
+        }
+
         return localEntry
       })
 
-      for (const vaultEntry of vaultLorebook.entries) {
-        if (!localNames.has(vaultEntry.name) && !locallyDeleted.has(vaultEntry.name)) {
-          updated.push(JSON.parse(JSON.stringify(vaultEntry)))
+      // Add unmatched vault entries (new insertions, or entries whose old-name
+      // local counterpart was filtered out by locallyDeleted)
+      for (let i = 0; i < vaultLorebook.entries.length; i++) {
+        if (!isMatched(i) && !locallyDeleted.has(vaultLorebook.entries[i].name)) {
+          updated.push(JSON.parse(JSON.stringify(vaultLorebook.entries[i])))
           changed = true
         }
       }
