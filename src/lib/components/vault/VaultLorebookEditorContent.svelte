@@ -111,48 +111,29 @@
     if (!vaultLorebook) return
 
     untrack(() => {
-      const vaultByName = new Map(vaultLorebook.entries.map((e) => [e.name, e]))
-
+      const vault = vaultLorebook.entries
       let changed = false
 
-      // Track which vault indices are already matched to avoid duplicates
-      // when an entry was renamed and a later index-based match would conflict.
-      const matchedVaultIndices: number[] = []
-
-      const isMatched = (i: number) => matchedVaultIndices.includes(i)
-      const markMatched = (i: number) => matchedVaultIndices.push(i)
-
-      let updated = entries.map((localEntry, i) => {
-        // Prefer name-based matching (preserves local content when vault unchanged)
-        const vaultEntry = vaultByName.get(localEntry.name)
-        if (vaultEntry && !locallyDeleted.has(vaultEntry.name)) {
-          markMatched(vaultLorebook.entries.indexOf(vaultEntry))
-          if (JSON.stringify(vaultEntry) !== JSON.stringify(localEntry)) {
-            changed = true
-            return JSON.parse(JSON.stringify(vaultEntry))
-          }
-          return localEntry
-        }
-
-        // Name not found — check if entry at same index was renamed in vault
-        if (
-          i < vaultLorebook.entries.length &&
-          !isMatched(i) &&
-          !locallyDeleted.has(vaultLorebook.entries[i].name)
-        ) {
+      // Pointwise: update entries at common indices where vault content differs
+      const commonLen = Math.min(entries.length, vault.length)
+      const updated = [...entries]
+      for (let i = 0; i < commonLen; i++) {
+        if (JSON.stringify(updated[i]) !== JSON.stringify(vault[i])) {
+          updated[i] = JSON.parse(JSON.stringify(vault[i]))
           changed = true
-          markMatched(i)
-          return JSON.parse(JSON.stringify(vaultLorebook.entries[i]))
         }
+      }
 
-        return localEntry
-      })
+      // Trim excess when entries were deleted from vault
+      if (vault.length < updated.length) {
+        updated.splice(vault.length)
+        changed = true
+      }
 
-      // Add unmatched vault entries (new insertions, or entries whose old-name
-      // local counterpart was filtered out by locallyDeleted)
-      for (let i = 0; i < vaultLorebook.entries.length; i++) {
-        if (!isMatched(i) && !locallyDeleted.has(vaultLorebook.entries[i].name)) {
-          updated.push(JSON.parse(JSON.stringify(vaultLorebook.entries[i])))
+      // Append when entries were inserted into vault
+      if (vault.length > updated.length) {
+        for (let i = updated.length; i < vault.length; i++) {
+          updated.push(JSON.parse(JSON.stringify(vault[i])))
           changed = true
         }
       }
@@ -262,11 +243,14 @@
         }
       }
       if (editMap.has(i)) {
+        const editChange = editMap.get(i)!
+        const updateData =
+          'data' in editChange ? (editChange.data as Partial<VaultLorebookEntry>) : {}
         return {
-          entry: e,
+          entry: { ...e, ...updateData } as VaultLorebookEntry,
           index: i,
           isPending: true,
-          pendingChange: editMap.get(i)!,
+          pendingChange: editChange,
           pendingAction: 'edit' as const,
         }
       }

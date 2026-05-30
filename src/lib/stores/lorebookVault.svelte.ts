@@ -14,9 +14,6 @@ const log = createLogger('LorebookVault')
 class LorebookVaultStore {
   lorebooks = $state<VaultLorebook[]>([])
   isLoaded = $state(false)
-  /** Per-lorebook version counter incremented whenever entries change */
-  private _entryVersions = new Map<string, number>()
-
   get favorites(): VaultLorebook[] {
     return this.lorebooks.filter((lb) => lb.favorite)
   }
@@ -55,10 +52,6 @@ class LorebookVaultStore {
   }
 
   async update(id: string, updates: Partial<VaultLorebook>): Promise<void> {
-    if (updates.entries) {
-      const v = (this._entryVersions.get(id) ?? 0) + 1
-      this._entryVersions.set(id, v)
-    }
     await database.updateVaultLorebook(id, updates)
     this.lorebooks = this.lorebooks.map((lb) =>
       lb.id === id ? { ...lb, ...updates, updatedAt: Date.now() } : lb,
@@ -171,8 +164,14 @@ class LorebookVaultStore {
     return this.lorebooks.find((lb) => lb.id === id)
   }
 
+  /**
+   * Current version of a lorebook's entries, derived from its updatedAt timestamp.
+   * Used by the vault assistant to detect external entry changes between AI turns
+   * and across sessions. Naturally persists across reloads since updatedAt is
+   * part of the lorebook data loaded from the database.
+   */
   getEntryVersion(id: string): number {
-    return this._entryVersions.get(id) ?? 0
+    return this.lorebooks.find((lb) => lb.id === id)?.updatedAt ?? 0
   }
 
   /**
