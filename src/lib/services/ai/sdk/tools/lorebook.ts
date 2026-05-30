@@ -47,7 +47,9 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
 
   function resolveTargetEntries(
     lorebookId: string | undefined,
-  ): { ok: true; targetEntries: VaultLorebookEntry[] } | { ok: false; error: string } {
+  ):
+    | { ok: true; targetEntries: VaultLorebookEntry[]; targetId: string | undefined }
+    | { ok: false; error: string } {
     if (lorebookId && !getLorebookEntries) {
       return { ok: false, error: 'Global lorebook access not available in this context' }
     }
@@ -57,9 +59,9 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
       if (!found) {
         return { ok: false, error: `Lorebook with ID "${targetId}" not found` }
       }
-      return { ok: true, targetEntries: found }
+      return { ok: true, targetEntries: found, targetId }
     }
-    return { ok: true, targetEntries: entries }
+    return { ok: true, targetEntries: entries, targetId }
   }
 
   return {
@@ -131,7 +133,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         if (index < 0 || index >= targetEntries.length) {
           return {
             found: false,
-            error: `Entry index ${index} out of range (0-${entries.length - 1})`,
+            error: `Entry index ${index} out of range (0-${targetEntries.length - 1})`,
           }
         }
 
@@ -217,7 +219,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
           id: changeId,
           type: 'create',
           toolCallId: changeId,
-          lorebookId,
+          lorebookId: targetId,
           entry: newEntry,
           status: 'pending',
         }
@@ -269,7 +271,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         if (!resolved.ok) {
           return { success: false, error: resolved.error }
         }
-        const targetEntries = resolved.targetEntries
+        const { targetEntries, targetId } = resolved
 
         if (index < 0 || index >= targetEntries.length) {
           return {
@@ -291,7 +293,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
           id: changeId,
           type: 'update',
           toolCallId: changeId,
-          lorebookId,
+          lorebookId: targetId,
           index,
           updates: cleanUpdates,
           previous,
@@ -332,7 +334,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         if (!resolved.ok) {
           return { success: false, error: resolved.error }
         }
-        const targetEntries = resolved.targetEntries
+        const { targetEntries, targetId } = resolved
 
         if (index < 0 || index >= targetEntries.length) {
           return {
@@ -348,7 +350,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
           id: changeId,
           type: 'delete',
           toolCallId: changeId,
-          lorebookId,
+          lorebookId: targetId,
           index,
           previous,
           status: 'pending',
@@ -389,7 +391,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         if (!resolved.ok) {
           return { success: false, error: resolved.error }
         }
-        const targetEntries = resolved.targetEntries
+        const { targetEntries, targetId } = resolved
 
         // Validate all indices
         for (const idx of indices) {
@@ -418,7 +420,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
           type: 'merge',
           toolCallId: changeId,
           indices: uniqueIndices,
-          lorebookId,
+          lorebookId: targetId,
           entry: mergedEntry,
           previousEntries,
           status: 'pending',
