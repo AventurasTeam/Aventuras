@@ -3360,7 +3360,7 @@ class DatabaseService {
         conversation.messages,
         conversation.chatMessages,
         conversation.pendingChanges,
-        conversation.entryVersions ?? '{}',
+        conversation.entryVersions ?? '[]',
       ],
     )
   }
