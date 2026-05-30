@@ -492,6 +492,7 @@
       }
 
       await saveHandler(updatedLorebook)
+      locallyDeleted = new Set()
       saving = false
       entriesDirty = false
     } catch (e) {
