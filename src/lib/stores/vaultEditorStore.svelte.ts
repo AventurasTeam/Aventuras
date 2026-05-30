@@ -26,6 +26,9 @@ class VaultEditorStore {
   /** Whether the entity editor panel is visible */
   editorOpen = $state(false)
 
+  /** Whether the lorebook editor has unsaved local changes */
+  editorDirty = $state(false)
+
   /** Whether the editor is in view mode (direct editing, no approval workflow) */
   viewMode = $state(false)
 
@@ -478,6 +481,7 @@ class VaultEditorStore {
     this.pendingChanges = []
     this.activeChange = null
     this.editorOpen = false
+    this.editorDirty = false
     this.viewMode = false
     this.viewEntityId = null
     this.viewEntityType = null

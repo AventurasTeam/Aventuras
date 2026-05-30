@@ -558,6 +558,10 @@
 
   async function handleApprove(change?: VaultPendingChange) {
     if (!service) return
+    if (vaultEditor.editorDirty) {
+      error = 'Save your local edits before approving changes.'
+      return
+    }
     const target = change ?? vaultEditor.activeChange
     if (!target) return
     try {
@@ -582,6 +586,10 @@
 
   async function handleApproveAll(): Promise<string | null> {
     if (!service) return 'Service not initialized'
+    if (vaultEditor.editorDirty) {
+      error = 'Save your local edits before approving changes.'
+      return 'Editor has unsaved changes'
+    }
     const err = await vaultEditor.approveAll(service)
     if (err) error = err
     if (!err) {

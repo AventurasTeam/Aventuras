@@ -28,6 +28,7 @@
   import TagInput from '$lib/components/tags/TagInput.svelte'
   import VaultLorebookEntryFields from './VaultLorebookEntryFields.svelte'
   import VaultPendingOperations, { type PendingOperation } from './VaultPendingOperations.svelte'
+  import { vaultEditor } from '$lib/stores/vaultEditorStore.svelte'
   import { LorebookImportExport } from '$lib/services/lorebookImportExport'
   import { ui } from '$lib/stores/ui.svelte'
   import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
@@ -79,19 +80,18 @@
   let name = $derived(lorebook.name)
   let description = $derived(lorebook.description ?? '')
   let tags = $derived<string[]>([...lorebook.tags])
-  // svelte-ignore state_referenced_locally
-  let entries = $state<VaultLorebookEntry[]>(
-    JSON.parse(
-      JSON.stringify(
-        // In embedded mode, the lorebook prop is previewLorebook which may have
-        // pending deletes already applied (truncated). Use the vault store's
-        // canonical entry list instead, so combinedEntries index mapping stays correct.
-        isEmbedded
-          ? (lorebookVault.getById(lorebook.id)?.entries ?? lorebook.entries)
-          : lorebook.entries,
-      ),
+  // Deep-copy the source entries once for revert support.
+  // In embedded mode, use the vault store's canonical list (previewLorebook may
+  // have pending deletes already applied, which would break index mapping).
+  const revertSnapshot: VaultLorebookEntry[] = JSON.parse(
+    JSON.stringify(
+      isEmbedded
+        ? (lorebookVault.getById(lorebook.id)?.entries ?? lorebook.entries)
+        : lorebook.entries,
     ),
-  ) // Deep copy — $state so manual adds persist
+  )
+
+  let entries = $state<VaultLorebookEntry[]>(JSON.parse(JSON.stringify(revertSnapshot)))
 
   // New-entry draft: not in entries[] until user clicks Save
   let newEntryDraft = $state<VaultLorebookEntry | null>(null)
@@ -157,6 +157,10 @@
   let settingsDirty = $state(false)
   let entriesDirty = $state(false)
   let savedFeedback = $state<'settings' | 'entry' | null>(null)
+
+  $effect(() => {
+    vaultEditor.editorDirty = entriesDirty
+  })
   let savedFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 
   function showSavedFeedback(type: 'settings' | 'entry') {
@@ -526,6 +530,22 @@
     activeTab = 'editor'
     searchQuery = ''
     confirmingDeleteIndex = null
+  }
+
+  function handleRevertChanges() {
+    if (isEmbedded) {
+      const vaultLorebook = lorebookVault.getById(lorebook.id)
+      if (vaultLorebook) {
+        entries = JSON.parse(JSON.stringify(vaultLorebook.entries))
+      } else {
+        entries = JSON.parse(JSON.stringify(revertSnapshot))
+      }
+    } else {
+      entries = JSON.parse(JSON.stringify(revertSnapshot))
+    }
+    locallyDeleted = new Set()
+    entriesDirty = false
+    selectedIndex = null
   }
 
   function handleSaveNewEntry() {
@@ -1071,9 +1091,21 @@
                         Saved
                       {:else}
                         <Save class="h-3.5 w-3.5" />
-                        Save Entry
+                        Save All Entries
                       {/if}
                     </Button>
+                    {#if entriesDirty}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        class="gap-1.5 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                        onclick={handleRevertChanges}
+                        disabled={saving}
+                      >
+                        <span class="hidden sm:inline">Revert Changes</span>
+                        <span class="sm:hidden">Revert</span>
+                      </Button>
+                    {/if}
                   {/if}
                   {#if selectedIndex >= 0}
                     <Button
