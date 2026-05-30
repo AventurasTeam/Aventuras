@@ -3350,8 +3350,8 @@ class DatabaseService {
   async createVaultConversation(conversation: VaultConversation): Promise<void> {
     const db = await this.getDb()
     await db.execute(
-      `INSERT INTO vault_assistant_conversations (id, title, created_at, updated_at, messages, chat_messages, pending_changes)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO vault_assistant_conversations (id, title, created_at, updated_at, messages, chat_messages, pending_changes, entry_versions)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         conversation.id,
         conversation.title,
@@ -3360,6 +3360,7 @@ class DatabaseService {
         conversation.messages,
         conversation.chatMessages,
         conversation.pendingChanges,
+        conversation.entryVersions ?? '{}',
       ],
     )
   }
@@ -3383,7 +3384,13 @@ class DatabaseService {
 
   async saveVaultConversation(
     id: string,
-    updates: { title?: string; messages?: string; chatMessages?: string; pendingChanges?: string },
+    updates: {
+      title?: string
+      messages?: string
+      chatMessages?: string
+      pendingChanges?: string
+      entryVersions?: string
+    },
   ): Promise<void> {
     const db = await this.getDb()
     const setClauses: string[] = ['updated_at = ?']
@@ -3404,6 +3411,10 @@ class DatabaseService {
     if (updates.pendingChanges !== undefined) {
       setClauses.push('pending_changes = ?')
       values.push(updates.pendingChanges)
+    }
+    if (updates.entryVersions !== undefined) {
+      setClauses.push('entry_versions = ?')
+      values.push(updates.entryVersions)
     }
 
     values.push(id)
@@ -3427,6 +3438,7 @@ class DatabaseService {
       messages: row.messages,
       chatMessages: row.chat_messages ?? '[]',
       pendingChanges: row.pending_changes ?? '[]',
+      entryVersions: row.entry_versions ?? undefined,
     }
   }
 

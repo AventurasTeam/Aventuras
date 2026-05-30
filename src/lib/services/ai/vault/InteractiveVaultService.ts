@@ -131,6 +131,8 @@ export class InteractiveVaultService extends BaseAIService {
   private conversationHistory: ModelMessage[] = []
   private systemPrompt: string = ''
   private conversationId: string | null = null
+  /** Per-lorebook known entry version at last interaction — used to detect external changes */
+  private _knownEntryVersions = new Map<string, number>()
 
   /** Session-level map of generated images: imageId → base64 data URL */
   readonly generatedImages: Map<string, string> = new Map()
@@ -285,6 +287,7 @@ export class InteractiveVaultService extends BaseAIService {
 
     const lorebookEntryContext: LorebookEntryToolContext = {
       entries: vaultState.activeEntries ?? [], // Default to empty if no active lorebook, relying on getLorebookEntries for global access
+      activeLorebookId: vaultState.activeLorebookId,
       getLorebookEntries: (id: string) => {
         const lb = vaultState.lorebooks().find((b) => b.id === id)
         return lb ? lb.entries : undefined
@@ -599,6 +602,32 @@ export class InteractiveVaultService extends BaseAIService {
       role: 'user',
       content: note,
     })
+
+    // Sync the known version so the AI doesn't get a redundant "entries changed"
+    // notification about work it just did.
+    if (change.entityType === 'lorebook-entry' && 'lorebookId' in change && change.lorebookId) {
+      this._knownEntryVersions.set(
+        change.lorebookId,
+        lorebookVault.getEntryVersion(change.lorebookId),
+      )
+    }
+  }
+
+  /**
+   * Before sending a message, check if the focused lorebook's entries
+   * have changed since the last interaction. If so, inject a system note.
+   */
+  injectLorebookChangeNote(lorebookId: string): void {
+    const currentVersion = lorebookVault.getEntryVersion(lorebookId)
+    const knownVersion = this._knownEntryVersions.get(lorebookId)
+    if (knownVersion !== undefined && currentVersion !== knownVersion) {
+      this.conversationHistory.push({
+        role: 'user',
+        content:
+          '[System: Lorebook entries were modified externally. Use list_entries to get the current state before making changes.]',
+      })
+    }
+    this._knownEntryVersions.set(lorebookId, currentVersion)
   }
 
   /**
@@ -825,12 +854,14 @@ export class InteractiveVaultService extends BaseAIService {
     const messagesJson = JSON.stringify(this.conversationHistory)
     const chatMessagesJson = JSON.stringify(chatMessages)
     const pendingChangesJson = JSON.stringify(pendingChanges)
+    const entryVersionsJson = JSON.stringify([...this._knownEntryVersions])
 
     if (this.conversationId) {
       await database.saveVaultConversation(this.conversationId, {
         messages: messagesJson,
         chatMessages: chatMessagesJson,
         pendingChanges: pendingChangesJson,
+        entryVersions: entryVersionsJson,
       })
       log('Saved conversation', { id: this.conversationId })
       return this.conversationId
@@ -849,6 +880,7 @@ export class InteractiveVaultService extends BaseAIService {
       messages: messagesJson,
       chatMessages: chatMessagesJson,
       pendingChanges: pendingChangesJson,
+      entryVersions: entryVersionsJson,
     })
 
     this.conversationId = id
@@ -889,6 +921,13 @@ export class InteractiveVaultService extends BaseAIService {
           }
         }
       }
+
+      // Restore known entry versions for change detection across sessions
+      this._knownEntryVersions = new Map(
+        conversation.entryVersions
+          ? (JSON.parse(conversation.entryVersions) as [string, number][])
+          : [],
+      )
 
       log('Loaded conversation', {
         id: conversationId,

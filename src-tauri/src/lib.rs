@@ -217,6 +217,12 @@ pub fn run() {
             description: "model_health_cache",
             sql: include_str!("../migrations/034_model_health_cache.sql"),
             kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 35,
+            description: "entry_versions",
+            sql: include_str!("../migrations/035_entry_versions.sql"),
+            kind: MigrationKind::Up,
         }
     ];
 

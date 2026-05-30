@@ -24,6 +24,7 @@
     Bot,
     Download,
   } from 'lucide-svelte'
+  import { untrack } from 'svelte'
   import TagInput from '$lib/components/tags/TagInput.svelte'
   import VaultLorebookEntryFields from './VaultLorebookEntryFields.svelte'
   import VaultPendingOperations, { type PendingOperation } from './VaultPendingOperations.svelte'
@@ -101,23 +102,41 @@
   // Inline delete confirmation
   let confirmingDeleteIndex = $state<number | null>(null)
 
-  // Sync entries from the vault store when entries are added externally
-  // (e.g. after pending creates are approved and saved, or the vault assistant
-  // adds entries in another session). In embedded mode, this replaces the old
-  // sync-from-previewLorebook which caused index misalignment (the preview
-  // already had pending deletes applied, truncating the array).
+  // Sync entries from the vault store when the lorebook is updated externally
+  // (e.g. after AI creates/updates are approved). Uses untrack() to avoid
+  // re-firing on every keystroke (entries is $state, so reading it in $effect
+  // would track it as a dependency). Only fires when the vault store changes.
   $effect(() => {
     const vaultLorebook = lorebookVault.getById(lorebook.id)
     if (!vaultLorebook) return
 
-    const localNames = new Set(entries.map((e) => e.name))
-    const newFromVault = vaultLorebook.entries.filter(
-      (e) => !localNames.has(e.name) && !locallyDeleted.has(e.name),
-    )
+    untrack(() => {
+      const vaultByName = new Map(vaultLorebook.entries.map((e) => [e.name, e]))
+      const localNames = new Set(entries.map((e) => e.name))
 
-    if (newFromVault.length > 0) {
-      entries = [...entries, ...newFromVault.map((e) => JSON.parse(JSON.stringify(e)))]
-    }
+      let changed = false
+      let updated = entries.map((localEntry) => {
+        const vaultEntry = vaultByName.get(localEntry.name)
+        if (vaultEntry && !locallyDeleted.has(vaultEntry.name)) {
+          if (JSON.stringify(vaultEntry) !== JSON.stringify(localEntry)) {
+            changed = true
+            return JSON.parse(JSON.stringify(vaultEntry))
+          }
+        }
+        return localEntry
+      })
+
+      for (const vaultEntry of vaultLorebook.entries) {
+        if (!localNames.has(vaultEntry.name) && !locallyDeleted.has(vaultEntry.name)) {
+          updated.push(JSON.parse(JSON.stringify(vaultEntry)))
+          changed = true
+        }
+      }
+
+      if (changed) {
+        entries = updated
+      }
+    })
   })
 
   // UI State
@@ -422,8 +441,10 @@
     error = null
 
     try {
-      // Preserve entries added externally (e.g. by vault assistant) that are
-      // not in the local working copy — prevents overwriting on save.
+      // Merge in entries from the vault store that aren't in the local working
+      // copy (e.g. added externally by vault assistant) — prevents overwriting
+      // on save. Do NOT update existing entries here; that's handled by the
+      // sync effect, and this is a save path (local state is the source of truth).
       const vaultLorebook = lorebookVault.getById(lorebook.id)
       if (vaultLorebook) {
         const localNames = new Set(entries.map((e) => e.name))
@@ -464,6 +485,7 @@
 
       await saveHandler(updatedLorebook)
       saving = false
+      entriesDirty = false
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to save lorebook'
       saving = false

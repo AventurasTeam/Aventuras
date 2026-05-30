@@ -14,6 +14,8 @@ const log = createLogger('LorebookVault')
 class LorebookVaultStore {
   lorebooks = $state<VaultLorebook[]>([])
   isLoaded = $state(false)
+  /** Per-lorebook version counter incremented whenever entries change */
+  private _entryVersions = new Map<string, number>()
 
   get favorites(): VaultLorebook[] {
     return this.lorebooks.filter((lb) => lb.favorite)
@@ -53,6 +55,10 @@ class LorebookVaultStore {
   }
 
   async update(id: string, updates: Partial<VaultLorebook>): Promise<void> {
+    if (updates.entries) {
+      const v = (this._entryVersions.get(id) ?? 0) + 1
+      this._entryVersions.set(id, v)
+    }
     await database.updateVaultLorebook(id, updates)
     this.lorebooks = this.lorebooks.map((lb) =>
       lb.id === id ? { ...lb, ...updates, updatedAt: Date.now() } : lb,
@@ -163,6 +169,10 @@ class LorebookVaultStore {
    */
   getById(id: string): VaultLorebook | undefined {
     return this.lorebooks.find((lb) => lb.id === id)
+  }
+
+  getEntryVersion(id: string): number {
+    return this._entryVersions.get(id) ?? 0
   }
 
   /**

@@ -1008,4 +1008,5 @@ export interface VaultConversation {
   messages: string // JSON blob — AI SDK ModelMessage[]
   chatMessages: string // JSON blob — ChatMessage[] (UI display state with diff cards, images, reasoning)
   pendingChanges: string // JSON blob — VaultPendingChange[] (full list including status)
+  entryVersions?: string // JSON blob — [lorebookId, version][] for change detection across sessions
 }

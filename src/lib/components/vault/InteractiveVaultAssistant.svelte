@@ -377,6 +377,15 @@
     abortController = new AbortController()
 
     try {
+      // Check for external lorebook edits before streaming
+      const lorebookId =
+        focusedEntity?.entityType === 'lorebook'
+          ? focusedEntity.entityId
+          : vaultEditor.currentLorebookId
+      if (lorebookId) {
+        service.injectLorebookChangeNote(lorebookId)
+      }
+
       const vaultState: VaultState = {
         characters: () => characterVault.items,
         lorebooks: () => lorebookVault.items,

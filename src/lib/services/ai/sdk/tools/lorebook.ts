@@ -25,6 +25,8 @@ export type { VaultLorebookPendingChangeSchema }
 export interface LorebookEntryToolContext {
   /** Current entries in the lorebook */
   entries: VaultLorebookEntry[]
+  /** The ID of the lorebook these entries belong to, if bound */
+  activeLorebookId?: string
   /** Callback to register a pending change */
   onPendingChange: (change: LorebookEntryPendingChangeSchema) => void
   /** Generate unique ID for pending changes */
@@ -41,7 +43,7 @@ export interface LorebookEntryToolContext {
  * Each invocation creates fresh tools bound to the current entries.
  */
 function createLorebookEntryTools(context: LorebookEntryToolContext) {
-  const { entries, onPendingChange, generateId, getLorebookEntries } = context
+  const { entries, activeLorebookId, onPendingChange, generateId, getLorebookEntries } = context
 
   return {
     /**
@@ -65,23 +67,20 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
       }) => {
         let targetEntries = entries
 
-        if (lorebookId) {
-          if (!getLorebookEntries) {
-            return {
-              entries: [],
-              total: 0,
-              error: 'Global lorebook access not available in this context',
+        // Prefer live lookup when available
+        if (getLorebookEntries) {
+          const targetId = lorebookId ?? activeLorebookId
+          if (targetId) {
+            const found = getLorebookEntries(targetId)
+            if (!found) {
+              return {
+                entries: [],
+                total: 0,
+                error: `Lorebook with ID "${targetId}" not found`,
+              }
             }
+            targetEntries = found
           }
-          const found = getLorebookEntries(lorebookId)
-          if (!found) {
-            return {
-              entries: [],
-              total: 0,
-              error: `Lorebook with ID "${lorebookId}" not found`,
-            }
-          }
-          targetEntries = found
         }
 
         let filtered = targetEntries
@@ -120,21 +119,19 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
       execute: async ({ lorebookId, index }: { lorebookId?: string; index: number }) => {
         let targetEntries = entries
 
-        if (lorebookId) {
-          if (!getLorebookEntries) {
-            return {
-              found: false,
-              error: 'Global lorebook access not available in this context',
+        // Prefer live lookup when available
+        if (getLorebookEntries) {
+          const targetId = lorebookId ?? activeLorebookId
+          if (targetId) {
+            const found = getLorebookEntries(targetId)
+            if (!found) {
+              return {
+                found: false,
+                error: `Lorebook with ID "${targetId}" not found`,
+              }
             }
+            targetEntries = found
           }
-          const found = getLorebookEntries(lorebookId)
-          if (!found) {
-            return {
-              found: false,
-              error: `Lorebook with ID "${lorebookId}" not found`,
-            }
-          }
-          targetEntries = found
         }
 
         if (index < 0 || index >= targetEntries.length) {
@@ -201,16 +198,13 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         injectionMode?: z.infer<typeof injectionModeSchema>
         priority?: number
       }) => {
-        // Validation: require lorebookId if not bound?
-        // Actually, if we are in InteractiveMode, we might not have 'entries' bound at all
-        // but we can't easily check that without checking entries.length which might be 0 anyway.
-        // Best effort: if lorebookId is provided, use it.
-
-        if (lorebookId && getLorebookEntries) {
-          if (!getLorebookEntries(lorebookId)) {
+        // Validate the target lorebook exists
+        const targetId = lorebookId ?? activeLorebookId
+        if (getLorebookEntries) {
+          if (targetId && !getLorebookEntries(targetId)) {
             return {
               success: false,
-              error: `Lorebook with ID "${lorebookId}" not found`,
+              error: `Lorebook with ID "${targetId}" not found`,
             }
           }
         }
@@ -279,27 +273,25 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
       }) => {
         let targetEntries = entries
 
-        if (lorebookId) {
-          if (!getLorebookEntries) {
-            return {
-              success: false,
-              error: 'Global lorebook access not available in this context',
+        // Prefer live lookup when available
+        if (getLorebookEntries) {
+          const targetId = lorebookId ?? activeLorebookId
+          if (targetId) {
+            const found = getLorebookEntries(targetId)
+            if (!found) {
+              return {
+                success: false,
+                error: `Lorebook with ID "${targetId}" not found`,
+              }
             }
+            targetEntries = found
           }
-          const found = getLorebookEntries(lorebookId)
-          if (!found) {
-            return {
-              success: false,
-              error: `Lorebook with ID "${lorebookId}" not found`,
-            }
-          }
-          targetEntries = found
         }
 
         if (index < 0 || index >= targetEntries.length) {
           return {
             success: false,
-            error: `Entry index ${index} out of range (0-${entries.length - 1})`,
+            error: `Entry index ${index} out of range (0-${targetEntries.length - 1})`,
           }
         }
 
@@ -355,27 +347,25 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
       }) => {
         let targetEntries = entries
 
-        if (lorebookId) {
-          if (!getLorebookEntries) {
-            return {
-              success: false,
-              error: 'Global lorebook access not available in this context',
+        // Prefer live lookup when available
+        if (getLorebookEntries) {
+          const targetId = lorebookId ?? activeLorebookId
+          if (targetId) {
+            const found = getLorebookEntries(targetId)
+            if (!found) {
+              return {
+                success: false,
+                error: `Lorebook with ID "${targetId}" not found`,
+              }
             }
+            targetEntries = found
           }
-          const found = getLorebookEntries(lorebookId)
-          if (!found) {
-            return {
-              success: false,
-              error: `Lorebook with ID "${lorebookId}" not found`,
-            }
-          }
-          targetEntries = found
         }
 
         if (index < 0 || index >= targetEntries.length) {
           return {
             success: false,
-            error: `Entry index ${index} out of range (0-${entries.length - 1})`,
+            error: `Entry index ${index} out of range (0-${targetEntries.length - 1})`,
           }
         }
 
@@ -408,7 +398,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
      */
     merge_entries: tool({
       description:
-        'Merge multiple lorebook entries into a single entry. Useful for consolidating duplicate or related entries. The change will be pending until approved.',
+        'Merge multiple lorebook entries into a single entry. Useful for consolidating duplicate or related entries. The change will be pending until approval.',
       inputSchema: z.object({
         lorebookId: z.string().optional().describe('ID of the lorebook containing the entries'),
         indices: z.array(z.number()).min(2).describe('Indices of entries to merge (at least 2)'),
@@ -425,21 +415,19 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
       }) => {
         let targetEntries = entries
 
-        if (lorebookId) {
-          if (!getLorebookEntries) {
-            return {
-              success: false,
-              error: 'Global lorebook access not available in this context',
+        // Prefer live lookup when available
+        if (getLorebookEntries) {
+          const targetId = lorebookId ?? activeLorebookId
+          if (targetId) {
+            const found = getLorebookEntries(targetId)
+            if (!found) {
+              return {
+                success: false,
+                error: `Lorebook with ID "${targetId}" not found`,
+              }
             }
+            targetEntries = found
           }
-          const found = getLorebookEntries(lorebookId)
-          if (!found) {
-            return {
-              success: false,
-              error: `Lorebook with ID "${lorebookId}" not found`,
-            }
-          }
-          targetEntries = found
         }
 
         // Validate all indices
