@@ -988,6 +988,7 @@ export class InteractiveVaultService extends BaseAIService {
     this.initialized = false
     this.conversationId = null
     this.generatedImages.clear()
+    this._knownEntryVersions.clear()
   }
 
   /**
