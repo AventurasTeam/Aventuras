@@ -29,6 +29,7 @@
   import VaultPendingOperations, { type PendingOperation } from './VaultPendingOperations.svelte'
   import { LorebookImportExport } from '$lib/services/lorebookImportExport'
   import { ui } from '$lib/stores/ui.svelte'
+  import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
 
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
@@ -78,7 +79,18 @@
   let description = $derived(lorebook.description ?? '')
   let tags = $derived<string[]>([...lorebook.tags])
   // svelte-ignore state_referenced_locally
-  let entries = $state<VaultLorebookEntry[]>(JSON.parse(JSON.stringify(lorebook.entries))) // Deep copy — $state so manual adds persist
+  let entries = $state<VaultLorebookEntry[]>(
+    JSON.parse(
+      JSON.stringify(
+        // In embedded mode, the lorebook prop is previewLorebook which may have
+        // pending deletes already applied (truncated). Use the vault store's
+        // canonical entry list instead, so combinedEntries index mapping stays correct.
+        isEmbedded
+          ? (lorebookVault.getById(lorebook.id)?.entries ?? lorebook.entries)
+          : lorebook.entries,
+      ),
+    ),
+  ) // Deep copy — $state so manual adds persist
 
   // New-entry draft: not in entries[] until user clicks Save
   let newEntryDraft = $state<VaultLorebookEntry | null>(null)
@@ -89,16 +101,17 @@
   // Inline delete confirmation
   let confirmingDeleteIndex = $state<number | null>(null)
 
-  // Sync entries from the lorebook prop when vault updates add or remove entries
-  // (e.g. after pending creates are approved and saved, or deletes are applied).
-  // Only needed in embedded mode where the AI can add entries concurrently.
+  // Sync entries from the vault store when entries are added externally
+  // (e.g. after pending creates are approved and saved, or the vault assistant
+  // adds entries in another session). In embedded mode, this replaces the old
+  // sync-from-previewLorebook which caused index misalignment (the preview
+  // already had pending deletes applied, truncating the array).
   $effect(() => {
-    if (!isEmbedded) return
+    const vaultLorebook = lorebookVault.getById(lorebook.id)
+    if (!vaultLorebook) return
 
     const localNames = new Set(entries.map((e) => e.name))
-
-    // Only add entries that are new in the prop and not locally deleted
-    const newFromVault = lorebook.entries.filter(
+    const newFromVault = vaultLorebook.entries.filter(
       (e) => !localNames.has(e.name) && !locallyDeleted.has(e.name),
     )
 
@@ -409,6 +422,19 @@
     error = null
 
     try {
+      // Preserve entries added externally (e.g. by vault assistant) that are
+      // not in the local working copy — prevents overwriting on save.
+      const vaultLorebook = lorebookVault.getById(lorebook.id)
+      if (vaultLorebook) {
+        const localNames = new Set(entries.map((e) => e.name))
+        const externalAdditions = vaultLorebook.entries.filter(
+          (e) => !localNames.has(e.name) && !locallyDeleted.has(e.name),
+        )
+        if (externalAdditions.length > 0) {
+          entries = [...entries, ...externalAdditions.map((e) => JSON.parse(JSON.stringify(e)))]
+        }
+      }
+
       // Update metadata entry breakdown
       const breakdown: Record<EntryType, number> = {
         character: 0,
