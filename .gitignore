@@ -58,6 +58,7 @@ app-example
 *storybook.log
 storybook-static
 .impl-plans/
+.worktrees/
 
 # Superpowers brainstorming scratch dir (visual companion mockups)
 .superpowers/
