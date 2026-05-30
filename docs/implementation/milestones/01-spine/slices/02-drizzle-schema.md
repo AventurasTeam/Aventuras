@@ -225,3 +225,7 @@ desktop` + Expo Android run); `vec_version()` returns without
   the root `_layout.tsx` effect blocks the first render until
   migrations finish. Acceptable for milestone 1 (no real data,
   fast); future loading-state UX is a later concern.
+
+## Implementation notes
+
+_Populated at finish: notable deviations from the plan and resolved developer decisions._

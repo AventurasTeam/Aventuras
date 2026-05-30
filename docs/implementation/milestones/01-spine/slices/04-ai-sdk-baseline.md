@@ -273,3 +273,7 @@ modelId): LanguageModelV1` — given a provider instance ID
   independently; pin to a specific minor at first install to
   avoid surprise upgrades during early milestones. Confirm
   versioning policy at authoring time.
+
+## Implementation notes
+
+_Populated at finish: notable deviations from the plan and resolved developer decisions._

@@ -27,11 +27,11 @@ For code work, read [`docs/code-conventions.md`](../../../docs/code-conventions.
 
 ## Input
 
-The input is one slice doc plus the open questions resolved in `aventuras-brainstorming`. Read the slice doc, its parent milestone, and the decisions carried over from brainstorming.
+The input is one slice doc plus the open questions resolved in `aventuras-plan-slice`. Read the slice doc, its parent milestone, and the decisions carried over from brainstorming.
 
 ## Scope Check
 
-A slice is a PR-sized unit — one slice, one plan. If the slice turns out too large for one PR, `aventuras-brainstorming` should have flagged it for a split; if it slipped through, stop and recommend a slice split rather than planning an oversized slice.
+A slice is a PR-sized unit — one slice, one plan. If the slice turns out too large for one PR, `aventuras-plan-slice` should have flagged it for a split; if it slipped through, stop and recommend a slice split rather than planning an oversized slice.
 
 ## Plan Structure
 
@@ -39,7 +39,7 @@ Write the plan into a file created from `references/execution-plan-template.md`.
 
 - **Header** — title, the agentic-workers sub-skill line, `Slice:` / `Milestone:` links, Goal, Architecture, Tech Stack.
 - **Execution gate** — a condition that must hold before execution may start, or `none`.
-- **Decisions** — developer decisions, implementer choices, and monitor-during-work items carried from `aventuras-brainstorming`.
+- **Decisions** — developer decisions, implementer choices, and monitor-during-work items carried from `aventuras-plan-slice`. These are the upstream source for the slice doc's **Implementation notes**: any decision that deviates from the slice brief, constrains a future slice, or picks a non-obvious route is promoted there when the branch is finished. This plan lives in git-ignored `.impl-plans/` and is ephemeral — the slice doc is the durable record, so nothing notable should die with the plan.
 - **Tasks** — one `### Task N` per task; see Task Structure below.
 - **Evidence Matrix** — one row per slice acceptance criterion.
 - **Skill Plan** — domain skills the executor should reach for.

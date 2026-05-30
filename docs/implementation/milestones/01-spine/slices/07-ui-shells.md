@@ -290,3 +290,7 @@ happens when real interactive features land.
   story bootstrap should be removed when real
   story-creation UI ships. Track the removal as a followup
   in `docs/followups.md` at the time this slice merges.
+
+## Implementation notes
+
+_Populated at finish: notable deviations from the plan and resolved developer decisions._

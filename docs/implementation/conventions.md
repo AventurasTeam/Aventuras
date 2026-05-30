@@ -177,15 +177,22 @@ coverage; a pipeline slice probably does.
 **Open questions.** Known-unknowns the executing dev should expect
 to surface during implementation. If a question turns into a
 decision during implementation, the canonical doc is updated and
-the slice doc is amended accordingly.
+the slice doc is amended accordingly — the resolution typically
+moves into Implementation notes.
 
-**Implementation notes.** Optional final section for brief
-implementation rationale that should persist near the slice. Use it
-sparingly: why a notable route was chosen, what constraint the
-executor should remember, or what implementation decision affected
-future slices. Do **not** put task checklists, step-by-step plans,
-verification logs, or work journals here. Full execution plans live
-outside `docs/` in `.impl-plans/`.
+**Implementation notes.** A standard final section — always present
+(seed it with a one-line placeholder when the slice doc is authored;
+populate it when the branch is finished, not before). It is the
+durable home for what otherwise survives only in the git-ignored
+execution plan or the commit history: **notable deviations from the
+slice's original brief** and **resolved developer decisions** (the
+choices settled during slice planning). Keep it sparing — why a
+notable route was chosen, what constraint the executor should
+remember, what decision affects future slices. Do **not** put task
+checklists, step-by-step plans, verification logs, or work journals
+here; full execution plans live outside `docs/` in `.impl-plans/`.
+Keeping the section always present is deliberate: its absence is how
+it gets overlooked at finish time.
 
 ## Slice planning
 
@@ -303,3 +310,8 @@ when it isn't." A trivial config-only slice doesn't need a
 Dependency graph or a Background; a load-bearing pipeline slice
 probably uses every section. The blueprint exists to make
 dev-ready slices easy to author, not to add ceremony.
+
+The one standing exception is **Implementation notes**: keep it
+present on every slice doc (a placeholder line is fine), because it
+is populated at finish and its absence is precisely what lets it be
+skipped.

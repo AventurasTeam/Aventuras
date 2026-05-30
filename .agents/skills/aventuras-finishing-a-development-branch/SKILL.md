@@ -38,7 +38,18 @@ Cannot proceed with merge/PR until tests pass.
 
 Stop. Don't proceed to Step 2.
 
-**If tests pass:** Continue to Step 2.
+**If tests pass:** Continue.
+
+### Step 1.5: Reconcile the slice doc (Aventuras slice branches)
+
+If this branch implemented a slice (it has a doc under
+`docs/implementation/milestones/**/slices/NN-*.md`), reconcile that doc with what actually shipped **before** presenting options, so the reconciliation rides along in the merge or PR. The execution plan in `.impl-plans/` is git-ignored and about to be lost — mine it now.
+
+- **Implementation notes** — record the notable deviations from the slice's plan and the resolved developer decisions. Sources: the plan's Decisions section in `.impl-plans/`, and the branch's commit history (`fix` / `chore` / `refactor` commits are usually deviations or review fixes). Keep it sparing, per the slice-doc structure in `docs/implementation/conventions.md` — why a notable route was chosen, what constrains a future slice, what a later author must remember. If the section is missing, add it.
+- **Open questions** — migrate any question that turned into a decision into Implementation notes; leave the genuinely-open ones.
+- **Scope / acceptance** — if shipped reality diverged from the brief, correct the brief so the doc isn't misleading.
+
+Commit this reconciliation on the branch. Skip the step entirely for non-slice branches (hotfixes, chores, tooling).
 
 ### Step 2: Detect Environment
 

@@ -292,3 +292,7 @@ commits).
   it becomes unwieldy, consider sub-grouping
   (`domain.world.useEntities`, `domain.session.useAppSettings`).
   Not a milestone-1 concern.
+
+## Implementation notes
+
+_Populated at finish: notable deviations from the plan and resolved developer decisions._

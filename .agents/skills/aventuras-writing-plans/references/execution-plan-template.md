@@ -24,7 +24,10 @@ Milestone: [Milestone N](../docs/implementation/milestones/NN-name/milestone.md)
 
 ## Decisions
 
-Carried from the aventuras-brainstorming session that preceded this plan.
+Carried from the aventuras-plan-slice session that preceded this plan.
+Decisions that deviate from the slice brief, constrain a future slice, or
+pick a non-obvious route are promoted to the slice doc's Implementation
+notes when the branch is finished (this plan is git-ignored).
 
 ### Developer decisions
 

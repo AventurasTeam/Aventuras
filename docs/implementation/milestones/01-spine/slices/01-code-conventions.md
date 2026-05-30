@@ -283,3 +283,7 @@ refactor exercise the rule live. Inter-element coupling stays out
 of scope: the `disallow` only targets `lib-module` internals, so
 this slice does not police which component imports which; that is a
 future slice if cross-domain coupling becomes a concern.
+
+## Implementation notes
+
+_Populated at finish: notable deviations from the plan and resolved developer decisions._

@@ -402,3 +402,7 @@ adds it.
   later milestone. For milestone 1, the report is just
   logged via `logger.warn` on any orphans recovered; the
   user sees nothing.
+
+## Implementation notes
+
+_Populated at finish: notable deviations from the plan and resolved developer decisions._

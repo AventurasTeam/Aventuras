@@ -198,7 +198,7 @@ viable; lead with your recommendation + reasoning.
 If a question requires a canonical-spec decision (not an
 implementation choice), STOP and offer the
 [`aventuras-design`](../aventuras-design/SKILL.md) route the way
-`aventuras-brainstorming` does — do not invoke `aventuras-design`
+`aventuras-plan-slice` does — do not invoke `aventuras-design`
 yourself.
 
 ## Phase 5 — Draft milestone.md
@@ -244,8 +244,12 @@ exactly. Each slice doc:
   without asking the author.
 - **Tests** — calibrated to the slice's risk profile.
 - **Open questions** — slice-scoped known-unknowns.
-- **Implementation notes** — optional; brief rationale, not a
-  task checklist (those live outside `docs/`).
+- **Implementation notes** — always present. Seed it with the
+  placeholder line `_Populated at finish: notable deviations from
+  the plan and resolved developer decisions._` — it is populated
+  when the branch is finished, not at authoring time. Brief
+  rationale only, never a task checklist (those live outside
+  `docs/`).
 
 ## Audit dispatch
 
