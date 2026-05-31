@@ -273,12 +273,21 @@ Cross-cutting deferrals surfaced during the build were routed to the
 - **`CallRetryError` → `PipelineError` mapping is test-only.** No
   production pipeline kind ships here, so the mapper lives in the fault
   suite; the first real pipeline kind will need a shipped equivalent.
+- **Finalization-write hardening (added post-review).** `commitRun` and
+  `abortRun` wrap the terminal `pipeline_runs` marker write in a
+  `try`/`catch`: a failed write is logged (`pipeline.marker_write_failed`)
+  and the run still finishes cleanly, so the ambient `actionId` and the
+  active-run slot always clear. Surfaced by the final review — an
+  un-wrapped write could leak both singletons into the next run; the
+  orphaned marker is reconciled by boot recovery.
 
 ### Carried follow-ups
 
-Cross-cutting deferrals with no single downstream owner were routed to
-the [triage inbox](../../../triage.md): the orchestrator
-finalization-write singleton-leak window, the chained-execution
-context-threading gap, the structured `action-layer` `PipelineError`
-fields, the shipped `CallRetryError` → `PipelineError` mapper, and the
-`generation-pipeline.md` `callWithRetry` signature reconciliation.
+The chained-execution context-threading gap is recorded on the
+[M5.2 roadmap entry](../../../roadmap.md) — the first real `chainsTo`
+consumer (per-turn → chapter-close) will own it. The remaining
+cross-cutting deferrals were routed to the
+[triage inbox](../../../triage.md): the structured `action-layer`
+`PipelineError` fields, the shipped `CallRetryError` → `PipelineError`
+mapper, and the `generation-pipeline.md` `callWithRetry` signature
+reconciliation.

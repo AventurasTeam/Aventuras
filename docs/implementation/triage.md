@@ -19,21 +19,6 @@ slice-planning gate forces its resolution before that slice is planned.
 
 ## Inbox
 
-- **Orchestrator finalization-write leak window.** `runPipeline`'s
-  `try`/`catch` wraps only the phase loop; if the terminal
-  `pipeline_runs` marker write in `commitRun` / `abortRun` throws, the
-  `clearCurrentActionId()` and `domain.clearActiveRun()` that follow are
-  skipped, leaking both module-level singletons into the next run. The
-  ambient half pre-dates 1.5b (1.5a); 1.5b widened it with `activeRunId`.
-  Cheap fix is a `try`/`finally` guaranteeing the clears, but it wants a
-  deliberate finalization-failure-semantics call (propagate vs swallow;
-  turn-finalize on a failed marker write) and a regression test. Low
-  probability on local SQLite. Source: Slice 1.5b final review.
-- **Chained-execution context threading.** When chained pipelines are
-  unparked, `commitRun` must hand the successor run its ambient
-  `actionId`, active-run pointer, and intermediates — today all are
-  cleared at the predecessor's commit. Source: Slice 1.5b (chaining is
-  Scope: out / parked).
 - **Structured `action-layer` PipelineError fields.** `tableName`,
   `targetId`, and `constraintViolated` are defined on the `action-layer`
   error variant but unpopulated; extracting them from a constraint throw
