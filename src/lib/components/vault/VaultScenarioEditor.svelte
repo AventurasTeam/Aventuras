@@ -1,11 +1,12 @@
 <script lang="ts">
   import type { VaultScenario } from '$lib/types'
   import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
-  import { Save, MapPin, Loader2, Bot } from 'lucide-svelte'
+  import { Save, MapPin, Loader2, Bot, X } from 'lucide-svelte'
   import VaultScenarioFormFields from './VaultScenarioFormFields.svelte'
   import type { VaultScenarioInput } from '$lib/services/ai/sdk/schemas/vault'
   import type { FocusedEntity } from '$lib/services/ai/vault/InteractiveVaultService'
   import { untrack } from 'svelte'
+  import { ui } from '$lib/stores/ui.svelte'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -32,6 +33,8 @@
     })),
   )
 
+  let savedSnapshot = $state<string>(untrack(() => JSON.stringify(formData)))
+
   $effect(() => {
     const current = scenarioVault.getById(scenario.id)
     if (!current) return
@@ -48,14 +51,20 @@
       }
       if (JSON.stringify(snapshot) !== JSON.stringify(formData)) {
         formData = snapshot
+        savedSnapshot = JSON.stringify(snapshot)
       }
     })
   })
 
   const isCreating = $derived(scenario.name === '' && scenario.settingSeed === '')
+  const hasChanges = $derived(JSON.stringify(formData) !== savedSnapshot)
 
   let saving = $state(false)
   let error = $state<string | null>(null)
+  let isOpen = $state(true)
+  let closeCooldownActive = $state(false)
+  let closeCooldownTimer: ReturnType<typeof setTimeout> | undefined = $state()
+  const CLOSE_COOLDOWN_MS = 3000
 
   async function handleSave() {
     if (!formData.name.trim()) {
@@ -77,21 +86,69 @@
           alternateGreetingsCount: formData.alternateGreetings?.length ?? 0,
         },
       })
-      onClose()
+      savedSnapshot = JSON.stringify(formData)
+      ui.showToast('Scenario saved', 'info')
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to save scenario'
     } finally {
       saving = false
     }
   }
+
+  function closeWithChanges() {
+    if (closeCooldownActive) {
+      clearTimeout(closeCooldownTimer)
+      closeCooldownActive = false
+      onClose()
+    } else {
+      closeCooldownActive = true
+      ui.showToast('Unsaved Changes — Press close again to discard changes', 'warning')
+      closeCooldownTimer = setTimeout(() => {
+        closeCooldownActive = false
+      }, CLOSE_COOLDOWN_MS)
+    }
+  }
+
+  function handleCloseAttempt() {
+    if (hasChanges) {
+      closeWithChanges()
+    } else {
+      onClose()
+    }
+  }
+
+  function handleModalOpenChange(nextOpen: boolean) {
+    if (nextOpen) return
+    if (hasChanges) {
+      if (closeCooldownActive) {
+        clearTimeout(closeCooldownTimer)
+        closeCooldownActive = false
+        onClose()
+      } else {
+        closeCooldownActive = true
+        isOpen = true
+        ui.showToast(
+          'Unsaved Changes — Press Escape or click outside again to discard changes',
+          'warning',
+        )
+        closeCooldownTimer = setTimeout(() => {
+          closeCooldownActive = false
+        }, CLOSE_COOLDOWN_MS)
+      }
+    } else {
+      onClose()
+    }
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault()
+      handleSave()
+    }
+  }
 </script>
 
-<ResponsiveModal.Root
-  open={true}
-  onOpenChange={(open) => {
-    if (!open) onClose()
-  }}
->
+<ResponsiveModal.Root bind:open={isOpen} onOpenChange={handleModalOpenChange}>
   <ResponsiveModal.Content
     class="flex h-[95vh] flex-col overflow-hidden p-0 md:h-[85vh] md:max-w-4xl"
   >
@@ -111,7 +168,7 @@
       </div>
     </ResponsiveModal.Header>
 
-    <div class="flex flex-1 flex-col overflow-hidden">
+    <div class="flex flex-1 flex-col overflow-hidden" onkeydown={handleKeydown} role="none">
       {#if error}
         <div class="px-6 py-2">
           <div
@@ -146,8 +203,11 @@
           <div></div>
         {/if}
         <div class="flex items-center gap-2">
-          <Button variant="outline" onclick={onClose} disabled={saving}>Cancel</Button>
-          <Button onclick={handleSave} disabled={saving || !formData.name.trim()}>
+          <Button variant="outline" onclick={handleCloseAttempt} disabled={saving}>
+            <X class="h-4 w-4" />
+            <span class="hidden sm:inline">Close</span>
+          </Button>
+          <Button onclick={handleSave} disabled={saving || !formData.name.trim() || !hasChanges}>
             {#if saving}
               <Loader2 class=" h-4 w-4 animate-spin" />
             {:else}
