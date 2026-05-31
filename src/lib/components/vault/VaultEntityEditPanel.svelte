@@ -13,6 +13,7 @@
   import { vaultEditor } from '$lib/stores/vaultEditorStore.svelte'
   import { characterToRecord, scenarioToRecord } from '$lib/utils/vaultMerge'
   import { SvelteMap } from 'svelte/reactivity'
+  import { ui } from '$lib/stores/ui.svelte'
 
   interface Props {
     change: VaultPendingChange
@@ -35,6 +36,7 @@
   let charData = $state<VaultCharacterInput | null>(null)
   let scenarioData = $state<VaultScenarioInput | null>(null)
   let entryData = $state<VaultLorebookEntry | null>(null)
+  let formDirty = $state(false)
 
   const composedData = $derived(vaultEditor.composedData)
 
@@ -92,9 +94,12 @@
   const displayScenarioData = $derived(vaultEditor.viewMode ? viewScenarioData : scenarioData)
 
   // Initialize local $state from the current source when switching modes
-  // or when the underlying data changes (so user edits start from fresh data).
+  // or when the underlying data changes. In view mode, skip syncing if
+  // the user is actively editing (formDirty) to avoid overwriting edits
+  // when a new AI tool response arrives.
   $effect(() => {
     if (isViewMode) {
+      if (formDirty) return
       // In view mode, local state is not the source of truth but we keep
       // it in sync so that handleViewModeSave can use it after user edits.
       if (viewCharData) {
@@ -131,6 +136,7 @@
   export function setPortrait(dataUrl: string) {
     if (charData) {
       charData = { ...charData, portrait: dataUrl }
+      formDirty = true
       emitUpdate()
     }
   }
@@ -165,9 +171,16 @@
   /**
    * Given the current form data (which may include sibling changes via
    * composedData), produce a version scoped to only this change's
-   * modifications. For fields this change originally modified, use the
-   * form value (allowing user edits). For fields this change didn't
-   * modify, keep the previous value so the change stays scoped.
+   * modifications.
+   *
+   * For AI-modified fields: use originalData (the AI's intent for this
+   * change only), NOT the composed form value. The composed form includes
+   * sibling changes, which would cause duplicate additions/approvals.
+   * For scalar AI-modified fields, allow user edits by using form[key] if
+   * the user explicitly changed the value from originalData.
+   *
+   * For fields the user edited that weren't in the original AI change:
+   * include those edits from the form data.
    */
   function scopeToOwnChanges(
     formData: VaultCharacterInput | VaultScenarioInput,
@@ -178,11 +191,36 @@
     const originalData = change.data as Record<string, unknown>
     const form = formData as Record<string, unknown>
     const result: Record<string, unknown> = { ...previous }
+
     for (const key of Object.keys(originalData)) {
       if (JSON.stringify(originalData[key]) !== JSON.stringify(previous[key])) {
+        // Array fields: always use originalData to prevent sibling changes
+        // from leaking into this change's data. Array additions from sibling
+        // changes must be approved separately, not carried along.
+        if (Array.isArray(originalData[key])) {
+          result[key] = originalData[key]
+        } else {
+          // Scalar fields: use form value ONLY if the user explicitly
+          // edited it (form differs from originalData). Otherwise use
+          // originalData to preserve this change's intent, preventing
+          // sibling scalar values from leaking via composedData.
+          result[key] =
+            JSON.stringify(form[key]) !== JSON.stringify(originalData[key])
+              ? form[key]
+              : originalData[key]
+        }
+      }
+    }
+
+    // Fields the user edited that weren't in the original AI change — include
+    // those edits from the composed form data.
+    for (const key of Object.keys(form)) {
+      if (key in result) continue
+      if (JSON.stringify(form[key]) !== JSON.stringify(previous[key])) {
         result[key] = form[key]
       }
     }
+
     return result as VaultCharacterInput | VaultScenarioInput
   }
 
@@ -264,7 +302,8 @@
       })
     }
 
-    onClose()
+    formDirty = false
+    ui.showToast('Changes saved', 'info')
   }
 
   // --- Diff computation for update actions ---
@@ -380,6 +419,7 @@
             changedFields={changedFieldKeys}
             onUpdate={(newData) => {
               charData = newData
+              formDirty = true
               emitUpdate()
             }}
           />
@@ -390,6 +430,7 @@
           changedFields={changedFieldKeys}
           onUpdate={(newData) => {
             scenarioData = newData
+            formDirty = true
             emitUpdate()
           }}
         />
