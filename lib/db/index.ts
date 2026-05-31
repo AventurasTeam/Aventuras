@@ -3,6 +3,12 @@ export {
   APP_SETTINGS_SINGLETON_ID,
   ensureAppSettingsSingleton,
 } from './app-settings-defaults'
+export {
+  appSettingsConfigSchema,
+  modelProfileSchema,
+  providerInstanceSchema,
+} from './app-settings-schema'
+export type { AppSettingsConfig, ModelProfile, ProviderInstance } from './app-settings-schema'
 export { db } from './client'
 export { entryMetadataSchema } from './entry-metadata'
 export type { EntryMetadata } from './entry-metadata'

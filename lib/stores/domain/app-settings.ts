@@ -1,17 +1,13 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
-import { APP_SETTINGS_DEFAULTS } from '@/lib/db'
+import { APP_SETTINGS_DEFAULTS, type AppSettingsConfig, appSettingsConfigSchema } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
-// In-memory mirror of the app_settings singleton's config fields. Raw JSON —
-// no Zod parse yet (not a v1 dep), so providers/profiles stay loosely typed.
-type AppSettingsSnapshot = {
-  providers: unknown[]
-  profiles: unknown[]
-  assignments: Record<string, string>
-  defaultProviderId: string | null
-}
+// In-memory mirror of the app_settings singleton's config fields. The shape is
+// the Zod-inferred config type; hydrateAppSettings validates the raw row against
+// appSettingsConfigSchema, since the drizzle column $type is an unchecked cast.
+type AppSettingsSnapshot = AppSettingsConfig
 
 type AppSettingsState = AppSettingsSnapshot & {
   apply: (snapshot: AppSettingsSnapshot) => void
@@ -46,14 +42,16 @@ function getAppSettings(): AppSettingsSnapshot {
 }
 
 // Injected-read core: testable without sqlite — the boot wrapper supplies the
-// db read. On a missing row or a read/parse throw, apply defaults so boot
-// continues; the blocking recovery screen lands with Zod parsing.
-export async function hydrateAppSettings(
-  read: () => Promise<AppSettingsSnapshot | undefined>,
-): Promise<void> {
+// raw singleton row. appSettingsConfigSchema.parse is the runtime validation
+// boundary (the drizzle $type is an unchecked cast) and strips the id /
+// diagnostics columns. On a missing row, or a read / parse failure, apply
+// defaults so boot continues; the blocking recovery screen lands with the
+// provider-management slice that introduces real writes.
+export async function hydrateAppSettings(read: () => Promise<unknown>): Promise<void> {
   try {
-    const row = await read()
-    appSettingsStore.getState().apply(row ?? DEFAULT_SNAPSHOT)
+    const raw = await read()
+    const snapshot = raw === undefined ? DEFAULT_SNAPSHOT : appSettingsConfigSchema.parse(raw)
+    appSettingsStore.getState().apply(snapshot)
   } catch (err) {
     logger.error('bootstrap.app_settings_hydrate_failed', {
       error: err instanceof Error ? err.message : String(err),

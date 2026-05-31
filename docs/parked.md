@@ -49,11 +49,11 @@ with `text({ enum: [...] })` shapes on the four columns above
 rather than re-typing the enum independently — eliminates the
 duplication without changing compound shapes.
 
-**Zod's scope is separate.** Zod (when it joins the dep list)
-owns JSON column contents (`entities.state`, `stories.settings`,
-`stories.definition`, `app_settings` JSON), runtime LLM-output
-validation, and import / export validation — not the direct-DB
-column enums above. Adjacent design surfaces (the
+**Zod's scope is separate.** Zod (a v1 dependency) owns JSON column
+contents (`entities.state`, `stories.settings`, `stories.definition`,
+`app_settings` JSON — the last already wired via
+`appSettingsConfigSchema`), runtime LLM-output validation, and
+import / export validation — not the direct-DB column enums above. Adjacent design surfaces (the
 [`ImportDialog` payload validation contract](./ui/patterns/import-dialog.md#stage-3--payload-zod-validate),
 structured-output schemas) drive Zod's adoption when they ship.
 

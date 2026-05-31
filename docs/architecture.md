@@ -370,10 +370,14 @@ fail: `app_settings` (master config), `stories.definition`,
 story` actions. Reset destroys per-story knobs but preserves all
   delta-replayable narrative content.
 
-Recovery contract applies when Zod-using code lands — Zod isn't a
-v1 dependency yet (see
-[`parked.md → Drizzle schemas as source of truth`](./parked.md#drizzle-schemas-as-source-of-truth-for-typed-enum-unions)
-for scope).
+Zod is a v1 dependency. `app_settings` config is zod-parsed at
+hydrate via `appSettingsConfigSchema`; on a parse failure boot
+currently logs and falls back to defaults — the blocking recovery
+screen above lands with the slice that introduces real
+`app_settings` writes. Per-story parsing (`stories.definition`,
+`stories.settings`) arrives with the story-open path. The
+enum-union dedup that drizzle `$inferSelect` will own is tracked in
+[`parked.md → Drizzle schemas as source of truth`](./parked.md#drizzle-schemas-as-source-of-truth-for-typed-enum-unions).
 
 **The models resolver is the one deliberate exception** to "no `??` at
 read sites" — because models use override-at-render, the context

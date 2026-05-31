@@ -331,11 +331,15 @@ planning reconciled both, so several brief items were superseded.
 - **Boot order is migrations → `hydrateAppSettings` (non-blocking) →
   mount.** The brief's intervening "crash recovery" step is dropped
   here; crash-recovery boot wiring is Slice 1.7's per Slice 1.5b.
-- **Hydration failure logs and falls back, not a blocking recovery
-  screen.** `architecture.md`'s Zod-parse recovery screen is deferred
-  (Zod isn't a v1 dep); M1 logs `bootstrap.app_settings_hydrate_failed`
-  (a new `LogSubsystem` member added this slice) and applies
-  `APP_SETTINGS_DEFAULTS`.
+- **Hydration validates and falls back, not a blocking recovery
+  screen.** `app_settings` config is parsed at hydrate through
+  `appSettingsConfigSchema` (Zod); on a parse failure boot logs
+  `bootstrap.app_settings_hydrate_failed` (a new `LogSubsystem` member
+  added this slice) and applies `APP_SETTINGS_DEFAULTS`.
+  `architecture.md`'s blocking recovery screen stays deferred to the
+  slice that introduces real `app_settings` writes. (The Zod wiring
+  landed as a follow-up; 1.6 itself shipped the mirror loosely-typed
+  as `unknown[]`, an asymmetry with `entry-metadata.ts`.)
 
 **Resolved developer decisions:** store placement is
 domain-vs-infrastructure, not "all stores in `lib/stores`" — domain
@@ -348,8 +352,9 @@ surface test plus a typecheck fixture.
 
 **Carry-forward for Slice 1.7:** `getAppSettings()` / `getNavigation()`
 return live store references (matching the generation store's
-`getTxState`); consumers must treat results as read-only until
-Zod-parsed copies land — flagged in
+`getTxState`); the hydrate-time Zod parse does not freeze them, so
+consumers must treat results as read-only until the parsed snapshot is
+frozen (deferred) — flagged in
 [Slice 1.7 Open questions](./07-ui-shells.md#open-questions).
 
 **Doc-hygiene followups queued** in

@@ -9,6 +9,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 
+import type { AppSettingsDiagnostics, ModelProfile, ProviderInstance } from './app-settings-schema'
 import type { EntryMetadata } from './entry-metadata'
 
 export const stories = sqliteTable('stories', {
@@ -67,11 +68,11 @@ export const storyEntries = sqliteTable(
 export const appSettings = sqliteTable('app_settings', {
   id: text('id').primaryKey(),
   providers: text('providers', { mode: 'json' })
-    .$type<unknown[]>()
+    .$type<ProviderInstance[]>()
     .notNull()
     .default(sql`'[]'`),
   profiles: text('profiles', { mode: 'json' })
-    .$type<unknown[]>()
+    .$type<ModelProfile[]>()
     .notNull()
     .default(sql`'[]'`),
   assignments: text('assignments', { mode: 'json' })
@@ -80,7 +81,7 @@ export const appSettings = sqliteTable('app_settings', {
     .default(sql`'{}'`),
   defaultProviderId: text('default_provider_id'),
   diagnostics: text('diagnostics', { mode: 'json' })
-    .$type<{ enabled: boolean; debug_level_enabled: boolean }>()
+    .$type<AppSettingsDiagnostics>()
     .notNull()
     .default(sql`'{"enabled":false,"debug_level_enabled":false}'`),
 })

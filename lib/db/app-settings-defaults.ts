@@ -1,14 +1,15 @@
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core'
 
+import type { ModelProfile, ProviderInstance } from './app-settings-schema'
 import { appSettings } from './schema'
 
 export const APP_SETTINGS_SINGLETON_ID = 'singleton'
 
 export const APP_SETTINGS_DEFAULTS = {
-  providers: [] as unknown[],
-  profiles: [] as unknown[],
+  providers: [] as ProviderInstance[],
+  profiles: [] as ModelProfile[],
   assignments: {} as Record<string, string>,
-  defaultProviderId: null,
+  defaultProviderId: null as string | null,
   diagnostics: { enabled: false, debug_level_enabled: false },
 }
 

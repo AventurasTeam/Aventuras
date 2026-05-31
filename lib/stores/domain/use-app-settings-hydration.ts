@@ -16,14 +16,7 @@ export function useAppSettingsHydration(ready: boolean): void {
         .select()
         .from(appSettingsTable)
         .where(eq(appSettingsTable.id, APP_SETTINGS_SINGLETON_ID))
-      const row = rows[0]
-      if (!row) return undefined
-      return {
-        providers: row.providers,
-        profiles: row.profiles,
-        assignments: row.assignments,
-        defaultProviderId: row.defaultProviderId,
-      }
+      return rows[0]
     })
   }, [ready])
 }
