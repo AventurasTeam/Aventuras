@@ -662,8 +662,6 @@ class VaultEditorStore {
       }
       // Different entity — leave editor as-is; the composed data getter
       // now reads from the vault so it will reflect the approved change
-    } else if (!this.editorOpen) {
-      // Editor not open — just clean up view state
     }
   }
 

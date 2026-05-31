@@ -215,9 +215,9 @@
             value={ui.lorebookTypeFilter}
             onValueChange={(val) => ui.setLorebookTypeFilter(val as EntryType | 'all')}
           >
-            {#each entryTypes as type (type)}
-              <DropdownMenuRadioItem value={type} class="capitalize">
-                {type === 'all' ? 'All Types' : type}
+            {#each entryTypes as entryType (entryType)}
+              <DropdownMenuRadioItem value={entryType} class="capitalize">
+                <span>{entryType === 'all' ? 'All Types' : entryType}</span>
               </DropdownMenuRadioItem>
             {/each}
           </DropdownMenuRadioGroup>

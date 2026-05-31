@@ -172,7 +172,7 @@
       </div>
     </ResponsiveModal.Header>
 
-    <div class="flex flex-1 flex-col overflow-hidden" onkeydown={handleKeydown} role="none">
+    <div class="flex flex-1 flex-col overflow-hidden">
       {#if error}
         <div class="px-6 py-2">
           <div
@@ -224,3 +224,5 @@
     </ResponsiveModal.Footer>
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>
+
+<svelte:window onkeydown={handleKeydown} />

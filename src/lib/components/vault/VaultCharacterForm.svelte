@@ -168,7 +168,7 @@
   <ResponsiveModal.Content class="flex flex-col md:h-auto md:max-h-[90vh] md:max-w-150">
     <ResponsiveModal.Header title={isEditing ? 'Edit Character' : 'New Character'} />
 
-    <div class="flex-1 overflow-y-auto px-4 sm:pr-4" onkeydown={handleKeydown} role="none">
+    <div class="flex-1 overflow-y-auto px-4 sm:pr-4">
       <form
         id="character-form"
         onsubmit={(e) => {
@@ -222,3 +222,5 @@
     </ResponsiveModal.Footer>
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>
+
+<svelte:window onkeydown={handleKeydown} />
