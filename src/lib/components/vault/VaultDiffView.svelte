@@ -23,6 +23,7 @@
   } from 'lucide-svelte'
   import { fade } from 'svelte/transition'
   import { vaultEditor } from '$lib/stores/vaultEditorStore.svelte'
+  import { computeDelta } from '$lib/utils/vaultMerge'
 
   interface Props {
     change: VaultPendingChange
@@ -265,13 +266,8 @@
     if (!data) return null
 
     const base = JSON.parse(JSON.stringify(change.previous)) as Record<string, unknown>
-    const diffSource = data
-    const diffBase = prev ?? (change.previous as Record<string, unknown>)
-    for (const key of Object.keys(diffSource)) {
-      if (JSON.stringify(diffSource[key]) !== JSON.stringify(diffBase[key])) {
-        base[key] = diffSource[key]
-      }
-    }
+    const delta = computeDelta(data, prev ?? (change.previous as Record<string, unknown>))
+    Object.assign(base, delta)
     return base
   })
 </script>
