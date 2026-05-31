@@ -64,7 +64,11 @@ Three tiers, narrowest first:
   These stores expose **mutators only**. Nothing outside the store
   or the [action layer](#action-layer) calls `setState`; the store's
   namespace shape mechanically prevents it. Callers invoke named
-  mutators, never poke the state directly.
+  mutators, never poke the state directly. A store that **mirrors a
+  persisted SQLite table** is the special case: it exposes read
+  selectors plus hydrate and **no value-setter** — writes go through
+  the action layer, which re-hydrates it (see
+  [Syncing a store after a write](#syncing-a-store-after-a-write)).
 
 SQLite remains canonical for persistent data; the Zustand tier is
 the in-memory working copy.
@@ -81,12 +85,51 @@ A single layer spans pipeline writes and UI writes — there is no
 separate "UI actions" versus "pipeline actions" split. Actions are
 organized by domain under `lib/actions/<domain>/`.
 
-The action layer mediates between Zustand and SQLite
-**transactionally**: a cross-cutting write updates the in-memory
-store and persists to SQLite as one unit. Single-store mutations
-that touch nothing else stay inside the store file as mutators; the
-action layer exists for writes that cross stores or cross the
-store / SQLite boundary.
+The action layer mediates between Zustand and SQLite. SQLite is
+canonical: the write runs in one SQLite transaction
+(`runInTransaction`), and the store reflects it afterward (see
+[Syncing a store after a write](#syncing-a-store-after-a-write)) —
+the store update is not part of the SQLite transaction. Single-store,
+memory-only mutations that touch nothing else stay inside the store
+file as mutators; the action layer exists for writes that persist to
+SQLite or cross stores.
+
+### Syncing a store after a write
+
+A store that mirrors a SQLite table stays in sync by **re-hydrating
+from the DB**, not by being set directly. The action runs the write
+in one SQLite transaction, then `await`s the store's hydrate
+(re-read plus apply) as its last step — so by the time the action
+resolves the store already reflects the write, with no stale window.
+The store's content stays a pure function of the DB.
+
+This is why a persisted-mirror store exposes **read selectors plus
+hydrate, never a value-setter**. With no arbitrary-write surface the
+only way the mirror changes is "reload from canonical SQLite," so no
+caller can desync it from the database — the footgun of a setter that
+mutates memory without persisting (silently lost on the next hydrate)
+never exists to be called.
+
+Re-hydrate is the default and, for a singleton or small row, is
+effectively instant: one indexed read, a few milliseconds across the
+desktop IPC bridge. A store hot enough that re-reading it per edit
+shows up in a profile may apply the change optimistically instead —
+but that mutator stays **package-private to the action layer**
+(boundaries-lint, like a raw store handle), never reachable from a
+component.
+
+Failure handling is **not** part of this mechanism — it is a
+per-store, per-context policy, and the mechanism itself carries no
+default-fallback. A post-write re-hydrate **keeps the current store**
+on a transient read failure (the write already committed; SQLite is
+canonical, and the next hydrate reconciles). Fallback belongs only to
+**boot hydration**, for the handful of stores loaded at app start,
+and even there it splits by criticality: state whose loss is harmless
+(a toggle whose safe default is off) may default-and-continue, while
+destructive-to-lose state (app settings — providers, API keys)
+**blocks at a recovery screen** rather than silently resetting.
+Defaulting app settings on a failed read is an M1 stopgap until that
+screen lands — don't read it as the pattern's norm.
 
 ## Component folder taxonomy
 
