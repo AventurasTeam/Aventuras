@@ -1,0 +1,35 @@
+{
+  "title": "App Settings",
+  "comingSoon": "Coming soon",
+  "sections": {
+    "generation": "Generation",
+    "storyDefaults": "Story defaults",
+    "app": "App"
+  },
+  "tabs": {
+    "providers": "Providers",
+    "profiles": "Profiles",
+    "memory": "Memory",
+    "translation": "Translation",
+    "composer": "Composer",
+    "appearance": "Appearance",
+    "language": "Language",
+    "data": "Data",
+    "about": "About",
+    "diagnostics": "Diagnostics"
+  },
+  "diagnostics": {
+    "enableLabel": "Enable diagnostics capture",
+    "enableHint": "Master gate for the diagnostics layer. Off by default.",
+    "debugLabel": "Include debug-level emissions",
+    "debugHint": "Captures debug-level logs. Requires diagnostics capture to be on."
+  },
+  "diagnosticsHub": {
+    "title": "Diagnostics Hub",
+    "comingSoon": "Diagnostics Hub — coming soon",
+    "actionLabel": "Diagnostics Hub"
+  },
+  "actions": {
+    "appGroup": "App"
+  }
+}

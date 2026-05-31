@@ -19,4 +19,20 @@ slice-planning gate forces its resolution before that slice is planned.
 
 ## Inbox
 
-_Empty — no items awaiting triage._
+- **Remove the temporary `__DEV__` landing debug reader affordance.**
+  [Slice 1.7b](./milestones/01-spine/slices/07b-ui-shells.md#implementation-notes)
+  added an "Open reader (debug)" button on the landing (`app/index.tsx`),
+  `__DEV__`-gated, as the only M1 path into the reader (no story /
+  create-flow exists yet). Remove it once a real story-list (cards +
+  create-flow) provides a path to the reader — route to that slice's
+  Open questions when the post-M1 story-list slice is defined.
+- **Lift master-detail hardware-back into a shared hook.**
+  `MasterDetailLayout`'s phone list-first collapse needs Android
+  hardware-back to pop detail→list before exiting the route. Slice 1.7b
+  wired this route-local in `app/settings/index.tsx` with a focus-scoped
+  `BackHandler`; it can't live in the shell because the shell's Storybook
+  stories render with no navigation context, so `useFocusEffect` would
+  throw there. When the next `MasterDetailLayout` consumer lands (World /
+  Plot), extract a shared `useMasterDetailBack` hook so the behavior
+  isn't re-implemented and the back-exits-route bug isn't reproduced —
+  route to that slice's Open questions then.

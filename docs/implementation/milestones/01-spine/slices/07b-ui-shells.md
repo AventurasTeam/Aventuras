@@ -21,9 +21,10 @@ list), the reader-composer with existing pieces wired through to the
 namespaced stores, and the settings screen layouts. Replace the
 `/dev` redirect with the real app navigation. Every chrome string
 routes through the `t()` instance installed in
-[Slice 1.7a](./07a-app-root-boot.md). The only interactive control
-is the settings diagnostics master toggle, wired to 1.7a's action;
-all other interactive flows defer to later milestones.
+[Slice 1.7a](./07a-app-root-boot.md). The only interactive controls
+are the two settings diagnostics toggles (master enable + debug
+level, the latter disabled when master is off), wired to 1.7a's
+actions; all other interactive flows defer to later milestones.
 
 ## Background
 
@@ -76,14 +77,14 @@ interactive features land.
     - Textarea and button at bottom (existing components)
     - **No smoke trigger** — that injects in
       [Slice 1.7c](./07c-smoke.md).
-  - Settings route (`app/settings/_layout.tsx` plus sub-routes per
-    the settings spec). Renders section headings and the navigation
-    chrome only; the only interactive control is the diagnostics
-    master toggle, which invokes the diagnostics master-toggle
-    **action** shipped in [Slice 1.7a](./07a-app-root-boot.md). The
-    debug-level toggle renders per the spec (grayed when master is
-    off); whether it is interactive tracks 1.7a's debug-level open
-    question.
+  - Settings route (a single `app/settings/index.tsx` with in-pane
+    tab state — see [Implementation notes](#implementation-notes) for
+    why not `_layout.tsx` + sub-routes). Renders section headings and
+    the navigation chrome only; the two diagnostics toggles are the
+    interactive controls, invoking the master-toggle and debug-level
+    **actions** shipped in [Slice 1.7a](./07a-app-root-boot.md). The
+    debug-level toggle is interactive (1.7a shipped its mutator) and
+    grayed when master is off.
 - Navigation wiring: any cross-route transition uses
   `stores.domain.setCurrentStory(id)` and
   `stores.domain.setCurrentBranch(id)`. Selectors via
@@ -172,21 +173,65 @@ interactive features land.
 
 ## Open questions
 
-- **Store snapshot reads expose live nested values.**
-  `domain.getAppSettings()` / `getNavigation()` return a fresh
-  top-level object each call, but their nested values are the
-  store's **live references**, not deep copies. Any read this slice
-  wires must treat the result as read-only — in particular the
-  Diagnostics-Hub visibility check should read through the
-  `useAppSettings` selector hook rather than capturing a snapshot.
-  Same constraint the 1.7a gate observes; see
+Both questions this slice carried are resolved; the decisions live in
+[Implementation notes](#implementation-notes):
+
+- **Store snapshot reads expose live nested values** — the
+  Diagnostics-Hub visibility (and every other read this slice wires)
+  goes through the `useAppSettings` selector hook, never a captured
+  `getAppSettings()` snapshot. The broader deep-freeze deferral stays
+  1.7a's; see
   [Slice 1.7a Open questions](./07a-app-root-boot.md#open-questions).
-- **Settings sub-route shape.** How many of the settings tabs get
-  layout shells this slice versus a single placeholder? Lean:
-  render the section / tab scaffold (Providers, Profiles, … ,
-  Diagnostics) as layout with the Diagnostics tab the only
-  interactive one. Confirm at authoring.
+- **Settings sub-route shape** — shipped as a single
+  `app/settings/index.tsx` with in-pane tab state, the Diagnostics tab
+  the only interactive one and the rest "Coming soon" placeholders.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+### Resolved developer decisions
+
+- **Both diagnostics toggles are interactive.** The master enable and
+  the debug-level toggle both wire to 1.7a's actions
+  (`setDiagnosticsEnabled` / `setDebugLevelEnabled`); debug-level is
+  disabled when master is off. Supersedes the original brief's "only
+  the master toggle is interactive" wording (Goal + Scope amended).
+- **Settings ships as one route**, not `app/settings/_layout.tsx` +
+  per-tab sub-routes, using `MasterDetailLayout` for the tier-aware
+  two-pane: desktop/tablet side-by-side, phone list-first collapse
+  (the top-bar Return is stack-aware — it pops the open tab back to
+  the rail before exiting the surface). The left rail lists all
+  sections/tabs; only the Diagnostics tab renders live content (the
+  two toggles), every other tab shows a "Coming soon" placeholder.
+  Later milestones add real tab bodies by replacing the
+  `activeTab === 'diagnostics'` branch (e.g. a `tabId → node` map).
+  Desktop defaults to the Diagnostics tab (the only live one) — flip
+  to Providers once it has content.
+- **Screens are assembled route-local — no extracted per-screen
+  shells**, per
+  [`component-inventory.md`](../../../../ui/component-inventory.md)'s
+  reader-composer all-locality decision. The two new reusable
+  compounds are `AppActionsMenu` (gated Diagnostics-Hub entry) and
+  `DiagnosticsSettingsPanel` (the toggle pair); both carry Storybook
+  play tests and inventory rows.
+- **`ScreenShell` gained an optional `actions` slot** that replaces
+  its default Actions icon; the chrome screens mount `<AppActionsMenu>`
+  into it. The Diagnostics-Hub entry reads
+  `useAppSettings(s => s.diagnostics.enabled)` via the selector (never
+  a snapshot), so it is hidden when diagnostics is off.
+
+### Notable deviations and constraints for future slices
+
+- **Temporary `__DEV__`-gated "Open reader (debug)" affordance.** With
+  no story and no create-flow in M1, this landing button is the only
+  path into the reader (it seeds placeholder story/branch ids and
+  routes to `/reader-composer/__debug__`). It is `__DEV__`-only (absent
+  in production builds) and **must be removed before M2**, once real
+  story-open / [Slice 1.7c](./07c-smoke.md)'s synthetic story lands.
+- **Reader chrome is intentionally bare for M1.** The `in-story` top
+  bar renders title-only (no chapter/time/branch chips — later
+  milestones), the side rail is an inert placeholder, the composer
+  textarea is editable but the Send button is disabled (the live
+  trigger is 1.7c), and the Story Settings ⛭ icon is present-but-inert
+  (its target screen is a later milestone). The reader route ignores
+  the `branchId` URL param and renders an empty entry list regardless;
+  1.7c wires entries.

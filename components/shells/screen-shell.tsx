@@ -1,11 +1,13 @@
 import { ArrowLeft, BookOpen, MoreVertical, Settings, SlidersVertical } from 'lucide-react-native'
 import { type ReactNode } from 'react'
 import { View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
 import { TextClassContext } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type ScreenShellVariant = 'app-root' | 'app' | 'in-story'
@@ -69,6 +71,13 @@ type ScreenShellProps = {
   /** Wires the ⚲ Actions icon (every variant). */
   onOpenActions?: () => void
 
+  /**
+   * Replaces the shell's default Actions icon when provided — lets a screen
+   * mount its own Actions menu (trigger + overlay) in the right cluster.
+   * Falls back to the `onOpenActions` IconAction when omitted.
+   */
+  actions?: ReactNode
+
   children: ReactNode
 }
 
@@ -92,9 +101,11 @@ export function ScreenShell({
   onOpenAppSettings,
   onOpenStorySettings,
   onOpenActions,
+  actions,
   children,
 }: ScreenShellProps) {
   const tier = useTier()
+  const insets = useSafeAreaInsets()
   const isPhone = tier === 'phone'
   const isInStory = variant === 'in-story'
   const isAppRoot = variant === 'app-root'
@@ -111,12 +122,20 @@ export function ScreenShell({
         <View className="mr-1 flex-row items-center gap-2">{statusSlot}</View>
       ) : null}
       {isAppRoot && !hideSelfReferentialIcon ? (
-        <IconAction icon={Settings} label="App Settings" onPress={onOpenAppSettings} />
+        <IconAction icon={Settings} label={t('chrome.appSettings')} onPress={onOpenAppSettings} />
       ) : null}
       {isInStory && !hideSelfReferentialIcon ? (
-        <IconAction icon={SlidersVertical} label="Story Settings" onPress={onOpenStorySettings} />
+        <IconAction
+          icon={SlidersVertical}
+          label={t('chrome.storySettings')}
+          onPress={onOpenStorySettings}
+        />
       ) : null}
-      <IconAction icon={MoreVertical} label="Actions" onPress={onOpenActions} />
+      {actions != null ? (
+        actions
+      ) : (
+        <IconAction icon={MoreVertical} label={t('chrome.actions')} onPress={onOpenActions} />
+      )}
     </View>
   )
 
@@ -129,13 +148,21 @@ export function ScreenShell({
       <Icon as={BookOpen} size="md" />
     </View>
   ) : (
-    <IconAction icon={ArrowLeft} label="Back" onPress={onBack} />
+    <IconAction icon={ArrowLeft} label={t('chrome.back')} onPress={onBack} />
   )
 
   const progress = clampProgress(chapterProgress)
 
   return (
-    <View className="flex-1 bg-bg-base">
+    <View
+      className="flex-1 bg-bg-base"
+      style={{
+        paddingTop: insets.top,
+        paddingRight: insets.right,
+        paddingBottom: insets.bottom,
+        paddingLeft: insets.left,
+      }}
+    >
       {banners != null ? <View className="flex-col">{banners}</View> : null}
 
       <View
@@ -145,7 +172,7 @@ export function ScreenShell({
       >
         {leftSlot}
         <View className="min-w-0 flex-1 flex-row items-center gap-3">
-          <TextClassContext.Provider value="!leading-none translate-y-[0.08em]">
+          <TextClassContext.Provider value="text-fg-primary !leading-none translate-y-[0.08em]">
             <View className="min-w-0 flex-shrink flex-row items-center">{title}</View>
           </TextClassContext.Provider>
           {inlineCenterExtras != null ? (

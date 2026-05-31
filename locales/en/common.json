@@ -5,5 +5,11 @@
     "openFile": "Open file",
     "resetSettings": "Reset settings",
     "resetWarning": "Resetting erases your saved providers and API keys. Your stories are not affected."
+  },
+  "chrome": {
+    "appSettings": "App Settings",
+    "storySettings": "Story Settings",
+    "actions": "Actions",
+    "back": "Back"
   }
 }

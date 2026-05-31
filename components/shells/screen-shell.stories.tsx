@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
+import { expect, screen } from 'storybook/test'
 
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
 import { Tag } from '@/components/ui/tag'
@@ -265,4 +266,18 @@ export const ThemeMatrix: Story = {
       ))}
     </View>
   ),
+}
+
+export const ActionsSlot: Story = {
+  args: {
+    variant: 'app-root',
+    onOpenAppSettings: noop,
+    actions: <Text>ACTIONS_SLOT</Text>,
+    children: <BodyPlaceholder label="actions slot replaces the default Actions icon" />,
+  },
+  play: async () => {
+    await expect(screen.getByText('ACTIONS_SLOT')).toBeInTheDocument()
+    // The default Actions IconAction is replaced, not rendered alongside.
+    expect(screen.queryByRole('button', { name: 'Actions' })).toBeNull()
+  },
 }

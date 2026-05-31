@@ -16,4 +16,16 @@ describe('lib/i18n', () => {
     // returnNull:false → missing keys fall back to the key string, never null.
     expect(t('recovery.does_not_exist' as never)).toBe('recovery.does_not_exist')
   })
+
+  it('resolves per-screen namespace keys via the ns:key form', () => {
+    expect(t('landing:emptyBody')).toBe('Stories will appear here once created.')
+    expect(t('reader:send')).toBe('Send')
+    expect(t('settings:tabs.diagnostics')).toBe('Diagnostics')
+    expect(t('settings:diagnosticsHub.comingSoon')).toBe('Diagnostics Hub — coming soon')
+  })
+
+  it('resolves the shared chrome keys from the common namespace', () => {
+    expect(t('chrome.appSettings')).toBe('App Settings')
+    expect(t('chrome.back')).toBe('Back')
+  })
 })
