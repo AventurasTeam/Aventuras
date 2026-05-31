@@ -318,7 +318,11 @@ Several shapes feed into it:
      stop.
    - **App-only settings** — global concerns that never appear
      per-story (API keys, classifier truncation caps, diagnostics
-     toggles).
+     toggles). The diagnostics toggle is special: its value persists
+     in `app_settings`, but its runtime gate and in-memory state live
+     in `lib/diagnostics`, **not** the `useAppSettingsStore` mirror
+     ([`observability.md → Gating model`](./observability.md#gating-model)).
+     Don't re-introduce a diagnostics mirror on the app-settings store.
 2. **Story-level definition** (`stories.definition` JSON on the
    loaded story) — definitional content (`mode`, `leadEntityId`,
    `narration`, `genre`, `tone`, `setting`, calendar fields). Zod-

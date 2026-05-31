@@ -114,7 +114,9 @@ are free, types are public, and `scripts/**` is exempt. See
 
 Component-local `useState`; cross-component ephemeral in
 `lib/stores/ui/`; domain-class Zustand stores expose mutators only —
-no `setState` from outside the store or action layer. See
+no `setState` from outside the store or action layer. Infrastructure
+`lib/*` modules (`lib/diagnostics`, `lib/toast`) keep their own
+runtime state in-module, not in `lib/stores`. See
 [code-conventions.md → State placement](../../docs/code-conventions.md#state-placement).
 
 ## Logging discipline

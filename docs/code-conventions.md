@@ -69,6 +69,12 @@ Three tiers, narrowest first:
 SQLite remains canonical for persistent data; the Zustand tier is
 the in-memory working copy.
 
+Infrastructure `lib/*` modules that own runtime state internally —
+the `lib/diagnostics` gate, the `lib/toast` queue — keep that store
+**in-module**, not in `lib/stores`. The three tiers above govern the
+app's domain and ephemeral-UI working set; a module's own machinery
+is not a fourth tier and does not relocate to `lib/stores`.
+
 ## Action layer
 
 A single layer spans pipeline writes and UI writes — there is no
