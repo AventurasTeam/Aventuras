@@ -19,16 +19,4 @@ slice-planning gate forces its resolution before that slice is planned.
 
 ## Inbox
 
-- **Structured `action-layer` PipelineError fields.** `tableName`,
-  `targetId`, and `constraintViolated` are defined on the `action-layer`
-  error variant but unpopulated; extracting them from a constraint throw
-  needs a SQLite-error mapper. Diagnostics-Hub-adjacent. Source: Slice
-  1.5b.
-- **Shipped `CallRetryError` → `PipelineError` mapper.** The mapping that
-  turns the retry helper's recoverable errors into pipeline errors lives
-  only in the 1.5b fault test; the first concrete pipeline kind will need
-  a shipped version. Source: Slice 1.5b.
-- **Reconcile `generation-pipeline.md`'s `callWithRetry` sketch.** The
-  canonical doc still shows the illustrative `{ result, recoverable }`
-  signature; the shipped helper returns a discriminated `ok` / `failed` /
-  `aborted` union over a `lib/ai`-local error type. Source: Slice 1.5b.
+_No items awaiting triage._

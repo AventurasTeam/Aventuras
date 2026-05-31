@@ -163,7 +163,10 @@ memory pipeline (M3) needs to tune against.
   `Reset settings`) per
   [`architecture.md → Settings`](../architecture.md#settings-strict-types-defaults-at-load).
   `jsonrepair` install lands with the structured-output parse
-  path (per [`tech-stack.md`](../tech-stack.md)).
+  path (per [`tech-stack.md`](../tech-stack.md)). The first real phase
+  to call `callWithRetry` lands here, so the `CallRetryError →
+PipelineError` mapping (test-only in Slice 1.5b) is promoted to a
+  shipped helper.
 
 **Parallel paths after M2.1 + M2.2.** {M2.3, M2.4} || {M2.5}, then
 M2.6 wires.
@@ -508,6 +511,12 @@ the underlying configuration surfaces.
   [`architecture.md → Variable registry`](../architecture.md#variable-registry-for-the-prompt-editor).
 - M7.3 — Diagnostics screen per
   [`docs/ui/screens/diagnostics/diagnostics.md`](../ui/screens/diagnostics/diagnostics.md).
+  The Diagnostics UI renders the structured `action-layer` error fields
+  (`tableName` / `targetId` / `constraintViolated`) when present per
+  [`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories);
+  populating them needs an engine-side SQLite-error mapper to extract
+  them from a constraint throw (Slice 1.5b ships those fields optional
+  and unpopulated).
 - M7.4 — Onboarding flow per
   [`docs/ui/screens/onboarding/onboarding.md`](../ui/screens/onboarding/onboarding.md).
 - M7.5 — Memory probe (rich, user-facing) per

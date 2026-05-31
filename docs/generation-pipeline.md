@@ -1174,6 +1174,15 @@ transparent — the phase eventually returns success or fatal; no
 user surfacing in between.
 
 ```ts
+type CallRetryError =
+  | { tier: 'provider'; reason: 'auth' | 'network' | 'timeout' | 'unknown'; detail?: string }
+  | { tier: 'parse'; detail: string; attempt: number }
+
+type CallWithRetryResult<T> =
+  | { status: 'ok'; result: T; recoverable: CallRetryError[] }
+  | { status: 'failed'; error: CallRetryError; recoverable: CallRetryError[] }
+  | { status: 'aborted'; recoverable: CallRetryError[] }
+
 async function callWithRetry<T>(
   callFn: (signal: AbortSignal) => Promise<string>,
   parseFn: (raw: string) => T,
@@ -1182,13 +1191,21 @@ async function callWithRetry<T>(
     maxParseAttempts: number
     signal: AbortSignal
   },
-): Promise<{ result: T; recoverable: PipelineError[] }>
+): Promise<CallWithRetryResult<T>>
 ```
 
+The discriminated outcome carries the accumulated `recoverable` list on
+every arm — including `failed` and `aborted` — so the phase yields a
+`recoverable_error` event per retried attempt regardless of how the call
+ultimately resolves. The helper emits its own `CallRetryError`
+vocabulary rather than `PipelineError`: provider-error classification
+lives in the provider abstraction layer (one floor below the pipeline
+framework), and keeping that layer's error type independent of
+`PipelineError` avoids a dependency back up into the framework — the
+phase maps `CallRetryError → PipelineError` when it surfaces the events.
+
 Non-retryable errors short-circuit: auth failures (401 / 403) skip
-retry. Same for 4xx client errors. Provider-error classification
-lives in the provider abstraction layer (one floor below the
-pipeline framework).
+retry. Same for 4xx client errors.
 
 ### Phase-level recovery is the v1 transparency goal
 
