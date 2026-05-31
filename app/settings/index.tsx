@@ -151,12 +151,7 @@ export default function SettingsRoute() {
       variant="app"
       title={<Text className="font-semibold">{t('settings:title')}</Text>}
       onBack={onBack}
-      actions={
-        <AppActionsMenu
-          diagnosticsEnabled={enabled}
-          onOpenDiagnosticsHub={() => router.push('/diagnostics')}
-        />
-      }
+      actions={<AppActionsMenu />}
     >
       <MasterDetailLayout
         isRowSelected={selectedTab != null}

@@ -1,16 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
-import { AppActionsMenu } from './app-actions-menu'
+import { AppActionsMenuPure } from './app-actions-menu-pure'
 
-const meta: Meta<typeof AppActionsMenu> = {
-  title: 'Compounds/AppActionsMenu',
-  component: AppActionsMenu,
+const meta: Meta<typeof AppActionsMenuPure> = {
+  title: 'Compounds/AppActionsMenuPure',
+  component: AppActionsMenuPure,
   parameters: { layout: 'centered' },
 }
 
 export default meta
-type Story = StoryObj<typeof AppActionsMenu>
+type Story = StoryObj<typeof AppActionsMenuPure>
 
 // Diagnostics on → entry present and activates the handler.
 export const DiagnosticsOn: Story = {

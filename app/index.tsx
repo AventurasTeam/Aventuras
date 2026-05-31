@@ -15,7 +15,6 @@ const DEBUG_ID = '__debug__'
 
 export default function Index() {
   const router = useRouter()
-  const diagnosticsEnabled = domain.useAppSettings((s) => s.diagnostics.enabled)
 
   const openReaderDebug = () => {
     domain.setCurrentStory(DEBUG_ID)
@@ -28,12 +27,7 @@ export default function Index() {
       variant="app-root"
       title={<Text className="font-semibold">{t('landing:title')}</Text>}
       onOpenAppSettings={() => router.push('/settings')}
-      actions={
-        <AppActionsMenu
-          diagnosticsEnabled={diagnosticsEnabled}
-          onOpenDiagnosticsHub={() => router.push('/diagnostics')}
-        />
-      }
+      actions={<AppActionsMenu />}
     >
       <View className="flex-1 items-center justify-center gap-6 p-6">
         <EmptyState title={t('landing:emptyTitle')} subtext={t('landing:emptyBody')} />

@@ -11,7 +11,6 @@ import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import { useTier } from '@/hooks/use-tier'
 import { t } from '@/lib/i18n'
-import { domain } from '@/lib/stores'
 
 type ReaderEntry = {
   id: string
@@ -24,7 +23,6 @@ export default function ReaderComposerRoute() {
   const router = useRouter()
   const tier = useTier()
   const showRail = tier !== 'phone'
-  const diagnosticsEnabled = domain.useAppSettings((s) => s.diagnostics.enabled)
   const [draft, setDraft] = useState('')
 
   // Entries arrive in a later slice; for now this stays empty and EmptyState shows.
@@ -36,12 +34,7 @@ export default function ReaderComposerRoute() {
       title={<Text className="font-semibold">{t('reader:placeholderTitle')}</Text>}
       chapterProgress={0}
       onBack={() => router.back()}
-      actions={
-        <AppActionsMenu
-          diagnosticsEnabled={diagnosticsEnabled}
-          onOpenDiagnosticsHub={() => router.push('/diagnostics')}
-        />
-      }
+      actions={<AppActionsMenu />}
     >
       <View className="flex-1 flex-row">
         <View className="flex-1">
