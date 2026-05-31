@@ -3,67 +3,128 @@ import type { VaultCharacter, VaultScenario } from '$lib/types'
 /**
  * Merge array changes from `prevArr` → `dataArr` onto `baseArr`.
  *
- * Detects in-place replacements (same index, different content) and preserves
- * position, while appending pure additions and removing items that
- * disappeared between previous and data.
+ * Detects three types of changes:
+ * 1. **Genuine replacements**: Same index, different content, and the new value
+ *    doesn't exist elsewhere in prev (not a shift from an insertion/deletion)
+ * 2. **Removals**: Items that disappeared between previous and data
+ * 3. **Additions**: Items that appeared between previous and data
+ *
+ * Uses count-based multiset tracking for removals so duplicate values are
+ * handled correctly (removing one of two "John"s only removes one copy).
+ * Positional differences that are actually shifts (the value at data[i]
+ * exists elsewhere in prev) are NOT treated as replacements, preventing
+ * duplication when deletions cause items to shift left.
+ *
+ * Unused replacements are inserted at their original index in descending
+ * order to avoid index shift from prior insertions.
+ *
+ * **Known limitation**: When a string array element is renamed (e.g. NPC "Bob"
+ * → "Robert") and a prior approval has shifted indices, the rename is treated
+ * as a remove + append rather than an in-place modification, so the renamed
+ * item may end up at the end of the array. This is cosmetic for NPC/tag lists.
+ * For structured objects (lorebook entries), matching by stable key is preferable
+ * but not yet implemented.
  */
 export function mergeArrayLists(
   dataArr: unknown[],
   prevArr: unknown[],
   baseArr: unknown[],
 ): unknown[] {
+  // 1. Detect genuine positional replacements (same index, different content)
+  // A positional difference is only a genuine replacement if the new value
+  // doesn't exist elsewhere in prevArr — otherwise it's a shift caused by
+  // insertions/deletions, not a true replacement.
   const replacements: Record<number, unknown> = {}
   const replacementIndices: number[] = []
   const minLen = Math.min(dataArr.length, prevArr.length)
+
+  // Build a multiset of prevArr values for shift detection
+  const prevValueCounts = new Map<string, number>()
+  for (const p of prevArr) {
+    const s = JSON.stringify(p)
+    prevValueCounts.set(s, (prevValueCounts.get(s) ?? 0) + 1)
+  }
+
   for (let i = 0; i < minLen; i++) {
     if (JSON.stringify(dataArr[i]) !== JSON.stringify(prevArr[i])) {
-      replacements[i] = dataArr[i]
-      replacementIndices.push(i)
+      const dataStr = JSON.stringify(dataArr[i])
+      // Check if this value exists elsewhere in prevArr (it's a shift, not a replacement)
+      const prevCount = prevValueCounts.get(dataStr) ?? 0
+      const sameIndexCount = JSON.stringify(prevArr[i]) === dataStr ? 1 : 0
+      const existsElsewhereInPrev = prevCount > sameIndexCount
+
+      if (!existsElsewhereInPrev) {
+        // Genuine replacement: new value that doesn't appear elsewhere in prev
+        replacements[i] = dataArr[i]
+        replacementIndices.push(i)
+      }
     }
   }
 
+  // 2. Detect appended items (beyond previous length)
   const appended: unknown[] = []
   for (let i = prevArr.length; i < dataArr.length; i++) {
     appended.push(dataArr[i])
   }
 
-  const removedSerialized: Record<string, boolean> = {}
+  // 3. Compute removals using count-based multiset
+  // Count occurrences in dataArr to determine how many copies were removed
+  const dataCounts = new Map<string, number>()
+  for (const d of dataArr) {
+    const s = JSON.stringify(d)
+    dataCounts.set(s, (dataCounts.get(s) ?? 0) + 1)
+  }
+  const prevCounts = new Map<string, number>()
   for (const p of prevArr) {
     const s = JSON.stringify(p)
-    if (!dataArr.some((d) => JSON.stringify(d) === s)) {
-      removedSerialized[s] = true
+    prevCounts.set(s, (prevCounts.get(s) ?? 0) + 1)
+  }
+
+  // removedCounts tracks how many copies of each value should be removed
+  const removedCounts = new Map<string, number>()
+  for (const [key, prevCount] of prevCounts) {
+    const dataCount = dataCounts.get(key) ?? 0
+    const removed = prevCount - dataCount
+    if (removed > 0) {
+      removedCounts.set(key, removed)
     }
   }
 
-  const usedReplacements: Record<number, boolean> = {}
+  // 4. Walk baseArr, replacing removed items with their replacement or dropping them
+  const usedReplacements = new Set<number>()
+  const remainingRemoved = new Map(removedCounts)
   const result: unknown[] = []
+
   for (const item of baseArr) {
     const s = JSON.stringify(item)
-    if (removedSerialized[s]) {
+    const stillNeedsRemoval = remainingRemoved.get(s)
+
+    if (stillNeedsRemoval && stillNeedsRemoval > 0) {
+      // This item is marked for removal — consume one count
+      remainingRemoved.set(s, stillNeedsRemoval - 1)
+      // Check if this removed items maps to a positional replacement
       const repIdx = findReplacementIndex(item, prevArr, replacementIndices)
-      if (repIdx !== null && repIdx in replacements && !usedReplacements[repIdx]) {
+      if (repIdx !== null && repIdx in replacements && !usedReplacements.has(repIdx)) {
         result.push(replacements[repIdx])
-        usedReplacements[repIdx] = true
+        usedReplacements.add(repIdx)
       }
+      // If no replacement, the item is simply removed (or replaced above)
     } else {
       result.push(item)
     }
   }
 
-  for (const idx of replacementIndices) {
-    if (!usedReplacements[idx]) {
-      if (idx < result.length) {
-        result.splice(idx, 0, replacements[idx])
-      } else {
-        result.push(replacements[idx])
-      }
-    }
+  // 5. Insert unused replacements at their original indices (descending to avoid shift)
+  const unusedDescending = replacementIndices
+    .filter((idx) => !usedReplacements.has(idx))
+    .sort((a, b) => b - a)
+  for (const idx of unusedDescending) {
+    result.splice(idx, 0, replacements[idx])
   }
 
+  // 6. Append new items that weren't in previous
   for (const item of appended) {
-    if (!result.some((r) => JSON.stringify(r) === JSON.stringify(item))) {
-      result.push(item)
-    }
+    result.push(item)
   }
 
   return result
@@ -98,7 +159,7 @@ export function mergeIntent(
 ): Record<string, unknown> {
   if (!data) return {}
   if (!previous) return { ...data }
-  if (!live) return computeDelta(data, previous)
+  if (!live) return { ...data }
 
   const delta: Record<string, unknown> = {}
   for (const key of Object.keys(data)) {
@@ -147,22 +208,8 @@ export function composePendingOnto(
 ): Record<string, unknown> {
   const result = JSON.parse(JSON.stringify(base)) as Record<string, unknown>
   for (const c of changes) {
-    for (const key of Object.keys(c.data)) {
-      if (JSON.stringify(c.data[key]) !== JSON.stringify(c.previous[key])) {
-        const dataVal = c.data[key]
-        const prevVal = c.previous[key]
-        const resultVal = result[key]
-        if (Array.isArray(dataVal) && Array.isArray(prevVal) && Array.isArray(resultVal)) {
-          result[key] = mergeArrayLists(
-            dataVal as unknown[],
-            prevVal as unknown[],
-            resultVal as unknown[],
-          )
-        } else {
-          result[key] = c.data[key]
-        }
-      }
-    }
+    const delta = mergeIntent(c.data, c.previous, result)
+    Object.assign(result, delta)
   }
   return result
 }
