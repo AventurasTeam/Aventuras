@@ -5,6 +5,7 @@
   import { cn } from '$lib/utils/cn'
   import VaultLorebookEditorContent from './VaultLorebookEditorContent.svelte'
   import type { FocusedEntity } from '$lib/services/ai/vault/InteractiveVaultService'
+  import { ui } from '$lib/stores/ui.svelte'
 
   interface Props {
     lorebook: VaultLorebook
@@ -18,18 +19,37 @@
     await lorebookVault.update(updated.id, updated)
   }
 
-  async function handleSaveAndClose(updated: VaultLorebook) {
-    await lorebookVault.update(updated.id, updated)
-    onClose()
+  let isOpen = $state(true)
+  let closeCooldownActive = $state(false)
+  let closeCooldownTimer: ReturnType<typeof setTimeout> | undefined = $state()
+  const CLOSE_COOLDOWN_MS = 3000
+  let contentHasChanges = $state(false)
+
+  function handleModalOpenChange(nextOpen: boolean) {
+    if (nextOpen) return
+    if (contentHasChanges) {
+      if (closeCooldownActive) {
+        clearTimeout(closeCooldownTimer)
+        closeCooldownActive = false
+        onClose()
+      } else {
+        closeCooldownActive = true
+        isOpen = true
+        ui.showToast(
+          'Unsaved Changes — Press Escape or click outside again to discard changes',
+          'warning',
+        )
+        closeCooldownTimer = setTimeout(() => {
+          closeCooldownActive = false
+        }, CLOSE_COOLDOWN_MS)
+      }
+    } else {
+      onClose()
+    }
   }
 </script>
 
-<ResponsiveModal.Root
-  open={true}
-  onOpenChange={(open) => {
-    if (!open) onClose()
-  }}
->
+<ResponsiveModal.Root bind:open={isOpen} onOpenChange={handleModalOpenChange}>
   <ResponsiveModal.Content
     class={cn(
       'flex h-[100dvh] w-full flex-col overflow-hidden rounded-none p-0 transition-all duration-200 sm:h-[90vh] sm:max-w-6xl sm:rounded-lg',
@@ -38,10 +58,10 @@
     <VaultLorebookEditorContent
       {lorebook}
       onSave={handleSave}
-      onSaveAndClose={handleSaveAndClose}
       {onClose}
       {onOpenAssistant}
       initialEntryIndex={null}
+      bind:hasChanges={contentHasChanges}
     />
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>

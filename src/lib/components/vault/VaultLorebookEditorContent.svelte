@@ -44,7 +44,6 @@
   interface Props {
     lorebook: VaultLorebook
     onSave: (updatedLorebook: VaultLorebook) => Promise<void> | void
-    onSaveAndClose?: (updatedLorebook: VaultLorebook) => Promise<void> | void
     onClose: () => void
     initialEntryIndex?: number | null
     isEmbedded?: boolean
@@ -57,12 +56,12 @@
     onOpenAssistant?: (entity: FocusedEntity) => void
     onApproveAllAsync?: () => Promise<string | null>
     hideHeader?: boolean
+    hasChanges?: boolean
   }
 
   let {
     lorebook,
     onSave,
-    onSaveAndClose,
     onClose,
     initialEntryIndex = null,
     isEmbedded = false,
@@ -74,6 +73,7 @@
     onOpenAssistant,
     onApproveAllAsync,
     hideHeader = false,
+    hasChanges = $bindable(false),
   }: Props = $props()
 
   // Local state for editing - initialized from props but mutable
@@ -99,6 +99,10 @@
   // Track locally deleted entry names so the sync effect won't re-add them
   let locallyDeleted = $state<Set<string>>(new Set())
 
+  // Track indices of entries the user has edited locally so the sync effect
+  // won't overwrite them with external changes.
+  let dirtyEntryIndices = $state<Set<number>>(new Set())
+
   // Inline delete confirmation
   let confirmingDeleteIndex = $state<number | null>(null)
 
@@ -115,9 +119,11 @@
       let changed = false
 
       // Pointwise: update entries at common indices where vault content differs
+      // Skip entries the user has edited locally (their edits take precedence).
       const commonLen = Math.min(entries.length, vault.length)
       const updated = [...entries]
       for (let i = 0; i < commonLen; i++) {
+        if (dirtyEntryIndices.has(i)) continue
         if (JSON.stringify(updated[i]) !== JSON.stringify(vault[i])) {
           updated[i] = JSON.parse(JSON.stringify(vault[i]))
           changed = true
@@ -156,10 +162,17 @@
   // Dirty tracking & save feedback
   let settingsDirty = $state(false)
   let entriesDirty = $state(false)
+  const _hasChanges = $derived(settingsDirty || entriesDirty)
+  $effect(() => {
+    hasChanges = _hasChanges
+  })
   let savedFeedback = $state<'settings' | 'entry' | null>(null)
 
   $effect(() => {
     vaultEditor.editorDirty = entriesDirty
+    return () => {
+      vaultEditor.editorDirty = false
+    }
   })
   let savedFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -396,15 +409,8 @@
     const combined = combinedEntries.find((c) => c.index === selectedIndex)
     if (!combined) return null
 
-    // For edits: merge partial update data onto the full existing entry
-    if (combined.pendingAction === 'edit' && combined.pendingChange) {
-      const updateData =
-        'data' in combined.pendingChange
-          ? (combined.pendingChange.data as Partial<VaultLorebookEntry>)
-          : {}
-      return { ...combined.entry, ...updateData }
-    }
-
+    // For edits: combined.entry already has the update data overlaid,
+    // so no further merging is needed.
     return combined.entry
   })
 
@@ -497,8 +503,11 @@
 
       await saveHandler(updatedLorebook)
       locallyDeleted = new Set()
-      saving = false
+      dirtyEntryIndices = new Set()
       entriesDirty = false
+      settingsDirty = false
+      saving = false
+      ui.showToast('Lorebook saved', 'info')
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to save lorebook'
       saving = false
@@ -513,6 +522,35 @@
       }
     } catch (e) {
       ui.showToast(e instanceof Error ? e.message : 'Export failed', 'error')
+    }
+  }
+
+  let closeCooldownActive = $state(false)
+  let closeCooldownTimer: ReturnType<typeof setTimeout> | undefined = $state()
+  const CLOSE_COOLDOWN_MS = 3000
+
+  function handleCloseAttempt() {
+    if (_hasChanges) {
+      if (closeCooldownActive) {
+        clearTimeout(closeCooldownTimer)
+        closeCooldownActive = false
+        onClose()
+      } else {
+        closeCooldownActive = true
+        ui.showToast('Unsaved Changes — Press close again to discard changes', 'warning')
+        closeCooldownTimer = setTimeout(() => {
+          closeCooldownActive = false
+        }, CLOSE_COOLDOWN_MS)
+      }
+    } else {
+      onClose()
+    }
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault()
+      handleSaveClick(onSave)
     }
   }
 
@@ -544,6 +582,7 @@
       entries = JSON.parse(JSON.stringify(revertSnapshot))
     }
     locallyDeleted = new Set()
+    dirtyEntryIndices = new Set()
     entriesDirty = false
     selectedIndex = null
   }
@@ -1081,6 +1120,7 @@
                       )}
                       onclick={() => {
                         handleSaveClick()
+                        dirtyEntryIndices = new Set()
                         entriesDirty = false
                         showSavedFeedback('entry')
                       }}
@@ -1148,6 +1188,9 @@
                     changedFields={entryChangedFields}
                     onUpdate={(newData) => {
                       entriesDirty = true
+                      if (selectedIndex !== null && selectedIndex >= 0) {
+                        dirtyEntryIndices = new Set([...dirtyEntryIndices, selectedIndex])
+                      }
                       if (selectedIndex === -1) {
                         // Editing the new entry draft
                         newEntryDraft = newData
@@ -1213,7 +1256,7 @@
         <Button
           variant="outline"
           class="border-surface-600 h-8 w-10 p-0 text-xs sm:w-auto sm:px-3"
-          onclick={onClose}
+          onclick={handleCloseAttempt}
           disabled={saving}
         >
           <X class="h-3.5 w-3.5" />
@@ -1221,8 +1264,8 @@
         </Button>
         <Button
           class="h-8 flex-1 text-xs sm:flex-none"
-          onclick={() => handleSaveClick(onSaveAndClose ?? onSave)}
-          disabled={saving || !name.trim()}
+          onclick={() => handleSaveClick(onSave)}
+          disabled={saving || !name.trim() || !_hasChanges}
         >
           {#if saving}
             <div
@@ -1237,3 +1280,5 @@
     </div>
   {/if}
 </div>
+
+<svelte:window onkeydown={handleKeydown} />
