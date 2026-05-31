@@ -728,14 +728,7 @@ export class InteractiveVaultService extends BaseAIService {
       log('Lorebook not found for entry change', { lorebookId: change.lorebookId })
       return
     }
-
-    // Get a fresh copy of entries from the vault store
-    const currentLorebook = lorebookVault.getById(change.lorebookId)
-    if (!currentLorebook) {
-      log('Lorebook disappeared during change application', { lorebookId: change.lorebookId })
-      return
-    }
-    const entries = [...currentLorebook.entries]
+    const entries = [...lorebook.entries]
 
     switch (change.action) {
       case 'create':
