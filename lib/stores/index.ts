@@ -35,8 +35,9 @@ export const domain = {
 
 export const ui = {}
 
-export { useAppSettingsHydration } from './domain/use-app-settings-hydration'
+export { hydrateAppSettings } from './domain/app-settings'
+export { readAppSettingsRow, rehydrateAppSettings } from './domain/app-settings-read'
 
 export type { PerTurnContext, RunState, TxState } from './domain/generation'
-export type { AppSettingsSnapshot } from './domain/app-settings'
+export type { AppSettingsSnapshot, BootHydrateResult } from './domain/app-settings'
 export type { NavigationSnapshot } from './domain/navigation'

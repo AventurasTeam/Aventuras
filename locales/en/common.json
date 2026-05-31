@@ -1,0 +1,9 @@
+{
+  "recovery": {
+    "title": "Couldn't load settings",
+    "body": "Your saved settings are corrupted and can't be read. Open the file to repair it by hand, or reset settings to defaults.",
+    "openFile": "Open file",
+    "resetSettings": "Reset settings",
+    "resetWarning": "Resetting erases your saved providers and API keys. Your stories are not affected."
+  }
+}

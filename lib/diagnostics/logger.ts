@@ -1,4 +1,5 @@
 import { getCurrentActionId } from './ambient-action-id'
+import { isDiagnosticsDebugEnabled, isDiagnosticsEnabled } from './gate'
 import { EVENT_NAME_REGEX, eventNameOf, type LogKind } from './kinds'
 import { diagnosticsStore } from './store'
 import type { LogEntry, LogLevel } from './types'
@@ -18,10 +19,10 @@ function emit(
   fields: Record<string, unknown>,
   actionId: string | undefined,
 ): void {
-  const state = diagnosticsStore.getState()
-  if (!state.enabled) return
-  if (level === 'debug' && !state.debugEnabled) return
+  if (!isDiagnosticsEnabled()) return
+  if (level === 'debug' && !isDiagnosticsDebugEnabled()) return
 
+  const state = diagnosticsStore.getState()
   if (runDriftCheck && !EVENT_NAME_REGEX.test(eventNameOf(kind))) {
     console.warn(
       `[diagnostics] log kind "${kind}" has a non-snake_case event name (expected /^[a-z][a-z0-9_]*$/).`,

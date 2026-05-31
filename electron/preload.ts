@@ -5,6 +5,7 @@ import type { DbBridge } from './db/types'
 const api = {
   platform: process.platform,
   ping: (): Promise<string> => ipcRenderer.invoke('native:ping'),
+  revealDbFile: (): Promise<void> => ipcRenderer.invoke('native:reveal-db-file'),
 } as const
 
 contextBridge.exposeInMainWorld('native', api)

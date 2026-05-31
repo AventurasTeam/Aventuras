@@ -60,8 +60,12 @@ export function transaction(ops: { sql: string; params: unknown[] }[]): { ok: tr
   return { ok: true }
 }
 
+export function getDbFilePath(): string {
+  return join(app.getPath('userData'), 'aventuras.db')
+}
+
 export async function initDb(): Promise<void> {
-  const file = join(app.getPath('userData'), 'aventuras.db')
+  const file = getDbFilePath()
   sqlite = new DatabaseSync(file, { allowExtension: true })
   sqlite.enableLoadExtension(true)
   sqlite.loadExtension(getLoadablePath())

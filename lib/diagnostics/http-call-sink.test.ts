@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { __resetDiagnosticsGate, configureDiagnosticsGate } from './gate'
 import { httpCallSink } from './http-call-sink'
 import { setHttpCallKnownSecretValues } from './http-redaction'
 import { diagnosticsStore } from './store'
@@ -7,7 +8,8 @@ import { diagnosticsStore } from './store'
 describe('httpCallSink', () => {
   beforeEach(() => {
     diagnosticsStore.getState().__reset()
-    diagnosticsStore.getState().setEnabled(true)
+    __resetDiagnosticsGate()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     setHttpCallKnownSecretValues([])
     vi.useFakeTimers()
   })
@@ -86,7 +88,7 @@ describe('httpCallSink', () => {
   })
 
   it('is a no-op while diagnostics are disabled', () => {
-    diagnosticsStore.getState().setEnabled(false)
+    configureDiagnosticsGate({ isEnabled: () => false, isDebugEnabled: () => false })
     const id = httpCallSink.beginCall({
       method: 'GET',
       url: 'https://api.example.test/v1/models',
@@ -102,7 +104,7 @@ describe('httpCallSink', () => {
   })
 
   it('skips redaction and body snapshot work while diagnostics are disabled', () => {
-    diagnosticsStore.getState().setEnabled(false)
+    configureDiagnosticsGate({ isEnabled: () => false, isDebugEnabled: () => false })
     const throwingRequestBody = {
       toJSON() {
         throw new Error('snapshot should not run')

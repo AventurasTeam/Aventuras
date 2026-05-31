@@ -1,10 +1,11 @@
 import { join, normalize } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { app, BrowserWindow, ipcMain, net, protocol } from 'electron'
+import { app, BrowserWindow, ipcMain, net, protocol, shell } from 'electron'
 
 import {
   exec as dbExec,
+  getDbFilePath,
   initDb,
   query as dbQuery,
   transaction as dbTransaction,
@@ -82,6 +83,9 @@ app.whenReady().then(async () => {
   await initDb()
   registerBundleProtocol()
   ipcMain.handle('native:ping', () => 'pong')
+  ipcMain.handle('native:reveal-db-file', () => {
+    shell.showItemInFolder(getDbFilePath())
+  })
   ipcMain.handle('db:query', (_e, sql: string, params: unknown[], method: DbProxyMethod) =>
     dbQuery(sql, params, method),
   )

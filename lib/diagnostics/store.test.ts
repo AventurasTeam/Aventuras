@@ -1,43 +1,43 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { diagnosticsStore } from './store'
+import { clearBuffers, diagnosticsStore, getDiagnosticsSnapshot } from './store'
 import type { HttpCall, LogEntry, TurnCapture } from './types'
 
+beforeEach(() => diagnosticsStore.getState().__reset())
+
+const log: LogEntry = {
+  id: 'l1',
+  emittedAt: 1,
+  level: 'warn',
+  kind: 'pipeline.run_aborted',
+  fields: {},
+}
+const call = { id: 'c1', startedAt: 1, method: 'POST', url: 'x', requestHeaders: {} } as HttpCall
+const turn = { actionId: 'a1', branchId: 'b1', startedAt: 1, phaseEvents: [] } as TurnCapture
+
 function entry(i: number): LogEntry {
-  return { id: String(i), emittedAt: i, level: 'warn', kind: 'pipeline.recovered', fields: { i } }
+  return { id: String(i), emittedAt: i, level: 'warn', kind: 'pipeline.run_aborted', fields: { i } }
 }
 
-describe('diagnosticsStore', () => {
-  beforeEach(() => diagnosticsStore.getState().__reset())
-
-  it('defaults to gate OFF and three empty slices', () => {
-    const s = diagnosticsStore.getState()
-    expect(s.enabled).toBe(false)
-    expect(s.debugEnabled).toBe(false)
-    expect(s.logEntries).toEqual([])
-    expect(s.httpCalls).toEqual([])
-    expect(s.turnCaptures).toEqual([])
+describe('diagnostics store buffers', () => {
+  it('pushLog appends entries', () => {
+    diagnosticsStore.getState().pushLog(log)
+    expect(getDiagnosticsSnapshot().logEntries).toHaveLength(1)
   })
 
   it('evicts logEntries FIFO at cap 500', () => {
-    for (let i = 0; i < 600; i++) diagnosticsStore.getState().pushLog(entry(i))
-    const entries = diagnosticsStore.getState().logEntries
-    expect(entries).toHaveLength(500)
-    expect(entries[0].fields.i).toBe(100) // first 100 (0..99) evicted
-    expect(entries[499].fields.i).toBe(599)
+    for (let i = 0; i < 501; i++) diagnosticsStore.getState().pushLog(entry(i))
+    const { logEntries } = getDiagnosticsSnapshot()
+    expect(logEntries).toHaveLength(500)
+    expect(logEntries[0].id).toBe('1') // entry 0 evicted
+    expect(logEntries[499].id).toBe('500')
   })
 
-  it('setEnabled(false) clears all three slices', () => {
-    const s = diagnosticsStore.getState()
-    s.setEnabled(true)
-    s.pushLog(entry(1))
-    diagnosticsStore.setState({
-      httpCalls: [{ id: 'h' } as HttpCall],
-      turnCaptures: [{ actionId: 't' } as TurnCapture],
-    })
-    diagnosticsStore.getState().setEnabled(false)
-    const after = diagnosticsStore.getState()
-    expect(after.enabled).toBe(false)
+  it('clearBuffers empties all three slices', () => {
+    diagnosticsStore.getState().pushLog(log)
+    diagnosticsStore.setState({ httpCalls: [call], turnCaptures: [turn] })
+    clearBuffers()
+    const after = getDiagnosticsSnapshot()
     expect(after.logEntries).toEqual([])
     expect(after.httpCalls).toEqual([])
     expect(after.turnCaptures).toEqual([])

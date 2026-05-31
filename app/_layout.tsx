@@ -3,39 +3,47 @@ import { PortalHost } from '@rn-primitives/portal'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { Stack } from 'expo-router'
 import { useEffect } from 'react'
+import { I18nextProvider } from 'react-i18next'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 
 import '@/global.css'
+import { SettingsRecoveryScreen } from '@/components/shells/settings-recovery-screen'
+import { Toaster } from '@/components/ui/toast'
+import { useBootstrap } from '@/lib/boot'
 import { queryClient } from '@/lib/cache'
 import { db, ensureAppSettingsSingleton, useDbMigrations } from '@/lib/db'
 import { DensityProvider } from '@/lib/density'
-import { useDiagnosticsHydration } from '@/lib/diagnostics'
-import { useAppSettingsHydration } from '@/lib/stores'
+import { i18n } from '@/lib/i18n'
 import { ThemeProvider } from '@/lib/themes'
 
 export default function RootLayout() {
   const { success, error } = useDbMigrations()
+  const { phase, resetSettings } = useBootstrap(success)
 
-  // Set the diagnostics master gate once migrations are applied. Resilient to
-  // the settings row not existing yet (defaults OFF; dev build forces ON).
-  useDiagnosticsHydration(success)
-
-  // Non-blocking: no M1 surface reads the mirror yet, so the tree mounts
-  // without waiting for hydration to complete.
-  useAppSettingsHydration(success)
-
-  // Seed the app_settings singleton (idempotent) once migrations are applied —
-  // native after useMigrations succeeds, desktop after the main process has
-  // migrated. Fire-and-forget: no M1 shell depends on it being present yet.
+  // Seed the app_settings singleton (idempotent) once migrations are applied.
   useEffect(() => {
     if (success) void ensureAppSettingsSingleton(db)
   }, [success])
 
-  // First render blocks until migrations finish — acceptable for M1 (no real
-  // data, fast). Loading-state UX is a later concern.
   if (error) throw error
-  if (!success) return null
+  if (!success || phase === 'loading') return null
+
+  // Corrupt app_settings: halt pre-Router. Wrapped only in the providers the
+  // recovery surface needs (theme tokens + layout); copy uses the import-time
+  // i18n instance, no I18nextProvider required.
+  if (phase === 'config-corrupt') {
+    return (
+      // eslint-disable-next-line react-native/no-inline-styles -- GestureHandlerRootView isn't NativeWind-wrapped; documented full-screen root pattern.
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemeProvider>
+          <DensityProvider>
+            <SettingsRecoveryScreen onReset={resetSettings} />
+          </DensityProvider>
+        </ThemeProvider>
+      </GestureHandlerRootView>
+    )
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -44,10 +52,13 @@ export default function RootLayout() {
         <KeyboardProvider>
           <ThemeProvider>
             <DensityProvider>
-              <BottomSheetModalProvider>
-                <Stack screenOptions={{ headerShown: false }} />
-                <PortalHost />
-              </BottomSheetModalProvider>
+              <I18nextProvider i18n={i18n}>
+                <BottomSheetModalProvider>
+                  <Stack screenOptions={{ headerShown: false }} />
+                  <Toaster />
+                  <PortalHost />
+                </BottomSheetModalProvider>
+              </I18nextProvider>
             </DensityProvider>
           </ThemeProvider>
         </KeyboardProvider>

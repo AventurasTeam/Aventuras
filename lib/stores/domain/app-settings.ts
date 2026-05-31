@@ -1,13 +1,16 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
-import { APP_SETTINGS_DEFAULTS, type AppSettingsConfig, appSettingsConfigSchema } from '@/lib/db'
+import {
+  APP_SETTINGS_DEFAULTS,
+  type AppSettingsConfig,
+  type AppSettingsDiagnostics,
+  appSettingsConfigSchema,
+  appSettingsDiagnosticsSchema,
+} from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
-// In-memory mirror of the app_settings singleton's config fields. The shape is
-// the Zod-inferred config type; hydrateAppSettings validates the raw row against
-// appSettingsConfigSchema, since the drizzle column $type is an unchecked cast.
-type AppSettingsSnapshot = AppSettingsConfig
+type AppSettingsSnapshot = AppSettingsConfig & { diagnostics: AppSettingsDiagnostics }
 
 type AppSettingsState = AppSettingsSnapshot & {
   apply: (snapshot: AppSettingsSnapshot) => void
@@ -19,6 +22,7 @@ const DEFAULT_SNAPSHOT: AppSettingsSnapshot = {
   profiles: APP_SETTINGS_DEFAULTS.profiles,
   assignments: APP_SETTINGS_DEFAULTS.assignments,
   defaultProviderId: APP_SETTINGS_DEFAULTS.defaultProviderId,
+  diagnostics: APP_SETTINGS_DEFAULTS.diagnostics,
 }
 
 const appSettingsStore = createStore<AppSettingsState>()((set) => ({
@@ -38,26 +42,53 @@ function getAppSettings(): AppSettingsSnapshot {
     profiles: s.profiles,
     assignments: s.assignments,
     defaultProviderId: s.defaultProviderId,
+    diagnostics: s.diagnostics,
   }
 }
 
-// Injected-read core: testable without sqlite — the boot wrapper supplies the
-// raw singleton row. appSettingsConfigSchema.parse is the runtime validation
-// boundary (the drizzle $type is an unchecked cast) and strips the id /
-// diagnostics columns. On a missing row, or a read / parse failure, apply
-// defaults so boot continues; the blocking recovery screen lands with the
-// provider-management slice that introduces real writes.
-export async function hydrateAppSettings(read: () => Promise<unknown>): Promise<void> {
+export type BootHydrateResult = { status: 'ok' } | { status: 'config-corrupt'; error: string }
+
+const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err))
+
+// A read throw (unparseable JSON column) is treated as config corruption, not a
+// transient miss — halting at the recovery screen beats silently defaulting away
+// providers/keys. `read` is injected so the core is sqlite-free under test.
+export async function hydrateAppSettings(read: () => Promise<unknown>): Promise<BootHydrateResult> {
+  let raw: unknown
   try {
-    const raw = await read()
-    const snapshot = raw === undefined ? DEFAULT_SNAPSHOT : appSettingsConfigSchema.parse(raw)
-    appSettingsStore.getState().apply(snapshot)
+    raw = await read()
   } catch (err) {
-    logger.error('bootstrap.app_settings_hydrate_failed', {
-      error: err instanceof Error ? err.message : String(err),
-    })
-    appSettingsStore.getState().apply(DEFAULT_SNAPSHOT)
+    const message = messageOf(err)
+    logger.error('bootstrap.app_settings_hydrate_failed', { error: message })
+    return { status: 'config-corrupt', error: message }
   }
+
+  if (raw === undefined) {
+    appSettingsStore.getState().apply(DEFAULT_SNAPSHOT)
+    return { status: 'ok' }
+  }
+
+  let config: AppSettingsConfig
+  try {
+    config = appSettingsConfigSchema.parse(raw)
+  } catch (err) {
+    const message = messageOf(err)
+    logger.error('bootstrap.app_settings_hydrate_failed', { error: message })
+    return { status: 'config-corrupt', error: message }
+  }
+
+  const diag = appSettingsDiagnosticsSchema.safeParse(
+    (raw as { diagnostics?: unknown }).diagnostics,
+  )
+  if (!diag.success) {
+    logger.error('bootstrap.app_settings_hydrate_failed', {
+      error: `diagnostics: ${diag.error.message}`,
+    })
+  }
+  const diagnostics = diag.success ? diag.data : APP_SETTINGS_DEFAULTS.diagnostics
+
+  appSettingsStore.getState().apply({ ...config, diagnostics })
+  return { status: 'ok' }
 }
 
 export const appSettings = {

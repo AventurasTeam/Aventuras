@@ -1,12 +1,14 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { __resetDiagnosticsGate, configureDiagnosticsGate } from './gate'
 import { diagnosticsStore } from './store'
 import { turnCaptureSink } from './turn-capture-sink'
 
+beforeEach(() => __resetDiagnosticsGate())
 afterEach(() => diagnosticsStore.getState().__reset())
 
 function enable() {
-  diagnosticsStore.getState().setEnabled(true)
+  configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
 }
 
 describe('turnCaptureSink', () => {

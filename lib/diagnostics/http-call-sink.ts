@@ -1,3 +1,4 @@
+import { isDiagnosticsEnabled } from './gate'
 import { redactHeaders, redactResponseHeaders, redactUrl } from './http-redaction'
 import { loggerWithoutTurn } from './logger'
 import { diagnosticsStore } from './store'
@@ -86,7 +87,7 @@ function finalizeCall(
 export const httpCallSink = {
   beginCall(args: BeginCallArgs): string {
     const id = ulid()
-    if (!diagnosticsStore.getState().enabled) return id
+    if (!isDiagnosticsEnabled()) return id
 
     const row: HttpCall = {
       id,

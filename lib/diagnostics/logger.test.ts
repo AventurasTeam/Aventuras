@@ -1,14 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { __resetDiagnosticsGate, configureDiagnosticsGate } from './gate'
 import { logger } from './logger'
 import { diagnosticsStore } from './store'
 
 describe('logger', () => {
-  beforeEach(() => diagnosticsStore.getState().__reset())
+  beforeEach(() => {
+    diagnosticsStore.getState().__reset()
+    __resetDiagnosticsGate()
+  })
   afterEach(() => vi.restoreAllMocks())
 
   it('writes a LogEntry and mirrors to console when master is ON', () => {
-    diagnosticsStore.getState().setEnabled(true)
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     logger.warn('provider.retry_succeeded', { attempt: 2 })
     const entries = diagnosticsStore.getState().logEntries
@@ -34,7 +38,7 @@ describe('logger', () => {
   })
 
   it('debug no-ops when debug_level is OFF, but warn/error emit', () => {
-    diagnosticsStore.getState().setEnabled(true) // debugEnabled stays false
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => false })
     vi.spyOn(console, 'debug').mockImplementation(() => {})
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     logger.debug('pipeline.recovered', {})
@@ -44,15 +48,14 @@ describe('logger', () => {
   })
 
   it('debug emits when both master and debug_level are ON', () => {
-    diagnosticsStore.getState().setEnabled(true)
-    diagnosticsStore.getState().setDebugEnabled(true)
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     vi.spyOn(console, 'debug').mockImplementation(() => {})
     logger.debug('pipeline.recovered', { detail: 1 })
     expect(diagnosticsStore.getState().logEntries).toHaveLength(1)
   })
 
   it('warns on a non-snake_case event name in a dev build', () => {
-    diagnosticsStore.getState().setEnabled(true)
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     logger.warn('pipeline.phaseFailed', {}) // camelCase event name
     expect(warnSpy.mock.calls.some((c) => String(c[0]).includes('non-snake_case'))).toBe(true)

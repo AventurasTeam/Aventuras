@@ -49,6 +49,7 @@ describe('lib/stores public namespace', () => {
       profiles: [],
       assignments: {},
       defaultProviderId: null,
+      diagnostics: { enabled: false, debug_level_enabled: false },
     })
   })
 })

@@ -30,6 +30,7 @@ export default defineConfig({
             tags: { exclude: ['no-vitest'] },
           }),
         ],
+        optimizeDeps: { include: ['i18next', 'react-i18next'] },
         test: {
           name: 'storybook',
           browser: {

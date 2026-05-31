@@ -218,35 +218,72 @@ authoritative.
 
 ## Open questions
 
-- **Debug-level toggle wiring.** The store mirrors both `enabled`
-  and `debug_level_enabled`, but only the master toggle is specced
-  as an action this slice. Ship `debug_level_enabled` as a second
-  symmetric action now (cheap; the store already mirrors it) so
-  1.7b's two toggles both have a mutator, or leave it read-only
-  until 1.7b needs it? Lean: ship both actions here. Confirm at
-  authoring.
-- **`Open file` desktop mechanism.** The reveal-in-file-manager
-  call on Electron (e.g. `shell.showItemInFolder` over IPC) — a
-  desktop-only path; Android omits the button. Confirm the IPC
-  surface at authoring.
-- **i18n namespace granularity for bootstrap.** One
-  bootstrap / recovery namespace, or a shared `common` namespace
-  the later screens also draw from? Implementer's call; pick the
-  lower-churn option.
-- **Recovery screen visual depth.** No per-screen doc or wireframe
-  exists; `architecture.md` specs the copy and the two actions.
-  Inline minimal layout is sufficient for M1; a per-screen
-  doc / wireframe is deferred unless the screen grows.
 - **Store snapshot reads expose live nested values** (carried
   from [Slice 1.6](./06-base-stores.md#implementation-notes)).
   `domain.getAppSettings()` returns a fresh top-level object each
   call but its nested values are the store's **live references**,
-  not deep copies. The gate's resolution is mandated in scope
-  (call `getAppSettings()` on every check, never capture it); the
+  not deep copies. The gate's resolution shipped (it calls
+  `getAppSettings()` on every check, never captures it); the
   broader rule — every consumer treats the result as read-only —
   also binds [Slice 1.7b](./07b-ui-shells.md)'s screen reads. Deep
   freezing is deferred to the Zod-parsed-copy milestone.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+### Resolved developer decisions
+
+- **Two-parse hydrate, discriminated result.** `hydrateAppSettings`
+  parses the config (`appSettingsConfigSchema`) and the diagnostics
+  section (`appSettingsDiagnosticsSchema.safeParse`) independently and
+  returns `BootHydrateResult` (`ok` or `config-corrupt`). A config
+  failure halts at the recovery screen without mutating the mirror; a
+  diagnostics-section failure defaults the toggles off and continues;
+  an absent row hydrates defaults. A read throw (an unparseable JSON
+  column) maps to `config-corrupt` too — at M1 a transient read error
+  is not distinguished from corruption, and halting beats silently
+  defaulting away configured providers and keys.
+- **Both diagnostics toggle actions shipped now.** `lib/actions/settings`
+  exposes `setDiagnosticsEnabled` and `setDebugLevelEnabled`; each
+  persists the `app_settings.diagnostics` row then re-hydrates the
+  mirror, and the master off-write also calls `clearBuffers()`. 1.7b's
+  two toggles both have a mutator with no mid-UI-slice follow-up.
+- **`Open file` is a dedicated `native:reveal-db-file` IPC.** Main
+  resolves the path (`getDbFilePath()`) and calls
+  `shell.showItemInFolder`; the renderer calls
+  `window.native.revealDbFile()` and never computes the path. Android
+  feature-detects the bridge method and omits the button.
+- **i18n self-initializes at import; single `common` namespace.**
+  `lib/i18n` creates and `init()`s the instance synchronously with
+  bundled `en` resources, so the recovery screen's bound `t()` resolves
+  pre-Router without `<I18nextProvider>`. No `expo-localization`
+  (en-only). The recovery screen is inline minimal — no per-screen doc
+  or wireframe.
+
+### Notable deviations and constraints for future slices
+
+- **Gate is configured before recovery, not after hydrate.** The brief
+  ordered `configureDiagnosticsGate` after hydrate; `runBootstrap` wires
+  it first. The gate is a live pull-getter, so its position is
+  functionally free, and configuring it first lets the crash-recovery
+  pass's logs be captured (and `__DEV__`-forced-on in dev).
+- **Recovery never blocks boot — guarded at the boot layer.**
+  `recoverInFlightRuns`'s outer orphan query is not wrapped (only its
+  per-orphan bodies are), so `runBootstrap` wraps the recovery call in a
+  `try`/`catch` (logs `bootstrap.recovery_failed`, continues to
+  hydrate); `useBootstrap` also routes any unexpected rejection to the
+  recovery screen. Without this a recovery-query failure at boot would
+  hang the app at a blank loading screen with no escape.
+- **The brief's "`useToasts` from 1.6" was inaccurate.** No such hook
+  exists; `lib/toast` is an imperative singleton and `<Toaster>` already
+  shipped as a foundation module. This slice mounts the existing
+  `<Toaster>` and proves it via `toast.success(...)`. The 4th toast
+  severity (`warning`) stays a separate followup, out of scope.
+- **CI cold-cache flake guard.** The recovery-screen story pulls
+  `i18next` / `react-i18next` into the Storybook browser Vitest project;
+  `vitest.config.ts` adds them to that project's `optimizeDeps.include`
+  to avoid a mid-run re-optimize and reload.
+- **Recovery-screen Reset has no pending, disabled, or error state**
+  (M1-acceptable: a failed reset leaves the screen up to retry, never
+  hangs). The interactive settings UI in
+  [Slice 1.7b](./07b-ui-shells.md) should add those states when it wires
+  the live toggles to this slice's actions.

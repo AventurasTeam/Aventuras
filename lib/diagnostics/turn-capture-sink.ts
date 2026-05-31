@@ -1,3 +1,4 @@
+import { isDiagnosticsEnabled } from './gate'
 import { loggerWithoutTurn } from './logger'
 import { diagnosticsStore } from './store'
 import type { PhaseEvent, TurnCapture } from './types'
@@ -16,7 +17,7 @@ function update(actionId: string, fn: (t: TurnCapture) => TurnCapture): void {
 
 export const turnCaptureSink = {
   beginTurn(args: { actionId: string; branchId: string }): void {
-    if (!diagnosticsStore.getState().enabled) return
+    if (!isDiagnosticsEnabled()) return
     diagnosticsStore.setState((state) => {
       const row: TurnCapture = {
         actionId: args.actionId,

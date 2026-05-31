@@ -5,10 +5,16 @@ export {
 } from './app-settings-defaults'
 export {
   appSettingsConfigSchema,
+  appSettingsDiagnosticsSchema,
   modelProfileSchema,
   providerInstanceSchema,
 } from './app-settings-schema'
-export type { AppSettingsConfig, ModelProfile, ProviderInstance } from './app-settings-schema'
+export type {
+  AppSettingsConfig,
+  AppSettingsDiagnostics,
+  ModelProfile,
+  ProviderInstance,
+} from './app-settings-schema'
 export { db } from './client'
 export { entryMetadataSchema } from './entry-metadata'
 export type { EntryMetadata } from './entry-metadata'

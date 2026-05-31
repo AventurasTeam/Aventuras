@@ -1,10 +1,6 @@
 import { branches, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import {
-  clearCurrentActionId,
-  setDiagnosticsDebugEnabled,
-  setDiagnosticsEnabled,
-} from '@/lib/diagnostics'
+import { clearBuffers, clearCurrentActionId, configureDiagnosticsGate } from '@/lib/diagnostics'
 import { __resetBus, __resetRegistry, type RunCtx } from '@/lib/pipeline'
 import { domain } from '@/lib/stores'
 
@@ -23,7 +19,6 @@ export function resetSingletons(): void {
   __resetBus()
   domain.__reset()
   clearCurrentActionId()
-  setDiagnosticsEnabled(false) // clears the in-memory slices
-  setDiagnosticsEnabled(true)
-  setDiagnosticsDebugEnabled(true) // so debug-level run_complete lands
+  clearBuffers()
+  configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
 }
