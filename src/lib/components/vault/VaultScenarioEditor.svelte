@@ -32,6 +32,26 @@
     })),
   )
 
+  $effect(() => {
+    const current = scenarioVault.getById(scenario.id)
+    if (!current) return
+    untrack(() => {
+      const snapshot: VaultScenarioInput = {
+        name: current.name,
+        description: current.description,
+        settingSeed: current.settingSeed,
+        npcs: JSON.parse(JSON.stringify(current.npcs)),
+        primaryCharacterName: current.primaryCharacterName,
+        firstMessage: current.firstMessage,
+        alternateGreetings: [...current.alternateGreetings],
+        tags: [...current.tags],
+      }
+      if (JSON.stringify(snapshot) !== JSON.stringify(formData)) {
+        formData = snapshot
+      }
+    })
+  })
+
   const isCreating = $derived(scenario.name === '' && scenario.settingSeed === '')
 
   let saving = $state(false)

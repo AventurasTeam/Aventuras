@@ -92,7 +92,10 @@
   let showCharForm = $state(false)
   let editingCharacter = $state<VaultCharacter | null>(null)
   let editingLorebook = $state<VaultLorebook | null>(null)
-  let editingScenario = $state<VaultScenario | null>(null)
+  let editingScenarioId = $state<string | null>(null)
+  let editingScenario = $derived(
+    editingScenarioId ? (scenarioVault.getById(editingScenarioId) ?? null) : null,
+  )
 
   let showDiscoveryModal = $state(false)
   let discoveryMode = $state<VaultType>('character')
@@ -107,7 +110,7 @@
     showCharForm = false
     editingCharacter = null
     editingLorebook = null
-    editingScenario = null
+    editingScenarioId = null
     // Two-phase wait to avoid a race with bits-ui's deferred scroll lock cleanup.
     //
     // When the entity editor unmounts, bits-ui schedules `resetBodyStyle()` via
@@ -324,7 +327,7 @@
       originalFilename: null,
       metadata: null,
     })
-    editingScenario = newScenario
+    editingScenarioId = newScenario.id
   }
 
   function handleImportScenario(event: Event) {
@@ -344,7 +347,7 @@
   function handleEdit(item: AnyVaultItem, type: VaultType) {
     if (type === 'character') openEditCharForm(item as VaultCharacter)
     else if (type === 'lorebook') editingLorebook = item as VaultLorebook
-    else if (type === 'scenario') editingScenario = item as VaultScenario
+    else if (type === 'scenario') editingScenarioId = (item as VaultScenario).id
   }
 
   function handleOpenPack(packId: string) {
@@ -725,10 +728,10 @@
 {/if}
 
 <!-- Scenario Editor Modal -->
-{#if editingScenario}
+{#if editingScenarioId}
   <VaultScenarioEditor
-    scenario={editingScenario}
-    onClose={() => (editingScenario = null)}
+    scenario={editingScenario!}
+    onClose={() => (editingScenarioId = null)}
     onOpenAssistant={openAssistantWithEntity}
   />
 {/if}
