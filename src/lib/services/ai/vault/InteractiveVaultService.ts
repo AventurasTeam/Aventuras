@@ -35,6 +35,7 @@ import {
 import type { VaultPendingChange } from '../sdk/schemas/vault'
 import { database } from '$lib/services/database'
 import { createStreamingAgenticAssistant } from '../sdk/agents/factory'
+import { mergeIntent, scenarioToRecord, characterToRecord } from '$lib/utils/vaultMerge'
 
 const log = createLogger('InteractiveVault')
 
@@ -703,7 +704,9 @@ export class InteractiveVaultService extends BaseAIService {
         })
         break
       case 'update': {
-        const delta = this._computeDelta(change.data, change.previous)
+        const live = characterVault.getById(change.entityId)
+        const current = live ? characterToRecord(live) : undefined
+        const delta = mergeIntent(change.data, change.previous, current)
         await characterVault.update(change.entityId, delta)
         break
       }
@@ -821,7 +824,12 @@ export class InteractiveVaultService extends BaseAIService {
         })
         break
       case 'update': {
-        const delta = this._computeDelta(change.data, change.previous)
+        // Compute this change's intent (data vs previous) and merge it
+        // onto the current live state. This avoids sequential approvals
+        // overwriting each other's array/object changes (e.g. NPC additions).
+        const live = scenarioVault.getById(change.entityId)
+        const current = live ? scenarioToRecord(live) : undefined
+        const delta = mergeIntent(change.data, change.previous, current)
         await scenarioVault.update(change.entityId, delta)
         break
       }
@@ -829,27 +837,6 @@ export class InteractiveVaultService extends BaseAIService {
         await scenarioVault.delete(change.entityId)
         break
     }
-  }
-
-  /**
-   * Compute a delta (partial update) from a pending change by comparing
-   * `data` against `previous`. Only includes fields that actually changed,
-   * so consecutive updates to the same entity don't overwrite each other's
-   * changes when applied sequentially (e.g. "Approve All").
-   */
-  private _computeDelta(
-    data: Record<string, unknown> | undefined,
-    previous: Record<string, unknown> | undefined,
-  ): Record<string, unknown> {
-    if (!data) return {}
-    if (!previous) return { ...data }
-    const delta: Record<string, unknown> = {}
-    for (const key of Object.keys(data)) {
-      if (JSON.stringify(data[key]) !== JSON.stringify(previous[key])) {
-        delta[key] = data[key]
-      }
-    }
-    return delta
   }
 
   /**

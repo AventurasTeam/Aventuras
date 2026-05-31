@@ -728,9 +728,9 @@
 {/if}
 
 <!-- Scenario Editor Modal -->
-{#if editingScenarioId}
+{#if editingScenario}
   <VaultScenarioEditor
-    scenario={editingScenario!}
+    scenario={editingScenario}
     onClose={() => (editingScenarioId = null)}
     onOpenAssistant={openAssistantWithEntity}
   />

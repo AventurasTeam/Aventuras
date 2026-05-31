@@ -20,7 +20,6 @@
     CheckCircle2,
     XCircle,
     Zap,
-    Layers,
   } from 'lucide-svelte'
   import { fade } from 'svelte/transition'
   import { vaultEditor } from '$lib/stores/vaultEditorStore.svelte'
@@ -250,45 +249,31 @@
       : undefined,
   )
 
-  // --- Composed preview for multi-update entities (character / scenario) ---
-  // When multiple pending updates target the same entity, "After" shows
-  // what Approve All would produce (all changes merged), not just this
-  // single change's data.
+  // --- Single-change preview for update entities (character / scenario) ---
+  // Shows what the entity would look like if ONLY this change were approved,
+  // starting from the original state and applying this change's delta.
+  // Uses the edited version if the user modified it in the editor.
 
-  const composedData = $derived.by(() => {
+  const afterData = $derived.by(() => {
     if (change.action !== 'update') return null
     if (change.entityType !== 'character' && change.entityType !== 'scenario') return null
     if (!('previous' in change) || !change.previous) return null
-    if (!('entityId' in change) || !change.entityId) return null
 
-    const entityId = change.entityId as string
-    const pending = vaultEditor.pendingChanges.filter(
-      (c) =>
-        c.status === 'pending' &&
-        c.entityType === change.entityType &&
-        'entityId' in c &&
-        c.entityId === entityId &&
-        'data' in c &&
-        'previous' in c,
-    )
-
-    if (pending.length <= 1) return null
+    const effective = vaultEditor.getEffectiveChange(change)
+    const data = (effective as { data?: Record<string, unknown> }).data
+    const prev = (effective as { previous?: Record<string, unknown> }).previous
+    if (!data) return null
 
     const base = JSON.parse(JSON.stringify(change.previous)) as Record<string, unknown>
-    for (const c of pending) {
-      const data = (c as { data?: Record<string, unknown> }).data
-      const prev = (c as { previous?: Record<string, unknown> }).previous
-      if (!data || !prev) continue
-      for (const key of Object.keys(data)) {
-        if (JSON.stringify(data[key]) !== JSON.stringify(prev[key])) {
-          base[key] = data[key]
-        }
+    const diffSource = data
+    const diffBase = prev ?? (change.previous as Record<string, unknown>)
+    for (const key of Object.keys(diffSource)) {
+      if (JSON.stringify(diffSource[key]) !== JSON.stringify(diffBase[key])) {
+        base[key] = diffSource[key]
       }
     }
     return base
   })
-
-  const hasMultipleUpdates = $derived(composedData !== null)
 </script>
 
 <div
@@ -398,25 +383,14 @@
           </div>
         </div>
         <div class="rounded-lg border border-emerald-500/20 bg-emerald-500/8 p-2.5">
-          <div
-            class="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-emerald-400 uppercase"
-          >
+          <div class="mb-1.5 text-[10px] font-bold tracking-wider text-emerald-400 uppercase">
             After
-            {#if hasMultipleUpdates}
-              <span
-                class="inline-flex items-center gap-0.5 rounded bg-blue-500/20 px-1 py-px text-blue-400 normal-case"
-                title="Preview includes all pending updates for this entity"
-              >
-                <Layers class="h-2.5 w-2.5" />
-                all changes
-              </span>
-            {/if}
           </div>
           <div
             class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
           >
-            {#if composedData}
-              {formatEntityData(composedData)}
+            {#if afterData}
+              {formatEntityData(afterData)}
             {:else}
               {formatChangeData()}
             {/if}

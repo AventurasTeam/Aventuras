@@ -11,6 +11,7 @@
   import { characterVault } from '$lib/stores/characterVault.svelte'
   import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
   import { vaultEditor } from '$lib/stores/vaultEditorStore.svelte'
+  import { characterToRecord, scenarioToRecord } from '$lib/utils/vaultMerge'
   import { SvelteMap } from 'svelte/reactivity'
 
   interface Props {
@@ -31,21 +32,97 @@
     hideHeader = false,
   }: Props = $props()
 
-  // Local state for the editable data (character / scenario)
   let charData = $state<VaultCharacterInput | null>(null)
-  let entryData = $state<VaultLorebookEntry | null>(null)
   let scenarioData = $state<VaultScenarioInput | null>(null)
+  let entryData = $state<VaultLorebookEntry | null>(null)
 
   const composedData = $derived(vaultEditor.composedData)
 
-  // Initialize local state from the change data (or composed preview if available)
+  // In view mode, the source of truth is the vault store + remaining pending
+  // changes, composed reactively. In edit mode, the source is the change data
+  // (possibly composed with sibling changes). We use $derived so the form
+  // always reflects the latest data without relying on $effect timing.
+
+  const viewCharData = $derived.by(() => {
+    if (!vaultEditor.viewMode) return null
+    const eid = vaultEditor.viewEntityId
+    if (vaultEditor.viewEntityType !== 'character' || !eid) return null
+    const existing = characterVault.getById(eid)
+    if (!existing) return null
+    const composed = vaultEditor.composePendingChanges(
+      characterToRecord(existing),
+      'character',
+      eid,
+    )
+    return {
+      name: composed.name as string,
+      description: composed.description as string | null,
+      traits: [...(composed.traits as string[])],
+      visualDescriptors: JSON.parse(JSON.stringify(composed.visualDescriptors)),
+      portrait: (composed.portrait as string | null) ?? null,
+      tags: [...(composed.tags as string[])],
+      favorite: composed.favorite as boolean,
+    }
+  })
+
+  const viewScenarioData = $derived.by(() => {
+    if (!vaultEditor.viewMode) return null
+    const eid = vaultEditor.viewEntityId
+    if (vaultEditor.viewEntityType !== 'scenario' || !eid) return null
+    const existing = scenarioVault.getById(eid)
+    if (!existing) return null
+    const composed = vaultEditor.composePendingChanges(scenarioToRecord(existing), 'scenario', eid)
+    return {
+      name: composed.name as string,
+      description: composed.description as string | null,
+      settingSeed: composed.settingSeed as string,
+      npcs: JSON.parse(JSON.stringify(composed.npcs)),
+      primaryCharacterName: composed.primaryCharacterName as string,
+      firstMessage: composed.firstMessage as string | null,
+      alternateGreetings: (composed.alternateGreetings as string[]) ?? [],
+      tags: [...(composed.tags as string[])],
+      favorite: composed.favorite as boolean,
+    }
+  })
+
+  // The data passed to the form: in view mode, use the reactive derived
+  // value; in edit mode, use local $state (which may diverge from the
+  // source as the user edits).
+  const displayCharData = $derived(vaultEditor.viewMode ? viewCharData : charData)
+  const displayScenarioData = $derived(vaultEditor.viewMode ? viewScenarioData : scenarioData)
+
+  // Initialize local $state from the current source when switching modes
+  // or when the underlying data changes (so user edits start from fresh data).
   $effect(() => {
-    const source = composedData ?? ('data' in change ? change.data : null)
-    if (change.entityType === 'character' && source) {
+    if (isViewMode) {
+      // In view mode, local state is not the source of truth but we keep
+      // it in sync so that handleViewModeSave can use it after user edits.
+      if (viewCharData) {
+        charData = { ...viewCharData }
+      } else if (viewScenarioData) {
+        scenarioData = { ...viewScenarioData }
+      }
+    } else if (change.entityType === 'character' && 'data' in change && change.data) {
+      const source =
+        composedData ??
+        ('previous' in change && change.previous
+          ? {
+              ...(change.previous as Record<string, unknown>),
+              ...(change.data as Record<string, unknown>),
+            }
+          : change.data)
       charData = JSON.parse(JSON.stringify(source))
     } else if (change.entityType === 'lorebook-entry' && 'data' in change) {
       entryData = JSON.parse(JSON.stringify(change.data))
-    } else if (change.entityType === 'scenario' && source) {
+    } else if (change.entityType === 'scenario' && 'data' in change && change.data) {
+      const source =
+        composedData ??
+        ('previous' in change && change.previous
+          ? {
+              ...(change.previous as Record<string, unknown>),
+              ...(change.data as Record<string, unknown>),
+            }
+          : change.data)
       scenarioData = JSON.parse(JSON.stringify(source))
     }
   })
@@ -58,12 +135,18 @@
     }
   }
 
-  /** Push local edits to the store so "Approve" uses the edited version */
+  /** Push local edits to the store so "Approve" uses the edited version.
+   * Scopes the saved data to only this change's modifications — fields
+   * that differ between the original change.data and change.previous are
+   * taken from the current form; everything else stays as change.data.
+   * This prevents sibling pending changes from leaking into this change.
+   */
   function emitUpdate() {
     if (change.entityType === 'character' && charData) {
+      const scoped = scopeToOwnChanges(charData, change)
       vaultEditor.updateChangeData(change.id, {
         ...change,
-        data: charData,
+        data: scoped,
       } as VaultPendingChange)
     } else if (change.entityType === 'lorebook-entry' && entryData) {
       vaultEditor.updateChangeData(change.id, {
@@ -71,11 +154,36 @@
         data: entryData,
       } as VaultPendingChange)
     } else if (change.entityType === 'scenario' && scenarioData) {
+      const scoped = scopeToOwnChanges(scenarioData, change)
       vaultEditor.updateChangeData(change.id, {
         ...change,
-        data: scenarioData,
+        data: scoped,
       } as VaultPendingChange)
     }
+  }
+
+  /**
+   * Given the current form data (which may include sibling changes via
+   * composedData), produce a version scoped to only this change's
+   * modifications. For fields this change originally modified, use the
+   * form value (allowing user edits). For fields this change didn't
+   * modify, keep the previous value so the change stays scoped.
+   */
+  function scopeToOwnChanges(
+    formData: VaultCharacterInput | VaultScenarioInput,
+    change: VaultPendingChange,
+  ): VaultCharacterInput | VaultScenarioInput {
+    if (!('previous' in change) || !change.previous || !('data' in change)) return formData
+    const previous = change.previous as Record<string, unknown>
+    const originalData = change.data as Record<string, unknown>
+    const form = formData as Record<string, unknown>
+    const result: Record<string, unknown> = { ...previous }
+    for (const key of Object.keys(originalData)) {
+      if (JSON.stringify(originalData[key]) !== JSON.stringify(previous[key])) {
+        result[key] = form[key]
+      }
+    }
+    return result as VaultCharacterInput | VaultScenarioInput
   }
 
   function handleApproveWithEdits() {
@@ -187,6 +295,7 @@
   }
 
   const changedFieldsMap = $derived.by(() => {
+    if (isViewMode) return new SvelteMap<string, { old: string; new: string }>()
     if (change.action !== 'update' || !('data' in change) || !('previous' in change)) {
       return new SvelteMap<string, { old: string; new: string }>()
     }
@@ -264,10 +373,10 @@
 
     <!-- Form -->
     <div class="flex-1 space-y-4 overflow-y-auto">
-      {#if change.entityType === 'character' && charData}
+      {#if change.entityType === 'character' && displayCharData}
         <div class="px-4">
           <VaultCharacterFormFields
-            data={charData}
+            data={displayCharData}
             changedFields={changedFieldKeys}
             onUpdate={(newData) => {
               charData = newData
@@ -275,9 +384,9 @@
             }}
           />
         </div>
-      {:else if change.entityType === 'scenario' && scenarioData}
+      {:else if change.entityType === 'scenario' && displayScenarioData}
         <VaultScenarioFormFields
-          data={scenarioData}
+          data={displayScenarioData}
           changedFields={changedFieldKeys}
           onUpdate={(newData) => {
             scenarioData = newData

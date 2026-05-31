@@ -12,7 +12,10 @@ import type { VaultPendingChange } from '$lib/services/ai/sdk/schemas'
 import type { VaultLorebook, VaultLorebookEntry } from '$lib/types'
 import type { InteractiveVaultService } from '$lib/services/ai/vault/InteractiveVaultService'
 import { lorebookVault } from './lorebookVault.svelte'
+import { characterVault } from './characterVault.svelte'
+import { scenarioVault } from './scenarioVault.svelte'
 import { SvelteMap } from 'svelte/reactivity'
+import { composePendingOnto, scenarioToRecord, characterToRecord } from '$lib/utils/vaultMerge'
 
 class VaultEditorStore {
   // ── Core state ────────────────────────────────────────────────────────
@@ -49,11 +52,11 @@ class VaultEditorStore {
   }
 
   /**
-   * Composed preview for the active entity when multiple pending updates
-   * target the same scenario or character. Merges all pending updates for
-   * that entity (in order) so the editor shows what "Approve All" would
-   * produce. Returns null for lorebook-related entities (they use
-   * previewLorebook) or when there's no active change.
+   * Composed preview for the active entity. Starts from the current vault
+   * state (which includes already-approved changes) and overlays remaining
+   * pending updates so the editor always reflects reality. Returns null for
+   * lorebook-related entities (they use previewLorebook) or when there's no
+   * active change.
    */
   get composedData(): Record<string, unknown> | null {
     const change = this.activeChange
@@ -66,33 +69,74 @@ class VaultEditorStore {
       change.entityType === 'scenario' || change.entityType === 'character' ? change.entityId : null
     if (!entityId) return null
 
-    const pending = this.pendingChanges.filter(
-      (c) =>
-        c.status === 'pending' &&
-        c.entityType === change.entityType &&
-        'entityId' in c &&
-        c.entityId === entityId &&
-        'data' in c &&
-        'previous' in c,
-    )
+    const pending = this._pendingChangesWithEditOverlay(change.entityType, entityId)
 
-    if (pending.length <= 1) return null
+    const base = this._getVaultBase(change.entityType, entityId, change.previous)
+    return composePendingOnto(base, pending)
+  }
 
-    // Start from the original state and apply each change's delta
-    const base = JSON.parse(JSON.stringify(change.previous)) as Record<string, unknown>
-    for (const c of pending) {
-      const effective = this._editedChanges.get(c.id) ?? c
-      const data = (effective as { data?: Record<string, unknown> }).data
-      const prev = (effective as { previous?: Record<string, unknown> }).previous
-      if (!data || !prev) continue
-      // Only overlay fields that this specific change actually modified
-      for (const key of Object.keys(data)) {
-        if (JSON.stringify(data[key]) !== JSON.stringify(prev[key])) {
-          base[key] = data[key]
-        }
-      }
+  /**
+   * Build a base record from the current vault state for the given entity
+   * type and ID. Falls back to `previous` when the entity isn't found
+   * (e.g. create actions where the entity doesn't exist in the vault yet).
+   */
+  private _getVaultBase(
+    entityType: string,
+    entityId: string,
+    previous: Record<string, unknown>,
+  ): Record<string, unknown> {
+    if (entityType === 'scenario') {
+      const live = scenarioVault.getById(entityId)
+      if (live) return scenarioToRecord(live)
+    } else if (entityType === 'character') {
+      const live = characterVault.getById(entityId)
+      if (live) return characterToRecord(live)
     }
-    return base
+    return JSON.parse(JSON.stringify(previous))
+  }
+
+  /**
+   * Collect pending changes for an entity, applying any user edits
+   * on top of the original change data/previous.
+   */
+  private _pendingChangesWithEditOverlay(
+    entityType: string,
+    entityId: string,
+  ): Array<{ data: Record<string, unknown>; previous: Record<string, unknown> }> {
+    return this.pendingChanges
+      .filter(
+        (c) =>
+          c.status === 'pending' &&
+          c.entityType === entityType &&
+          'entityId' in c &&
+          c.entityId === entityId &&
+          'data' in c &&
+          'previous' in c,
+      )
+      .map((c) => {
+        const effective = this._editedChanges.get(c.id) ?? c
+        return {
+          data: (effective as { data: Record<string, unknown> }).data,
+          previous: (effective as { previous: Record<string, unknown> }).previous,
+        }
+      })
+      .filter((c) => c.data && c.previous)
+  }
+
+  /**
+   * Compose pending changes for an entity onto a base state.
+   * Unlike `composedData` (which requires `activeChange`), this works
+   * from any base state and entity ID — used by view mode to overlay
+   * unapproved changes onto the current vault entity.
+   */
+  composePendingChanges(
+    base: Record<string, unknown>,
+    entityType: 'character' | 'scenario',
+    entityId: string,
+  ): Record<string, unknown> {
+    const pending = this._pendingChangesWithEditOverlay(entityType, entityId)
+    if (pending.length === 0) return base
+    return composePendingOnto(base, pending)
   }
 
   /** Human-readable breakdown of pending changes by type */
@@ -320,9 +364,13 @@ class VaultEditorStore {
   /**
    * Smart editor open: opens for the given change, but skips if the editor
    * is already showing the same lorebook (to avoid resetting state).
+   * Exits view mode so the approval workflow is active for the new change.
    */
   openEditorSmart(change: VaultPendingChange): void {
     if (this.isShowingSameLorebook(change)) return
+    this.viewMode = false
+    this.viewEntityId = null
+    this.viewEntityType = null
     this.activeChange = change
     this.editorOpen = true
   }
@@ -360,6 +408,11 @@ class VaultEditorStore {
    */
   updateChangeData(changeId: string, updatedChange: VaultPendingChange): void {
     this._editedChanges = new SvelteMap(this._editedChanges).set(changeId, updatedChange)
+  }
+
+  /** Return the edited version of a change if one exists, otherwise the original. */
+  getEffectiveChange(change: VaultPendingChange): VaultPendingChange {
+    return this._editedChanges.get(change.id) ?? change
   }
 
   /**
@@ -555,16 +608,62 @@ class VaultEditorStore {
     return incomingLorebookId != null && activeLorebookId === incomingLorebookId
   }
 
-  /** Auto-close editor after approval/rejection (unless lorebook-related) */
+  /** After approval/rejection, keep the editor open for continued iteration.
+   * For characters and scenarios, transition to view mode so the user can
+   * review the updated entity and make direct edits or request more changes.
+   * For lorebook deletes, close entirely (the entity is gone).
+   *
+   * If the editor is currently showing a different change for the same entity
+   * type & ID, still transition to view mode so the user sees the updated
+   * entity including the just-approved change. If it's a different entity
+   * entirely, skip the transition so we don't yank the user to a different
+   * entity.
+   */
   private _autoCloseAfterAction(change: VaultPendingChange): void {
-    if (this.activeChange?.id !== change.id) return
-
     const isLorebook = change.entityType === 'lorebook'
     const isLorebookEntry = change.entityType === 'lorebook-entry'
     const isDelete = change.action === 'delete'
 
-    if ((!isLorebookEntry && !isLorebook) || (isLorebook && isDelete)) {
+    // Lorebook deletes close the editor entirely (the entity is gone)
+    if (isLorebook && isDelete) {
       this.closeEditor()
+      return
+    }
+
+    // Lorebook entries and lorebook creates/updates keep existing behavior
+    // (the lorebook editor handles multi-entry iteration natively)
+    if (isLorebookEntry || (isLorebook && !isDelete)) return
+
+    // Characters and scenarios: transition to view mode so the user can
+    // review the result and make direct edits or continue iterating.
+    const entityId = 'entityId' in change ? (change.entityId as string) : null
+    if (!entityId) {
+      this.closeEditor()
+      return
+    }
+
+    const entityType = change.entityType === 'character' ? 'character' : 'scenario'
+
+    // If the editor is open and showing either the same change or another
+    // change for the same entity, transition to view mode for that entity.
+    // If the editor is showing a completely different entity, skip the
+    // transition — we don't want to yank the user away from their work.
+    if (this.editorOpen && this.activeChange) {
+      const activeEntityId =
+        'entityId' in this.activeChange ? (this.activeChange.entityId as string) : null
+      const activeEntityType = this.activeChange.entityType
+
+      if (activeEntityId === entityId && activeEntityType === change.entityType) {
+        // Same entity — transition to view mode so the approved change
+        // is visible in the composed data
+        this.viewMode = true
+        this.viewEntityId = entityId
+        this.viewEntityType = entityType
+      }
+      // Different entity — leave editor as-is; the composed data getter
+      // now reads from the vault so it will reflect the approved change
+    } else if (!this.editorOpen) {
+      // Editor not open — just clean up view state
     }
   }
 
