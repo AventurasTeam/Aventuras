@@ -702,9 +702,11 @@ export class InteractiveVaultService extends BaseAIService {
           metadata: null,
         })
         break
-      case 'update':
-        await characterVault.update(change.entityId, change.data)
+      case 'update': {
+        const delta = this._computeDelta(change.data, change.previous)
+        await characterVault.update(change.entityId, delta)
         break
+      }
       case 'delete':
         await characterVault.delete(change.entityId)
         break
@@ -818,13 +820,36 @@ export class InteractiveVaultService extends BaseAIService {
           metadata: null,
         })
         break
-      case 'update':
-        await scenarioVault.update(change.entityId, change.data)
+      case 'update': {
+        const delta = this._computeDelta(change.data, change.previous)
+        await scenarioVault.update(change.entityId, delta)
         break
+      }
       case 'delete':
         await scenarioVault.delete(change.entityId)
         break
     }
+  }
+
+  /**
+   * Compute a delta (partial update) from a pending change by comparing
+   * `data` against `previous`. Only includes fields that actually changed,
+   * so consecutive updates to the same entity don't overwrite each other's
+   * changes when applied sequentially (e.g. "Approve All").
+   */
+  private _computeDelta(
+    data: Record<string, unknown> | undefined,
+    previous: Record<string, unknown> | undefined,
+  ): Record<string, unknown> {
+    if (!data) return {}
+    if (!previous) return { ...data }
+    const delta: Record<string, unknown> = {}
+    for (const key of Object.keys(data)) {
+      if (JSON.stringify(data[key]) !== JSON.stringify(previous[key])) {
+        delta[key] = data[key]
+      }
+    }
+    return delta
   }
 
   /**

@@ -36,14 +36,17 @@
   let entryData = $state<VaultLorebookEntry | null>(null)
   let scenarioData = $state<VaultScenarioInput | null>(null)
 
-  // Initialize local state from the change data
+  const composedData = $derived(vaultEditor.composedData)
+
+  // Initialize local state from the change data (or composed preview if available)
   $effect(() => {
-    if (change.entityType === 'character' && 'data' in change) {
-      charData = JSON.parse(JSON.stringify(change.data))
+    const source = composedData ?? ('data' in change ? change.data : null)
+    if (change.entityType === 'character' && source) {
+      charData = JSON.parse(JSON.stringify(source))
     } else if (change.entityType === 'lorebook-entry' && 'data' in change) {
       entryData = JSON.parse(JSON.stringify(change.data))
-    } else if (change.entityType === 'scenario' && 'data' in change) {
-      scenarioData = JSON.parse(JSON.stringify(change.data))
+    } else if (change.entityType === 'scenario' && source) {
+      scenarioData = JSON.parse(JSON.stringify(source))
     }
   })
 
@@ -187,10 +190,11 @@
     if (change.action !== 'update' || !('data' in change) || !('previous' in change)) {
       return new SvelteMap<string, { old: string; new: string }>()
     }
-    return computeChangedFields(
-      change.data as Record<string, unknown>,
-      change.previous as Record<string, unknown>,
-    )
+    // When multiple pending updates target the same entity, diff the composed
+    // preview against the original so the editor highlights ALL changed fields
+    // (not just the fields from this single change).
+    const data = (composedData ?? change.data) as Record<string, unknown>
+    return computeChangedFields(data, change.previous as Record<string, unknown>)
   })
 
   const changedFieldKeys = $derived(new Set<string>(changedFieldsMap.keys()))

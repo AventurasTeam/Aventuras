@@ -272,8 +272,12 @@ export function createCharacterTools(context: CharacterToolContext) {
         // Build full data: start from previous, apply scalar updates, then resolved arrays
         // Strip tool-only keys that aren't real schema fields
         const { replaceTags: _rt, replaceTraits: _rtr, ...scalarUpdates } = updates
+        // Strip undefined, null, and empty-string values to prevent
+        // accidental overwrites (e.g. the AI sending description: null)
         const cleanUpdates = Object.fromEntries(
-          Object.entries(scalarUpdates).filter(([_, v]) => v !== undefined),
+          Object.entries(scalarUpdates).filter(
+            ([_, v]) => v !== undefined && v !== null && v !== '',
+          ),
         ) as Partial<z.infer<typeof vaultCharacterInputSchema>>
 
         const changeId = generateId()

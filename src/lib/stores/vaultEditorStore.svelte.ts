@@ -48,6 +48,53 @@ class VaultEditorStore {
     return this.pendingChanges.filter((c) => c.status === 'pending').length
   }
 
+  /**
+   * Composed preview for the active entity when multiple pending updates
+   * target the same scenario or character. Merges all pending updates for
+   * that entity (in order) so the editor shows what "Approve All" would
+   * produce. Returns null for lorebook-related entities (they use
+   * previewLorebook) or when there's no active change.
+   */
+  get composedData(): Record<string, unknown> | null {
+    const change = this.activeChange
+    if (!change) return null
+    if (change.entityType === 'lorebook' || change.entityType === 'lorebook-entry') return null
+    if (change.action !== 'update') return null
+    if (!('previous' in change) || !change.previous) return null
+
+    const entityId =
+      change.entityType === 'scenario' || change.entityType === 'character' ? change.entityId : null
+    if (!entityId) return null
+
+    const pending = this.pendingChanges.filter(
+      (c) =>
+        c.status === 'pending' &&
+        c.entityType === change.entityType &&
+        'entityId' in c &&
+        c.entityId === entityId &&
+        'data' in c &&
+        'previous' in c,
+    )
+
+    if (pending.length <= 1) return null
+
+    // Start from the original state and apply each change's delta
+    const base = JSON.parse(JSON.stringify(change.previous)) as Record<string, unknown>
+    for (const c of pending) {
+      const effective = this._editedChanges.get(c.id) ?? c
+      const data = (effective as { data?: Record<string, unknown> }).data
+      const prev = (effective as { previous?: Record<string, unknown> }).previous
+      if (!data || !prev) continue
+      // Only overlay fields that this specific change actually modified
+      for (const key of Object.keys(data)) {
+        if (JSON.stringify(data[key]) !== JSON.stringify(prev[key])) {
+          base[key] = data[key]
+        }
+      }
+    }
+    return base
+  }
+
   /** Human-readable breakdown of pending changes by type */
   get pendingBreakdown(): string {
     const pending = this.pendingChanges.filter((c) => c.status === 'pending')
