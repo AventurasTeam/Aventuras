@@ -85,9 +85,11 @@
   // have pending deletes already applied, which would break index mapping).
   const revertSnapshot: VaultLorebookEntry[] = JSON.parse(
     JSON.stringify(
-      isEmbedded
-        ? (lorebookVault.getById(lorebook.id)?.entries ?? lorebook.entries)
-        : lorebook.entries,
+      untrack(() =>
+        isEmbedded
+          ? (lorebookVault.getById(lorebook.id)?.entries ?? lorebook.entries)
+          : lorebook.entries,
+      ),
     ),
   )
 
