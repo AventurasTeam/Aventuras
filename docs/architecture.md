@@ -318,11 +318,14 @@ Several shapes feed into it:
      stop.
    - **App-only settings** — global concerns that never appear
      per-story (API keys, classifier truncation caps, diagnostics
-     toggles). The diagnostics toggle is special: its value persists
-     in `app_settings`, but its runtime gate and in-memory state live
-     in `lib/diagnostics`, **not** the `useAppSettingsStore` mirror
-     ([`observability.md → Gating model`](./observability.md#gating-model)).
-     Don't re-introduce a diagnostics mirror on the app-settings store.
+     toggles). The diagnostics toggles are special: they persist in
+     `app_settings` and their in-memory home is the
+     `useAppSettingsStore` mirror alongside the rest of the row, but
+     their runtime gate lives in `lib/diagnostics` as injected thunks
+     that read the mirror live. `lib/diagnostics` owns only the
+     ephemeral buffers and never imports `lib/stores`, so the layering
+     stays acyclic
+     ([`observability.md → Store ownership and gate wiring`](./observability.md#store-ownership-and-gate-wiring)).
 2. **Story-level definition** (`stories.definition` JSON on the
    loaded story) — definitional content (`mode`, `leadEntityId`,
    `narration`, `genre`, `tone`, `setting`, calendar fields). Zod-
