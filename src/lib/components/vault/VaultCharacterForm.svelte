@@ -70,6 +70,7 @@
   })
 
   async function handleSubmit() {
+    if (saving || (isEditing && !hasChanges)) return
     if (!formData.name.trim()) {
       _error = 'Name is required'
       return

@@ -71,6 +71,7 @@
   })
 
   async function handleSave() {
+    if (saving || !hasChanges) return
     if (!formData.name.trim()) {
       error = 'Scenario name is required'
       return

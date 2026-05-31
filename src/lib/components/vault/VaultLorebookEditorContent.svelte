@@ -452,6 +452,7 @@
   async function handleSaveClick(
     saveHandler: (updatedLorebook: VaultLorebook) => Promise<void> | void = onSave,
   ) {
+    if (saving || !_hasChanges) return
     if (!name.trim()) {
       error = 'Lorebook name is required'
       return
