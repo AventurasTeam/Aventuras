@@ -24,7 +24,7 @@
     Bot,
     Download,
   } from 'lucide-svelte'
-  import { untrack } from 'svelte'
+  import { untrack, onDestroy } from 'svelte'
   import TagInput from '$lib/components/tags/TagInput.svelte'
   import VaultLorebookEntryFields from './VaultLorebookEntryFields.svelte'
   import VaultPendingOperations, { type PendingOperation } from './VaultPendingOperations.svelte'
@@ -530,6 +530,11 @@
   let closeCooldownActive = $state(false)
   let closeCooldownTimer: ReturnType<typeof setTimeout> | undefined = $state()
   const CLOSE_COOLDOWN_MS = 3000
+
+  onDestroy(() => {
+    clearTimeout(closeCooldownTimer)
+    if (savedFeedbackTimer) clearTimeout(savedFeedbackTimer)
+  })
 
   function handleCloseAttempt() {
     if (_hasChanges) {

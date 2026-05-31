@@ -6,6 +6,7 @@
   import VaultLorebookEditorContent from './VaultLorebookEditorContent.svelte'
   import type { FocusedEntity } from '$lib/services/ai/vault/InteractiveVaultService'
   import { ui } from '$lib/stores/ui.svelte'
+  import { onDestroy } from 'svelte'
 
   interface Props {
     lorebook: VaultLorebook
@@ -24,6 +25,10 @@
   let closeCooldownTimer: ReturnType<typeof setTimeout> | undefined = $state()
   const CLOSE_COOLDOWN_MS = 3000
   let contentHasChanges = $state(false)
+
+  onDestroy(() => {
+    clearTimeout(closeCooldownTimer)
+  })
 
   function handleModalOpenChange(nextOpen: boolean) {
     if (nextOpen) return

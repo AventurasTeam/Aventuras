@@ -5,7 +5,7 @@
   import VaultScenarioFormFields from './VaultScenarioFormFields.svelte'
   import type { VaultScenarioInput } from '$lib/services/ai/sdk/schemas/vault'
   import type { FocusedEntity } from '$lib/services/ai/vault/InteractiveVaultService'
-  import { untrack } from 'svelte'
+  import { untrack, onDestroy } from 'svelte'
   import { ui } from '$lib/stores/ui.svelte'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
@@ -65,6 +65,10 @@
   let closeCooldownActive = $state(false)
   let closeCooldownTimer: ReturnType<typeof setTimeout> | undefined = $state()
   const CLOSE_COOLDOWN_MS = 3000
+
+  onDestroy(() => {
+    clearTimeout(closeCooldownTimer)
+  })
 
   async function handleSave() {
     if (!formData.name.trim()) {

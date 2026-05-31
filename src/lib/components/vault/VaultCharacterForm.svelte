@@ -5,7 +5,7 @@
   import VaultCharacterFormFields from './VaultCharacterFormFields.svelte'
   import type { VaultCharacterInput } from '$lib/services/ai/sdk/schemas/vault'
   import type { FocusedEntity } from '$lib/services/ai/vault/InteractiveVaultService'
-  import { untrack } from 'svelte'
+  import { untrack, onDestroy } from 'svelte'
   import { ui } from '$lib/stores/ui.svelte'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
@@ -39,6 +39,10 @@
   let closeCooldownActive = $state(false)
   let closeCooldownTimer: ReturnType<typeof setTimeout> | undefined = $state()
   const CLOSE_COOLDOWN_MS = 3000
+
+  onDestroy(() => {
+    clearTimeout(closeCooldownTimer)
+  })
 
   const isEditing = $derived(!!character)
   const hasChanges = $derived(JSON.stringify(formData) !== savedSnapshot)
