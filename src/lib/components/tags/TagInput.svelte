@@ -99,7 +99,7 @@
     tabindex="-1"
     onkeydown={() => {}}
   >
-    {#each value as tagName (tagName)}
+    {#each value as tagName, i (i)}
       <TagBadge
         name={tagName}
         color={tagStore.getColor(tagName, type)}
