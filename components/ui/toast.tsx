@@ -3,9 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Platform, Pressable, View, type ViewStyle } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import {
-  FadeOut,
   LinearTransition,
   SlideInUp,
+  SlideOutUp,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -56,6 +56,8 @@ const FG_BY_SEVERITY: Record<ToastSeverity, string> = {
   warning: 'text-warning-fg',
 }
 
+// Dismiss fires at 50% of the toast's height or 50px of upward drag, whichever
+// is smaller — so short toasts dismiss on a proportionally shorter swipe.
 const DRAG_DISMISS_THRESHOLD_PX = 50
 
 type ToastProps = {
@@ -74,6 +76,8 @@ function Toast({ item }: ToastProps) {
   // Native swipe-up gesture — pan with dismiss threshold + spring
   // back below it. Reuses the Sheet primitive's drag pattern.
   const dragOffset = useSharedValue(0)
+  // Measured on layout so the swipe threshold can scale with the toast's height.
+  const toastHeight = useSharedValue(0)
   const animatedDragStyle = useAnimatedStyle(
     () => ({ transform: [{ translateY: dragOffset.value }] }),
     [],
@@ -88,7 +92,11 @@ function Toast({ item }: ToastProps) {
         })
         .onEnd((event) => {
           'worklet'
-          if (event.translationY < -DRAG_DISMISS_THRESHOLD_PX) {
+          const threshold =
+            toastHeight.value > 0
+              ? Math.min(toastHeight.value * 0.5, DRAG_DISMISS_THRESHOLD_PX)
+              : DRAG_DISMISS_THRESHOLD_PX
+          if (event.translationY < -threshold) {
             dragOffset.value = withTiming(-200, { duration: 150 }, (finished?: boolean) => {
               'worklet'
               if (finished) runOnJS(dismiss)()
@@ -101,7 +109,7 @@ function Toast({ item }: ToastProps) {
             overshootClamping: true,
           })
         }),
-    [dragOffset, dismiss],
+    [dragOffset, dismiss, toastHeight],
   )
 
   const SeverityIcon = ICON_BY_SEVERITY[item.severity]
@@ -111,13 +119,16 @@ function Toast({ item }: ToastProps) {
   const inner = (
     <NativeOnlyAnimatedView
       entering={SlideInUp.duration(250)}
-      exiting={FadeOut.duration(200)}
+      exiting={SlideOutUp.duration(200)}
       layout={LinearTransition.duration(200)}
       style={Platform.select({ native: animatedDragStyle as ViewStyle })}
     >
       <View
         aria-live={ARIA_LIVE[item.severity]}
         role="status"
+        onLayout={(e) => {
+          toastHeight.value = e.nativeEvent.layout.height
+        }}
         className={cn(
           'flex-row items-center gap-3 rounded-md px-4 py-3 shadow-lg shadow-black/10',
           bg,
