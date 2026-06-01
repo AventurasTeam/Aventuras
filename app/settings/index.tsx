@@ -6,6 +6,7 @@ import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { DiagnosticsSettingsPanel } from '@/components/compounds/diagnostics-settings-panel'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
+import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
@@ -115,12 +116,19 @@ export default function SettingsRoute() {
   const detail = (
     <ScrollView className="flex-1" contentContainerClassName="gap-4 p-4">
       {activeTab === 'diagnostics' ? (
-        <DiagnosticsSettingsPanel
-          enabled={enabled}
-          debugEnabled={debugEnabled}
-          onToggleEnabled={(next) => void setDiagnosticsEnabled(next, { db })}
-          onToggleDebug={(next) => void setDebugLevelEnabled(next, { db })}
-        />
+        <>
+          <DiagnosticsSettingsPanel
+            enabled={enabled}
+            debugEnabled={debugEnabled}
+            onToggleEnabled={(next) => void setDiagnosticsEnabled(next, { db })}
+            onToggleDebug={(next) => void setDebugLevelEnabled(next, { db })}
+          />
+          {__DEV__ ? (
+            <Button variant="secondary" onPress={() => router.push('/dev')}>
+              <Text>{t('settings:diagnostics.devRoutes')}</Text>
+            </Button>
+          ) : null}
+        </>
       ) : activeTab != null ? (
         <EmptyState title={t('settings:comingSoon')} />
       ) : null}

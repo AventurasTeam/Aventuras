@@ -22,7 +22,8 @@
     "enableLabel": "Enable diagnostics capture",
     "enableHint": "Master gate for the diagnostics layer. Off by default.",
     "debugLabel": "Include debug-level emissions",
-    "debugHint": "Captures debug-level logs. Requires diagnostics capture to be on."
+    "debugHint": "Captures debug-level logs. Requires diagnostics capture to be on.",
+    "devRoutes": "Dev routes"
   },
   "diagnosticsHub": {
     "title": "Diagnostics Hub",
