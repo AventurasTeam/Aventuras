@@ -964,7 +964,7 @@ async function recoverInFlightRuns(): Promise<RecoveryReport> {
           storyId: orphan.story_id,
           deltas: deltaCount,
         })
-        logger.info('pipeline.recovered', {
+        logger.debug('pipeline.recovered', {
           runId: orphan.run_id,
           kind: orphan.kind,
           deltas: deltaCount,
