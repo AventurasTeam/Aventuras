@@ -11,6 +11,7 @@ import {
   withSpring,
   withTiming,
 } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { runOnJS } from 'react-native-worklets'
 
 import { Icon } from '@/components/ui/icon'
@@ -152,6 +153,7 @@ function Toast({ item }: ToastProps) {
  * renders the visible queue, top-center, above all surfaces.
  */
 export function Toaster() {
+  const insets = useSafeAreaInsets()
   const [items, setItems] = useState<ToastItem[]>([])
   useEffect(() => toastStore.subscribe(setItems), [])
 
@@ -160,6 +162,8 @@ export function Toaster() {
   return (
     <View
       pointerEvents="box-none"
+      // top-4 alone sits under the status bar / notch on device; pad past the inset.
+      style={{ paddingTop: insets.top }}
       className={cn(
         'absolute left-0 right-0 top-4 z-[100] mx-4 items-center gap-2',
         Platform.select({ web: 'fixed' }),
