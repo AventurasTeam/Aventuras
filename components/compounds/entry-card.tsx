@@ -18,10 +18,10 @@ import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
-import type { EntryMetadata } from '@/lib/db'
+import type { EntryMetadata, StoryEntry } from '@/lib/db'
 import { cn } from '@/lib/utils'
 
-type EntryKind = 'user' | 'ai' | 'opening' | 'system' | 'streaming'
+type EntryKind = StoryEntry['kind'] | 'streaming'
 
 // The card surfaces the canonical entry-metadata token shape directly rather
 // than a bespoke copy, so the two can't drift; only completion + reasoning are
@@ -70,8 +70,8 @@ type EntryCardProps = {
 }
 
 const KIND_BUBBLE: Record<EntryKind, string> = {
-  user: 'bg-bg-sunken border-border',
-  ai: 'bg-bg-raised border-border',
+  user_action: 'bg-bg-sunken border-border',
+  ai_reply: 'bg-bg-raised border-border',
   opening: 'bg-bg-raised border-border',
   system: 'bg-bg-base border-warning',
   streaming: 'bg-bg-raised border-border border-dashed',
@@ -117,7 +117,7 @@ export function EntryCard({
       )}
     >
       <View className={cn('mb-2 flex-row items-center gap-2', showActions && 'pr-28')}>
-        {kind === 'user' ? (
+        {kind === 'user_action' ? (
           <View className="rounded-sm bg-fg-primary px-2 py-0.5">
             <Text size="xs" className="font-medium text-bg-base">
               You
@@ -237,7 +237,7 @@ export function EntryCard({
               disabledReason={disabledReason}
             />
           ) : null}
-          {onRegen != null && kind === 'ai' ? (
+          {onRegen != null && kind === 'ai_reply' ? (
             <IconAction
               icon={RefreshCw}
               label="Regenerate"
@@ -247,7 +247,7 @@ export function EntryCard({
               disabledReason={disabledReason}
             />
           ) : null}
-          {onBranch != null && (kind === 'ai' || kind === 'opening') ? (
+          {onBranch != null && (kind === 'ai_reply' || kind === 'opening') ? (
             <IconAction
               icon={GitBranch}
               label="Branch from here"
