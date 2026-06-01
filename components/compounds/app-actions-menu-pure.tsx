@@ -28,7 +28,8 @@ export function AppActionsMenuPure({
         ]
       : [],
   }
-  return <ActionsMenu coreGroups={[appGroup]} triggerLabel={t('chrome.actions')} />
+  // Chrome bar trigger — lg to match the top-bar IconActions.
+  return <ActionsMenu coreGroups={[appGroup]} triggerLabel={t('chrome.actions')} triggerSize="lg" />
 }
 
 export type { AppActionsMenuPureProps }

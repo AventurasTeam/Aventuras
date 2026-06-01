@@ -122,19 +122,30 @@ export function ScreenShell({
         <View className="mr-1 flex-row items-center gap-2">{statusSlot}</View>
       ) : null}
       {isAppRoot && !hideSelfReferentialIcon ? (
-        <IconAction icon={Settings} label={t('chrome.appSettings')} onPress={onOpenAppSettings} />
+        <IconAction
+          icon={Settings}
+          label={t('chrome.appSettings')}
+          onPress={onOpenAppSettings}
+          size="lg"
+        />
       ) : null}
       {isInStory && !hideSelfReferentialIcon ? (
         <IconAction
           icon={SlidersVertical}
           label={t('chrome.storySettings')}
           onPress={onOpenStorySettings}
+          size="lg"
         />
       ) : null}
       {actions != null ? (
         actions
       ) : (
-        <IconAction icon={MoreVertical} label={t('chrome.actions')} onPress={onOpenActions} />
+        <IconAction
+          icon={MoreVertical}
+          label={t('chrome.actions')}
+          onPress={onOpenActions}
+          size="lg"
+        />
       )}
     </View>
   )
@@ -143,12 +154,12 @@ export function ScreenShell({
     <View
       accessibilityRole="image"
       aria-label="Aventuras"
-      className="h-icon-action-md w-icon-action-md items-center justify-center"
+      className="h-icon-action-lg w-icon-action-lg items-center justify-center"
     >
-      <Icon as={BookOpen} size="md" />
+      <Icon as={BookOpen} size="lg" />
     </View>
   ) : (
-    <IconAction icon={ArrowLeft} label={t('chrome.back')} onPress={onBack} />
+    <IconAction icon={ArrowLeft} label={t('chrome.back')} onPress={onBack} size="lg" />
   )
 
   const progress = clampProgress(chapterProgress)
@@ -166,8 +177,11 @@ export function ScreenShell({
       {banners != null ? <View className="flex-col">{banners}</View> : null}
 
       <View
+        // Bar height is structural (h-bar-md), not the tap-target control
+        // floor — a bar holds touchables but isn't one. Its actions render at
+        // IconAction size="lg" so they read as chrome, not row-nestled icons.
         className={cn(
-          'h-control-md flex-row items-center gap-2 border-b border-border bg-bg-base px-3',
+          'h-bar-md flex-row items-center gap-2 border-b border-border bg-bg-base px-3',
         )}
       >
         {leftSlot}

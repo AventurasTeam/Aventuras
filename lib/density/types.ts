@@ -33,6 +33,10 @@ export type DensityTokens = {
   '--icon-action-h-sm': string
   '--icon-action-h-md': string
   '--icon-action-h-lg': string
+  // Chrome bar height — top app bar / toolbar. A structural
+  // container, not a tap target, so it rides above the
+  // --control-h-* touch floor rather than borrowing it.
+  '--bar-h-md': string
 }
 
 export const DENSITY_TOKEN_KEYS = [
@@ -51,6 +55,7 @@ export const DENSITY_TOKEN_KEYS = [
   '--icon-action-h-sm',
   '--icon-action-h-md',
   '--icon-action-h-lg',
+  '--bar-h-md',
 ] as const satisfies readonly (keyof DensityTokens)[]
 
 export const DENSITY_VALUES = [

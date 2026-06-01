@@ -2,7 +2,7 @@ import { MoreVertical } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useState, type Ref } from 'react'
 import { Platform, View } from 'react-native'
 
-import { IconAction } from '@/components/ui/icon-action'
+import { IconAction, type IconActionSize } from '@/components/ui/icon-action'
 import {
   SearchableOverlayList,
   type Row,
@@ -54,6 +54,8 @@ type ActionsMenuProps = {
   emptyLabel?: string
   /** Translated `aria-label` for the trigger button. */
   triggerLabel?: string
+  /** Trigger IconAction size. Defaults to `md`; chrome bars pass `lg`. */
+  triggerSize?: IconActionSize
   /**
    * When true, both the trigger and the `Cmd/Ctrl-K` shortcut are inert. Pass
    * this from the surface owner whenever a modal / AlertDialog / Sheet is
@@ -113,6 +115,7 @@ type ActionsTriggerOwnProps = {
   label: string
   shortcutHint: string | null
   disabled?: boolean
+  size?: IconActionSize
 }
 
 function ActionsTrigger({
@@ -120,6 +123,7 @@ function ActionsTrigger({
   label,
   shortcutHint,
   disabled,
+  size,
   ...slotProps
 }: ActionsTriggerOwnProps) {
   const accessibleLabel = shortcutHint ? `${label} (${shortcutHint})` : label
@@ -130,6 +134,7 @@ function ActionsTrigger({
       label={accessibleLabel}
       onPress={p.onPress}
       disabled={disabled}
+      size={size}
       aria-haspopup={p['aria-haspopup']}
       aria-expanded={p['aria-expanded']}
       aria-controls={p['aria-controls']}
@@ -144,6 +149,7 @@ function ActionsMenu({
   searchPlaceholder = DEFAULT_SEARCH_PLACEHOLDER,
   emptyLabel = DEFAULT_EMPTY_LABEL,
   triggerLabel = DEFAULT_TRIGGER_LABEL,
+  triggerSize,
   blocked,
 }: ActionsMenuProps) {
   const [open, setOpen] = useState(false)
@@ -202,9 +208,15 @@ function ActionsMenu({
 
   const renderTrigger = useCallback(
     (p: TriggerProps) => (
-      <ActionsTrigger p={p} label={triggerLabel} shortcutHint={shortcutHint} disabled={blocked} />
+      <ActionsTrigger
+        p={p}
+        label={triggerLabel}
+        shortcutHint={shortcutHint}
+        disabled={blocked}
+        size={triggerSize}
+      />
     ),
-    [triggerLabel, shortcutHint, blocked],
+    [triggerLabel, shortcutHint, blocked, triggerSize],
   )
 
   const renderEmpty = useCallback(

@@ -93,6 +93,9 @@ module.exports = {
         'icon-action-sm': 'var(--icon-action-h-sm)',
         'icon-action-md': 'var(--icon-action-h-md)',
         'icon-action-lg': 'var(--icon-action-h-lg)',
+        // Chrome bar (top app bar) — structural container, not a tap
+        // target, so it has its own height token above the control floor.
+        'bar-md': 'var(--bar-h-md)',
       },
       // Mirror as widths for square (icon-button-shaped) controls.
       width: {

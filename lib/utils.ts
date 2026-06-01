@@ -30,10 +30,13 @@ const CONTROL_HEIGHT_VALUES = [
 const ROW_X_VALUES = ['row-x-xs', 'row-x-sm', 'row-x-md', 'row-x-lg'] as const
 const ROW_Y_VALUES = ['row-y-xs', 'row-y-sm', 'row-y-md', 'row-y-lg'] as const
 
+// Chrome bar height — `height` only (the bar isn't square, so no w / min-h).
+const BAR_HEIGHT_VALUES = ['bar-md'] as const
+
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
-      h: [{ h: [...CONTROL_HEIGHT_VALUES] }],
+      h: [{ h: [...CONTROL_HEIGHT_VALUES, ...BAR_HEIGHT_VALUES] }],
       w: [{ w: [...CONTROL_HEIGHT_VALUES] }],
       'min-h': [{ 'min-h': [...CONTROL_HEIGHT_VALUES] }],
       pl: [{ pl: [...ROW_X_VALUES] }],

@@ -65,7 +65,25 @@ dominate the row's primary content:
 Mirrored as widths so the buttons render square; consumed via
 `h-icon-action-md w-icon-action-md` in NativeWind. Hit targets on
 mobile rely on `hitSlop` (set in IconAction itself) to reach
-44 px without growing the visual footprint.
+44 px without growing the visual footprint — `hitSlop` is sized so
+`visible + 2 × slop = 44` at `regular` (the phone default).
+
+**Chrome bar height token** for the top app bar (`ScreenShell`).
+A bar is a **structural container that holds touchables — it is not
+itself a tap target**, so it carries its own height token rather
+than borrowing the tap-target `--control-h-*` floor. The bar rides
+_above_ that floor so its contents (icon-actions, title) sit with
+breathing room:
+
+| Token        | compact | regular | comfortable | Use                             |
+| ------------ | ------- | ------- | ----------- | ------------------------------- |
+| `--bar-h-md` | 48 px   | 56 px   | 64 px       | top app bar / chrome bar height |
+
+Consumed via `h-bar-md`. Top-bar actions render at `IconAction
+size="lg"` (24 px glyph) so they read as chrome affordances rather
+than the row-nestled `md` default. Distinct from `--control-h-*`:
+sizing a bar with a tap-target token conflates a container with a
+control.
 
 **Padding-driven tokens** for rows (list rows, item rows, where
 content varies and row height emerges from content + padding):
