@@ -5,15 +5,17 @@
 // See [`docs/ui/patterns/toast.md`](../../docs/ui/patterns/toast.md)
 // for severity / placement / dismiss / queue contract.
 
-import { toastStore } from './store'
+import { toastStore, type ToastOptions } from './store'
 
 export const toast = {
-  success: (message: string) => toastStore.show('success', message),
-  error: (message: string) => toastStore.show('error', message),
-  info: (message: string) => toastStore.show('info', message),
-  warning: (message: string) => toastStore.show('warning', message),
+  success: (message: string, options?: ToastOptions) =>
+    toastStore.show('success', message, options),
+  error: (message: string, options?: ToastOptions) => toastStore.show('error', message, options),
+  info: (message: string, options?: ToastOptions) => toastStore.show('info', message, options),
+  warning: (message: string, options?: ToastOptions) =>
+    toastStore.show('warning', message, options),
   dismiss: (id: string) => toastStore.dismiss(id),
 }
 
 export { toastStore } from './store'
-export type { ToastItem, ToastSeverity } from './store'
+export type { ToastAction, ToastItem, ToastOptions, ToastSeverity } from './store'

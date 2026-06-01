@@ -45,8 +45,15 @@ export const Live: Story = {
         >
           <Text>Info</Text>
         </Button>
-        <Button variant="secondary" onPress={() => toast.warning('Translation: 3 rows missing.')}>
-          <Text>Warning</Text>
+        <Button
+          variant="secondary"
+          onPress={() =>
+            toast.warning('Translation: 3 rows missing.', {
+              action: { label: 'Retry', onPress: () => toast.success('Retried.') },
+            })
+          }
+        >
+          <Text>Warning + action</Text>
         </Button>
       </View>
       <Toaster />
@@ -56,10 +63,20 @@ export const Live: Story = {
 
 // Static severity row — for visual / theme-matrix verification
 // without the auto-dismiss timer firing.
-function StaticToast({ severity, message }: { severity: ToastItem['severity']; message: string }) {
+function StaticToast({
+  severity,
+  message,
+  action,
+}: {
+  severity: ToastItem['severity']
+  message: string
+  action?: ToastItem['action']
+}) {
   // Stable item; toastStore not involved so auto-dismiss doesn't run
   // (the timer in <Toast/> still fires but has nothing to remove).
-  return <Toast item={{ id: `static-${severity}`, severity, message }} />
+  return (
+    <Toast item={{ id: `static-${severity}`, severity, message, ...(action ? { action } : {}) }} />
+  )
 }
 
 export const SeverityRow: Story = {
@@ -72,6 +89,33 @@ export const SeverityRow: Story = {
         message="Provider connected. Default model: gpt-4. Change anytime in Settings."
       />
       <StaticToast severity="warning" message="Translation: 3 rows missing." />
+    </View>
+  ),
+}
+
+export const WithAction: Story = {
+  render: () => (
+    <View className="gap-2 p-6" style={{ width: 400 }}>
+      <StaticToast
+        severity="warning"
+        message="Translation: 3 rows missing."
+        action={{ label: 'Retry', onPress: () => {} }}
+      />
+      <StaticToast
+        severity="error"
+        message="Save failed."
+        action={{ label: 'Retry', onPress: () => {} }}
+      />
+      <StaticToast
+        severity="info"
+        message="Update available."
+        action={{ label: 'Reload', onPress: () => {} }}
+      />
+      <StaticToast
+        severity="success"
+        message="Exported to file."
+        action={{ label: 'Open', onPress: () => {} }}
+      />
     </View>
   ),
 }

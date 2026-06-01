@@ -5,11 +5,20 @@
 
 export type ToastSeverity = 'success' | 'error' | 'info' | 'warning'
 
+// Optional single-action affordance rendered inline before the × close.
+export type ToastAction = {
+  label: string
+  onPress: () => void
+}
+
 export type ToastItem = {
   id: string
   severity: ToastSeverity
   message: string
+  action?: ToastAction
 }
+
+export type ToastOptions = { action?: ToastAction }
 
 const QUEUE_CAP = 3
 
@@ -23,11 +32,16 @@ function notify() {
   for (const listener of listeners) listener(toasts)
 }
 
-function show(severity: ToastSeverity, message: string): string {
+function show(severity: ToastSeverity, message: string, options?: ToastOptions): string {
   // Stable per-process IDs are good enough for a transient queue;
   // we never persist or reconcile toasts across reloads.
   const id = `toast-${++nextId}`
-  const item: ToastItem = { id, severity, message }
+  const item: ToastItem = {
+    id,
+    severity,
+    message,
+    ...(options?.action ? { action: options.action } : {}),
+  }
 
   // Cap-3 queue: when full, drop the oldest. The Toast component's
   // own auto-dismiss timer otherwise runs to completion; here we

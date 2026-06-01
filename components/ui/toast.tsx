@@ -128,6 +128,28 @@ function Toast({ item }: ToastProps) {
         <Text size="sm" className={cn('flex-1', fg)}>
           {item.message}
         </Text>
+        {item.action != null ? (
+          <Pressable
+            accessibilityRole="button"
+            aria-label={item.action.label}
+            // Acting on the toast is its end-of-life signal: fire, then dismiss.
+            onPress={() => {
+              item.action?.onPress()
+              dismiss()
+            }}
+            hitSlop={8}
+            className={cn(
+              'shrink-0 rounded-md px-2 py-1',
+              Platform.select({
+                web: 'cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+              }),
+            )}
+          >
+            <Text size="sm" className={cn('font-medium', fg)}>
+              {item.action.label}
+            </Text>
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           aria-label="Dismiss"
