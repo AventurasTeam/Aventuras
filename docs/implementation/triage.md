@@ -26,16 +26,6 @@ slice-planning gate forces its resolution before that slice is planned.
   create-flow exists yet). Remove it once a real story-list (cards +
   create-flow) provides a path to the reader — route to that slice's
   Open questions when the post-M1 story-list slice is defined.
-- **Lift master-detail hardware-back into a shared hook.**
-  `MasterDetailLayout`'s phone list-first collapse needs Android
-  hardware-back to pop detail→list before exiting the route. Slice 1.7b
-  wired this route-local in `app/settings/index.tsx` with a focus-scoped
-  `BackHandler`; it can't live in the shell because the shell's Storybook
-  stories render with no navigation context, so `useFocusEffect` would
-  throw there. When the next `MasterDetailLayout` consumer lands (World /
-  Plot), extract a shared `useMasterDetailBack` hook so the behavior
-  isn't re-implemented and the back-exits-route bug isn't reproduced —
-  route to that slice's Open questions then.
 - **Reconcile `EntryCard.EntryMeta` with the canonical `EntryMetadata`.**
   `EntryCard` defines its own display shape (`{ tokens: { reply, reasoning? } }`)
   with no explicit link to `lib/db`'s `EntryMetadata` (`tokens.completion`,

@@ -1,6 +1,6 @@
-import { useFocusEffect, useRouter } from 'expo-router'
-import { useCallback, useState } from 'react'
-import { BackHandler, Platform, Pressable, ScrollView, View } from 'react-native'
+import { useRouter } from 'expo-router'
+import { useState } from 'react'
+import { Platform, Pressable, ScrollView, View } from 'react-native'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { DiagnosticsSettingsPanel } from '@/components/compounds/diagnostics-settings-panel'
@@ -8,6 +8,7 @@ import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
+import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useTier } from '@/hooks/use-tier'
 import { setDebugLevelEnabled, setDiagnosticsEnabled } from '@/lib/actions'
 import { db } from '@/lib/db'
@@ -42,21 +43,8 @@ export default function SettingsRoute() {
   const activeTab: SettingsTabId | null = selectedTab ?? (isPhone ? null : 'diagnostics')
 
   // Android hardware back pops the open tab back to the list before exiting the
-  // route (mirrors the top-bar Return). Focus-scoped so it doesn't swallow back
-  // on a screen pushed over Settings (e.g. the Diagnostics Hub).
-  useFocusEffect(
-    useCallback(() => {
-      const onHardwareBack = () => {
-        if (isPhone && selectedTab != null) {
-          setSelectedTab(null)
-          return true
-        }
-        return false
-      }
-      const sub = BackHandler.addEventListener('hardwareBackPress', onHardwareBack)
-      return () => sub.remove()
-    }, [isPhone, selectedTab]),
-  )
+  // route (mirrors the top-bar Return).
+  useMasterDetailBack(isPhone && selectedTab != null, () => setSelectedTab(null))
 
   const sections: { id: string; header: string; tabs: { id: SettingsTabId; label: string }[] }[] = [
     {
