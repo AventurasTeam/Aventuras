@@ -172,14 +172,16 @@ retrofits them rather than starting from an empty `lib/`.
   `## What's here` index.
 - Update `CLAUDE.md` `## Authoritative reading` to list
   `docs/code-conventions.md`.
-- Update the `aventuras-*` dev skills that touch code
+- Update the `aventuras-*` dev skills that author code
   (`aventuras-test-driven-development`,
   `aventuras-systematic-debugging`,
   `aventuras-receiving-code-review`,
   `aventuras-requesting-code-review`,
-  `aventuras-verification-before-completion`,
-  `aventuras-finishing-a-development-branch`) to cite
+  `aventuras-verification-before-completion`) to cite
   `docs/code-conventions.md` in their preflight.
+  `aventuras-finishing-a-development-branch` is intentionally
+  excluded — it orchestrates merge / PR / cleanup, not code
+  authoring, so the conventions preflight does not apply.
 
 ## Scope: out
 

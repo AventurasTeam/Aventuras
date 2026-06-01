@@ -164,10 +164,17 @@ interactive features land.
   the layout assembles top bar, side rail, scroll list, and
   textarea / button without error when given an empty entries
   array.
-- **Settings diagnostics toggle.** Vitest with RN Testing Library:
-  render the toggle, simulate click, assert 1.7a's master-toggle
-  action was invoked with the new value and the underlying
-  `app_settings.diagnostics.enabled` row updated.
+- **Settings diagnostics toggle.** Split across the two test
+  environments, because a browser-rendered RN switch and a
+  node-SQLite write cannot share one runtime: a Storybook play
+  test renders the toggle, clicks it, and asserts the handler
+  fires with the new value
+  (`DiagnosticsSettingsPanel` stories); a vitest asserts 1.7a's
+  master-toggle action writes the `app_settings.diagnostics.enabled`
+  row and re-hydrates the store
+  (`lib/actions/settings/diagnostics.test.ts`). The rendered-switch
+  to real-action binding in the route is covered by the route
+  navigability smoke check below.
 - **Route navigability.** Manual / smoke check that each route
   mounts and back-navigation works.
 
