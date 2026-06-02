@@ -1480,6 +1480,14 @@ invariant and hand crash recovery a zero-delta orphan to reason about.
 The `reversalInProgress` gate is a few lines in the entry algorithm —
 cheaper than a pipeline that disables what makes it a pipeline.
 
+**Committed-delta over-reversal is handled separately.** The barrier above
+guards the _in-flight_ classifier; a lagging classifier's
+_already-committed_ facts about surviving turns are spared by the
+survival-anchor predicate in
+[`data-model.md → Entry mutability & rollback → Survival anchor`](./data-model.md#survival-anchor),
+not here. The two are orthogonal — barrier for racing runs, anchor for
+committed positions.
+
 ### Chained start bypasses concurrencyPolicy
 
 Per-turn's `chainsTo` returning `'chapter-close'` triggers a

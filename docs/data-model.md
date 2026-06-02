@@ -57,6 +57,7 @@ erDiagram
         text fork_entry_id "entry in parent branch the fork diverged from"
         text name
         integer created_at
+        json classifier_status "per-branch periodic-classifier status: lifecycle state, last-success-at, last-error, retry-count, and processedThrough (highest entry position fully processed; pass range is (processedThrough, head]). Operational state — branches is not delta-logged, so reversal clamps processedThrough imperatively. See docs/memory/classifier.md → Persistence"
     }
 
     story_entries {
@@ -253,7 +254,7 @@ erDiagram
     deltas {
         text id PK
         text branch_id FK
-        text entry_id FK "the story_entry that produced this delta; null for non-entry-triggered actions (chapter close, user direct edit)"
+        text entry_id FK "survival anchor: reverse this delta iff this entry is reversed. Foreground turn delta → its own turn; periodic_classifier fact → its provenance entry; translation → its target's content-defining-delta anchor; null (chapter close, user direct edit) → reverse positionally by own commit position. See Entry mutability & rollback → Survival anchor"
         text action_id "groups deltas into one user-visible action (used for CTRL-Z batching)"
         integer log_position "append-only ordering within branch"
         text source "ai_classifier | periodic_classifier | user_edit | lore_agent | chapter_close"
@@ -429,14 +430,21 @@ the latest entry):
 
 1. Copy parent's CURRENT rows for every branch-scoped table per the
    manifest below into the new branch.
-2. Copy parent's deltas with `log_position < L` into the new branch — so
-   the new branch carries the complete history up to the fork point and
-   rollback on the new branch can reach any entry 1..N.
-3. Reverse-apply parent's deltas with `log_position >= L` onto the new
-   branch's copied rows. These rewind the copies from "parent's current
-   state" to "state as of entry N." The post-fork deltas themselves are
-   NOT copied — their only purpose was to rewind, and keeping them would
-   contradict the rewound state.
+2. Copy parent's deltas with `log_position < L` into the new branch —
+   plus any background (`periodic_classifier`) delta with
+   `log_position >= L` whose survival anchor is a kept entry
+   (`position(entry_id) <= position(N)`). A lagging fact about an entry
+   ≤ N that committed late would otherwise be rewound away in step 3,
+   silently dropping facts about kept turns (see
+   [Entry mutability & rollback → Survival anchor](#survival-anchor)).
+   The new branch thus carries the complete history up to the fork point
+   and rollback on the new branch can reach any entry 1..N.
+3. Reverse-apply parent's deltas with `log_position >= L` **except those
+   copied in step 2** (i.e. `entry_id IS NULL OR position(entry_id) >=
+position(N+1)`) onto the new branch's copied rows. These rewind the
+   copies from "parent's current state" to "state as of entry N." The
+   post-fork deltas themselves are NOT copied — their only purpose was to
+   rewind, and keeping them would contradict the rewound state.
 
 **Branch-copy manifest.** Every branch-scoped table behaves the same
 way at fork unless flagged otherwise:
@@ -462,6 +470,15 @@ way at fork unless flagged otherwise:
 If a branch-scoped table is added to the schema later, it MUST get a
 row here in the same commit. New branch-scoped table without a
 manifest row is a bug.
+
+**`branches.classifier_status` at fork.** Not a manifest row — it is a
+column, not a branch-scoped table. The new branch initializes
+`processedThrough = min(parent.processedThrough, position(N))` (it cannot
+have processed turns it does not contain, and step 2 already copied facts
+about kept entries up to that point); the rest of the status resets to
+idle, so a fresh branch does not inherit a parent's failed-persistent
+state. See
+[classifier.md → Persistence](./memory/classifier.md#persistence).
 
 Reads on the new branch are always fast because state is pre-materialized
 — no lineage walk, no copy-on-write. Branch creation cost is linear in
@@ -1968,7 +1985,9 @@ for the full structural-floor contract.
 **Decided:** everything is an event in the append-only `deltas` log,
 regardless of who authored the change — AI classifier, lore-management
 agent, chapter close, or direct user edit.
-Rollback = reverse every delta with `log_position ≥ N`. Entity rows
+Rollback = reverse every delta with `log_position ≥ N` (refined by the
+[survival anchor](#survival-anchor) below, which spares a lagging
+background fact about a surviving turn). Entity rows
 (and lore / thread / happening / chapter rows) are mutated in place for
 fast reads; the delta log is the history of record.
 
@@ -2148,10 +2167,11 @@ by the same user-visible operation. Action boundaries:
 Algorithm:
 
 1. **Select the target group** — walk back from the head to the most
-   recent _user_ action group, skipping `source = periodic_classifier`
-   deltas. Background classifier work is never an undo target; its
-   `action_id` exists only for crash recovery, so a classifier commit
-   sitting at the literal head is stepped over.
+   recent _undoable unit_ (a user turn, a user edit, or a chapter close,
+   auto or manual), skipping `source = periodic_classifier` deltas.
+   Background classifier work is never an undo target; its `action_id`
+   exists only for crash recovery, so a classifier commit sitting at the
+   literal head is stepped over.
 2. **Reverse by group content:**
    - **Prose turn** (the group creates a `story_entries` row) — reverse
      the positional suffix from the turn's first `log_position`
@@ -2174,6 +2194,53 @@ conventions).
 This co-exists cleanly with entry-level rollback: CTRL-Z is
 action-granular ("undo my last thing"), rollback is entry-granular
 ("take me back to entry 40"). Both use the same reverse-delta mechanism.
+
+#### Survival anchor
+
+The positional suffix (`log_position ≥ N`) assumes commit order matches
+narrative order. The lagging periodic classifier breaks that — it commits
+facts about old, surviving turns at new tail positions, so a bare suffix
+sweep of a later turn would over-reverse valid facts about turns that
+aren't being undone (it fires even on regenerate-the-last-reply, when a
+catch-up pass landed between the reply and its regenerate).
+`deltas.entry_id` is the **survival anchor** that fixes it: _reverse this
+delta iff this entry is reversed_. With `B` the earliest entry the
+reversal removes (the undone turn for regenerate / CTRL-Z-of-a-turn;
+`M+1` for a rollback that keeps `M`) and `N` its first `log_position`,
+the sweep reverses
+
+```text
+log_position ≥ N  AND  ( entry_id IS NULL OR position(entry_id) ≥ position(B) )
+```
+
+where `position()` reads `story_entries.position`. Foreground deltas
+anchor to their own turn (≥ B), and `null`-anchor deltas (chapter close,
+user edit) always reverse, exactly as before; only a lagging background
+delta whose anchor is below `B` is spared. A background delta therefore
+survives only if its anchor entry survives — no orphans or dangling
+anchors by construction. The same predicate drives the
+[fork reverse-apply partition](#branch-model), and is orthogonal to the
+in-flight
+[`waitForClassifier('cancel')` barrier](./generation-pipeline.md#prose-reversals-and-the-classifier-barrier),
+which guards the racing classifier, not committed deltas.
+
+For this to hold, background-source (`periodic_classifier`) deltas stamp
+`entry_id` with per-fact **provenance**, and translation deltas stamp
+their target's content-defining-delta anchor — see
+[classifier.md → Provenance attribution](./memory/classifier.md#provenance-attribution)
+and [Translation](#translation).
+
+The same `B` clamps the per-branch classifier watermark —
+`processedThrough ← min(processedThrough, position(B) − 1)`, in the sweep
+transaction (see
+[classifier.md → Persistence](./memory/classifier.md#persistence)) — so
+re-generated or rolled-back turns are re-processed. Because the predicate
+already spared every surviving turn's facts, re-processing resumes at `B`
+and never re-derives a spared fact: no duplicate happenings on a normal
+reversal. (Redo of a classifier-processed turn does not restore
+`processedThrough`, so it may re-derive that turn; the duplicate
+happenings are cleaned at chapter-close dedup, inside the existing
+tolerance.)
 
 ### Happenings & character knowledge
 
@@ -2295,6 +2362,17 @@ Translation writes that **succeed** produce deltas under the same
 `action_id` as the originating action — so if the classifier creates
 a new entity that triggers a translation write, a single CTRL-Z
 reverses both the entity and its translation atomically.
+
+**Survival anchor.** A translation delta's `entry_id` (the
+[survival anchor](#survival-anchor)) is the anchor of its target's
+**current content-defining delta** — the target's top-of-chain delta at
+translation time. For an inline translate-on-create this coincides with
+the originating action's anchor, so both reverse together (above). A
+decoupled re-translation (the `translation-retry` pipeline) commits under
+its own `action_id` at a tail position; the content anchor makes a
+positional reversal keep the translation exactly as long as the content
+it translates survives — never a stale survivor, never an over-reversed
+miss.
 
 Translation calls that **fail** (per-call exhaustion in the
 `display-translation` phase, see

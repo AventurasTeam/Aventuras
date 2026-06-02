@@ -8,8 +8,11 @@ chapter close at any time, the chapter-close pipeline fires.
 remains canonical for the trigger and atomic-commit shape; this
 section details the phases.
 
-Five phases under one `action_id` for atomic rollback. A single
-CTRL-Z from the user reverses the entire chapter-close.
+Phases 1–4 commit under one chapter-close `action_id` for atomic
+rollback; a single CTRL-Z reverses the entire close. Phase 0 is **not**
+in that batch — the periodic classifier it runs holds its own
+`action_id`(s) with `source = periodic_classifier` (see
+[Phase 0](#phase-0--catch-up-classifier-pass)).
 
 | Phase                           | Mode      | Drives                                                                                                      |
 | ------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------- |
@@ -65,6 +68,16 @@ After drain, phase 0 runs the classifier synchronously over any
 remaining unclassified entries in the open region. Bounded by the
 cadence overlap window — typically a few turns of un-classified
 content, fast.
+
+**Phase-0 writes stay off the chapter-close batch.** The catch-up runs
+the periodic classifier, so its writes carry their own
+`periodic_classifier` `action_id`(s) and per-fact provenance
+(`deltas.entry_id`) like any pass — never the phases-1–4 chapter-close
+`action_id`. So CTRL-Z of the close (an `action_id`-group reversal of
+phases 1–4) leaves phase-0's facts about the surviving, now-un-chaptered
+turns intact, and a later deep rollback into the chapter spares them by
+the survival-anchor predicate (see
+[`data-model.md → Entry mutability & rollback → Survival anchor`](../data-model.md#survival-anchor)).
 
 **Concurrency.** The background classifier's
 `concurrencyPolicy.blockedBy` includes `'chapter-close'` — it cannot

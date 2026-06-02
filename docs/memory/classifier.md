@@ -29,6 +29,38 @@ declaration values.
   [`data-model.md → World-state storage`](../data-model.md#world-state-storage)
   remains intact).
 
+## Provenance attribution
+
+Every delta the classifier commits carries a **survival anchor** in
+`deltas.entry_id` — the window entry whose prose produced _that row_ — so
+a prose reversal spares facts about surviving turns rather than
+over-reversing them (see
+[`data-model.md → Entry mutability & rollback → Survival anchor`](../data-model.md#survival-anchor)).
+The structured output therefore tags each emitted fact with a provenance
+handle drawn from its input window; the parse path resolves it to an
+`entry_id` and stamps the delta. Sub-rows produced with a parent (a
+happening's involvements) inherit the parent's anchor unless independently
+sourced — a character learning of an _old_ happening now anchors to the
+turn that narrated the learning, not the happening's.
+
+- **Single-turn extraction** → that turn (the common case).
+- **Cross-turn synthesis** → the **latest contributing turn**; anchoring
+  at the earliest contributor would leave a stale fact standing after its
+  newer evidence rolled back.
+- **Status flip / first-introduction** → the triggering / introducing
+  turn.
+- **Unattributed fallback** → the window head, so the fact reverses on any
+  reversal into its window (re-derivable) but never survives as an orphan.
+
+Provenance is a **distinct axis** from the narrative anchors
+`happenings.occurred_at_entry` (where an event sits in story time; `null`
+for the temporal / historical class) and
+`happening_awareness.learned_at_entry` (when a character learned a fact).
+They frequently coincide, but the classifier already had to map each
+extraction to a window entry to populate those — provenance formalizes the
+single per-fact attribution channel that feeds all three, the anchor read
+directly and the narrative fields the classifier's judgment on top.
+
 ## ID handling in classifier output
 
 References to existing entities in the classifier's structured
@@ -222,10 +254,23 @@ succeed.
 ### Persistence
 
 Per-branch classifier status — current state, last-success-at,
-last-error, retry-attempt count — persists alongside the branch.
-Concrete shape (`branches.classifier_status?: JSON` field vs
-sidecar table) is an implementation detail; this design pins what
-gets stored, not where.
+last-error, retry-attempt count, and **`processedThrough`** — persists in
+a `branches.classifier_status` JSON field. `branches` is not delta-logged,
+so the status is operational state outside the reversal log.
+
+`processedThrough` is the highest entry position (`story_entries.position`)
+the classifier has fully processed; the pass range is
+`(processedThrough, head]`. It is the concrete field behind "unprocessed
+turns," read by the cadence trigger, `[Run classifier now]`, and
+chapter-close phase 0. A successful pass over `(processedThrough, E]` sets
+`processedThrough = E` in its commit transaction. A prose reversal clamps
+it — `processedThrough ← min(processedThrough, position(B) − 1)` for `B`
+the earliest removed entry (see
+[`data-model.md → Entry mutability & rollback → Survival anchor`](../data-model.md#survival-anchor))
+— so changed turns are re-processed without re-deriving spared facts. At
+fork from entry `N`, the new branch sets
+`processedThrough = min(parent.processedThrough, position(N))` and resets
+the rest of the status to idle.
 
 The panel sits in the same Memory tab as the embedder controls
 (see
