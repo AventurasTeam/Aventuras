@@ -542,6 +542,11 @@ are built.
   paid generations.
 - **`entry_swipes` shape**, and whether takes carry across a branch
   fork or are pruned at the fork point.
+- **Classifier concurrency** is being settled as active v1 design
+  work in [`followups.md`](./followups.md) — regenerate/swipe must
+  cancel an in-flight periodic classifier (it reverses the
+  classifier's input). A general rollback concern the session
+  inherits rather than re-opens.
 
 ---
 
