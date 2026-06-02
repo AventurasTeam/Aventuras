@@ -220,6 +220,28 @@ visibility:
   checkbox next to the composer's Send button when probe mode is
   on; it resets after one turn.
 
+### Regenerate confirmation
+
+Regenerating an AI reply rolls its turn back — the same delta
+reversal as rollback, per
+[Entry mutability & rollback](../../../data-model.md#entry-mutability--rollback)
+— then re-runs generation from the same input.
+
+**No confirm in the common case.** When the turn reversed is the
+reply alone (no chained chapter close), regenerate fires
+immediately; discarding that take is the point of the action, and
+prompting every time would nag.
+
+**Confirm when the turn closed a chapter.** If the turn chained a
+chapter close, its lore-management writes (the chapter-close
+sub-jobs) reverse and re-run. The gate is cost, not data loss —
+regenerate owns the loss of the prior take intrinsically; what
+warrants consent is re-running the expensive sub-jobs, a boundary
+rare enough that the confirm never turns routine. It reuses the
+[rollback confirmation](./rollback-confirm/rollback-confirm.md#cross-chapter-case)
+cross-chapter copy, reframed as re-run rather than re-open: the
+chapter returns to in-progress and regenerates.
+
 ## Era flip
 
 Era flips are user-triggered narrative events writing one row to

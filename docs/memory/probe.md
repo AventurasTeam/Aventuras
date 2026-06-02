@@ -130,8 +130,9 @@ Per capture:
   active+in-scene entities, their location, active threads,
   `injection_mode='always'` rows) and their token cost. Surfaces
   what budget the per-type pools actually competed over.
-- **Stale-row count per type** — rows excluded from the pool by
-  the eager-sync invariant (their vec0 entry was missing at
+- **Stale-row count per type** — rows still `embedding_stale` at
+  retrieval, excluded from the pool because the pre-retrieval sync
+  stage couldn't embed them (their vec0 entry was missing at
   retrieval time). Counts only; no per-row data, since stale rows
   weren't candidates.
 

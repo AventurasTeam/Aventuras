@@ -54,27 +54,29 @@ embeddings regardless of how identity is rendered to the model.
 
 ## Embedding compute boundary
 
-The classifier emits rows and embeds them in the same transaction —
-new happenings, first-introduction entity descriptions, and any
-other write touching an embedded field go through the eager-sync-
-on-write contract specified in
-[`retrieval.md → Compute lifecycle`](./retrieval.md#compute-lifecycle).
-The classifier itself runs as a background pipeline (see
-[Background-task framing](#background-task-framing) below), so the
-inline embed cost stays off the user-facing critical path.
+The classifier emits rows but does **not** embed them: new
+happenings, first-introduction entity descriptions, and any other
+write touching an embedded field land `embedding_stale = 1` and
+leave the vector to the pre-retrieval sync stage, per the
+[sync-before-read contract](./retrieval.md#compute-lifecycle).
+Nothing embeds on the classifier's write path; the dirty rows are
+picked up by the opportunistic background worker between turns and,
+as a backstop, by the next retrieving pipeline's sync stage — so the
+embed cost stays off the user-facing critical path, decoupled from
+the write. (The classifier itself runs as a background pipeline; see
+[Background-task framing](#background-task-framing) below.)
 
-If the embedder is unavailable at write time (local model still
-initializing, provider mode network down), the metadata write
-succeeds, the row is marked `embedding_stale = 1`, and a worker
-drains the flagged set when the embedder is healthy again. Same
-path as any other embedded-field write — no classifier-specific
-deferral mechanism.
+If the embedder is still unavailable when that sync stage runs
+(local model initializing, provider mode network down), the row
+stays `embedding_stale = 1` and absent from vec0, and the stage's
+blocking failure path applies. No classifier-specific deferral
+mechanism — same path as any other dirty row.
 
 The classifier does not modify already-embedded fields on existing
 rows. Status flips touch `entities.status` only, which isn't
 embedded. If a future extension lets the classifier modify an
-embedded field, it goes through the same eager-sync contract — no
-special path required.
+embedded field, it flags the row dirty the same way — no special
+path required.
 
 The transient embedding computed in the disambiguation flow below
 (extracted description for the similarity check) is a decision-time

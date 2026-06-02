@@ -809,9 +809,10 @@ Merge writes:
 
 Embeddings are not delta-logged
 ([`data-model.md → embeddings`](../../../data-model.md#diagram)) —
-the loser's vec0 row is dropped silently; on rollback the
-restored entity row re-embeds via the standard
-[eager-sync-on-write contract](../../../memory/retrieval.md#compute-lifecycle).
+the loser's vec0 row drops when its entity row is deleted; on
+rollback the restored entity row flags `embedding_stale` and
+re-embeds at the next pre-retrieval sync stage, per the
+[sync-before-read contract](../../../memory/retrieval.md#compute-lifecycle).
 The user-visible behavior is "merge is reversible" — the
 non-trivial wiring lives below the surface.
 

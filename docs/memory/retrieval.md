@@ -84,20 +84,23 @@ ungated swap).
 
 **Source-hash tripwire.** `source_hash` stores the content hash of
 the embedded fields at embed time (`xxhash(title + description)` or
-similar). Under the [Compute lifecycle](#compute-lifecycle) contract
-vec0 stays in sync with source content via eager-sync-on-write, so
-`source_hash` is a tripwire — at retrieval, a mismatch against the
-candidate's current content hash indicates a write path bypassed
-the embed step (bug, ungated direct DB write). Log the mismatch
-loudly; treat the row's vector as untrusted (exclude or flag, do
-not silently re-embed and continue). Hash is chosen over timestamps
-because rollback restores prior `updated_at` along with the rest of
-the row's state — a timestamp-based check would invert post-
-rollback and silently mask the bug it was meant to catch. Content
-hashes are timeline-direction-agnostic. Embeddings themselves are
-not delta-logged (deterministic from source); the
-[`embedding_stale`](#compute-lifecycle) flag carries explicit
-degradation state when the eager-sync invariant can't be met.
+similar) and plays two roles. Per the
+[Compute lifecycle](#compute-lifecycle) contract it is the reference
+for the per-row `embedding_stale` flip: an embedded-field write
+recomputes the row's hash and compares against it to set or clear the
+dirty flag. And at retrieval — after the sync stage has run — it is a
+tripwire: a candidate whose current content hash doesn't match its
+`source_hash` means a write changed content without flipping the flag
+(a bug, an ungated direct DB write). Log the mismatch loudly; treat
+the row's vector as untrusted (exclude or flag, do not silently
+re-embed and continue). Hash is chosen over timestamps because
+rollback restores prior `updated_at` along with the rest of the
+row's state — a timestamp-based check would invert post-rollback and
+silently mask the bug it was meant to catch. Content hashes are
+timeline-direction-agnostic. Embeddings themselves are not
+delta-logged (deterministic from source); the
+[`embedding_stale`](#compute-lifecycle) flag carries the dirty state
+the sync stage acts on.
 
 Branched (forks with the branch like every other branch-scoped table).
 
@@ -121,79 +124,129 @@ entity embedding itself.
 
 ### Compute lifecycle
 
-**Eager-sync-on-write contract.** Every write that mutates an
-embedded field embeds the new content and updates vec0 in the same
-transaction. Creates (classifier emit, wizard, chapter-close
-summary, branch-fork copies), updates (user-edit of a description,
-lore-mgmt refinement at chapter close), and rollback (delta-log
-reversal restoring prior content) all go through this path. By
-construction vec0 is never out of sync with source content.
+**Sync-before-read contract.** vec0 is guaranteed consistent with
+source content at every retrieval — not after every write. An
+embedded-field write (classifier emit, chapter-close summary,
+user-edit of a description, rollback restoring prior content) does
+**not** embed inline; it writes the metadata row and sets the source
+row's `embedding_stale` flag. A dedicated **pre-retrieval sync
+stage** then embeds every dirty row (`embedding_stale = 1`) in one
+batch immediately before retrieval — at the head of any pipeline
+that retrieves, alongside the query-embed step that already runs
+there — and KNN runs against a fresh index.
 
-The asymmetry that forces this contract: vec0 KNN can only return
-rows that exist in vec0. A row written to its metadata table but
-lacking a vec0 entry is invisible to retrieval — there's no "lazy
-at first retrieval" path because retrieval can't discover what
-isn't indexed. Net-new rows must be embedded before retrieval can
-find them. Mutations of existing rows can't fall back to lazy
-either, because KNN ranks against the stored vector — a stale
-vector silently mis-ranks or excludes candidates that current
-content would have qualified.
+The invariant is **"no KNN without a preceding sync,"** honoured by
+every vec0 reader:
 
-**Embedder unavailability — `embedding_stale` flag.** When an
-embed call fails at write time (init failed lazily, provider
-network down, EP crashed) the write succeeds in the metadata
-table, the row's `embedding_stale` is set to 1, and vec0 is left
-without the row (for creates) or has the row removed (for updates
-that invalidate the existing vector). The flag captures the
-degradation explicitly — embeddings aren't delta-logged, so without
-it any drift between source content and stored vector would be
-silent.
+- **Per-turn pipeline retrieval** — the sync stage is part of the
+  pipeline, just before the retrieval phase (which already runs
+  after Pre commits the user-action delta).
+- **Memory probe**, _if_ it offers current-state retrieval rather
+  than replaying a captured historical run — spawns the same sync
+  stage on demand before its KNN (probe reader-model is still open;
+  see
+  [`memory-probe.md`](../ui/screens/memory-probe/memory-probe.md)).
 
-**Embed failure is blocking, not "queue and continue."** A failed
-embed is treated identically to a failed LLM call: surfaced as an
-error, must be resolved, no ignore path. The next-turn affordance
-disables until the user picks Retry / Switch embedder / Roll back
-this turn. See
+Between retrievals vec0 may lag the live rows. That is deliberate
+and harmless: nothing reads it without first running the sync stage.
+The one trade — a future _ad-hoc_ KNN reader outside a pipeline (a
+"search my world" action, an entity-sheet "related" hover) pays the
+sync latency before results rather than reading an always-fresh
+index — is acceptable for today's readers; revisit if instant-feel
+ad-hoc KNN lands.
+
+**Dirty detection is a flag, not a scan.** `embedding_stale` lives
+on the source row (entities, lore, happenings, threads, chapters),
+so the dirty set is `WHERE embedding_stale = 1` behind a partial
+index — no content-hash sweep across the corpus. The flag is flipped
+per-row, only on the rows a write or reversal touches: recompute
+that row's content hash and compare to the embedding's stored
+`source_hash` — set the flag to 1 when they differ, back to 0 when
+they match. One rule covers every transition: a create has no
+matching vector so it flags dirty; an edit that drifts the content
+flags dirty; an edit or rollback that returns content to its
+embedded value **revalidates to 0 with no re-embed**, since the
+existing vector is still correct. Row deletion cascade-removes the
+orphaned vec0 entry (the flag is on the row; when the row goes, so
+does its embedding).
+
+The asymmetry this answers: vec0 KNN returns only rows present in
+vec0, so a net-new or drifted row invisible at retrieval time
+silently mis-ranks or drops candidates. Embedding before the read
+satisfies this just as embedding on the write would — the row is
+indexed before any KNN — but pays once, at the read. What makes
+deferral the right trade is any operation that mutates embedded rows
+yet is _not itself a retrieval_: swipe-switching between alternate
+takes, rollback, repeated edits. Embedding on every such write is
+waste, since only the state live at the next retrieval matters;
+deferring collapses it to a single embed of whatever survives.
+
+**Reverse-replay stays embed-free.** Rollback / CTRL-Z /
+crash-recovery restore rows through raw delta reversal and never
+call the embedder — they write rows, flip `embedding_stale` by the
+same per-row checksum, and cascade-delete embeddings for rows they
+delete. Re-embedding is the next sync stage's job. (An
+embed-on-write contract would have forced reverse-replay through the
+embed path for every restored row.)
+
+**`embedding_stale` is one flag, one meaning: "needs embed."** It
+covers ordinary deferred writes, creates, and failures alike — a
+dirty row stays flagged until a sync stage successfully embeds it,
+and a failed embed (init failed, provider down, EP crashed) simply
+leaves it flagged and absent from vec0. There is no separate
+"drifted vs failed" state.
+
+**Embed failure is blocking, not "queue and continue."** When the
+pre-retrieval sync stage can't embed a dirty row, the turn can't
+reach retrieval. Treated identically to a failed LLM call: surfaced
+as an error, must be resolved, no ignore path. The next-turn
+affordance disables until the user picks Retry / Switch embedder /
+Roll back this turn. See
 [`model-management.md → Embedder failures`](./model-management.md#embedder-failures)
 for the action surface and the wider failure-mode discussion.
 
-A worker drains flagged rows opportunistically when conditions
-allow — if the user's retry succeeds, or the embedder recovers and
-the next normal embed call goes through, the worker catches up the
-staleness in the same transaction. The opportunistic drain is the
-recovery mechanism; it isn't a "user can ignore the error and let
-the worker fix it later" license. The blocking UX prevents the
-ignore path.
+A worker drains dirty rows opportunistically between turns when
+conditions allow, so a later sync stage finds less to do — a
+warm-cache optimization, not an "ignore the error and let the worker
+fix it later" license. The blocking sync stage prevents the ignore
+path.
 
-**Retrieval excludes stale rows.** Stale rows aren't in vec0 — they
-don't surface as KNN candidates. Better known-absent than silently-
-wrong.
+**Retrieval excludes stale rows.** A row still `embedding_stale = 1`
+_at retrieval_ — one the sync stage just failed to embed — isn't in
+vec0 and doesn't surface as a KNN candidate. Better known-absent
+than silently-wrong. (Pre-sync, the flag is the normal dirty state
+and says nothing about retrieval; the sync stage clears every
+embeddable row first, so anything still flagged at KNN is a genuine
+failure.)
 
-**Per-turn cost.** With this contract, retrieval pays no embed cost
-inline for stored rows — vec0 is fresh by the time KNN runs. The
-query side still embeds three queries per pass; see
-[Query construction](#query-construction--three-vector-stack).
+**Per-turn cost.** Retrieval pays the embed cost for rows dirtied
+since the last sync — for an ordinary turn, the handful the previous
+reply created or changed — plus the three query embeds. No per-write
+embed latency; the cost is batched at the sync stage.
 
-- **Before turn:** embed the three queries (user action,
-  structural digest, scene context). Short text; <20 ms local
-  warm, <100 ms API.
-- **At each embedded-field write:** embed inline as part of the
-  write transaction. Atomic with metadata write. Local mode warm
-  CPU ~10–30 ms per row; provider mode ~100–300 ms per network
-  round-trip (batchable across multiple rows in one transaction).
+- **Pre-retrieval sync stage:** embed the dirty source rows, then
+  clear their flags. Local mode warm CPU ~10–30 ms per row; provider
+  mode ~100–300 ms per network round-trip (batchable across rows in
+  one transaction). A normal turn is a few rows; a swipe selection or
+  rollback can dirty more.
+- **Query embeds:** embed the three queries (user action, structural
+  digest, scene context); see
+  [Query construction](#query-construction--three-vector-stack).
+  Short text; <20 ms local warm, <100 ms API.
 - **Cache:** keyed by `(target_kind, target_id, field, model_id)`.
-  If source field unchanged and model unchanged, reuse.
+  If the source field and model are unchanged, reuse — the
+  `source_hash` revalidation above is the per-row expression of this.
 
 **Bulk import** (loading a story from `.avts` or migrating an old
-database) needs an explicit batched-embed phase, not naive per-row
-eager. 100k rows × 10 ms is 16 minutes if you embed each inline
-during import; batch the embed calls (especially in provider mode,
-where each call is a network round-trip) and surface progress UI.
-Same machinery as the model-swap re-index path.
+database) uses the same batched-embed machinery, but as an explicit
+up-front phase with progress UI rather than one giant sync at first
+retrieval. 100k rows × 10 ms is 16 minutes; batch the embed calls
+(especially in provider mode, where each is a network round-trip).
+Same path as the model-swap re-index.
 
-**Edit storms** are not a concern because saves are explicit user
-actions in the v1 design — no autosave per keystroke. One save
-equals one embed.
+**Edit storms** are not a concern: saves are explicit user actions
+in the v1 design — no autosave per keystroke — and a save only flips
+the flag, deferring the single embed to the next sync.
 
 ### Performance characteristics — PoC findings
 

@@ -752,14 +752,18 @@ One SQLite transaction, all or none:
    `app_settings.default_story_settings`, identity columns.
 2. Insert initial `branches` row.
 3. Insert wizard-authored `entities` rows (initial cast). Per-row:
-   `kind`, `name`, `description`, `status`, `state` JSON. **Each
-   embedded-field write triggers an embed** per the
-   [eager-sync-on-write contract](../../../memory/retrieval.md#compute-lifecycle)
-   — entity `name + description` is the embedded composite. The
-   embed runs inline in the same transaction; `entities_vec` rows
-   land alongside the metadata.
-4. Insert wizard-authored `lore` rows (initial world). Each
-   triggers an embed of `title + body` into `lore_vec`, same path
+   `kind`, `name`, `description`, `status`, `state` JSON, and embed
+   the `name + description` composite into `entities_vec` **in the
+   same transaction**. This is a deliberate exception to the
+   [sync-before-read default](../../../memory/retrieval.md#compute-lifecycle):
+   creation has no later retrieval to defer the embed to, and a story
+   whose cast isn't embedded can't retrieve at all, so the embed is
+   part of the atomic commit — committed rows are never
+   `embedding_stale`, and an embed failure rolls the whole
+   transaction back (see
+   [Embedder-unavailable on Finish](#embedder-unavailable-on-finish)).
+4. Insert wizard-authored `lore` rows (initial world); each embeds
+   `title + body` into `lore_vec` in the same transaction, same path
    as entities.
 5. Insert `story_entries[1]` with `kind='opening'`, prose,
    metadata. `metadata.model = <wizard-assist profile model>` if

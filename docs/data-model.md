@@ -82,7 +82,7 @@ erDiagram
         integer name_collision_flag "0 | 1; 1 = same-name collision detected at classifier extraction; surfaces in World panel for review. See docs/memory/edge-cases.md → Name collision"
         json state "typed per kind"
         json tags
-        integer embedding_stale "0 | 1; 1 = embedded field (name/description) was written but vec0 sync couldn't complete (embedder unavailable). Excluded from retrieval until worker drains. See docs/memory/retrieval.md → Storage"
+        integer embedding_stale "0 | 1; 1 = embedded fields (name/description) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
         integer created_at
         integer updated_at
     }
@@ -97,7 +97,7 @@ erDiagram
         json keywords "string[]; user-authored at create OR lore-mgmt-emitted at chapter close. Drives keyword retrieval pathway alongside embedding similarity. See docs/memory/retrieval.md → Hybrid retrieval per type"
         text injection_mode "always | auto | disabled"
         integer priority "0..100; higher = more weight in retrieval ranker. See docs/memory/retrieval.md → The ranker"
-        integer embedding_stale "0 | 1; 1 = embedded field (title/body) was written but vec0 sync couldn't complete. Excluded from retrieval until worker drains. See docs/memory/retrieval.md → Storage"
+        integer embedding_stale "0 | 1; 1 = embedded fields (title/body) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
         integer created_at
         integer updated_at
     }
@@ -113,7 +113,7 @@ erDiagram
         text injection_mode "always | auto | disabled"
         integer triggered_at_entry
         integer resolved_at_entry
-        integer embedding_stale "0 | 1; 1 = embedded field (title/description) was written but vec0 sync couldn't complete. Excluded from retrieval until worker drains. See docs/memory/retrieval.md → Storage"
+        integer embedding_stale "0 | 1; 1 = embedded fields (title/description) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
         integer created_at
         integer updated_at
     }
@@ -128,7 +128,7 @@ erDiagram
         text temporal "in-world time anchor for happenings WITHOUT a narrative position; free-form (e.g. '1872 AR', 'future', 'ongoing', 'next solstice')"
         integer occurred_at_entry "narrative log position; null = outside narrative (use temporal instead). When set, in-world time derives from the entry's metadata.worldTime."
         integer common_knowledge "1 = everyone knows; skip awareness links"
-        integer embedding_stale "0 | 1; 1 = embedded field (title/description) was written but vec0 sync couldn't complete. Excluded from retrieval until worker drains. See docs/memory/retrieval.md → Storage"
+        integer embedding_stale "0 | 1; 1 = embedded fields (title/description) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
         integer created_at
         integer updated_at
     }
@@ -176,7 +176,7 @@ erDiagram
         text end_entry_id FK "always set — only closed chapters exist as rows"
         integer token_count "accumulated across chapter entries"
         integer closed_at
-        integer embedding_stale "0 | 1; 1 = embedded field (summary/theme) was written but vec0 sync couldn't complete. Excluded from retrieval until worker drains. See docs/memory/retrieval.md → Storage"
+        integer embedding_stale "0 | 1; 1 = embedded fields (summary/theme) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
         integer created_at
         integer updated_at
     }
@@ -228,7 +228,7 @@ erDiagram
         text model_id "canonical embedding model id; the model that produced this row's vector. Within a single branch all rows share one model (vector-space invariant for retrieval); across the database different stories' rows may be under different models. See docs/memory/retrieval.md → Storage"
         integer dim "vector dimension"
         blob vector "packed float32/float16 vector"
-        text source_hash "xxhash of source field at embed time. Tripwire — under eager-sync-on-write, vec0 stays in sync with source content; mismatch indicates a write path bypassed the embed step (bug)."
+        text source_hash "xxhash of source field at embed time. Two roles per docs/memory/retrieval.md → Compute lifecycle: reference for the per-row embedding_stale flip (a write compares the row's current hash against this), and the retrieval tripwire (a candidate whose content hash mismatches this, after the sync stage has run, signals a write that bypassed the flag, i.e. a bug)."
         integer updated_at
     }
     %% UNIQUE(branch_id, target_kind, target_id, field, model_id)

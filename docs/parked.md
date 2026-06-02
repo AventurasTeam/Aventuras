@@ -467,6 +467,82 @@ Adds a Pack tab section or sibling control set; design pass picks
 the affordance shape once the static pack workflow has been used
 in practice.
 
+### Deferred design sessions
+
+#### Reader-composer swipes — alternate takes per turn
+
+A **swipe** keeps multiple AI generations for one turn and lets the
+user move between them without losing earlier tries (the
+character.ai / SillyTavern affordance). The non-obvious part here: a
+generation is not just text — it writes the entry plus world state
+(entity piggyback fields, happenings and awareness, translations,
+`worldTime`, embeddings). **A swipe is a fork of world state, not a
+text toggle** — switching takes changes what mutated and what
+downstream retrieval sees. Feasibility is good and the effort
+moderate; everything below rides primitives that already exist,
+which is why this is a confirmed session rather than open research.
+
+Deferred because reader-composer generation isn't wired yet (the
+screen is a skeleton). Revisit when the per-turn pipeline and reader
+are built.
+
+**Spine the session starts from:**
+
+- **Head-only.** Swipes apply to the latest AI reply only. Once the
+  user takes the next turn, state and memory advance on top and the
+  take is committed; swiping an older turn is just rollback. Matches
+  the genre and the existing rollback model — not a compromise.
+- **Reversal reuses the rollback boundary; no new primitive.**
+  Regenerating or swiping the head reverses the contiguous delta
+  suffix from the start of that turn — the positional rollback the
+  [branch model](./data-model.md#branch-model) and
+  [Entry mutability & rollback](./data-model.md#entry-mutability--rollback)
+  already define (boundary is `min(log_position)` among the entry's
+  deltas). A chapter-close cascade sits later in the same suffix and
+  is swept automatically — no enumerating `actionId` groups, no
+  captured watermark; the rollback derivation already yields the
+  boundary.
+- **Storage: an `entry_swipes` table.** Persisted (survives reload
+  and resurfaces when an entry becomes head again via rollback or
+  branch), branch-scoped, empty when no swipes. Each take stores its
+  entry content and metadata plus a snapshot of the touched rows'
+  after-state (the `(target_table, target_id)` set from its delta
+  range), captured at generation. Switching reverses the active take,
+  restores the target's snapshot, and re-logs it as the active delta
+  group. Embeddings are not stored in the snapshot.
+- **Embeddings are free for swipes under sync-before-read.** Per the
+  [sync-before-read contract](./memory/retrieval.md#compute-lifecycle),
+  vec0 syncs only at retrieval. Because swipes are head-only and
+  resolved before the next retrieval, discarded takes are never
+  embedded: their created rows are deleted on reversal before any
+  sync, and reverted description edits revalidate the existing vector
+  (`embedding_stale` flips back to 0, no re-embed). Only the take live
+  at the next turn's sync gets embedded. Exception: a take whose own
+  cascade retrieved (a chapter-closing take runs a sync mid-take)
+  does re-embed when swiped away — rare, bounded.
+- **Destructive regenerate is the no-swipe sibling**, already
+  specced — see
+  [reader-composer → Regenerate confirmation](./ui/screens/reader-composer/reader-composer.md#regenerate-confirmation).
+  Swipes make a chapter-closing regenerate reversible (the old take
+  is retained), softening that confirm from data-loss to cost.
+
+**Open questions for the session:**
+
+- **Accept-and-continue.** When the user picks a take and takes the
+  next turn, are the inactive takes dropped or archived? Pin the
+  lifecycle.
+- **Hand-edited takes.** Entry-prose edits bypass the delta log, so
+  the snapshot must read live content for edits to ride along per
+  take; define edit-then-swipe behavior.
+- **Chapter-closing takes** carry the heavier lore-agent cascade and
+  the one embedding re-cost above; decide whether swiping across a
+  chapter boundary is offered or gated.
+- **Cost.** Each take is a full generation (model call plus
+  classifier, not refunded by rewinding) — surface that N takes is N
+  paid generations.
+- **`entry_swipes` shape**, and whether takes carry across a branch
+  fork or are pruned at the fork point.
+
 ---
 
 ## Parked until signal
