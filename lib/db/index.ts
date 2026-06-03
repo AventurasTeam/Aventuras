@@ -2,21 +2,21 @@ export {
   APP_SETTINGS_DEFAULTS,
   APP_SETTINGS_SINGLETON_ID,
   ensureAppSettingsSingleton,
-} from './app-settings-defaults'
+} from './app-settings/app-settings-defaults'
 export {
   appSettingsConfigSchema,
   appSettingsDiagnosticsSchema,
   modelProfileSchema,
   providerInstanceSchema,
-} from './app-settings-schema'
+} from './app-settings/app-settings-schema'
 export type {
   AppSettingsConfig,
   AppSettingsDiagnostics,
   ModelProfile,
   ProviderInstance,
-} from './app-settings-schema'
-export { db } from './client'
-export { DrizzleStudioDevTools } from './drizzle-studio-devtools'
+} from './app-settings/app-settings-schema'
+export { db } from './runtime/client'
+export { DrizzleStudioDevTools } from './devtools/drizzle-studio-devtools'
 export { entryMetadataSchema } from './entry-metadata'
 export type { EntryMetadata } from './entry-metadata'
 export {
@@ -42,6 +42,6 @@ export type {
   Story,
   StoryEntry,
 } from './types'
-export { runInTransaction } from './transaction'
+export { runInTransaction } from './runtime/transaction'
 export type { SqlOp } from './types'
-export { useDbMigrations } from './use-db-migrations'
+export { useDbMigrations } from './runtime/use-db-migrations'

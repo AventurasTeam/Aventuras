@@ -3,8 +3,8 @@ import type { LanguageModel } from 'ai'
 
 import { getCurrentActionId } from '@/lib/diagnostics'
 
-import { createFetchWithCapture } from './fetch'
 import { makeScenarioFetch, type StubScenario } from './stub/scenarios'
+import { createFetchWithCapture } from './transport/fetch'
 import type { ProviderInstance } from './types'
 
 type AnthropicModelId = Parameters<AnthropicProvider>[0]

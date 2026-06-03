@@ -1,7 +1,7 @@
 import type { LanguageModel } from 'ai'
 
 import { createProviderModel } from './providers'
-import { findTemporaryProvider } from './temporary-registry'
+import { findTemporaryProvider } from './stub/temporary-registry'
 
 export function getModel(providerId: string, modelId: string): LanguageModel {
   const provider = findTemporaryProvider(providerId)

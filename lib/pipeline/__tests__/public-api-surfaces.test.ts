@@ -11,9 +11,9 @@ async function ruleIds(code: string): Promise<(string | null)[]> {
 
 describe('lib public-API surfaces', () => {
   it('flags deep imports into module internals', async () => {
-    expect(await ruleIds("import { runPipeline } from '@/lib/pipeline/orchestrator'\n")).toContain(
-      'boundaries/dependencies',
-    )
+    expect(
+      await ruleIds("import { runPipeline } from '@/lib/pipeline/runtime/orchestrator'\n"),
+    ).toContain('boundaries/dependencies')
     expect(
       await ruleIds("import { applyDeltaAction } from '@/lib/actions/apply-delta-action'\n"),
     ).toContain('boundaries/dependencies')

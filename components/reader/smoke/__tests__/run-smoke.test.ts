@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { resetTemporaryProvidersForTests } from '@/lib/ai/temporary-registry'
+import { resetTemporaryProvidersForTests } from '@/lib/ai/stub/temporary-registry'
 import { branches, deltas, pipelineRuns, stories, storyEntries } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import {

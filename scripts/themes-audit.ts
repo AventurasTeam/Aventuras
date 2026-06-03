@@ -1,5 +1,5 @@
-import { contrastRatio } from '../lib/themes/contrast'
-import { themes } from '../lib/themes/registry'
+import { contrastRatio } from '../lib/themes/core/contrast'
+import { themes } from '../lib/themes/core/registry'
 import type { Theme } from '../lib/themes/types'
 
 type Pair = {

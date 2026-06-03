@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { ensureAppSettingsSingleton } from '../app-settings-defaults'
+import { ensureAppSettingsSingleton } from '../app-settings/app-settings-defaults'
 import { appSettings } from '../schema'
 import { createTestDb } from './test-db'
 

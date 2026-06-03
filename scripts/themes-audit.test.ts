@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { auditTheme, AUDIT_PAIRS } from './themes-audit'
-import { themes } from '../lib/themes/registry'
+import { themes } from '../lib/themes/core/registry'
 
 describe('AUDIT_PAIRS', () => {
   it('declares the body-prose load-bearing pair', () => {

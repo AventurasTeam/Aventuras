@@ -6,7 +6,7 @@ import {
   findTemporaryProvider,
   resetTemporaryProvidersForTests,
   setTemporaryProvidersForTests,
-} from './temporary-registry'
+} from './stub/temporary-registry'
 
 const sink = vi.hoisted(() => ({
   beginCall: vi.fn(() => 'call-1'),

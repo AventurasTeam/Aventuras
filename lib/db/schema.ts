@@ -9,7 +9,11 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 
-import type { AppSettingsDiagnostics, ModelProfile, ProviderInstance } from './app-settings-schema'
+import type {
+  AppSettingsDiagnostics,
+  ModelProfile,
+  ProviderInstance,
+} from './app-settings/app-settings-schema'
 import type { EntryMetadata } from './entry-metadata'
 
 export const stories = sqliteTable('stories', {

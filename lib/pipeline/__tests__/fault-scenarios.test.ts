@@ -2,13 +2,13 @@ import { generateText } from 'ai'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { getModel } from '@/lib/ai'
-import { callWithRetry, type CallRetryError } from '@/lib/ai/call-with-retry'
-import { ProviderTimeoutError } from '@/lib/ai/classify-provider-error'
 import { type StubScenario } from '@/lib/ai/stub/scenarios'
 import {
   resetTemporaryProvidersForTests,
   setTemporaryProvidersForTests,
-} from '@/lib/ai/temporary-registry'
+} from '@/lib/ai/stub/temporary-registry'
+import { callWithRetry, type CallRetryError } from '@/lib/ai/transport/call-with-retry'
+import { ProviderTimeoutError } from '@/lib/ai/transport/classify-provider-error'
 import { getCurrentActionId, getDiagnosticsSnapshot } from '@/lib/diagnostics'
 import {
   definePipeline,

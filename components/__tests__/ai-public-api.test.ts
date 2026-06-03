@@ -13,7 +13,7 @@ describe('lib/ai public API boundary', () => {
     )
 
     const [deepResult] = await eslint.lintText(
-      "import { createFetchWithCapture } from '@/lib/ai/fetch'\n",
+      "import { createFetchWithCapture } from '@/lib/ai/transport/fetch'\n",
       { filePath: 'components/__ai-deep.tsx' },
     )
     expect(deepResult.messages.map((message) => message.ruleId)).toContain(
