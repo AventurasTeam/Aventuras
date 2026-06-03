@@ -15,7 +15,7 @@ describe('lib public-API surfaces', () => {
       await ruleIds("import { runPipeline } from '@/lib/pipeline/runtime/orchestrator'\n"),
     ).toContain('boundaries/dependencies')
     expect(
-      await ruleIds("import { applyDeltaAction } from '@/lib/actions/apply-delta-action'\n"),
+      await ruleIds("import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'\n"),
     ).toContain('boundaries/dependencies')
     // the raw generation store handle is reachable only by deep import -> flagged
     expect(
