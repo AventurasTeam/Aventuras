@@ -100,8 +100,7 @@ memory pipeline (M3) needs to tune against.
   in M7 alongside the providers settings tab. Extends the M1.4
   redaction vitest suite with OAI-compat scenarios — value-match
   catches the key in OAI-compat's auth headers without per-
-  provider configuration. `Zod` install lands here as the first
-  consumer (per [`tech-stack.md`](../tech-stack.md)).
+  provider configuration.
 - M2.2 — Entry data layer: `story_entries` + the entry kinds the
   M2 loop exercises (`opening`, `user_action`, `ai_reply`); `system`
   stub. CRUD actions through the action layer. Full enum per
@@ -173,7 +172,13 @@ memory pipeline (M3) needs to tune against.
   path (per [`tech-stack.md`](../tech-stack.md)). The first real phase
   to call `callWithRetry` lands here, so the `CallRetryError →
 PipelineError` mapping (test-only in Slice 1.5b) is promoted to a
-  shipped helper.
+  shipped helper. That phase's AI-SDK call config is settled (checked
+  against v1 + the AI SDK v6 docs): `maxRetries: 0` (SDK default is 2 —
+  `callWithRetry` is the sole retry authority), the SDK-native `timeout`
+  (`totalMs` / `stepMs`, `chunkMs` for streams) instead of a fetch-level
+  timeout, and Retry-After-aware backoff added to `callWithRetry` —
+  suppressing `maxRetries` also drops the SDK's exponential backoff, which
+  `callWithRetry` currently lacks.
 
 **Parallel paths after M2.1 + M2.2.** {M2.3, M2.4} || {M2.5}, then
 M2.6 wires.
