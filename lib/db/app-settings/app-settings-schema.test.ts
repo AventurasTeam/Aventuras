@@ -6,6 +6,13 @@ import {
   providerInstanceSchema,
 } from './app-settings-schema'
 
+const MINIMAL_EXISTING = {
+  providers: [],
+  profiles: [],
+  assignments: {},
+  defaultProviderId: null,
+}
+
 const VALID_PROVIDER = {
   id: 'p1',
   type: 'anthropic',
@@ -97,12 +104,10 @@ describe('appSettingsConfigSchema', () => {
       assignments: {},
       defaultProviderId: null,
     })
-    expect(parsed).toEqual({
-      providers: [],
-      profiles: [],
-      assignments: {},
-      defaultProviderId: null,
-    })
+    expect('id' in parsed).toBe(false)
+    expect('diagnostics' in parsed).toBe(false)
+    expect(parsed.providers).toEqual([])
+    expect(parsed.profiles).toEqual([])
   })
 
   it('rejects a non-array providers field', () => {
@@ -123,5 +128,98 @@ describe('appSettingsConfigSchema', () => {
       defaultProviderId: null,
     })
     expect(bad.success).toBe(false)
+  })
+})
+
+describe('appSettingsConfigSchema — new fields (Task 4)', () => {
+  it('applies defaults for newly-added config fields when they are absent', () => {
+    const parsed = appSettingsConfigSchema.parse(MINIMAL_EXISTING)
+    expect(parsed.appearance.density).toBe('default')
+    expect(parsed.appearance.themeId).toBeTypeOf('string')
+    expect(parsed.uiLanguage).toBeTypeOf('string')
+    expect(parsed.defaultSuggestionCategories).toEqual({ adventure: [], creative: [] })
+    expect(parsed.defaultStorySettings).toEqual({})
+    expect(parsed.onboardingCompletedAt).toBeNull()
+    expect(parsed.defaultCalendarId).toBeNull()
+    expect(parsed.embeddingModelId).toBeNull()
+    expect(parsed.embeddingProviderId).toBeNull()
+  })
+
+  it('fills appearance field-level defaults for a partial appearance', () => {
+    const parsed = appSettingsConfigSchema.parse({
+      ...MINIMAL_EXISTING,
+      appearance: { themeId: 'dark' },
+    })
+    expect(parsed.appearance.themeId).toBe('dark')
+    expect(parsed.appearance.density).toBe('default')
+    expect(parsed.appearance.readerFontScale).toBe(1)
+  })
+
+  it('preserves explicit values when supplied', () => {
+    const parsed = appSettingsConfigSchema.parse({
+      ...MINIMAL_EXISTING,
+      uiLanguage: 'fr',
+      onboardingCompletedAt: 1700000000000,
+      defaultCalendarId: 'cal-gregorian',
+      embeddingModelId: 'text-embedding-3-small',
+      embeddingProviderId: 'prov-openai',
+      appearance: {
+        themeId: 'dark',
+        readerFontScale: 1.2,
+        density: 'compact',
+      },
+      defaultSuggestionCategories: {
+        adventure: [
+          { id: 'c1', label: 'Action', promptHint: 'act', color: '#f00', enabled: true, order: 0 },
+        ],
+        creative: [],
+      },
+    })
+    expect(parsed.uiLanguage).toBe('fr')
+    expect(parsed.onboardingCompletedAt).toBe(1700000000000)
+    expect(parsed.defaultCalendarId).toBe('cal-gregorian')
+    expect(parsed.embeddingModelId).toBe('text-embedding-3-small')
+    expect(parsed.embeddingProviderId).toBe('prov-openai')
+    expect(parsed.appearance.density).toBe('compact')
+    expect(parsed.appearance.themeId).toBe('dark')
+    expect(parsed.defaultSuggestionCategories.adventure).toHaveLength(1)
+  })
+
+  it('accepts a partial defaultStorySettings (proving .partial() is wired)', () => {
+    const parsed = appSettingsConfigSchema.parse({
+      ...MINIMAL_EXISTING,
+      defaultStorySettings: { chapterAutoClose: false },
+    })
+    expect(parsed.defaultStorySettings.chapterAutoClose).toBe(false)
+  })
+
+  it('rejects a defaultStorySettings with an invalid field type', () => {
+    const result = appSettingsConfigSchema.safeParse({
+      ...MINIMAL_EXISTING,
+      defaultStorySettings: { chapterAutoClose: 'yes' },
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects an invalid density value in appearance', () => {
+    const result = appSettingsConfigSchema.safeParse({
+      ...MINIMAL_EXISTING,
+      appearance: { themeId: 't', readerFontScale: 1, density: 'jumbo' },
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('strips non-config columns (id, diagnostics, createdAt, updatedAt) from a full row', () => {
+    const parsed = appSettingsConfigSchema.parse({
+      id: 'singleton',
+      diagnostics: { enabled: true, debug_level_enabled: false },
+      createdAt: 1700000000000,
+      updatedAt: 1700000000001,
+      ...MINIMAL_EXISTING,
+    })
+    expect('id' in parsed).toBe(false)
+    expect('diagnostics' in parsed).toBe(false)
+    expect('createdAt' in parsed).toBe(false)
+    expect('updatedAt' in parsed).toBe(false)
   })
 })

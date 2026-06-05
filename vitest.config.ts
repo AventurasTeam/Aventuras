@@ -53,6 +53,7 @@ export default defineConfig({
           name: 'unit',
           environment: 'node',
           include: ['lib/**/*.test.ts', 'scripts/**/*.test.ts', 'components/**/*.test.{ts,tsx}'],
+          setupFiles: ['./vitest.setup.ts'],
         },
       },
     ],

@@ -22,6 +22,14 @@ const DEFAULT_SNAPSHOT: AppSettingsSnapshot = {
   profiles: APP_SETTINGS_DEFAULTS.profiles,
   assignments: APP_SETTINGS_DEFAULTS.assignments,
   defaultProviderId: APP_SETTINGS_DEFAULTS.defaultProviderId,
+  embeddingModelId: APP_SETTINGS_DEFAULTS.embeddingModelId,
+  embeddingProviderId: APP_SETTINGS_DEFAULTS.embeddingProviderId,
+  defaultStorySettings: APP_SETTINGS_DEFAULTS.defaultStorySettings,
+  defaultCalendarId: APP_SETTINGS_DEFAULTS.defaultCalendarId,
+  defaultSuggestionCategories: APP_SETTINGS_DEFAULTS.defaultSuggestionCategories,
+  appearance: APP_SETTINGS_DEFAULTS.appearance,
+  uiLanguage: APP_SETTINGS_DEFAULTS.uiLanguage,
+  onboardingCompletedAt: APP_SETTINGS_DEFAULTS.onboardingCompletedAt,
   diagnostics: APP_SETTINGS_DEFAULTS.diagnostics,
 }
 
@@ -42,6 +50,14 @@ function getAppSettings(): AppSettingsSnapshot {
     profiles: s.profiles,
     assignments: s.assignments,
     defaultProviderId: s.defaultProviderId,
+    embeddingModelId: s.embeddingModelId,
+    embeddingProviderId: s.embeddingProviderId,
+    defaultStorySettings: s.defaultStorySettings,
+    defaultCalendarId: s.defaultCalendarId,
+    defaultSuggestionCategories: s.defaultSuggestionCategories,
+    appearance: s.appearance,
+    uiLanguage: s.uiLanguage,
+    onboardingCompletedAt: s.onboardingCompletedAt,
     diagnostics: s.diagnostics,
   }
 }

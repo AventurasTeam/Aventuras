@@ -241,21 +241,55 @@ language)` — each rejected.
 
 ## Open questions
 
-- **`deltas.target_table`** — free `text()` validated by the registry
-  vs Drizzle enum (registry already constrains valid targets at
-  runtime; enum is a DB backstop at migration cost).
-- **`PipelineAction` extensibility mechanism** — module augmentation of
-  a shared interface vs a generic `{ table, op, payload }` envelope
-  with per-table payload Zod. Pick the one that keeps domain slices
-  from editing a central file while preserving the discriminated-union
-  ergonomics the current arms rely on.
-- **Migration file formatting / commit policy** — carry-forward from
-  Slice 1.2's open question (prettier on generated SQL); confirm at
-  authoring.
-- **Store hydration trigger** — `hydrate(branchId)` exists here; the
-  boot / navigation hook that calls it, and eager-vs-lazy per type, is
-  deferred to the first consumer (M2+). May ship stubbed.
+_All resolved during planning / implementation — see Implementation
+notes._
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **`deltas.target_table` stays free `text()`** validated by the runtime
+  registry — no Drizzle enum. An enum would re-couple every new
+  delta-logged table to the schema, defeating the gate's decoupling.
+- **`PipelineAction` extensibility uses a module-augmented
+  `PipelineActionMap`.** Each domain adds its kinds via
+  `declare module '@/lib/actions/action-map'` in its own file;
+  `PipelineAction` is the derived union; the old dispatch `switch` is
+  replaced by a registry lookup (`resolveByActionKind`). Emission-site
+  discriminated-union narrowing is preserved.
+- **Store-mirror is action-layer-owned.** `applyDeltaAction` and
+  `reverseReplayDeltas` invoke the registered table's patcher _after_
+  `runInTransaction` (post-commit, both directions); the store
+  branch-guards, so a patch for a non-held branch no-ops. Orchestrator,
+  recovery, and `abortRun` call sites are unchanged.
+- **Registration bootstrap is an append-only
+  `lib/actions/delta/registrations.ts`** (`registerAllDomains`,
+  idempotent `done` guard), called at the top of `runBootstrap` (before
+  recovery drives reverse-replay) and via a vitest `setupFiles` entry on
+  the `unit` project (so the 1.5a parity-lock tests register without
+  being edited). A domain slice's only shared touch is one append line
+  here; `register` / `resolveBy*` / `__resetRegistry` stay intra-module,
+  only `registerAllDomains` and the `StorePatch` type are public.
+- **`MutationSource` was removed** (dead, zero consumers) — there is one
+  delta `source` concept, `DeltaSource`, widened with
+  `periodic_classifier`. The AC line reading "`MutationSource` updated"
+  is satisfied by the removal.
+- **`app_settings.default_story_settings` is `Partial<StorySettings>`**
+  (a copy-at-creation source, `data-model.md` Story-defaults), parsed
+  with `storySettingsSchema.partial()`, column typed
+  `$type<Partial<StorySettings>>`, default `{}`. `storySettingsSchema`
+  defaults _only_ the data-model-pinned fields; the rest stay required —
+  no fabricated frozen-spec values. `app_settings.created_at` /
+  `updated_at` are `notNull` with a SQL `(unixepoch() * 1000)` default.
+- **C4 template: a domain's `delete` handler must capture the FULL row
+  in `undoPayload`** — reverse-replay rebuilds both the SQLite re-insert
+  and the store create-patch from it. The fixture and store-mirror
+  delete handlers are the reference; `story_entries` ships create /
+  update only.
+- **Deferred (resolved):** the migration is committed as `drizzle-kit`
+  emits it (no hand-edits; `$type` narrowings change no SQL, so the
+  snapshot stays in sync); `hydrate(branchId, rows)` ships unwired — the
+  boot / navigation trigger is a first-consumer (M2+) concern.
+- **Cross-cutting follow-ups this slice surfaced** are queued in
+  [`triage.md`](../../../triage.md): two config-default vs data-model
+  reconciliations, the stale `delta-log-row.tsx` `DeltaSource` union,
+  the boot registration-ordering test gap, and a pre-existing storybook
+  flake.

@@ -1,4 +1,5 @@
 import type { DbCtx } from '@/lib/actions'
+import { registerAllDomains } from '@/lib/actions'
 import { configureDiagnosticsGate, logger } from '@/lib/diagnostics'
 import { recoverInFlightRuns } from '@/lib/pipeline'
 import {
@@ -20,6 +21,8 @@ export function ensureDiagnosticsGate(): void {
 }
 
 export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
+  // Registry must be populated before recovery drives reverse-replay (resolves by target_table).
+  registerAllDomains()
   ensureDiagnosticsGate()
   // Recovery must never block boot: a failure of the orphan pass itself (not just
   // a per-orphan delta) is logged and boot proceeds to hydrate.

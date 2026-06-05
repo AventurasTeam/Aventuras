@@ -217,7 +217,7 @@ erDiagram
     translations {
         text id PK
         text branch_id FK "composite PK with id; translations fork with branches"
-        text target_kind "entity | lore | thread | happening | story_entry | character_relationship"
+        text target_kind "entity | lore | thread | happening | story_entry | character_relationship | chapter"
         text target_id "id in the target table; polymorphic FK (no DB constraint)"
         text field "which field of the target row is translated (name, description, body, title, content, kind, inverse_kind, etc.); supports dotted paths into state JSON"
         text language "ISO 639-1 code (en, es, ja, ...)"
@@ -1289,8 +1289,9 @@ fields are `definition`'s entire scope by construction.
 substantial prose in `genre.promptBody` / `tone.promptBody` /
 `setting` is user-typed source-language input consumed by the AI
 during generation; it's not AI-output displayed in different UI
-languages. The translations table targets AI-output content (entities,
-lore, threads, happenings, story_entries) — not author-input fields.
+languages. The [translations](#translation) table targets user-facing
+in-story content (both AI output and the user's own action text), not
+author-input config.
 
 **Narration vs composer wrap POV — orthogonal axes, often confused.**
 `narration` governs how the AI writes prose (`first | second | third`
@@ -2354,12 +2355,16 @@ Rationale: the old app spread `translated_name`, `translated_description`,
 proliferation that also hard-coded "one target language" and lost prior
 translations if the user reconfigured. Dedicated table fixes all three.
 
-**Definition fields are NOT translation targets.** The substantial
-prose in `stories.definition` (`genre.promptBody` / `tone.promptBody`
-/ `setting`) is user-typed source-language input consumed by the AI
-during generation; it's not AI-output displayed in different UI
-languages. The translations table targets AI-output content only —
-not author-input fields.
+**What is a translation target.** Any user-facing in-story text — AI-
+generated world-state and narrative shown to the user (source → target)
+and the user's own submitted action text (target → source). The per-kind
+field lists (here, and architecture's `display-translation` phase) are
+illustrative, not exhaustive: any user-facing column on a target row
+(e.g. `chapters.theme`, `entities.retired_reason`, `lore.category`) is a
+target by this rule. NOT targets: `stories.definition`
+(`genre.promptBody` / `tone.promptBody` / `setting`) — user-typed
+source-language authoring input consumed by the AI, never displayed
+translated — and structural / id / numeric / provenance fields.
 
 **Shape:**
 

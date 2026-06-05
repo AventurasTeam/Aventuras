@@ -4,9 +4,30 @@ import { describe, expect, it } from 'vitest'
 import { appSettings, branches, dbSchema, pipelineRuns, stories, storyEntries } from './schema'
 
 describe('schema', () => {
-  it('exposes the six milestone-1 tables in dbSchema', () => {
+  it('exposes every relational table in dbSchema', () => {
     expect(Object.keys(dbSchema).sort()).toEqual(
-      ['appSettings', 'branches', 'deltas', 'pipelineRuns', 'stories', 'storyEntries'].sort(),
+      [
+        'appSettings',
+        'assets',
+        'branchEraFlips',
+        'branches',
+        'chapters',
+        'characterRelationships',
+        'deltas',
+        'entities',
+        'entryAssets',
+        'happeningAwareness',
+        'happeningInvolvements',
+        'happenings',
+        'lore',
+        'pipelineRuns',
+        'probeCaptures',
+        'stories',
+        'storyEntries',
+        'threads',
+        'translations',
+        'vaultCalendars',
+      ].sort(),
     )
   })
 

@@ -37,3 +37,36 @@ slice-planning gate forces its resolution before that slice is planned.
   restatement) to the revised contract now; orchestrator-side stamping
   of `kind` / `anchorEntryId` lands with the real capture producers in
   M2 / M3 per [`roadmap.md`](./roadmap.md).
+- **M1.5-gate config defaults vs data-model prose.** Two `app_settings`
+  defaults the gate shipped diverge from the data-model's prose and
+  need reconciling (a prose fix, or a seeded value): (a)
+  `default_calendar_id` is nullable — no calendar exists at first init
+  (`vault_calendars` is unseeded) — but `data-model.md`'s App-settings
+  storage types it `string`; (b) `ui_language` defaults to `'en'` in the
+  config schema, but the data-model says "defaults to OS locale on first
+  launch" — the OS-locale seed belongs in the boot / onboarding path,
+  not a static schema default. Routes to the calendar domain (M8.3) and
+  an onboarding / boot slice respectively.
+- **Stale third `DeltaSource` union.**
+  `components/compounds/delta-log-row.tsx` redeclares a local
+  `DeltaSource` that still carries the dropped `memory_compaction` and
+  lacks `periodic_classifier`. The canonical union is `lib/actions`'
+  `DeltaSource`. Fold the UI to import it (or align the local copy).
+  Out of the M1.5 data-layer slice's scope (UI).
+- **Boot registration-ordering is test-unguarded.** `runBootstrap` calls
+  `registerAllDomains()` before `recoverInFlightRuns` (load-bearing:
+  recovery drives reverse-replay, which resolves descriptors by
+  `target_table`). The vitest `setupFiles` pre-registration trips the
+  `done` guard, so `runBootstrap`'s own call is a no-op in every test —
+  a future reorder of those two lines fails no test, yet at real runtime
+  (empty registry) recovery throws `unknown target_table`, swallowed by
+  `runBootstrap`'s try/catch (crash recovery silently disabled). Lock
+  the ordering with a test seam (reset the `done` guard) or a
+  non-empty-registry assertion at the recovery call.
+- **Pre-existing storybook flake** (observed during M1.5-gate full-suite
+  runs, ~20% of runs). `components/compounds/app-actions-menu-pure.stories.tsx`
+  "Diagnostics On" intermittently fails a `findByRole` with a
+  `TestingLibraryElementError`; the console shows a load-bearing DOM bug
+  — a `<button>` nested inside a `<button>` — the likely cause of the
+  unstable query. Predates this branch (last touched in `ee5efe2a`, on
+  `main`). Fix the nested-button markup.

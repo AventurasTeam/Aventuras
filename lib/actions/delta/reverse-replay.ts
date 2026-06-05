@@ -5,8 +5,7 @@ import { deltas } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 import { applyUndoPayload } from './delta-encoding'
-import type { TargetTableDescriptor } from './registries'
-import { COLUMN_SCHEMAS, TARGET_TABLES } from './registries'
+import { resolveByTable, type StorePatch } from './registry'
 
 export class DeltaReplayError extends Error {
   readonly actionId: string
@@ -17,22 +16,24 @@ export class DeltaReplayError extends Error {
   }
 }
 
-function descriptorFor(name: string): TargetTableDescriptor {
-  const descriptor = TARGET_TABLES[name]
-  if (!descriptor) throw new Error(`reverse-replay: unknown target_table ${name}`)
-  return descriptor
-}
+type PatchEmission = { table: string; branchId: string; patch: StorePatch }
 
 // Build undo ops for one action's deltas (already in log_position DESC order).
 // A per-row working copy threads each op=update undo onto the prior one so multiple
 // updates to the SAME row — even touching disjoint sub-keys of a JSON column —
 // compose correctly instead of clobbering via stale-base whole-column overwrites.
-async function buildUndoOps(rows: Delta[], ctx: DbCtx): Promise<SqlOp[]> {
+async function buildUndoOps(
+  rows: Delta[],
+  ctx: DbCtx,
+): Promise<{ ops: SqlOp[]; patches: PatchEmission[] }> {
   const working = new Map<string, Record<string, unknown>>()
   const ops: SqlOp[] = []
+  const patches: PatchEmission[] = []
 
   for (const delta of rows) {
-    const { table, idCol, branchCol } = descriptorFor(delta.targetTable)
+    const entry = resolveByTable(delta.targetTable)
+    if (!entry) throw new Error(`reverse-replay: unknown target_table ${delta.targetTable}`)
+    const { table, idCol, branchCol } = entry.descriptor
     const where = branchCol
       ? and(eq(branchCol, delta.branchId), eq(idCol, delta.targetId))
       : eq(idCol, delta.targetId)
@@ -41,12 +42,22 @@ async function buildUndoOps(rows: Delta[], ctx: DbCtx): Promise<SqlOp[]> {
     if (delta.op === 'create') {
       working.delete(key)
       ops.push(ctx.db.delete(table).where(where).toSQL())
+      patches.push({
+        table: delta.targetTable,
+        branchId: delta.branchId,
+        patch: { op: 'delete', id: delta.targetId },
+      })
       continue
     }
     if (delta.op === 'delete') {
       const full = (delta.undoPayload ?? {}) as Record<string, unknown>
       working.set(key, { ...full })
       ops.push(ctx.db.insert(table).values(full).toSQL())
+      patches.push({
+        table: delta.targetTable,
+        branchId: delta.branchId,
+        patch: { op: 'create', id: delta.targetId, row: full },
+      })
       continue
     }
 
@@ -62,7 +73,7 @@ async function buildUndoOps(rows: Delta[], ctx: DbCtx): Promise<SqlOp[]> {
     const payload = (delta.undoPayload ?? {}) as Record<string, unknown>
     const restored: Record<string, unknown> = {}
     for (const [col, partial] of Object.entries(payload)) {
-      const schema = COLUMN_SCHEMAS[delta.targetTable]?.[col]
+      const schema = entry.columnSchemas[col]
       const value = schema
         ? applyUndoPayload(
             schema,
@@ -74,9 +85,14 @@ async function buildUndoOps(rows: Delta[], ctx: DbCtx): Promise<SqlOp[]> {
       row[col] = value // thread into the working copy for later-in-DESC undos
     }
     ops.push(ctx.db.update(table).set(restored).where(where).toSQL())
+    patches.push({
+      table: delta.targetTable,
+      branchId: delta.branchId,
+      patch: { op: 'update', id: delta.targetId, columns: restored },
+    })
   }
 
-  return ops
+  return { ops, patches }
 }
 
 export async function reverseReplayDeltas(actionId: string, ctx: DbCtx): Promise<number> {
@@ -88,8 +104,10 @@ export async function reverseReplayDeltas(actionId: string, ctx: DbCtx): Promise
       .orderBy(desc(deltas.logPosition))) as Delta[]
     if (rows.length === 0) return 0
 
-    const ops = await buildUndoOps(rows, ctx)
+    const { ops, patches } = await buildUndoOps(rows, ctx)
     await ctx.runInTransaction(ops)
+    // Action layer owns the patch: invert in the held-branch store after the tx.
+    for (const p of patches) resolveByTable(p.table)?.patcher?.(p.branchId, p.patch)
     return rows.length
   } catch (e) {
     if (e instanceof DeltaReplayError) throw e

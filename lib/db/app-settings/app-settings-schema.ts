@@ -1,5 +1,15 @@
 import { z } from 'zod'
 
+import { storySettingsSchema, suggestionCategorySchema } from '../story-config/story-config-schema'
+import type { Appearance } from '../story-config/story-settings-types'
+
+export const appearanceSchema = z.object({
+  themeId: z.string().default('system'),
+  readerFontScale: z.number().default(1),
+  accentOverride: z.string().optional(),
+  density: z.enum(['default', 'compact', 'regular', 'comfortable']).default('default'),
+})
+
 const providerCapabilitiesSchema = z.object({
   reasoning: z.boolean().optional(),
   structuredOutput: z.boolean().optional(),
@@ -48,17 +58,38 @@ export const appSettingsDiagnosticsSchema = z.object({
   debug_level_enabled: z.boolean(),
 })
 
-// The config subset the in-memory app-settings mirror holds (drops id and the
-// diagnostics column, which lib/diagnostics owns). Object .strip() default
-// discards those columns when a full row is parsed.
+const defaultSuggestionCategoriesSchema = z.object({
+  adventure: z.array(suggestionCategorySchema),
+  creative: z.array(suggestionCategorySchema),
+})
+
+// The config subset the in-memory app-settings mirror holds (drops id,
+// diagnostics, createdAt, updatedAt — .strip() default discards unlisted keys).
 export const appSettingsConfigSchema = z.object({
   providers: z.array(providerInstanceSchema),
   profiles: z.array(modelProfileSchema),
   assignments: z.record(z.string(), z.string()),
   defaultProviderId: z.string().nullable(),
+  embeddingModelId: z.string().nullable().default(null),
+  embeddingProviderId: z.string().nullable().default(null),
+  defaultStorySettings: storySettingsSchema.partial().default({}),
+  defaultCalendarId: z.string().nullable().default(null),
+  defaultSuggestionCategories: defaultSuggestionCategoriesSchema.default({
+    adventure: [],
+    creative: [],
+  }),
+  // .default({}) skips inner field defaults; factory form runs them via parse({}) only when the key is absent.
+  appearance: appearanceSchema.default(() => appearanceSchema.parse({})),
+  uiLanguage: z.string().default('en'),
+  onboardingCompletedAt: z.number().nullable().default(null),
 })
 
 export type ProviderInstance = z.infer<typeof providerInstanceSchema>
 export type ModelProfile = z.infer<typeof modelProfileSchema>
 export type AppSettingsDiagnostics = z.infer<typeof appSettingsDiagnosticsSchema>
 export type AppSettingsConfig = z.infer<typeof appSettingsConfigSchema>
+
+// Compile-time guard: appearanceSchema output must extend the gate-owned Appearance type (never → compile error); void silences unused-var lint.
+type _AppearanceOk = z.infer<typeof appearanceSchema> extends Appearance ? true : never
+const _appearanceOk: _AppearanceOk = true
+void _appearanceOk

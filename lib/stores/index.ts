@@ -19,6 +19,9 @@ export {
   rehydrateAppSettings,
 }
 
+export { createWorkingSetStore } from './factory/working-set-store'
+
 export type { AppSettingsSnapshot, BootHydrateResult } from './app-settings/app-settings'
+export type { WorkingSetStore } from './factory/working-set-store'
 export type { RunState, TxState } from './generation/generation'
 export type { NavigationSnapshot } from './navigation/navigation'

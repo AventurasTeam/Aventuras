@@ -49,12 +49,19 @@ describe('lib/stores public surface', () => {
 
     expect(generationStore.getTxState().runs.size).toBe(0)
     expect(navigationStore.getNavigation().currentStoryId).toBeNull()
-    expect(appSettingsStore.getAppSettings()).toEqual({
-      providers: [],
-      profiles: [],
-      assignments: {},
-      defaultProviderId: null,
-      diagnostics: { enabled: false, debug_level_enabled: false },
-    })
+    const settings = appSettingsStore.getAppSettings()
+    expect(settings.providers).toEqual([])
+    expect(settings.profiles).toEqual([])
+    expect(settings.assignments).toEqual({})
+    expect(settings.defaultProviderId).toBeNull()
+    expect(settings.embeddingModelId).toBeNull()
+    expect(settings.embeddingProviderId).toBeNull()
+    expect(settings.defaultCalendarId).toBeNull()
+    expect(settings.onboardingCompletedAt).toBeNull()
+    expect(settings.uiLanguage).toBe('en')
+    expect(settings.appearance.density).toBe('default')
+    expect(settings.defaultStorySettings).toEqual({})
+    expect(settings.defaultSuggestionCategories).toEqual({ adventure: [], creative: [] })
+    expect(settings.diagnostics).toEqual({ enabled: false, debug_level_enabled: false })
   })
 })

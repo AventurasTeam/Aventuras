@@ -1,18 +1,13 @@
-import { and, eq, sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 
 import type { SqlOp } from '@/lib/db'
-import { deltas, storyEntries } from '@/lib/db'
+import { deltas } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 
 import type { DbCtx, MutationResult, PipelineAction } from '../types'
-import { computeUndoPayload } from './delta-encoding'
-import { COLUMN_SCHEMAS } from './registries'
+import { resolveByActionKind, resolveByTable } from './registry'
 
 type Args = { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null }
-
-function assertNever(x: never): never {
-  throw new Error(`applyDeltaAction: unhandled action kind ${JSON.stringify(x)}`)
-}
 
 // MAX+1-within-branch as a subquery so the assignment is atomic inside the INSERT.
 function nextLogPosition(branchId: string) {
@@ -22,66 +17,15 @@ function nextLogPosition(branchId: string) {
 export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<MutationResult> {
   const { action, actionId, branchId } = args
   const entryId = args.entryId ?? null
-  const ops: SqlOp[] = []
-  let targetTable: string
-  let targetId: string
-  let op: 'create' | 'update' | 'delete'
-  let undoPayload: Record<string, unknown> | null
 
-  switch (action.kind) {
-    case 'createStoryEntry':
-      const { entry } = action.payload
-      // reverse-replay locates the row by the delta's branch; a run-ctx vs payload
-      // branch split would reverse the wrong branch.
-      if (entry.branchId !== branchId)
-        return {
-          status: 'rejected',
-          reason: `branch mismatch: delta branch ${branchId} vs entry branch ${entry.branchId}`,
-        }
-      targetTable = 'story_entries'
-      targetId = entry.id
-      op = 'create'
-      undoPayload = null
-      ops.push(ctx.db.insert(storyEntries).values(entry).toSQL())
-      break
-    case 'updateStoryEntryMetadata':
-      const { branchId: bid, id, metadata } = action.payload
-      if (bid !== branchId)
-        return {
-          status: 'rejected',
-          reason: `branch mismatch: delta branch ${branchId} vs target branch ${bid}`,
-        }
-      targetTable = 'story_entries'
-      targetId = id
-      op = 'update'
-      const [current] = await ctx.db
-        .select()
-        .from(storyEntries)
-        .where(and(eq(storyEntries.branchId, bid), eq(storyEntries.id, id)))
-      if (!current) {
-        return { status: 'rejected', reason: `update target story_entries ${bid}:${id} not found` }
-      }
-      const before = (current.metadata ?? {}) as Record<string, unknown>
-      // Column-keyed: reverse-replay iterates undo_payload's top-level keys as
-      // target columns. metadata is the column; the inner object is its partial.
-      undoPayload = {
-        metadata: computeUndoPayload(COLUMN_SCHEMAS.story_entries.metadata, before, metadata),
-      }
-      ops.push(
-        ctx.db
-          .update(storyEntries)
-          .set({ metadata })
-          .where(and(eq(storyEntries.branchId, bid), eq(storyEntries.id, id)))
-          .toSQL(),
-      )
-      break
+  const resolved = resolveByActionKind(action.kind)
+  if (!resolved) return { status: 'rejected', reason: `no handler registered for ${action.kind}` }
 
-    default:
-      return assertNever(action)
-  }
+  const outcome = await resolved.handler(action, branchId, ctx)
+  if (outcome.status === 'rejected') return outcome
 
   const deltaId = generateId('delta')
-  ops.unshift(
+  const ops: SqlOp[] = [
     ctx.db
       .insert(deltas)
       .values({
@@ -91,20 +35,24 @@ export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<Mutation
         actionId,
         logPosition: nextLogPosition(branchId),
         source: action.source,
-        targetTable,
-        targetId,
-        op,
-        undoPayload,
+        targetTable: outcome.targetTable,
+        targetId: outcome.targetId,
+        op: outcome.op,
+        undoPayload: outcome.undoPayload,
         encodingVersion: 1,
         createdAt: Date.now(),
       })
       .toSQL(),
-  )
+    ...outcome.ops,
+  ]
 
   await ctx.runInTransaction(ops)
 
-  // Read back by this delta's own id: a multi-delta action shares
-  // one actionId, so an actionId lookup would return an arbitrary row's position.
+  // Action layer owns the store mirror; the patcher branch-guards internally.
+  if (outcome.patch) resolveByTable(outcome.targetTable)?.patcher?.(branchId, outcome.patch)
+
+  // Read back by this delta's own id: a multi-delta action shares one actionId,
+  // so an actionId lookup would return an arbitrary row's position.
   const [row] = await ctx.db
     .select({ lp: deltas.logPosition })
     .from(deltas)

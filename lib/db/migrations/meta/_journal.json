@@ -15,6 +15,13 @@
       "when": 1780155636362,
       "tag": "0001_striped_prism",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1780697790443,
+      "tag": "0002_lovely_jocasta",
+      "breakpoints": true
     }
   ]
 }
