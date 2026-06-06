@@ -7,7 +7,7 @@ import type { DbCtx } from '../types'
 
 type ThreadOperationalFlags = Partial<{ embeddingStale: boolean }>
 
-// Non-delta write seam for the compute-lifecycle column (driver lands in M3).
+// Non-delta write seam for the compute-lifecycle column.
 export async function setThreadOperationalFlags(
   branchId: string,
   id: string,

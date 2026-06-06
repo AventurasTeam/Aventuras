@@ -28,8 +28,7 @@ declare module '@/lib/actions/action-map' {
   }
 }
 
-// Delta-logged narrative columns. Operational (embedding_stale, timestamps) and
-// immutable (id, branch_id) columns are never in this set.
+// Delta-logged columns.
 const UPDATABLE = [
   'title',
   'body',

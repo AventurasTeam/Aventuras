@@ -34,8 +34,7 @@ declare module '@/lib/actions/action-map' {
   }
 }
 
-// D3: delta-logged narrative columns. Operational (embedding_stale, name_collision_flag,
-// timestamps) and immutable (id, branch_id, kind) columns are never in this set.
+// Delta-logged columns.
 const UPDATABLE = [
   'name',
   'description',
@@ -58,7 +57,6 @@ function fullRow(entry: NewEntity): Entity {
     retiredReason: entry.retiredReason ?? null,
     injectionMode: entry.injectionMode,
     nameCollisionFlag: entry.nameCollisionFlag ?? 0,
-    // D4: state is non-null in the write path; default a null/absent state to the empty-kind state.
     state: entry.state ?? emptyEntityState(entry.kind),
     tags: entry.tags ?? [],
     embeddingStale: entry.embeddingStale ?? 0,
@@ -119,7 +117,6 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     if (!(col in patch)) continue
     set[col] = patch[col]
     if (col === 'state') {
-      // D4 guard: coerce a legacy null prior to empty-kind state so the encoder never sees null.
       const prior = (current.state ?? emptyEntityState(current.kind)) as Record<string, unknown>
       undoPayload.state = computeUndoPayload(
         entityStateColumnSchema,

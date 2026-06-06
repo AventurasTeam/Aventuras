@@ -4,6 +4,7 @@ import type { NewThread, Thread } from '@/lib/db'
 import { threadWriteSchema, threads } from '@/lib/db'
 import { threadsStore } from '@/lib/stores'
 
+import { nullifyRef } from '../coerce'
 import { register, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
@@ -29,8 +30,7 @@ declare module '@/lib/actions/action-map' {
   }
 }
 
-// Delta-logged narrative columns. Operational (embedding_stale, timestamps) and
-// immutable (id, branch_id) columns are never in this set.
+// Delta-logged narrative columns.
 const UPDATABLE = [
   'title',
   'description',
@@ -43,10 +43,6 @@ const UPDATABLE = [
 ] as const
 
 const REF_COLS = new Set(['triggeredAtEntryId', 'resolvedAtEntryId'])
-
-// data-model: absent entry refs are NULL, never '' (breaks happenings CHECK family + position derivation).
-const nullifyRef = (v: string | null | undefined): string | null =>
-  v == null || v === '' ? null : v
 
 function fullRow(entry: NewThread): Thread {
   // Apply SQLite defaults so the inserted row and the store create-patch row are byte-identical.
