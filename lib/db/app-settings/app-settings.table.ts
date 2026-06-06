@@ -7,7 +7,7 @@ import type {
   ModelProfile,
   ProviderInstance,
 } from './app-settings-schema'
-import type { StorySettings, SuggestionCategory } from '../story-config/story-config-schema'
+import type { StorySettings, SuggestionCategory } from '../stories/story-config-schema'
 
 export const appSettings = sqliteTable('app_settings', {
   id: text('id').primaryKey(),

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { storySettingsSchema, suggestionCategorySchema } from '../story-config/story-config-schema'
+import { storySettingsSchema, suggestionCategorySchema } from '../stories/story-config-schema'
 
 export const appearanceSchema = z.object({
   themeId: z.string().default('system'),

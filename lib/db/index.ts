@@ -37,12 +37,12 @@ export type {
   StorySettings,
   SuggestionCategory,
   TierTuple,
-} from './story-config/story-config-schema'
+} from './stories/story-config-schema'
 export {
   storyDefinitionSchema,
   storySettingsSchema,
   suggestionCategorySchema,
-} from './story-config/story-config-schema'
+} from './stories/story-config-schema'
 export {
   appearanceSchema,
   appSettingsConfigSchema,

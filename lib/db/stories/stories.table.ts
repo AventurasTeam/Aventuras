@@ -7,7 +7,7 @@ import {
   text,
 } from 'drizzle-orm/sqlite-core'
 
-import type { StoryDefinition, StorySettings } from '../story-config/story-config-schema'
+import type { StoryDefinition, StorySettings } from './story-config-schema'
 import type { ClassifierStatus } from '../world-json-types'
 
 export const stories = sqliteTable('stories', {
