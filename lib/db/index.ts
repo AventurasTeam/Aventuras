@@ -12,13 +12,9 @@ export type {
   FactionState,
 } from './entities/entities-types'
 export {
-  characterStateSchema,
   emptyEntityState,
   entityStateColumnSchema,
   entityStateSchemaForKind,
-  factionStateSchema,
-  itemStateSchema,
-  locationStateSchema,
 } from './entities/entity-state-schema'
 export type { EntityKind } from './entities/entity-state-schema'
 export { entityWriteSchema } from './entities/entity-schema'
