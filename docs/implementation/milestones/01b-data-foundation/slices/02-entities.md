@@ -123,14 +123,38 @@ encoding (per
 
 ## Open questions
 
-- **Store granularity** — one `entities` store keyed by id with
-  `by-kind` selectors, vs per-kind stores. Lean: one store, kind is a
-  selector axis (matches the single table). Confirm at authoring.
-- **Operational-column write surface** — `embedding_stale` /
-  `name_collision_flag` need a non-delta write path eventually; this
-  slice can omit it (no consumer) or stub a minimal operational setter.
-  Decide at authoring; not a blocker.
+_Resolved during planning / implementation — see Implementation notes._
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **`state` delta-encoding uses a merged `z.object`, not the per-kind
+  union.** The generic encoder (`delta-encoding.ts`) throws on any
+  non-`z.object` top-level schema, and reverse-replay resolves a
+  single `columnSchemas['state']` with no access to the row's `kind` — so a
+  `z.discriminatedUnion` cannot be registered. The slice registers one merged
+  `entityStateColumnSchema` spanning every kind's fields, each carrying its
+  **true** per-kind `optional`|`nullable` flag (never optional-because-absent),
+  and ships the four per-kind schemas (with the `.max()` degradation bounds)
+  separately for write-time validation. The merged schema is **encoder-only and
+  never `.parse()`'d**, so a field "required" for one kind but absent for
+  another is inert (`ABSENT → NOCHANGE`). Any future per-kind `state` field must
+  preserve this flag accuracy or the undo round-trip corrupts.
+- **`state` is kept non-null in the write path.** A `null → object` transition
+  is not faithfully reversible (reverse-replay nest-merges the registered schema
+  and `applyUndoPayload` can never return `null`). The create arm defaults a
+  null/absent `state` to the empty-kind state; `updateEntity.patch.state` is
+  always non-null. Downstream writers (classifier M3, World panel M4) supply a
+  non-null `state` or rely on the create default — never write `state = null`.
+- **Write arms validate `state` per kind and reject on a degradation-bound
+  violation.** Delta scope is the user-editable columns (`name`, `description`,
+  `status`, `retired_reason`, `injection_mode`, `tags`, `state`);
+  `embedding_stale` / `name_collision_flag` / timestamps are operational and
+  bypass the log.
+- **Open questions resolved.** Store granularity → one `entities` store keyed by
+  id with `byKind` selectors. Operational-column write surface → a minimal
+  non-delta `setEntityOperationalFlags` seam (SQLite write + direct store patch);
+  the embedding / collision lifecycle that drives it is M3.
+- **First working-set store + patcher.** Entities is the template the other M1.5
+  domain slices copy: a store built on the gate factory, a `register()` carrying
+  `columnSchemas` + handlers + a `patcher`, and one append line in
+  `registrations.ts`.

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
+import type { Entity } from '@/lib/db'
 import {
   appSettingsStore,
+  entitiesStore,
   generationStore,
   navigationStore,
   resetAllStores,
@@ -29,6 +31,13 @@ describe('lib/stores public surface', () => {
     expect(typeof navigationStore.setCurrentBranch).toBe('function')
   })
 
+  it('exposes the entities selectors', () => {
+    expect(typeof entitiesStore.useEntities).toBe('function')
+    expect(typeof entitiesStore.getEntities).toBe('function')
+    expect(typeof entitiesStore.getById).toBe('function')
+    expect(typeof entitiesStore.getByKind).toBe('function')
+  })
+
   it('resetAllStores clears every store', () => {
     const run: RunState = {
       runId: 'r1',
@@ -42,13 +51,31 @@ describe('lib/stores public surface', () => {
       terminal: Promise.resolve(),
       resolveTerminal: () => {},
     }
+    const entity: Entity = {
+      id: 'char_1',
+      branchId: 'br_1',
+      kind: 'character',
+      name: 'Test',
+      description: null,
+      status: 'active',
+      retiredReason: null,
+      injectionMode: 'auto',
+      nameCollisionFlag: 0,
+      state: null,
+      tags: [],
+      embeddingStale: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    }
     generationStore.startRun(run)
     navigationStore.setCurrentStory('s1')
+    entitiesStore.hydrate('br_1', [entity])
 
     resetAllStores()
 
     expect(generationStore.getTxState().runs.size).toBe(0)
     expect(navigationStore.getNavigation().currentStoryId).toBeNull()
+    expect(entitiesStore.getEntities().size).toBe(0)
     const settings = appSettingsStore.getAppSettings()
     expect(settings.providers).toEqual([])
     expect(settings.profiles).toEqual([])

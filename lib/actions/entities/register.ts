@@ -1,0 +1,192 @@
+import { and, eq } from 'drizzle-orm'
+
+import type { Entity, EntityState, NewEntity } from '@/lib/db'
+import {
+  emptyEntityState,
+  entities,
+  entityStateColumnSchema,
+  entityStateSchemaForKind,
+} from '@/lib/db'
+import { entitiesStore } from '@/lib/stores'
+
+import { computeUndoPayload } from '../delta/delta-encoding'
+import { register, type ActionHandler } from '../delta/registry'
+import type { DeltaSource } from '../types'
+
+type EntityUpdatePatch = Partial<{
+  name: string
+  description: string | null
+  status: Entity['status']
+  retiredReason: string | null
+  injectionMode: Entity['injectionMode']
+  tags: string[]
+  state: EntityState
+}>
+
+declare module '@/lib/actions/action-map' {
+  interface PipelineActionMap {
+    createEntity: { source: DeltaSource; payload: { entry: NewEntity } }
+    updateEntity: {
+      source: DeltaSource
+      payload: { branchId: string; id: string; patch: EntityUpdatePatch }
+    }
+    deleteEntity: { source: DeltaSource; payload: { branchId: string; id: string } }
+  }
+}
+
+// D3: delta-logged narrative columns. Operational (embedding_stale, name_collision_flag,
+// timestamps) and immutable (id, branch_id, kind) columns are never in this set.
+const UPDATABLE = [
+  'name',
+  'description',
+  'status',
+  'retiredReason',
+  'injectionMode',
+  'tags',
+  'state',
+] as const
+
+function fullRow(entry: NewEntity): Entity {
+  // Apply SQLite defaults so the inserted row and the store create-patch row are byte-identical.
+  return {
+    id: entry.id,
+    branchId: entry.branchId,
+    kind: entry.kind,
+    name: entry.name,
+    description: entry.description ?? null,
+    status: entry.status,
+    retiredReason: entry.retiredReason ?? null,
+    injectionMode: entry.injectionMode,
+    nameCollisionFlag: entry.nameCollisionFlag ?? 0,
+    // D4: state is non-null in the write path; default a null/absent state to the empty-kind state.
+    state: entry.state ?? emptyEntityState(entry.kind),
+    tags: entry.tags ?? [],
+    embeddingStale: entry.embeddingStale ?? 0,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+  }
+}
+
+const createHandler: ActionHandler = (action, branchId, ctx) => {
+  if (action.kind !== 'createEntity')
+    throw new Error(`handler/kind mismatch: expected 'createEntity', got '${action.kind}'`)
+  const { entry } = action.payload
+  if (entry.branchId !== branchId)
+    return {
+      status: 'rejected',
+      reason: `branch mismatch: delta ${branchId} vs entry ${entry.branchId}`,
+    }
+  const row = fullRow(entry)
+  const parsed = entityStateSchemaForKind(row.kind).safeParse(row.state)
+  if (!parsed.success)
+    return { status: 'rejected', reason: `invalid ${row.kind} state: ${parsed.error.message}` }
+  return {
+    status: 'ok',
+    targetTable: 'entities',
+    targetId: row.id,
+    op: 'create',
+    undoPayload: null,
+    ops: [ctx.db.insert(entities).values(row).toSQL()],
+    patch: { op: 'create', id: row.id, row },
+  }
+}
+
+const updateHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'updateEntity')
+    throw new Error(`handler/kind mismatch: expected 'updateEntity', got '${action.kind}'`)
+  const { branchId: bid, id, patch } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const [current] = await ctx.db
+    .select()
+    .from(entities)
+    .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
+  if (!current)
+    return { status: 'rejected', reason: `update target entities ${bid}:${id} not found` }
+
+  if (patch.state !== undefined) {
+    const parsed = entityStateSchemaForKind(current.kind).safeParse(patch.state)
+    if (!parsed.success)
+      return {
+        status: 'rejected',
+        reason: `invalid ${current.kind} state: ${parsed.error.message}`,
+      }
+  }
+
+  const set: Record<string, unknown> = {}
+  const undoPayload: Record<string, unknown> = {}
+  for (const col of UPDATABLE) {
+    if (!(col in patch)) continue
+    set[col] = patch[col]
+    if (col === 'state') {
+      // D4 guard: coerce a legacy null prior to empty-kind state so the encoder never sees null.
+      const prior = (current.state ?? emptyEntityState(current.kind)) as Record<string, unknown>
+      undoPayload.state = computeUndoPayload(
+        entityStateColumnSchema,
+        prior,
+        patch.state as Record<string, unknown>,
+      )
+    } else {
+      undoPayload[col] = current[col as keyof Entity]
+    }
+  }
+
+  return {
+    status: 'ok',
+    targetTable: 'entities',
+    targetId: id,
+    op: 'update',
+    undoPayload,
+    ops: [
+      ctx.db
+        .update(entities)
+        .set(set)
+        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
+        .toSQL(),
+    ],
+    patch: { op: 'update', id, columns: set },
+  }
+}
+
+const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'deleteEntity')
+    throw new Error(`handler/kind mismatch: expected 'deleteEntity', got '${action.kind}'`)
+  const { branchId: bid, id } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const [current] = await ctx.db
+    .select()
+    .from(entities)
+    .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
+  if (!current)
+    return { status: 'rejected', reason: `delete target entities ${bid}:${id} not found` }
+  return {
+    status: 'ok',
+    targetTable: 'entities',
+    targetId: id,
+    op: 'delete',
+    // Full row so reverse-replay rebuilds both the SQLite re-insert and the store create-patch.
+    undoPayload: { ...current },
+    ops: [
+      ctx.db
+        .delete(entities)
+        .where(and(eq(entities.branchId, bid), eq(entities.id, id)))
+        .toSQL(),
+    ],
+    patch: { op: 'delete', id },
+  }
+}
+
+export function registerEntities(): void {
+  register({
+    table: 'entities',
+    descriptor: { table: entities, idCol: entities.id, branchCol: entities.branchId },
+    columnSchemas: { state: entityStateColumnSchema },
+    handlers: {
+      createEntity: createHandler,
+      updateEntity: updateHandler,
+      deleteEntity: deleteHandler,
+    },
+    patcher: (branchId, p) => entitiesStore.patch(branchId, p),
+  })
+}

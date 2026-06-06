@@ -1,10 +1,12 @@
 import { appSettingsStore, hydrateAppSettings } from './app-settings/app-settings'
 import { readAppSettingsRow, rehydrateAppSettings } from './app-settings/app-settings-read'
+import { entitiesStore } from './entities/entities'
 import { generationStore } from './generation/generation'
 import { navigationStore } from './navigation/navigation'
 
 // Test-harness seam: resets every domain store in one call
 export function resetAllStores(): void {
+  entitiesStore.__reset()
   generationStore.__reset()
   navigationStore.__reset()
   appSettingsStore.__reset()
@@ -12,6 +14,7 @@ export function resetAllStores(): void {
 
 export {
   appSettingsStore,
+  entitiesStore,
   generationStore,
   hydrateAppSettings,
   navigationStore,

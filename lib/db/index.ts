@@ -11,6 +11,16 @@ export type {
   ItemState,
   FactionState,
 } from './entities-types'
+export {
+  characterStateSchema,
+  emptyEntityState,
+  entityStateColumnSchema,
+  entityStateSchemaForKind,
+  factionStateSchema,
+  itemStateSchema,
+  locationStateSchema,
+} from './entity-state-schema'
+export type { EntityKind } from './entity-state-schema'
 export type {
   ClassifierLifecycleState,
   ClassifierStatus,

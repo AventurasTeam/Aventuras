@@ -63,6 +63,16 @@ slice-planning gate forces its resolution before that slice is planned.
   `runBootstrap`'s try/catch (crash recovery silently disabled). Lock
   the ordering with a test seam (reset the `done` guard) or a
   non-empty-registry assertion at the recovery call.
+- **Branch-mismatch rejection is test-unguarded across the arm pattern.**
+  Every delta-arm handler guards `payload.branchId !== branchId` and
+  returns `{ status: 'rejected' }` (the guard that stops reverse-replay
+  from reversing the wrong branch's row), but no test exercises that
+  rejection in any of them — `story-entries`, the `fixture-domain` test,
+  or now `entities`. A refactor dropping the guard fails no test. Add one
+  negative case against the shared pattern asserting a branch-mismatch
+  payload rejects without writing a row or a delta. Pattern-wide (the
+  shared `lib/actions` arm idiom); not the M1.5 entities slice's to own
+  alone.
 - **Pre-existing storybook flake** (observed during M1.5-gate full-suite
   runs, ~20% of runs). `components/compounds/app-actions-menu-pure.stories.tsx`
   "Diagnostics On" intermittently fails a `findByRole` with a
