@@ -969,7 +969,7 @@ Where:
   continuous pin signal in v1).
 - **`λ_type`** — type-specific decay rate (table below).
 - **`chapters_old(c)`** — chapters since `c` became relevant
-  (`learned_at_entry` for awareness, `created_at` mapped to chapter
+  (`learned_at_entry_id` for awareness, `created_at` mapped to chapter
   for happenings without awareness, `updated_at` for entities and
   threads, effectively zero for lore since lore is timeless).
 - **`kw_boost(c)`** — additive bonus when the keyword index hits
@@ -1049,7 +1049,7 @@ such candidates:
 
 ```
 chapter_boost(h, matched_chapters) =
-  if any(ch.range contains h.occurred_at_entry for ch in matched_chapters):
+  if any(ch.range contains h.occurred_at_entry_id for ch in matched_chapters):
     1.3   # tunable; default range 1.2-1.5
   else:
     1.0
@@ -1268,7 +1268,7 @@ def rank_per_type(candidates, queries, type_budget, λ_type, type_overhead, *, m
 
         # Chapter-match boost on happenings
         if c.kind == 'happening' and matched_chapters:
-            if any(ch.contains(c.occurred_at_entry) for ch in matched_chapters):
+            if any(ch.contains(c.occurred_at_entry_id) for ch in matched_chapters):
                 score *= 1.3
 
         scored.append((c, score))

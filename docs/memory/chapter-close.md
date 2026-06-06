@@ -330,7 +330,8 @@ Cluster happenings within the closed chapter range by:
 
 - Embedding similarity ≥ 0.80 (cosine).
 - `happening_involvements` overlap ≥ 50% (same cast).
-- `occurred_at_entry` proximity within ~3 entries.
+- `occurred_at_entry_id` proximity within ~3 entries (by the referenced
+  entries' positions).
 
 All three criteria must hold for cluster membership. Clusters of
 ≥ 2 rows are passed to the LLM for judgment.
@@ -353,13 +354,13 @@ projected volumes.
 
 - `description` — composite, LLM-authored ("X happened, then Y").
 - `title` — pick the more general, or LLM-authored composite.
-- `occurred_at_entry` — earliest of the cluster (the later events'
-  precise timing is lost; acceptable v1 trade).
+- `occurred_at_entry_id` — earliest of the cluster by entry position (the
+  later events' precise timing is lost; acceptable v1 trade).
 - `decay_resistance` on the surviving row — max of the cluster.
 - Awareness rows merge per-character via the existing
   `UNIQUE(branch_id, character_id, happening_id)` upsert: max
-  `decay_resistance`, earliest `learned_at_entry`, source strings
-  concatenated where they differ.
+  `decay_resistance`, earliest `learned_at_entry_id` (by entry position),
+  source strings concatenated where they differ.
 - Deleted rows are delta-logged for rollback.
 
 **Conservative override:** when the LLM is uncertain about cluster

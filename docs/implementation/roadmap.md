@@ -364,8 +364,8 @@ chapter-management is M5.
   [`docs/ui/screens/plot/plot.md`](../ui/screens/plot/plot.md).
   Threads data may be sparse until M5's chapter-close populates it
   reliably; the surface ships in M4. Entry-ref picker primitive
-  (for `triggered_at_entry` / `resolved_at_entry` /
-  `occurred_at_entry` / `learned_at_entry` fields) ships here as
+  (for `triggered_at_entry_id` / `resolved_at_entry_id` /
+  `occurred_at_entry_id` / `learned_at_entry_id` fields) ships here as
   the first consumer; pattern reused across later entry-ref
   surfaces.
 - M4.4 — Story settings real (basic): model overrides + basic

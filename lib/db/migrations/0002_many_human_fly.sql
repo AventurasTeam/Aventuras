@@ -92,7 +92,7 @@ CREATE TABLE `happening_awareness` (
 	`branch_id` text NOT NULL,
 	`happening_id` text NOT NULL,
 	`character_id` text NOT NULL,
-	`learned_at_entry` integer,
+	`learned_at_entry_id` text,
 	`decay_resistance` real,
 	`retrieval_count` integer DEFAULT 0 NOT NULL,
 	`source` text,
@@ -119,14 +119,14 @@ CREATE TABLE `happenings` (
 	`category` text,
 	`icon` text,
 	`temporal` text,
-	`occurred_at_entry` integer,
+	`occurred_at_entry_id` text,
 	`common_knowledge` integer DEFAULT 0 NOT NULL,
 	`embedding_stale` integer DEFAULT 0 NOT NULL,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
 	PRIMARY KEY(`branch_id`, `id`),
 	FOREIGN KEY (`branch_id`) REFERENCES `branches`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "happenings_mutual_excl" CHECK("happenings"."occurred_at_entry" IS NULL OR "happenings"."temporal" IS NULL)
+	CONSTRAINT "happenings_mutual_excl" CHECK("happenings"."occurred_at_entry_id" IS NULL OR "happenings"."temporal" IS NULL)
 );
 --> statement-breakpoint
 CREATE TABLE `lore` (
@@ -169,8 +169,8 @@ CREATE TABLE `threads` (
 	`icon` text,
 	`status` text NOT NULL,
 	`injection_mode` text NOT NULL,
-	`triggered_at_entry` integer,
-	`resolved_at_entry` integer,
+	`triggered_at_entry_id` text,
+	`resolved_at_entry_id` text,
 	`embedding_stale` integer DEFAULT 0 NOT NULL,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,

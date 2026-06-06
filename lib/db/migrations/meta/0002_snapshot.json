@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "98818cd9-6922-4fa2-b3e5-70eb6b89fcab",
+  "id": "2d7d40f9-bb2c-44ff-a727-ad1d36eeda2d",
   "prevId": "f84a8662-3263-4e9b-8d89-5d18c8e729c6",
   "tables": {
     "app_settings": {
@@ -987,9 +987,9 @@
           "notNull": true,
           "autoincrement": false
         },
-        "learned_at_entry": {
-          "name": "learned_at_entry",
-          "type": "integer",
+        "learned_at_entry_id": {
+          "name": "learned_at_entry_id",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -1174,9 +1174,9 @@
           "notNull": false,
           "autoincrement": false
         },
-        "occurred_at_entry": {
-          "name": "occurred_at_entry",
-          "type": "integer",
+        "occurred_at_entry_id": {
+          "name": "occurred_at_entry_id",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -1241,7 +1241,7 @@
       "checkConstraints": {
         "happenings_mutual_excl": {
           "name": "happenings_mutual_excl",
-          "value": "\"happenings\".\"occurred_at_entry\" IS NULL OR \"happenings\".\"temporal\" IS NULL"
+          "value": "\"happenings\".\"occurred_at_entry_id\" IS NULL OR \"happenings\".\"temporal\" IS NULL"
         }
       }
     },
@@ -1777,16 +1777,16 @@
           "notNull": true,
           "autoincrement": false
         },
-        "triggered_at_entry": {
-          "name": "triggered_at_entry",
-          "type": "integer",
+        "triggered_at_entry_id": {
+          "name": "triggered_at_entry_id",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "resolved_at_entry": {
-          "name": "resolved_at_entry",
-          "type": "integer",
+        "resolved_at_entry_id": {
+          "name": "resolved_at_entry_id",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

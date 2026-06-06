@@ -249,7 +249,7 @@ gate-slice authoring:
   needed in the descriptor.
 - **CHECK / UNIQUE constraints** the gate must encode in DDL:
   `happenings` mutual-exclusivity
-  (`CHECK (occurred_at_entry IS NULL OR temporal IS NULL)`);
+  (`CHECK (occurred_at_entry_id IS NULL OR temporal IS NULL)`);
   `character_relationships` (`CHECK (a_id < b_id)`,
   `CHECK (kind IS NOT NULL OR inverse_kind IS NOT NULL)`,
   `UNIQUE (branch_id, a_id, b_id)`);

@@ -27,8 +27,8 @@ This cluster is the awareness graph per
 memory), and `character_relationships` (per-pair char↔char, two POVs).
 Three traits make it the constraint-heavy slice:
 
-- **`happenings` mutual-exclusivity** — `occurred_at_entry` (narrative
-  position) and `temporal` (free-form out-of-narrative anchor) are
+- **`happenings` mutual-exclusivity** — `occurred_at_entry_id` (narrative
+  entry ref) and `temporal` (free-form out-of-narrative anchor) are
   exclusive per row; in-world time for a narrative happening derives
   from the entry's `metadata.worldTime`, never duplicated here.
 - **`happening_awareness` UPSERT** — `UNIQUE(branch_id, character_id,
@@ -65,15 +65,18 @@ other branch-scoped table.
 ## Scope: in
 
 - **`happenings`** Zod + store + CRUD arms. Columns: `title`,
-  `description`, `category`, `icon`, `temporal`, `occurred_at_entry`,
+  `description`, `category`, `icon`, `temporal`, `occurred_at_entry_id`,
   `common_knowledge` (0/1), `embedding_stale`, timestamps. Enforce
-  `CHECK (occurred_at_entry IS NULL OR temporal IS NULL)` in DDL (gate)
-  **and** at the Zod boundary (the friendlier surface).
+  `CHECK (occurred_at_entry_id IS NULL OR temporal IS NULL)` in DDL (gate)
+  **and** at the Zod boundary (the friendlier surface). `occurred_at_entry_id`
+  is nullable text — Zod normalizes empty to `null` so `''` can't slip past
+  the CHECK (it is non-null) per
+  [`data-model.md → On the two time fields`](../../../../data-model.md#happenings--character-knowledge).
 - **`happening_involvements`** (surrogate id + `happening_id`,
   `entity_id`, `role`) — Zod + CRUD arms; store as a sub-collection of
   the happenings store (Open questions).
 - **`happening_awareness`** (surrogate id + `happening_id`,
-  `character_id`, `learned_at_entry`, `decay_resistance` real 0..1,
+  `character_id`, `learned_at_entry_id`, `decay_resistance` real 0..1,
   `retrieval_count`, `source`) — Zod + **UPSERT-merge arm** keyed on
   `(branch_id, character_id, happening_id)`; one delta per write.
   `retrieval_count` is a delta-logged operational counter (the ranker
@@ -107,7 +110,7 @@ other branch-scoped table.
 
 ## Acceptance criteria
 
-- `happenings` rejects a row with both `occurred_at_entry` and
+- `happenings` rejects a row with both `occurred_at_entry_id` and
   `temporal` (DDL CHECK + Zod), accepts either alone or neither.
 - `happening_awareness` re-write for an existing
   `(branch, character, happening)` UPSERTs (one row, fields merged),
@@ -143,8 +146,12 @@ other branch-scoped table.
   and whether `character_relationships` is its own store or folded
   with entities. Lean: happenings store owns its two link collections;
   relationships its own store. Confirm at authoring.
-- **`learned_at_entry` / `occurred_at_entry`** store entry positions
-  (not composite entry ids) — same convention as threads' entry refs.
+- **`learned_at_entry_id` / `occurred_at_entry_id`** — resolved: store a
+  branch-scoped `story_entries.id` (text), FK-less, resolved via
+  `(branch_id, id)` — same convention as threads' `*_at_entry_id` refs and
+  `deltas.entry_id`. The earlier position-integer plan was dropped (reused
+  positions silently re-point after rollback); see
+  [data-model.md → On the two time fields](../../../../data-model.md#happenings--character-knowledge).
 
 ## Implementation notes
 

@@ -2036,7 +2036,7 @@
 
           <div class="field-row">
             <div class="field-label">
-              triggered_at_entry
+              triggered_at_entry_id
               <span class="type-hint">EntryRef &middot; read-only</span>
             </div>
             <div class="input-select read-only">
@@ -2047,7 +2047,7 @@
 
           <div class="field-row">
             <div class="field-label">
-              resolved_at_entry
+              resolved_at_entry_id
               <span class="type-hint">EntryRef &middot; only when resolved/failed</span>
             </div>
             <div class="input-select read-only" style="opacity: 0.45">
@@ -2072,7 +2072,7 @@
         <div class="tab-panel happenings-only" data-panel="overview" data-side-panel="happenings">
           <div style="font-size: 11px; color: var(--ink-muted); margin-bottom: 14px; padding: 8px 12px; background: #fffbe6; border-left: 3px solid #e3d8c0; border-radius: 2px">
             Fields shown here are from <code>happenings</code>. Time anchor is mutually exclusive
-            (<code>occurred_at_entry</code> XOR <code>temporal</code>) &mdash; the form enforces one-or-the-other.
+            (<code>occurred_at_entry_id</code> XOR <code>temporal</code>) &mdash; the form enforces one-or-the-other.
           </div>
 
           <div class="field-row">
@@ -2109,13 +2109,13 @@
           <div class="field-row">
             <div class="field-label">
               time anchor
-              <span class="type-hint">XOR &middot; occurred_at_entry / temporal</span>
+              <span class="type-hint">XOR &middot; occurred_at_entry_id / temporal</span>
             </div>
             <div class="anchor-group">
               <div class="anchor-cell active">
                 <div class="anchor-label">
                   <span class="anchor-radio"></span>
-                  <span>occurred_at_entry</span>
+                  <span>occurred_at_entry_id</span>
                 </div>
                 <div class="input-select">
                   <span>entry 23 &middot; ch3</span>
@@ -2375,7 +2375,7 @@
   <span class="k">"category"</span><span class="p">:</span> <span class="s">"encounter"</span><span class="p">,</span>
   <span class="k">"icon"</span><span class="p">:</span> <span class="s">"battle"</span><span class="p">,</span>
   <span class="k">"temporal"</span><span class="p">:</span> <span class="n">null</span><span class="p">,</span>
-  <span class="k">"occurred_at_entry"</span><span class="p">:</span> <span class="s">"e-23"</span><span class="p">,</span>
+  <span class="k">"occurred_at_entry_id"</span><span class="p">:</span> <span class="s">"e-23"</span><span class="p">,</span>
   <span class="k">"common_knowledge"</span><span class="p">:</span> <span class="n">0</span><span class="p">,</span>
   <span class="k">"tags"</span><span class="p">:</span> <span class="p">[</span><span class="s">"combat"</span><span class="p">,</span> <span class="s">"tavern"</span><span class="p">],</span>
   <span class="k">"involvements"</span><span class="p">:</span> <span class="p">[</span>
@@ -2385,8 +2385,8 @@
     <span class="p">{</span> <span class="k">"entity_id"</span><span class="p">:</span> <span class="s">"l-iron-tavern"</span><span class="p">,</span> <span class="k">"role"</span><span class="p">:</span> <span class="s">"site"</span> <span class="p">}</span>
   <span class="p">],</span>
   <span class="k">"awareness"</span><span class="p">:</span> <span class="p">[</span>
-    <span class="p">{</span> <span class="k">"character_id"</span><span class="p">:</span> <span class="s">"e-aria"</span><span class="p">,</span> <span class="k">"learned_at_entry"</span><span class="p">:</span> <span class="s">"e-23"</span><span class="p">,</span> <span class="k">"salience"</span><span class="p">:</span> <span class="n">1.0</span><span class="p">,</span> <span class="k">"source"</span><span class="p">:</span> <span class="s">"witnessed firsthand"</span> <span class="p">},</span>
-    <span class="p">{</span> <span class="k">"character_id"</span><span class="p">:</span> <span class="s">"e-kael"</span><span class="p">,</span> <span class="k">"learned_at_entry"</span><span class="p">:</span> <span class="s">"e-23"</span><span class="p">,</span> <span class="k">"salience"</span><span class="p">:</span> <span class="n">1.0</span><span class="p">,</span> <span class="k">"source"</span><span class="p">:</span> <span class="s">"was there &mdash; took the punches"</span> <span class="p">}</span>
+    <span class="p">{</span> <span class="k">"character_id"</span><span class="p">:</span> <span class="s">"e-aria"</span><span class="p">,</span> <span class="k">"learned_at_entry_id"</span><span class="p">:</span> <span class="s">"e-23"</span><span class="p">,</span> <span class="k">"salience"</span><span class="p">:</span> <span class="n">1.0</span><span class="p">,</span> <span class="k">"source"</span><span class="p">:</span> <span class="s">"witnessed firsthand"</span> <span class="p">},</span>
+    <span class="p">{</span> <span class="k">"character_id"</span><span class="p">:</span> <span class="s">"e-kael"</span><span class="p">,</span> <span class="k">"learned_at_entry_id"</span><span class="p">:</span> <span class="s">"e-23"</span><span class="p">,</span> <span class="k">"salience"</span><span class="p">:</span> <span class="n">1.0</span><span class="p">,</span> <span class="k">"source"</span><span class="p">:</span> <span class="s">"was there &mdash; took the punches"</span> <span class="p">}</span>
     <span class="p">&hellip;</span>
   <span class="p">],</span>
   <span class="k">"created_at"</span><span class="p">:</span> <span class="n">1745580234</span><span class="p">,</span>

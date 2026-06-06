@@ -77,7 +77,7 @@ describe('M1.5 migration', () => {
     expect(cols('branches').has('classifier_status')).toBe(true)
   })
 
-  it('rejects happenings with both occurred_at_entry and temporal set', async () => {
+  it('rejects happenings with both occurred_at_entry_id and temporal set', async () => {
     const { db } = await createTestDb()
     await seed(db)
     await expect(
@@ -85,7 +85,7 @@ describe('M1.5 migration', () => {
         id: 'h1',
         branchId: 'b1',
         title: 'Test happening',
-        occurredAtEntry: 5,
+        occurredAtEntryId: 'entry_5',
         temporal: '1200-05-01',
         createdAt: 1,
         updatedAt: 1,

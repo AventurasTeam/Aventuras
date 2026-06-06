@@ -116,8 +116,8 @@ Affordances per the
 **Detail tabs:**
 
 - **Overview** — status, category, icon, description,
-  `injection_mode` dropdown, `triggered_at_entry` (read-only entry
-  ref), `resolved_at_entry` (read-only entry ref, only when status is
+  `injection_mode` dropdown, `triggered_at_entry_id` (read-only entry
+  ref), `resolved_at_entry_id` (read-only entry ref, only when status is
   resolved/failed), tags.
 - **History** — delta log filtered to this thread; structured search
   over field-path / op / change-summary text per
@@ -141,15 +141,15 @@ about each happening.
 set; placeholder slot kept when unset so the row layout stays
 identical).
 
-**Sort.** Chronological — `occurred_at_entry` DESC first;
-`temporal`-only rows pinned at the bottom in their own block.
+**Sort.** Chronological — by `occurred_at_entry_id`'s entry position DESC
+first; `temporal`-only rows pinned at the bottom in their own block.
 
 **Filter chips** (single-select). All / This chapter / Common
 knowledge / Out-of-narrative.
 
-`This chapter` filters to happenings whose `occurred_at_entry` falls
+`This chapter` filters to happenings whose `occurred_at_entry_id` falls
 within the currently-open chapter's range. `Out-of-narrative` filters
-to rows with `temporal` set (and null `occurred_at_entry`).
+to rows with `temporal` set (and null `occurred_at_entry_id`).
 
 **All view — accordion grouping by chapter bucket.** Same accordion
 pattern as World, different grouping key. Buckets:
@@ -173,7 +173,7 @@ Affordances per the
   (kind-aware, character / location / item / faction) + role
   (free-form text). Add / remove rows.
 - **Awareness** — `happening_awareness` rows: character picker (kind
-  = character only) + `learned_at_entry` (entry-ref picker) +
+  = character only) + `learned_at_entry_id` (entry-ref picker) +
   `decay_resistance` (0-1 numeric — scales recency decay) +
   `source` (free-form text descriptor). Add / remove rows.
 - **History** — delta log filtered to this happening.
@@ -250,7 +250,7 @@ configured for the active kind:
   `payloadKey='happening'`, `schema=HappeningImportSchema`.
 
 Zod schema constraints gate both manual entry and JSON imports —
-no happening with both `occurred_at_entry` and `temporal` set, no
+no happening with both `occurred_at_entry_id` and `temporal` set, no
 thread without status, etc. — surfaced as inline validation
 rather than partial-save.
 
@@ -364,8 +364,8 @@ inherit unchanged.
   or hardcode 2? Lean: hardcode 2 for v1, revisit if users want more.
 - **Visual icon set for thread / happening categories** — placeholder
   glyphs only; finalize with the visual identity session.
-- **Entry-ref picker UX** — picking a `triggered_at_entry`,
-  `resolved_at_entry`, `occurred_at_entry`, or `learned_at_entry`
+- **Entry-ref picker UX** — picking a `triggered_at_entry_id`,
+  `resolved_at_entry_id`, `occurred_at_entry_id`, or `learned_at_entry_id`
   needs a picker. Inline mini-list of recent entries? Searchable
   popover keyed on entry content? Deferred — same pattern likely
   reused across other entry-ref fields.

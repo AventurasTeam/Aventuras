@@ -147,8 +147,8 @@ export const threads = sqliteTable(
     icon: text('icon'),
     status: text('status', { enum: ['pending', 'active', 'resolved', 'failed'] }).notNull(),
     injectionMode: text('injection_mode', { enum: ['always', 'auto', 'disabled'] }).notNull(),
-    triggeredAtEntry: integer('triggered_at_entry'),
-    resolvedAtEntry: integer('resolved_at_entry'),
+    triggeredAtEntryId: text('triggered_at_entry_id'),
+    resolvedAtEntryId: text('resolved_at_entry_id'),
     embeddingStale: integer('embedding_stale').notNull().default(0),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
@@ -168,7 +168,7 @@ export const happenings = sqliteTable(
     category: text('category'),
     icon: text('icon'),
     temporal: text('temporal'),
-    occurredAtEntry: integer('occurred_at_entry'),
+    occurredAtEntryId: text('occurred_at_entry_id'),
     commonKnowledge: integer('common_knowledge').notNull().default(0),
     embeddingStale: integer('embedding_stale').notNull().default(0),
     createdAt: integer('created_at').notNull(),
@@ -176,7 +176,7 @@ export const happenings = sqliteTable(
   },
   (t) => [
     primaryKey({ columns: [t.branchId, t.id] }),
-    check('happenings_mutual_excl', sql`${t.occurredAtEntry} IS NULL OR ${t.temporal} IS NULL`),
+    check('happenings_mutual_excl', sql`${t.occurredAtEntryId} IS NULL OR ${t.temporal} IS NULL`),
   ],
 )
 
@@ -207,7 +207,7 @@ export const happeningAwareness = sqliteTable(
     happeningId: text('happening_id').notNull(),
     // FK-less: entities has a composite PK (branch_id, id); a single-column FK is impossible.
     characterId: text('character_id').notNull(),
-    learnedAtEntry: integer('learned_at_entry'),
+    learnedAtEntryId: text('learned_at_entry_id'),
     decayResistance: real('decay_resistance'),
     retrievalCount: integer('retrieval_count').notNull().default(0),
     source: text('source'),

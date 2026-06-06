@@ -47,7 +47,7 @@ later milestones.
   operational (off-log).
 - **`threads` runtime Zod + store + CRUD arms.** Columns: `title`,
   `description`, `category`, `icon`, `status`, `injection_mode`,
-  `triggered_at_entry`, `resolved_at_entry`, `embedding_stale`,
+  `triggered_at_entry_id`, `resolved_at_entry_id`, `embedding_stale`,
   timestamps.
 - Stores via the base factory (keyed by id, branch-scoped, internal
   patch surface, read selectors); no speculative public mutators.
@@ -89,11 +89,14 @@ later milestones.
 
 ## Open questions
 
-- **`triggered_at_entry` / `resolved_at_entry`** are entry-position
-  integers, not FKs (entries are branch-scoped composite-keyed). They
-  store positions, validated only loosely here; the entry-ref picker
-  primitive that authors them lands in M4. Confirm we store raw
-  positions, not entry ids.
+- **`triggered_at_entry_id` / `resolved_at_entry_id`** — resolved: these
+  store a branch-scoped `story_entries.id` (text), not an entry position.
+  They are FK-less (entries are branch-scoped composite-keyed) and resolve
+  via `(branch_id, id)`, the same convention as `deltas.entry_id` and
+  `chapters.start_entry_id`; the earlier position-integer plan was dropped
+  because reused positions silently re-point after rollback. See
+  [data-model.md → On the two time fields](../../../../data-model.md#happenings--character-knowledge).
+  The entry-ref picker primitive that authors them lands in M4.
 
 ## Implementation notes
 

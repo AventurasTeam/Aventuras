@@ -53,9 +53,9 @@ turn that narrated the learning, not the happening's.
   reversal into its window (re-derivable) but never survives as an orphan.
 
 Provenance is a **distinct axis** from the narrative anchors
-`happenings.occurred_at_entry` (where an event sits in story time; `null`
+`happenings.occurred_at_entry_id` (where an event sits in story time; `null`
 for the temporal / historical class) and
-`happening_awareness.learned_at_entry` (when a character learned a fact).
+`happening_awareness.learned_at_entry_id` (when a character learned a fact).
 They frequently coincide, but the classifier already had to map each
 extraction to a window entry to populate those — provenance formalizes the
 single per-fact attribution channel that feeds all three, the anchor read

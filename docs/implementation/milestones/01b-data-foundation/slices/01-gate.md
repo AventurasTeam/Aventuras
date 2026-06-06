@@ -219,7 +219,7 @@ against the `CalendarSystem` type but its full runtime Zod rides with
 - **Migration apply.** Apply the committed migration to a fresh
   in-memory DB; assert every expected table + the C5 constraints exist.
 - **Constraint negatives** (one each): happenings with both
-  `occurred_at_entry` and `temporal` set; `character_relationships`
+  `occurred_at_entry_id` and `temporal` set; `character_relationships`
   with `a_id ≥ b_id` and with both `kind` / `inverse_kind` null;
   duplicate `happening_awareness` `(branch, character, happening)`;
   duplicate `translations` `(branch, target_kind, target_id, field,

@@ -112,8 +112,8 @@ erDiagram
         text icon "string key from preset icon catalog"
         text status "pending | active | resolved | failed"
         text injection_mode "always | auto | disabled"
-        integer triggered_at_entry
-        integer resolved_at_entry
+        text triggered_at_entry_id "entry the thread was triggered at; FK-less ref into story_entries, branch-scoped (resolved via (branch_id, id))"
+        text resolved_at_entry_id "entry the thread resolved at; FK-less ref into story_entries"
         integer embedding_stale "0 | 1; 1 = embedded fields (title/description) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
         integer created_at
         integer updated_at
@@ -127,13 +127,13 @@ erDiagram
         text category "free-form — e.g. battle / encounter / discovery / scheduled"
         text icon "string key from preset icon catalog"
         text temporal "in-world time anchor for happenings WITHOUT a narrative position; free-form (e.g. '1872 AR', 'future', 'ongoing', 'next solstice')"
-        integer occurred_at_entry "narrative log position; null = outside narrative (use temporal instead). When set, in-world time derives from the entry's metadata.worldTime."
+        text occurred_at_entry_id "narrative entry ref (FK-less into story_entries, branch-scoped); null = outside narrative (use temporal instead). When set, in-world time derives from the referenced entry's metadata.worldTime."
         integer common_knowledge "1 = everyone knows; skip awareness links"
         integer embedding_stale "0 | 1; 1 = embedded fields (title/description) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
         integer created_at
         integer updated_at
     }
-    %% CHECK (occurred_at_entry IS NULL OR temporal IS NULL) — mutual exclusivity enforced at the SQLite level
+    %% CHECK (occurred_at_entry_id IS NULL OR temporal IS NULL) — mutual exclusivity enforced at the SQLite level
 
     happening_involvements {
         text id PK "hinv_${uuid}; surrogate single ID — needed as delta target (same reason as character_relationships)"
@@ -148,7 +148,7 @@ erDiagram
         text branch_id FK "composite PK with id; forks with branches"
         text happening_id FK
         text character_id FK "entity where kind=character"
-        integer learned_at_entry "when this character learned it"
+        text learned_at_entry_id "entry where this character learned it; FK-less ref into story_entries"
         real decay_resistance "0..1; scales recency decay (1=no decay, 0=normal). Set by classifier severity at extraction; tunable by user toggle and lore-mgmt at chapter close. See docs/memory/retrieval.md → Pinning"
         integer retrieval_count "incremented by ranker on injection (post budget-fill); per-chapter counter, reset at chapter close after lore-mgmt phase 3d. Delta-logged so rollback reverses retrieval-driven counts. See docs/memory/chapter-close.md → 3d awareness pin tuning"
         text source "free-form LLM-authored descriptor — e.g. 'overheard in tavern' / 'told by Jorin' / 'witnessed firsthand'; used verbatim in prompts"
@@ -1875,7 +1875,7 @@ Happenings derivation, threads, retrieval recency, character ageing,
 and scheduled-happening firing checks all read each entry's stored
 `worldTime` independently and do NOT assume monotonic order. Edits
 that produce out-of-order sequences cause derived values
-(happening times via `occurred_at_entry`, thread positions) to
+(happening times via `occurred_at_entry_id`, thread entry refs) to
 shift silently on the next read — that is the accepted consequence
 of the no-cascade contract. The delta log entry on the edited
 entry is the audit trail.
@@ -2271,7 +2271,7 @@ is split into two layers with clean responsibilities:
   - `happening_involvements` — which entities are the subject matter
     (character, location, item, faction; optional free-form `role` label).
   - `happening_awareness` — which characters know about it, with
-    `learned_at_entry`, `decay_resistance` (per-character pin signal,
+    `learned_at_entry_id`, `decay_resistance` (per-character pin signal,
     set by classifier severity at extraction; tunable by user toggle
     and lore-mgmt at chapter close — see
     [docs/memory/retrieval.md → Pinning](./memory/retrieval.md#pinning--decay_resistance)),
@@ -2310,25 +2310,42 @@ character knowledge; awareness links are the filter) and addresses the
 events-vs-beats name collision (events are happenings now; threads don't
 have an enum kind anymore).
 
-**On the two time fields on `happenings`:** `occurred_at_entry` and
-`temporal` look overlapping but measure orthogonal axes. `occurred_at_entry`
-is the narrative log position — present for happenings that occurred
-during play, used for rollback ordering and scene-based retrieval. The
-actual in-world time for a narrative happening is **derived** from the
+**On the two time fields on `happenings`:** `occurred_at_entry_id` and
+`temporal` look overlapping but measure orthogonal axes.
+`occurred_at_entry_id` references the narrative entry the happening
+occurred at — present for happenings that occurred during play, used for
+rollback ordering (via the entry's `position`) and scene-based retrieval.
+The actual in-world time for a narrative happening is **derived** from the
 referenced entry's `metadata.worldTime` (see "Entry metadata shape" and
 "In-world time tracking" below). No duplication on `happenings`.
 `temporal` is only populated when there is no narrative entry to
 derive from (pre-story history, scheduled future, ambient backdrop) —
 its free-form text is the anchor because out-of-narrative happenings
-have no cumulative counter to reference. `occurred_at_entry`
+have no entry to reference. `occurred_at_entry_id`
 and `temporal` are **mutually exclusive per row**, enforced both
 at the SQLite level (CHECK constraint at table-create time:
-`CHECK (occurred_at_entry IS NULL OR temporal IS NULL)`) and at
+`CHECK (occurred_at_entry_id IS NULL OR temporal IS NULL)`) and at
 the Zod boundary on form/import. The DB constraint is the floor;
 the Zod check is the friendlier validation surface. `threads` don't carry
 `temporal` because threads only exist during narrative and always
-resolve via entry positions (same worldTime-derivation story as
+resolve via entry references (same worldTime-derivation story as
 happenings).
+
+**Entry references are IDs, not positions.** `occurred_at_entry_id`,
+`learned_at_entry_id`, and the two thread `*_at_entry_id` columns store a
+branch-scoped `story_entries.id` (FK-less, resolved via `(branch_id, id)`
+like every other entry reference — `deltas.entry_id`,
+`chapters.start_entry_id`, `probe_captures.target_entry_id`), not the
+`position` integer. Ordering comparisons derive `position(entry_id)` at
+query time, exactly as the [survival anchor](#survival-anchor) predicate
+does. Positions get reused — after a rollback the next turn reclaims the
+freed `position` with a new entry id — so a stored position can silently
+re-point to a different entry, whereas a stored id dangles detectably (it
+resolves to no row) if its target is ever rolled away. This also aligns
+the schema with the Plot screen's entry-ref pickers, which were already
+designed around entry ids. **Absent refs are `NULL`, never `''`** — an
+empty string would pass the `happenings` mutual-exclusivity CHECK and
+break position derivation; the Zod/action layer normalizes empty to null.
 
 **Context-bloat note:** for long-running stories, character awareness
 lists grow unbounded — projected scale is thousands of happenings and
