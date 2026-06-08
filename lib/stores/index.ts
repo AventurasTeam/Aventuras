@@ -1,7 +1,9 @@
 import { appSettingsStore, hydrateAppSettings } from './app-settings/app-settings'
 import { readAppSettingsRow, rehydrateAppSettings } from './app-settings/app-settings-read'
+import { chaptersStore } from './chapters/chapters'
 import { characterRelationshipsStore } from './character-relationships/character-relationships'
 import { entitiesStore } from './entities/entities'
+import { eraFlipsStore } from './era-flips/era-flips'
 import { generationStore } from './generation/generation'
 import { happeningAwarenessStore } from './happenings/awareness'
 import { happeningsStore } from './happenings/happenings'
@@ -12,8 +14,10 @@ import { threadsStore } from './threads/threads'
 
 // Test-harness seam: resets every domain store in one call
 export function resetAllStores(): void {
+  chaptersStore.__reset()
   characterRelationshipsStore.__reset()
   entitiesStore.__reset()
+  eraFlipsStore.__reset()
   generationStore.__reset()
   happeningAwarenessStore.__reset()
   happeningInvolvementsStore.__reset()
@@ -26,8 +30,10 @@ export function resetAllStores(): void {
 
 export {
   appSettingsStore,
+  chaptersStore,
   characterRelationshipsStore,
   entitiesStore,
+  eraFlipsStore,
   generationStore,
   happeningAwarenessStore,
   happeningInvolvementsStore,

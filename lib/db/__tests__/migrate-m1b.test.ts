@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
 
 import {
+  branchEraFlips,
   branches,
   characterRelationships,
   happeningAwareness,
@@ -152,6 +153,33 @@ describe('M1.5 migration', () => {
     }
     await db.insert(translations).values({ id: 'tr1', ...base })
     await expect(db.insert(translations).values({ id: 'tr2', ...base })).rejects.toThrow()
+  })
+
+  it('rejects duplicate branch_era_flips (same branch_id + at_worldtime)', async () => {
+    const { db } = await createTestDb()
+    await seed(db)
+    await db
+      .insert(branchEraFlips)
+      .values({ id: 'ef1', branchId: 'b1', atWorldtime: 1000, eraName: 'Age of Ash', createdAt: 1 })
+    await expect(
+      db.insert(branchEraFlips).values({
+        id: 'ef2',
+        branchId: 'b1',
+        atWorldtime: 1000,
+        eraName: 'Age of Storms',
+        createdAt: 1,
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('rejects a negative at_worldtime (DB CHECK)', async () => {
+    const { db } = await createTestDb()
+    await seed(db)
+    await expect(
+      db
+        .insert(branchEraFlips)
+        .values({ id: 'ef3', branchId: 'b1', atWorldtime: -1, eraName: 'Before', createdAt: 1 }),
+    ).rejects.toThrow()
   })
 
   // Regression: createTestDb applies every migration to a fresh (empty) db in one

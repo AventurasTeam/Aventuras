@@ -1,10 +1,12 @@
 import { sql } from 'drizzle-orm'
 import {
   type AnySQLiteColumn,
+  check,
   integer,
   primaryKey,
   sqliteTable,
   text,
+  uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 
 import type { StoryDefinition, StorySettings } from './story-config-schema'
@@ -57,5 +59,11 @@ export const branchEraFlips = sqliteTable(
     eraName: text('era_name').notNull(),
     createdAt: integer('created_at').notNull(),
   },
-  (t) => [primaryKey({ columns: [t.branchId, t.id] })],
+  (t) => [
+    primaryKey({ columns: [t.branchId, t.id] }),
+    // One composite unique index serves both the no-duplicate-moment invariant and
+    // the resolver's "largest at_worldtime <= N for branch" range scan.
+    uniqueIndex('era_flips_branch_worldtime_uniq').on(t.branchId, t.atWorldtime),
+    check('era_flips_worldtime_nonneg', sql`${t.atWorldtime} >= 0`),
+  ],
 )

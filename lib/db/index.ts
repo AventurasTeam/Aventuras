@@ -31,6 +31,10 @@ export { loreWriteSchema } from './lore/lore-schema'
 export type { LoreWrite } from './lore/lore-schema'
 export { threadWriteSchema } from './threads/thread-schema'
 export type { ThreadWrite } from './threads/thread-schema'
+export { chapterWriteSchema } from './story-entries/chapter-schema'
+export type { ChapterWrite } from './story-entries/chapter-schema'
+export { branchEraFlipWriteSchema } from './stories/era-flip-schema'
+export type { BranchEraFlipWrite } from './stories/era-flip-schema'
 export type {
   ClassifierLifecycleState,
   ClassifierStatus,

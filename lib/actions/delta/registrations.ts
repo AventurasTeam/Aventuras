@@ -1,7 +1,9 @@
 // Append-only: each domain slice adds ONE import + one call here. Reverse-replay
 // (incl. boot recovery) resolves descriptors by target_table, so every delta-logged
 // table must be registered before any reverse-replay runs.
+import { registerChapters } from '../chapters/register'
 import { registerEntities } from '../entities/register'
+import { registerBranchEraFlips } from '../era-flips/register'
 import { registerHappeningAwareness } from '../happenings/register-awareness'
 import { registerHappenings } from '../happenings/register-happenings'
 import { registerHappeningInvolvements } from '../happenings/register-involvements'
@@ -21,6 +23,8 @@ export function registerAllDomains(): void {
   registerHappeningInvolvements()
   registerHappeningAwareness()
   registerCharacterRelationships()
+  registerChapters()
+  registerBranchEraFlips()
   // <domain slices append their register*() call here>
   done = true
 }

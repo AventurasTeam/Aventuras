@@ -27,6 +27,15 @@ describe('createWorkingSetStore', () => {
     expect(store.getRows().has('x_9')).toBe(false)
   })
 
+  it('no-ops an update patch for an id absent from the working set (never synthesizes a partial row)', () => {
+    const store = createWorkingSetStore<Row>()
+    store.hydrate('br_1', [{ id: 'x_1', name: 'a' }])
+    // e.g. a stale operational write for a row deleted (or never hydrated) on the held branch
+    store.patch('br_1', { op: 'update', id: 'gone', columns: { name: 'partial' } })
+    expect(store.getRows().has('gone')).toBe(false)
+    expect(store.getRows().size).toBe(1)
+  })
+
   it('__reset clears rows and loadedBranch', () => {
     const store = createWorkingSetStore<Row>()
     store.hydrate('br_1', [{ id: 'x_1', name: 'a' }])

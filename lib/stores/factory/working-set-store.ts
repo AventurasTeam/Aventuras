@@ -25,7 +25,12 @@ export function createWorkingSetStore<Row extends { id: string }>(): WorkingSetS
     if (p.op === 'delete') rows.delete(p.id)
     // row/columns are Record<> on StorePatch (domain-agnostic); the action handler that emits the patch guarantees they match Row.
     else if (p.op === 'create') rows.set(p.id, p.row as Row)
-    else rows.set(p.id, { ...(rows.get(p.id) as Row), ...(p.columns as Partial<Row>) })
+    else {
+      const existing = rows.get(p.id)
+      // An update for a row absent from the working set is a no-op — never synthesize a partial row from the column delta (e.g. a stale operational write after the row was deleted or never hydrated on the held branch).
+      if (existing === undefined) return
+      rows.set(p.id, { ...existing, ...(p.columns as Partial<Row>) })
+    }
     store.setState({ rows })
   }
 

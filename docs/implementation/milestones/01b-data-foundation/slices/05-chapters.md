@@ -90,12 +90,49 @@ the stores so those features build against them.
 
 ## Open questions
 
-- **`start_entry_id` / `end_entry_id`** reference branch-scoped
-  composite-keyed entries; stored as the entry's `id` (resolved within
-  branch) per the composite-PK invariant. Confirm they store the entry
-  `id`, not a `(branch_id, id)` pair (branch is implied by the chapter's
-  own `branch_id`).
+- **`start_entry_id` / `end_entry_id`** — resolved: they store a single
+  branch-scoped `story_entries.id` (FK-less, `notNull`; branch implied by
+  the chapter's own `branch_id`), not a `(branch_id, id)` pair. Confirmed
+  by the gate-landed table shape and the same convention the lore-threads
+  slice fixed for `threads.triggered_at_entry_id` /
+  [`chapters.start_entry_id`](./03-lore-threads.md#open-questions).
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **Chapters `UPDATABLE` is the full delta-logged set** —
+  `sequenceNumber`, `title`, `summary`, `theme`, `keywords`,
+  `startEntryId`, `endEntryId`, `tokenCount` (excludes the operational
+  `embedding_stale`, the `closed_at` / `created_at` / `updated_at`
+  timestamps, and the composite PK). Mirrors the threads "every
+  delta-logged column is updatable" precedent, giving chapter-close /
+  re-close / boundary-adjust (M5) the full primitive surface without
+  re-editing this domain. `closed_at` stays in `chapterWriteSchema`
+  (validated on create) but out of `UPDATABLE`, so a patch touching only
+  non-updatable fields yields an empty `set`; both update arms guard that
+  case and return `rejected` (without the guard Drizzle's `.set({})`
+  throws "No values to set" — caught in Codex review).
+- **`branch_era_flips` ships its DB constraints here** (migration
+  `0003`): one composite `uniqueIndex(branch_id, at_worldtime)`, serving
+  both the no-duplicate-moment invariant and the resolver's "largest
+  `at_worldtime ≤ N`" range scan (no separate index), plus
+  `CHECK (at_worldtime >= 0)`. The gate's
+  [C5](../milestone.md#c5--key-shape-and-constraint-encoding) list had
+  omitted era-flips; this honors the data-model's pinned constraints.
+  `at_worldtime ≥ 0` is enforced at both the DB CHECK and the write-Zod
+  (`.min(0)`).
+- **Deliberate gate-file touch.** Adding the era-flip constraints edited
+  the gate-owned `stories.table.ts` and the migrations folder — an
+  exception to the "domain slice edits only its own files" property,
+  accepted because the parallel domain slices are already merged.
+- **Store-mirror hardening (shared factory, from Codex review).** The
+  working-set store's update patch now no-ops when the target id is absent
+  from the held set instead of synthesizing a partial row from the column
+  delta — closes a corruption path where a stale operational write (e.g.
+  `embedding_stale` for a since-deleted chapter on the loaded branch)
+  would leave a malformed row. Touches the gate-owned `lib/stores/factory`;
+  benefits every domain store.
+- **Followup queued** in [`triage.md`](../../../triage.md): if a future
+  M5 / M7 orchestrator batches multiple era-flip `at_worldtime` updates
+  into one action, reverse-replay can transiently collide against the
+  non-deferrable unique index. No callers today (this slice ships
+  primitives only).
