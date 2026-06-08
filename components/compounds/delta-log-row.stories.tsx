@@ -75,13 +75,13 @@ export const SourceLoreAgent: Story = {
   args: { delta: { ...baseDelta, source: 'lore_agent' }, onPress: fn() },
 }
 
-export const SourceMemoryCompaction: Story = {
+export const SourcePeriodicClassifier: Story = {
   args: {
     delta: {
       ...baseDelta,
-      source: 'memory_compaction',
+      source: 'periodic_classifier',
       entryId: null,
-      summary: 'Compacted 12 entries into long-term memory',
+      summary: 'Reconciled entity state from recent turns',
     },
     onPress: fn(),
   },

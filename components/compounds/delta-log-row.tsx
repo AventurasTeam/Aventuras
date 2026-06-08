@@ -5,11 +5,14 @@ import { cn } from '@/lib/utils'
 
 type DeltaOp = 'create' | 'update' | 'delete'
 
+// Mirrors the canonical union in lib/actions (DeltaSource). Kept local so this
+// presentational compound stays decoupled from the action layer; v1's data model
+// is frozen, so the two won't drift.
 type DeltaSource =
   | 'ai_classifier'
+  | 'periodic_classifier'
   | 'user_edit'
   | 'lore_agent'
-  | 'memory_compaction'
   | 'chapter_close'
 
 type Delta = {
@@ -50,9 +53,9 @@ const OP_STYLES: Record<DeltaOp, { container: string; label: string }> = {
 
 const SOURCE_LABEL: Record<DeltaSource, string> = {
   ai_classifier: 'classifier',
+  periodic_classifier: 'periodic classifier',
   user_edit: 'user',
   lore_agent: 'lore agent',
-  memory_compaction: 'memory compaction',
   chapter_close: 'chapter close',
 }
 

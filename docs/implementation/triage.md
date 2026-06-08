@@ -29,12 +29,6 @@ slice-planning gate forces its resolution before that slice is planned.
   launch" — the OS-locale seed belongs in the boot / onboarding path,
   not a static schema default. Routes to the calendar domain (M8.3) and
   an onboarding / boot slice respectively.
-- **Stale third `DeltaSource` union.**
-  `components/compounds/delta-log-row.tsx` redeclares a local
-  `DeltaSource` that still carries the dropped `memory_compaction` and
-  lacks `periodic_classifier`. The canonical union is `lib/actions`'
-  `DeltaSource`. Fold the UI to import it (or align the local copy).
-  Out of the M1.5 data-layer slice's scope (UI).
 - **Boot registration-ordering is test-unguarded.** `runBootstrap` calls
   `registerAllDomains()` before `recoverInFlightRuns` (load-bearing:
   recovery drives reverse-replay, which resolves descriptors by
