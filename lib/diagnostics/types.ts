@@ -39,12 +39,16 @@ export type PhaseEvent = {
 
 export type TurnCapture = {
   actionId: string
+  // Pipeline kind: 'per-turn' | 'chapter-close' | 'periodic-classifier' | 'suggestion-refresh' | 'translation-retry'.
+  kind: string
   branchId: string
+  // Grouping key — the turn this run is attributed to. Undefined for a per-turn run
+  // that never produced an entry. Stamped by the orchestrator from M2/M3 onward.
+  anchorEntryId?: string
   targetEntryId?: string
   startedAt: number
   endedAt?: number
   outcome?: 'completed' | 'aborted' | 'failed'
   outcomeReason?: string
   phaseEvents: PhaseEvent[]
-  classifierOutputRaw?: unknown
 }

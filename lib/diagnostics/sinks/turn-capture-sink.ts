@@ -16,14 +16,21 @@ function update(actionId: string, fn: (t: TurnCapture) => TurnCapture): void {
 }
 
 export const turnCaptureSink = {
-  beginTurn(args: { actionId: string; branchId: string }): void {
+  beginTurn(args: {
+    actionId: string
+    kind: string
+    branchId: string
+    anchorEntryId?: string
+  }): void {
     if (!isDiagnosticsEnabled()) return
     diagnosticsStore.setState((state) => {
       const row: TurnCapture = {
         actionId: args.actionId,
+        kind: args.kind,
         branchId: args.branchId,
         startedAt: Date.now(),
         phaseEvents: [],
+        ...(args.anchorEntryId !== undefined ? { anchorEntryId: args.anchorEntryId } : {}),
       }
       if (state.turnCaptures.length < TURN_CAPTURES_CAP) {
         return { turnCaptures: [...state.turnCaptures, row] }
@@ -49,8 +56,10 @@ export const turnCaptureSink = {
     update(actionId, (t) => ({ ...t, phaseEvents: [...t.phaseEvents, event] }))
   },
 
-  recordClassifierOutput(actionId: string, raw: unknown): void {
-    update(actionId, (t) => ({ ...t, classifierOutputRaw: raw }))
+  // Per-turn run: the AI entry landing is both the run's product and the turn it
+  // anchors to, so targetEntryId and anchorEntryId are set together.
+  recordTargetEntry(actionId: string, entryId: string): void {
+    update(actionId, (t) => ({ ...t, targetEntryId: entryId, anchorEntryId: entryId }))
   },
 
   endTurn(actionId: string, outcome: TurnCapture['outcome'], reason?: string): void {

@@ -200,13 +200,16 @@ cross-branch concurrency is parked.
     Slice 1.2's drizzle-kit workflow.
 - Implement `turnCaptureSink` in `lib/diagnostics/` (the
   declared-empty slice from 1.3):
-  - `beginTurn({ actionId, branchId })` appends a new
-    `TurnCapture` to the `turnCaptures` ring buffer (cap 100).
+  - `beginTurn({ actionId, kind, branchId, anchorEntryId? })`
+    appends a new `TurnCapture` to the `turnCaptures` ring buffer
+    (cap 100). `kind` is the pipeline kind; `anchorEntryId` is the
+    turn-grouping key, left undefined here — real anchor stamping
+    lands with the M2 / M3 capture producers.
   - `appendPhaseEvent(actionId, event)` looks up the row by
     actionId and pushes to `phaseEvents`.
-  - `recordClassifierOutput(actionId, raw)` mutates
-    `classifierOutputRaw` (unused this slice; classifier isn't
-    running yet).
+  - `recordTargetEntry(actionId, entryId)` sets `targetEntryId`
+    and `anchorEntryId` together (per-turn run; unused this slice —
+    no real reply entries land yet).
   - `endTurn(actionId, outcome, reason?)` sets `endedAt`,
     `outcome`, `outcomeReason`, finalizes the row.
   - Eviction at cap 100: oldest finalized turn evicts; in-flight
@@ -332,7 +335,7 @@ cross-branch concurrency is parked.
   a single SQLite transaction and updates the `pipeline_runs`
   row with the appropriate outcome.
 - `turnCaptureSink` is fully implemented (`beginTurn`,
-  `appendPhaseEvent`, `recordClassifierOutput`, `endTurn`);
+  `appendPhaseEvent`, `recordTargetEntry`, `endTurn`);
   eviction at cap 100 protects in-flight turns.
 - Ambient `actionId` threads through `logger` and
   `turnCaptureSink` during a run and is cleared after

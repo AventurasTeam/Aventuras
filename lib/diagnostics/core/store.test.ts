@@ -13,7 +13,13 @@ const log: LogEntry = {
   fields: {},
 }
 const call = { id: 'c1', startedAt: 1, method: 'POST', url: 'x', requestHeaders: {} } as HttpCall
-const turn = { actionId: 'a1', branchId: 'b1', startedAt: 1, phaseEvents: [] } as TurnCapture
+const turn = {
+  actionId: 'a1',
+  kind: 'per-turn',
+  branchId: 'b1',
+  startedAt: 1,
+  phaseEvents: [],
+} as TurnCapture
 
 function entry(i: number): LogEntry {
   return { id: String(i), emittedAt: i, level: 'warn', kind: 'pipeline.run_aborted', fields: { i } }

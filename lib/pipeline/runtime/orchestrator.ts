@@ -89,7 +89,7 @@ async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
     run.resolveTerminal()
     throw e
   }
-  turnCaptureSink.beginTurn({ actionId: run.actionId, branchId: run.branchId })
+  turnCaptureSink.beginTurn({ actionId: run.actionId, kind: run.kind, branchId: run.branchId })
   pipelineEventBus.emit({
     type: 'run_start',
     runId: run.runId,
@@ -206,7 +206,7 @@ async function startChainedSuccessor(run: RunState, ctx: RunCtx): Promise<void> 
     storyId: ctx.storyId,
     startedAt: Date.now(),
   })
-  turnCaptureSink.beginTurn({ actionId: run.actionId, branchId: run.branchId })
+  turnCaptureSink.beginTurn({ actionId: run.actionId, kind: run.kind, branchId: run.branchId })
   pipelineEventBus.emit({
     type: 'run_start',
     runId: run.runId,
