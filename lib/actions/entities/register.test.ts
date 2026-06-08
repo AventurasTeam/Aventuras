@@ -66,6 +66,33 @@ describe('entities CRUD arms', () => {
     expect(entitiesStore.getById('char_1')?.state).toMatchObject({ visual: { attire: 'cloak' } })
   })
 
+  it('rejects an empty-set update (no updatable fields → no throw, no delta)', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createEntity', source: 'user_edit', payload: { entry: CHAR } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'char_1', patch: {} },
+        },
+        actionId: 'act_noop',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(result.status).toBe('rejected')
+    expect((await rowFor(db, 'char_1')).name).toBe('Kael') // unchanged
+    expect((await db.select().from(deltas)).length).toBe(1) // only the create delta
+  })
+
   it('a write to a non-held branch no-ops against the store', async () => {
     const { db, ctx } = await setup()
     entitiesStore.hydrate('br_2', []) // store now holds br_2, not br_1

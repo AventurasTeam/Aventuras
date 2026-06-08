@@ -63,16 +63,3 @@ slice-planning gate forces its resolution before that slice is planned.
   deferred-constraint handling or per-row sequencing in the batching layer.
   Zero callers today (the slice ships primitives only). Route to whichever
   of M5 (chapter-close) / M7.2 (era-flip UX) first batches era-flip writes.
-- **Empty-patch update throws across the arm pattern.** Every delta update
-  handler builds `set` by looping `UPDATABLE`; a patch that parses but
-  touches no updatable column leaves `set` empty, and Drizzle's `.set({})`
-  throws "No values to set" — the action crashes instead of being rejected.
-  Fixed in `chapters` / `branch_era_flips` (slice M01b/05) with an
-  empty-set guard returning `rejected`, but the merged sibling arms
-  (`lore`, `threads`, `entities`, `happenings` + its link tables,
-  `character_relationships`, `story_entries`) still carry the latent bug.
-  No current trigger (no UI/orchestrator callers yet). Pattern-wide
-  hardening — add the same guard to each, ideally with one shared helper;
-  pairs naturally with the existing "branch-mismatch rejection is
-  test-unguarded across the arm pattern" item. Route to a delta-arm
-  hardening pass (M2/M3, whoever first wires a real update caller).

@@ -69,6 +69,33 @@ describe('threads CRUD arms', () => {
     expect(threadsStore.getById('thr_1')).toBeUndefined()
   })
 
+  it('rejects an empty-set update (no updatable fields → no throw, no delta)', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createThread', source: 'chapter_close', payload: { entry: THREAD } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateThread',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'thr_1', patch: {} },
+        },
+        actionId: 'act_noop',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(result.status).toBe('rejected')
+    expect((await rowFor(db, 'thr_1')).title).toBe('Recover the relic') // unchanged
+    expect((await db.select().from(deltas)).length).toBe(1) // only the create delta
+  })
+
   it('rejects an unknown status on create (no row, no delta)', async () => {
     const { db, ctx } = await setup()
     const bad = { ...THREAD, status: 'abandoned' } as unknown as NewThread

@@ -67,6 +67,33 @@ describe('happenings CRUD arms', () => {
     expect((await db.select().from(deltas)).length).toBe(0)
   })
 
+  it('rejects an empty-set update (no updatable fields → no throw, no delta)', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createHappening', source: 'ai_classifier', payload: { entry: HAP } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateHappening',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'hap_1', patch: {} },
+        },
+        actionId: 'act_noop',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(result.status).toBe('rejected')
+    expect((await rowFor(db, 'hap_1')).title).toBe('The duel') // unchanged
+    expect((await db.select().from(deltas)).length).toBe(1) // only the create delta
+  })
+
   it('update produces whole-value undo; reverse-replay restores row + store', async () => {
     const { db, ctx } = await setup()
     await applyDeltaAction(

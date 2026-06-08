@@ -111,6 +111,13 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     // No columnSchemas registered: scalar/nullable columns take the whole prior value as undo.
     undoPayload[col] = current[col as keyof Thread]
   }
+  // A patch that parsed but touched no updatable column would reach Drizzle's
+  // .set({}) and throw "No values to set" — reject instead.
+  if (Object.keys(set).length === 0)
+    return {
+      status: 'rejected',
+      reason: `update patch for threads ${bid}:${id} has no updatable fields`,
+    }
 
   return {
     status: 'ok',

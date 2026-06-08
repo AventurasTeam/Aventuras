@@ -135,6 +135,13 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
       undoPayload[col] = current[col as keyof Entity]
     }
   }
+  // A patch that parsed but touched no updatable column would reach Drizzle's
+  // .set({}) and throw "No values to set" — reject instead.
+  if (Object.keys(set).length === 0)
+    return {
+      status: 'rejected',
+      reason: `update patch for entities ${bid}:${id} has no updatable fields`,
+    }
 
   return {
     status: 'ok',

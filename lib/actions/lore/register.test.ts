@@ -71,6 +71,33 @@ describe('lore CRUD arms', () => {
     expect(loreStore.getById('lore_1')).toBeUndefined() // store no-op
   })
 
+  it('rejects an empty-set update (no updatable fields → no throw, no delta)', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createLore', source: 'lore_agent', payload: { entry: LORE } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateLore',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'lore_1', patch: {} },
+        },
+        actionId: 'act_noop',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(result.status).toBe('rejected')
+    expect((await rowFor(db, 'lore_1')).title).toBe('Aether') // unchanged
+    expect((await db.select().from(deltas)).length).toBe(1) // only the create delta
+  })
+
   it('rejects an out-of-range priority on create (no row, no delta)', async () => {
     const { db, ctx } = await setup()
     const bad: NewLore = { ...LORE, priority: 200 }

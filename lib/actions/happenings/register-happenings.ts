@@ -107,6 +107,13 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     set[col] = next
     undoPayload[col] = current[col as keyof Happening]
   }
+  // A patch that parsed but touched no updatable column would reach Drizzle's
+  // .set({}) and throw "No values to set" — reject instead.
+  if (Object.keys(set).length === 0)
+    return {
+      status: 'rejected',
+      reason: `update patch for happening ${bid}:${id} has no updatable fields`,
+    }
   const merged = { ...current, ...set } as Happening
   // Friendly graceful-reject surface over the DDL CHECK constraint.
   if (merged.occurredAtEntryId != null && merged.temporal != null)
