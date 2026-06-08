@@ -110,4 +110,25 @@ lang)`.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **Translation store is a bespoke wrapper; the gate factory is untouched.**
+  `lib/stores/translations/` wraps a private id-keyed
+  `createWorkingSetStore<Translation>()` and maintains a derived
+  `Map<(kind, id, field, lang) → text>` render index, rebuilt from the
+  base rows after each `patch` / `hydrate`. An id-keyed primary is
+  mandatory, not optional: reverse-replay of a `create` emits a store
+  patch carrying only the `tr_` id, so a composite-keyed-only store
+  cannot service delete-by-id. Generalizing the factory with a pluggable
+  key was rejected (YAGNI — translations is the only composite-index
+  consumer). Rebuild-from-base-rows (vs. incremental index updates)
+  auto-inherits the base store's branch guard; incremental updates are a
+  deferred optimization.
+- **Render reactivity is deferred to M8.** The store ships a synchronous
+  `getTranslation(kind, id, field, lang)` selector (O(1) via the index;
+  `undefined` on miss → caller falls back to source). A reactive
+  `useTranslation` subscription is out of scope here (it lands with the
+  `display-translation` reader in M8).
+- **`translatedText` is required non-empty at the write boundary**
+  (`z.string().min(1)`) though the DDL column is nullable — failed
+  translations write no row, so a row that exists always has text.
+- **`entry_assets` ships no asset lifecycle.** Its delete arm writes the
+  link delta only; asset trashing / refcount / GC stays in M4 / M9.

@@ -3,6 +3,7 @@ import { readAppSettingsRow, rehydrateAppSettings } from './app-settings/app-set
 import { chaptersStore } from './chapters/chapters'
 import { characterRelationshipsStore } from './character-relationships/character-relationships'
 import { entitiesStore } from './entities/entities'
+import { entryAssetsStore } from './entry-assets/entry-assets'
 import { eraFlipsStore } from './era-flips/era-flips'
 import { generationStore } from './generation/generation'
 import { happeningAwarenessStore } from './happenings/awareness'
@@ -11,12 +12,14 @@ import { happeningInvolvementsStore } from './happenings/involvements'
 import { loreStore } from './lore/lore'
 import { navigationStore } from './navigation/navigation'
 import { threadsStore } from './threads/threads'
+import { translationsStore } from './translations/translations'
 
 // Test-harness seam: resets every domain store in one call
 export function resetAllStores(): void {
   chaptersStore.__reset()
   characterRelationshipsStore.__reset()
   entitiesStore.__reset()
+  entryAssetsStore.__reset()
   eraFlipsStore.__reset()
   generationStore.__reset()
   happeningAwarenessStore.__reset()
@@ -24,6 +27,7 @@ export function resetAllStores(): void {
   happeningsStore.__reset()
   loreStore.__reset()
   threadsStore.__reset()
+  translationsStore.__reset()
   navigationStore.__reset()
   appSettingsStore.__reset()
 }
@@ -33,6 +37,7 @@ export {
   chaptersStore,
   characterRelationshipsStore,
   entitiesStore,
+  entryAssetsStore,
   eraFlipsStore,
   generationStore,
   happeningAwarenessStore,
@@ -44,6 +49,7 @@ export {
   readAppSettingsRow,
   rehydrateAppSettings,
   threadsStore,
+  translationsStore,
 }
 
 export { createWorkingSetStore } from './factory/working-set-store'
