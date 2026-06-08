@@ -32,3 +32,9 @@ export function registerAllDomains(): void {
   // <domain slices append their register*() call here>
   done = true
 }
+
+// Test-only: clears the idempotency latch so a subsequent registerAllDomains()
+// re-runs. Pair with __resetRegistry() to simulate a cold (empty-registry) boot.
+export function __resetRegistrationGuard(): void {
+  done = false
+}

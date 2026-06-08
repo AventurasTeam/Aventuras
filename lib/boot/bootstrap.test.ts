@@ -1,11 +1,16 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { __resetRegistrationGuard, __resetRegistry } from '@/lib/actions'
 import {
   APP_SETTINGS_DEFAULTS,
   APP_SETTINGS_SINGLETON_ID,
   appSettings,
+  branches,
+  deltas,
   pipelineRuns,
+  stories,
+  storyEntries,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { __resetDiagnosticsGate } from '@/lib/diagnostics'
@@ -81,5 +86,59 @@ describe('runBootstrap', () => {
     ctx.sqlite.exec('DROP TABLE pipeline_runs')
     const r = await runBootstrap(ctx)
     expect(r).toEqual({ status: 'ok' })
+  })
+
+  // Guards the load-bearing registerAllDomains()-before-recovery order. Simulate a
+  // cold boot (empty registry): runBootstrap's own registration must repopulate it
+  // before reverse-replay, else recovery throws unknown target_table and the dirty
+  // orphan's create-delta never reverses. A reorder of those two lines fails here.
+  it('registers domains before recovery so a dirty orphan reverses from a cold registry', async () => {
+    __resetRegistry()
+    __resetRegistrationGuard()
+
+    await seedRow()
+    await ctx.db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await ctx.db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    await ctx.db
+      .insert(storyEntries)
+      .values({
+        id: 'e1',
+        branchId: 'b1',
+        position: 1,
+        kind: 'ai_reply',
+        content: 'x',
+        createdAt: 1,
+      })
+    await ctx.db.insert(pipelineRuns).values({
+      runId: 'r1',
+      kind: 'smoke',
+      actionId: 'act1',
+      storyId: 's1',
+      startedAt: 1,
+      finishedAt: null,
+      outcome: null,
+    })
+    await ctx.db.insert(deltas).values({
+      id: 'd1',
+      branchId: 'b1',
+      entryId: 'e1',
+      actionId: 'act1',
+      logPosition: 1,
+      source: 'ai_classifier',
+      targetTable: 'story_entries',
+      targetId: 'e1',
+      op: 'create',
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: 1,
+    })
+
+    await runBootstrap(ctx)
+
+    expect((await ctx.db.select().from(storyEntries).where(eq(storyEntries.id, 'e1'))).length).toBe(
+      0,
+    )
+    const [run] = await ctx.db.select().from(pipelineRuns).where(eq(pipelineRuns.runId, 'r1'))
+    expect(run.outcome).toBe('recovered')
   })
 })

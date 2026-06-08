@@ -29,16 +29,6 @@ slice-planning gate forces its resolution before that slice is planned.
   launch" — the OS-locale seed belongs in the boot / onboarding path,
   not a static schema default. Routes to the calendar domain (M8.3) and
   an onboarding / boot slice respectively.
-- **Boot registration-ordering is test-unguarded.** `runBootstrap` calls
-  `registerAllDomains()` before `recoverInFlightRuns` (load-bearing:
-  recovery drives reverse-replay, which resolves descriptors by
-  `target_table`). The vitest `setupFiles` pre-registration trips the
-  `done` guard, so `runBootstrap`'s own call is a no-op in every test —
-  a future reorder of those two lines fails no test, yet at real runtime
-  (empty registry) recovery throws `unknown target_table`, swallowed by
-  `runBootstrap`'s try/catch (crash recovery silently disabled). Lock
-  the ordering with a test seam (reset the `done` guard) or a
-  non-empty-registry assertion at the recovery call.
 - **Branch-mismatch rejection is test-unguarded across the arm pattern.**
   Every delta-arm handler guards `payload.branchId !== branchId` and
   returns `{ status: 'rejected' }` (the guard that stops reverse-replay
