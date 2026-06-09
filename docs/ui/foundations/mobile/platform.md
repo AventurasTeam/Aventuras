@@ -303,15 +303,16 @@ background.
 **Mechanism:** RN's `StatusBar` component / `setBarStyle` API.
 Sync with the active theme:
 
-- **Light themes** (Parchment, Catppuccin Latte, Aventuras
-  Signature light, default-light): `barStyle="dark-content"` —
-  dark icons against light status-bar background.
+- **Light themes** (Parchment, Catppuccin Latte, default-light):
+  `barStyle="dark-content"` — dark icons against light status-bar
+  background.
 - **Dark themes** (Catppuccin Mocha, Tokyo Night, Royal,
-  Cyberpunk, Fallen Down, default-dark): `barStyle="light-content"`
-  — light icons against dark status-bar background.
+  Cyberpunk, Fallen Down, Aventuras, default-dark):
+  `barStyle="light-content"` — light icons against dark status-bar
+  background.
 - **Switch on theme change.** The theme registry
   ([`../theming.md`](../theming.md)) carries
-  `themeMode: 'light' | 'dark'`; status-bar style binds directly.
+  `mode: 'light' | 'dark'`; status-bar style binds directly.
 
 **Android-specific:** also set the status-bar background color
 to match the top-bar's `--bg-region` token via

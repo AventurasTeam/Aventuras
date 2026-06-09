@@ -137,7 +137,7 @@ files produced.
    labeling, focus traps for sheets / modals, dynamic-type
    scaling, status-pill phase announcements via
    `accessibilityLiveRegion`. **Status bar style** binds to the
-   active theme's `themeMode`. **Out of scope for v1**: haptics,
+   active theme's `mode`. **Out of scope for v1**: haptics,
    deep links, splash screen config, web-target concerns.
    Files: [`platform.md`](./platform.md),
    [`platform.html`](./platform.html).

@@ -254,7 +254,7 @@ modes).
 --recently-classified-bg: #f0d68a
 ```
 
-`tokens.fonts.--font-reading: '"Charter", "Iowan Old Style", "Source Serif Pro", Georgia, "Cambria", "Liberation Serif", "Noto Serif", serif'`
+`tokens.fonts.--font-reading: '"Charter", "Iowan Old Style", "Source Serif 4", "Source Serif Pro", Georgia, "Cambria", "Liberation Serif", "Noto Serif", serif'`
 
 **Audit expectations** — clears AAA 7:1 on body prose
 (`#3a2818` × `#f5e6c4` ≈ 11.7:1); clears the focus and accent
