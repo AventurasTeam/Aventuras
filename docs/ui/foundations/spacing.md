@@ -163,9 +163,11 @@ The `regular` density (mobile default) sets `--control-h-md` to
 44 px, which meets iOS HIG's 44 pt minimum without `hitSlop`
 gymnastics. `comfortable` density bumps to 48 px (also meets
 Android Material's 48 dp guidance). `compact` density at 40 px
-sits below HIG, but it's the **desktop default** where mouse
-precision settles the question; phone users on `compact` are
-explicitly opting below HIG (a deliberate user choice).
+sits below HIG; it's the **desktop default** where mouse precision
+settles the question. On phone the per-tier 44 px tap floor holds
+regardless of density — a `compact` phone user gets tighter inner
+padding but the tappable row never drops below 44 px (see
+[`mobile/touch.md → Touch-target floor on phone`](./mobile/touch.md#touch-target-floor-on-phone)).
 
 `hitSlop` is no longer the primary mechanism for HIG compliance
 post-density-reinstatement — visible size handles it on the

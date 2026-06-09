@@ -203,15 +203,12 @@ long-form reading activity and individual eyesight varies widely.
 
 ### Persistence
 
-`app_settings.appearance` gains a new field (per
-[`theming.md → Persistence`](./theming.md#persistence)):
+`app_settings.appearance` gains the `readerFontScale` field; the
+full persistence shape (the canonical copy) lives in
+[`theming.md → Persistence`](./theming.md#persistence):
 
 ```ts
-app_settings.appearance: {
-  themeId: string
-  readerFontScale: 'sm' | 'md' | 'lg' | 'xl'   // reader prose scaling
-  accentOverride?: string
-}
+readerFontScale: 'sm' | 'md' | 'lg' | 'xl' // reader prose scaling
 ```
 
 String-keyed (semantic, stable across step-set evolution) rather

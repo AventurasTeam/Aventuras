@@ -142,6 +142,7 @@ carries:
 app_settings.appearance: {
   themeId: string                                 // into the theme registry
   readerFontScale: 'sm' | 'md' | 'lg' | 'xl'      // user-orthogonal reader prose scale — see typography.md
+  density: 'default' | 'compact' | 'regular' | 'comfortable' // 'default' selects per-tier defaults — see spacing.md
   accentOverride?: string                         // hex; honored only when active theme has accentOverridable: true
 }
 ```
