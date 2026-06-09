@@ -549,7 +549,7 @@ structurally-locked radii.
 --recently-classified-bg: #1a1a00
 ```
 
-`tokens.fonts.--font-reading: '"VT323", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'`
+`tokens.fonts.--font-reading: '"VT323", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'`
 
 **Audit expectations** — body prose `#ffffff` × `#000000` = 21:1
 (WCAG-maximum contrast); all targets clear with margin.
