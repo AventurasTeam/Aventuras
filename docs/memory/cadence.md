@@ -2,11 +2,11 @@
 
 Three agents touch memory state at different time scales.
 
-| Layer                      | Trigger                                                                  | Scope                                                                          |
-| -------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| **Piggyback**              | Every AI reply, inline on the narrative call                             | Scene-local fast-mutating state                                                |
-| **Periodic classifier**    | Background, every N turns or token-budget-tied to recent-buffer eviction | Multi-turn batch extractions                                                   |
-| **Chapter-close pipeline** | Token threshold crossed OR user-triggered                                | 5 phases: catch-up classifier, boundary, metadata, lore-mgmt, lifecycle review |
+| Layer                      | Trigger                                       | Scope                                                                          |
+| -------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Piggyback**              | Every AI reply, inline on the narrative call  | Scene-local fast-mutating state                                                |
+| **Periodic classifier**    | Background, every N turns (entry-counted; v1) | Multi-turn batch extractions                                                   |
+| **Chapter-close pipeline** | Token threshold crossed OR user-triggered     | 5 phases: catch-up classifier, boundary, metadata, lore-mgmt, lifecycle review |
 
 Two architectural drivers shape the stratification:
 

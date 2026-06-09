@@ -246,8 +246,8 @@ Cross-cutting deferrals surfaced during the build were routed to the
   `lib/ai`-local `CallRetryError` union so `lib/ai` carries no upward
   dependency on `lib/pipeline`'s `PipelineError`. The helper returns a
   discriminated `ok` / `failed` / `aborted` union so the accumulated
-  recoverable list survives the fatal and abort paths — a refinement of
-  the spec's illustrative `{ result, recoverable }` signature.
+  recoverable list survives the fatal and abort paths, matching the
+  discriminated union that `generation-pipeline.md` now documents.
 - **Ambient `actionId` threaded through the captured fetch.**
   `getActionId` is wired into `createFetchWithCapture` for both the
   `anthropic` and `stub` cases, closing the `httpCallSink`-`actionId`
@@ -287,9 +287,9 @@ Cross-cutting deferrals surfaced during the build were routed to the
 
 The chained-execution context-threading gap is recorded on the
 [M5.2 roadmap entry](../../../roadmap.md) — the first real `chainsTo`
-consumer (per-turn → chapter-close) will own it. The remaining
-cross-cutting deferrals were routed to the
-[triage inbox](../../../triage.md): the structured `action-layer`
-`PipelineError` fields, the shipped `CallRetryError` → `PipelineError`
-mapper, and the `generation-pipeline.md` `callWithRetry` signature
-reconciliation.
+consumer (per-turn → chapter-close) will own it. The structured
+`action-layer` `PipelineError` fields and their `CallRetryError`
+→ `PipelineError` mapper are owned by [roadmap M7.3](../../../roadmap.md)
+(the Diagnostics UI that renders them). The `callWithRetry` signature
+reconciliation is resolved — `generation-pipeline.md` now documents
+the discriminated `ok` / `failed` / `aborted` union.

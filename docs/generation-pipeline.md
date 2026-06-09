@@ -519,7 +519,7 @@ disappearing while any story uses it.
 
 What gets validated is **selective per pipeline kind** — the
 pre-flight walks only the resolver inputs of phases this pipeline
-actually fires. The new-turn pipeline validates retrieval +
+actually fires. The per-turn pipeline validates retrieval +
 narrative + classifier (if a separate classifier call is in the
 phase list, e.g. piggyback mode is off) + suggestions (if
 `stories.settings.suggestionsEnabled`); the chapter-close pipeline
@@ -529,14 +529,14 @@ time; the memory probe validates retrieval's config.
 
 **On failure**, the run halts before phase 0 fires — no LLM call
 goes out, no tokens spent, no deltas written. The orchestrator
-emits a `run_complete` event with `result.status === 'failed'` and
+emits a `run_complete` event with `outcome === 'failed'` and
 an error payload identifying the first failing resolver in phase
 order (retrieval before narrative before classifier — avoids
 piling up multiple system entries when the user has multiple
 broken references).
 
 **Surfacing.** Pre-flight failure on **turn-blocking pipelines**
-(new-turn, chapter-close, memory probe) emits a system-kind entry
+(per-turn, chapter-close, memory probe) emits a system-kind entry
 into the affected story per
 [`reader-composer.md → Error surface`](./ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill).
 Pre-flight failure on **background pipelines** (periodic
