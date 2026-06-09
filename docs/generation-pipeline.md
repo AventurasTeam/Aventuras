@@ -1378,6 +1378,14 @@ const chapterClosePipeline: Pipeline = {
   // chained start bypasses (orchestrator-internal)
 }
 
+const suggestionRefreshPipeline: Pipeline = {
+  kind: 'suggestion-refresh',
+  gateBehavior: 'no-gate', // composer stays usable; only the chip strip shows local loading
+  concurrencyPolicy: { blockedBy: ['per-turn', 'suggestion-refresh'] },
+  // per-turn and self-block are framework backstops; the UI also gates
+  // the re-roll affordance during a turn or while one is already loading
+}
+
 const periodicClassifierPipeline: Pipeline = {
   kind: 'periodic-classifier',
   gateBehavior: 'no-gate',
