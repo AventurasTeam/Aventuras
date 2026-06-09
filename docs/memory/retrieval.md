@@ -828,13 +828,14 @@ floor; rare in practice.
 
 ### Ranker semantics
 
-The ranker uses `decay_resistance` to bias the budget queue: pinned
-items get **preferred slots in the budget queue, ranked by recency
-among themselves**, with the embedding-similarity-ranked tail filling
-remaining budget. Pinned items do **not bypass the budget** — long
-stories with hundreds of pinned rows still fall to budget pressure,
-oldest-pinned-first. Absolute always-inject would break on long
-stories.
+The ranker uses `decay_resistance` to bias scoring, not to carve out
+a separate budget tier: a pinned item's salience decays more slowly
+(scaled by `(1 - decay_resistance)`), so it floats higher in the
+single similarity-ranked order without reserved slots and without
+bypassing the budget. Long stories with hundreds of pinned rows
+still fall to budget pressure — pins compete on similarity to the
+current scene, and only the diverse-and-relevant survive MMR +
+budget. Absolute always-inject would break on long stories.
 
 Decay model: salience decays per chapter, scaled by
 `(1 - decay_resistance)`. Exact math at the
