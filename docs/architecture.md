@@ -310,12 +310,15 @@ Several shapes feed into it:
      thereafter. Changing the global does NOT propagate to existing
      stories. This is the **copy-at-creation scope pattern**.
    - **Agent assignments** (`assignments[agentId]` → profile id) —
-     each agent (narrative, classifier, embedder, …) points at a
+     each agent (`classifier`, `translation`, `suggestion`,
+     `lore-mgmt`, `retrieval`, `wizard-assist`) points at a
      provider-profile. Resolved live at render time via the models
      resolver (see below). This is the **override-at-render scope
      pattern**. No "global default model" constant exists — the
      resolver walks story-override → app-assignment → profile, full
-     stop.
+     stop. Narrative is not an agent — it's always wired to the
+     `kind: 'narrative'` profile. Embedders are not agents either
+     and never route through `assignments` (no LLM-profile shape).
    - **App-only settings** — global concerns that never appear
      per-story (API keys, classifier truncation caps, diagnostics
      toggles). The diagnostics toggles are special: they persist in

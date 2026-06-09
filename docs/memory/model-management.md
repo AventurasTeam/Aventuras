@@ -241,7 +241,7 @@ around the call site rather than inside the SDK.
 
 ### Custom file import
 
-Settings · Memory exposes "Import custom model" for users with a
+App Settings · Embedding models exposes "Import custom model" for users with a
 local model file outside the curated catalog. The user provides
 three files from the filesystem (`model.onnx`, `tokenizer.json`,
 `tokenizer_config.json`). Flow:
@@ -300,7 +300,7 @@ installs don't count as agreement.
 
 ## Removal
 
-Settings · Memory · Models list shows installed models. A per-model
+App Settings · Embedding models list shows installed models. A per-model
 overflow menu offers `Remove`. The dialog branches on whether any
 story currently has the model selected:
 
@@ -352,9 +352,10 @@ adjusting.
 
 ### Test button
 
-Settings · Memory exposes a `Test embedder` affordance per active
-embedder configuration (the local model, and/or the configured
-provider embedder). Tapping it runs init + a smoke-test embed and
+App Settings exposes a `Test embedder` affordance per active
+embedder configuration (the local model on the Embedding models
+tab, the provider embedder on its Providers list). Tapping it runs
+init + a smoke-test embed and
 reports success or failure with diagnostics. Lets users verify
 proactively rather than waiting for the first turn-time use.
 
@@ -464,15 +465,16 @@ parameters. Forcing them into the profile shape would create UI
 noise and a misleading conceptual link between two unrelated
 concerns.
 
-Two surfaces:
+Three surfaces, three concerns (per
+[`app-settings.md → Embedding models`](../ui/screens/app-settings/app-settings.md#generation--embedding-models)):
 
-**App Settings · Memory tab** — app-level defaults that seed new
-stories' settings:
+**App Settings · Embedding models tab** — manages the **installed
+local models** themselves (infrastructure under Generation, not a
+story default):
 
-- Embedder backend default (`local | provider`).
-- Local model picker (catalog list + Import custom + Remove). Each
-  installed model carries:
-  - A `Test embedder` button that runs init + smoke-test embed.
+- Catalog list, Import custom, and Remove. Each installed model
+  carries:
+  - A `Test embedder` button that runs init then a smoke-test embed.
   - An `Execution provider` picker — defaults to the catalog
     `default_ep[platform]` for curated entries, or the user's pick
     at import time for custom entries. Override persists in the
@@ -480,22 +482,32 @@ stories' settings:
     that picking the wrong EP can crash the app on next embed
     call (which surfaces at action time per
     [Embedder failures](#embedder-failures), not at app launch).
-- Provider embedder picker (provider dropdown grouped by configured
-  providers; model dropdown filtered to embedding-capable models on
-  the chosen provider) plus its own `Test embedder` button.
-  Required when backend is `provider`.
+- The cross-story staleness aggregate, plus "Re-index this story
+  now" affordances when a story has staleness or a model-swap
+  pending.
+
+Provider-side embedding models are not installed here — they live on
+each provider's Embedding models list under
+[`Providers`](../ui/screens/app-settings/app-settings.md#generation--providers).
+
+**App Settings · Memory tab** — the **default selection only** that
+seeds new stories' settings:
+
+- Embedder backend default (`local | provider`).
+- The default-model selector: which installed local model (backend
+  `local`), or which provider and embedding-capable model (provider
+  dropdown grouped by configured providers, model dropdown filtered
+  to that provider) when backend is `provider`.
 - Per-type retrieval budgets (see
   [`retrieval.md → Per-type retrieval budgets`](./retrieval.md#per-type-retrieval-budgets)
   — already in scope).
-- "Re-index this story now" affordances surface here too when a
-  story has staleness or a model-swap pending.
 
-**Story Settings · Memory tab** — per-story override of the
-app-level defaults. Same fields except the EP picker (per-story EP
-override is parked — limited divergence data justifies one surface
-in v1). Locked once the story has any embedded content (i.e. once
-any vec0 rows exist for that story's branches), unless the user
-explicitly triggers the model-swap re-index path.
+**Story Settings · Memory tab** — per-story override of the default
+selection. Same fields except the EP picker (per-story EP override
+is parked — limited divergence data justifies one surface in v1).
+Locked once the story has any embedded content (i.e. once any vec0
+rows exist for that story's branches), unless the user explicitly
+triggers the model-swap re-index path.
 
 ---
 
