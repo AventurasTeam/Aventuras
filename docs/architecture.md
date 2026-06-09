@@ -992,12 +992,14 @@ Flag for future sessions:
   [Slice 1.2](./implementation/milestones/01-spine/slices/02-drizzle-schema.md)),
   store hydration, and
   [crash recovery](./generation-pipeline.md#crash-recovery-via-pipeline_runs-marker-table).
-  The substrate is in place — schema migrations run idempotently
-  at boot, marker-table replay is spec'd end-to-end — what's
-  missing is the canonical ordering doc that names the precise
-  sequence (migrations → store hydration → recovery →
-  first render) and the recovery hook's module path. Lands with
-  the broader startup-slice when it's written.
+  The canonical ordering is owned by
+  [Slice 1.7a](./implementation/milestones/01-spine/slices/07a-app-root-boot.md)
+  and [`generation-pipeline.md → Startup recovery pass`](./generation-pipeline.md#startup-recovery-pass):
+  migrations → stores constructed empty → recovery → settings
+  hydration → first render. Recovery runs **before** settings
+  hydration so an orphan's reverse-replay applies against
+  freshly-migrated tables before the UI reads them
+  (`recoverInFlightRuns()` in `lib/pipeline/`).
 - **Secrets storage** — API keys in SQLite (per data strategy), whether
   encrypted at rest, how they flow from settings UI into AI SDK calls
 - **Observability + debugging** — substrate designed in
