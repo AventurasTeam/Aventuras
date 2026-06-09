@@ -156,15 +156,17 @@ Stored in a new `probe_captures` table:
 ```sql
 probe_captures {
   branch_id TEXT, id TEXT,                    -- composite PK; forks with branch
-  target_entry_id TEXT,                       -- the entry whose retrieval this drove
+  target_entry_id TEXT,                       -- FK-less story_entries.id (branch-scoped, resolved via (branch_id, id)); the entry whose retrieval this drove
   captured_at INTEGER,
   capture_mode TEXT,                          -- 'light' | 'deep'
   embedding_model_id TEXT,                    -- model active at capture
   failure_reason TEXT,                        -- nullable; set if retrieval failed
   payload BLOB,                               -- gzipped JSON of the per-capture record
   payload_size INTEGER,                       -- pre-compression size for storage UI
-  PRIMARY KEY (branch_id, id),
-  FOREIGN KEY (branch_id, target_entry_id) REFERENCES entries (branch_id, id)
+  PRIMARY KEY (branch_id, id)
+  -- No FK on (branch_id, target_entry_id): story_entries has a composite
+  -- PK so a single-column FK is impossible, and entry refs are FK-less
+  -- by design (entries are hard-deleted on rollback). Resolved in app code.
 }
 ```
 

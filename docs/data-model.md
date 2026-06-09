@@ -177,8 +177,8 @@ erDiagram
         text summary "LLM-generated at create"
         text theme "short thematic tag"
         json keywords "for retrieval / injection"
-        text start_entry_id FK
-        text end_entry_id FK "always set — only closed chapters exist as rows"
+        text start_entry_id "FK-less ref into story_entries, branch-scoped"
+        text end_entry_id "FK-less ref into story_entries; always set — only closed chapters exist as rows"
         integer token_count "accumulated across chapter entries"
         integer closed_at
         integer embedding_stale "0 | 1; 1 = embedded fields (summary/theme) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
@@ -245,7 +245,7 @@ erDiagram
     probe_captures {
         text id PK
         text branch_id FK "composite PK with id; captures fork with branches"
-        text target_entry_id FK "the entry whose retrieval pass this capture diagnoses; FK into story_entries"
+        text target_entry_id "the entry whose retrieval pass this capture diagnoses; FK-less ref into story_entries, branch-scoped"
         integer captured_at
         text capture_mode "light | deep; light stores per-row sims + score components, deep adds candidate vectors. See docs/memory/probe.md → Capture model"
         text embedding_model_id "model active at capture; bound to deep-mode vectors for vector-space validity. Light captures are model-agnostic post-capture (sims are pre-computed cosines)."
@@ -1933,10 +1933,16 @@ involvements or awareness; the conflation would muddy both domains.
 **Constraints:**
 
 - `at_worldtime ≥ 0` — no pre-story flips. Pre-story history belongs
-  in `happenings.temporal`. Time is increment-only.
+  in `happenings.temporal`. Time is increment-only. Enforced by a
+  DB `CHECK (at_worldtime ≥ 0)` (migration `0003`).
 - Unique `(branch_id, at_worldtime)` — no two flips at the same
-  moment on the same branch. UI-level invariant; the user has no
-  normal flow to construct conflicting writes.
+  moment on the same branch. Enforced by a DB
+  `uniqueIndex(branch_id, at_worldtime)` (migration `0003`,
+  non-deferrable), which doubles as the resolver's range-scan index
+  (below). The user has no normal flow to construct conflicting
+  writes; single-action writes are collision-free, but a future
+  batched reverse-replay touching multiple flips must sequence
+  per-row to avoid a transient mid-undo collision.
 - A flip at `at_worldtime = 0` overrides the calendar's
   `EraDeclaration.defaultStartName`. The story-creation wizard
   (deferred — not yet drawn; lands with the wizard pass) is the
@@ -1950,7 +1956,8 @@ involvements or awareness; the conflation would muddy both domains.
 the largest `at_worldtime ≤ N` for the current branch. Before any
 flip (and the calendar isn't constrained to have one at 0), the
 active era is the calendar's `EraDeclaration.defaultStartName`.
-Indexable on `(branch_id, at_worldtime)` for O(log n) lookup.
+Served by the same `(branch_id, at_worldtime)` unique index
+(above) for O(log n) lookup.
 
 **Calendar swap.** Flips are preserved as-is (`at_worldtime` is in
 seconds, calendar-agnostic). If the new calendar has `eras: null`,

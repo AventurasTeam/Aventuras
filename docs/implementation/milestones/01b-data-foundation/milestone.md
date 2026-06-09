@@ -254,7 +254,10 @@ gate-slice authoring:
   `CHECK (kind IS NOT NULL OR inverse_kind IS NOT NULL)`,
   `UNIQUE (branch_id, a_id, b_id)`);
   `happening_awareness` `UNIQUE (branch_id, character_id, happening_id)`;
-  `translations` `UNIQUE (branch_id, target_kind, target_id, field, language)`.
+  `translations` `UNIQUE (branch_id, target_kind, target_id, field, language)`;
+  `branch_era_flips` (`UNIQUE (branch_id, at_worldtime)`,
+  `CHECK (at_worldtime ≥ 0)`) — this pair landed in the chapters
+  slice rather than the gate, a documented gate-file exception.
   These are DB backstops; the application write path is the primary
   enforcement (e.g. the relationship `normalizeForWrite` canonical
   ordering).
