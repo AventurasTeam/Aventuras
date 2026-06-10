@@ -119,6 +119,36 @@ Both questions live with the broader backup design pass — see
 [Backup / export consistency](#backup--export-consistency) for the
 gating concerns that share the same pass.
 
+#### Tier-2 retrieval ranker-knob tuning surface
+
+The ranker's scoring-math knobs — per-type decay rates `λ`, MMR
+diversity `λ_div`, `kw_boost`, `min_score_threshold`, `τ_revive`,
+`chapter_boost`, and the three query weights `w_action` / `w_digest`
+/ `w_prose` — ship in v1 as hardcoded constants. Their starting
+values live in prose under
+[`retrieval.md → Tuning surface`](./memory/retrieval.md#tuning-surface),
+calibrated against real story data by the empirical-tuning pass that
+the [scale assumptions](./memory/retrieval.md#scale-assumptions)
+describe. No persisted field or settings control exists for them in
+v1, by design.
+
+These are distinct from the **Tier-1** retrieval knobs (per-type
+budgets, buffers, classifier cadence, embedding config), which v1
+already exposes as editable fields on `stories.settings` seeded from
+`app_settings.default_story_settings` per the copy-at-creation
+pattern. Post-v1, the Tier-2 knobs adopt that same shape: an
+app-level default plus per-story override, with optional named
+presets (e.g. tight / loose / off) layered on top.
+
+Lands post-v1, once the empirical-tuning pass has settled defaults
+stable enough to be worth exposing — surfacing them earlier would
+hand users knobs whose sane ranges aren't yet known. The work adds
+the Tier-2 fields to the `StorySettings` schema and to
+`app_settings.default_story_settings`, then builds the
+App Settings → Memory → Advanced and per-story override controls the
+[tuning surface](./memory/retrieval.md#tuning-surface) section
+currently only gestures at.
+
 ### UX (post-v1)
 
 #### Prompt-pack editor (desktop spec + mobile retrofit)

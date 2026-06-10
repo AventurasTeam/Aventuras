@@ -1323,8 +1323,11 @@ def rank_all(pools, queries, budgets, type_config):
 
 ### Tuning surface
 
-Defaults are conservative; expose for power-user override in App
-Settings → Memory → Advanced:
+Defaults are conservative. v1 ships them hardcoded; the user-facing
+override surface — an app-level default plus per-story override under
+App Settings → Memory → Advanced — is parked
+([parked.md → Tier-2 retrieval ranker-knob tuning surface](../parked.md#tier-2-retrieval-ranker-knob-tuning-surface)).
+The Tier-2 knob set those controls would expose:
 
 - Per-type `λ` decay rates.
 - `λ_div` MMR diversity vs. relevance.
