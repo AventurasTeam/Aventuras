@@ -99,16 +99,14 @@ describe('runBootstrap', () => {
     await seedRow()
     await ctx.db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     await ctx.db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
-    await ctx.db
-      .insert(storyEntries)
-      .values({
-        id: 'e1',
-        branchId: 'b1',
-        position: 1,
-        kind: 'ai_reply',
-        content: 'x',
-        createdAt: 1,
-      })
+    await ctx.db.insert(storyEntries).values({
+      id: 'e1',
+      branchId: 'b1',
+      position: 1,
+      kind: 'ai_reply',
+      content: 'x',
+      createdAt: 1,
+    })
     await ctx.db.insert(pipelineRuns).values({
       runId: 'r1',
       kind: 'smoke',
