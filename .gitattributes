@@ -1,0 +1,25 @@
+# Normalize all text files to LF in the repository and on checkout, so a
+# contributor editor or git's autocrlf can't introduce CRLF. This is the one
+# corruption vector the rest of the tooling can't catch at the source.
+* text=auto eol=lf
+
+# drizzle-kit generated migrations: force LF, never CRLF. The SQL content is
+# hashed by drizzle-orm at runtime and meta/ snapshots are checksummed — a
+# line-ending flip would break migrations, not just diffs.
+lib/db/migrations/**/*.sql text eol=lf
+
+# Binary assets — never normalize line endings or attempt a text diff.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.ttf   binary
+*.otf   binary
+*.woff  binary
+*.woff2 binary
+
+# SQLite database files, should any ever be committed.
+*.db     binary
+*.sqlite binary

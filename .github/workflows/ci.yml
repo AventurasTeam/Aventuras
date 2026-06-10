@@ -39,6 +39,12 @@ jobs:
       - name: Lint docs (remark)
         run: pnpm lint:docs
 
+      - name: Check migration consistency (drizzle-kit)
+        run: pnpm db:check
+
+      - name: Check migration file format
+        run: pnpm db:check:format
+
       - name: Typecheck
         run: pnpm typecheck
 
