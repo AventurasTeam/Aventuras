@@ -659,24 +659,21 @@ export class EntryRetrievalService extends BaseAIService {
     const normalized = text.toLowerCase().trim()
     if (normalized.length < 2) return false
 
-    // Check if the keyword contains CJK (Chinese, Japanese, Korean) characters
-    const hasCJK = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]/.test(normalized)
-
-    if (hasCJK) {
+    // Check if the keyword contains characters from non-space-separated languages (CJK, Thai, Lao, Khmer, Burmese)
+    const isNonSpaceSeparated = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\u0e00-\u0e7f\u0e80-\u0eff\u1780-\u17ff\u1000-\u109f]/.test(normalized)
+    if (isNonSpaceSeparated) {
       // Non-space-separated languages must use substring matching
       return searchContent.includes(normalized)
     }
-
-    // Dynamic word boundary match for space-separated languages
+    // Dynamic Unicode-aware word boundary match for space-separated languages
     let patternStr = escapeRegex(normalized)
-    if (/^\w/.test(normalized)) {
-      patternStr = '\\b' + patternStr
+    if (/^[\p{L}\p{N}]/u.test(normalized)) {
+      patternStr = '(?<![\\p{L}\\p{N}])' + patternStr
     }
-    if (/\w$/.test(normalized)) {
-      patternStr = patternStr + '\\b'
+    if (/[\p{L}\p{N}]$/u.test(normalized)) {
+      patternStr = patternStr + '(?![\\p{L}\\p{N}])'
     }
-
-    const wordPattern = new RegExp(patternStr, 'i')
+    const wordPattern = new RegExp(patternStr, 'iu')
     return wordPattern.test(searchContent)
   }
 
