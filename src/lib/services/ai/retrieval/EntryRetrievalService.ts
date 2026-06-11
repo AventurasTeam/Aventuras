@@ -659,18 +659,25 @@ export class EntryRetrievalService extends BaseAIService {
     const normalized = text.toLowerCase().trim()
     if (normalized.length < 2) return false
 
-    // Exact match
-    if (searchContent.includes(normalized)) {
-      return true
+    // Check if the keyword contains CJK (Chinese, Japanese, Korean) characters
+    const hasCJK = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]/.test(normalized)
+
+    if (hasCJK) {
+      // Non-space-separated languages must use substring matching
+      return searchContent.includes(normalized)
     }
 
-    // Word boundary match
-    const wordPattern = new RegExp(`\\b${escapeRegex(normalized)}\\b`, 'i')
-    if (wordPattern.test(searchContent)) {
-      return true
+    // Dynamic word boundary match for space-separated languages
+    let patternStr = escapeRegex(normalized)
+    if (/^\w/.test(normalized)) {
+      patternStr = '\\b' + patternStr
+    }
+    if (/\w$/.test(normalized)) {
+      patternStr = patternStr + '\\b'
     }
 
-    return false
+    const wordPattern = new RegExp(patternStr, 'i')
+    return wordPattern.test(searchContent)
   }
 
   /**
