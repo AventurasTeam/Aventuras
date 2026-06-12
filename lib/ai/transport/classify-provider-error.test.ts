@@ -46,4 +46,21 @@ describe('classifyProviderError', () => {
       retryable: true,
     })
   })
+
+  it('extracts Retry-After seconds into retryAfterMs', () => {
+    const err = new APICallError({
+      message: 'rate limited',
+      url: 'https://api.test/v1',
+      requestBodyValues: {},
+      statusCode: 429,
+      responseHeaders: { 'retry-after': '2' },
+    })
+    const out = classifyProviderError(err)
+    expect(out.retryable).toBe(true)
+    expect(out.retryAfterMs).toBe(2000)
+  })
+
+  it('returns undefined retryAfterMs when the header is absent', () => {
+    expect(classifyProviderError(apiError(503)).retryAfterMs).toBeUndefined()
+  })
 })
