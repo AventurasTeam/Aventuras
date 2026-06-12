@@ -4,6 +4,7 @@ import { Platform, Pressable, ScrollView, View } from 'react-native'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { DiagnosticsSettingsPanel } from '@/components/compounds/diagnostics-settings-panel'
+import { ProviderSetupForm } from '@/components/compounds/provider-setup-form'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { Button } from '@/components/ui/button'
@@ -129,6 +130,8 @@ export default function SettingsRoute() {
             </Button>
           ) : null}
         </>
+      ) : activeTab === 'providers' ? (
+        <ProviderSetupForm />
       ) : activeTab != null ? (
         <EmptyState title={t('settings:comingSoon')} />
       ) : null}
