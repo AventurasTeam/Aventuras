@@ -31,7 +31,9 @@ export default function Index() {
       onOpenAppSettings={() => router.push('/settings')}
       actions={<AppActionsMenu />}
       banners={
-        noProviders ? <AiConfigBanner onPressCta={() => router.push('/settings')} /> : undefined
+        noProviders ? (
+          <AiConfigBanner onPressCta={() => router.push('/settings?tab=providers')} />
+        ) : undefined
       }
     >
       <View className="flex-1 items-center justify-center gap-6 p-6">

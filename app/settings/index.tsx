@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useState } from 'react'
 import { Platform, Pressable, ScrollView, View } from 'react-native'
 
@@ -32,10 +32,25 @@ type SettingsTabId =
 
 const SETTINGS_RAIL_WIDTH = 240
 
+const SETTINGS_TAB_IDS = [
+  'providers',
+  'profiles',
+  'memory',
+  'translation',
+  'composer',
+  'appearance',
+  'language',
+  'data',
+  'about',
+  'diagnostics',
+] as const satisfies readonly SettingsTabId[]
+
 export default function SettingsRoute() {
   const router = useRouter()
   const isPhone = useTier() === 'phone'
-  const [selectedTab, setSelectedTab] = useState<SettingsTabId | null>(null)
+  const { tab } = useLocalSearchParams<{ tab?: string }>()
+  const initialTab = SETTINGS_TAB_IDS.includes(tab as SettingsTabId) ? (tab as SettingsTabId) : null
+  const [selectedTab, setSelectedTab] = useState<SettingsTabId | null>(initialTab)
 
   const enabled = appSettingsStore.useAppSettings((s) => s.diagnostics.enabled)
   const debugEnabled = appSettingsStore.useAppSettings((s) => s.diagnostics.debug_level_enabled)
