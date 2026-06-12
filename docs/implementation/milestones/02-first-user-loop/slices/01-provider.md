@@ -170,4 +170,45 @@ definition of done requires a _user_ to complete the loop and the
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **Quick-wire assigns all six agents, not just `wizard-assist`.** The
+  one-control action writes the narrative profile, one agent profile, and
+  assignments for every agent in the registry pointing at that agent
+  profile, plus the default provider. This aligns the write with the
+  control's own "narrative and agent tasks" label and is forward-safe (no
+  surprise `no-profile-assigned` when a later milestone first fires another
+  agent). Agent-profile `structuredOutput` defaults to `'auto'`.
+- **Per-story override resolves on the default provider.** A bare model id
+  in `stories.settings.models[target]` short-circuits the assignment walk
+  and resolves as `{ providerId: defaultProviderId, modelId: override }`;
+  no default provider yields `provider-missing`. This is the reading most
+  consistent with the AC wording and the data-model's "no provider
+  component" note. M2-inert (no override UI yet); if the per-turn wiring in
+  [Slice 2.7](./07-wiring.md) reveals the intent was "inherit the assigned
+  profile's provider," that is a canonical-spec clarification to raise, not
+  a silent resolver change.
+- **The AgentId registry (`AGENT_IDS` / `AgentId`) lives in `lib/db`, not
+  `lib/ai`.** It indexes `app_settings.assignments`, so the config/action
+  layer must reach it without importing the AI-SDK barrel — `lib/actions`
+  importing `AGENT_IDS` from `lib/ai` dragged the `ai` SDK plus the
+  transport modules into `vitest.setup.ts`'s graph and broke `vi.mock` in
+  the `lib/ai` tests. `lib/ai` re-exports the registry, so its public
+  surface is unchanged. Future slices import `AGENT_IDS` from `lib/db`.
+- **`resolveModel` is a pure config-injected function; `getModel` reads the
+  store.** The resolver takes `{ providers, profiles, assignments,
+defaultProviderId, storyModels }` explicitly (no store read), so 2.9
+  pre-flight calls it per agent and 2.7 builds the store adapter at the
+  call site. `getModel` does read `appSettingsStore` to resolve a real
+  provider instance, with the temporary stub registry as a fallback until
+  [Slice 2.7](./07-wiring.md) removes the smoke seam.
+- **Configured provider keys are registered into the `httpCallSink`
+  redaction comparator at `app_settings` hydrate.** The M1 redaction was
+  fed only by the stub registry, so a real OAI-compat call would have
+  leaked its raw `Authorization` key into the diagnostics buffer; the
+  hydrate path now syncs the comparator from `providers[]` on every
+  (re)hydrate, which an integration test covers.
+- **`streamProviderCall` ships without bespoke error mapping.**
+  `runProviderCall` distinguishes an internal SDK timeout from a user
+  cancel; the streaming variant returns the raw `streamText` result (errors
+  surface on the stream). [Slice 2.7](./07-wiring.md) wires streaming into
+  the store and verifies the SDK v6 timeout-error shape against a real
+  endpoint — the one open monitor from this slice.
