@@ -12,5 +12,9 @@
     "actions": "Actions",
     "back": "Back",
     "chapterProgress": "Chapter progress"
+  },
+  "aiBanner": {
+    "notConfigured": "AI generation not configured.",
+    "cta": "Set up a provider"
   }
 }
