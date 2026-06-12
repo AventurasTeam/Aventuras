@@ -1,11 +1,18 @@
 import { setHttpCallKnownSecretValues } from '@/lib/diagnostics'
+import { appSettingsStore } from '@/lib/stores'
 
 import type { ProviderInstanceWithStub } from '../types'
 
 let providers: ProviderInstanceWithStub[] = []
 
+// setHttpCallKnownSecretValues replaces the whole comparator, and app_settings
+// hydrate is the other writer — so union the configured keys in here (the stub
+// side owns the merge because app_settings can't import this dev seam) to keep
+// registering the stub from dropping a real provider's key.
 function syncProviderSecrets(): void {
-  setHttpCallKnownSecretValues(providers.map((provider) => provider.apiKey))
+  const configuredKeys = appSettingsStore.getAppSettings().providers.map((p) => p.apiKey)
+  const stubKeys = providers.map((provider) => provider.apiKey)
+  setHttpCallKnownSecretValues([...configuredKeys, ...stubKeys])
 }
 
 export function findTemporaryProvider(providerId: string): ProviderInstanceWithStub | undefined {
