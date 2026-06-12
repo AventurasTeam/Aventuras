@@ -26,6 +26,7 @@ export async function fetchModelCatalog(
     method: 'GET',
     // Keyless local endpoints (LM Studio, llama.cpp) omit auth rather than send
     // a bare `Bearer `; mirrors createOpenAICompatible's own header construction.
+    // TODO: Revisit when adding other providers.
     headers: provider.apiKey ? { authorization: `Bearer ${provider.apiKey}` } : {},
   })
   if (!response.ok) {

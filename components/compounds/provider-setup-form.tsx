@@ -63,7 +63,12 @@ export function ProviderSetupForm() {
     if (provider === undefined) return
     setCatalog('fetching')
     try {
-      const ids = await fetchModelCatalog(provider)
+      const ids = await fetchModelCatalog({
+        ...provider,
+        displayName,
+        endpoint,
+        apiKey,
+      })
       await updateProvider(
         provider.id,
         { cachedModels: ids.map((id) => ({ id })), cachedAt: Date.now() },

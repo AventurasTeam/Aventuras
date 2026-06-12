@@ -17,7 +17,9 @@ export class ProviderTimeoutError extends Error {
 }
 
 function parseRetryAfter(headers: Record<string, string> | undefined): number | undefined {
-  const raw = headers?.['retry-after']
+  if (headers === undefined) return undefined
+  const key = Object.keys(headers).find((k) => k.toLowerCase() === 'retry-after')
+  const raw = key ? headers[key] : undefined
   if (raw === undefined) return undefined
   const seconds = Number(raw)
   if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000)
