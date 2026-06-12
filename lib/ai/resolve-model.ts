@@ -7,7 +7,7 @@ export type ResolveModelConfig = {
   assignments: Record<string, string>
   defaultProviderId: string | null
   // stories.settings.models — narrative + 5 agents (no wizard-assist slot).
-  storyModels?: Partial<Record<string, string>>
+  storyModels?: Partial<Record<ResolveTarget, string>>
 }
 
 export type ResolvedParams = {

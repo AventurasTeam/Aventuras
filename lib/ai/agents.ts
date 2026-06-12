@@ -11,5 +11,4 @@ export const AGENT_IDS = [
 
 export type AgentId = (typeof AGENT_IDS)[number]
 
-// resolveModel resolves a model for an agent or for the narrative storyteller.
 export type ResolveTarget = AgentId | 'narrative'
