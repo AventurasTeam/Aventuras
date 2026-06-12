@@ -1,4 +1,5 @@
 import { createAnthropic, type AnthropicProvider } from '@ai-sdk/anthropic'
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { LanguageModel } from 'ai'
 
 import { makeScenarioFetch, type StubScenario } from './stub/scenarios'
@@ -39,6 +40,22 @@ export function createProviderModel(
       })
 
       return anthropic('claude-3-haiku-20240307')
+    }
+    case 'openai-compatible': {
+      if (provider.endpoint === undefined || provider.endpoint.length === 0) {
+        throw new Error(`Provider "${provider.id}" (openai-compatible) requires an endpoint`)
+      }
+      const openaiCompatible = createOpenAICompatible({
+        name: provider.displayName,
+        apiKey: provider.apiKey,
+        baseURL: provider.endpoint,
+        fetch: createFetchWithCapture({
+          source: `provider:${provider.id}`,
+          actionId,
+        }),
+      })
+
+      return openaiCompatible(modelId)
     }
     default:
       throw new Error(`Provider type "${provider.type}" is not supported in Slice 1.4`)
