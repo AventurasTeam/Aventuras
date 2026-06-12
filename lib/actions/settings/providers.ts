@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm'
 import { ulid } from 'ulid'
 
-import { AGENT_IDS } from '@/lib/ai'
 import {
+  AGENT_IDS,
   APP_SETTINGS_SINGLETON_ID,
   type ModelProfile,
   type ProviderInstance,
