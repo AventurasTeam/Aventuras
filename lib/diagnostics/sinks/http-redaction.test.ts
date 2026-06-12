@@ -87,4 +87,24 @@ describe('http redaction', () => {
       'https://example.test/?token=***&token=public&x=1',
     )
   })
+
+  it('redacts an OAI-compat key across header placements by value', () => {
+    setHttpCallKnownSecretValues(['sk-oai-compat-xyz'])
+
+    expect(redactHeaderValue('Bearer sk-oai-compat-xyz')).toBe('***')
+    expect(
+      redactHeaders({
+        authorization: 'Bearer sk-oai-compat-xyz',
+        'api-key': 'sk-oai-compat-xyz',
+        'content-type': 'application/json',
+      }),
+    ).toEqual({ authorization: '***', 'api-key': '***', 'content-type': 'application/json' })
+  })
+
+  it('redacts an OAI-compat key placed in the query string', () => {
+    setHttpCallKnownSecretValues(['sk-oai-compat-xyz'])
+    expect(redactUrl('http://localhost:1234/v1/models?api_key=sk-oai-compat-xyz')).toBe(
+      'http://localhost:1234/v1/models?api_key=***',
+    )
+  })
 })
