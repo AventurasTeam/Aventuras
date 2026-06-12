@@ -165,4 +165,34 @@ describe('callWithRetry', () => {
       vi.useRealTimers()
     }
   })
+
+  it('caps an unreasonably large Retry-After at the backoff cap', async () => {
+    vi.useFakeTimers()
+    try {
+      let n = 0
+      const ra = new APICallError({
+        message: 'rl',
+        url: 'u',
+        requestBodyValues: {},
+        statusCode: 429,
+        responseHeaders: { 'retry-after': '3600' },
+      })
+      const promise = callWithRetry(
+        async () => {
+          if (n++ === 0) throw ra
+          return '{"v":1}'
+        },
+        (raw) => JSON.parse(raw),
+        { maxProviderAttempts: 2, maxParseAttempts: 2, signal: new AbortController().signal },
+      )
+      // Still backing off just before the 30s cap...
+      await vi.advanceTimersByTimeAsync(29_999)
+      // ...and retries right after it, not after the full 3600s.
+      await vi.advanceTimersByTimeAsync(2)
+      const res = await promise
+      expect(res.status).toBe('ok')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

@@ -63,7 +63,13 @@ export async function callWithRetry<T>(
         return { status: 'failed', error: classified.error, recoverable }
       }
       recoverable.push(classified.error)
-      const backoffMs = classified.retryAfterMs ?? exponentialBackoffMs(providerAttempt)
+      // Cap the wait even when the provider's Retry-After is honored — an
+      // unbounded header (Retry-After: 3600) must not stall the phase for an
+      // hour; we wait up to the cap, then retry or exhaust attempts.
+      const backoffMs = Math.min(
+        BACKOFF_CAP_MS,
+        classified.retryAfterMs ?? exponentialBackoffMs(providerAttempt),
+      )
       if ((await abortableDelay(backoffMs, opts.signal)) === 'aborted') {
         return { status: 'aborted', recoverable }
       }
