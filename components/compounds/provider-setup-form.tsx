@@ -8,6 +8,7 @@ import { Text } from '@/components/ui/text'
 import { addProvider, quickWireModel, updateProvider } from '@/lib/actions'
 import { fetchModelCatalog } from '@/lib/ai'
 import { db } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { appSettingsStore } from '@/lib/stores'
 
@@ -35,20 +36,26 @@ export function ProviderSetupForm() {
   ]
 
   const onSaveProvider = async () => {
-    if (provider === undefined) {
-      await addProvider(
-        {
-          id: PROVIDER_ID,
-          type: 'openai-compatible',
-          displayName,
-          apiKey,
-          endpoint,
-          favoriteModelIds: [],
-        },
-        { db },
-      )
-    } else {
-      await updateProvider(provider.id, { displayName, apiKey, endpoint }, { db })
+    try {
+      if (provider === undefined) {
+        await addProvider(
+          {
+            id: PROVIDER_ID,
+            type: 'openai-compatible',
+            displayName,
+            apiKey,
+            endpoint,
+            favoriteModelIds: [],
+          },
+          { db },
+        )
+      } else {
+        await updateProvider(provider.id, { displayName, apiKey, endpoint }, { db })
+      }
+    } catch (e) {
+      logger.error('provider.setup_save_failed', {
+        error: e instanceof Error ? e.message : String(e),
+      })
     }
   }
 
@@ -63,15 +70,24 @@ export function ProviderSetupForm() {
         { db },
       )
       setCatalog('idle')
-    } catch {
+    } catch (e) {
+      logger.error('provider.setup_fetch_models_failed', {
+        error: e instanceof Error ? e.message : String(e),
+      })
       setCatalog('failed')
     }
   }
 
   const onQuickWire = async () => {
     if (picked === null) return
-    await quickWireModel(picked, { db })
-    setWired(true)
+    try {
+      await quickWireModel(picked, { db })
+      setWired(true)
+    } catch (e) {
+      logger.error('provider.setup_quick_wire_failed', {
+        error: e instanceof Error ? e.message : String(e),
+      })
+    }
   }
 
   return (
@@ -145,13 +161,19 @@ export function ProviderSetupForm() {
           }
           favorites={[]}
           onFavoriteToggle={() => {}}
-          onAddCustom={(ref) => {
+          onAddCustom={async (ref) => {
             if (provider !== undefined)
-              void updateProvider(
-                provider.id,
-                { customModelIds: [...(provider.customModelIds ?? []), ref.modelId] },
-                { db },
-              )
+              try {
+                await updateProvider(
+                  provider.id,
+                  { customModelIds: [...(provider.customModelIds ?? []), ref.modelId] },
+                  { db },
+                )
+              } catch (e) {
+                logger.error('provider.setup_add_custom_failed', {
+                  error: e instanceof Error ? e.message : String(e),
+                })
+              }
           }}
         />
       </View>
