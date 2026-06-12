@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resolveModel } from '@/lib/ai'
 import { APP_SETTINGS_DEFAULTS, APP_SETTINGS_SINGLETON_ID, appSettings } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { redactHeaderValue, setHttpCallKnownSecretValues } from '@/lib/diagnostics'
 import { appSettingsStore, rehydrateAppSettings, resetAllStores } from '@/lib/stores'
 
 import { addProvider, quickWireModel } from './providers'
@@ -14,7 +15,10 @@ beforeEach(async () => {
   await db.insert(appSettings).values({ id: APP_SETTINGS_SINGLETON_ID, ...APP_SETTINGS_DEFAULTS })
   await rehydrateAppSettings(db)
 })
-afterEach(() => resetAllStores())
+afterEach(() => {
+  resetAllStores()
+  setHttpCallKnownSecretValues([])
+})
 
 const oaiProvider = {
   id: 'prov-1',
@@ -53,6 +57,11 @@ describe('provider mutators', () => {
     }
     expect(resolveModel('narrative', config)).toMatchObject({ ok: true, modelId: 'm-1' })
     expect(resolveModel('wizard-assist', config)).toMatchObject({ ok: true, modelId: 'm-1' })
+  })
+
+  it('registers the configured provider key for httpCallSink redaction', async () => {
+    await addProvider({ ...oaiProvider, apiKey: 'sk-secret-xyz' }, { db })
+    expect(redactHeaderValue('Bearer sk-secret-xyz')).toBe('***')
   })
 
   it('rejects an invalid provider shape at the boundary', async () => {
