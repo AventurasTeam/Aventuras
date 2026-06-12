@@ -209,9 +209,16 @@ defaultProviderId, storyModels }` explicitly (no store read), so 2.9
   leaked its raw `Authorization` key into the diagnostics buffer; the
   hydrate path now syncs the comparator from `providers[]` on every
   (re)hydrate, which an integration test covers.
-- **`streamProviderCall` ships without bespoke error mapping.**
-  `runProviderCall` distinguishes an internal SDK timeout from a user
-  cancel; the streaming variant returns the raw `streamText` result (errors
-  surface on the stream). [Slice 2.7](./07-wiring.md) wires streaming into
-  the store and verifies the SDK v6 timeout-error shape against a real
+- **`runProviderCall` / `streamProviderCall` are thin hardening proxies.**
+  Each takes the SDK's own `generateText` / `streamText` options type
+  (`Parameters<typeof …>`), so `timeout` (`TimeoutConfiguration`) and the
+  `output` schema flow through with nothing re-declared, forces
+  `maxRetries: 0` (callWithRetry is the sole retry authority), and returns
+  the full SDK result. They don't classify errors — that stays in
+  `classifyProviderError`. They have no consumer yet; the config-by-agent
+  resolution, structured-output switch (force-on/off now; `auto` once
+  capability detection lands), schema injection and validation grow here
+  into the generate layer with their first caller in
+  [Slice 2.3](./03-wizard.md). [Slice 2.7](./07-wiring.md) wires streaming
+  into the store and verifies the SDK v6 timeout-error shape against a real
   endpoint — the one open monitor from this slice.
