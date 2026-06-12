@@ -24,7 +24,9 @@ export async function fetchModelCatalog(
   })
   const response = await fetchWithCapture(joinModelsUrl(provider.endpoint), {
     method: 'GET',
-    headers: { authorization: `Bearer ${provider.apiKey}` },
+    // Keyless local endpoints (LM Studio, llama.cpp) omit auth rather than send
+    // a bare `Bearer `; mirrors createOpenAICompatible's own header construction.
+    headers: provider.apiKey ? { authorization: `Bearer ${provider.apiKey}` } : {},
   })
   if (!response.ok) {
     throw new Error(`Model catalog fetch failed: ${response.status}`)
