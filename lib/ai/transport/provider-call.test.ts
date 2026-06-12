@@ -1,63 +1,59 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { runProviderCall } from './provider-call'
+import { runProviderCall, streamProviderCall } from './provider-call'
 
 const generateTextMock = vi.fn()
+const streamTextMock = vi.fn()
 vi.mock('ai', async (importOriginal) => {
   const real = await importOriginal<Record<string, unknown>>()
-  return { ...real, generateText: (...args: unknown[]) => generateTextMock(...args) }
+  return {
+    ...real,
+    generateText: (...args: unknown[]) => generateTextMock(...args),
+    streamText: (...args: unknown[]) => streamTextMock(...args),
+  }
 })
 
-afterEach(() => generateTextMock.mockReset())
+afterEach(() => {
+  generateTextMock.mockReset()
+  streamTextMock.mockReset()
+})
 
 describe('runProviderCall', () => {
-  it('passes maxRetries:0 and the timeout config to the SDK', async () => {
+  it('forces maxRetries:0 and passes the full options through to generateText', async () => {
     generateTextMock.mockResolvedValue({ text: 'hello' })
     const signal = new AbortController().signal
-    const fakeModel = {} as never
-    const text = await runProviderCall(fakeModel, {
+    const result = await runProviderCall({
+      model: {} as never,
       prompt: 'go',
-      signal,
+      abortSignal: signal,
       timeout: { totalMs: 60000, stepMs: 10000, chunkMs: 5000 },
+      temperature: 0.7,
     })
-    expect(text).toBe('hello')
+    expect(result).toEqual({ text: 'hello' })
     expect(generateTextMock).toHaveBeenCalledWith(
       expect.objectContaining({
         maxRetries: 0,
-        timeout: { totalMs: 60000, stepMs: 10000, chunkMs: 5000 },
-        abortSignal: signal,
         prompt: 'go',
+        abortSignal: signal,
+        timeout: { totalMs: 60000, stepMs: 10000, chunkMs: 5000 },
+        temperature: 0.7,
       }),
     )
   })
 
-  it('rethrows an APICallError unchanged so the classifier can map it', async () => {
-    const { APICallError } = await import('ai')
-    const apiErr = new APICallError({
-      message: 'x',
-      url: 'u',
-      requestBodyValues: {},
-      statusCode: 503,
-    })
-    generateTextMock.mockRejectedValue(apiErr)
-    await expect(
-      runProviderCall({} as never, {
-        prompt: 'go',
-        signal: new AbortController().signal,
-        timeout: {},
-      }),
-    ).rejects.toBe(apiErr)
+  it('overrides a caller-supplied maxRetries with 0', async () => {
+    generateTextMock.mockResolvedValue({ text: 'ok' })
+    await runProviderCall({ model: {} as never, prompt: 'go', maxRetries: 5 })
+    expect(generateTextMock).toHaveBeenCalledWith(expect.objectContaining({ maxRetries: 0 }))
   })
+})
 
-  it('maps an internal timeout (signal not aborted) to ProviderTimeoutError', async () => {
-    generateTextMock.mockRejectedValue(new Error('AbortError: timeout'))
-    const { ProviderTimeoutError } = await import('./classify-provider-error')
-    await expect(
-      runProviderCall({} as never, {
-        prompt: 'go',
-        signal: new AbortController().signal,
-        timeout: {},
-      }),
-    ).rejects.toBeInstanceOf(ProviderTimeoutError)
+describe('streamProviderCall', () => {
+  it('forces maxRetries:0 on streamText', () => {
+    streamTextMock.mockReturnValue({ textStream: {} })
+    streamProviderCall({ model: {} as never, prompt: 'go', timeout: { chunkMs: 5000 } })
+    expect(streamTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({ maxRetries: 0, prompt: 'go', timeout: { chunkMs: 5000 } }),
+    )
   })
 })

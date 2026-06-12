@@ -1,51 +1,18 @@
-import { APICallError, generateText, streamText, type LanguageModel } from 'ai'
+import { generateText, streamText } from 'ai'
 
-import { ProviderTimeoutError } from './classify-provider-error'
+type GenerateTextOptions = Parameters<typeof generateText>[0]
+type StreamTextOptions = Parameters<typeof streamText>[0]
 
-type TimeoutConfig = { totalMs?: number; stepMs?: number; chunkMs?: number }
-
-type ProviderCallOpts = {
-  prompt: string
-  signal: AbortSignal
-  timeout: TimeoutConfig
+// callWithRetry is the sole retry authority, so the SDK must never retry on its
+// own — these proxies force that one default over the full SDK call surface
+// (`opts` is the SDK's own options type, carrying its `timeout` and `output`
+// schema, so nothing is re-declared here) and are otherwise pass-through. Error
+// classification stays in classifyProviderError. The assertion bridges a TS
+// limit: spreading collapses the options' `prompt | messages` discriminant.
+export function runProviderCall(opts: GenerateTextOptions): ReturnType<typeof generateText> {
+  return generateText({ ...opts, maxRetries: 0 } as GenerateTextOptions)
 }
 
-function mapCallError(error: unknown, signal: AbortSignal): never {
-  // APICallError carries an HTTP status → let classifyProviderError map it.
-  if (APICallError.isInstance(error)) throw error
-  // A user cancel aborts the caller's signal; anything else with no user abort
-  // is the SDK's internal timeout firing → retryable provider timeout.
-  if (!signal.aborted) throw new ProviderTimeoutError()
-  throw error
-}
-
-export async function runProviderCall(
-  model: LanguageModel,
-  opts: ProviderCallOpts,
-): Promise<string> {
-  try {
-    const { text } = await generateText({
-      model,
-      prompt: opts.prompt,
-      abortSignal: opts.signal,
-      maxRetries: 0,
-      timeout: opts.timeout,
-    })
-    return text
-  } catch (error) {
-    mapCallError(error, opts.signal)
-  }
-}
-
-export function streamProviderCall(
-  model: LanguageModel,
-  opts: ProviderCallOpts,
-): ReturnType<typeof streamText> {
-  return streamText({
-    model,
-    prompt: opts.prompt,
-    abortSignal: opts.signal,
-    maxRetries: 0,
-    timeout: opts.timeout,
-  })
+export function streamProviderCall(opts: StreamTextOptions): ReturnType<typeof streamText> {
+  return streamText({ ...opts, maxRetries: 0 } as StreamTextOptions)
 }
