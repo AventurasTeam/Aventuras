@@ -161,15 +161,18 @@ definition of done requires a _user_ to complete the loop and the
 
 ## Open questions
 
-- Which AI SDK package backs OAI-compat (`@ai-sdk/openai` with
-  `baseURL` vs `@ai-sdk/openai-compatible`) — pick at planning
-  against SDK v6 docs; the choice is invisible above `lib/ai`.
-- Whether the interim form supports multiple provider instances
-  or exactly one (recommendation: exactly one — multi-instance
-  management is M7.1's problem and the loop needs only one).
+None outstanding — both planning questions resolved (see Implementation
+notes): the OAI-compat SDK package, and single-vs-multi provider instance
+in the interim form.
 
 ## Implementation notes
 
+- **OAI-compat is backed by `@ai-sdk/openai-compatible`
+  (`createOpenAICompatible`), not `@ai-sdk/openai` + `baseURL`.** It is
+  purpose-built for arbitrary user-supplied `{ name, apiKey, baseURL,
+fetch }` endpoints; the choice is invisible above `lib/ai`. The interim
+  form manages exactly one provider instance, edited in place
+  (`providers[]` length 1) — multi-instance management is M7.1's.
 - **Quick-wire assigns all six agents, not just `wizard-assist`.** The
   one-control action writes the narrative profile, one agent profile, and
   assignments for every agent in the registry pointing at that agent
