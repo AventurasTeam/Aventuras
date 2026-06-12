@@ -4,7 +4,7 @@ import { runProviderCall } from './provider-call'
 
 const generateTextMock = vi.fn()
 vi.mock('ai', async (importOriginal) => {
-  const real = await importOriginal()
+  const real = await importOriginal<Record<string, unknown>>()
   return { ...real, generateText: (...args: unknown[]) => generateTextMock(...args) }
 })
 
