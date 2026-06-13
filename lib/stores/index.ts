@@ -3,6 +3,7 @@ import { readAppSettingsRow, rehydrateAppSettings } from './app-settings/app-set
 import { chaptersStore } from './chapters/chapters'
 import { characterRelationshipsStore } from './character-relationships/character-relationships'
 import { entitiesStore } from './entities/entities'
+import { entriesStore } from './entries/entries'
 import { entryAssetsStore } from './entry-assets/entry-assets'
 import { eraFlipsStore } from './era-flips/era-flips'
 import { generationStore } from './generation/generation'
@@ -19,6 +20,7 @@ export function resetAllStores(): void {
   chaptersStore.__reset()
   characterRelationshipsStore.__reset()
   entitiesStore.__reset()
+  entriesStore.__reset()
   entryAssetsStore.__reset()
   eraFlipsStore.__reset()
   generationStore.__reset()
@@ -37,6 +39,7 @@ export {
   chaptersStore,
   characterRelationshipsStore,
   entitiesStore,
+  entriesStore,
   entryAssetsStore,
   eraFlipsStore,
   generationStore,
@@ -57,5 +60,6 @@ export { createWorkingSetStore } from './factory/working-set-store'
 export type { AppSettingsSnapshot, BootHydrateResult } from './app-settings/app-settings'
 export type { RelationshipView } from './character-relationships/character-relationships'
 export type { WorkingSetStore } from './factory/working-set-store'
+export { isUserEditBlocked } from './generation/generation'
 export type { RunState, TxState } from './generation/generation'
 export type { NavigationSnapshot } from './navigation/navigation'

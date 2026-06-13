@@ -52,6 +52,7 @@ function newRunState(kind: string, ctx: RunCtx): RunState {
   return {
     runId: generateId('run'),
     kind,
+    gateBehavior: getPipeline(kind).gateBehavior,
     actionId: generateId('act'),
     storyId: ctx.storyId,
     branchId: ctx.branchId,

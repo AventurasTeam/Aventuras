@@ -3,13 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { type PipelineAction } from '@/lib/actions'
 import { deltas, pipelineRuns, storyEntries } from '@/lib/db'
-import {
-  definePipeline,
-  isUserEditBlocked,
-  pipelineEventBus,
-  runPipeline,
-  type PhaseResult,
-} from '@/lib/pipeline'
+import { definePipeline, pipelineEventBus, runPipeline, type PhaseResult } from '@/lib/pipeline'
 import { generationStore } from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
@@ -91,7 +85,7 @@ describe('chained transition', () => {
 
     let blockedAtPredComplete: boolean | null = null
     const off = pipelineEventBus.subscribe('run_complete', (e) => {
-      if (e.kind === 'pred') blockedAtPredComplete = isUserEditBlocked(generationStore.getTxState())
+      if (e.kind === 'pred') blockedAtPredComplete = generationStore.isUserEditBlocked()
     })
     await runPipeline('pred', ctx)
     off()

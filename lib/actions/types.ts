@@ -24,4 +24,4 @@ export type PipelineAction = {
 
 export type MutationResult =
   | { status: 'ok'; logPosition: number }
-  | { status: 'rejected'; reason: string }
+  | { status: 'rejected'; reason: string; code?: string }

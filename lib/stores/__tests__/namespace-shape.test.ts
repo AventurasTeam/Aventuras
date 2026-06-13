@@ -42,6 +42,7 @@ describe('lib/stores public surface', () => {
     const run: RunState = {
       runId: 'r1',
       kind: 'synthetic',
+      gateBehavior: 'no-gate',
       actionId: 'a1',
       storyId: null,
       branchId: 'b1',

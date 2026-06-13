@@ -16,7 +16,7 @@ export type StorePatch =
 export type StorePatcher = (branchId: string, patch: StorePatch) => void
 
 export type HandlerOutcome =
-  | { status: 'rejected'; reason: string }
+  | { status: 'rejected'; reason: string; code?: string }
   | {
       status: 'ok'
       targetTable: string
