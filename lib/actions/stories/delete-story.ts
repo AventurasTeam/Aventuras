@@ -19,6 +19,7 @@ import {
   storyEntries,
   threads,
   translations,
+  type SqlOp,
 } from '@/lib/db'
 import { rehydrateStories } from '@/lib/stores'
 
@@ -51,7 +52,7 @@ export async function deleteStory(storyId: string, ctx: DbCtx): Promise<void> {
     .where(eq(branches.storyId, storyId))
   const branchIds = branchRows.map((b) => b.id)
 
-  const ops = []
+  const ops: SqlOp[] = []
   if (branchIds.length > 0) {
     for (const table of BRANCH_SCOPED) {
       ops.push(ctx.db.delete(table).where(inArray(table.branchId, branchIds)).toSQL())

@@ -60,6 +60,13 @@ async function setup() {
       createdAt: 1,
       updatedAt: 1,
     })
+    await db.insert(pipelineRuns).values({
+      runId: `run_${id}`,
+      kind: 'generate',
+      actionId: `act_${id}`,
+      storyId: id,
+      startedAt: 1,
+    })
   }
   // Shared vault calendar must survive.
   await db
@@ -78,6 +85,7 @@ describe('deleteStory', () => {
     expect((await db.select().from(branches)).map((r) => r.id)).toEqual(['br_survivor'])
     expect((await db.select().from(storyEntries)).map((r) => r.branchId)).toEqual(['br_survivor'])
     expect((await db.select().from(entities)).map((r) => r.branchId)).toEqual(['br_survivor'])
+    expect((await db.select().from(pipelineRuns)).map((r) => r.storyId)).toEqual(['survivor'])
     // Shared vault calendar untouched.
     expect((await db.select().from(vaultCalendars)).length).toBe(1)
     // Store reflects the delete.
@@ -100,7 +108,6 @@ describe('deleteStory', () => {
       probeCaptures,
       deltas,
       entryAssets,
-      pipelineRuns,
     ]) {
       const rows = await db.select().from(t)
       // None belonged to the victim branch; survivor's (none seeded) remain absent.
