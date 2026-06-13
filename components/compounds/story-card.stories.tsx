@@ -4,6 +4,7 @@ import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
+import { t } from '@/lib/i18n'
 import { themes } from '@/lib/themes'
 
 import { StoryCard, type Story } from './story-card'
@@ -128,7 +129,7 @@ export const FavoriteTogglesIndependent: StoryT = {
   ...cardCentered,
   args: { story: baseStory, ...handlers },
   play: async ({ args }) => {
-    const star = screen.getByRole('button', { name: 'Favorite story' })
+    const star = screen.getByRole('button', { name: t('storyCard.favorite') })
     await userEvent.click(star)
     await waitFor(() => expect(args.onToggleFavorite).toHaveBeenCalledTimes(1))
     // Star tap MUST NOT bubble to body open. The reverse is guarded
@@ -141,10 +142,10 @@ export const OverflowOpensMenu: StoryT = {
   ...cardCentered,
   args: { story: baseStory, ...handlers },
   play: async ({ args }) => {
-    const trigger = screen.getByRole('button', { name: 'Story actions' })
+    const trigger = screen.getByRole('button', { name: t('storyCard.actionsLabel') })
     await userEvent.click(trigger)
     await waitFor(() =>
-      expect(screen.getByRole('menuitem', { name: 'Archive' })).toBeInTheDocument(),
+      expect(screen.getByRole('menuitem', { name: t('storyCard.archive') })).toBeInTheDocument(),
     )
     // Overflow tap MUST NOT bubble to body open.
     expect(args.onOpen).not.toHaveBeenCalled()
@@ -155,10 +156,10 @@ export const ArchiveLabelFlipsForArchived: StoryT = {
   ...cardCentered,
   args: { story: { ...baseStory, archived: true }, ...handlers },
   play: async () => {
-    const trigger = screen.getByRole('button', { name: 'Story actions' })
+    const trigger = screen.getByRole('button', { name: t('storyCard.actionsLabel') })
     await userEvent.click(trigger)
     await waitFor(() =>
-      expect(screen.getByRole('menuitem', { name: 'Unarchive' })).toBeInTheDocument(),
+      expect(screen.getByRole('menuitem', { name: t('storyCard.unarchive') })).toBeInTheDocument(),
     )
   },
 }

@@ -46,6 +46,11 @@ const MODE_DEFAULT_COLOR: Record<StoryMode, string> = {
   creative: '#a855f7',
 }
 
+const MODE_LABEL_KEY = {
+  adventure: 'storyCard.modeAdventure',
+  creative: 'storyCard.modeCreative',
+} as const satisfies Record<StoryMode, string>
+
 export function StoryCard({
   story,
   onOpen,
@@ -60,8 +65,7 @@ export function StoryCard({
   const stripColor = story.accentColor ?? MODE_DEFAULT_COLOR[story.mode]
   const overflowTriggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
 
-  const modeLabel =
-    story.mode === 'adventure' ? t('storyCard.modeAdventure') : t('storyCard.modeCreative')
+  const modeLabel = t(MODE_LABEL_KEY[story.mode])
   const metaParts = [modeLabel, story.chapterLabel, story.lastOpenedRelative].filter(
     (part): part is string => part != null,
   )
