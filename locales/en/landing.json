@@ -2,5 +2,9 @@
   "title": "Aventuras",
   "emptyTitle": "No stories yet",
   "emptyBody": "Stories will appear here once created.",
-  "openReaderDebug": "Open reader (debug)"
+  "openReaderDebug": "Open reader (debug)",
+  "banner": {
+    "aiNotConfigured": "AI generation not configured.",
+    "setUpProvider": "Set up a provider →"
+  }
 }
