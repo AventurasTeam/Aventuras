@@ -6,4 +6,11 @@ export { __resetRegistry, type StorePatch } from './delta/registry'
 export { DeltaReplayError, reverseReplayDeltas } from './delta/reverse-replay'
 export { resetAppSettings, setDebugLevelEnabled, setDiagnosticsEnabled } from './settings'
 export type { SettingsActionCtx } from './settings'
+export {
+  openStory,
+  setStoryArchived,
+  setStoryFavorite,
+  touchStoryOpened,
+} from './stories/operational'
+export type { OpenStoryResult } from './stories/operational'
 export type { DbCtx, DeltaSource, MutationResult, PipelineAction } from './types'
