@@ -80,7 +80,7 @@ describe('selectStoryCards', () => {
     const rows = [
       row({ id: 'byTitle', title: 'Ironclad' }),
       row({ id: 'byDesc', description: 'an IRON saga' }),
-       
+
       row({ id: 'byGenre', definition: { genre: { label: 'Iron Fantasy' } } as any }),
       row({ id: 'byTag', tags: ['steampunk', 'iron'] }),
       row({ id: 'miss', title: 'Cozy' }),
@@ -88,5 +88,13 @@ describe('selectStoryCards', () => {
     expect(ids(rows, Q({ search: 'iron' })).sort()).toEqual(
       ['byDesc', 'byGenre', 'byTag', 'byTitle'].sort(),
     )
+  })
+
+  it('favorite floats first within the Archived filter', () => {
+    const rows = [
+      row({ id: 'arch-plain', status: 'archived', lastOpenedAt: 200 }),
+      row({ id: 'arch-fav', status: 'archived', favorite: 1, lastOpenedAt: 50 }),
+    ]
+    expect(ids(rows, Q({ filter: 'archived' }))).toEqual(['arch-fav', 'arch-plain'])
   })
 })
