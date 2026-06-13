@@ -10,7 +10,6 @@ export async function readStoriesRows(db: Db): Promise<StoryRow[]> {
   return db.select().from(stories)
 }
 
-/** Convenience used by the action layer and boot/landing hydration. */
 export function rehydrateStories(db: Db): Promise<void> {
   return hydrateStories(() => readStoriesRows(db))
 }

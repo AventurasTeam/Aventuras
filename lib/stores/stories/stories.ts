@@ -62,4 +62,4 @@ export const storiesStore = {
   __reset: api.__reset,
 }
 
-export type { StoriesSnapshot, StoriesState, StoryRow }
+export type { StoriesSnapshot, StoriesState }
