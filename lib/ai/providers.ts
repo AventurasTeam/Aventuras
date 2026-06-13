@@ -42,13 +42,14 @@ export function createProviderModel(
       return anthropic('claude-3-haiku-20240307')
     }
     case 'openai-compatible': {
-      if (provider.endpoint === undefined || provider.endpoint.length === 0) {
+      const endpoint = provider.endpoint?.trim()
+      if (endpoint === undefined || endpoint.length === 0) {
         throw new Error(`Provider "${provider.id}" (openai-compatible) requires an endpoint`)
       }
       const openaiCompatible = createOpenAICompatible({
         name: provider.displayName,
         apiKey: provider.apiKey,
-        baseURL: provider.endpoint,
+        baseURL: endpoint,
         fetch: createFetchWithCapture({
           source: `provider:${provider.id}`,
           actionId,

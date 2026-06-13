@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { ModelProfile, ProviderInstance } from '@/lib/db'
+import type { GlobalAgentId, ModelProfile, ProviderInstance, StoryAgentId } from '@/lib/db'
 
 import { resolveModel, type ResolveModelConfig } from './resolve-model'
 
@@ -85,6 +85,25 @@ describe('resolveModel', () => {
       providerId: 'prov-1',
       modelId: 'override-model',
       params: {},
+    })
+  })
+
+  it('keeps the story and global agent registries disjoint (compile-time)', () => {
+    // isStoryOverrideTarget treats "not global" as "story-scoped"; overlap would
+    // make that unsound. A shared id collapses Disjoint to false → typecheck fails.
+    type Disjoint = StoryAgentId & GlobalAgentId extends never ? true : false
+    const disjoint: Disjoint = true
+    expect(disjoint).toBe(true)
+  })
+
+  it('rejects a wizard-assist story override at the type level and ignores it at runtime', () => {
+    // @ts-expect-error wizard-assist has no per-story override slot (modelsSchema).
+    const cfg: ResolveModelConfig = { ...base, storyModels: { 'wizard-assist': 'override-model' } }
+    expect(resolveModel('wizard-assist', cfg)).toEqual({
+      ok: true,
+      providerId: 'prov-1',
+      modelId: 'm-agent',
+      params: { structuredOutput: 'auto' },
     })
   })
 

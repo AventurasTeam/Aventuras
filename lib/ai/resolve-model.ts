@@ -1,13 +1,12 @@
-import type { ModelProfile, ProviderInstance } from '../db'
-import type { ResolveTarget } from './agents'
+import type { ModelProfile, ProviderInstance, StorySettings } from '../db'
+import { isStoryOverrideTarget, type ResolveTarget } from './agents'
 
 export type ResolveModelConfig = {
   providers: ProviderInstance[]
   profiles: ModelProfile[]
   assignments: Record<string, string>
   defaultProviderId: string | null
-  // stories.settings.models — narrative + 5 agents (no wizard-assist slot).
-  storyModels?: Partial<Record<ResolveTarget, string>>
+  storyModels?: StorySettings['models']
 }
 
 export type ResolvedParams = {
@@ -57,7 +56,8 @@ export function resolveModel(
   target: ResolveTarget,
   config: ResolveModelConfig,
 ): ResolveModelResult {
-  const override = config.storyModels?.[target]
+  // Global agents run outside any story, so they never read story overrides.
+  const override = isStoryOverrideTarget(target) ? config.storyModels?.[target] : undefined
   if (override !== undefined) {
     // Bare model id, no provider component → runs on the default provider.
     const provider = config.providers.find((p) => p.id === config.defaultProviderId)

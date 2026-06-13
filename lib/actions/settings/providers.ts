@@ -24,7 +24,10 @@ async function persistConfig(
   }>,
 ): Promise<void> {
   await ctx.db.update(appSettings).set(patch).where(eq(appSettings.id, APP_SETTINGS_SINGLETON_ID))
-  await rehydrateAppSettings(ctx.db)
+  const result = await rehydrateAppSettings(ctx.db)
+  if (result.status !== 'ok') {
+    throw new Error(`Failed to rehydrate app settings: ${result.error}`)
+  }
 }
 
 export async function addProvider(
@@ -42,6 +45,9 @@ export async function updateProvider(
   ctx: SettingsActionCtx,
 ): Promise<void> {
   const current = appSettingsStore.getAppSettings().providers
+  if (!current.some((p) => p.id === id)) {
+    throw new Error(`Provider with id "${id}" not found`)
+  }
   const next = current.map((p) =>
     p.id === id ? providerInstanceSchema.parse({ ...p, ...patch }) : p,
   )

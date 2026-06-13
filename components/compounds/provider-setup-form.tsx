@@ -85,10 +85,12 @@ export function ProviderSetupForm() {
 
   const onQuickWire = async () => {
     if (picked === null) return
+    setWired(false)
     try {
       await quickWireModel(picked, { db })
       setWired(true)
     } catch (e) {
+      setWired(false)
       logger.error('provider.setup_quick_wire_failed', {
         error: e instanceof Error ? e.message : String(e),
       })
@@ -151,7 +153,10 @@ export function ProviderSetupForm() {
         <Text>{t('settings:providers.modelLabel')}</Text>
         <ProviderModelPicker
           value={picked}
-          onChange={setPicked}
+          onChange={(next) => {
+            setPicked(next)
+            setWired(false)
+          }}
           placeholder={t('settings:providers.modelPlaceholder')}
           providers={
             provider !== undefined

@@ -7,6 +7,10 @@ import type { PipelineError } from './types'
 // Two retry tiers). lib/ai stays free of an upward PipelineError dependency.
 export function toPipelineError(e: CallRetryError): PipelineError {
   return e.tier === 'provider'
-    ? { kind: 'provider', reason: e.reason, ...(e.detail ? { detail: e.detail } : {}) }
+    ? {
+        kind: 'provider',
+        reason: e.reason,
+        ...(e.detail !== undefined ? { detail: e.detail } : {}),
+      }
     : { kind: 'phase-logic', detail: e.detail }
 }

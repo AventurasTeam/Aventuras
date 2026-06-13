@@ -15,14 +15,15 @@ export async function fetchModelCatalog(
   provider: ProviderInstanceWithStub,
   opts?: { fetchImpl?: typeof fetch },
 ): Promise<string[]> {
-  if (provider.endpoint === undefined || provider.endpoint.length === 0) {
+  const endpoint = provider.endpoint?.trim()
+  if (endpoint === undefined || endpoint.length === 0) {
     throw new Error(`Provider "${provider.id}" requires an endpoint to fetch a model catalog`)
   }
   const fetchWithCapture = createFetchWithCapture({
     source: `provider:${provider.id}`,
     ...(opts?.fetchImpl !== undefined ? { fetchImpl: opts.fetchImpl } : {}),
   })
-  const response = await fetchWithCapture(joinModelsUrl(provider.endpoint), {
+  const response = await fetchWithCapture(joinModelsUrl(endpoint), {
     method: 'GET',
     // Keyless local endpoints (LM Studio, llama.cpp) omit auth rather than send
     // a bare `Bearer `; mirrors createOpenAICompatible's own header construction.
