@@ -11,6 +11,8 @@ import { happeningsStore } from './happenings/happenings'
 import { happeningInvolvementsStore } from './happenings/involvements'
 import { loreStore } from './lore/lore'
 import { navigationStore } from './navigation/navigation'
+import { readStoriesRows, rehydrateStories } from './stories/read'
+import { hydrateStories, storiesStore } from './stories/stories'
 import { threadsStore } from './threads/threads'
 import { translationsStore } from './translations/translations'
 
@@ -26,6 +28,7 @@ export function resetAllStores(): void {
   happeningInvolvementsStore.__reset()
   happeningsStore.__reset()
   loreStore.__reset()
+  storiesStore.__reset()
   threadsStore.__reset()
   translationsStore.__reset()
   navigationStore.__reset()
@@ -44,10 +47,14 @@ export {
   happeningInvolvementsStore,
   happeningsStore,
   hydrateAppSettings,
+  hydrateStories,
   loreStore,
   navigationStore,
   readAppSettingsRow,
+  readStoriesRows,
   rehydrateAppSettings,
+  rehydrateStories,
+  storiesStore,
   threadsStore,
   translationsStore,
 }
@@ -59,3 +66,9 @@ export type { RelationshipView } from './character-relationships/character-relat
 export type { WorkingSetStore } from './factory/working-set-store'
 export type { RunState, TxState } from './generation/generation'
 export type { NavigationSnapshot } from './navigation/navigation'
+export type { OpenFailure, OpenFailureKind, StoriesSnapshot } from './stories/stories'
+export type { StoryCardVM } from './stories/view-model'
+export type { StoryFilter, StoryListQuery, StorySort } from './stories/selectors'
+export { selectStoryCards } from './stories/selectors'
+export { formatRelativeTime } from './stories/relative-time'
+export { toStoryCardVM } from './stories/view-model'
