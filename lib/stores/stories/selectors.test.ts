@@ -97,4 +97,12 @@ describe('selectStoryCards', () => {
     ]
     expect(ids(rows, Q({ filter: 'archived' }))).toEqual(['arch-fav', 'arch-plain'])
   })
+
+  it('keeps stable order for two never-opened rows (no NaN comparator)', () => {
+    const rows = [
+      row({ id: 'first', lastOpenedAt: null }),
+      row({ id: 'second', lastOpenedAt: null }),
+    ]
+    expect(ids(rows, Q())).toEqual(['first', 'second'])
+  })
 })

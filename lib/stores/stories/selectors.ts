@@ -27,6 +27,7 @@ function compare(a: StoryRow, b: StoryRow, sort: StorySort): number {
   if (sort === 'created') return b.createdAt - a.createdAt
   const av = a.lastOpenedAt ?? -Infinity // nulls last
   const bv = b.lastOpenedAt ?? -Infinity
+  if (av === bv) return 0
   return bv - av
 }
 
