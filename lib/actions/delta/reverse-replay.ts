@@ -95,6 +95,26 @@ async function buildUndoOps(
   return { ops, patches }
 }
 
+// Rollback path: reverse a pre-selected delta set AND prune those delta rows
+// from the log in one transaction (gaps in log_position are expected). The
+// actionId-scoped reverseReplayDeltas deliberately does not prune; this does.
+export async function reverseAndPruneDeltaRows(rows: Delta[], ctx: DbCtx): Promise<number> {
+  if (rows.length === 0) return 0
+  try {
+    const { ops, patches } = await buildUndoOps(rows, ctx)
+    const pruneOps = rows.map((r) => ctx.db.delete(deltas).where(eq(deltas.id, r.id)).toSQL())
+    await ctx.runInTransaction([...ops, ...pruneOps])
+    for (const p of patches) resolveByTable(p.table)?.patcher?.(p.branchId, p.patch)
+    return rows.length
+  } catch (e) {
+    if (e instanceof DeltaReplayError) throw e
+    throw new DeltaReplayError('Reverse-and-prune failed', {
+      cause: e,
+      actionId: rows[0]?.actionId ?? 'rollback',
+    })
+  }
+}
+
 export async function reverseReplayDeltas(actionId: string, ctx: DbCtx): Promise<number> {
   try {
     const rows = (await ctx.db

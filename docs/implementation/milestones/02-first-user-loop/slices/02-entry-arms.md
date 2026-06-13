@@ -118,11 +118,65 @@ so M3.3 / M3.9 refine rather than rewrite.
 
 ## Open questions
 
-- Whether the rollback count query needs an index beyond the
-  existing `(branch_id, log_position)` unique — measure on the
-  fixture; the modal's open-questions note flags deep-rollback
-  scan cost as a v1 non-issue.
+- None. The rollback count-query index question resolved during
+  implementation — see Implementation notes.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **Entries working-set store stood up here, not deferred to
+  2.5.** This slice created `lib/stores/entries` (over the
+  `createWorkingSetStore` factory) and registered it as the
+  `story_entries` delta patcher, so create / update / delete now
+  mirror into it; the create and metadata-update arms emit store
+  patches (previously `null`). "No behavior change on create /
+  metadata-update" held as delta and SQL semantics unchanged, with
+  the store mirror additive. 2.5 owns the consuming surface
+  (entry-window selectors, scroll model, hydrate-on-open) and
+  extends rather than re-creates the store — pinned as
+  [milestone contract C8](../milestone.md#c8--entries-working-set-store-ownership).
+- **In-flight gate moved to the store to avoid a dependency
+  cycle.** `isUserEditBlocked` left `lib/pipeline/runtime/gate.ts`
+  for the generation store; `RunState` carries a `gateBehavior`
+  field stamped at run start from `getPipeline(kind)`, so the
+  predicate reads run state without importing the pipeline
+  registry. The gate is enforced only in the user-facing
+  operational wrappers (content-update, rollback), never in
+  `applyDeltaAction` or the registered handlers — the per-turn
+  pipeline must not gate its own mid-run writes.
+- **Rollback target is the clicked entry (first removed).** The
+  reader's per-entry delete means "roll back to before this
+  entry": it removes that entry and every later entry by
+  `position`. `B` is the clicked entry, `N` is `B`'s own
+  `op=create` delta `log_position` (found by `target_id`, so the
+  lookup is independent of `entry_id`). The opening is the floor —
+  a target of `kind='opening'` is rejected. Swept entries are
+  removed by reversing their create-deltas; the swept delta rows
+  are pruned in the same transaction, so `log_position` gains
+  gaps. This rides a new `reverseAndPruneDeltaRows`, kept separate
+  from the actionId-scoped, non-pruning `reverseReplayDeltas` that
+  the orchestrator and recovery still use. The execute path brackets
+  its sweep with `reversalInProgress` (selection runs inside the
+  barrier), so no writer can commit into the select-to-prune window;
+  the in-flight classifier-cancel drain is dormant in M2 (no
+  background writer exists) and lands in M3.3 — see that roadmap
+  entry.
+- **M2 foreground deltas carry `entry_id = NULL`.** The
+  survival-anchor predicate is written in full shape, but its
+  position-correlated branch is dormant in M2 and first exercised
+  in M3.3 once the classifier stamps provenance; the bare suffix
+  is equivalent meanwhile.
+- **The opening "move" invariant is vacuous in M2.** No arm writes
+  `position`, so an opening cannot be moved; only the
+  create-position guard and the delete-block are actively enforced
+  and tested. A position-mutation arm landing later must re-check
+  this.
+- **Typed rejections.** `HandlerOutcome` / `MutationResult` gained
+  an optional `code`; the story-entries module exports a
+  `STORY_ENTRY_REJECTION` code map and a `StoryEntryRejection`
+  type for 2.5 to narrow against.
+- **No new index needed for the rollback queries.** The existing
+  `deltas_chain_idx (branch_id, target_id, log_position)` covers
+  the create-delta `N` lookup and `deltas_log_position_uniq
+(branch_id, log_position)` covers the suffix scan, so the
+  fixture needed no schema change; deep-rollback scan cost stays a
+  v1 non-issue.

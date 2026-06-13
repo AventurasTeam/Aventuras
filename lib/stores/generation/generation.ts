@@ -4,6 +4,7 @@ import { createStore } from 'zustand/vanilla'
 export type RunState = {
   runId: string
   kind: string
+  gateBehavior: 'hard-gate' | 'no-gate'
   actionId: string
   storyId: string | null
   branchId: string
@@ -21,6 +22,11 @@ export type RunState = {
 // reversalInProgress brackets a prose-reversal's wait->sweep window: while set it
 // blocks a periodic-classifier start and forces isUserEditBlocked true.
 export type TxState = { runs: Map<string, RunState>; reversalInProgress: boolean }
+
+export function isUserEditBlocked(txState: TxState): boolean {
+  if (txState.reversalInProgress) return true
+  return [...txState.runs.values()].some((r) => r.gateBehavior === 'hard-gate')
+}
 
 type GenerationState = {
   txState: TxState
@@ -90,6 +96,7 @@ const api = store.getState()
 export const generationStore = {
   useGeneration,
   getTxState,
+  isUserEditBlocked: () => isUserEditBlocked(getTxState()),
   startRun: api.startRun,
   setCurrentPhase: api.setCurrentPhase,
   recordPhaseResult: api.recordPhaseResult,
