@@ -122,7 +122,11 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, bid), eq(storyEntries.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `delete target story_entries ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `delete target story_entries ${bid}:${id} not found`,
+      code: STORY_ENTRY_REJECTION.notFound,
+    }
   if (current.kind === 'opening')
     return {
       status: 'rejected',
