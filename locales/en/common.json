@@ -27,6 +27,8 @@
     "editInfo": "Edit info",
     "duplicate": "Duplicate",
     "export": "Export",
-    "delete": "Delete"
+    "delete": "Delete",
+    "draft": "Draft",
+    "archived": "Archived"
   }
 }

@@ -117,8 +117,8 @@ export function StoryCard({
             {story.title}
           </Text>
 
-          {story.isDraft ? <Chip>Draft</Chip> : null}
-          {story.archived ? <Chip>Archived</Chip> : null}
+          {story.isDraft ? <Chip>{t('storyCard.draft')}</Chip> : null}
+          {story.archived ? <Chip>{t('storyCard.archived')}</Chip> : null}
         </View>
 
         <Text size="xs" variant="muted" numberOfLines={1}>
