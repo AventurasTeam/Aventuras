@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { STORY_AGENT_IDS, type StoryAgentId } from '../app-settings/agents'
+
 const tierTupleSchema = z.record(z.string(), z.number())
 
 const labeledPromptSchema = z.object({
@@ -60,13 +62,13 @@ const translationSchema = z.object({
   }),
 })
 
+const storyAgentModelShape = Object.fromEntries(
+  STORY_AGENT_IDS.map((id) => [id, z.string().optional()]),
+) as Record<StoryAgentId, z.ZodOptional<z.ZodString>>
+
 const modelsSchema = z.object({
   narrative: z.string().optional(),
-  classifier: z.string().optional(),
-  translation: z.string().optional(),
-  suggestion: z.string().optional(),
-  'lore-mgmt': z.string().optional(),
-  retrieval: z.string().optional(),
+  ...storyAgentModelShape,
 })
 
 export const storySettingsSchema = z.object({

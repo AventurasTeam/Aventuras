@@ -1,24 +1,22 @@
 import { generateText } from 'ai'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { getModel } from '@/lib/ai'
+import { callWithRetry, getModel, ProviderTimeoutError } from '@/lib/ai'
 import { type StubScenario } from '@/lib/ai/stub/scenarios'
 import {
   resetTemporaryProvidersForTests,
   setTemporaryProvidersForTests,
 } from '@/lib/ai/stub/temporary-registry'
-import { callWithRetry, type CallRetryError } from '@/lib/ai/transport/call-with-retry'
-import { ProviderTimeoutError } from '@/lib/ai/transport/classify-provider-error'
 import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
 import {
   definePipeline,
   pipelineEventBus,
   runPipeline,
+  toPipelineError,
   type PhaseContext,
   type PhaseEmittedEvent,
   type PhaseFn,
   type PhaseResult,
-  type PipelineError,
 } from '@/lib/pipeline'
 import { generationStore } from '@/lib/stores'
 
@@ -31,12 +29,6 @@ const STUB = {
   displayName: 'Stub',
   apiKey: 'stub-key',
   favoriteModelIds: [] as string[],
-}
-
-function toPipelineError(e: CallRetryError): PipelineError {
-  return e.tier === 'provider'
-    ? { kind: 'provider', reason: e.reason, ...(e.detail ? { detail: e.detail } : {}) }
-    : { kind: 'phase-logic', detail: e.detail }
 }
 
 type Parsed = { reply?: string; refusal?: boolean }

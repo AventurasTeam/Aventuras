@@ -18,6 +18,24 @@
     "about": "About",
     "diagnostics": "Diagnostics"
   },
+  "providers": {
+    "heading": "Provider",
+    "intro": "Connect an OpenAI-compatible endpoint to use the app. A full providers screen comes later.",
+    "displayNameLabel": "Display name",
+    "displayNamePlaceholder": "e.g. Local llama.cpp",
+    "endpointLabel": "Endpoint",
+    "endpointPlaceholder": "http://localhost:1234/v1",
+    "apiKeyLabel": "API key",
+    "apiKeyPlaceholder": "sk-…",
+    "save": "Save provider",
+    "fetchModels": "Fetch models",
+    "fetching": "Fetching…",
+    "fetchFailed": "Couldn't fetch models. Enter a model id manually.",
+    "modelLabel": "Model",
+    "modelPlaceholder": "Pick a model",
+    "quickWire": "Use this model for narrative and agent tasks",
+    "quickWired": "Wired. You can create a story now."
+  },
   "diagnostics": {
     "enableLabel": "Enable diagnostics capture",
     "enableHint": "Master gate for the diagnostics layer. Off by default.",

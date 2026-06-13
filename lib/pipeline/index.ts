@@ -1,3 +1,4 @@
+export { toPipelineError } from './call-error'
 export { definePhase, definePipeline } from './authoring/define'
 export { __resetRegistry, getPipeline, registerPipeline } from './authoring/registry'
 export { __resetBus, pipelineEventBus } from './runtime/event-bus'

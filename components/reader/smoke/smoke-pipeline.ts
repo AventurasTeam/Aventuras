@@ -2,7 +2,7 @@
 // settings UI land (see docs/followups.md).
 import { generateText } from 'ai'
 
-import { getModel, registerStubProvider } from '@/lib/ai'
+import { getModel, registerStubProvider, resolveModel, streamProviderCall } from '@/lib/ai'
 import { generateId } from '@/lib/ids'
 import {
   definePhase,
@@ -12,17 +12,45 @@ import {
   type PhaseEmittedEvent,
   type PhaseResult,
 } from '@/lib/pipeline'
+import { appSettingsStore } from '@/lib/stores'
 
 export const SMOKE_KIND = 'smoke'
 export const SMOKE_STORY_ID = 'story_smoke'
 export const SMOKE_BRANCH_ID = 'branch_smoke'
 
-async function* smokePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
+const SMOKE_PROMPT = 'Reply with a short, friendly one-sentence greeting.'
+
+// When a narrative model is quick-wired, make a real streamed call against the
+// user's endpoint (the only real-generation path until Slice 2.7) and surface
+// the reply; otherwise fall back to the dev stub so the smoke still runs with
+// nothing configured.
+async function generateSmokeReply(ctx: PhaseContext): Promise<string> {
+  const cfg = appSettingsStore.getAppSettings()
+  const resolved = resolveModel('narrative', {
+    providers: cfg.providers,
+    profiles: cfg.profiles,
+    assignments: cfg.assignments,
+    defaultProviderId: cfg.defaultProviderId,
+  })
+  if (resolved.ok) {
+    const model = getModel(resolved.providerId, resolved.modelId, ctx.actionId)
+    const reply = await streamProviderCall({
+      model,
+      prompt: SMOKE_PROMPT,
+      abortSignal: ctx.abortSignal,
+    }).text
+    return reply.length > 0 ? reply : 'Smoke entry'
+  }
   await generateText({
     model: getModel(registerStubProvider(), 'happy', ctx.actionId),
     prompt: 'smoke',
     abortSignal: ctx.abortSignal,
   })
+  return 'Smoke entry'
+}
+
+async function* smokePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
+  const content = await generateSmokeReply(ctx)
 
   // Benign warning so the run lands a logger.warn in diagnosticsStore: the happy
   // path otherwise only logs at debug, which the gate drops unless debug-level is on.
@@ -41,7 +69,7 @@ async function* smokePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent,
           branchId: SMOKE_BRANCH_ID,
           position: 0,
           kind: 'ai_reply',
-          content: 'Smoke entry',
+          content,
           createdAt: Date.now(),
         },
       },

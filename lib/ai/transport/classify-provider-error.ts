@@ -16,19 +16,40 @@ export class ProviderTimeoutError extends Error {
   }
 }
 
+function parseRetryAfter(headers: Record<string, string> | undefined): number | undefined {
+  if (headers === undefined) return undefined
+  const key = Object.keys(headers).find((k) => k.toLowerCase() === 'retry-after')
+  const raw = key ? headers[key] : undefined
+  if (raw === undefined) return undefined
+  const seconds = Number(raw)
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000)
+  const dateMs = Date.parse(raw)
+  if (Number.isFinite(dateMs)) return Math.max(0, dateMs - Date.now())
+  return undefined
+}
+
 export function classifyProviderError(error: unknown): {
   error: Extract<CallRetryError, { tier: 'provider' }>
   retryable: boolean
+  retryAfterMs?: number
 } {
   if (error instanceof ProviderTimeoutError) {
     return { error: { tier: 'provider', reason: 'timeout' }, retryable: true }
   }
   if (APICallError.isInstance(error)) {
     const status = error.statusCode
+    const retryAfterMs = parseRetryAfter(error.responseHeaders)
     if (status === 401 || status === 403) {
       return {
         error: { tier: 'provider', reason: 'auth', detail: error.message },
         retryable: false,
+      }
+    }
+    if (status === 429) {
+      return {
+        error: { tier: 'provider', reason: 'network', detail: error.message },
+        retryable: true,
+        ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
       }
     }
     if (status !== undefined && status >= 400 && status < 500) {
@@ -40,6 +61,7 @@ export function classifyProviderError(error: unknown): {
     return {
       error: { tier: 'provider', reason: 'network', detail: error.message },
       retryable: true,
+      ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
     }
   }
   return {
