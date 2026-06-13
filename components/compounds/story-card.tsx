@@ -7,6 +7,7 @@ import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Text } from '@/components/ui/text'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type StoryMode = 'adventure' | 'creative'
@@ -33,9 +34,9 @@ type StoryCardProps = {
   onOpen: () => void
   onToggleFavorite: () => void
   onArchiveToggle: () => void
-  onEditInfo: () => void
-  onDuplicate: () => void
-  onExport: () => void
+  onEditInfo?: () => void
+  onDuplicate?: () => void
+  onExport?: () => void
   onDelete: () => void
   className?: string
 }
@@ -43,11 +44,6 @@ type StoryCardProps = {
 const MODE_DEFAULT_COLOR: Record<StoryMode, string> = {
   adventure: '#3b82f6',
   creative: '#a855f7',
-}
-
-const MODE_LABEL: Record<StoryMode, string> = {
-  adventure: 'Adventure',
-  creative: 'Creative',
 }
 
 export function StoryCard({
@@ -64,7 +60,9 @@ export function StoryCard({
   const stripColor = story.accentColor ?? MODE_DEFAULT_COLOR[story.mode]
   const overflowTriggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
 
-  const metaParts = [MODE_LABEL[story.mode], story.chapterLabel, story.lastOpenedRelative].filter(
+  const modeLabel =
+    story.mode === 'adventure' ? t('storyCard.modeAdventure') : t('storyCard.modeCreative')
+  const metaParts = [modeLabel, story.chapterLabel, story.lastOpenedRelative].filter(
     (part): part is string => part != null,
   )
 
@@ -87,7 +85,7 @@ export function StoryCard({
       <Pressable
         onPress={onOpen}
         accessibilityRole="button"
-        accessibilityLabel={`Open ${story.title}`}
+        accessibilityLabel={t('storyCard.open', { title: story.title })}
         className={cn(
           'flex-1 flex-col gap-1.5 p-4 pl-5',
           'active:bg-tint-press',
@@ -110,7 +108,7 @@ export function StoryCard({
             className="font-medium uppercase tracking-wide"
             numberOfLines={1}
           >
-            Genre not set
+            {t('storyCard.genreNotSet')}
           </Text>
         )}
 
@@ -132,14 +130,14 @@ export function StoryCard({
           numberOfLines={3}
           className={story.description == null ? 'italic text-fg-muted' : ''}
         >
-          {story.description ?? '(no description yet)'}
+          {story.description ?? t('storyCard.noDescription')}
         </Text>
       </Pressable>
 
       <Pressable
         onPress={onToggleFavorite}
         accessibilityRole="button"
-        accessibilityLabel={story.favorited ? 'Unfavorite story' : 'Favorite story'}
+        accessibilityLabel={story.favorited ? t('storyCard.unfavorite') : t('storyCard.favorite')}
         hitSlop={8}
         className={cn(
           'group/star absolute left-[22px] top-[40px] rounded-sm',
@@ -165,40 +163,46 @@ export function StoryCard({
       <View className="absolute right-2 top-2" pointerEvents="box-none">
         <Popover>
           <PopoverTrigger ref={overflowTriggerRef} asChild>
-            <IconAction icon={MoreHorizontal} label="Story actions" size="sm" />
+            <IconAction icon={MoreHorizontal} label={t('storyCard.actionsLabel')} size="sm" />
           </PopoverTrigger>
           <PopoverContent align="end" className="w-56 p-1">
             <View className="flex-col">
               <OverflowItem
-                label={story.archived ? 'Unarchive' : 'Archive'}
+                label={story.archived ? t('storyCard.unarchive') : t('storyCard.archive')}
                 onSelect={() => {
                   overflowTriggerRef.current?.close()
                   onArchiveToggle()
                 }}
               />
+              {onEditInfo ? (
+                <OverflowItem
+                  label={t('storyCard.editInfo')}
+                  onSelect={() => {
+                    overflowTriggerRef.current?.close()
+                    onEditInfo()
+                  }}
+                />
+              ) : null}
+              {onDuplicate ? (
+                <OverflowItem
+                  label={t('storyCard.duplicate')}
+                  onSelect={() => {
+                    overflowTriggerRef.current?.close()
+                    onDuplicate()
+                  }}
+                />
+              ) : null}
+              {onExport ? (
+                <OverflowItem
+                  label={t('storyCard.export')}
+                  onSelect={() => {
+                    overflowTriggerRef.current?.close()
+                    onExport()
+                  }}
+                />
+              ) : null}
               <OverflowItem
-                label="Edit info"
-                onSelect={() => {
-                  overflowTriggerRef.current?.close()
-                  onEditInfo()
-                }}
-              />
-              <OverflowItem
-                label="Duplicate"
-                onSelect={() => {
-                  overflowTriggerRef.current?.close()
-                  onDuplicate()
-                }}
-              />
-              <OverflowItem
-                label="Export"
-                onSelect={() => {
-                  overflowTriggerRef.current?.close()
-                  onExport()
-                }}
-              />
-              <OverflowItem
-                label="Delete"
+                label={t('storyCard.delete')}
                 destructive
                 onSelect={() => {
                   overflowTriggerRef.current?.close()

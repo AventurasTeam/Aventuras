@@ -40,14 +40,19 @@ type StoryCardProps = {
   onOpen: () => void
   onToggleFavorite: () => void
   onArchiveToggle: () => void
-  onEditInfo: () => void
-  onDuplicate: () => void
-  onExport: () => void
+  onEditInfo?: () => void
+  onDuplicate?: () => void
+  onExport?: () => void
   onDelete: () => void
 
   className?: string
 }
 ```
+
+`onEditInfo` / `onDuplicate` / `onExport` are optional; the overflow menu
+hides each item when its callback is absent, so a consuming milestone wires
+only the actions it backs (M2 wires Archive/Unarchive + Delete). `onArchiveToggle`,
+`onDelete`, `onToggleFavorite`, and `onOpen` are required.
 
 `chapterLabel` and `lastOpenedRelative` are **pre-formatted
 strings** — same opaque-render contract EntryCard's
