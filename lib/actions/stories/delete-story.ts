@@ -26,7 +26,7 @@ import type { DbCtx } from '../types'
 
 // Branch-scoped owned tables. vault_calendars (shared) and assets (content-addressed
 // blobs, GC-owned by M4/M9 + M9.3) are intentionally absent — see docs/implementation/triage.md.
-const BRANCH_SCOPED: (SQLiteTable & { branchId: SQLiteColumn })[] = [
+export const BRANCH_SCOPED: (SQLiteTable & { branchId: SQLiteColumn })[] = [
   storyEntries,
   entities,
   characterRelationships,

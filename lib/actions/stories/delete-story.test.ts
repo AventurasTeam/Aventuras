@@ -1,3 +1,5 @@
+import { getTableColumns, getTableName } from 'drizzle-orm'
+import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -5,6 +7,7 @@ import {
   branches,
   chapters,
   characterRelationships,
+  dbSchema,
   deltas,
   entities,
   entryAssets,
@@ -23,7 +26,7 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { storiesStore } from '@/lib/stores'
 
-import { deleteStory } from './delete-story'
+import { BRANCH_SCOPED, deleteStory } from './delete-story'
 
 async function setup() {
   const { db, runInTransaction } = await createTestDb()
@@ -103,5 +106,17 @@ describe('deleteStory', () => {
       // None belonged to the victim branch; survivor's (none seeded) remain absent.
       expect(rows.every((r) => !('branchId' in r) || r.branchId !== 'br_victim')).toBe(true)
     }
+  })
+
+  it('cascade covers exactly the schema branch-scoped tables (no future orphans)', () => {
+    // Every table carrying a branch_id is owned-by-story content in this schema, so it
+    // MUST be in the cascade. This guards against a table being dropped from BRANCH_SCOPED
+    // or a new branch-scoped table being added to the schema without wiring the cascade.
+    const schemaBranchTables = (Object.values(dbSchema) as SQLiteTable[])
+      .filter((t) => 'branchId' in getTableColumns(t))
+      .map(getTableName)
+      .sort()
+    const cascadeTables = BRANCH_SCOPED.map(getTableName).sort()
+    expect(cascadeTables).toEqual(schemaBranchTables)
   })
 })
