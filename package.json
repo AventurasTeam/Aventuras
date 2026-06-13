@@ -33,6 +33,7 @@
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:check:format": "tsx scripts/check-migrations-format.ts",
+    "db:seed": "tsx scripts/seed/index.ts",
     "db:studio:desktop": "drizzle-kit studio --config drizzle.studio.config.ts"
   },
   "dependencies": {
