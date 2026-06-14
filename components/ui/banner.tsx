@@ -35,7 +35,11 @@ export function Banner({ message, ctaLabel, onCta, className }: BannerProps) {
         accessibilityRole="button"
         accessibilityLabel={ctaLabel}
         onPress={onCta}
-        className={cn(Platform.select({ web: 'cursor-pointer outline-none' }))}
+        className={cn(
+          Platform.select({
+            web: 'cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+          }),
+        )}
       >
         <Text size="sm" className="font-medium text-fg-primary underline">
           {ctaLabel}

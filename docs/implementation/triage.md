@@ -28,9 +28,11 @@ slice-planning gate forces its resolution before that slice is planned.
   [trash-can pattern](../data-model.md#assets-images--future-media), removing
   the last `entry_assets` reference should set `pending_delete_at` + rename to
   `.trash`. When M4/M9 builds refcount-trashing, it must hook the **story-delete
-  cascade path**, not just the standalone entry/branch delete arms, or deleting
-  a story with assets leaks blobs. No live impact in M2 (M2 stories carry no
-  assets). Route into the M4/M9 refcount-trashing slice's Open questions when
+  cascade path** for both the `entry_assets` junction removals **and** the
+  `stories.cover_asset_id` field (cleared, or its row deleted, on story delete),
+  not just the standalone entry/branch delete arms, or deleting a story with
+  attached assets or a cover leaks blobs. No live impact in M2 (M2 stories carry
+  no assets or covers). Route into the M4/M9 refcount-trashing slice's Open questions when
   that slice is authored.
 - **Store hydrate/rehydrate seam — fold into the store namespace?** Sweep
   every store in `lib/stores/*` (`appSettingsStore`, `storiesStore`, the

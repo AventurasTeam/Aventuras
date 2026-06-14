@@ -54,7 +54,10 @@ export function StoryCard({
     genre?: { label?: string | null } | null
   } | null
   const genreLabel = def?.genre?.label ?? null
-  const mode: StoryMode = def?.mode ?? 'creative'
+  // The loose cast can't vouch for the value; a corrupt/partial draft may carry a stray `mode`
+  // that would miss the MODE_* lookups below. Re-validate against the known keys.
+  const mode: StoryMode =
+    def?.mode != null && def.mode in MODE_DEFAULT_COLOR ? def.mode : 'creative'
   const favorited = story.favorite === 1
   const archived = story.status === 'archived'
   const isDraft = story.status === 'draft'
