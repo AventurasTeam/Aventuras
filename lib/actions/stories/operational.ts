@@ -32,9 +32,14 @@ export async function setStoryArchived(id: string, archived: boolean, ctx: DbCtx
   await rehydrateStories(ctx.db)
 }
 
-export async function touchStoryOpened(id: string, ctx: DbCtx, nowSec: number): Promise<void> {
+// nowMs defaults to the clock so callers (UI) don't thread time into the action; tests inject a fixed value.
+export async function touchStoryOpened(
+  id: string,
+  ctx: DbCtx,
+  nowMs: number = Date.now(),
+): Promise<void> {
   await ctx.runInTransaction([
-    ctx.db.update(stories).set({ lastOpenedAt: nowSec }).where(eq(stories.id, id)).toSQL(),
+    ctx.db.update(stories).set({ lastOpenedAt: nowMs }).where(eq(stories.id, id)).toSQL(),
   ])
   await rehydrateStories(ctx.db)
 }
@@ -46,7 +51,7 @@ export async function openStory(
   id: string,
   ctx: DbCtx,
   navigate: (branchId: string) => void,
-  nowSec: number,
+  nowMs: number = Date.now(),
 ): Promise<OpenStoryResult> {
   const [row] = await ctx.db
     .select({ branchId: stories.currentBranchId })
@@ -54,7 +59,7 @@ export async function openStory(
     .where(eq(stories.id, id))
   const branchId = row?.branchId ?? null
   if (branchId == null) return { status: 'no-branch' }
-  await touchStoryOpened(id, ctx, nowSec)
+  await touchStoryOpened(id, ctx, nowMs)
   navigationStore.setCurrentStory(id)
   navigationStore.setCurrentBranch(branchId)
   navigate(branchId)

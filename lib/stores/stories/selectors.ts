@@ -34,10 +34,10 @@ function compare(a: StoryRow, b: StoryRow, sort: StorySort): number {
 export function selectStoryCards(
   rows: StoryRow[],
   query: StoryListQuery,
-  nowSec: number,
+  nowMs: number,
 ): StoryCardData[] {
   return rows
     .filter((r) => matchesFilter(r, query.filter) && matchesSearch(r, query.search))
     .sort((a, b) => compare(a, b, query.sort))
-    .map((r) => toStoryCardData(r, nowSec))
+    .map((r) => toStoryCardData(r, nowMs))
 }

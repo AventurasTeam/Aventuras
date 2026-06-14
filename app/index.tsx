@@ -34,7 +34,6 @@ import {
 } from '@/lib/stores'
 
 const ctx = { db, runInTransaction }
-const nowSec = () => Math.floor(Date.now() / 1000)
 
 type PromptState = { trigger: 'new-story' | 'draft'; storyId?: string }
 
@@ -54,8 +53,8 @@ export default function Index() {
     void rehydrateStories(db)
   }, [])
 
-  // nowSec snapshot recomputes on rows/query change, not on a clock tick — relative labels lag <60s, acceptable.
-  const cards = useMemo(() => selectStoryCards(rows, query, nowSec()), [rows, query])
+  // Date.now() snapshot recomputes on rows/query change, not on a clock tick — relative labels lag <60s, acceptable.
+  const cards = useMemo(() => selectStoryCards(rows, query, Date.now()), [rows, query])
 
   // The wizard route + draft-resume contract are owned by Slice 2.3 (unmerged); until it
   // lands, both entry points route to /wizard (cast: not in the typed-route table yet) and
@@ -85,12 +84,7 @@ export default function Index() {
           openDraft(storyId)
           return
         }
-        void openStory(
-          storyId,
-          ctx,
-          (branchId) => router.push(`/reader-composer/${branchId}`),
-          nowSec(),
-        )
+        void openStory(storyId, ctx, (branchId) => router.push(`/reader-composer/${branchId}`))
       },
       onToggleFavorite: () => {
         void setStoryFavorite(storyId, !(row?.favorite === 1), ctx)

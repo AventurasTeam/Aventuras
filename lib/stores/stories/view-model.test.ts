@@ -4,7 +4,7 @@ import type { Story } from '@/lib/db'
 
 import { toStoryCardData } from './view-model'
 
-const NOW = 2_000_000
+const NOW = 2_000_000_000_000 // unix ms
 
 function row(partial: Partial<Story>): Story {
   return {
@@ -32,7 +32,7 @@ describe('toStoryCardData', () => {
       row({
         favorite: 1,
         status: 'active',
-        lastOpenedAt: NOW - 7200,
+        lastOpenedAt: NOW - 7_200_000,
         definition: { mode: 'adventure', genre: { label: 'Dark Fantasy' } } as never,
       }),
       NOW,
