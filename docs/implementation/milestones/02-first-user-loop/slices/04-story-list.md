@@ -137,4 +137,42 @@ story` with a session fires the new-story variant. Resolutions:
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+Resolved during planning + execution (full execution plan was the
+git-ignored `.impl-plans/M02-04-story-list.md`).
+
+- **Story Delete pulled in** (milestone open question → in). Implemented as
+  a transactional full-graph cascade (`lib/actions/stories/delete-story.ts`):
+  deletes the entire owned graph child→parent, **excludes** shared
+  `vault_calendars` and content-addressed `assets` blobs (drops `entry_assets`
+  junction rows only). Policy pinned in
+  [`data-model.md → Story deletion`](../../../../data-model.md#story-deletion).
+  A schema-derived completeness test fails if a branch-scoped table is added
+  without wiring the cascade. The asset-trashing forward-coupling (M4/M9 GC
+  must hook the story-delete path) is tracked in
+  [`triage.md`](../../../triage.md).
+- **Built against pinned contracts** (consumers unmerged). The C5 session
+  selector + prompt are a local placeholder
+  (`components/story/wizard-session-seam.tsx`) for
+  [Slice 2.3](./03-wizard.md) to supersede; the banner CTA points at the
+  interim `/settings` providers tab; the `/wizard` route is cast `as Href`
+  until 2.3 lands it. The C1 creation-refresh surface 2.3 calls is
+  `rehydrateStories(db)` (targeted re-read).
+- **Persisted-mirror store.** Column writes (favorite / status /
+  last_opened_at) and delete are action-layer writes that re-hydrate the store
+  — the store exposes no value-setter. C1's "two externally-called mutators"
+  resolve to `touchStoryOpened` (action layer) plus the in-memory open-failure
+  `setOpenFailure` / `clearOpenFailure` (store).
+- **StoryCard changes.** Out-of-scope menu callbacks (Edit info / Duplicate /
+  Export) made optional and hidden when absent; all chrome converted to
+  `t()`; Archive hidden on draft cards per the data-model archive-gating rule.
+- **Added beyond the brief.** A no-results state on StoryList for when a
+  filter / search matches nothing (distinct from the zero-stories welcome).
+- **Debug-button removal deferred.** The M1 `__DEV__` reader button stays
+  until [Slice 2.5](./05-reader.md) merges (execution-gated).
+- **Handoffs.** [Slice 2.7](./07-wiring.md) extends `openStory` (strict
+  definition / settings parse, `hydrate(branchId)`, open-failure write) and
+  should give the currently-silent `{status:'no-branch'}` return a surface;
+  [Slice 2.10](./10-recovery-ui.md) renders / clears open-failure via the
+  store. Relative-time strings (`lib/stores/stories/relative-time.ts`) are not
+  yet i18n'd — a cross-cutting pass with the sibling helper in
+  `collision-resolve-dialog.tsx`.
