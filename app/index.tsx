@@ -1,25 +1,111 @@
-import { useRouter } from 'expo-router'
-import { View } from 'react-native'
+import { useRouter, type Href } from 'expo-router'
+import { useEffect, useMemo, useState } from 'react'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { ScreenShell } from '@/components/shells/screen-shell'
+import { AppBannerHost } from '@/components/story/app-banner-host'
+import { StoryList, type StoryCardHandlers } from '@/components/story/story-list'
+import {
+  ConcurrentStatePrompt,
+  useWizardSessionExists,
+} from '@/components/story/wizard-session-seam'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
+import { deleteStory, openStory, setStoryArchived, setStoryFavorite } from '@/lib/actions'
+import { db, runInTransaction } from '@/lib/db'
 import { t } from '@/lib/i18n'
-import { navigationStore } from '@/lib/stores'
+import {
+  rehydrateStories,
+  selectStoryCards,
+  storiesStore,
+  type StoryFilter,
+  type StoryListQuery,
+  type StorySort,
+} from '@/lib/stores'
+import { runAction } from '@/lib/utils'
 
-// Temporary M1 nav stopgap: no story exists until a later slice's synthetic
-// story, so a dev-only affordance is the only path into the reader.
-const DEBUG_ID = '__debug__'
+const ctx = { db, runInTransaction }
+
+type PromptState = { trigger: 'new-story' | 'draft'; storyId?: string }
 
 export default function Index() {
   const router = useRouter()
+  const rows = storiesStore.useStories((s) => s.rows)
+  const [query, setQuery] = useState<StoryListQuery>({
+    search: '',
+    filter: 'all',
+    sort: 'last-opened',
+  })
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+  const [prompt, setPrompt] = useState<PromptState | null>(null)
+  const sessionExists = useWizardSessionExists()
 
-  const openReaderDebug = () => {
-    navigationStore.setCurrentStory(DEBUG_ID)
-    navigationStore.setCurrentBranch(DEBUG_ID)
-    router.push(`/reader-composer/${DEBUG_ID}`)
+  useEffect(() => {
+    void rehydrateStories(db)
+  }, [])
+
+  const cards = useMemo(() => selectStoryCards(rows, query, Date.now()), [rows, query])
+
+  const goWizard = () => router.push('/wizard' as Href)
+  const onNewStory = () => {
+    if (sessionExists) {
+      setPrompt({ trigger: 'new-story' })
+      return
+    }
+    goWizard()
+  }
+  const openDraft = (storyId: string) => {
+    if (sessionExists) {
+      setPrompt({ trigger: 'draft', storyId })
+      return
+    }
+    goWizard()
+  }
+
+  const cardHandlers = (storyId: string): StoryCardHandlers => {
+    const row = rows.find((r) => r.id === storyId)
+    const isDraft = row?.status === 'draft'
+    return {
+      onOpen: () => {
+        if (isDraft) {
+          openDraft(storyId)
+          return
+        }
+        runAction(
+          openStory(storyId, ctx, (branchId) => router.push(`/reader-composer/${branchId}`)),
+          {
+            event: 'action_layer.story_open_failed',
+            toastMessage: t('landing:errors.openFailed'),
+            context: { storyId },
+          },
+        )
+      },
+      onToggleFavorite: () => {
+        runAction(setStoryFavorite(storyId, !(row?.favorite === 1), ctx), {
+          event: 'action_layer.story_favorite_failed',
+          toastMessage: t('landing:errors.favoriteFailed'),
+          context: { storyId },
+        })
+      },
+      onArchiveToggle: () => {
+        runAction(setStoryArchived(storyId, row?.status !== 'archived', ctx), {
+          event: 'action_layer.story_archive_failed',
+          toastMessage: t('landing:errors.archiveFailed'),
+          context: { storyId },
+        })
+      },
+      onDelete: () => setPendingDelete(storyId),
+    }
   }
 
   return (
@@ -29,14 +115,69 @@ export default function Index() {
       onOpenAppSettings={() => router.push('/settings')}
       actions={<AppActionsMenu />}
     >
-      <View className="flex-1 items-center justify-center gap-6 p-6">
-        <EmptyState title={t('landing:emptyTitle')} subtext={t('landing:emptyBody')} />
-        {__DEV__ ? (
-          <Button variant="secondary" onPress={openReaderDebug}>
-            <Text>{t('landing:openReaderDebug')}</Text>
-          </Button>
-        ) : null}
-      </View>
+      <StoryList
+        cards={cards}
+        totalCount={rows.length}
+        query={query}
+        onSearch={(search) => setQuery((q) => ({ ...q, search }))}
+        onFilter={(filter: StoryFilter) => setQuery((q) => ({ ...q, filter }))}
+        onSort={(sort: StorySort) => setQuery((q) => ({ ...q, sort }))}
+        onNewStory={onNewStory}
+        cardHandlers={cardHandlers}
+        banner={
+          <AppBannerHost onConfigureProvider={() => router.push('/settings?tab=providers')} />
+        }
+      />
+
+      {prompt ? (
+        <ConcurrentStatePrompt
+          trigger={prompt.trigger}
+          onContinueSession={() => {
+            setPrompt(null)
+            goWizard()
+          }}
+          onDiscard={() => {
+            setPrompt(null)
+            goWizard()
+          }}
+          onDismiss={() => setPrompt(null)}
+        />
+      ) : null}
+
+      <AlertDialog
+        open={pendingDelete != null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('landing:delete.title')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('landing:delete.body')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild>
+              <Button variant="secondary">
+                <Text>{t('landing:delete.cancel')}</Text>
+              </Button>
+            </AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Button
+                variant="destructive"
+                onPress={() => {
+                  const id = pendingDelete
+                  if (id)
+                    runAction(deleteStory(id, ctx), {
+                      event: 'action_layer.story_delete_failed',
+                      toastMessage: t('landing:errors.deleteFailed'),
+                      context: { storyId: id },
+                    })
+                }}
+              >
+                <Text>{t('landing:delete.confirm')}</Text>
+              </Button>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </ScreenShell>
   )
 }

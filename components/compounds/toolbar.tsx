@@ -139,7 +139,9 @@ function ToolbarSort({ value, onChange, options, label, disabled, className }: T
               <Text size="sm" variant="muted">
                 {`${label}:`}
               </Text>
-              <Text size="sm" className="text-fg-primary">
+              {/* Reserve the widest-label width so the trigger (and the popover
+                  that mirrors its width) doesn't resize between selections. */}
+              <Text size="sm" className="min-w-[5.5rem] text-fg-primary">
                 {valueText}
               </Text>
             </View>

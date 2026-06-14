@@ -1,6 +1,9 @@
 import { clsx, type ClassValue } from 'clsx'
 import { extendTailwindMerge } from 'tailwind-merge'
 
+import { logger, type LogKind } from '@/lib/diagnostics'
+import { toast } from '@/lib/toast'
+
 // Custom token families registered with tailwind-merge so `cn()`
 // dedupes them against their built-in counterparts. Without this,
 // e.g. `cn('pl-row-x-md', 'pl-8')` keeps both classes in the
@@ -51,4 +54,25 @@ const twMerge = extendTailwindMerge({
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs))
+}
+
+type RunActionOptions = {
+  /** Diagnostics event for the failure; routes through the gate instead of leaking an unhandled rejection. */
+  event: LogKind
+  /** User-facing toast on failure. Omit for background work that needs no user feedback. */
+  toastMessage?: string
+  /** Extra structured fields merged into the failure log. */
+  context?: Record<string, unknown>
+}
+
+/** Fire-and-forget an action-layer promise without leaking an unhandled rejection: on failure,
+ *  log through the diagnostics gate and optionally surface a toast. Replaces bare `void action(...)`. */
+export function runAction(promise: Promise<unknown>, options: RunActionOptions): void {
+  void promise.catch((err: unknown) => {
+    logger.error(options.event, {
+      ...options.context,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    if (options.toastMessage != null) toast.error(options.toastMessage)
+  })
 }

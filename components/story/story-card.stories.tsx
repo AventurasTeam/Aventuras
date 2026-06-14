@@ -4,24 +4,33 @@ import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
+import { t } from '@/lib/i18n'
+import type { StoryCardData } from '@/lib/stores'
 import { themes } from '@/lib/themes'
 
-import { StoryCard, type Story } from './story-card'
+import { StoryCard } from './story-card'
 
-const baseStory: Story = {
-  id: 's1',
+const makeStoryRow = (p: Partial<StoryCardData> & { id: string }): StoryCardData => ({
   title: "Aria's Descent",
   description:
     'A former royal guard hunts the Warden through the undercities of Ironshore, hoping to clear her name before the war reaches the capital.',
-  genreLabel: 'Dark Fantasy',
-  mode: 'adventure',
+  tags: [],
+  coverAssetId: null,
   accentColor: null,
-  favorited: false,
-  archived: false,
-  isDraft: false,
+  status: 'active',
+  favorite: 0,
+  lastOpenedAt: null,
+  definition: { mode: 'adventure', genre: { label: 'Dark Fantasy' } } as never,
+  settings: null,
+  createdAt: 1,
+  updatedAt: 1,
+  currentBranchId: null,
   chapterLabel: 'Chapter 3',
   lastOpenedRelative: '2h ago',
-}
+  ...p,
+})
+
+const baseStory = makeStoryRow({ id: 's1' })
 
 const handlers = {
   onOpen: fn(),
@@ -34,7 +43,7 @@ const handlers = {
 }
 
 const meta: Meta<typeof StoryCard> = {
-  title: 'Compounds/StoryCard',
+  title: 'Compounds/Story/StoryCard',
   component: StoryCard,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],
@@ -63,47 +72,50 @@ export const Default: StoryT = {
 
 export const Favorited: StoryT = {
   ...cardCentered,
-  args: { story: { ...baseStory, favorited: true }, ...handlers },
+  args: { story: makeStoryRow({ id: 's1', favorite: 1 }), ...handlers },
 }
 
 export const Draft: StoryT = {
   ...cardCentered,
   args: {
-    story: { ...baseStory, isDraft: true, chapterLabel: null },
+    story: makeStoryRow({ id: 's1', status: 'draft', chapterLabel: null }),
     ...handlers,
   },
 }
 
 export const Archived: StoryT = {
   ...cardCentered,
-  args: { story: { ...baseStory, archived: true }, ...handlers },
+  args: { story: makeStoryRow({ id: 's1', status: 'archived' }), ...handlers },
 }
 
 export const ArchivedDraft: StoryT = {
   ...cardCentered,
   args: {
-    story: { ...baseStory, archived: true, isDraft: true, chapterLabel: null },
+    story: makeStoryRow({ id: 's1', status: 'archived', chapterLabel: null }),
     ...handlers,
   },
 }
 
 export const NoDescription: StoryT = {
   ...cardCentered,
-  args: { story: { ...baseStory, description: null }, ...handlers },
+  args: { story: makeStoryRow({ id: 's1', description: null }), ...handlers },
 }
 
 export const NoGenre: StoryT = {
   ...cardCentered,
-  args: { story: { ...baseStory, genreLabel: null }, ...handlers },
+  args: {
+    story: makeStoryRow({ id: 's1', definition: { mode: 'adventure' } as never }),
+    ...handlers,
+  },
 }
 
 export const LongTitle: StoryT = {
   ...cardCentered,
   args: {
-    story: {
-      ...baseStory,
+    story: makeStoryRow({
+      id: 's1',
       title: 'A title that runs longer than usual to verify the two-line clamp behavior holds',
-    },
+    }),
     ...handlers,
   },
 }
@@ -111,7 +123,10 @@ export const LongTitle: StoryT = {
 export const CreativeMode: StoryT = {
   ...cardCentered,
   args: {
-    story: { ...baseStory, mode: 'creative', genreLabel: 'Cozy Slice-of-Life' },
+    story: makeStoryRow({
+      id: 's1',
+      definition: { mode: 'creative', genre: { label: 'Cozy Slice-of-Life' } } as never,
+    }),
     ...handlers,
   },
 }
@@ -119,7 +134,11 @@ export const CreativeMode: StoryT = {
 export const CustomAccent: StoryT = {
   ...cardCentered,
   args: {
-    story: { ...baseStory, accentColor: '#10b981', genreLabel: 'Adventure Sci-Fi' },
+    story: makeStoryRow({
+      id: 's1',
+      accentColor: '#10b981',
+      definition: { mode: 'adventure', genre: { label: 'Adventure Sci-Fi' } } as never,
+    }),
     ...handlers,
   },
 }
@@ -128,7 +147,7 @@ export const FavoriteTogglesIndependent: StoryT = {
   ...cardCentered,
   args: { story: baseStory, ...handlers },
   play: async ({ args }) => {
-    const star = screen.getByRole('button', { name: 'Favorite story' })
+    const star = screen.getByRole('button', { name: t('storyCard.favorite') })
     await userEvent.click(star)
     await waitFor(() => expect(args.onToggleFavorite).toHaveBeenCalledTimes(1))
     // Star tap MUST NOT bubble to body open. The reverse is guarded
@@ -141,24 +160,40 @@ export const OverflowOpensMenu: StoryT = {
   ...cardCentered,
   args: { story: baseStory, ...handlers },
   play: async ({ args }) => {
-    const trigger = screen.getByRole('button', { name: 'Story actions' })
+    const trigger = screen.getByRole('button', { name: t('storyCard.actionsLabel') })
     await userEvent.click(trigger)
     await waitFor(() =>
-      expect(screen.getByRole('menuitem', { name: 'Archive' })).toBeInTheDocument(),
+      expect(screen.getByRole('menuitem', { name: t('storyCard.archive') })).toBeInTheDocument(),
     )
     // Overflow tap MUST NOT bubble to body open.
     expect(args.onOpen).not.toHaveBeenCalled()
   },
 }
 
-export const ArchiveLabelFlipsForArchived: StoryT = {
+export const DraftHidesArchive: StoryT = {
   ...cardCentered,
-  args: { story: { ...baseStory, archived: true }, ...handlers },
+  args: { story: makeStoryRow({ id: 's1', status: 'draft', chapterLabel: null }), ...handlers },
   play: async () => {
-    const trigger = screen.getByRole('button', { name: 'Story actions' })
+    const trigger = screen.getByRole('button', { name: t('storyCard.actionsLabel') })
     await userEvent.click(trigger)
     await waitFor(() =>
-      expect(screen.getByRole('menuitem', { name: 'Unarchive' })).toBeInTheDocument(),
+      expect(screen.getByRole('menuitem', { name: t('storyCard.delete') })).toBeInTheDocument(),
+    )
+    expect(screen.queryByRole('menuitem', { name: t('storyCard.archive') })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('menuitem', { name: t('storyCard.unarchive') }),
+    ).not.toBeInTheDocument()
+  },
+}
+
+export const ArchiveLabelFlipsForArchived: StoryT = {
+  ...cardCentered,
+  args: { story: makeStoryRow({ id: 's1', status: 'archived' }), ...handlers },
+  play: async () => {
+    const trigger = screen.getByRole('button', { name: t('storyCard.actionsLabel') })
+    await userEvent.click(trigger)
+    await waitFor(() =>
+      expect(screen.getByRole('menuitem', { name: t('storyCard.unarchive') })).toBeInTheDocument(),
     )
   },
 }
@@ -182,32 +217,27 @@ export const GridResponsive: StoryT = {
       }}
     >
       {[
-        { ...baseStory, id: '1' },
-        { ...baseStory, id: '2', favorited: true, title: 'The Iron Pact' },
-        { ...baseStory, id: '3', isDraft: true, chapterLabel: null, title: 'Untitled draft' },
-        {
-          ...baseStory,
+        makeStoryRow({ id: '1' }),
+        makeStoryRow({ id: '2', favorite: 1, title: 'The Iron Pact' }),
+        makeStoryRow({ id: '3', status: 'draft', chapterLabel: null, title: 'Untitled draft' }),
+        makeStoryRow({
           id: '4',
-          archived: true,
-          mode: 'creative' as const,
-          genreLabel: 'Cozy Slice-of-Life',
+          status: 'archived',
+          definition: { mode: 'creative', genre: { label: 'Cozy Slice-of-Life' } } as never,
           title: 'Tea House Diaries',
-        },
-        {
-          ...baseStory,
+        }),
+        makeStoryRow({
           id: '5',
-          mode: 'creative' as const,
           accentColor: '#10b981',
-          genreLabel: 'Solarpunk',
+          definition: { mode: 'creative', genre: { label: 'Solarpunk' } } as never,
           title: 'Greenhouse Saga',
           description: null,
-        },
-        {
-          ...baseStory,
+        }),
+        makeStoryRow({
           id: '6',
-          genreLabel: null,
+          definition: { mode: 'adventure' } as never,
           title: 'No-Genre Story',
-        },
+        }),
       ].map((s) => (
         <StoryCard key={s.id} story={s} {...handlers} />
       ))}
@@ -246,15 +276,13 @@ export const ThemeMatrix: StoryT = {
               gap: 12,
             }}
           >
-            <StoryCard story={{ ...baseStory, id: `${t.id}-1` }} {...handlers} />
-            <StoryCard story={{ ...baseStory, id: `${t.id}-2`, favorited: true }} {...handlers} />
+            <StoryCard story={makeStoryRow({ id: `${t.id}-1` })} {...handlers} />
+            <StoryCard story={makeStoryRow({ id: `${t.id}-2`, favorite: 1 })} {...handlers} />
             <StoryCard
-              story={{
-                ...baseStory,
+              story={makeStoryRow({
                 id: `${t.id}-3`,
-                mode: 'creative',
-                genreLabel: 'Cozy Slice-of-Life',
-              }}
+                definition: { mode: 'creative', genre: { label: 'Cozy Slice-of-Life' } } as never,
+              })}
               {...handlers}
             />
           </View>
