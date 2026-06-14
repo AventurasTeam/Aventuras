@@ -4,9 +4,7 @@
 
 - **Milestone:** [Milestone 2 — First user loop](../milestone.md)
 - **Depends on:** none for the surface (StoryCard / Toolbar /
-  ScreenShell are shipped; develops against seeded story rows);
-  [Slice 2.5](./05-reader.md) for the debug-button removal task
-  only.
+  ScreenShell are shipped; develops against seeded story rows).
 - **Blocks:** [Slice 2.10](./10-recovery-ui.md) (the
   parse-failure badge renders on this surface)
 
@@ -77,8 +75,7 @@ pinned C1 refresh surface, so the two slices run in parallel.
   `last_opened_at` touched.
 - **Debug-button removal:** delete the 1.7b `__DEV__` "Open
   reader (debug)" landing button (only this button — the rest of
-  the smoke teardown is [Slice 2.7](./07-wiring.md)). Ordered
-  after 2.5 merges.
+  the smoke teardown is [Slice 2.7](./07-wiring.md)).
 
 ## Scope: out
 
@@ -110,8 +107,7 @@ story` with a session fires the new-story variant. Resolutions:
 - Card click lands in the reader with the story open and
   `last_opened_at` updated; empty database renders the welcome
   state with toolbar and header CTA hidden.
-- After this slice + 2.5, no `__DEV__` reader button remains on
-  the landing.
+- No `__DEV__` reader button remains on the landing.
 - The AI-not-configured banner shows iff `providers` is empty and
   routes to the interim form.
 
@@ -165,8 +161,10 @@ git-ignored `.impl-plans/M02-04-story-list.md`).
   `t()`; Archive hidden on draft cards per the data-model archive-gating rule.
 - **Added beyond the brief.** A no-results state on StoryList for when a
   filter / search matches nothing (distinct from the zero-stories welcome).
-- **Debug-button removal deferred.** The M1 `__DEV__` reader button stays
-  until [Slice 2.5](./05-reader.md) merges (execution-gated).
+- **Debug-button removed** (was execution-gated on 2.5; the developer pulled
+  it forward — the story-list card-click reader path plus seeded stories
+  obsolete the button, which was the only thing the 2.5 gate protected). The
+  rest of the M1 smoke teardown stays [Slice 2.7](./07-wiring.md).
 - **Handoffs.** [Slice 2.7](./07-wiring.md) extends `openStory` (strict
   definition / settings parse, `hydrate(branchId)`, open-failure write) and
   should give the currently-silent `{status:'no-branch'}` return a surface;
