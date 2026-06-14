@@ -21,6 +21,7 @@
     "sortTitle": "Title",
     "welcomeTitle": "Welcome to Aventuras",
     "welcomeBody": "Create your first story to begin. Everything stays on this device.",
-    "createFirst": "+ Create your first story"
+    "createFirst": "+ Create your first story",
+    "noResults": "No stories match your search or filters."
   }
 }

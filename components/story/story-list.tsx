@@ -15,7 +15,7 @@ const SORT_OPTIONS = [
   { value: 'last-opened', label: t('landing:list.sortLastOpened') },
   { value: 'created', label: t('landing:list.sortCreated') },
   { value: 'title', label: t('landing:list.sortTitle') },
-]
+] as const
 
 export type StoryCardHandlers = {
   onOpen: () => void
@@ -101,23 +101,31 @@ export function StoryList({
               />
             </Toolbar>
 
-            <View
-              // @ts-expect-error — web grid styling on RN-Web; native falls back to flex wrap.
-              style={Platform.select({
-                web: {
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                  gap: 16,
-                },
-                default: undefined,
-              })}
-              className={Platform.OS === 'web' ? '' : 'flex-row flex-wrap gap-4'}
-            >
-              {cards.map((c) => {
-                const h = cardHandlers(c.id)
-                return <StoryCard key={c.id} story={c} {...h} />
-              })}
-            </View>
+            {cards.length === 0 ? (
+              <View className="items-center py-10">
+                <Text variant="muted" size="sm">
+                  {t('landing:list.noResults')}
+                </Text>
+              </View>
+            ) : (
+              <View
+                // @ts-expect-error — web grid styling on RN-Web; native falls back to flex wrap.
+                style={Platform.select({
+                  web: {
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                    gap: 16,
+                  },
+                  default: undefined,
+                })}
+                className={Platform.OS === 'web' ? '' : 'flex-row flex-wrap gap-4'}
+              >
+                {cards.map((c) => {
+                  const h = cardHandlers(c.id)
+                  return <StoryCard key={c.id} story={c} {...h} />
+                })}
+              </View>
+            )}
           </>
         )}
       </View>

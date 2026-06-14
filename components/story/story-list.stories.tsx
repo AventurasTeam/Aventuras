@@ -75,3 +75,11 @@ export const WithBanner: T = {
     ),
   },
 }
+export const NoResults: T = {
+  args: {
+    ...base,
+    cards: [],
+    totalCount: 5,
+    query: { search: 'zzz', filter: 'all', sort: 'last-opened' },
+  },
+}
