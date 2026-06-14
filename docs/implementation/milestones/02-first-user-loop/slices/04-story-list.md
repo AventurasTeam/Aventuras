@@ -147,10 +147,21 @@ git-ignored `.impl-plans/M02-04-story-list.md`).
 - **Built against pinned contracts** (consumers unmerged). The C5 session
   selector + prompt are a local placeholder
   (`components/story/wizard-session-seam.tsx`) for
-  [Slice 2.3](./03-wizard.md) to supersede; the banner CTA points at the
-  interim `/settings` providers tab; the `/wizard` route is cast `as Href`
-  until 2.3 lands it. The C1 creation-refresh surface 2.3 calls is
+  [Slice 2.3](./03-wizard.md) to supersede; the `/wizard` route is cast
+  `as Href` until 2.3 lands it. The C1 creation-refresh surface 2.3 calls is
   `rehydrateStories(db)` (targeted re-read).
+- **AI-not-configured banner owned here.** This slice builds the banner
+  (`components/ui/banner.tsx` + the `AppBannerHost` no-providers / priority
+  resolver host per [`banners.md`](../../../../ui/patterns/banners.md), which
+  names the story list the sole host); CTA deep-links to
+  `/settings?tab=providers`. [Slice 2.1](./01-provider.md)'s branch
+  independently built a duplicate (`AiConfigBanner`, solid-fill, rendered on
+  the old empty landing). Since this slice's `app/index.tsx` replaces that
+  landing wholesale, 2.1's banner is superseded — when 2.1 rebases onto this it
+  drops `ai-config-banner.tsx` + its `app/index.tsx` render + the `aiBanner.*`
+  keys, keeping only the provider form, mutators, and the CTA target (its
+  banner AC collapses to the integration assertion it always was). Onboarding's
+  skip-path is a third consumer of this same banner.
 - **Persisted-mirror store.** Column writes (favorite / status /
   last_opened_at) and delete are action-layer writes that re-hydrate the store
   — the store exposes no value-setter. C1's "two externally-called mutators"

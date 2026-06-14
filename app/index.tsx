@@ -53,12 +53,8 @@ export default function Index() {
     void rehydrateStories(db)
   }, [])
 
-  // Date.now() snapshot recomputes on rows/query change, not on a clock tick — relative labels lag <60s, acceptable.
   const cards = useMemo(() => selectStoryCards(rows, query, Date.now()), [rows, query])
 
-  // The wizard route + draft-resume contract are owned by Slice 2.3 (unmerged); until it
-  // lands, both entry points route to /wizard (cast: not in the typed-route table yet) and
-  // the session prompt path stays dormant (useWizardSessionExists returns false until 2.3).
   const goWizard = () => router.push('/wizard' as Href)
   const onNewStory = () => {
     if (sessionExists) {
@@ -112,7 +108,9 @@ export default function Index() {
         onSort={(sort: StorySort) => setQuery((q) => ({ ...q, sort }))}
         onNewStory={onNewStory}
         cardHandlers={cardHandlers}
-        banner={<AppBannerHost onConfigureProvider={() => router.push('/settings')} />}
+        banner={
+          <AppBannerHost onConfigureProvider={() => router.push('/settings?tab=providers')} />
+        }
       />
 
       {prompt ? (
