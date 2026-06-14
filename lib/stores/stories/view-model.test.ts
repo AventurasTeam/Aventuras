@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Story as StoryRow } from '@/lib/db'
+import type { Story } from '@/lib/db'
 
-import { toStoryCardVM } from './view-model'
+import { toStoryCardData } from './view-model'
 
 const NOW = 2_000_000
 
-function row(partial: Partial<StoryRow>): StoryRow {
+function row(partial: Partial<Story>): Story {
   return {
     id: 's1',
     title: 'Aria',
@@ -23,37 +23,35 @@ function row(partial: Partial<StoryRow>): StoryRow {
     updatedAt: 1,
     currentBranchId: null,
     ...partial,
-  } as StoryRow
+  } as Story
 }
 
-describe('toStoryCardVM', () => {
-  it('maps an active story with full definition', () => {
-    const vm = toStoryCardVM(
+describe('toStoryCardData', () => {
+  it('spreads the row through and adds the two derived display fields', () => {
+    const data = toStoryCardData(
       row({
         favorite: 1,
+        status: 'active',
         lastOpenedAt: NOW - 7200,
-         
-        definition: { mode: 'adventure', genre: { label: 'Dark Fantasy' } } as any,
+        definition: { mode: 'adventure', genre: { label: 'Dark Fantasy' } } as never,
       }),
       NOW,
     )
-    expect(vm).toMatchObject({
-      mode: 'adventure',
-      genreLabel: 'Dark Fantasy',
-      favorited: true,
-      archived: false,
-      isDraft: false,
+    expect(data).toMatchObject({
+      id: 's1',
+      title: 'Aria',
+      status: 'active',
+      favorite: 1,
+      definition: { mode: 'adventure', genre: { label: 'Dark Fantasy' } },
       chapterLabel: null,
       lastOpenedRelative: '2h ago',
     })
   })
 
-  it('tolerates a draft with null definition', () => {
-    const vm = toStoryCardVM(row({ status: 'draft', definition: null }), NOW)
-    expect(vm).toMatchObject({ mode: 'creative', genreLabel: null, isDraft: true })
-  })
-
-  it('marks archived from status', () => {
-    expect(toStoryCardVM(row({ status: 'archived' }), NOW).archived).toBe(true)
+  it('formats lastOpenedRelative from the row and yields chapterLabel null on a draft', () => {
+    const data = toStoryCardData(row({ status: 'draft', lastOpenedAt: null }), NOW)
+    expect(data.status).toBe('draft')
+    expect(data.lastOpenedRelative).toBe('Never')
+    expect(data.chapterLabel).toBeNull()
   })
 })

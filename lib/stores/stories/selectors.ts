@@ -1,6 +1,6 @@
 import type { Story as StoryRow } from '@/lib/db'
 
-import { toStoryCardVM, type StoryCardVM } from './view-model'
+import { toStoryCardData, type StoryCardData } from './view-model'
 
 export type StoryFilter = 'all' | 'favorited' | 'archived'
 export type StorySort = 'last-opened' | 'created' | 'title'
@@ -35,9 +35,9 @@ export function selectStoryCards(
   rows: StoryRow[],
   query: StoryListQuery,
   nowSec: number,
-): StoryCardVM[] {
+): StoryCardData[] {
   return rows
     .filter((r) => matchesFilter(r, query.filter) && matchesSearch(r, query.search))
     .sort((a, b) => compare(a, b, query.sort))
-    .map((r) => toStoryCardVM(r, nowSec))
+    .map((r) => toStoryCardData(r, nowSec))
 }
