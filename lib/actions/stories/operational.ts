@@ -32,7 +32,6 @@ export async function setStoryArchived(id: string, archived: boolean, ctx: DbCtx
   await rehydrateStories(ctx.db)
 }
 
-// nowMs defaults to the clock so callers (UI) don't thread time into the action; tests inject a fixed value.
 export async function touchStoryOpened(
   id: string,
   ctx: DbCtx,
@@ -46,7 +45,6 @@ export async function touchStoryOpened(
 
 export type OpenStoryResult = { status: 'ok'; branchId: string } | { status: 'no-branch' }
 
-/** Resolve current branch, touch last_opened_at, set navigation, then navigate. */
 export async function openStory(
   id: string,
   ctx: DbCtx,

@@ -1,4 +1,5 @@
-/** Wall-clock relative time for the story-list meta row. Both args are unix ms (Date.now()). */
+// Wall-clock relative time for the story-list meta row. Both args are unix ms (Date.now()).
+// TODO: replace with date-fns if ever adopted.
 export function formatRelativeTime(thenMs: number | null, nowMs: number): string {
   if (thenMs == null) return 'Never'
   const deltaSec = Math.max(0, Math.floor((nowMs - thenMs) / 1000))
