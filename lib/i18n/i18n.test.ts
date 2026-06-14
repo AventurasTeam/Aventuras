@@ -18,7 +18,9 @@ describe('lib/i18n', () => {
   })
 
   it('resolves per-screen namespace keys via the ns:key form', () => {
-    expect(t('landing:emptyBody')).toBe('Stories will appear here once created.')
+    expect(t('landing:list.welcomeBody')).toBe(
+      'Create your first story to begin. Everything stays on this device.',
+    )
     expect(t('reader:send')).toBe('Send')
     expect(t('settings:tabs.diagnostics')).toBe('Diagnostics')
     expect(t('settings:diagnosticsHub.comingSoon')).toBe('Diagnostics Hub — coming soon')
