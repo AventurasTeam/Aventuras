@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react'
-import { Platform, View } from 'react-native'
+import { Platform, ScrollView, View } from 'react-native'
 
 import { StoryCard } from '@/components/compounds/story-card'
 import { Toolbar } from '@/components/compounds/toolbar'
@@ -48,10 +48,11 @@ export function StoryList({
   banner,
 }: StoryListProps) {
   const isEmpty = totalCount === 0
+  // flex-grow on contentContainer lets the empty-state's flex-1 centering fill the viewport.
   return (
-    <View className="flex-1">
+    <ScrollView className="flex-1" contentContainerClassName="flex-grow">
       {banner}
-      <View className="gap-3 p-4">
+      <View className={isEmpty ? 'flex-1 gap-3 p-4' : 'gap-3 p-4'}>
         <View className="flex-row flex-wrap items-center justify-between gap-2">
           <Text className="font-semibold">
             {`${t('landing:list.title')} · ${t('landing:list.total', { count: totalCount })}`}
@@ -129,7 +130,7 @@ export function StoryList({
           </>
         )}
       </View>
-    </View>
+    </ScrollView>
   )
 }
 
