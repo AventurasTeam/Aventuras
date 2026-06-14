@@ -6,5 +6,21 @@
   "banner": {
     "aiNotConfigured": "AI generation not configured.",
     "setUpProvider": "Set up a provider →"
+  },
+  "list": {
+    "title": "Stories",
+    "total": "{{count}} total",
+    "newStory": "+ New story",
+    "searchPlaceholder": "Search stories",
+    "filterAll": "All",
+    "filterFavorited": "Favorited",
+    "filterArchived": "Archived",
+    "sortLabel": "sort",
+    "sortLastOpened": "Last opened",
+    "sortCreated": "Created",
+    "sortTitle": "Title",
+    "welcomeTitle": "Welcome to Aventuras",
+    "welcomeBody": "Create your first story to begin. Everything stays on this device.",
+    "createFirst": "+ Create your first story"
   }
 }
