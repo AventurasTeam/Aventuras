@@ -57,6 +57,7 @@ export default function Index() {
     void rehydrateStories(db)
   }, [])
 
+  // nowSec snapshot recomputes on rows/query change, not on a clock tick — relative labels lag <60s, acceptable.
   const cards = useMemo(() => selectStoryCards(rows, query, nowSec()), [rows, query])
 
   // The wizard route + draft-resume contract are owned by Slice 2.3 (unmerged); until it
@@ -157,7 +158,8 @@ export default function Index() {
               <Button
                 variant="destructive"
                 onPress={() => {
-                  if (pendingDelete) void deleteStory(pendingDelete, ctx)
+                  const id = pendingDelete
+                  if (id) void deleteStory(id, ctx)
                 }}
               >
                 <Text>{t('landing:delete.confirm')}</Text>
