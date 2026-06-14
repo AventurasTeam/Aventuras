@@ -70,8 +70,9 @@ pinned C1 refresh surface, so the two slices run in parallel.
   pre-populated; both concurrent-state prompt triggers wired to
   the C5 prompt component from [Slice 2.3](./03-wizard.md).
 - **Card overflow menu** with the M2-backed entries only:
-  Archive / Unarchive and Edit-info-less minimum (see Scope:
-  out); favorite is the inline star.
+  Archive / Unarchive and Delete (full-graph cascade);
+  Edit info / Duplicate / Export stay out (see Scope: out);
+  favorite is the inline star.
 - **Navigation:** card click opens the reader route with
   `last_opened_at` touched.
 - **Debug-button removal:** delete the 1.7b `__DEV__` "Open
@@ -81,9 +82,6 @@ pinned C1 refresh surface, so the two slices run in parallel.
 
 ## Scope: out
 
-- Story **Delete** on the card menu — milestone open question;
-  default out (archive is the M2 cleanup affordance; cascade
-  deletion has no spec section).
 - **Duplicate** (M6.6), **Export** (M9.4),
   **`[Import story…]`** (M9.4), cover display (visual identity),
   **Edit info** routing into Story Settings · About (story
@@ -132,8 +130,8 @@ story` with a session fires the new-story variant. Resolutions:
 
 ## Open questions
 
-- Whether story Delete gets pulled in (milestone open question —
-  decide here at planning).
+_Story Delete (the milestone open question) was pulled in — see
+Implementation notes. None remaining._
 
 ## Implementation notes
 
