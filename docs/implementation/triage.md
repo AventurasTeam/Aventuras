@@ -32,3 +32,17 @@ slice-planning gate forces its resolution before that slice is planned.
   a story with assets leaks blobs. No live impact in M2 (M2 stories carry no
   assets). Route into the M4/M9 refcount-trashing slice's Open questions when
   that slice is authored.
+- **Store hydrate/rehydrate seam — fold into the store namespace?** Sweep
+  every store in `lib/stores/*` (`appSettingsStore`, `storiesStore`, the
+  `working-set-store` factory stores, etc.) and decide a single rule: should
+  `rehydrate(db)` be a **method on the store object** (`storiesStore.rehydrate(db)`)
+  so the store owns its own refresh, instead of a separate free export sitting
+  next to it in the barrel? Apply the answer consistently. Concrete cleanups to
+  fold in while there: (1) `bootstrap.ts` inlines
+  `hydrateAppSettings(() => readAppSettingsRow(ctx.db))`, which is byte-identical
+  to `rehydrateAppSettings(ctx.db)` — switch boot to the convenience; (2) once it
+  does, `hydrateAppSettings`(thunk) + `readAppSettingsRow` have no production
+  callers, so app-settings can collapse to `appSettingsStore` +
+  `rehydrateAppSettings` the way stories collapsed in 2.4 (drop the thunk + read
+  from the public surface; point the boot-order test at the surviving symbol).
+  Cross-cutting (stores layer + boot), no single slice owner.
