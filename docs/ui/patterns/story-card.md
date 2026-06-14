@@ -61,11 +61,11 @@ date-library agnostic.
 
 ## Per-state rendering
 
-| State                       | Visual                                                       | Behavioral effect                                                                                                                  |
-| --------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Default                     | full opacity, mode-accented strip plus overline              | all actions enabled                                                                                                                |
-| Archived (`archived: true`) | `opacity-55` on the entire card; `Archived` Chip after title | card body click still opens story; overflow menu's Archive becomes Unarchive                                                       |
-| Draft (`isDraft: true`)     | `Draft` Chip after title; meta row drops chapter             | card body click resumes the wizard or opens the draft; overflow menu's Edit info points to wizard or Story Settings (host concern) |
+| State                       | Visual                                                       | Behavioral effect                                                                                                                                               |
+| --------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Default                     | full opacity, mode-accented strip plus overline              | all actions enabled                                                                                                                                             |
+| Archived (`archived: true`) | `opacity-55` on the entire card; `Archived` Chip after title | card body click still opens story; overflow menu's Archive becomes Unarchive                                                                                    |
+| Draft (`isDraft: true`)     | `Draft` Chip after title; meta row drops chapter             | card body click resumes the wizard or opens the draft; overflow menu's Edit info points to wizard or Story Settings (host concern); overflow menu hides Archive |
 
 Both flags can co-exist (archived draft) — both Chips render,
 opacity applies.

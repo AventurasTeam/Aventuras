@@ -152,6 +152,22 @@ export const OverflowOpensMenu: StoryT = {
   },
 }
 
+export const DraftHidesArchive: StoryT = {
+  ...cardCentered,
+  args: { story: { ...baseStory, isDraft: true, chapterLabel: null }, ...handlers },
+  play: async () => {
+    const trigger = screen.getByRole('button', { name: t('storyCard.actionsLabel') })
+    await userEvent.click(trigger)
+    await waitFor(() =>
+      expect(screen.getByRole('menuitem', { name: t('storyCard.delete') })).toBeInTheDocument(),
+    )
+    expect(screen.queryByRole('menuitem', { name: t('storyCard.archive') })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('menuitem', { name: t('storyCard.unarchive') }),
+    ).not.toBeInTheDocument()
+  },
+}
+
 export const ArchiveLabelFlipsForArchived: StoryT = {
   ...cardCentered,
   args: { story: { ...baseStory, archived: true }, ...handlers },

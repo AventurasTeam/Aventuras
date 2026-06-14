@@ -171,13 +171,15 @@ export function StoryCard({
           </PopoverTrigger>
           <PopoverContent align="end" className="w-56 p-1">
             <View className="flex-col">
-              <OverflowItem
-                label={story.archived ? t('storyCard.unarchive') : t('storyCard.archive')}
-                onSelect={() => {
-                  overflowTriggerRef.current?.close()
-                  onArchiveToggle()
-                }}
-              />
+              {!story.isDraft ? (
+                <OverflowItem
+                  label={story.archived ? t('storyCard.unarchive') : t('storyCard.archive')}
+                  onSelect={() => {
+                    overflowTriggerRef.current?.close()
+                    onArchiveToggle()
+                  }}
+                />
+              ) : null}
               {onEditInfo ? (
                 <OverflowItem
                   label={t('storyCard.editInfo')}
