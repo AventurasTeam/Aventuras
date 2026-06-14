@@ -1,6 +1,5 @@
 import { useRouter, type Href } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
-import { View } from 'react-native'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { ScreenShell } from '@/components/shells/screen-shell'
@@ -26,7 +25,6 @@ import { deleteStory, openStory, setStoryArchived, setStoryFavorite } from '@/li
 import { db, runInTransaction } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import {
-  navigationStore,
   rehydrateStories,
   selectStoryCards,
   storiesStore,
@@ -35,7 +33,6 @@ import {
   type StorySort,
 } from '@/lib/stores'
 
-const DEBUG_ID = '__debug__'
 const ctx = { db, runInTransaction }
 const nowSec = () => Math.floor(Date.now() / 1000)
 
@@ -168,21 +165,6 @@ export default function Index() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {__DEV__ ? (
-        <View className="items-center p-4">
-          <Button
-            variant="secondary"
-            onPress={() => {
-              navigationStore.setCurrentStory(DEBUG_ID)
-              navigationStore.setCurrentBranch(DEBUG_ID)
-              router.push(`/reader-composer/${DEBUG_ID}`)
-            }}
-          >
-            <Text>{t('landing:openReaderDebug')}</Text>
-          </Button>
-        </View>
-      ) : null}
     </ScreenShell>
   )
 }

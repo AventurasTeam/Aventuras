@@ -1,6 +1,5 @@
 {
   "title": "Aventuras",
-  "openReaderDebug": "Open reader (debug)",
   "banner": {
     "aiNotConfigured": "AI generation not configured.",
     "setUpProvider": "Set up a provider →"
