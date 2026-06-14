@@ -1,7 +1,8 @@
+import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core'
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
-import type { Story as StoryRow } from '@/lib/db'
+import { stories, type Story as StoryRow, type dbSchema } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
 export type OpenFailureKind = 'definition-corrupt' | 'settings-corrupt'
@@ -41,12 +42,15 @@ function getStories(): StoriesSnapshot {
   return { rows: s.rows, openFailures: s.openFailures }
 }
 
-/** Hydrate-apply half (DB read is the caller's thunk). Re-read keeps the mirror a pure function of SQLite. */
-export async function hydrateStories(read: () => Promise<StoryRow[]>): Promise<void> {
+type Db = BaseSQLiteDatabase<'async' | 'sync', unknown, typeof dbSchema>
+
+/** Re-read story rows from the caller-supplied DB and apply them — keeps the store a pure function
+ *  of SQLite. Takes `db` so a write and its re-hydrate hit the same instance (test isolation). */
+export async function rehydrateStories(db: Db): Promise<void> {
   try {
-    store.getState().apply(await read())
+    store.getState().apply(await db.select().from(stories))
   } catch (err) {
-    // Post-write re-hydrate keeps the current store on a transient read failure (write already committed).
+    // A transient read failure keeps the current store (the write already committed).
     logger.error('bootstrap.stories_hydrate_failed', {
       error: err instanceof Error ? err.message : String(err),
     })

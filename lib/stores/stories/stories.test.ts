@@ -1,18 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Story as StoryRow } from '@/lib/db'
+import { storiesStore } from './stories'
 
-import { hydrateStories, storiesStore } from './stories'
-
-const ROW = { id: 's1', title: 'T' } as StoryRow
-
+// The read→apply round-trip is covered by the action tests (insert → action → store reflects it);
+// here we test the in-memory-only surface.
 describe('storiesStore', () => {
-  it('hydrate applies rows; selectors read them', async () => {
-    storiesStore.__reset()
-    await hydrateStories(async () => [ROW])
-    expect(storiesStore.getStories().rows).toHaveLength(1)
-  })
-
   it('open-failure write/clear is in-memory and pruned on clear', () => {
     storiesStore.__reset()
     storiesStore.setOpenFailure({ storyId: 's1', kind: 'definition-corrupt' })
