@@ -23,5 +23,11 @@
     "welcomeBody": "Create your first story to begin. Everything stays on this device.",
     "createFirst": "+ Create your first story",
     "noResults": "No stories match your search or filters."
+  },
+  "delete": {
+    "title": "Delete this story?",
+    "body": "This permanently removes the story and all its branches, entries, and world data. This cannot be undone.",
+    "cancel": "Cancel",
+    "confirm": "Delete"
   }
 }
