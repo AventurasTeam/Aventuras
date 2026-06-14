@@ -159,6 +159,12 @@ git-ignored `.impl-plans/M02-04-story-list.md`).
 - **StoryCard changes.** Out-of-scope menu callbacks (Edit info / Duplicate /
   Export) made optional and hidden when absent; all chrome converted to
   `t()`; Archive hidden on draft cards per the data-model archive-gating rule.
+- **StoryCard row-based props.** Moved to `components/story/` (domain compound)
+  and now consumes the canonical `Story` row plus the two derived display fields
+  (`StoryCardData`), collapsing the duplicated `StoryCardVM` / `Story` /
+  `StoryMode` types; the card derives favorited / archived / isDraft / genreLabel /
+  mode from the row. The date-agnostic contract is preserved — display strings
+  stay pre-formatted in the selector (`toStoryCardData`).
 - **Added beyond the brief.** A no-results state on StoryList for when a
   filter / search matches nothing (distinct from the zero-stories welcome).
 - **Debug-button removed** (was execution-gated on 2.5; the developer pulled
