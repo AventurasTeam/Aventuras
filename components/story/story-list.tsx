@@ -1,14 +1,15 @@
 import { type ReactNode } from 'react'
 import { Platform, ScrollView, View } from 'react-native'
 
-import { StoryCard } from '@/components/compounds/story-card'
 import { Toolbar } from '@/components/compounds/toolbar'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
-import type { StoryCardVM, StoryFilter, StoryListQuery, StorySort } from '@/lib/stores'
+import type { StoryCardData, StoryFilter, StoryListQuery, StorySort } from '@/lib/stores'
+
+import { StoryCard } from './story-card'
 
 const SEARCH_SCOPE = ['title', 'description', 'genre', 'tags'] as const
 const SORT_OPTIONS = [
@@ -25,7 +26,7 @@ export type StoryCardHandlers = {
 }
 
 type StoryListProps = {
-  cards: StoryCardVM[]
+  cards: StoryCardData[]
   totalCount: number
   query: StoryListQuery
   onSearch: (v: string) => void

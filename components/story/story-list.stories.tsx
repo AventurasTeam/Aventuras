@@ -3,21 +3,26 @@ import { View } from 'react-native'
 import { fn } from 'storybook/test'
 
 import { Banner } from '@/components/ui/banner'
-import type { StoryCardVM } from '@/lib/stores'
+import type { StoryCardData } from '@/lib/stores'
 
 import { StoryList } from './story-list'
 
-const card = (p: Partial<StoryCardVM> & { id: string }): StoryCardVM => ({
+const makeCard = (p: Partial<StoryCardData> & { id: string }): StoryCardData => ({
   title: p.id,
   description: 'A short blurb.',
-  genreLabel: 'Dark Fantasy',
-  mode: 'adventure',
+  tags: [],
+  coverAssetId: null,
   accentColor: null,
-  favorited: false,
-  archived: false,
-  isDraft: false,
-  chapterLabel: null,
+  status: 'active',
+  favorite: 0,
+  lastOpenedAt: null,
+  definition: { mode: 'adventure', genre: { label: 'Dark Fantasy' } } as never,
+  settings: null,
+  createdAt: 1,
+  updatedAt: 1,
+  currentBranchId: null,
   lastOpenedRelative: '2h ago',
+  chapterLabel: null,
   ...p,
 })
 
@@ -51,9 +56,9 @@ export default meta
 type T = StoryObj<typeof StoryList>
 
 const cards = [
-  card({ id: 'Aria', favorited: true }),
-  card({ id: 'Iron' }),
-  card({ id: 'Mornstone' }),
+  makeCard({ id: 'Aria', favorite: 1 }),
+  makeCard({ id: 'Iron' }),
+  makeCard({ id: 'Mornstone' }),
 ]
 
 export const Populated: T = { args: { ...base, cards, totalCount: 3 } }
@@ -62,7 +67,10 @@ export const WithDrafts: T = {
   args: {
     ...base,
     totalCount: 2,
-    cards: [card({ id: 'Untitled', isDraft: true, genreLabel: null }), card({ id: 'Iron' })],
+    cards: [
+      makeCard({ id: 'Untitled', status: 'draft', definition: null }),
+      makeCard({ id: 'Iron' }),
+    ],
   },
 }
 export const WithBanner: T = {
