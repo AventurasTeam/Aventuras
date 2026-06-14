@@ -25,8 +25,8 @@ function compare(a: StoryRow, b: StoryRow, sort: StorySort): number {
   if (a.favorite !== b.favorite) return b.favorite - a.favorite
   if (sort === 'title') return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
   if (sort === 'created') return b.createdAt - a.createdAt
-  const av = a.lastOpenedAt ?? -Infinity // nulls last
-  const bv = b.lastOpenedAt ?? -Infinity
+  const av = a.lastOpenedAt ?? 0
+  const bv = b.lastOpenedAt ?? 0
   if (av === bv) return 0
   return bv - av
 }
