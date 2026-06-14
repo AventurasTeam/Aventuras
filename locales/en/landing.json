@@ -26,5 +26,11 @@
     "body": "This permanently removes the story and all its branches, entries, and world data. This cannot be undone.",
     "cancel": "Cancel",
     "confirm": "Delete"
+  },
+  "errors": {
+    "openFailed": "Couldn't open the story. Please try again.",
+    "favoriteFailed": "Couldn't update favorite. Please try again.",
+    "archiveFailed": "Couldn't update the story. Please try again.",
+    "deleteFailed": "Couldn't delete the story. Please try again."
   }
 }

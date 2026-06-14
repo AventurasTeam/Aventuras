@@ -32,6 +32,7 @@ import {
   type StoryListQuery,
   type StorySort,
 } from '@/lib/stores'
+import { runAction } from '@/lib/utils'
 
 const ctx = { db, runInTransaction }
 
@@ -80,13 +81,28 @@ export default function Index() {
           openDraft(storyId)
           return
         }
-        void openStory(storyId, ctx, (branchId) => router.push(`/reader-composer/${branchId}`))
+        runAction(
+          openStory(storyId, ctx, (branchId) => router.push(`/reader-composer/${branchId}`)),
+          {
+            event: 'action_layer.story_open_failed',
+            toastMessage: t('landing:errors.openFailed'),
+            context: { storyId },
+          },
+        )
       },
       onToggleFavorite: () => {
-        void setStoryFavorite(storyId, !(row?.favorite === 1), ctx)
+        runAction(setStoryFavorite(storyId, !(row?.favorite === 1), ctx), {
+          event: 'action_layer.story_favorite_failed',
+          toastMessage: t('landing:errors.favoriteFailed'),
+          context: { storyId },
+        })
       },
       onArchiveToggle: () => {
-        void setStoryArchived(storyId, row?.status !== 'archived', ctx)
+        runAction(setStoryArchived(storyId, row?.status !== 'archived', ctx), {
+          event: 'action_layer.story_archive_failed',
+          toastMessage: t('landing:errors.archiveFailed'),
+          context: { storyId },
+        })
       },
       onDelete: () => setPendingDelete(storyId),
     }
@@ -148,7 +164,12 @@ export default function Index() {
                 variant="destructive"
                 onPress={() => {
                   const id = pendingDelete
-                  if (id) void deleteStory(id, ctx)
+                  if (id)
+                    runAction(deleteStory(id, ctx), {
+                      event: 'action_layer.story_delete_failed',
+                      toastMessage: t('landing:errors.deleteFailed'),
+                      context: { storyId: id },
+                    })
                 }}
               >
                 <Text>{t('landing:delete.confirm')}</Text>
