@@ -76,4 +76,13 @@ describe('stories column writes', () => {
     const result = await openStory('draft_1', ctx, vi.fn(), 999)
     expect(result.status).toBe('no-branch')
   })
+
+  it('openStory still opens when the last-opened write fails', async () => {
+    const { ctx } = await setup()
+    const navigate = vi.fn()
+    const failingCtx = { ...ctx, runInTransaction: () => Promise.reject(new Error('write failed')) }
+    const result = await openStory('story_1', failingCtx, navigate, 999)
+    expect(result).toEqual({ status: 'ok', branchId: 'br_1' })
+    expect(navigate).toHaveBeenCalledWith('br_1')
+  })
 })
