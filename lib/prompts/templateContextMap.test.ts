@@ -18,4 +18,13 @@ describe('templateContextMap', () => {
     const issues = validateRegistry([...Object.values(TEMPLATE_IDS), 'tmpl_ghost'])
     expect(issues).toContainEqual({ kind: 'unmapped-template', id: 'tmpl_ghost' })
   })
+
+  it('reports a dangling display variable', () => {
+    const issues = validateRegistry(Object.values(TEMPLATE_IDS), { Bogus: ['nonexistent_var'] })
+    expect(issues).toContainEqual({
+      kind: 'dangling-display-variable',
+      displayGroup: 'Bogus',
+      name: 'nonexistent_var',
+    })
+  })
 })

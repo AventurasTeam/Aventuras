@@ -103,7 +103,10 @@ export type RegistryIssue =
   | { kind: 'unmapped-template'; id: string }
   | { kind: 'dangling-display-variable'; displayGroup: string; name: string }
 
-export function validateRegistry(templateIds: readonly string[]): RegistryIssue[] {
+export function validateRegistry(
+  templateIds: readonly string[],
+  displayGroups: Record<string, string[]> = DISPLAY_GROUPS,
+): RegistryIssue[] {
   const issues: RegistryIssue[] = []
   for (const id of templateIds) {
     if (!TEMPLATE_GROUPS[id]) issues.push({ kind: 'unmapped-template', id })
@@ -113,7 +116,7 @@ export function validateRegistry(templateIds: readonly string[]): RegistryIssue[
       .flat()
       .map((v) => v.name),
   )
-  for (const [displayGroup, names] of Object.entries(DISPLAY_GROUPS)) {
+  for (const [displayGroup, names] of Object.entries(displayGroups)) {
     for (const name of names) {
       if (!defined.has(name)) issues.push({ kind: 'dangling-display-variable', displayGroup, name })
     }
