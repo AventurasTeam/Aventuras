@@ -1,5 +1,7 @@
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core'
 
+import { BUNDLED_PACK_ID } from '@/lib/prompts'
+
 import type { Appearance, ModelProfile, ProviderInstance } from './app-settings-schema'
 import { appSettings } from '../schema'
 import type { StorySettings, SuggestionCategory } from '../stories/story-config-schema'
@@ -13,7 +15,7 @@ export const APP_SETTINGS_DEFAULTS = {
   defaultProviderId: null as string | null,
   embeddingModelId: null as string | null,
   embeddingProviderId: null as string | null,
-  defaultStorySettings: {} as Partial<StorySettings>,
+  defaultStorySettings: { activePackId: BUNDLED_PACK_ID } as Partial<StorySettings>,
   defaultCalendarId: null as string | null,
   defaultSuggestionCategories: { adventure: [], creative: [] } as {
     adventure: SuggestionCategory[]

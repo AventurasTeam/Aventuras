@@ -1,5 +1,7 @@
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 
+import { BUNDLED_PACK_ID } from '@/lib/prompts'
+
 import {
   appearanceSchema,
   modelProfileSchema,
@@ -178,7 +180,7 @@ function settings(overrides: Partial<StorySettings> = {}): StorySettings {
       },
     },
     models: {},
-    activePackId: null,
+    activePackId: BUNDLED_PACK_ID,
     packVariables: {},
     ...overrides,
   })
