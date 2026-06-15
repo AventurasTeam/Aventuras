@@ -12,7 +12,7 @@ export function findInlinedIds(files: { path: string; src: string }[], ids: stri
   const offenders: string[] = []
   for (const { path, src } of files) {
     for (const id of ids) {
-      if (src.includes(`'${id}'`) || src.includes(`"${id}"`)) offenders.push(`${path}: ${id}`)
+      if (new RegExp(`['"\`]${id}['"\`]`).test(src)) offenders.push(`${path}: ${id}`)
     }
   }
   return offenders
@@ -28,10 +28,16 @@ describe('template/macro ids are referenced via constants, not inlined', () => {
 
   it('no consumer module inlines a template or macro id literal', async () => {
     // lib/prompts owns the literals; everything else must use the constants.
-    const paths = await fg(['app/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'], {
-      ignore: ['**/node_modules/**', 'lib/prompts/**'],
-      cwd: process.cwd(),
-    })
+    const paths = await fg(
+      [
+        'app/**/*.{ts,tsx}',
+        'components/**/*.{ts,tsx}',
+        'lib/**/*.{ts,tsx}',
+        'hooks/**/*.{ts,tsx}',
+        'electron/**/*.{ts,tsx}',
+      ],
+      { ignore: ['**/node_modules/**', 'lib/prompts/**'], cwd: process.cwd() },
+    )
     const files = paths.map((path) => ({ path, src: readFileSync(path, 'utf8') }))
     expect(findInlinedIds(files, IDS)).toEqual([])
   })
