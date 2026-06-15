@@ -15,7 +15,11 @@ describe('prompt filters', () => {
   })
 
   it('byKind returns [] for non-array input', () => {
-    expect(byKind(undefined as unknown as unknown[], 'character')).toEqual([])
+    expect(byKind(undefined as unknown as never[], 'character')).toEqual([])
+  })
+
+  it('active returns [] for non-array input', () => {
+    expect(active(undefined as unknown as never[])).toEqual([])
   })
 
   it('active filters to status active', () => {

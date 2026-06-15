@@ -20,7 +20,7 @@ export function proseJoin(items: unknown[]): string {
 }
 
 export function jsonFilter(value: unknown): string {
-  return JSON.stringify(value)
+  return JSON.stringify(value) ?? ''
 }
 
 // Registered names match the author-facing filter names in architecture.md.
