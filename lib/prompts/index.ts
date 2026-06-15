@@ -20,3 +20,6 @@ function bundled(): LoadedPack {
 export function renderTemplate(templateId: string, context: Record<string, unknown>): string {
   return renderWith(bundled().engine, templateId, context)
 }
+
+export { VARIABLES, TEMPLATE_GROUPS, DISPLAY_GROUPS, validateRegistry } from './templateContextMap'
+export type { VariableDef, RegistryIssue } from './templateContextMap'
