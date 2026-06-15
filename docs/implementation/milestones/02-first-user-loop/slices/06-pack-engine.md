@@ -76,8 +76,7 @@ editor consumer is M7.2.
   tone / setting until M3.6; entries buffer; structural-floor
   entity injection; no retrieval buckets yet), wizard-group
   templates for opening generation / title chips / description,
-  output-format macros (`staticContent`), and the composer wrap
-  macros — one per `(Do | Say | Think) × (first | third)` cell.
+  and output-format macros (`staticContent`).
 - **Structural-floor invariant test:** context fixture with an
   entity carrying `injection_mode: 'disabled'` AND present in
   `sceneEntities`; render the bundled per-turn template; assert
@@ -100,6 +99,10 @@ editor consumer is M7.2.
 - The author-time (editor) include-mismatch flagging and the
   full pack-validation contract — parked.
 - `js-tiktoken`-backed filters — M3.4.
+- Composer-mode wrap (`Do` / `Say` / `Think` × `first` / `third`) —
+  implemented in-code (i18n-keyed) in
+  [Slice 2.5](./05-reader.md), not as pack macros; the engine
+  receives the already-wrapped action. Moved out in M2.6 planning.
 
 ## Acceptance criteria
 
@@ -116,8 +119,6 @@ editor consumer is M7.2.
 - The include-compatibility validator rejects a fixture pack
   whose `generationContext` template includes a `wizard`-tagged
   macro, and accepts `staticContent` includes from any group.
-- Wrap macros produce the principle doc's exact example outputs
-  for all six cells given `{ text, leadName }`-shaped input.
 - The registry integrity validator reports an unmapped template
   id fixture and passes on the shipped registry.
 - Consumers reference template / macro ids via the exported
