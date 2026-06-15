@@ -172,6 +172,14 @@ single-open-chapter degenerate case: the last
   satisfy the `actionId` grouping contract; pick at planning
   against how abort-before-stream should treat the user's text
   (keep vs reverse).
+- **Per-turn context-builder hygiene** (surfaced by Slice 2.6). The
+  builder must emit the `generationContext` variable names pinned in
+  `lib/prompts`'s `templateContextMap.ts` (a mismatch only fails at
+  integration); normalize empty or whitespace-only definitional
+  fields, since LiquidJS `!= blank` treats whitespace as non-empty
+  and would leak an otherwise-guarded section header; and guard
+  array contents passed to the `prose_join` / `json` filters, which
+  stringify `null` / `undefined` literally.
 
 ## Implementation notes
 
