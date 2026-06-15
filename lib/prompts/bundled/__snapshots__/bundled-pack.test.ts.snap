@@ -1,0 +1,8 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`bundled pack > renders the wizard opening from definition + lead 1`] = `
+"Write the opening passage of a adventure story.
+Setting: A frozen coast.
+The lead character is Aria.
+Write the next beat of the story as prose. Do not break character or address the reader."
+`;
