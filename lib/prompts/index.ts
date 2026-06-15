@@ -1,5 +1,6 @@
 import { bundledPack } from './bundled'
 import { renderWith } from './engine'
+import type { TemplateId } from './ids'
 import { loadPack, type LoadedPack } from './load-pack'
 
 export { BUNDLED_PACK_ID, TEMPLATE_IDS, MACRO_IDS } from './ids'
@@ -17,7 +18,7 @@ function bundled(): LoadedPack {
   return (loaded ??= loadPack(bundledPack))
 }
 
-export function renderTemplate(templateId: string, context: Record<string, unknown>): string {
+export function renderTemplate(templateId: TemplateId, context: Record<string, unknown>): string {
   return renderWith(bundled().engine, templateId, context)
 }
 

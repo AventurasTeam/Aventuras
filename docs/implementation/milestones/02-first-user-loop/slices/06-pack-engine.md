@@ -180,3 +180,11 @@ M7.2 author-time validator.
 or whitespace-only definitional fields and guard array contents
 passed to the filters — tracked in [Slice 2.7](./07-wiring.md) Open
 questions.
+
+**Forward note (M7.2 pack system).** Template ids are a closed static
+union (`renderTemplate` takes `TemplateId`): users edit content
+within a fixed template set, not pipelines, so no arbitrary template
+ids exist. Pack selection is therefore a separate argument to be
+added with the pack system, not encoded in the template id. Macro
+ids are forced to a `macro_` prefix so the engine's flat template-and-macro
+lookup map (which merges both id spaces) stays collision-free.
