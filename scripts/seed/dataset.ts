@@ -1311,7 +1311,7 @@ const appSettingsRow: NewAppSettings = {
   defaultProviderId: 'prov_local',
   embeddingModelId: 'bge-small-en',
   embeddingProviderId: 'prov_local',
-  defaultStorySettings: {},
+  defaultStorySettings: { activePackId: BUNDLED_PACK_ID },
   defaultCalendarId: CAL,
   defaultSuggestionCategories: { adventure: [], creative: [] },
   appearance: appearanceSchema.parse({ themeId: 'system', readerFontScale: 1, density: 'default' }),
