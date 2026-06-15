@@ -1,0 +1,17 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`bundled per-turn template — empty-guard contract > matches the recorded snapshot 1`] = `
+"# Characters in scene
+
+## Aria
+A wary scout.
+
+
+# Story so far
+
+The gate groaned open.
+
+Aria stepped through.
+
+Write the next beat of the story as prose. Do not break character or address the reader."
+`;
