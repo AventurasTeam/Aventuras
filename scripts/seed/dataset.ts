@@ -1216,7 +1216,9 @@ function fillerStoryRows(): {
         content:
           i === 1
             ? `[${f.title}] ${f.description ?? 'An opening scene.'}`
-            : `${REPLY_LINES[(fi + i) % REPLY_LINES.length]}`,
+            : kind === 'user_action'
+              ? ACTION_LINES[(fi + i) % ACTION_LINES.length]
+              : `${REPLY_LINES[(fi + i) % REPLY_LINES.length]} ${REPLY_BEATS[(fi + i) % REPLY_BEATS.length]}`,
         chapterId: null,
         metadata: entryMetadataSchema.parse({
           sceneEntities: f.lead ? [f.lead.id] : [],

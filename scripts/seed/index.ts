@@ -45,10 +45,11 @@ async function main() {
   try {
     sqlite.enableLoadExtension(true)
     sqlite.loadExtension(getLoadablePath())
-    sqlite.enableLoadExtension(false)
   } catch (err) {
     // Non-fatal: no current migration needs sqlite-vec (test-db migrates without it).
     console.warn('[seed] sqlite-vec load skipped:', (err as Error).message)
+  } finally {
+    sqlite.enableLoadExtension(false) // re-close the surface after loading
   }
   sqlite.exec('PRAGMA foreign_keys = ON;')
 
