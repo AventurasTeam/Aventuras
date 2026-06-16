@@ -36,6 +36,7 @@ const WIRED_CONFIG = {
   ],
   assignments: {},
   defaultProviderId: 'prov-1',
+  diagnostics: { enabled: false, debug_level_enabled: false },
 }
 
 describe('runPipeline config pre-flight', () => {
