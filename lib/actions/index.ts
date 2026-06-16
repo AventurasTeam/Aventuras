@@ -16,4 +16,5 @@ export {
   upsertProfile,
 } from './settings'
 export type { SettingsActionCtx } from './settings'
+export { clearSystemEntry, writeSystemEntry } from './story-entries/system-entry'
 export type { DbCtx, DeltaSource, MutationResult, PipelineAction } from './types'
