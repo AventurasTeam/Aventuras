@@ -352,9 +352,17 @@ export async function runPipeline(kind: string, ctx: RunCtx): Promise<TxResult |
   // are observed on the event bus, not the return value.
   let originResult: TxResult | undefined
   for (;;) {
-    const preflightError = runPreflight(getPipeline(run.kind), {
-      appSettings: appSettingsStore.getAppSettings(),
-    })
+    // A throwing resolver predicate (or any preflight error) must wind the run down
+    // through the normal abort path — rejecting here would orphan the registered run
+    // and its unresolved terminal, blocking edits and deadlocking awaitRunTerminal.
+    let preflightError: PipelineError | null
+    try {
+      preflightError = runPreflight(getPipeline(run.kind), {
+        appSettings: appSettingsStore.getAppSettings(),
+      })
+    } catch (e) {
+      preflightError = { kind: 'orchestrator', detail: e instanceof Error ? e.message : String(e) }
+    }
     if (preflightError) {
       const tx = await abortRun(run, ctx, { reason: 'preflight-failure', error: preflightError })
       return originResult ?? tx

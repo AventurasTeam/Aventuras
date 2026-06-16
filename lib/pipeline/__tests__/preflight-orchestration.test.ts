@@ -9,7 +9,7 @@ import {
   type PhaseFn,
   type PipelineEvent,
 } from '@/lib/pipeline'
-import { hydrateAppSettings } from '@/lib/stores'
+import { generationStore, hydrateAppSettings } from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
 
@@ -100,5 +100,47 @@ describe('runPipeline config pre-flight', () => {
     const result = expectRan(await runPipeline('pf-turn-ok', ctx))
     expect(phaseStarted).toBe(true)
     expect(result.outcome).toBe('completed')
+  })
+
+  it('winds the run down through abort when a resolver predicate throws', async () => {
+    const { db, ctx } = await makeHarness()
+    await hydrateAppSettings(async () => WIRED_CONFIG)
+
+    let phaseStarted = false
+    const phase: PhaseFn = async function* () {
+      phaseStarted = true
+      return { status: 'completed' }
+    }
+    definePipeline({
+      kind: 'pf-throw',
+      phases: [
+        {
+          name: 'narrative',
+          run: phase,
+          resolves: [
+            {
+              target: 'narrative',
+              when: () => {
+                throw new Error('predicate boom')
+              },
+            },
+          ],
+        },
+      ],
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('pf-throw', ctx))
+
+    expect(phaseStarted).toBe(false)
+    expect(result.outcome).toBe('failed')
+    expect(result.error).toMatchObject({ kind: 'orchestrator' })
+    // Must not leave the run registered: a stranded hard-gate run blocks edits
+    // forever and its unresolved terminal deadlocks awaitRunTerminal waiters.
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    const [pr] = await db.select().from(pipelineRuns).where(eq(pipelineRuns.runId, result.runId))
+    expect(pr.outcome).toBe('failed')
+    expect(pr.finishedAt).not.toBeNull()
+    expect((await db.select().from(deltas)).length).toBe(0)
   })
 })
