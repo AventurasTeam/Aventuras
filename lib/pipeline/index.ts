@@ -16,6 +16,8 @@ export type {
   Pipeline,
   PipelineError,
   PipelineEvent,
+  PreflightSnapshot,
   RejectedStart,
+  ResolverInput,
   TxResult,
 } from './types'

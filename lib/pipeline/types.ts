@@ -1,6 +1,8 @@
 import type { PipelineAction } from '@/lib/actions'
+import type { ResolveFailureKind, ResolveTarget } from '@/lib/ai'
+import type { StorySettings } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
-import type { RunState } from '@/lib/stores'
+import type { AppSettingsSnapshot, RunState } from '@/lib/stores'
 
 export type PipelineError =
   | { kind: 'provider'; reason: 'auth' | 'network' | 'timeout' | 'unknown'; detail?: string }
@@ -13,6 +15,13 @@ export type PipelineError =
       constraintViolated?: string
     }
   | { kind: 'orchestrator'; detail: string }
+  | {
+      kind: 'config-resolver'
+      detail: string
+      failure: ResolveFailureKind
+      target: ResolveTarget
+      phaseName: string
+    }
 
 export type PhaseResult =
   | { status: 'completed' }
@@ -48,9 +57,29 @@ export type PhaseContext = {
 
 export type PhaseFn = (ctx: PhaseContext) => AsyncGenerator<PhaseEmittedEvent, PhaseResult>
 
+// Read-only snapshot the pre-flight walk validates against. M2 populates only
+// `appSettings`; `storySettings` is reserved for M3 conditional predicates
+// (e.g. "suggestions iff enabled") and stays unset until story-settings
+// hydration reaches the orchestrator (2.7+).
+export type PreflightSnapshot = {
+  appSettings: AppSettingsSnapshot
+  storySettings?: StorySettings
+}
+
+// A resolver input a phase declares. `narrative` is just a ResolveTarget, so the
+// pseudo-slot needs no special casing. `when` gates the input on run-time config
+// (M3 conditional phases); absent means always validated.
+export type ResolverInput = {
+  target: ResolveTarget
+  when?: (snapshot: PreflightSnapshot) => boolean
+}
+
 export type PhaseNode =
-  | { name: string; run: PhaseFn }
-  | { name: string; parallel: readonly { name: string; run: PhaseFn }[] }
+  | { name: string; run: PhaseFn; resolves?: readonly ResolverInput[] }
+  | {
+      name: string
+      parallel: readonly { name: string; run: PhaseFn; resolves?: readonly ResolverInput[] }[]
+    }
 
 export type ConcurrencyPolicy = { blockedBy?: readonly string[]; yieldsTo?: readonly string[] }
 
