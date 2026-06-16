@@ -145,6 +145,27 @@ describe('runPreflight', () => {
     expect(runPreflight(pipeline, snap)).toMatchObject({ target: 'classifier' })
   })
 
+  it('forwards the snapshot to the when predicate', () => {
+    const snap = wiredSnapshot()
+    let captured: PreflightSnapshot | undefined
+    const pipeline = pipelineOf([
+      {
+        name: 'classify',
+        resolves: [
+          {
+            target: 'classifier',
+            when: (s) => {
+              captured = s
+              return false
+            },
+          },
+        ],
+      },
+    ])
+    runPreflight(pipeline, snap)
+    expect(captured).toBe(snap)
+  })
+
   it('issues no network call (pure, in-memory resolution)', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     const snap = wiredSnapshot()
