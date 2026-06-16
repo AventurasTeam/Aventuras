@@ -67,9 +67,9 @@ export type PreflightSnapshot = {
   storySettings?: StorySettings
 }
 
-// A resolver input a phase declares. `narrative` is just a ResolveTarget, so the
-// pseudo-slot needs no special casing. `when` gates the input on run-time config
-// (M3 conditional phases); absent means always validated.
+// `narrative` is just a ResolveTarget, so the pseudo-slot needs no special
+// casing. `when` gates the input on run-time config (M3 conditional phases);
+// absent means always validated.
 export type ResolverInput = {
   target: ResolveTarget
   when?: (snapshot: PreflightSnapshot) => boolean
