@@ -5,9 +5,6 @@ import { generateId } from '@/lib/ids'
 
 import type { DbCtx } from '../types'
 
-// Diagnostic artifact, not narrative state: bypasses the delta log so the pipeline
-// can surface config errors without touching the story's mutation history (and thus
-// rollback / undo). Removed on resolution or at the next main pipeline run.
 function deleteSystemEntries(branchId: string, ctx: DbCtx) {
   return ctx.db
     .delete(storyEntries)

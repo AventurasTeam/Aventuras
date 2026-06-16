@@ -20,7 +20,6 @@ export type PipelineError =
       failure: ResolveFailureKind
       target: ResolveTarget
       phaseName: string
-      // Optional supplemental log message; the structured fields are the contract.
       detail?: string
     }
 
@@ -58,18 +57,11 @@ export type PhaseContext = {
 
 export type PhaseFn = (ctx: PhaseContext) => AsyncGenerator<PhaseEmittedEvent, PhaseResult>
 
-// Read-only snapshot the pre-flight walk validates against. M2 populates only
-// `appSettings`; `storySettings` is reserved for M3 conditional predicates
-// (e.g. "suggestions iff enabled") and stays unset until story-settings
-// hydration reaches the orchestrator (2.7+).
 export type PreflightSnapshot = {
   appSettings: AppSettingsSnapshot
   storySettings?: StorySettings
 }
 
-// `narrative` is just a ResolveTarget, so the pseudo-slot needs no special
-// casing. `when` gates the input on run-time config (M3 conditional phases);
-// absent means always validated.
 export type ResolverInput = {
   target: ResolveTarget
   when?: (snapshot: PreflightSnapshot) => boolean

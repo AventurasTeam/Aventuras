@@ -6,8 +6,7 @@ type ConfigResolverError = Extract<PipelineError, { kind: 'config-resolver' }>
 
 // Validates every declared resolver input against the snapshot, in phase order
 // (and, within a parallel node, declared branch order). Returns the first
-// failure or null. Pure — no DB, no network; story overrides are intentionally
-// omitted from the config (they don't enter provider validation).
+// failure or null.
 export function runPreflight(
   pipeline: Pipeline,
   snapshot: PreflightSnapshot,
