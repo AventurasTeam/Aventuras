@@ -5,9 +5,9 @@ import { generateId } from '@/lib/ids'
 
 import type { DbCtx } from '../types'
 
-// System entries are diagnostic artifacts, not narrative state: written directly
-// (no delta, no source), the branch-tail singleton — at most one per branch,
-// always the last entry. Removed on resolution or at the next main pipeline run.
+// Diagnostic artifact, not narrative state: bypasses the delta log so the pipeline
+// can surface config errors without touching the story's mutation history (and thus
+// rollback / undo). Removed on resolution or at the next main pipeline run.
 function deleteSystemEntries(branchId: string, ctx: DbCtx) {
   return ctx.db
     .delete(storyEntries)

@@ -49,6 +49,14 @@ describe('writeSystemEntry', () => {
     expect(rows[0].content).toBe('second')
     expect(rows[0].position).toBe(3) // prior system entry cleared before MAX(position) recomputed
   })
+
+  it('inserts at position 1 on an empty branch (COALESCE guard)', async () => {
+    await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'empty', createdAt: 1 })
+    const id = await writeSystemEntry({ branchId: 'b2', content: 'empty branch' }, ctx)
+    const rows = await ctx.db.select().from(storyEntries).where(eq(storyEntries.branchId, 'b2'))
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ id, position: 1 })
+  })
 })
 
 describe('clearSystemEntry', () => {
