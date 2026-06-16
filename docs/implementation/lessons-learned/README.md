@@ -82,6 +82,13 @@ slice plans when relevant.
   ids from Sets / Maps on disappearance; reset / undo / reload
   can resurrect them and inherit leaked state.
 
+### Testing / module graph
+
+- [Keep `vitest.setup.ts`'s import graph thin](./test-setup-import-graph-breaks-mocks.md)
+  — an eager setup import (e.g. an action pulling a heavy barrel) loads
+  modules before test files register their `vi.mock`, silently breaking
+  the mocks; relocate the offending symbol to a light module.
+
 ### Native deps / install ritual
 
 - [Native-module RN libs need a dev-client rebuild](./native-dep-expo-link.md)

@@ -69,6 +69,14 @@ export type {
   ModelProfile,
   ProviderInstance,
 } from './app-settings/app-settings-schema'
+export {
+  AGENT_IDS,
+  STORY_AGENT_IDS,
+  GLOBAL_AGENT_IDS,
+  type AgentId,
+  type StoryAgentId,
+  type GlobalAgentId,
+} from './app-settings/agents'
 export { db } from './runtime/client'
 export { DrizzleStudioDevTools } from './devtools/drizzle-studio-devtools'
 export { entryMetadataSchema } from './story-entries/entry-metadata'

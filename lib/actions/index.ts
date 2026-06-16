@@ -4,7 +4,17 @@ export { applyUndoPayload, computeUndoPayload } from './delta/delta-encoding'
 export { registerAllDomains, __resetRegistrationGuard } from './delta/registrations'
 export { __resetRegistry, type StorePatch } from './delta/registry'
 export { DeltaReplayError, reverseReplayDeltas } from './delta/reverse-replay'
-export { resetAppSettings, setDebugLevelEnabled, setDiagnosticsEnabled } from './settings'
+export {
+  addProvider,
+  quickWireModel,
+  resetAppSettings,
+  setAssignments,
+  setDebugLevelEnabled,
+  setDefaultProvider,
+  setDiagnosticsEnabled,
+  updateProvider,
+  upsertProfile,
+} from './settings'
 export type { SettingsActionCtx } from './settings'
 export { deleteStory } from './stories/delete-story'
 export {

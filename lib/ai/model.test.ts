@@ -21,8 +21,14 @@ vi.mock('@/lib/diagnostics', () => ({
   setHttpCallKnownSecretValues,
 }))
 
+const appSettings = vi.hoisted(() => ({ providers: [] as unknown[] }))
+vi.mock('@/lib/stores', () => ({
+  appSettingsStore: { getAppSettings: () => appSettings },
+}))
+
 describe('getModel', () => {
   beforeEach(() => {
+    appSettings.providers = []
     resetTemporaryProvidersForTests()
     sink.beginCall.mockClear()
     sink.completeCall.mockClear()
@@ -78,6 +84,21 @@ describe('getModel', () => {
       provider: 'anthropic.messages',
       specificationVersion: 'v3',
     })
+  })
+
+  it('resolves a real openai-compatible provider from app settings', () => {
+    appSettings.providers = [
+      {
+        id: 'prov-real',
+        type: 'openai-compatible',
+        displayName: 'Local',
+        apiKey: 'sk-real',
+        endpoint: 'http://localhost:1234/v1',
+        favoriteModelIds: [],
+      },
+    ]
+    const model = getModel('prov-real', 'my-model')
+    expect(model).toBeDefined()
   })
 
   it('throws a clear error when the provider is missing', () => {
