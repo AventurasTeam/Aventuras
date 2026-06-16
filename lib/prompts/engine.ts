@@ -8,7 +8,14 @@ import type { Pack } from './types'
 export function createEngine(pack: Pack): Liquid {
   const templates: Record<string, string> = {}
   for (const [id, entry] of Object.entries(pack.templates)) templates[id] = entry.source
-  for (const [id, entry] of Object.entries(pack.macros)) templates[id] = entry.source
+  for (const [id, entry] of Object.entries(pack.macros)) {
+    // Templates and macros share one id namespace in the map; a collision would
+    // silently shadow a template's source, so fail loud instead.
+    if (Object.hasOwn(templates, id)) {
+      throw new Error(`pack id collision: '${id}' is registered as both a template and a macro`)
+    }
+    templates[id] = entry.source
+  }
 
   const engine = new Liquid({ templates })
   registerFilters(engine)

@@ -1,4 +1,5 @@
 import { TEMPLATE_IDS } from './ids'
+import type { TemplateId } from './ids'
 import type { ContextGroup } from './types'
 
 export type VariableDef = {
@@ -83,7 +84,9 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
   staticContent: [],
 }
 
-export const TEMPLATE_GROUPS: Record<string, ContextGroup> = {
+// Intersection keeps the string index (validateRegistry probes arbitrary ids)
+// while requiring every TemplateId to be mapped — a missing one fails to compile.
+export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, ContextGroup> = {
   [TEMPLATE_IDS.perTurnNarrative]: 'generationContext',
   [TEMPLATE_IDS.wizardOpening]: 'wizard',
   [TEMPLATE_IDS.wizardTitleChips]: 'wizard',

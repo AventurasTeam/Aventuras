@@ -25,4 +25,13 @@ describe('engine', () => {
     })
     expect(renderWith(engine, 'f', { items: ['a', 'b', 'c'] })).toBe('a, b, and c')
   })
+
+  it('throws when a template and a macro share an id', () => {
+    expect(() =>
+      createEngine({
+        templates: { dup: { group: 'generationContext', source: 'T' } },
+        macros: { dup: { group: 'staticContent', source: 'M' } },
+      }),
+    ).toThrow(/id collision: 'dup'/)
+  })
 })

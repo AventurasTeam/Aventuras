@@ -36,4 +36,11 @@ describe('prompt filters', () => {
   it('jsonFilter stringifies', () => {
     expect(jsonFilter({ a: 1 })).toBe('{"a":1}')
   })
+
+  it('jsonFilter returns the fallback for circular references', () => {
+    const circular: Record<string, unknown> = {}
+    circular.self = circular
+    expect(() => jsonFilter(circular)).not.toThrow()
+    expect(jsonFilter(circular)).toBe('')
+  })
 })
