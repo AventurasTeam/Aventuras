@@ -2065,6 +2065,16 @@ This is the second delta-scope exemption alongside the
 `story_entries.content` text-edit side-channel above; together they
 are the only narrative-state mutations that bypass the log.
 
+**System entries are not delta-logged.** A `kind='system'` entry — a
+pre-flight or runtime config-failure surfaced in the reader per
+[`reader-composer.md → Error surface`](./ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill)
+— is a diagnostic artifact, not a narrative-state mutation, so it bypasses
+the delta log entirely: a direct insert with no `source`. It exists only as
+the **branch-tail singleton** (at most one per branch, always the last
+entry) and is removed on resolution (user dismiss or config repair) or
+cleared at the next main (per-turn) pipeline run. Carrying no delta, it is
+invisible to rollback and CTRL-Z.
+
 **`log_position` assignment.** Computed at insert time inside the
 same SQLite transaction as the delta row:
 `COALESCE(MAX(log_position), 0) + 1 WHERE branch_id = ?`.
