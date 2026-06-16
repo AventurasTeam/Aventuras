@@ -17,10 +17,11 @@ export type PipelineError =
   | { kind: 'orchestrator'; detail: string }
   | {
       kind: 'config-resolver'
-      detail: string
       failure: ResolveFailureKind
       target: ResolveTarget
       phaseName: string
+      // Optional supplemental log message; the structured fields are the contract.
+      detail?: string
     }
 
 export type PhaseResult =
