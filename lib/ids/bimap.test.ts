@@ -6,6 +6,7 @@ const charA = 'char_0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9'
 const charB = 'char_1a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9'
 const locA = 'loc_2a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9'
 const loreA = 'lore_3a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9'
+const entryA = 'entry_4a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9'
 
 describe('IdBiMap', () => {
   it('allocates per-kind counters from kind prefixes', () => {
@@ -40,9 +41,24 @@ describe('IdBiMap', () => {
     expect(b.allocate(charB)).toBe('c1')
   })
 
+  it('rejects allocation of a non-substitutable or malformed id', () => {
+    const m = new IdBiMap()
+    expect(() => m.allocate(entryA)).toThrow(TypeError)
+    expect(() => m.allocate('char_not-a-uuid')).toThrow(TypeError)
+  })
+
   it('registers a consumer-chosen handle to a uuid', () => {
     const m = new IdBiMap()
     m.registerHandle('newHero', charA)
     expect(m.getUuidFor('newHero')).toBe(charA)
+  })
+
+  it('allows idempotent handle registration but rejects a conflicting one', () => {
+    const m = new IdBiMap()
+    m.registerHandle('newHero', charA)
+    m.registerHandle('newHero', charA)
+    expect(m.getUuidFor('newHero')).toBe(charA)
+    expect(() => m.registerHandle('newHero', charB)).toThrow()
+    expect(() => m.registerHandle(m.allocate(locA), charB)).toThrow()
   })
 })
