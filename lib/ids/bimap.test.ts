@@ -51,6 +51,8 @@ describe('IdBiMap', () => {
     const m = new IdBiMap()
     m.registerHandle('newHero', charA)
     expect(m.getUuidFor('newHero')).toBe(charA)
+    // Reverse-only by design: the forward map carries allocated placeholders, not handles.
+    expect(m.getPlaceholderFor(charA)).toBeUndefined()
   })
 
   it('allows idempotent handle registration but rejects a conflicting one', () => {
