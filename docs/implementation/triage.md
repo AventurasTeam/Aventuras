@@ -19,4 +19,12 @@ slice-planning gate forces its resolution before that slice is planned.
 
 ## Inbox
 
-_Empty — no untriaged items._
+- **Scoped coverage is not push-button reproducible.** The
+  dual-project vitest setup (storybook browser + unit node) drops a
+  single `lib/*` module from the merged `--coverage` report, and CLI
+  `--coverage.include` overrides crash the storybook project loader.
+  Slices that assert per-module line coverage (e.g.
+  [Slice 2.8](./milestones/02-first-user-loop/slices/08-id-substitution.md))
+  can only confirm the bar by inspection. A `lib`-only coverage
+  script or project would make it verifiable on demand. Surfaced by
+  Slice 2.8.

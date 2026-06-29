@@ -90,4 +90,30 @@ this same surface.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **New-entity / temporary-handle path is a consumer-driven
+  primitive.** `IdBiMap.registerHandle(handle, uuid)` plus the
+  reverse walker resolving any map-known string is the whole
+  mechanism; the walker does **not** auto-detect create nodes. The
+  new-entity fixture is illustrative and provisional — the real
+  output wire-shape belongs to M3.2 (classifier), which registers
+  handles against this same surface unchanged. No M2 consumer emits
+  creates.
+- **`MalformedPlaceholderError` is module-owned (zero runtime
+  deps).** It does not import the pipeline's `PipelineError`;
+  [Slice 2.7](./07-wiring.md) maps it to the pipeline
+  `recoverable_error` event at the call site (mirrors how
+  `lib/pipeline/call-error.ts` maps `lib/ai`'s `CallRetryError`).
+- **Reverse-walker boundary for 2.7.** `parseAndSubstitute`
+  resolves via `getUuidFor` (covers placeholders **and** registered
+  handles); a placeholder-shaped string the map doesn't know
+  throws. So 2.7 must run it only over structured reference output,
+  never prose / free-text fields — consistent with the contract
+  "prose carries names, structured emission carries placeholders."
+- **`lib/ids.ts` promoted to folder module `lib/ids/`** with
+  `index.ts` as the public API; `generateId` preserved, the five
+  external `@/lib/ids` importers unchanged.
+- **Coverage caveat.** 100% line coverage holds by line-by-line
+  inspection, but the dual-project vitest setup drops `lib/ids`
+  from the merged `--coverage` report, so the acceptance bar isn't
+  push-button reproducible — logged in
+  [`triage.md`](../../../triage.md).
