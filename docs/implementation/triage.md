@@ -48,3 +48,15 @@ slice-planning gate forces its resolution before that slice is planned.
   `rehydrateAppSettings` the way stories collapsed in 2.4 (drop the thunk + read
   from the public surface; point the boot-order test at the surviving symbol).
   Cross-cutting (stores layer + boot), no single slice owner.
+- **Sweep every store for `readonly` guards on read-view types.** `storiesStore`'s
+  `StoriesSnapshot` was returned from `getStories()`/fed to selectors with mutable
+  `rows`/`openFailures`, so a caller could `getStories().rows.push(...)` and mutate
+  store state in place — bypassing `set`, firing no subscriber notification. Fixed in
+  2.4 by making the snapshot fields `readonly StoryRow[]` / `Readonly<Record<…>>`.
+  At the end of M2, sweep `lib/stores/*` (`appSettingsStore`, the `working-set-store`
+  factory stores, etc.) and apply the same guard wherever a store exposes a read view
+  (getter return, selector input, public-export snapshot type): make array/record
+  fields `readonly` so `.push`/`.sort`/index-assignment become compile errors at the
+  call site. Array/record level is enough — deep-per-field readonly is overkill unless
+  a consumer actually mutates a nested field. Cross-cutting (whole stores layer), no
+  single slice owner.

@@ -8,7 +8,10 @@ import { logger } from '@/lib/diagnostics'
 export type OpenFailureKind = 'definition-corrupt' | 'settings-corrupt'
 export type OpenFailure = { storyId: string; kind: OpenFailureKind }
 
-type StoriesSnapshot = { rows: StoryRow[]; openFailures: Record<string, OpenFailureKind> }
+type StoriesSnapshot = {
+  rows: readonly StoryRow[]
+  openFailures: Readonly<Record<string, OpenFailureKind>>
+}
 
 type StoriesState = StoriesSnapshot & {
   apply: (rows: StoryRow[]) => void

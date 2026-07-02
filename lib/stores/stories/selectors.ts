@@ -32,7 +32,7 @@ function compare(a: StoryRow, b: StoryRow, sort: StorySort): number {
 }
 
 export function selectStoryCards(
-  rows: StoryRow[],
+  rows: readonly StoryRow[],
   query: StoryListQuery,
   nowMs: number,
 ): StoryCardData[] {
