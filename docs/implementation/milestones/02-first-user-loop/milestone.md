@@ -356,11 +356,6 @@ either side.
 
 ## Open questions
 
-- **`activePackId` seeding.** Whether M2 stories carry the
-  bundled pack's literal id in `stories.settings.activePackId`
-  (seeded via `default_story_settings`) or `null` is interpreted
-  as "bundled". Resolve in [Slice 2.6](./slices/06-pack-engine.md)
-  planning — affects the M7.2 pack tab's notion of "default".
 - **M2 chapter chrome.** ScreenShell's in-story variant always
   renders the token-progress strip, but token counting
   (`js-tiktoken`) lands in M3.4 and chapters don't close before

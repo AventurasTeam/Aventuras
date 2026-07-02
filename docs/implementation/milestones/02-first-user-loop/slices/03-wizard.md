@@ -196,6 +196,18 @@ M3.1; the commit transaction is stories + branch + opening
   strings or the Zod gains explicit empty defaults — must not
   violate the M1.5 "no fabricated frozen-spec values" rule;
   check the shipped schema's posture at planning.
+- **Rewrite the bundled wizard templates** that
+  [Slice 2.6](./06-pack-engine.md) shipped as provisional
+  placeholders (`lib/prompts/bundled/wizard.ts`). Replace them
+  against this slice's own opening contract: `tmpl_wizard_opening`
+  must emit the structured-output JSON (prose, `sceneEntities`,
+  `currentLocationId`, `worldTime`) through the JSON output macro,
+  not plain narrative prose; the lead reference must be guarded for
+  lead-less paths (creative third-person), with the `wizard`-group
+  `lead` variable in `templateContextMap.ts` reconciled against
+  which paths actually pass it; and `tmpl_wizard_description` needs
+  a description-appropriate output directive rather than the
+  next-beat narrative macro. (Surfaced by Codex review of 2.6.)
 
 ## Implementation notes
 
