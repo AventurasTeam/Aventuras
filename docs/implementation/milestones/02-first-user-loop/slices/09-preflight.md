@@ -116,11 +116,44 @@ merges, so this slice carries no hard dependency.
 
 ## Open questions
 
-- Exact declaration syntax — per-`PhaseNode` field vs a
-  pipeline-level map keyed by phase name. Per-node is the
-  default assumption (keeps declaration and phase adjacent);
-  decide at planning.
+- Declaration syntax (per-`PhaseNode` field vs pipeline-level map) —
+  resolved to per-node; see Implementation notes.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **Declaration shape.** Resolver inputs are a per-`PhaseNode`
+  `resolves?` field (a `ResolverInput` is `{ target, when? }`), not a
+  pipeline-level map — this keeps the declaration next to the phase and
+  makes "first failure in phase order" fall out of declared iteration
+  order. The `narrative` pseudo-slot is just `target: 'narrative'`, no
+  special case. A `when` predicate receives a `PreflightSnapshot`
+  (`appSettings` plus optional `storySettings`); M2 registers no
+  predicates (per-turn validates narrative only), so the form exists for
+  M3's conditional inputs.
+- **Pre-flight delegates to Slice 2.1's `resolveModel`** rather than
+  re-walking the chain, so the C3 failure vocabulary cannot drift. It
+  builds the resolver config WITHOUT story-level overrides — those are
+  bare model-id strings and do not enter provider validation (canonical).
+  The walk is pure; the orchestrator reads the snapshot via
+  `appSettingsStore.getAppSettings()`.
+- **`runPipeline` stays pure on pre-flight failure.** It halts before
+  phase 0 through the existing abort path (reverse-replay is a no-op, so
+  zero deltas), emits `run_complete(failed)` with a new `config-resolver`
+  `PipelineError`, and writes only the normal failed `pipeline_runs`
+  marker — it does NOT write the system entry. The error's `detail` is
+  optional but declared so the orchestrator's union-wide `error.detail`
+  access typechecks. **Slice 2.7 wires the surfacing:** it calls
+  `writeSystemEntry` on a failed outcome and `clearSystemEntry` at turn
+  start.
+- **System entries are a direct, non-delta-logged insert**
+  (`lib/actions/story-entries/system-entry.ts`), not the delta-logged
+  entry-create arm the Background, Scope, and the milestone C4 note
+  describe. A `kind='system'` entry is a diagnostic artifact, not a
+  narrative-state mutation: the `deltas.source` enum has no fitting value,
+  and it must stay invisible to rollback and CTRL-Z. It is the branch-tail
+  singleton, cleared on resolution or at the next main pipeline run. New
+  canonical note in
+  [`data-model.md → Entry mutability & rollback`](../../../../data-model.md#entry-mutability--rollback).
+  **Developer follow-up:** the milestone C4 note and this doc's Background
+  and Scope wording still say "compose the existing entry-create arm" —
+  reconcile each to a direct insert.

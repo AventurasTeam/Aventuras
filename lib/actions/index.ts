@@ -32,4 +32,5 @@ export {
   type StoryEntryRejection,
 } from './story-entries/operational'
 export { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './story-entries/register'
+export { clearSystemEntry, writeSystemEntry } from './story-entries/system-entry'
 export type { DbCtx, DeltaSource, MutationResult, PipelineAction } from './types'

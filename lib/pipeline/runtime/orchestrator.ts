@@ -10,7 +10,7 @@ import {
 import { pipelineRuns } from '@/lib/db'
 import { logger, makeLogger, turnCaptureSink } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
-import { generationStore, type RunState } from '@/lib/stores'
+import { appSettingsStore, generationStore, type RunState } from '@/lib/stores'
 
 import { getPipeline, getPipelineSafe } from '../authoring/registry'
 import type {
@@ -25,6 +25,7 @@ import type {
 } from '../types'
 import { checkConcurrencyContract } from './concurrency'
 import { pipelineEventBus } from './event-bus'
+import { runPreflight } from './preflight'
 
 class ActionLayerError extends Error {
   readonly detail: string
@@ -267,7 +268,7 @@ async function commitRun(
 async function abortRun(
   run: RunState,
   ctx: RunCtx,
-  cause: { reason: 'user-cancel' | 'phase-failure'; error?: PipelineError },
+  cause: { reason: 'user-cancel' | 'phase-failure' | 'preflight-failure'; error?: PipelineError },
 ): Promise<TxResult> {
   run.abortController.abort()
   let outcome: 'aborted' | 'failed' = cause.reason === 'user-cancel' ? 'aborted' : 'failed'
@@ -308,7 +309,10 @@ async function abortRun(
   return { runId: run.runId, actionId: run.actionId, outcome, ...(error ? { error } : {}) }
 }
 
-type AbortCause = { reason: 'user-cancel' | 'phase-failure'; error?: PipelineError }
+type AbortCause = {
+  reason: 'user-cancel' | 'phase-failure' | 'preflight-failure'
+  error?: PipelineError
+}
 type PhaseOutcome = { kind: 'completed' } | { kind: 'aborted'; cause: AbortCause }
 
 async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
@@ -358,6 +362,21 @@ export async function runPipeline(kind: string, ctx: RunCtx): Promise<TxResult |
   // are observed on the event bus, not the return value.
   let originResult: TxResult | undefined
   for (;;) {
+    // A throwing resolver predicate (or any preflight error) must wind the run down
+    // through the normal abort path — rejecting here would orphan the registered run
+    // and its unresolved terminal, blocking edits and deadlocking awaitRunTerminal.
+    let preflightError: PipelineError | null
+    try {
+      preflightError = runPreflight(getPipeline(run.kind), {
+        appSettings: appSettingsStore.getAppSettings(),
+      })
+    } catch (e) {
+      preflightError = { kind: 'orchestrator', detail: e instanceof Error ? e.message : String(e) }
+    }
+    if (preflightError) {
+      const tx = await abortRun(run, ctx, { reason: 'preflight-failure', error: preflightError })
+      return originResult ?? tx
+    }
     const outcome = await runPhases(run, ctx)
     if (outcome.kind === 'aborted') {
       const tx = await abortRun(run, ctx, outcome.cause)
