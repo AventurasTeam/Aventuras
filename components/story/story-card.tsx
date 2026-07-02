@@ -7,35 +7,21 @@ import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Text } from '@/components/ui/text'
+import { type StoryDefinition } from '@/lib/db'
+import { t } from '@/lib/i18n'
+import { type StoryCardData } from '@/lib/stores'
 import { cn } from '@/lib/utils'
 
-type StoryMode = 'adventure' | 'creative'
-
-type Story = {
-  id: string
-  title: string
-  description: string | null
-  /** From `definition.genre.label`. Renders as the uppercase overline. */
-  genreLabel: string | null
-  mode: StoryMode
-  accentColor: string | null
-  favorited: boolean
-  archived: boolean
-  isDraft: boolean
-  /** Pre-formatted "Chapter 3". */
-  chapterLabel: string | null
-  /** Pre-formatted "2h ago". */
-  lastOpenedRelative: string
-}
+type StoryMode = StoryDefinition['mode']
 
 type StoryCardProps = {
-  story: Story
+  story: StoryCardData
   onOpen: () => void
   onToggleFavorite: () => void
   onArchiveToggle: () => void
-  onEditInfo: () => void
-  onDuplicate: () => void
-  onExport: () => void
+  onEditInfo?: () => void
+  onDuplicate?: () => void
+  onExport?: () => void
   onDelete: () => void
   className?: string
 }
@@ -45,10 +31,10 @@ const MODE_DEFAULT_COLOR: Record<StoryMode, string> = {
   creative: '#a855f7',
 }
 
-const MODE_LABEL: Record<StoryMode, string> = {
-  adventure: 'Adventure',
-  creative: 'Creative',
-}
+const MODE_LABEL_KEY = {
+  adventure: 'storyCard.modeAdventure',
+  creative: 'storyCard.modeCreative',
+} as const satisfies Record<StoryMode, string>
 
 export function StoryCard({
   story,
@@ -61,10 +47,26 @@ export function StoryCard({
   onDelete,
   className,
 }: StoryCardProps) {
-  const stripColor = story.accentColor ?? MODE_DEFAULT_COLOR[story.mode]
+  // Drafts carry a partial/null `definition` that fails strict storyDefinitionSchema;
+  // the card only needs mode + genre.label, so read through a loose cast.
+  const def = (story.definition ?? null) as {
+    mode?: StoryMode
+    genre?: { label?: string | null } | null
+  } | null
+  const genreLabel = def?.genre?.label ?? null
+  // The loose cast can't vouch for the value; a corrupt/partial draft may carry a stray `mode`
+  // that would miss the MODE_* lookups below. Re-validate against the known keys.
+  const mode: StoryMode =
+    def?.mode != null && def.mode in MODE_DEFAULT_COLOR ? def.mode : 'creative'
+  const favorited = story.favorite === 1
+  const archived = story.status === 'archived'
+  const isDraft = story.status === 'draft'
+
+  const stripColor = story.accentColor ?? MODE_DEFAULT_COLOR[mode]
   const overflowTriggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
 
-  const metaParts = [MODE_LABEL[story.mode], story.chapterLabel, story.lastOpenedRelative].filter(
+  const modeLabel = t(MODE_LABEL_KEY[mode])
+  const metaParts = [modeLabel, story.chapterLabel, story.lastOpenedRelative].filter(
     (part): part is string => part != null,
   )
 
@@ -73,7 +75,7 @@ export function StoryCard({
       className={cn(
         'relative w-full overflow-hidden rounded-lg border border-border bg-bg-base',
         Platform.select({ web: 'h-full' }),
-        story.archived && 'opacity-55',
+        archived && 'opacity-55',
         className,
       )}
     >
@@ -87,21 +89,21 @@ export function StoryCard({
       <Pressable
         onPress={onOpen}
         accessibilityRole="button"
-        accessibilityLabel={`Open ${story.title}`}
+        accessibilityLabel={t('storyCard.open', { title: story.title })}
         className={cn(
           'flex-1 flex-col gap-1.5 p-4 pl-5',
           'active:bg-tint-press',
           Platform.select({ web: 'cursor-pointer hover:bg-tint-hover' }),
         )}
       >
-        {story.genreLabel != null ? (
+        {genreLabel != null ? (
           <Text
             size="xs"
             className="font-medium uppercase tracking-wide"
             style={{ color: stripColor }}
             numberOfLines={1}
           >
-            {story.genreLabel}
+            {genreLabel}
           </Text>
         ) : (
           <Text
@@ -110,7 +112,7 @@ export function StoryCard({
             className="font-medium uppercase tracking-wide"
             numberOfLines={1}
           >
-            Genre not set
+            {t('storyCard.genreNotSet')}
           </Text>
         )}
 
@@ -119,8 +121,8 @@ export function StoryCard({
             {story.title}
           </Text>
 
-          {story.isDraft ? <Chip>Draft</Chip> : null}
-          {story.archived ? <Chip>Archived</Chip> : null}
+          {isDraft ? <Chip>{t('storyCard.draft')}</Chip> : null}
+          {archived ? <Chip>{t('storyCard.archived')}</Chip> : null}
         </View>
 
         <Text size="xs" variant="muted" numberOfLines={1}>
@@ -132,14 +134,14 @@ export function StoryCard({
           numberOfLines={3}
           className={story.description == null ? 'italic text-fg-muted' : ''}
         >
-          {story.description ?? '(no description yet)'}
+          {story.description ?? t('storyCard.noDescription')}
         </Text>
       </Pressable>
 
       <Pressable
         onPress={onToggleFavorite}
         accessibilityRole="button"
-        accessibilityLabel={story.favorited ? 'Unfavorite story' : 'Favorite story'}
+        accessibilityLabel={favorited ? t('storyCard.unfavorite') : t('storyCard.favorite')}
         hitSlop={8}
         className={cn(
           'group/star absolute left-[22px] top-[40px] rounded-sm',
@@ -150,7 +152,7 @@ export function StoryCard({
           as={Star}
           size="sm"
           className={cn(
-            story.favorited
+            favorited
               ? 'fill-warning text-warning'
               : cn(
                   'text-fg-muted',
@@ -165,40 +167,48 @@ export function StoryCard({
       <View className="absolute right-2 top-2" pointerEvents="box-none">
         <Popover>
           <PopoverTrigger ref={overflowTriggerRef} asChild>
-            <IconAction icon={MoreHorizontal} label="Story actions" size="sm" />
+            <IconAction icon={MoreHorizontal} label={t('storyCard.actionsLabel')} size="sm" />
           </PopoverTrigger>
           <PopoverContent align="end" className="w-56 p-1">
             <View className="flex-col">
+              {!isDraft ? (
+                <OverflowItem
+                  label={archived ? t('storyCard.unarchive') : t('storyCard.archive')}
+                  onSelect={() => {
+                    overflowTriggerRef.current?.close()
+                    onArchiveToggle()
+                  }}
+                />
+              ) : null}
+              {onEditInfo ? (
+                <OverflowItem
+                  label={t('storyCard.editInfo')}
+                  onSelect={() => {
+                    overflowTriggerRef.current?.close()
+                    onEditInfo()
+                  }}
+                />
+              ) : null}
+              {onDuplicate ? (
+                <OverflowItem
+                  label={t('storyCard.duplicate')}
+                  onSelect={() => {
+                    overflowTriggerRef.current?.close()
+                    onDuplicate()
+                  }}
+                />
+              ) : null}
+              {onExport ? (
+                <OverflowItem
+                  label={t('storyCard.export')}
+                  onSelect={() => {
+                    overflowTriggerRef.current?.close()
+                    onExport()
+                  }}
+                />
+              ) : null}
               <OverflowItem
-                label={story.archived ? 'Unarchive' : 'Archive'}
-                onSelect={() => {
-                  overflowTriggerRef.current?.close()
-                  onArchiveToggle()
-                }}
-              />
-              <OverflowItem
-                label="Edit info"
-                onSelect={() => {
-                  overflowTriggerRef.current?.close()
-                  onEditInfo()
-                }}
-              />
-              <OverflowItem
-                label="Duplicate"
-                onSelect={() => {
-                  overflowTriggerRef.current?.close()
-                  onDuplicate()
-                }}
-              />
-              <OverflowItem
-                label="Export"
-                onSelect={() => {
-                  overflowTriggerRef.current?.close()
-                  onExport()
-                }}
-              />
-              <OverflowItem
-                label="Delete"
+                label={t('storyCard.delete')}
                 destructive
                 onSelect={() => {
                   overflowTriggerRef.current?.close()
@@ -240,4 +250,4 @@ function OverflowItem({
   )
 }
 
-export type { Story, StoryCardProps, StoryMode }
+export type { StoryCardProps, StoryMode }

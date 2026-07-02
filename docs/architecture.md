@@ -132,15 +132,25 @@ Every macro is created with a **context group tag**. The group drives:
 
 Example built-in macros:
 
-- `macros/character_block` (`generationContext`) — a character formatted
+- `macro_character_block` (`generationContext`) — a character formatted
   as a description block
-- `macros/happening_for_memory` (`generationContext`) — a happening
+- `macro_happening_for_memory` (`generationContext`) — a happening
   formatted as it would appear in a POV character's memory, including
   the source descriptor
-- `macros/output_format_narrative` (`staticContent`) — the output
+- `macro_output_format_narrative` (`staticContent`) — the output
   instruction block for narrative generation
-- `macros/output_format_json` (`staticContent`) — generic JSON output
+- `macro_output_format_json` (`staticContent`) — generic JSON output
   directive
+
+### Template and macro id space
+
+Template ids are a **closed static union**: the render entry
+(`renderTemplate`) accepts only a known `TemplateId`, so authors edit
+content within a fixed template set rather than defining arbitrary
+template pipelines. Macro ids carry a `macro_` prefix
+(e.g. `macro_output_format_narrative`); the engine merges template and
+macro ids into one flat lookup for include resolution, and the prefix
+keeps that merged namespace collision-free.
 
 ### Empty retrieval buckets — author contract
 

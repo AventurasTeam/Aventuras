@@ -1,5 +1,7 @@
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 
+import { BUNDLED_PACK_ID } from '@/lib/prompts'
+
 import {
   appearanceSchema,
   modelProfileSchema,
@@ -178,7 +180,7 @@ function settings(overrides: Partial<StorySettings> = {}): StorySettings {
       },
     },
     models: {},
-    activePackId: null,
+    activePackId: BUNDLED_PACK_ID,
     packVariables: {},
     ...overrides,
   })
@@ -1309,7 +1311,7 @@ const appSettingsRow: NewAppSettings = {
   defaultProviderId: 'prov_local',
   embeddingModelId: 'bge-small-en',
   embeddingProviderId: 'prov_local',
-  defaultStorySettings: {},
+  defaultStorySettings: { activePackId: BUNDLED_PACK_ID },
   defaultCalendarId: CAL,
   defaultSuggestionCategories: { adventure: [], creative: [] },
   appearance: appearanceSchema.parse({ themeId: 'system', readerFontScale: 1, density: 'default' }),

@@ -1071,6 +1071,28 @@ queries.
 favorited stories always float to the top within any filter. Mirrors
 the Layer 0 rule for lead-character sort on entity lists.
 
+### Story deletion
+
+**Decided:** deleting a story removes its entire **owned graph** in one
+transaction; **referenced/shared resources survive.**
+
+- **Owned (cascades):** all branch-scoped rows across every per-branch table
+  (`story_entries`, `entities`, `character_relationships`, `lore`, `threads`,
+  `happenings`, `happening_involvements`, `happening_awareness`, `chapters`,
+  `branch_era_flips`, `translations`, `probe_captures`, `deltas`,
+  `entry_assets`), plus story-scoped `pipeline_runs` and the `branches`
+  themselves, then the `stories` row. The cascade enumerates **every** table
+  even when empty, so future content cannot be orphaned. No DB-level
+  `ON DELETE` cascade exists; the action layer deletes child→parent.
+- **Referenced (survives):** `vault_calendars` is a shared vault resource —
+  a story references a calendar by `definition.calendarSystemId`, it does not
+  own it. `assets` are content-addressed binary media shared by reference (see
+  [Cleanup on delete — trash-can pattern](#assets-images--future-media)):
+  deletion drops the `entry_assets` junction rows only; orphaned blobs are
+  reclaimed by the refcount-trashing + boot-sweep GC, not by the story delete.
+- **No delta rows:** a story delete writes zero `deltas` (it deletes them); the
+  operation is a config-table cascade, not a delta-logged domain write.
+
 ### Story settings shape
 
 **Decided:** `stories` carries TWO zod-parsed JSON blobs, split by

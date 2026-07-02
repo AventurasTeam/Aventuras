@@ -4,9 +4,7 @@
 
 - **Milestone:** [Milestone 2 — First user loop](../milestone.md)
 - **Depends on:** none for the surface (StoryCard / Toolbar /
-  ScreenShell are shipped; develops against seeded story rows);
-  [Slice 2.5](./05-reader.md) for the debug-button removal task
-  only.
+  ScreenShell are shipped; develops against seeded story rows).
 - **Blocks:** [Slice 2.10](./10-recovery-ui.md) (the
   parse-failure badge renders on this surface)
 
@@ -70,20 +68,17 @@ pinned C1 refresh surface, so the two slices run in parallel.
   pre-populated; both concurrent-state prompt triggers wired to
   the C5 prompt component from [Slice 2.3](./03-wizard.md).
 - **Card overflow menu** with the M2-backed entries only:
-  Archive / Unarchive and Edit-info-less minimum (see Scope:
-  out); favorite is the inline star.
+  Archive / Unarchive and Delete (full-graph cascade);
+  Edit info / Duplicate / Export stay out (see Scope: out);
+  favorite is the inline star.
 - **Navigation:** card click opens the reader route with
   `last_opened_at` touched.
 - **Debug-button removal:** delete the 1.7b `__DEV__` "Open
   reader (debug)" landing button (only this button — the rest of
-  the smoke teardown is [Slice 2.7](./07-wiring.md)). Ordered
-  after 2.5 merges.
+  the smoke teardown is [Slice 2.7](./07-wiring.md)).
 
 ## Scope: out
 
-- Story **Delete** on the card menu — milestone open question;
-  default out (archive is the M2 cleanup affordance; cascade
-  deletion has no spec section).
 - **Duplicate** (M6.6), **Export** (M9.4),
   **`[Import story…]`** (M9.4), cover display (visual identity),
   **Edit info** routing into Story Settings · About (story
@@ -112,8 +107,7 @@ story` with a session fires the new-story variant. Resolutions:
 - Card click lands in the reader with the story open and
   `last_opened_at` updated; empty database renders the welcome
   state with toolbar and header CTA hidden.
-- After this slice + 2.5, no `__DEV__` reader button remains on
-  the landing.
+- No `__DEV__` reader button remains on the landing.
 - The AI-not-configured banner shows iff `providers` is empty and
   routes to the interim form.
 
@@ -132,9 +126,66 @@ story` with a session fires the new-story variant. Resolutions:
 
 ## Open questions
 
-- Whether story Delete gets pulled in (milestone open question —
-  decide here at planning).
+_Story Delete (the milestone open question) was pulled in — see
+Implementation notes. None remaining._
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+Resolved during planning + execution (full execution plan was the
+git-ignored `.impl-plans/M02-04-story-list.md`).
+
+- **Story Delete pulled in** (milestone open question → in). Implemented as
+  a transactional full-graph cascade (`lib/actions/stories/delete-story.ts`):
+  deletes the entire owned graph child→parent, **excludes** shared
+  `vault_calendars` and content-addressed `assets` blobs (drops `entry_assets`
+  junction rows only). Policy pinned in
+  [`data-model.md → Story deletion`](../../../../data-model.md#story-deletion).
+  A schema-derived completeness test fails if a branch-scoped table is added
+  without wiring the cascade. The asset-trashing forward-coupling (M4/M9 GC
+  must hook the story-delete path) is tracked in
+  [`triage.md`](../../../triage.md).
+- **Built against pinned contracts** (consumers unmerged). The C5 session
+  selector + prompt are a local placeholder
+  (`components/story/wizard-session-seam.tsx`) for
+  [Slice 2.3](./03-wizard.md) to supersede; the `/wizard` route is cast
+  `as Href` until 2.3 lands it. The C1 creation-refresh surface 2.3 calls is
+  `rehydrateStories(db)` (targeted re-read).
+- **AI-not-configured banner owned here.** This slice builds the banner
+  (`components/ui/banner.tsx` + the `AppBannerHost` no-providers / priority
+  resolver host per [`banners.md`](../../../../ui/patterns/banners.md), which
+  names the story list the sole host); CTA deep-links to
+  `/settings?tab=providers`. [Slice 2.1](./01-provider.md)'s branch
+  independently built a duplicate (`AiConfigBanner`, solid-fill, rendered on
+  the old empty landing). Since this slice's `app/index.tsx` replaces that
+  landing wholesale, 2.1's banner is superseded — when 2.1 rebases onto this it
+  drops `ai-config-banner.tsx` + its `app/index.tsx` render + the `aiBanner.*`
+  keys, keeping only the provider form, mutators, and the CTA target (its
+  banner AC collapses to the integration assertion it always was). Onboarding's
+  skip-path is a third consumer of this same banner.
+- **Persisted-mirror store.** Column writes (favorite / status /
+  last_opened_at) and delete are action-layer writes that re-hydrate the store
+  — the store exposes no value-setter. C1's "two externally-called mutators"
+  resolve to `touchStoryOpened` (action layer) plus the in-memory open-failure
+  `setOpenFailure` / `clearOpenFailure` (store).
+- **StoryCard changes.** Out-of-scope menu callbacks (Edit info / Duplicate /
+  Export) made optional and hidden when absent; all chrome converted to
+  `t()`; Archive hidden on draft cards per the data-model archive-gating rule.
+- **StoryCard row-based props.** Moved to `components/story/` (domain compound)
+  and now consumes the canonical `Story` row plus the two derived display fields
+  (`StoryCardData`), collapsing the duplicated `StoryCardVM` / `Story` /
+  `StoryMode` types; the card derives favorited / archived / isDraft / genreLabel /
+  mode from the row. The date-agnostic contract is preserved — display strings
+  stay pre-formatted in the selector (`toStoryCardData`).
+- **Added beyond the brief.** A no-results state on StoryList for when a
+  filter / search matches nothing (distinct from the zero-stories welcome).
+- **Debug-button removed** (was execution-gated on 2.5; the developer pulled
+  it forward — the story-list card-click reader path plus seeded stories
+  obsolete the button, which was the only thing the 2.5 gate protected). The
+  rest of the M1 smoke teardown stays [Slice 2.7](./07-wiring.md).
+- **Handoffs.** [Slice 2.7](./07-wiring.md) extends `openStory` (strict
+  definition / settings parse, `hydrate(branchId)`, open-failure write) and
+  should give the currently-silent `{status:'no-branch'}` return a surface;
+  [Slice 2.10](./10-recovery-ui.md) renders / clears open-failure via the
+  store. Relative-time strings (`lib/stores/stories/relative-time.ts`) are not
+  yet i18n'd — a cross-cutting pass with the sibling helper in
+  `collision-resolve-dialog.tsx`.
