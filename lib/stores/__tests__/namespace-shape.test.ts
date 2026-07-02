@@ -8,6 +8,7 @@ import {
   generationStore,
   navigationStore,
   resetAllStores,
+  storiesStore,
   type RunState,
 } from '@/lib/stores'
 
@@ -39,10 +40,18 @@ describe('lib/stores public surface', () => {
     expect(typeof entitiesStore.getByKind).toBe('function')
   })
 
+  it('exposes the stories selectors + open-failure mutators', () => {
+    expect(typeof storiesStore.useStories).toBe('function')
+    expect(typeof storiesStore.getStories).toBe('function')
+    expect(typeof storiesStore.setOpenFailure).toBe('function')
+    expect(typeof storiesStore.clearOpenFailure).toBe('function')
+  })
+
   it('resetAllStores clears every store', () => {
     const run: RunState = {
       runId: 'r1',
       kind: 'synthetic',
+      gateBehavior: 'no-gate',
       actionId: 'a1',
       storyId: null,
       branchId: 'b1',

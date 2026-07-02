@@ -1,5 +1,5 @@
 import { APICallError } from 'ai'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { callWithRetry } from './call-with-retry'
 
@@ -20,18 +20,25 @@ describe('callWithRetry', () => {
   })
 
   it('retries a retryable provider error then succeeds', async () => {
-    let n = 0
-    const res = await callWithRetry(
-      async () => {
-        if (n++ === 0) throw server()
-        return '{"v":2}'
-      },
-      (raw) => JSON.parse(raw),
-      opts(new AbortController().signal),
-    )
-    expect(res.status).toBe('ok')
-    expect(res.recoverable).toHaveLength(1)
-    expect(res.recoverable[0]).toMatchObject({ tier: 'provider', reason: 'network' })
+    vi.useFakeTimers()
+    try {
+      let n = 0
+      const promise = callWithRetry(
+        async () => {
+          if (n++ === 0) throw server()
+          return '{"v":2}'
+        },
+        (raw) => JSON.parse(raw),
+        opts(new AbortController().signal),
+      )
+      await vi.advanceTimersByTimeAsync(60000)
+      const res = await promise
+      expect(res.status).toBe('ok')
+      expect(res.recoverable).toHaveLength(1)
+      expect(res.recoverable[0]).toMatchObject({ tier: 'provider', reason: 'network' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('short-circuits on a non-retryable auth error', async () => {
@@ -49,15 +56,22 @@ describe('callWithRetry', () => {
   })
 
   it('exhausts provider attempts then fails', async () => {
-    const res = await callWithRetry(
-      async () => {
-        throw server()
-      },
-      (raw) => JSON.parse(raw),
-      { maxProviderAttempts: 2, maxParseAttempts: 2, signal: new AbortController().signal },
-    )
-    expect(res.status).toBe('failed')
-    expect(res.recoverable).toHaveLength(1) // attempts - 1
+    vi.useFakeTimers()
+    try {
+      const promise = callWithRetry(
+        async () => {
+          throw server()
+        },
+        (raw) => JSON.parse(raw),
+        { maxProviderAttempts: 2, maxParseAttempts: 2, signal: new AbortController().signal },
+      )
+      await vi.advanceTimersByTimeAsync(60000)
+      const res = await promise
+      expect(res.status).toBe('failed')
+      expect(res.recoverable).toHaveLength(1) // attempts - 1
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('surfaces an aborted signal without retrying', async () => {
@@ -94,5 +108,91 @@ describe('callWithRetry', () => {
     expect(res.status).toBe('failed')
     expect(res.recoverable).toHaveLength(1)
     if (res.status === 'failed') expect(res.error.tier).toBe('parse')
+  })
+
+  it('waits Retry-After before the next provider attempt', async () => {
+    vi.useFakeTimers()
+    try {
+      let n = 0
+      const ra = new APICallError({
+        message: 'rl',
+        url: 'u',
+        requestBodyValues: {},
+        statusCode: 429,
+        responseHeaders: { 'retry-after': '2' },
+      })
+      const promise = callWithRetry(
+        async () => {
+          if (n++ === 0) throw ra
+          return '{"v":9}'
+        },
+        (raw) => JSON.parse(raw),
+        { maxProviderAttempts: 2, maxParseAttempts: 2, signal: new AbortController().signal },
+      )
+      await vi.advanceTimersByTimeAsync(1999)
+      await vi.advanceTimersByTimeAsync(2)
+      const res = await promise
+      expect(res.status).toBe('ok')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('aborts mid-backoff', async () => {
+    vi.useFakeTimers()
+    try {
+      const ctrl = new AbortController()
+      const ra = new APICallError({
+        message: 'rl',
+        url: 'u',
+        requestBodyValues: {},
+        statusCode: 429,
+        responseHeaders: { 'retry-after': '5' },
+      })
+      const promise = callWithRetry(
+        async () => {
+          throw ra
+        },
+        (raw) => JSON.parse(raw),
+        { maxProviderAttempts: 3, maxParseAttempts: 2, signal: ctrl.signal },
+      )
+      await vi.advanceTimersByTimeAsync(100)
+      ctrl.abort()
+      await vi.advanceTimersByTimeAsync(100)
+      const res = await promise
+      expect(res.status).toBe('aborted')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('caps an unreasonably large Retry-After at the backoff cap', async () => {
+    vi.useFakeTimers()
+    try {
+      let n = 0
+      const ra = new APICallError({
+        message: 'rl',
+        url: 'u',
+        requestBodyValues: {},
+        statusCode: 429,
+        responseHeaders: { 'retry-after': '3600' },
+      })
+      const promise = callWithRetry(
+        async () => {
+          if (n++ === 0) throw ra
+          return '{"v":1}'
+        },
+        (raw) => JSON.parse(raw),
+        { maxProviderAttempts: 2, maxParseAttempts: 2, signal: new AbortController().signal },
+      )
+      // Still backing off just before the 30s cap...
+      await vi.advanceTimersByTimeAsync(29_999)
+      // ...and retries right after it, not after the full 3600s.
+      await vi.advanceTimersByTimeAsync(2)
+      const res = await promise
+      expect(res.status).toBe('ok')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

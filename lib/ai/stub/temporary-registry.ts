@@ -1,11 +1,14 @@
 import { setHttpCallKnownSecretValues } from '@/lib/diagnostics'
+import { appSettingsStore } from '@/lib/stores'
 
 import type { ProviderInstanceWithStub } from '../types'
 
 let providers: ProviderInstanceWithStub[] = []
 
 function syncProviderSecrets(): void {
-  setHttpCallKnownSecretValues(providers.map((provider) => provider.apiKey))
+  const configuredKeys = appSettingsStore.getAppSettings().providers.map((p) => p.apiKey)
+  const stubKeys = providers.map((provider) => provider.apiKey)
+  setHttpCallKnownSecretValues([...configuredKeys, ...stubKeys])
 }
 
 export function findTemporaryProvider(providerId: string): ProviderInstanceWithStub | undefined {

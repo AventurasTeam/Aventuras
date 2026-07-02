@@ -12,5 +12,23 @@
     "actions": "Actions",
     "back": "Back",
     "chapterProgress": "Chapter progress"
+  },
+  "storyCard": {
+    "genreNotSet": "Genre not set",
+    "noDescription": "(no description yet)",
+    "modeAdventure": "Adventure",
+    "modeCreative": "Creative",
+    "actionsLabel": "Story actions",
+    "open": "Open {{title}}",
+    "favorite": "Favorite story",
+    "unfavorite": "Unfavorite story",
+    "archive": "Archive",
+    "unarchive": "Unarchive",
+    "editInfo": "Edit info",
+    "duplicate": "Duplicate",
+    "export": "Export",
+    "delete": "Delete",
+    "draft": "Draft",
+    "archived": "Archived"
   }
 }

@@ -161,13 +161,64 @@ definition of done requires a _user_ to complete the loop and the
 
 ## Open questions
 
-- Which AI SDK package backs OAI-compat (`@ai-sdk/openai` with
-  `baseURL` vs `@ai-sdk/openai-compatible`) — pick at planning
-  against SDK v6 docs; the choice is invisible above `lib/ai`.
-- Whether the interim form supports multiple provider instances
-  or exactly one (recommendation: exactly one — multi-instance
-  management is M7.1's problem and the loop needs only one).
+None outstanding — both planning questions resolved (see Implementation
+notes): the OAI-compat SDK package, and single-vs-multi provider instance
+in the interim form.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **OAI-compat is backed by `@ai-sdk/openai-compatible`
+  (`createOpenAICompatible`), not `@ai-sdk/openai` + `baseURL`.** It is
+  purpose-built for arbitrary user-supplied `{ name, apiKey, baseURL,
+fetch }` endpoints; the choice is invisible above `lib/ai`. The interim
+  form manages exactly one provider instance, edited in place
+  (`providers[]` length 1) — multi-instance management is M7.1's.
+- **Quick-wire assigns all six agents, not just `wizard-assist`.** The
+  one-control action writes the narrative profile, one agent profile, and
+  assignments for every agent in the registry pointing at that agent
+  profile, plus the default provider. This aligns the write with the
+  control's own "narrative and agent tasks" label and is forward-safe (no
+  surprise `no-profile-assigned` when a later milestone first fires another
+  agent). Agent-profile `structuredOutput` defaults to `'auto'`.
+- **Per-story override resolves on the default provider.** A bare model id
+  in `stories.settings.models[target]` short-circuits the assignment walk
+  and resolves as `{ providerId: defaultProviderId, modelId: override }`;
+  no default provider yields `provider-missing`. This is the reading most
+  consistent with the AC wording and the data-model's "no provider
+  component" note. M2-inert (no override UI yet); if the per-turn wiring in
+  [Slice 2.7](./07-wiring.md) reveals the intent was "inherit the assigned
+  profile's provider," that is a canonical-spec clarification to raise, not
+  a silent resolver change.
+- **The AgentId registry (`AGENT_IDS` / `AgentId`) lives in `lib/db`, not
+  `lib/ai`.** It indexes `app_settings.assignments`, so the config/action
+  layer must reach it without importing the AI-SDK barrel — `lib/actions`
+  importing `AGENT_IDS` from `lib/ai` dragged the `ai` SDK plus the
+  transport modules into `vitest.setup.ts`'s graph and broke `vi.mock` in
+  the `lib/ai` tests. `lib/ai` re-exports the registry, so its public
+  surface is unchanged. Future slices import `AGENT_IDS` from `lib/db`.
+- **`resolveModel` is a pure config-injected function; `getModel` reads the
+  store.** The resolver takes `{ providers, profiles, assignments,
+defaultProviderId, storyModels }` explicitly (no store read), so 2.9
+  pre-flight calls it per agent and 2.7 builds the store adapter at the
+  call site. `getModel` does read `appSettingsStore` to resolve a real
+  provider instance, with the temporary stub registry as a fallback until
+  [Slice 2.7](./07-wiring.md) removes the smoke seam.
+- **Configured provider keys are registered into the `httpCallSink`
+  redaction comparator at `app_settings` hydrate.** The M1 redaction was
+  fed only by the stub registry, so a real OAI-compat call would have
+  leaked its raw `Authorization` key into the diagnostics buffer; the
+  hydrate path now syncs the comparator from `providers[]` on every
+  (re)hydrate, which an integration test covers.
+- **`runProviderCall` / `streamProviderCall` are thin hardening proxies.**
+  Each takes the SDK's own `generateText` / `streamText` options type
+  (`Parameters<typeof …>`), so `timeout` (`TimeoutConfiguration`) and the
+  `output` schema flow through with nothing re-declared, forces
+  `maxRetries: 0` (callWithRetry is the sole retry authority), and returns
+  the full SDK result. They don't classify errors — that stays in
+  `classifyProviderError`. They have no consumer yet; the config-by-agent
+  resolution, structured-output switch (force-on/off now; `auto` once
+  capability detection lands), schema injection and validation grow here
+  into the generate layer with their first caller in
+  [Slice 2.3](./03-wizard.md). [Slice 2.7](./07-wiring.md) wires streaming
+  into the store and verifies the SDK v6 timeout-error shape against a real
+  endpoint — the one open monitor from this slice.

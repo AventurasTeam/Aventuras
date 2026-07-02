@@ -8,7 +8,7 @@ import {
   appSettingsConfigSchema,
   appSettingsDiagnosticsSchema,
 } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
+import { logger, setHttpCallKnownSecretValues } from '@/lib/diagnostics'
 
 type AppSettingsSnapshot = AppSettingsConfig & { diagnostics: AppSettingsDiagnostics }
 
@@ -78,6 +78,8 @@ export async function hydrateAppSettings(read: () => Promise<unknown>): Promise<
 
   if (raw === undefined) {
     store.getState().apply(DEFAULT_SNAPSHOT)
+    // Keep the diagnostics redaction comparator in sync with configured keys.
+    setHttpCallKnownSecretValues(DEFAULT_SNAPSHOT.providers.map((p) => p.apiKey))
     return { status: 'ok' }
   }
 
@@ -101,6 +103,7 @@ export async function hydrateAppSettings(read: () => Promise<unknown>): Promise<
   const diagnostics = diag.success ? diag.data : APP_SETTINGS_DEFAULTS.diagnostics
 
   store.getState().apply({ ...config, diagnostics })
+  setHttpCallKnownSecretValues(config.providers.map((p) => p.apiKey))
   return { status: 'ok' }
 }
 

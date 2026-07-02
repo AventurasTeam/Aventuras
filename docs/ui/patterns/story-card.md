@@ -22,48 +22,65 @@ Used by:
 ## Compound API
 
 ```ts
+// StoryCardData = the canonical `stories` row + two derived display strings.
+type StoryCardData = Story & {
+  lastOpenedRelative: string // pre-formatted "2h ago" (derived in the selector)
+  chapterLabel: string | null // pre-formatted "Chapter 3"; selector returns null for every row until chapters land
+}
+
 type StoryCardProps = {
-  story: {
-    id: string
-    title: string
-    description: string | null
-    genreLabel: string | null // definition.genre.label
-    mode: 'adventure' | 'creative'
-    accentColor: string | null // stories.accent_color override; falls back to mode-derived
-    favorited: boolean
-    archived: boolean
-    isDraft: boolean // unfinished wizard session or explicit save-as-draft
-    chapterLabel: string | null // pre-formatted "Chapter 3"; null on drafts
-    lastOpenedRelative: string // pre-formatted "2h ago"
-  }
+  story: StoryCardData
 
   onOpen: () => void
   onToggleFavorite: () => void
   onArchiveToggle: () => void
-  onEditInfo: () => void
-  onDuplicate: () => void
-  onExport: () => void
+  onEditInfo?: () => void
+  onDuplicate?: () => void
+  onExport?: () => void
   onDelete: () => void
 
   className?: string
 }
 ```
 
+The card takes the **real `stories` row** (`Story` =
+`typeof stories.$inferSelect`) plus only the two fields it can't read
+off the row. It derives the rest from the row at render: `favorited`
+(`favorite === 1`), `archived` / `isDraft` (from `status`),
+`genreLabel` (`definition.genre.label`), and `mode`
+(`definition.mode`, default `creative`). Because drafts carry a
+partial / null `definition` that fails strict `storyDefinitionSchema`,
+the card reads `definition` through a small loose cast so the optional
+chaining is type-honest.
+
+`onEditInfo` / `onDuplicate` / `onExport` are optional; the overflow menu
+hides each item when its callback is absent, so a consuming milestone wires
+only the actions it backs (M2 wires Archive/Unarchive + Delete). `onArchiveToggle`,
+`onDelete`, `onToggleFavorite`, and `onOpen` are required.
+
 `chapterLabel` and `lastOpenedRelative` are **pre-formatted
 strings** — same opaque-render contract EntryCard's
-`worldTimeLabel` and the top-bar time chip use. Compound stays
-date-library agnostic.
+`worldTimeLabel` and the top-bar time chip use. They're computed by
+the stories selector (`selectStoryCards` → `toStoryCardData`), not in
+the compound, so the card stays date-library agnostic.
+
+`chapterLabel` is a deferred slot: `toStoryCardData` returns `null`
+for **every** row in M2 (chapters land in a later milestone), so the
+meta row drops the chapter segment for all stories, not just drafts.
+The `string` half of the type is reserved for when chapter wiring
+lands.
 
 ## Per-state rendering
 
-| State                       | Visual                                                       | Behavioral effect                                                                                                                  |
-| --------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Default                     | full opacity, mode-accented strip plus overline              | all actions enabled                                                                                                                |
-| Archived (`archived: true`) | `opacity-55` on the entire card; `Archived` Chip after title | card body click still opens story; overflow menu's Archive becomes Unarchive                                                       |
-| Draft (`isDraft: true`)     | `Draft` Chip after title; meta row drops chapter             | card body click resumes the wizard or opens the draft; overflow menu's Edit info points to wizard or Story Settings (host concern) |
+| State                              | Visual                                                       | Behavioral effect                                                                                                                                               |
+| ---------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Default                            | full opacity, mode-accented strip plus overline              | all actions enabled                                                                                                                                             |
+| Archived (`status === 'archived'`) | `opacity-55` on the entire card; `Archived` Chip after title | card body click still opens story; overflow menu's Archive becomes Unarchive                                                                                    |
+| Draft (`status === 'draft'`)       | `Draft` Chip after title; meta row drops chapter             | card body click resumes the wizard or opens the draft; overflow menu's Edit info points to wizard or Story Settings (host concern); overflow menu hides Archive |
 
-Both flags can co-exist (archived draft) — both Chips render,
-opacity applies.
+Both states derive from the row's `status`; an archived draft never
+co-exists (a single column), so the card renders at most one status
+Chip.
 
 ## Structure
 
@@ -102,8 +119,8 @@ opacity applies.
   conditional status Chip (`Draft` or `Archived`). Title
   truncates with `numberOfLines={2}` if it overflows.
 - **Meta row.** Mode (written out: "Adventure" / "Creative"),
-  chapter label (`Chapter 3` — null for drafts), last-opened
-  relative (`2h ago`). Middle-dot separators.
+  chapter label (`Chapter 3` — deferred, null for every row in
+  M2), last-opened relative (`2h ago`). Middle-dot separators.
 - **Description.** 3-line ellipsis. `(no description yet)`
   italic placeholder when null.
 
@@ -183,10 +200,10 @@ StoryCard itself: `w-full h-full` inside the grid cell.
 
 ## Storybook (StoryCard)
 
-Live demos: default, favorited, archived, draft, archived+draft,
+Live demos: default, favorited, archived, draft,
 no description, no genre, very long title (truncation), grid of
-mixed cards (responsive). Belongs in `Patterns/Story list/Story
-Card` when component implementation begins.
+mixed cards (responsive). Lives at `Compounds/Story/StoryCard`
+(domain compound under `components/story/`).
 
 ## What this design defers
 
