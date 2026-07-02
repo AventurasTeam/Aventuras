@@ -9,10 +9,14 @@ import { resolveByTable, type StorePatch } from './registry'
 
 export class DeltaReplayError extends Error {
   readonly actionId: string
-  constructor(message: string, opts: { cause: unknown; actionId: string }) {
+  // True when the DB transaction already committed (deltas pruned) and the failure
+  // is post-commit store sync — callers must not retry it as a rollback failure.
+  readonly committed: boolean
+  constructor(message: string, opts: { cause: unknown; actionId: string; committed?: boolean }) {
     super(message, { cause: opts.cause })
     this.name = 'DeltaReplayError'
     this.actionId = opts.actionId
+    this.committed = opts.committed ?? false
   }
 }
 
@@ -100,19 +104,29 @@ async function buildUndoOps(
 // actionId-scoped reverseReplayDeltas deliberately does not prune; this does.
 export async function reverseAndPruneDeltaRows(rows: Delta[], ctx: DbCtx): Promise<number> {
   if (rows.length === 0) return 0
+  const actionId = rows[0]?.actionId ?? 'rollback'
+  let patches: PatchEmission[]
   try {
-    const { ops, patches } = await buildUndoOps(rows, ctx)
+    const built = await buildUndoOps(rows, ctx)
+    patches = built.patches
     const pruneOps = rows.map((r) => ctx.db.delete(deltas).where(eq(deltas.id, r.id)).toSQL())
-    await ctx.runInTransaction([...ops, ...pruneOps])
-    for (const p of patches) resolveByTable(p.table)?.patcher?.(p.branchId, p.patch)
-    return rows.length
+    await ctx.runInTransaction([...built.ops, ...pruneOps])
   } catch (e) {
     if (e instanceof DeltaReplayError) throw e
-    throw new DeltaReplayError('Reverse-and-prune failed', {
+    throw new DeltaReplayError('Reverse-and-prune failed', { cause: e, actionId })
+  }
+  // Past the transaction the reversal + prune are committed; a patcher throw is a
+  // store-sync failure, not a rollback failure. Flag committed so callers don't retry.
+  try {
+    for (const p of patches) resolveByTable(p.table)?.patcher?.(p.branchId, p.patch)
+  } catch (e) {
+    throw new DeltaReplayError('Post-commit patch sync failed', {
       cause: e,
-      actionId: rows[0]?.actionId ?? 'rollback',
+      actionId,
+      committed: true,
     })
   }
+  return rows.length
 }
 
 export async function reverseReplayDeltas(actionId: string, ctx: DbCtx): Promise<number> {
