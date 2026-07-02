@@ -878,6 +878,15 @@ explicit.
     (runtime validation surface partial — full pack-format editor
     parked post-v1 per
     [`parked.md`](../parked.md#prompt-pack-editor-desktop-spec--mobile-retrofit)).
+    Live packs are the first user-authored macros, so the
+    include-compatibility validator must extend here: it scans
+    template sources only, leaving macro→macro includes
+    (transitive group mismatch, macro-sourced missing-macro refs)
+    unchecked — inert while the pack is bundled-only and immutable,
+    a real gap once packs are editable. Pack selection also lands
+    here as a separate render argument, never encoded in the template
+    id (a closed static union — see
+    [`architecture.md`](../architecture.md#template-and-macro-id-space)).
 - **Observability sinks beyond the logger**
   ([`observability.md`](../observability.md)).
   - **M1.3 / M1.4 / M1.5a** — `logger`, `httpCallSink` (fully
