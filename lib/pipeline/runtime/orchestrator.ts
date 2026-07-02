@@ -12,7 +12,7 @@ import { logger, makeLogger, turnCaptureSink } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { generationStore, type RunState } from '@/lib/stores'
 
-import { getPipeline } from '../authoring/registry'
+import { getPipeline, getPipelineSafe } from '../authoring/registry'
 import type {
   PhaseContext,
   PhaseEmittedEvent,
@@ -52,6 +52,7 @@ function newRunState(kind: string, ctx: RunCtx): RunState {
   return {
     runId: generateId('run'),
     kind,
+    gateBehavior: getPipeline(kind).gateBehavior,
     actionId: generateId('act'),
     storyId: ctx.storyId,
     branchId: ctx.branchId,
@@ -221,7 +222,16 @@ async function commitRun(
 ): Promise<{ tx: TxResult; successor?: RunState }> {
   const pipeline = getPipeline(run.kind)
   const nextKind = pipeline.chainsTo?.(run) ?? null
-  const successor = nextKind ? newRunState(nextKind, ctx) : undefined
+  // chainsTo may name an unregistered kind (authoring bug); resolve it without
+  // throwing so a bad chain can't strand the just-committed run in txState.runs.
+  const nextPipeline = nextKind ? getPipelineSafe(nextKind) : undefined
+  if (nextKind && !nextPipeline)
+    logger.error(
+      'pipeline.chain_target_missing',
+      { runId: run.runId, kind: run.kind, nextKind },
+      { actionId: run.actionId },
+    )
+  const successor = nextPipeline ? newRunState(nextPipeline.kind, ctx) : undefined
   generationStore.finishRun(run.runId, successor)
   try {
     await ctx.db
