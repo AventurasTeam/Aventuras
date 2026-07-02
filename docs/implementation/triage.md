@@ -28,7 +28,7 @@ slice-planning gate forces its resolution before that slice is planned.
   can only confirm the bar by inspection. A `lib`-only coverage
   script or project would make it verifiable on demand. Surfaced by
   Slice 2.8.
-  
+
 ### Composer-mode wrap: canonical reframe to in-code i18n
 
 Decided in M2.6 (pack-engine) planning: composer-mode send-time wrap
