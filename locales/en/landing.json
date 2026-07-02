@@ -1,6 +1,36 @@
 {
   "title": "Aventuras",
-  "emptyTitle": "No stories yet",
-  "emptyBody": "Stories will appear here once created.",
-  "openReaderDebug": "Open reader (debug)"
+  "banner": {
+    "aiNotConfigured": "AI generation not configured.",
+    "setUpProvider": "Set up a provider →"
+  },
+  "list": {
+    "title": "Stories",
+    "total": "{{count}} total",
+    "newStory": "+ New story",
+    "searchPlaceholder": "Search stories",
+    "filterAll": "All",
+    "filterFavorited": "Favorited",
+    "filterArchived": "Archived",
+    "sortLabel": "sort",
+    "sortLastOpened": "Last opened",
+    "sortCreated": "Created",
+    "sortTitle": "Title",
+    "welcomeTitle": "Welcome to Aventuras",
+    "welcomeBody": "Create your first story to begin. Everything stays on this device.",
+    "createFirst": "+ Create your first story",
+    "noResults": "No stories match your search or filters."
+  },
+  "delete": {
+    "title": "Delete this story?",
+    "body": "This permanently removes the story and all its branches, entries, and world data. This cannot be undone.",
+    "cancel": "Cancel",
+    "confirm": "Delete"
+  },
+  "errors": {
+    "openFailed": "Couldn't open the story. Please try again.",
+    "favoriteFailed": "Couldn't update favorite. Please try again.",
+    "archiveFailed": "Couldn't update the story. Please try again.",
+    "deleteFailed": "Couldn't delete the story. Please try again."
+  }
 }

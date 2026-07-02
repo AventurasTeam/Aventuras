@@ -21,9 +21,13 @@ export function registerPipeline(p: Pipeline): Pipeline {
 }
 
 export function getPipeline(kind: string): Pipeline {
-  const p = registry.get(kind)
+  const p = getPipelineSafe(kind)
   if (!p) throw new Error(`No pipeline registered for kind: ${kind}`)
   return p
+}
+
+export function getPipelineSafe(kind: string): Pipeline | undefined {
+  return registry.get(kind)
 }
 
 // Test seam — synthetic pipelines re-register each test.

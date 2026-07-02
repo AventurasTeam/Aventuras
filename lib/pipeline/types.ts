@@ -1,6 +1,8 @@
 import type { PipelineAction } from '@/lib/actions'
+import type { ResolveFailureKind, ResolveTarget } from '@/lib/ai'
+import type { StorySettings } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
-import type { RunState } from '@/lib/stores'
+import type { AppSettingsSnapshot, RunState } from '@/lib/stores'
 
 export type PipelineError =
   | { kind: 'provider'; reason: 'auth' | 'network' | 'timeout' | 'unknown'; detail?: string }
@@ -13,6 +15,13 @@ export type PipelineError =
       constraintViolated?: string
     }
   | { kind: 'orchestrator'; detail: string }
+  | {
+      kind: 'config-resolver'
+      failure: ResolveFailureKind
+      target: ResolveTarget
+      phaseName: string
+      detail?: string
+    }
 
 export type PhaseResult =
   | { status: 'completed' }
@@ -48,9 +57,22 @@ export type PhaseContext = {
 
 export type PhaseFn = (ctx: PhaseContext) => AsyncGenerator<PhaseEmittedEvent, PhaseResult>
 
+export type PreflightSnapshot = {
+  appSettings: AppSettingsSnapshot
+  storySettings?: StorySettings
+}
+
+export type ResolverInput = {
+  target: ResolveTarget
+  when?: (snapshot: PreflightSnapshot) => boolean
+}
+
 export type PhaseNode =
-  | { name: string; run: PhaseFn }
-  | { name: string; parallel: readonly { name: string; run: PhaseFn }[] }
+  | { name: string; run: PhaseFn; resolves?: readonly ResolverInput[] }
+  | {
+      name: string
+      parallel: readonly { name: string; run: PhaseFn; resolves?: readonly ResolverInput[] }[]
+    }
 
 export type ConcurrencyPolicy = { blockedBy?: readonly string[]; yieldsTo?: readonly string[] }
 

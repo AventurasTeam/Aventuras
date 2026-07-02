@@ -26,6 +26,7 @@ function runState(kind: string): RunState {
   return {
     runId: `r_${kind}`,
     kind,
+    gateBehavior: 'no-gate',
     actionId: 'a',
     storyId: null,
     branchId: 'b',

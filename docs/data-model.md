@@ -1071,6 +1071,28 @@ queries.
 favorited stories always float to the top within any filter. Mirrors
 the Layer 0 rule for lead-character sort on entity lists.
 
+### Story deletion
+
+**Decided:** deleting a story removes its entire **owned graph** in one
+transaction; **referenced/shared resources survive.**
+
+- **Owned (cascades):** all branch-scoped rows across every per-branch table
+  (`story_entries`, `entities`, `character_relationships`, `lore`, `threads`,
+  `happenings`, `happening_involvements`, `happening_awareness`, `chapters`,
+  `branch_era_flips`, `translations`, `probe_captures`, `deltas`,
+  `entry_assets`), plus story-scoped `pipeline_runs` and the `branches`
+  themselves, then the `stories` row. The cascade enumerates **every** table
+  even when empty, so future content cannot be orphaned. No DB-level
+  `ON DELETE` cascade exists; the action layer deletes child→parent.
+- **Referenced (survives):** `vault_calendars` is a shared vault resource —
+  a story references a calendar by `definition.calendarSystemId`, it does not
+  own it. `assets` are content-addressed binary media shared by reference (see
+  [Cleanup on delete — trash-can pattern](#assets-images--future-media)):
+  deletion drops the `entry_assets` junction rows only; orphaned blobs are
+  reclaimed by the refcount-trashing + boot-sweep GC, not by the story delete.
+- **No delta rows:** a story delete writes zero `deltas` (it deletes them); the
+  operation is a config-table cascade, not a delta-logged domain write.
+
 ### Story settings shape
 
 **Decided:** `stories` carries TWO zod-parsed JSON blobs, split by
@@ -2064,6 +2086,17 @@ update / delete operations on those rows produce deltas as usual.
 This is the second delta-scope exemption alongside the
 `story_entries.content` text-edit side-channel above; together they
 are the only narrative-state mutations that bypass the log.
+
+**System entries are not delta-logged.** A `kind='system'` entry — a
+pre-flight or runtime config-failure surfaced in the reader per
+[`reader-composer.md → Error surface`](./ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill)
+— is a diagnostic artifact, not a narrative-state mutation, so it bypasses
+the delta log entirely: a direct insert into `story_entries` with no
+corresponding `deltas` row. It exists only as
+the **branch-tail singleton** (at most one per branch, always the last
+entry) and is removed on resolution (user dismiss or config repair) or
+cleared at the next main (per-turn) pipeline run. Carrying no delta, it is
+invisible to rollback and CTRL-Z.
 
 **`log_position` assignment.** Computed at insert time inside the
 same SQLite transaction as the delta row:

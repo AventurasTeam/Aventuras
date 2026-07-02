@@ -2,13 +2,14 @@ import { and, eq } from 'drizzle-orm'
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import { describe, expect, it } from 'vitest'
 
+import type { Delta } from '@/lib/db'
 import { branches, deltas, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { createWorkingSetStore } from '@/lib/stores'
 
 import { applyDeltaAction } from '../apply-delta-action'
-import { __resetRegistry, register, type ActionHandler } from '../registry'
-import { reverseReplayDeltas } from '../reverse-replay'
+import { __resetRegistry, register, type ActionHandler, type StorePatcher } from '../registry'
+import { reverseAndPruneDeltaRows, reverseReplayDeltas } from '../reverse-replay'
 
 // Throwaway domain — raw SQL only; never in the real schema/migrations.
 const fixtures = sqliteTable('fixtures', {
@@ -119,7 +120,7 @@ type TestCtx = {
   store: ReturnType<typeof createWorkingSetStore<FixtureRow>>
 }
 
-async function setup(): Promise<TestCtx> {
+async function setup(patcher?: StorePatcher): Promise<TestCtx> {
   // vitest.setup.ts registered the real domains process-globally; reset so only the fixture domain is live.
   __resetRegistry()
   const { db, sqlite, runInTransaction } = await createTestDb()
@@ -144,7 +145,7 @@ async function setup(): Promise<TestCtx> {
       fixtureUpdate: fixtureUpdateHandler,
       fixtureDelete: fixtureDeleteHandler,
     },
-    patcher: (branchId, p) => store.patch(branchId, p),
+    patcher: patcher ?? ((branchId, p) => store.patch(branchId, p)),
   })
 
   return { db, runInTransaction, store }
@@ -249,5 +250,33 @@ describe('fixture domain self-registration + roundtrip (AC5)', () => {
     expect((await db.select().from(fixtures)).length).toBe(0)
     expect((await db.select().from(deltas)).length).toBe(0)
     expect(store.getRows().size).toBe(0)
+  })
+
+  it('reverse-and-prune: post-commit patcher failure reports committed; DB stays reversed', async () => {
+    // Throw only on the reverse (op:'delete') patch so the forward create still commits.
+    const { db, runInTransaction } = await setup((_branchId, p) => {
+      if (p.op === 'delete') throw new Error('patcher boom')
+    })
+    const ctx = { db, runInTransaction }
+
+    await applyDeltaAction(
+      {
+        action: { kind: 'fixtureCreate', source: 'user_edit', payload: { row: ROW } },
+        actionId: 'act_prune',
+        branchId: 'b1',
+      },
+      ctx,
+    )
+
+    const rows = (await db.select().from(deltas).where(eq(deltas.actionId, 'act_prune'))) as Delta[]
+    await expect(reverseAndPruneDeltaRows(rows, ctx)).rejects.toMatchObject({
+      name: 'DeltaReplayError',
+      message: 'Post-commit patch sync failed',
+      committed: true,
+    })
+
+    // Reversal + prune committed before the patcher threw.
+    expect((await db.select().from(fixtures).where(eq(fixtures.id, 'f1'))).length).toBe(0)
+    expect((await db.select().from(deltas).where(eq(deltas.actionId, 'act_prune'))).length).toBe(0)
   })
 })

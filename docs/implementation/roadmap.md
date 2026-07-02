@@ -199,6 +199,14 @@ to render against (the tables + stores exist from M1.5; M3 fills them).
     and the reversal predicate that refines M2.5's naive suffix sweep
     so a lagging fact about a surviving turn isn't over-reversed, per
     [`data-model.md → Survival anchor`](../data-model.md#survival-anchor).
+  - In-flight classifier barrier for prose reversals (rollback,
+    regenerate, CTRL-Z). M2.2 brackets the rollback sweep with
+    `reversalInProgress` (selection runs inside the barrier), but the
+    `awaitRunTerminal` classifier-cancel drain lands here — it needs
+    `awaitRunTerminal` relocated from `lib/pipeline` into the
+    generation store (mirroring M2.2's gate move) so `lib/actions`
+    stays cycle-free, per
+    [`generation-pipeline.md → Prose reversals and the classifier barrier`](../generation-pipeline.md#prose-reversals-and-the-classifier-barrier).
   - Happening reconcile cascades to the FK-less link tables: deleting
     or merging a happening must also drop / reattach its
     `happening_involvements` and `happening_awareness` rows. The M1.5
@@ -878,6 +886,15 @@ explicit.
     (runtime validation surface partial — full pack-format editor
     parked post-v1 per
     [`parked.md`](../parked.md#prompt-pack-editor-desktop-spec--mobile-retrofit)).
+    Live packs are the first user-authored macros, so the
+    include-compatibility validator must extend here: it scans
+    template sources only, leaving macro→macro includes
+    (transitive group mismatch, macro-sourced missing-macro refs)
+    unchecked — inert while the pack is bundled-only and immutable,
+    a real gap once packs are editable. Pack selection also lands
+    here as a separate render argument, never encoded in the template
+    id (a closed static union — see
+    [`architecture.md`](../architecture.md#template-and-macro-id-space)).
 - **Observability sinks beyond the logger**
   ([`observability.md`](../observability.md)).
   - **M1.3 / M1.4 / M1.5a** — `logger`, `httpCallSink` (fully

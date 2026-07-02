@@ -1,94 +1,84 @@
 import { useState } from 'react'
 import { ScrollView, View } from 'react-native'
 
-import { StoryCard, type Story } from '@/components/compounds/story-card'
 import { ThemePicker } from '@/components/foundations/sections/theme-picker'
+import { StoryCard } from '@/components/story/story-card'
 import { Heading } from '@/components/ui/heading'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import type { StoryCardData } from '@/lib/stores'
 import { cn } from '@/lib/utils'
 
-const SAMPLE_STORIES: Story[] = [
-  {
+const makeStoryRow = (p: Partial<StoryCardData> & { id: string }): StoryCardData => ({
+  title: 'Untitled',
+  description: null,
+  tags: [],
+  coverAssetId: null,
+  accentColor: null,
+  status: 'active',
+  favorite: 0,
+  lastOpenedAt: null,
+  definition: { mode: 'adventure', genre: { label: 'Misc' } } as never,
+  settings: null,
+  createdAt: 1,
+  updatedAt: 1,
+  currentBranchId: null,
+  chapterLabel: 'Chapter 1',
+  lastOpenedRelative: '2h ago',
+  ...p,
+})
+
+const SAMPLE_STORIES: StoryCardData[] = [
+  makeStoryRow({
     id: '1',
     title: "Aria's Descent",
     description:
       'A former royal guard hunts the Warden through the undercities of Ironshore, hoping to clear her name before the war reaches the capital.',
-    genreLabel: 'Dark Fantasy',
-    mode: 'adventure',
-    accentColor: null,
-    favorited: true,
-    archived: false,
-    isDraft: false,
+    definition: { mode: 'adventure', genre: { label: 'Dark Fantasy' } } as never,
+    favorite: 1,
     chapterLabel: 'Chapter 3',
-    lastOpenedRelative: '2h ago',
-  },
-  {
+  }),
+  makeStoryRow({
     id: '2',
     title: 'The Iron Pact',
     description: 'Three rival houses negotiate peace at a wedding nobody wanted.',
-    genreLabel: 'Political Drama',
-    mode: 'adventure',
+    definition: { mode: 'adventure', genre: { label: 'Political Drama' } } as never,
     accentColor: '#dc2626',
-    favorited: false,
-    archived: false,
-    isDraft: false,
-    chapterLabel: 'Chapter 1',
     lastOpenedRelative: '5d ago',
-  },
-  {
+  }),
+  makeStoryRow({
     id: '3',
     title: 'Untitled draft',
-    description: null,
-    genreLabel: null,
-    mode: 'adventure',
-    accentColor: null,
-    favorited: false,
-    archived: false,
-    isDraft: true,
+    status: 'draft',
+    definition: null,
     chapterLabel: null,
     lastOpenedRelative: '1h ago',
-  },
-  {
+  }),
+  makeStoryRow({
     id: '4',
     title: 'Tea House Diaries',
     description:
       "Slice-of-life vignettes from a tea house at the edge of the world. Each entry follows a single guest's day.",
-    genreLabel: 'Cozy Slice-of-Life',
-    mode: 'creative',
-    accentColor: null,
-    favorited: false,
-    archived: true,
-    isDraft: false,
+    definition: { mode: 'creative', genre: { label: 'Cozy Slice-of-Life' } } as never,
+    status: 'archived',
     chapterLabel: 'Chapter 7',
     lastOpenedRelative: '3w ago',
-  },
-  {
+  }),
+  makeStoryRow({
     id: '5',
     title: 'Greenhouse Saga',
-    description: null,
-    genreLabel: 'Solarpunk',
-    mode: 'creative',
+    definition: { mode: 'creative', genre: { label: 'Solarpunk' } } as never,
     accentColor: '#10b981',
-    favorited: true,
-    archived: false,
-    isDraft: false,
+    favorite: 1,
     chapterLabel: 'Chapter 12',
     lastOpenedRelative: '12h ago',
-  },
-  {
+  }),
+  makeStoryRow({
     id: '6',
     title: 'A title that runs long enough to verify the two-line truncation behavior',
     description: 'Short description.',
-    genreLabel: 'Misc',
-    mode: 'adventure',
-    accentColor: null,
-    favorited: false,
-    archived: false,
-    isDraft: false,
-    chapterLabel: 'Chapter 1',
     lastOpenedRelative: 'just now',
-  },
+  }),
 ]
 
 export default function StoryCardDevRoute() {
@@ -101,7 +91,7 @@ export default function StoryCardDevRoute() {
   // FlatList numColumns calc.
   const colClass = tier === 'phone' ? 'w-full' : tier === 'tablet' ? 'w-1/2' : 'w-1/4'
 
-  const updateStory = (id: string, partial: Partial<Story>) => {
+  const updateStory = (id: string, partial: Partial<StoryCardData>) => {
     setStories((prev) => prev.map((s) => (s.id === id ? { ...s, ...partial } : s)))
   }
 
@@ -135,8 +125,12 @@ export default function StoryCardDevRoute() {
                 <StoryCard
                   story={s}
                   onOpen={() => recordAction('Open', s.id)}
-                  onToggleFavorite={() => updateStory(s.id, { favorited: !s.favorited })}
-                  onArchiveToggle={() => updateStory(s.id, { archived: !s.archived })}
+                  onToggleFavorite={() => updateStory(s.id, { favorite: s.favorite === 1 ? 0 : 1 })}
+                  onArchiveToggle={() =>
+                    updateStory(s.id, {
+                      status: s.status === 'archived' ? 'active' : 'archived',
+                    })
+                  }
                   onEditInfo={() => recordAction('Edit info', s.id)}
                   onDuplicate={() => recordAction('Duplicate', s.id)}
                   onExport={() => recordAction('Export', s.id)}

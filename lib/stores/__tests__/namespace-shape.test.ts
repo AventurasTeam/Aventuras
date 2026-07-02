@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Entity } from '@/lib/db'
+import { BUNDLED_PACK_ID } from '@/lib/prompts'
 import {
   appSettingsStore,
   entitiesStore,
   generationStore,
   navigationStore,
   resetAllStores,
+  storiesStore,
   type RunState,
 } from '@/lib/stores'
 
@@ -38,10 +40,18 @@ describe('lib/stores public surface', () => {
     expect(typeof entitiesStore.getByKind).toBe('function')
   })
 
+  it('exposes the stories selectors + open-failure mutators', () => {
+    expect(typeof storiesStore.useStories).toBe('function')
+    expect(typeof storiesStore.getStories).toBe('function')
+    expect(typeof storiesStore.setOpenFailure).toBe('function')
+    expect(typeof storiesStore.clearOpenFailure).toBe('function')
+  })
+
   it('resetAllStores clears every store', () => {
     const run: RunState = {
       runId: 'r1',
       kind: 'synthetic',
+      gateBehavior: 'no-gate',
       actionId: 'a1',
       storyId: null,
       branchId: 'b1',
@@ -87,7 +97,7 @@ describe('lib/stores public surface', () => {
     expect(settings.onboardingCompletedAt).toBeNull()
     expect(settings.uiLanguage).toBe('en')
     expect(settings.appearance.density).toBe('default')
-    expect(settings.defaultStorySettings).toEqual({})
+    expect(settings.defaultStorySettings).toEqual({ activePackId: BUNDLED_PACK_ID })
     expect(settings.defaultSuggestionCategories).toEqual({ adventure: [], creative: [] })
     expect(settings.diagnostics).toEqual({ enabled: false, debug_level_enabled: false })
   })

@@ -282,6 +282,16 @@ typed miss the host maps to "no footer label" per
 [`reader-composer.md → Per-entry world-time footer`](../../../ui/screens/reader-composer/reader-composer.md#per-entry-world-time-footer).
 Exact name fixed in 2.3's first `lib/calendar` commit.
 
+### C8 — Entries working-set store ownership
+
+[Slice 2.2](./slices/02-entry-arms.md) creates `lib/stores/entries`
+(hydrate + patch + `getById` selectors) and registers it as the
+`story_entries` delta patcher, so create / update / delete mirror
+through it. [Slice 2.5](./slices/05-reader.md) owns the consuming
+surface — the entry-window selectors, scroll model, and the
+hydrate-on-story-open trigger; it **extends** this store rather than
+re-creating it.
+
 ### C5 — Wizard-session prompt seam
 
 [Slice 2.3](./slices/03-wizard.md) owns the wizard auto-save
@@ -346,11 +356,6 @@ either side.
 
 ## Open questions
 
-- **`activePackId` seeding.** Whether M2 stories carry the
-  bundled pack's literal id in `stories.settings.activePackId`
-  (seeded via `default_story_settings`) or `null` is interpreted
-  as "bundled". Resolve in [Slice 2.6](./slices/06-pack-engine.md)
-  planning — affects the M7.2 pack tab's notion of "default".
 - **M2 chapter chrome.** ScreenShell's in-story variant always
   renders the token-progress strip, but token counting
   (`js-tiktoken`) lands in M3.4 and chapters don't close before

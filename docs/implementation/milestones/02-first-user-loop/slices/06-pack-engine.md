@@ -76,8 +76,7 @@ editor consumer is M7.2.
   tone / setting until M3.6; entries buffer; structural-floor
   entity injection; no retrieval buckets yet), wizard-group
   templates for opening generation / title chips / description,
-  output-format macros (`staticContent`), and the composer wrap
-  macros — one per `(Do | Say | Think) × (first | third)` cell.
+  and output-format macros (`staticContent`).
 - **Structural-floor invariant test:** context fixture with an
   entity carrying `injection_mode: 'disabled'` AND present in
   `sceneEntities`; render the bundled per-turn template; assert
@@ -100,6 +99,10 @@ editor consumer is M7.2.
 - The author-time (editor) include-mismatch flagging and the
   full pack-validation contract — parked.
 - `js-tiktoken`-backed filters — M3.4.
+- Composer-mode wrap (`Do` / `Say` / `Think` × `first` / `third`) —
+  implemented in-code (i18n-keyed) in
+  [Slice 2.5](./05-reader.md), not as pack macros; the engine
+  receives the already-wrapped action. Moved out in M2.6 planning.
 
 ## Acceptance criteria
 
@@ -116,8 +119,6 @@ editor consumer is M7.2.
 - The include-compatibility validator rejects a fixture pack
   whose `generationContext` template includes a `wizard`-tagged
   macro, and accepts `staticContent` includes from any group.
-- Wrap macros produce the principle doc's exact example outputs
-  for all six cells given `{ text, leadName }`-shaped input.
 - The registry integrity validator reports an unmapped template
   id fixture and passes on the shipped registry.
 - Consumers reference template / macro ids via the exported
@@ -135,11 +136,55 @@ editor consumer is M7.2.
 
 ## Open questions
 
-- `activePackId` seeding (milestone open question — owned here).
-- Whether the bundled pack lives as repo `.liquid` files bundled
-  via the asset pipeline or as code-embedded strings — pick at
-  planning; affects how M7.2's editor later reads it.
+_Both resolved during planning — see Implementation notes
+(`activePackId` seeding; bundled-pack storage)._
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+**Resolved decisions.**
+
+- **`activePackId` seeding.** M2 stories carry the bundled pack's
+  literal id `BUNDLED_PACK_ID` (`pack_bundled_default`) in
+  `settings.activePackId`, seeded via `default_story_settings`; the
+  engine resolves that id to the embedded bundled pack. Chosen over
+  null-means-bundled for forward-compatibility with the M7.2 packs
+  table (bundled becomes a real row with that id; nothing migrates).
+- **Bundled-pack storage.** Code-embedded TypeScript string exports
+  composed into the in-memory `Pack`, not `.liquid` asset files —
+  zero bundler config across Metro, Electron, and Vitest.
+- **Composer-wrap macros descoped.** Moved out of the pack to
+  in-code i18n in [Slice 2.5](./05-reader.md): the wrapped string is
+  target-language user content, but a pack is English-source. The
+  per-turn template receives the already-wrapped action. The
+  canonical reframe (principles, architecture, C2) is queued in
+  [triage.md](../../../triage.md).
+- **Synchronous render.** `renderTemplate(templateId, context)`
+  renders via LiquidJS `renderFileSync`; every M2 filter and
+  in-memory include is synchronous. The `lib/prompts` barrel
+  therefore statically pulls `liquidjs` (a sync render path cannot
+  lazy-import it); consumers import the barrel, never deep paths.
+- **Variable-name contract.** `templateContextMap.ts` pins the M2
+  `generationContext` names (`entries`, `entities`, `sceneEntities`,
+  `definition`, `userSettings`, `intermediates`) that
+  [Slice 2.7](./07-wiring.md)'s context builder must match — a
+  mismatch only fails at integration. The filter set is the M2
+  minimum (`by_kind`, `active`, `prose_join`, `json`); `upcase_first`
+  left with the wraps.
+
+**Known limitation.** The load-time include validator is a regex; it
+also flags includes inside `{% comment %}` blocks (a harmless
+false-positive, inert for the bundled pack). Folds into the parked
+M7.2 author-time validator.
+
+**Forward note for 2.7.** Its context builder should normalize empty
+or whitespace-only definitional fields and guard array contents
+passed to the filters — tracked in [Slice 2.7](./07-wiring.md) Open
+questions.
+
+**Forward note (M7.2 pack system).** Template ids are a closed static
+union (`renderTemplate` takes `TemplateId`): users edit content
+within a fixed template set, not pipelines, so no arbitrary template
+ids exist. Pack selection is therefore a separate argument to be
+added with the pack system, not encoded in the template id. Macro
+ids are forced to a `macro_` prefix so the engine's flat template-and-macro
+lookup map (which merges both id spaces) stays collision-free.
