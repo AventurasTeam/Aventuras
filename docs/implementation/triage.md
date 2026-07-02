@@ -19,6 +19,16 @@ slice-planning gate forces its resolution before that slice is planned.
 
 ## Inbox
 
+- **Scoped coverage is not push-button reproducible.** The
+  dual-project vitest setup (storybook browser + unit node) drops a
+  single `lib/*` module from the merged `--coverage` report, and CLI
+  `--coverage.include` overrides crash the storybook project loader.
+  Slices that assert per-module line coverage (e.g.
+  [Slice 2.8](./milestones/02-first-user-loop/slices/08-id-substitution.md))
+  can only confirm the bar by inspection. A `lib`-only coverage
+  script or project would make it verifiable on demand. Surfaced by
+  Slice 2.8.
+  
 ### Composer-mode wrap: canonical reframe to in-code i18n
 
 Decided in M2.6 (pack-engine) planning: composer-mode send-time wrap
