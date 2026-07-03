@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { BackHandler, Platform, View } from 'react-native'
 
 import { Text } from '@/components/ui/text'
+import { StepFrame } from '@/components/wizard/step-frame'
 import { WizardShell } from '@/components/wizard/wizard-shell'
 import { t } from '@/lib/i18n'
 import { wizardStore } from '@/lib/stores'
@@ -59,7 +60,7 @@ export default function WizardRoute() {
       }}
       onJump={(s) => wizardStore.setStep(s)}
     >
-      <StepBodyPlaceholder step={step} />
+      {step === 1 ? <StepFrame /> : <StepBodyPlaceholder step={step} />}
     </WizardShell>
   )
 }

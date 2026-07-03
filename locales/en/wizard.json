@@ -20,5 +20,39 @@
     "frame": "Step 1 — Frame",
     "calendar": "Step 2 — Calendar",
     "opening": "Step 5 — Opening & finish"
+  },
+  "frame": {
+    "heading": "How is this story told?",
+    "mode": {
+      "label": "Mode",
+      "adventure": {
+        "label": "Adventure",
+        "description": "You play a character. AI runs the world."
+      },
+      "creative": {
+        "label": "Creative",
+        "description": "You write the prose. AI helps draft."
+      }
+    },
+    "narration": {
+      "label": "Narration",
+      "first": {
+        "label": "First",
+        "description": "\"I drew…\""
+      },
+      "second": {
+        "label": "Second",
+        "description": "\"You drew…\""
+      },
+      "third": {
+        "label": "Third",
+        "description": "\"Aria drew…\""
+      }
+    },
+    "leadNotice": "This combination will require a lead character in Cast.",
+    "leadName": {
+      "label": "Lead character name",
+      "placeholder": "e.g. Aria Stoneheart"
+    }
   }
 }
