@@ -49,6 +49,9 @@
     },
     "failed": "Couldn't create the story."
   },
+  "errors": {
+    "saveDraftFailed": "Couldn't save the draft. Please try again."
+  },
   "frame": {
     "heading": "How is this story told?",
     "mode": {

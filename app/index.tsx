@@ -24,6 +24,7 @@ import { Text } from '@/components/ui/text'
 import {
   clearLiveSession,
   deleteStory,
+  loadDraft,
   openStory,
   setStoryArchived,
   setStoryFavorite,
@@ -34,6 +35,7 @@ import {
   rehydrateStories,
   selectStoryCards,
   storiesStore,
+  wizardStore,
   type StoryFilter,
   type StoryListQuery,
   type StorySort,
@@ -62,7 +64,12 @@ export default function Index() {
 
   const cards = useMemo(() => selectStoryCards(rows, query, Date.now()), [rows, query])
 
-  const goWizard = () => router.push('/wizard' as Href)
+  // draftId rides the URL (mirrors the existing /settings?tab= precedent)
+  // so app/wizard.tsx knows which draft to update on Save-as-draft/Finish —
+  // the working-state itself is already delivered via wizardStore.hydrate,
+  // called synchronously before this navigation.
+  const goWizard = (draftId?: string) =>
+    router.push((draftId ? `/wizard?draftId=${draftId}` : '/wizard') as Href)
   const onNewStory = () => {
     if (sessionExists) {
       setPrompt({ trigger: 'new-story' })
@@ -75,7 +82,17 @@ export default function Index() {
       setPrompt({ trigger: 'draft', storyId })
       return
     }
-    goWizard()
+    runAction(
+      loadDraft(storyId, ctx).then((draft) => {
+        if (draft) wizardStore.hydrate(draft)
+        goWizard(storyId)
+      }),
+      {
+        event: 'action_layer.wizard_draft_load_failed',
+        toastMessage: t('landing:errors.draftLoadFailed'),
+        context: { storyId },
+      },
+    )
   }
 
   const cardHandlers = (storyId: string): StoryCardHandlers => {
@@ -144,15 +161,25 @@ export default function Index() {
           goWizard()
         }}
         onDiscard={() => {
+          const target = prompt
           runAction(
-            clearLiveSession(ctx).then(() => {
+            clearLiveSession(ctx).then(async () => {
+              if (target?.trigger === 'draft' && target.storyId) {
+                const draft = await loadDraft(target.storyId, ctx)
+                if (draft) wizardStore.hydrate(draft)
+                else wizardStore.reset()
+                setPrompt(null)
+                goWizard(target.storyId)
+                return
+              }
+              wizardStore.reset()
               setPrompt(null)
               goWizard()
             }),
             {
               event: 'action_layer.wizard_session_discard_failed',
               toastMessage: t('landing:errors.discardSessionFailed'),
-              context: { storyId: prompt?.storyId },
+              context: { storyId: target?.storyId },
             },
           )
         }}

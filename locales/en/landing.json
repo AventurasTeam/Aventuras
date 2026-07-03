@@ -46,6 +46,7 @@
     "favoriteFailed": "Couldn't update favorite. Please try again.",
     "archiveFailed": "Couldn't update the story. Please try again.",
     "deleteFailed": "Couldn't delete the story. Please try again.",
-    "discardSessionFailed": "Couldn't discard the session. Please try again."
+    "discardSessionFailed": "Couldn't discard the session. Please try again.",
+    "draftLoadFailed": "Couldn't open the draft. Please try again."
   }
 }

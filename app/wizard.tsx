@@ -1,19 +1,25 @@
-import { useRouter, type Href } from 'expo-router'
-import { useEffect } from 'react'
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router'
+import { useEffect, useState } from 'react'
 import { BackHandler, Platform } from 'react-native'
 
 import { finishWizard } from '@/components/wizard/finish'
 import { StepCalendar } from '@/components/wizard/step-calendar'
 import { StepFrame } from '@/components/wizard/step-frame'
+import { needsLead } from '@/components/wizard/step-frame-logic'
 import { StepOpening } from '@/components/wizard/step-opening'
+import { validateOriginTuple } from '@/components/wizard/tier-tuple-input-logic'
 import { WizardShell } from '@/components/wizard/wizard-shell'
-import { db, runInTransaction } from '@/lib/db'
+import { saveLiveSession, saveStoryDraft } from '@/lib/actions'
+import { DEFAULT_CALENDAR_ID, getCalendar } from '@/lib/calendar'
+import { db, emptyWorkingState, runInTransaction } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { appSettingsStore, wizardStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 import { runAction } from '@/lib/utils'
 
 const ctx = { db, runInTransaction }
+
+const AUTOSAVE_DEBOUNCE_MS = 500
 
 const FINISH_REASON_KEY = {
   title: 'wizard:finish.missing.title',
@@ -23,7 +29,21 @@ const FINISH_REASON_KEY = {
 
 export default function WizardRoute() {
   const router = useRouter()
+  const { draftId } = useLocalSearchParams<{ draftId?: string }>()
+  // The draft this session was resumed from, if any — carried as a nav param
+  // (set by app/index.tsx's openDraft, mirroring the existing /settings?tab=
+  // precedent) rather than in wizardStore's own state, since it's navigation
+  // provenance, not part of the working-state the store persists/commits.
+  const [sourceDraftId] = useState<string | null>(() =>
+    typeof draftId === 'string' ? draftId : null,
+  )
+
   const step = wizardStore.useWizard((s) => s.state.step)
+  const mode = wizardStore.useWizard((s) => s.state.definition.mode)
+  const narration = wizardStore.useWizard((s) => s.state.definition.narration)
+  const leadName = wizardStore.useWizard((s) => s.state.leadName)
+  const calendarSystemId = wizardStore.useWizard((s) => s.state.definition.calendarSystemId)
+  const worldTimeOrigin = wizardStore.useWizard((s) => s.state.definition.worldTimeOrigin)
 
   const goNext = () => wizardStore.setStep(step === 2 ? 5 : step + 1)
   const goBack = () => wizardStore.setStep(step === 5 ? 2 : step - 1)
@@ -41,6 +61,39 @@ export default function WizardRoute() {
     return () => sub.remove()
   }, [router])
 
+  // Auto-save mirror (wizard.md → Save/cancel/draft semantics): every store
+  // change debounces a saveLiveSession write so Next/Back/pill nav and field
+  // edits survive a restart. Gated on "not the pristine default" rather than
+  // "skip callback #1" — a lone Next click from step 1 is itself the first
+  // meaningful change and must persist, so counting invocations would drop it.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const unsubscribe = wizardStore.subscribe((s) => {
+      // Always clear first: a field toggled away and back to its default
+      // (net no-op) must cancel an already-scheduled write from the
+      // intermediate change, not just skip scheduling a new one.
+      if (timer) clearTimeout(timer)
+      if (JSON.stringify(s.state) === JSON.stringify(emptyWorkingState())) return
+      timer = setTimeout(() => {
+        runAction(saveLiveSession(wizardStore.getWizard().state, ctx), {
+          event: 'action_layer.wizard_autosave_failed',
+        })
+      }, AUTOSAVE_DEBOUNCE_MS)
+    })
+    return () => {
+      if (timer) clearTimeout(timer)
+      unsubscribe()
+    }
+  }, [])
+
+  const selectedCalendar = getCalendar(calendarSystemId) ?? getCalendar(DEFAULT_CALENDAR_ID)
+  const canGoNext =
+    step === 1
+      ? !needsLead(mode, narration) || leadName.trim() !== ''
+      : step === 2
+        ? selectedCalendar != null && validateOriginTuple(worldTimeOrigin, selectedCalendar).ok
+        : true
+
   const finish = () => {
     const { defaultStorySettings, embeddingModelId } = appSettingsStore.getAppSettings()
     runAction(
@@ -49,6 +102,8 @@ export default function WizardRoute() {
         ctx,
         (branchId) => router.replace(`/reader-composer/${branchId}` as Href),
         { defaultStorySettings, embeddingModelId },
+        undefined,
+        sourceDraftId ?? undefined,
       ).then((result) => {
         if (result.status === 'ok') {
           wizardStore.reset()
@@ -66,17 +121,33 @@ export default function WizardRoute() {
     )
   }
 
+  const saveDraft = () => {
+    runAction(
+      saveStoryDraft(
+        wizardStore.getWizard().state,
+        ctx,
+        undefined,
+        sourceDraftId ?? undefined,
+      ).then(() => {
+        wizardStore.reset()
+        router.back()
+      }),
+      {
+        event: 'action_layer.wizard_save_draft_failed',
+        toastMessage: t('wizard:errors.saveDraftFailed'),
+      },
+    )
+  }
+
   return (
     <WizardShell
       step={step}
-      canGoNext={true /* per-step validity wires in Task 22 */}
+      canGoNext={canGoNext}
       isFinish={step === 5}
       onCancel={() => router.back()}
       onBack={goBack}
       onNext={step === 5 ? finish : goNext}
-      onSaveDraft={() => {
-        // Task 22: wire the SQLite mirror + save-draft action.
-      }}
+      onSaveDraft={saveDraft}
       onJump={(s) => wizardStore.setStep(s)}
     >
       {step === 1 ? (

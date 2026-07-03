@@ -9,6 +9,7 @@ import {
   entities,
   stories,
   storyEntries,
+  wizardSessions,
   type WizardWorkingState,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -272,5 +273,54 @@ describe('finishWizard', () => {
     expect(result.status === 'invalid' && result.reasons).toContain('lead')
     expect(await db.select().from(stories)).toHaveLength(0)
     expect(await db.select().from(entities)).toHaveLength(0)
+  })
+
+  it('promoteDraftStoryId: a resumed draft is promoted in place, its session row is gone', async () => {
+    const { db, ctx } = await setup()
+    const draftId = 'story_draft_resumed'
+    const navigate = vi.fn()
+
+    await db.insert(stories).values({
+      id: draftId,
+      title: 'Untitled story',
+      status: 'draft',
+      createdAt: 100,
+      updatedAt: 100,
+    })
+    await db
+      .insert(wizardSessions)
+      .values({ id: draftId, storyId: draftId, state: emptyWorkingState(), updatedAt: 100 })
+
+    const result = await finishWizard(
+      makeState({ title: 'Promoted', opening: { content: 'The draft becomes real.' } }),
+      ctx,
+      navigate,
+      APP_DEFAULTS,
+      5000,
+      draftId,
+    )
+
+    expect(result).toEqual({ status: 'ok', storyId: draftId })
+
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, draftId)))[0]
+    expect(storyRow.status).toBe('active')
+    expect(storyRow.title).toBe('Promoted')
+
+    const branchRows = await db.select().from(branches).where(eq(branches.storyId, draftId))
+    expect(branchRows).toHaveLength(1)
+    expect(storyRow.currentBranchId).toBe(branchRows[0].id)
+
+    const entryRows = await db
+      .select()
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, branchRows[0].id))
+    expect(entryRows).toHaveLength(1)
+    expect(entryRows[0].content).toBe('The draft becomes real.')
+
+    const sessionRows = await db.select().from(wizardSessions).where(eq(wizardSessions.id, draftId))
+    expect(sessionRows).toHaveLength(0)
+
+    expect(await db.select().from(deltas)).toHaveLength(0)
+    expect(navigate).toHaveBeenCalledWith(branchRows[0].id)
   })
 })

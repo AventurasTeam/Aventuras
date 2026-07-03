@@ -1,7 +1,16 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, deltas, emptyEntityState, entities, stories, storyEntries } from '@/lib/db'
+import {
+  branches,
+  deltas,
+  emptyEntityState,
+  emptyWorkingState,
+  entities,
+  stories,
+  storyEntries,
+  wizardSessions,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import type { StoryDefinition } from '@/lib/db/stories/story-config-schema'
 import { buildStorySettings } from '@/lib/db/stories/story-settings-defaults'
@@ -177,5 +186,105 @@ describe('createStoryWithBranch', () => {
         3000,
       ),
     ).rejects.toThrow()
+  })
+
+  it('replaceExistingStoryId promotes a draft: same id becomes active, draft session row is gone', async () => {
+    const { db, ctx } = await setup()
+    const draftId = 'story_draft'
+    await db.insert(stories).values({
+      id: draftId,
+      title: 'Untitled story',
+      status: 'draft',
+      createdAt: 500,
+      updatedAt: 500,
+    })
+    await db
+      .insert(wizardSessions)
+      .values({ id: draftId, storyId: draftId, state: emptyWorkingState(), updatedAt: 500 })
+
+    const { storyId, branchId } = await createStoryWithBranch(
+      {
+        storyId: draftId,
+        replaceExistingStoryId: true,
+        title: 'Promoted Draft',
+        definition: makeDefinition(),
+        settings: buildStorySettings({}, null),
+        openingContent: 'The draft becomes real.',
+        openingMetadata: metadata,
+      },
+      ctx,
+      6000,
+    )
+
+    expect(storyId).toBe(draftId)
+    const storyRows = await db.select().from(stories).where(eq(stories.id, draftId))
+    expect(storyRows).toHaveLength(1)
+    expect(storyRows[0]).toMatchObject({
+      id: draftId,
+      status: 'active',
+      title: 'Promoted Draft',
+      currentBranchId: branchId,
+    })
+
+    const sessionRows = await db.select().from(wizardSessions).where(eq(wizardSessions.id, draftId))
+    expect(sessionRows).toHaveLength(0)
+
+    const branchRows = await db.select().from(branches).where(eq(branches.storyId, draftId))
+    expect(branchRows).toHaveLength(1)
+    expect(await db.select().from(deltas)).toHaveLength(0)
+  })
+
+  it('replaceExistingStoryId promotion is all-or-nothing: a forced failure leaves the draft intact', async () => {
+    const { db, ctx } = await setup()
+    const draftId = 'story_draft_forced_fail'
+
+    await db.insert(stories).values({
+      id: draftId,
+      title: 'Untitled story',
+      status: 'draft',
+      createdAt: 700,
+      updatedAt: 700,
+    })
+    await db
+      .insert(wizardSessions)
+      .values({ id: draftId, storyId: draftId, state: emptyWorkingState(), updatedAt: 700 })
+    // A branch already pointing at the draft (drafts never normally have one —
+    // saveStoryDraft only ever writes a stories + wizard_sessions row) forces
+    // the promotion's own `DELETE FROM stories` to hit the branches→stories FK,
+    // aborting the whole ops array atomically instead of leaving the draft
+    // half-deleted.
+    await db
+      .insert(branches)
+      .values({ id: 'br_orphan', storyId: draftId, name: 'stray', createdAt: 1 })
+
+    await expect(
+      createStoryWithBranch(
+        {
+          storyId: draftId,
+          replaceExistingStoryId: true,
+          title: 'Should not land',
+          definition: makeDefinition(),
+          settings: buildStorySettings({}, null),
+          openingContent: 'x',
+          openingMetadata: metadata,
+        },
+        ctx,
+        8000,
+      ),
+    ).rejects.toThrow()
+
+    const storyRows = await db.select().from(stories).where(eq(stories.id, draftId))
+    expect(storyRows).toHaveLength(1)
+    expect(storyRows[0].status).toBe('draft')
+
+    const sessionRows = await db.select().from(wizardSessions).where(eq(wizardSessions.id, draftId))
+    expect(sessionRows).toHaveLength(1)
+
+    // The pre-existing (stray) branch survives untouched; no second branch,
+    // no opening entry, was ever committed for it.
+    const branchRows = await db.select().from(branches).where(eq(branches.storyId, draftId))
+    expect(branchRows).toHaveLength(1)
+    expect(branchRows[0].id).toBe('br_orphan')
+    expect(await db.select().from(storyEntries)).toHaveLength(0)
   })
 })

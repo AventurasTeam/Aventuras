@@ -1,3 +1,5 @@
+import { eq } from 'drizzle-orm'
+
 import {
   branches,
   emptyEntityState,
@@ -7,7 +9,9 @@ import {
   storyDefinitionSchema,
   storyEntries,
   storySettingsSchema,
+  wizardSessions,
   type EntryMetadata,
+  type SqlOp,
   type StoryDefinition,
   type StorySettings,
 } from '@/lib/db'
@@ -17,6 +21,11 @@ import type { DbCtx } from '../types'
 
 export type CreateStoryInput = {
   storyId?: string
+  // Draft-promote seam: storyId names an existing draft (a status='draft'
+  // stories row + a wizard_sessions row keyed by the same id). When set, the
+  // draft's rows are deleted as the first ops of the same transaction as the
+  // fresh insert, so a failed commit leaves the draft untouched.
+  replaceExistingStoryId?: boolean
   title: string
   description?: string
   definition: StoryDefinition
@@ -45,7 +54,15 @@ export async function createStoryWithBranch(
   const branchId = generateId('br')
   const openingId = generateId('entry')
 
-  const ops = [
+  const ops: SqlOp[] = []
+  if (input.replaceExistingStoryId && input.storyId) {
+    ops.push(
+      ctx.db.delete(stories).where(eq(stories.id, input.storyId)).toSQL(),
+      ctx.db.delete(wizardSessions).where(eq(wizardSessions.id, input.storyId)).toSQL(),
+    )
+  }
+
+  ops.push(
     ctx.db
       .insert(stories)
       .values({
@@ -64,7 +81,7 @@ export async function createStoryWithBranch(
       .insert(branches)
       .values({ id: branchId, storyId, name: 'main', createdAt: nowMs })
       .toSQL(),
-  ]
+  )
 
   if (input.lead) {
     if (definition.leadEntityId !== input.lead.id) {

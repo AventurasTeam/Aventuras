@@ -25,9 +25,9 @@ export async function finishWizard(
   navigate: (branchId: string) => void,
   appDefaults: FinishAppDefaults,
   nowMs?: number,
-  // Draft-resume seam (Task 22 owns draft-resume): when the working-state came
-  // from a promoted draft, its stories row is reused instead of minting a new
-  // id. Undefined on a fresh Finish → createStoryWithBranch generates one.
+  // When the working-state came from a resumed draft, its stories row (and
+  // wizard_sessions row) are replaced in place instead of minting a new id —
+  // undefined on a fresh Finish, so createStoryWithBranch generates one.
   promoteDraftStoryId?: string,
 ): Promise<FinishResult> {
   const reasons: string[] = []
@@ -71,6 +71,7 @@ export async function finishWizard(
   const { storyId } = await createStoryWithBranch(
     {
       storyId: promoteDraftStoryId,
+      replaceExistingStoryId: promoteDraftStoryId != null,
       title: s.definition.title,
       description:
         s.definition.description.trim().length > 0 ? s.definition.description : undefined,
