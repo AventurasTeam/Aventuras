@@ -28,6 +28,38 @@ slice-planning gate forces its resolution before that slice is planned.
   can only confirm the bar by inspection. A `lib`-only coverage
   script or project would make it verifiable on demand. Surfaced by
   Slice 2.8.
+- **Wizard live-session loses draft provenance.** The auto-save
+  `wizard_sessions` `'live'` singleton writes `storyId: null` and the
+  `wizard_sessions.storyId` column is never read. So the sequence
+  resume-a-draft → edit (autosave) → Cancel (session preserved) →
+  Continue-session finishes as a **new** active story while the
+  original draft survives (duplicate story + orphaned draft). Fix:
+  thread the resumed `sourceDraftId` into `saveLiveSession`'s `storyId`
+  and recover it in `loadLiveSession` / `onContinueSession`. Partly
+  [Slice 2.4](./milestones/02-first-user-loop/slices/04-story-list.md)'s
+  concurrent-trigger territory. Recoverable via delete; doc
+  under-specifies the resume→cancel→continue interaction. Also fold in:
+  suppress the 500 ms autosave debounce once Finish / Save-as-draft
+  starts (a pending timer can recreate a stale `'live'` row just after
+  `clearLiveSession`). Surfaced by Slice 2.3 final review.
+- **Harden the draft-promote all-or-nothing test.** M2.3's
+  `createStoryWithBranch` promote path (`replaceExistingStoryId`) is
+  structurally atomic (one transaction), but its forced-failure test
+  fails on `ops[0]` (the DELETE, via a stray-branch FK), so it proves
+  "first-op-rejected", not "an already-executed delete is rolled back".
+  Forcing a post-delete op to fail is blocked today by the fresh-UUID
+  design (no PK can collide) and the eager `vitest.setup` domain-load
+  (can't `vi.mock` `generateId`). Revisit if a deterministic
+  post-delete failure becomes reachable. Surfaced by Slice 2.3.
+- **Calendar summary "year" row doc/schema drift.** The
+  [calendar-picker pattern doc](../ui/patterns/calendar-picker.md)
+  shows a summary row `year · rule: Gregorian leap`, but the
+  `earth-gregorian` built-in carries the leap inside `day.table.leap`
+  (indexed by year), not as a top-level `rule` on the `year` tier — so
+  M2.3's generic summary formatter can't mechanically derive that
+  string without special-casing "Gregorian". Reconcile the doc example
+  to the actual schema shape (or add the derivation the doc implies).
+  Surfaced by Slice 2.3.
 
 ### Composer-mode wrap: canonical reframe to in-code i18n
 

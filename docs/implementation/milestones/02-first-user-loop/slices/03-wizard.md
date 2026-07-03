@@ -211,4 +211,39 @@ M3.1; the commit transaction is stories + branch + opening
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **Step indicator** renders all five pills with World / Cast
+  disabled (not a three-pill `step N of 3`), per the resolved
+  milestone open question.
+- **Complete `stories.settings`** required a new
+  `STORY_SETTINGS_DEFAULTS` constant + `buildStorySettings` merge
+  helper (`lib/db/stories/story-settings-defaults.ts`): the app-level
+  `default_story_settings` is a partial and `storySettingsSchema` has
+  ~13 required-no-default fields, so a story committed without them is
+  unopenable. The wizard fills real fresh-story values (translation /
+  suggestions off, `embeddingBackend: 'local'`,
+  `embedding_model_id: app embeddingModelId ?? 'bge-small-en'`), not
+  empties.
+- **Session + draft** persist one serialized working-state blob in a
+  new `wizard_sessions` table (`'live'` singleton + one row per
+  draft). Finish-from-draft promotes in place atomically via
+  `createStoryWithBranch`'s `replaceExistingStoryId` (draft-row deletes
+  are prepended into the commit transaction).
+- **`definition.genre` / `tone` / `setting`** commit as empty values
+  (World/Cast are M3.6); the frozen `storyDefinitionSchema` was not
+  given defaults.
+- **`lib/calendar` day-tier leap** is modeled as a `table` rollover
+  carrying an optional `leap` augment (indexed by year) — a deviation
+  from the spec's pure `TierRollover` union, since a single `rule`
+  can't express twelve varying month lengths. Era **arithmetic** ships
+  and is fixture-tested; the era-**picker widget** is deferred to M8.3
+  (`earth-gregorian` has `eras: null`, so no M2 path reaches it).
+- **OQ4 resolved:** the bundled `tmpl_wizard_opening` now emits the
+  structured-output JSON via the JSON macro and renders the lead's
+  substitution placeholder id (so a real model can populate
+  `sceneEntities`); the `wizard`-group `lead` variable is
+  `{ name, id }`, `required: false`.
+- **Non-blocking followups** (logged in
+  [triage.md](../../../triage.md#inbox)): live-session draft-provenance
+  loss on resume→cancel→continue; autosave suppression during Finish;
+  hardening the draft-promote all-or-nothing test; the calendar-summary
+  `year`-row doc/schema drift.
