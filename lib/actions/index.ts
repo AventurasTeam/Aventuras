@@ -16,6 +16,7 @@ export {
   upsertProfile,
 } from './settings'
 export type { SettingsActionCtx } from './settings'
+export { createStoryWithBranch, type CreateStoryInput } from './stories/create-story'
 export { deleteStory } from './stories/delete-story'
 export {
   openStory,
