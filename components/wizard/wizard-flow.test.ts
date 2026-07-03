@@ -263,6 +263,13 @@ describe('wizard full-flow integration', () => {
       promptBody: 'Epic stakes, sweeping scale.',
     })
     expect(loaded!.definition.worldTimeOrigin).toEqual({ year: 2024, month: 3, day: 10 })
+    expect(loaded!.definition.title).toBe('The Long Road')
+    expect(loaded!.definition.tone).toEqual({
+      label: 'Hopeful',
+      promptBody: 'Warmth even in hardship.',
+    })
+    expect(loaded!.definition.setting).toBe('A war-torn kingdom.')
+    expect(loaded!.step).toBe(5)
     expect(loaded!.leadName).toBe('Kade')
     expect(loaded!.opening.content).toBe('Kade set out at first light.')
 
