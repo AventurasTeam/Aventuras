@@ -30,16 +30,23 @@
     "title": {
       "label": "Title",
       "assist": "Suggest title",
-      "placeholder": "Name your story"
+      "placeholder": "Name your story",
+      "guidance": "e.g. \"one word, ominous\""
     },
     "description": {
       "label": "Description",
       "assist": "Suggest description",
-      "placeholder": "A one-line synopsis (optional)"
+      "placeholder": "A one-line synopsis (optional)",
+      "guidance": "e.g. \"emphasize the mystery\""
     }
   },
   "finish": {
-    "invalid": "Add a title and an opening before finishing.",
+    "invalidList": "Add {{fields}} before finishing.",
+    "missing": {
+      "title": "a title",
+      "opening": "an opening",
+      "lead": "a lead character name"
+    },
     "failed": "Couldn't create the story."
   },
   "frame": {

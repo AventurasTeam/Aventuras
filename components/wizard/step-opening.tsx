@@ -50,6 +50,10 @@ export type StepOpeningProps = {
 
 const OPENING_MODEL_MARKER = 'wizard-assist'
 
+function withGuidance(prompt: string, guidance: string): string {
+  return guidance.trim().length > 0 ? `${prompt}\n\nGuidance: ${guidance}` : prompt
+}
+
 export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
   const definition = wizardStore.useWizard((s) => s.state.definition)
   const opening = wizardStore.useWizard((s) => s.state.opening)
@@ -68,7 +72,7 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
   // model's placeholder round-trips back to the SAME real lead id.
   const openingIdMapRef = useRef<IdBiMap>(new IdBiMap())
 
-  function buildOpeningPrompt(): string {
+  function buildOpeningPrompt(guidance: string): string {
     const idMap = new IdBiMap()
     openingIdMapRef.current = idMap
     let lead: { name: string; id: string } | undefined
@@ -80,7 +84,7 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
       }
       lead = { name: leadName, id: idMap.allocate(id) }
     }
-    return renderTemplate(TEMPLATE_IDS.wizardOpening, { definition, lead })
+    return withGuidance(renderTemplate(TEMPLATE_IDS.wizardOpening, { definition, lead }), guidance)
   }
 
   function commitOpening(value: OpeningOutput) {
@@ -174,8 +178,12 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
             </View>
             <AiAssist
               ariaLabel={t('wizard:opening.title.assist')}
-              buildPrompt={() =>
-                renderTemplate(TEMPLATE_IDS.wizardTitleChips, { opening: opening.content })
+              guidancePlaceholder={t('wizard:opening.title.guidance')}
+              buildPrompt={(guidance) =>
+                withGuidance(
+                  renderTemplate(TEMPLATE_IDS.wizardTitleChips, { opening: opening.content }),
+                  guidance,
+                )
               }
               schema={titleChipsSchema}
               result="chips"
@@ -200,8 +208,12 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
             </View>
             <AiAssist
               ariaLabel={t('wizard:opening.description.assist')}
-              buildPrompt={() =>
-                renderTemplate(TEMPLATE_IDS.wizardDescription, { opening: opening.content })
+              guidancePlaceholder={t('wizard:opening.description.guidance')}
+              buildPrompt={(guidance) =>
+                withGuidance(
+                  renderTemplate(TEMPLATE_IDS.wizardDescription, { opening: opening.content }),
+                  guidance,
+                )
               }
               schema={descriptionOutputSchema}
               result="prose"

@@ -10,7 +10,7 @@ const leadCtx = {
     genre: { promptBody: '' },
     tone: { promptBody: '' },
   },
-  lead: { name: 'Aria' },
+  lead: { name: 'Aria', id: 'c1' },
 }
 const leadlessCtx = {
   definition: {
@@ -31,14 +31,19 @@ describe('WIZARD_OPENING template', () => {
     expect(out.toLowerCase()).toContain('json') // from macro_output_format_json ("single JSON object")
   })
 
-  it('names the lead when present', () => {
-    expect(renderTemplate(TEMPLATE_IDS.wizardOpening, leadCtx)).toContain('Aria')
+  it('names the lead and its cast id when present', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, leadCtx)
+    expect(out).toContain('Aria')
+    // The placeholder id must reach the prompt so a real model can echo it back
+    // in sceneEntities — otherwise the idMap round-trip has nothing to resolve.
+    expect(out).toContain('cast id: c1')
   })
 
-  it('does NOT reference a lead on the lead-less path and has no "undefined"', () => {
+  it('does NOT reference a lead or cast id on the lead-less path and has no "undefined"', () => {
     const out = renderTemplate(TEMPLATE_IDS.wizardOpening, leadlessCtx)
     expect(out).not.toContain('undefined')
     expect(out).not.toMatch(/lead character is/i)
+    expect(out).not.toContain('cast id:')
   })
 })
 

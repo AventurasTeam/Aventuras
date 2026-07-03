@@ -15,6 +15,12 @@ import { runAction } from '@/lib/utils'
 
 const ctx = { db, runInTransaction }
 
+const FINISH_REASON_KEY = {
+  title: 'wizard:finish.missing.title',
+  opening: 'wizard:finish.missing.opening',
+  lead: 'wizard:finish.missing.lead',
+} as const
+
 export default function WizardRoute() {
   const router = useRouter()
   const step = wizardStore.useWizard((s) => s.state.step)
@@ -44,7 +50,14 @@ export default function WizardRoute() {
         (branchId) => router.replace(`/reader-composer/${branchId}` as Href),
         { defaultStorySettings, embeddingModelId },
       ).then((result) => {
-        if (result.status === 'invalid') toast.error(t('wizard:finish.invalid'))
+        if (result.status === 'ok') {
+          wizardStore.reset()
+          return
+        }
+        const fields = result.reasons
+          .map((reason) => t(FINISH_REASON_KEY[reason as keyof typeof FINISH_REASON_KEY]))
+          .join(', ')
+        toast.error(t('wizard:finish.invalidList', { fields }))
       }),
       {
         event: 'action_layer.wizard_finish_failed',

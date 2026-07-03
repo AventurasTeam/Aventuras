@@ -106,7 +106,12 @@ describe('finishWizard', () => {
         title: 'Aria Rising',
         leadName: 'Aria',
         leadEntityId: LEAD_ID,
-        opening: { content: 'You wake at dawn.', sceneEntities: [LEAD_ID], model: 'gpt-x' },
+        opening: {
+          content: 'You wake at dawn.',
+          sceneEntities: [LEAD_ID],
+          currentLocationId: 'loc_99999999-9999-9999-9999-999999999999',
+          model: 'gpt-x',
+        },
       }),
       ctx,
       navigate,
@@ -137,6 +142,9 @@ describe('finishWizard', () => {
       .where(eq(storyEntries.branchId, branchRows[0].id))
     expect(entryRows[0].metadata!.sceneEntities).toEqual([LEAD_ID])
     expect(entryRows[0].metadata!.model).toBe('gpt-x')
+    // M2 never materializes a location entity — currentLocationId is always
+    // nulled, even when the working-state opening carried one.
+    expect(entryRows[0].metadata!.currentLocationId).toBeNull()
 
     // The load-bearing id-consistency invariant: the committed opening ref, the
     // lead entities row, and definition.leadEntityId are all the SAME real id.

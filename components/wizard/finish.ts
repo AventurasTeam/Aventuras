@@ -58,12 +58,12 @@ export async function finishWizard(
   )
 
   // The lead is the only entity the M2 commit materializes, so it's the only id
-  // opening refs can legitimately point at. Drop anything else — a back-jump that
-  // clears the lead requirement after an AI opening was generated would otherwise
-  // leave a dangling sceneEntities ref to an entity row that never gets created.
+  // opening refs can legitimately point at: keep the lead in sceneEntities, drop
+  // everything else (a back-jump clearing the lead requirement, or a hallucinated
+  // location id, would otherwise commit a dangling ref to a never-created row).
   const openingMetadata: EntryMetadata = {
     sceneEntities: lead ? s.opening.sceneEntities.filter((id) => id === lead.id) : [],
-    currentLocationId: lead ? s.opening.currentLocationId : null,
+    currentLocationId: null,
     worldTime: 0,
     ...(s.opening.model ? { model: s.opening.model } : {}),
   }

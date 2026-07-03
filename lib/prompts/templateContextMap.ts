@@ -68,9 +68,10 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
     },
     {
       name: 'lead',
-      type: '{ name: string }',
+      type: '{ name: string; id: string }',
       category: 'Entities',
-      description: 'Minimal lead character. Absent on lead-less paths (creative + third-person).',
+      description:
+        'Minimal lead character (name + placeholder cast id for sceneEntities). Absent on lead-less paths (creative + third-person).',
       required: false,
     },
     {
