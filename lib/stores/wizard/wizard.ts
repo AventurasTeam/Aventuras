@@ -32,10 +32,14 @@ function useWizard<T>(selector: (s: WizardSnapshot) => T): T {
   return useStore(store, selector as (s: WizardState) => T)
 }
 
+function getWizard(): WizardSnapshot {
+  return { state: store.getState().state }
+}
+
 const api = store.getState()
 export const wizardStore = {
   useWizard,
-  getState: store.getState,
+  getWizard,
   setStep: api.setStep,
   patchDefinition: api.patchDefinition,
   patchOpening: api.patchOpening,
