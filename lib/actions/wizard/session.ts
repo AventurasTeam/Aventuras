@@ -72,3 +72,15 @@ export async function loadDraft(storyId: string, ctx: DbCtx): Promise<WizardWork
   const [row] = await ctx.db.select().from(wizardSessions).where(eq(wizardSessions.id, storyId))
   return row?.state ?? null
 }
+
+// The live singleton's state must be re-hydrated into wizardStore on Continue —
+// the in-memory store resets on every app boot, so without this a restart's
+// worth of auto-saved progress would open as a blank wizard despite the row
+// surviving in SQLite.
+export async function loadLiveSession(ctx: DbCtx): Promise<WizardWorkingState | null> {
+  const [row] = await ctx.db
+    .select()
+    .from(wizardSessions)
+    .where(eq(wizardSessions.id, LIVE_SESSION_ID))
+  return row?.state ?? null
+}

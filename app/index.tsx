@@ -25,6 +25,7 @@ import {
   clearLiveSession,
   deleteStory,
   loadDraft,
+  loadLiveSession,
   openStory,
   setStoryArchived,
   setStoryFavorite,
@@ -157,8 +158,20 @@ export default function Index() {
         trigger={prompt?.trigger ?? 'new-story'}
         draftName={rows.find((r) => r.id === prompt?.storyId)?.title}
         onContinueSession={() => {
-          setPrompt(null)
-          goWizard()
+          // wizardStore is in-memory only, so it doesn't survive an app
+          // restart — re-hydrate from the persisted live session before
+          // opening the wizard, or a resumed session would render blank.
+          runAction(
+            loadLiveSession(ctx).then((session) => {
+              if (session) wizardStore.hydrate(session)
+              setPrompt(null)
+              goWizard()
+            }),
+            {
+              event: 'action_layer.wizard_session_resume_failed',
+              toastMessage: t('landing:errors.resumeSessionFailed'),
+            },
+          )
         }}
         onDiscard={() => {
           const target = prompt

@@ -38,6 +38,7 @@ export type { DbCtx, DeltaSource, MutationResult, PipelineAction } from './types
 export {
   clearLiveSession,
   loadDraft,
+  loadLiveSession,
   saveLiveSession,
   saveStoryDraft,
   sessionExists,

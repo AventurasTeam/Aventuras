@@ -8,6 +8,7 @@ import { storiesStore } from '@/lib/stores'
 import {
   clearLiveSession,
   loadDraft,
+  loadLiveSession,
   saveLiveSession,
   saveStoryDraft,
   sessionExists,
@@ -83,6 +84,19 @@ describe('wizard session/draft actions', () => {
     await saveLiveSession(emptyWorkingState(), ctx, 1)
     await clearLiveSession(ctx)
     expect(await sessionExists(ctx)).toBe(false)
+  })
+
+  it('loadLiveSession round-trips the persisted live state, and is null once cleared', async () => {
+    expect(await loadLiveSession(ctx)).toBeNull()
+    const s = emptyWorkingState()
+    s.leadName = 'Bran'
+    s.step = 2
+    await saveLiveSession(s, ctx, 1)
+    const loaded = await loadLiveSession(ctx)
+    expect(loaded?.leadName).toBe('Bran')
+    expect(loaded?.step).toBe(2)
+    await clearLiveSession(ctx)
+    expect(await loadLiveSession(ctx)).toBeNull()
   })
 
   it('saveStoryDraft with an existingStoryId re-saves the same story row', async () => {

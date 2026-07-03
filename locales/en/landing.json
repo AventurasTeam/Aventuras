@@ -47,6 +47,7 @@
     "archiveFailed": "Couldn't update the story. Please try again.",
     "deleteFailed": "Couldn't delete the story. Please try again.",
     "discardSessionFailed": "Couldn't discard the session. Please try again.",
-    "draftLoadFailed": "Couldn't open the draft. Please try again."
+    "draftLoadFailed": "Couldn't open the draft. Please try again.",
+    "resumeSessionFailed": "Couldn't resume the session. Please try again."
   }
 }
