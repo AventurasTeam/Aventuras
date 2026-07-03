@@ -6,6 +6,7 @@ import { t } from '@/lib/i18n'
 import { ConcurrentStatePrompt } from './wizard-session-seam'
 
 const handlers = {
+  open: true,
   onContinueSession: fn(),
   onDiscard: fn(),
   onDismiss: fn(),

@@ -135,29 +135,29 @@ export default function Index() {
         }
       />
 
-      {prompt ? (
-        <ConcurrentStatePrompt
-          trigger={prompt.trigger}
-          draftName={rows.find((r) => r.id === prompt.storyId)?.title}
-          onContinueSession={() => {
-            setPrompt(null)
-            goWizard()
-          }}
-          onDiscard={() => {
-            runAction(
-              clearLiveSession(ctx).then(() => {
-                setPrompt(null)
-                goWizard()
-              }),
-              {
-                event: 'action_layer.wizard_session_discard_failed',
-                toastMessage: t('landing:errors.discardSessionFailed'),
-              },
-            )
-          }}
-          onDismiss={() => setPrompt(null)}
-        />
-      ) : null}
+      <ConcurrentStatePrompt
+        open={prompt != null}
+        trigger={prompt?.trigger ?? 'new-story'}
+        draftName={rows.find((r) => r.id === prompt?.storyId)?.title}
+        onContinueSession={() => {
+          setPrompt(null)
+          goWizard()
+        }}
+        onDiscard={() => {
+          runAction(
+            clearLiveSession(ctx).then(() => {
+              setPrompt(null)
+              goWizard()
+            }),
+            {
+              event: 'action_layer.wizard_session_discard_failed',
+              toastMessage: t('landing:errors.discardSessionFailed'),
+              context: { storyId: prompt?.storyId },
+            },
+          )
+        }}
+        onDismiss={() => setPrompt(null)}
+      />
 
       <AlertDialog
         open={pendingDelete != null}

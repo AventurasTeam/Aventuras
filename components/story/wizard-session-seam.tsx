@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router'
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -18,6 +18,7 @@ import { t } from '@/lib/i18n'
 export type ConcurrentTrigger = 'new-story' | 'draft'
 
 export type ConcurrentStatePromptProps = {
+  open: boolean
   trigger: ConcurrentTrigger
   draftName?: string
   onContinueSession: () => void
@@ -27,29 +28,32 @@ export type ConcurrentStatePromptProps = {
 
 const ctx = { db, runInTransaction }
 
-// Focus-aware: cancelling out of the wizard back to the landing screen must
-// clear a stale `true` from a previous visit, so the check re-runs on every
-// focus, not just on first mount.
+// Focus-aware: `useFocusEffect` fires on initial focus (mount) AND on every
+// refocus, so cancelling out of the wizard back to the landing screen clears a
+// stale `true` from a previous visit. Focus-effect alone (no companion
+// `useEffect`) matches the sibling precedent in hooks/use-master-detail-back.ts;
+// the returned cleanup's `cancelled` guard drops an in-flight fetch on blur so a
+// late resolve can't overwrite a newer focus-triggered result.
 export function useWizardSessionExists(): boolean {
   const [exists, setExists] = useState(false)
 
-  const check = useCallback(() => {
-    let cancelled = false
-    void sessionExists(ctx).then((result) => {
-      if (!cancelled) setExists(result)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => check(), [check])
-  useFocusEffect(check)
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false
+      void sessionExists(ctx).then((result) => {
+        if (!cancelled) setExists(result)
+      })
+      return () => {
+        cancelled = true
+      }
+    }, []),
+  )
 
   return exists
 }
 
 export function ConcurrentStatePrompt({
+  open,
   trigger,
   draftName,
   onContinueSession,
@@ -59,31 +63,32 @@ export function ConcurrentStatePrompt({
   const isDraft = trigger === 'draft'
   const name = draftName ?? t('landing:concurrentSession.untitledDraft')
 
+  const copy = isDraft
+    ? {
+        body: t('landing:concurrentSession.draft.body', { draftName: name }),
+        discard: t('landing:concurrentSession.draft.discard', { draftName: name }),
+        continue: t('landing:concurrentSession.draft.continue'),
+      }
+    : {
+        body: t('landing:concurrentSession.newStory.body'),
+        discard: t('landing:concurrentSession.newStory.discard'),
+        continue: t('landing:concurrentSession.newStory.continue'),
+      }
+
   return (
-    <Dialog open onOpenChange={(open) => !open && onDismiss()}>
+    <Dialog open={open} onOpenChange={(next) => !next && onDismiss()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('landing:concurrentSession.title')}</DialogTitle>
-          <DialogDescription>
-            {isDraft
-              ? t('landing:concurrentSession.draft.body', { draftName: name })
-              : t('landing:concurrentSession.newStory.body')}
-          </DialogDescription>
+          <DialogDescription>{copy.body}</DialogDescription>
         </DialogHeader>
+        {/* Discard left / Continue (primary) right — matches embedder-download-dialog's Cancel-left/primary-right convention. */}
         <DialogFooter>
           <Button variant="destructive" onPress={onDiscard}>
-            <Text>
-              {isDraft
-                ? t('landing:concurrentSession.draft.discard', { draftName: name })
-                : t('landing:concurrentSession.newStory.discard')}
-            </Text>
+            <Text>{copy.discard}</Text>
           </Button>
           <Button variant="primary" onPress={onContinueSession}>
-            <Text>
-              {isDraft
-                ? t('landing:concurrentSession.draft.continue')
-                : t('landing:concurrentSession.newStory.continue')}
-            </Text>
+            <Text>{copy.continue}</Text>
           </Button>
         </DialogFooter>
       </DialogContent>
