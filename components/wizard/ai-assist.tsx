@@ -1,0 +1,343 @@
+import { Sparkles } from 'lucide-react-native'
+import { useRef, useState, type ComponentRef, type ReactNode } from 'react'
+import { ScrollView, View } from 'react-native'
+import type { ZodType } from 'zod'
+
+import { Button } from '@/components/ui/button'
+import { Heading } from '@/components/ui/heading'
+import { IconAction } from '@/components/ui/icon-action'
+import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { Spinner } from '@/components/ui/spinner'
+import { Tag } from '@/components/ui/tag'
+import { Text } from '@/components/ui/text'
+import { useTier } from '@/hooks/use-tier'
+import { resolveModel, type ResolveModelConfig } from '@/lib/ai'
+import { t } from '@/lib/i18n'
+import { appSettingsStore } from '@/lib/stores'
+import { runWizardAssist, type WizardAssistResult } from '@/lib/wizard'
+
+const GUIDANCE_MAX_LENGTH = 200
+
+type AssistState<T> =
+  | { kind: 'idle' }
+  | { kind: 'not-configured' }
+  | { kind: 'guidance' }
+  | { kind: 'loading'; modelId: string }
+  | { kind: 'result'; value: T }
+  | { kind: 'failure'; detail: string }
+
+type AiAssistCommonProps<T> = {
+  /** Accessible name for the trigger AND the overlay's visible heading (e.g. "Suggest setting"). */
+  ariaLabel: string
+  guidancePlaceholder?: string
+  /** Builds the full prompt from current wizard state + the optional guidance text. */
+  buildPrompt: (guidance: string) => string
+  schema: ZodType<T>
+  /** "Set up in Settings" from the not-configured state. Caller owns the navigation. */
+  onSetup: () => void
+  disabled?: boolean
+  /**
+   * DI seam for tests/stories — defaults to the real runWizardAssist. Typed
+   * against this instance's own T (not the fully generic `typeof
+   * runWizardAssist`) so a story can inject a fake tied to its one concrete
+   * schema without fighting generic-function assignability.
+   */
+  runAssist?: (
+    prompt: string,
+    schema: ZodType<T>,
+    config: ResolveModelConfig,
+    signal: AbortSignal,
+  ) => Promise<WizardAssistResult<T>>
+  /** DI seam for tests/stories — defaults to reading the live app-settings store. */
+  resolveConfig?: () => ResolveModelConfig
+}
+
+type AiAssistProseProps<T> = AiAssistCommonProps<T> & {
+  result: 'prose'
+  getProse: (value: T) => string
+  onUse: (value: T) => void
+}
+
+type AiAssistChipsProps<T> = AiAssistCommonProps<T> & {
+  result: 'chips'
+  getChips: (value: T) => string[]
+  onPickChip: (chip: string, value: T) => void
+}
+
+export type AiAssistProps<T> = AiAssistProseProps<T> | AiAssistChipsProps<T>
+
+function defaultResolveConfig(): ResolveModelConfig {
+  return appSettingsStore.getAppSettings()
+}
+
+export function AiAssist<T>(props: AiAssistProps<T>) {
+  const {
+    ariaLabel,
+    guidancePlaceholder,
+    buildPrompt,
+    schema,
+    onSetup,
+    disabled,
+    runAssist = runWizardAssist,
+    resolveConfig = defaultResolveConfig,
+  } = props
+
+  const isPhone = useTier() === 'phone'
+
+  const [assist, setAssist] = useState<AssistState<T>>({ kind: 'idle' })
+  const [guidanceText, setGuidanceText] = useState('')
+  const [phoneOpen, setPhoneOpen] = useState(false)
+
+  const abortRef = useRef<AbortController | null>(null)
+  // Guards against a stale in-flight response clobbering state set by a
+  // later Generate / Try again / Cancel — AbortController's own 'aborted'
+  // status already covers the common case, this is the defensive backstop.
+  const requestSeqRef = useRef(0)
+  const triggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
+
+  function resetOnClose() {
+    abortRef.current?.abort()
+    abortRef.current = null
+    requestSeqRef.current += 1
+    setAssist({ kind: 'idle' })
+  }
+
+  function closeOverlay() {
+    if (isPhone) setPhoneOpen(false)
+    // rn-primitives Popover has no controlled `open` prop; PopoverTrigger's
+    // ref exposes an imperative close() that flips the shared root context.
+    else triggerRef.current?.close()
+    resetOnClose()
+  }
+
+  // Catches dismiss paths that bypass closeOverlay() — tap-outside, Escape,
+  // hardware back, sheet swipe-down — so an in-flight request still aborts
+  // and stale result/failure state doesn't survive to the next open.
+  function handlePopoverOpenChange(next: boolean) {
+    if (!next) resetOnClose()
+  }
+
+  function handlePhoneOpenChange(next: boolean) {
+    setPhoneOpen(next)
+    if (!next) resetOnClose()
+  }
+
+  function handleTriggerPress() {
+    const resolved = resolveModel('wizard-assist', resolveConfig())
+    if (!resolved.ok) {
+      setAssist({ kind: 'not-configured' })
+    } else {
+      setGuidanceText('')
+      setAssist({ kind: 'guidance' })
+    }
+    if (isPhone) setPhoneOpen(true)
+  }
+
+  async function runGenerate(guidance: string) {
+    const config = resolveConfig()
+    const resolved = resolveModel('wizard-assist', config)
+    if (!resolved.ok) {
+      setAssist({ kind: 'not-configured' })
+      return
+    }
+
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    const seq = ++requestSeqRef.current
+    setAssist({ kind: 'loading', modelId: resolved.modelId })
+
+    const result = await runAssist(buildPrompt(guidance), schema, config, controller.signal)
+    if (requestSeqRef.current !== seq) return
+
+    if (result.status === 'ok') setAssist({ kind: 'result', value: result.value })
+    else if (result.status === 'not-configured') setAssist({ kind: 'not-configured' })
+    else if (result.status === 'failed') setAssist({ kind: 'failure', detail: result.detail })
+    // 'aborted' — whichever action triggered the abort already set its own state.
+  }
+
+  const handleGenerate = () => void runGenerate(guidanceText)
+
+  function handleCancelLoading() {
+    abortRef.current?.abort()
+    setAssist({ kind: 'guidance' })
+  }
+
+  function handleSetupPress() {
+    onSetup()
+    closeOverlay()
+  }
+
+  function renderBody(): ReactNode {
+    switch (assist.kind) {
+      case 'idle':
+        return null
+
+      case 'not-configured':
+        return (
+          <View className="gap-3">
+            <Text size="sm">{t('wizard:aiAssist.notConfigured')}</Text>
+            <View className="flex-row justify-end gap-2">
+              <Button variant="ghost" onPress={closeOverlay}>
+                <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
+              </Button>
+              <Button onPress={handleSetupPress}>
+                <Text>{t('wizard:aiAssist.actions.setup')}</Text>
+              </Button>
+            </View>
+          </View>
+        )
+
+      case 'guidance':
+        return (
+          <View className="gap-3">
+            <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
+            <View className="gap-1">
+              <Text size="sm" variant="muted">
+                {t('wizard:aiAssist.guidance.label')}
+              </Text>
+              <Input
+                value={guidanceText}
+                onChangeText={setGuidanceText}
+                placeholder={guidancePlaceholder}
+                maxLength={GUIDANCE_MAX_LENGTH}
+                aria-label={t('wizard:aiAssist.guidance.label')}
+              />
+            </View>
+            <View className="flex-row justify-end gap-2">
+              <Button variant="ghost" onPress={closeOverlay}>
+                <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
+              </Button>
+              <Button onPress={handleGenerate}>
+                <Text>{t('wizard:aiAssist.actions.generate')}</Text>
+              </Button>
+            </View>
+          </View>
+        )
+
+      case 'loading':
+        return (
+          <View className="gap-3">
+            <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
+            <View className="flex-row items-center gap-2">
+              <Spinner size="sm" />
+              <Text size="sm" variant="muted">
+                {t('wizard:aiAssist.loading', { model: assist.modelId })}
+              </Text>
+            </View>
+            <View className="flex-row justify-end">
+              <Button variant="ghost" onPress={handleCancelLoading}>
+                <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
+              </Button>
+            </View>
+          </View>
+        )
+
+      case 'result': {
+        if (props.result === 'chips') {
+          const chips = props.getChips(assist.value)
+          return (
+            <View className="gap-3">
+              <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
+              <View className="flex-row flex-wrap gap-2">
+                {chips.map((chip) => (
+                  <Tag
+                    key={chip}
+                    onPress={() => {
+                      props.onPickChip(chip, assist.value)
+                      closeOverlay()
+                    }}
+                  >
+                    {chip}
+                  </Tag>
+                ))}
+              </View>
+              <View className="flex-row justify-end">
+                <Button variant="ghost" onPress={closeOverlay}>
+                  <Text>{t('wizard:aiAssist.actions.discard')}</Text>
+                </Button>
+              </View>
+            </View>
+          )
+        }
+
+        const prose = props.getProse(assist.value)
+        return (
+          <View className="gap-3">
+            <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
+            <ScrollView className="max-h-60 rounded-md border border-border bg-bg-sunken p-3">
+              <Text size="sm">{prose}</Text>
+            </ScrollView>
+            <View className="flex-row justify-end gap-2">
+              <Button variant="ghost" onPress={closeOverlay}>
+                <Text>{t('wizard:aiAssist.actions.discard')}</Text>
+              </Button>
+              <Button
+                onPress={() => {
+                  props.onUse(assist.value)
+                  closeOverlay()
+                }}
+              >
+                <Text>{t('wizard:aiAssist.actions.useThis')}</Text>
+              </Button>
+            </View>
+          </View>
+        )
+      }
+
+      case 'failure':
+        return (
+          <View className="gap-3">
+            <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
+            <Text size="sm" className="text-danger">
+              {t('wizard:aiAssist.failure', { reason: assist.detail })}
+            </Text>
+            <View className="flex-row justify-end gap-2">
+              <Button variant="ghost" onPress={closeOverlay}>
+                <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
+              </Button>
+              <Button onPress={handleGenerate}>
+                <Text>{t('wizard:aiAssist.actions.tryAgain')}</Text>
+              </Button>
+            </View>
+          </View>
+        )
+    }
+  }
+
+  const trigger = (
+    <IconAction
+      icon={Sparkles}
+      label={ariaLabel}
+      onPress={handleTriggerPress}
+      disabled={disabled}
+    />
+  )
+
+  if (isPhone) {
+    // Sheet's DialogPrimitive.Root renders a real (portaled) View sibling even
+    // while closed — a bare Fragment here would leak two layout children to the
+    // consumer's row. Wrap in one View, mirroring SearchableOverlayList's phone branch.
+    return (
+      <View>
+        {trigger}
+        <Sheet open={phoneOpen} onOpenChange={handlePhoneOpenChange} ariaLabel={ariaLabel}>
+          <SheetContent anchor="bottom" size="medium">
+            {renderBody()}
+          </SheetContent>
+        </Sheet>
+      </View>
+    )
+  }
+
+  return (
+    <Popover ariaLabel={ariaLabel} onOpenChange={handlePopoverOpenChange}>
+      <PopoverTrigger ref={triggerRef} asChild>
+        {trigger}
+      </PopoverTrigger>
+      <PopoverContent className="w-80">{renderBody()}</PopoverContent>
+    </Popover>
+  )
+}

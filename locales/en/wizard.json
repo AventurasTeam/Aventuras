@@ -89,5 +89,21 @@
         "preset": "enabled (preset names: {{names}})"
       }
     }
+  },
+  "aiAssist": {
+    "guidance": {
+      "label": "Optional guidance"
+    },
+    "actions": {
+      "cancel": "Cancel",
+      "generate": "Generate",
+      "discard": "Discard",
+      "useThis": "Use this",
+      "tryAgain": "Try again",
+      "setup": "Set up in Settings"
+    },
+    "notConfigured": "AI is not configured.",
+    "loading": "Generating with {{model}}…",
+    "failure": "Couldn't generate. {{reason}}."
   }
 }
