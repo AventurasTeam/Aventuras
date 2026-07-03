@@ -23,10 +23,7 @@ export function formatWorldTime(
   flips: EraFlip[] = [],
 ): string | FormatMiss {
   try {
-    // At worldTime 0 the tuple IS the origin: worldTimeToTuple round-trips
-    // origin through tupleToBaseUnits/baseUnitsToTuple, which only holds for
-    // non-negative tier values (the story-start BC origin would otherwise
-    // come back normalized to year >= 1).
+    // At worldTime 0 the tuple IS the origin; worldTimeToTuple's round-trip breaks for BC origins.
     const tuple = worldTime === 0 ? origin : worldTimeToTuple(worldTime, calendar, origin)
     const era = calendar.eras
       ? resolveEra(worldTime, calendar, origin, flips)
