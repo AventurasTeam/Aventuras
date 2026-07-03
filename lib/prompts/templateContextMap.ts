@@ -70,8 +70,8 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       name: 'lead',
       type: '{ name: string }',
       category: 'Entities',
-      description: 'Minimal lead character.',
-      required: true,
+      description: 'Minimal lead character. Absent on lead-less paths (creative + third-person).',
+      required: false,
     },
     {
       name: 'opening',

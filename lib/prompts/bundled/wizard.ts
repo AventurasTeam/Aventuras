@@ -4,15 +4,22 @@ export const WIZARD_OPENING = `Write the opening passage of a {{ definition.mode
 {% if definition.setting != blank %}Setting: {{ definition.setting }}
 {% endif %}{% if definition.genre.promptBody != blank %}Genre: {{ definition.genre.promptBody }}
 {% endif %}{% if definition.tone.promptBody != blank %}Tone: {{ definition.tone.promptBody }}
-{% endif %}The lead character is {{ lead.name }}.
-{% include 'macro_output_format_narrative' %}`
+{% endif %}{% if lead %}The lead character is {{ lead.name }}.
+{% endif %}Return a JSON object with these fields:
+- "prose": the opening passage as a string.
+- "sceneEntities": array of entity ids present in the scene (use only the provided cast ids; [] if none).
+- "currentLocationId": the location id where the scene opens, or null.
+- "worldTime": 0.
+{% include 'macro_output_format_json' %}`
 
 export const WIZARD_TITLE_CHIPS = `Suggest five short, evocative titles for this story.
 Opening:
 {{ opening }}
+Return a JSON object: { "titles": ["...", "...", ...] }.
 {% include 'macro_output_format_json' %}`
 
-export const WIZARD_DESCRIPTION = `Write a one-sentence description for this story, based on its opening.
+export const WIZARD_DESCRIPTION = `Write a one-sentence description (a log line) for this story, based on its opening. Do not write narrative prose; write a concise synopsis.
 Opening:
 {{ opening }}
-{% include 'macro_output_format_narrative' %}`
+Return a JSON object: { "description": "..." }.
+{% include 'macro_output_format_json' %}`

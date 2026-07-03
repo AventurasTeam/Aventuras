@@ -26,7 +26,7 @@ describe('bundled pack', () => {
     expect(out).toContain('adventure')
     expect(out).toContain('A frozen coast.')
     expect(out).toContain('Aria')
-    expect(out).toContain('Write the next beat') // included output-format macro
+    expect(out).toContain('Respond with a single JSON object') // included output-format macro
     expect(out).toMatchSnapshot()
   })
 })
