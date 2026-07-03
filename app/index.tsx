@@ -21,7 +21,13 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
-import { deleteStory, openStory, setStoryArchived, setStoryFavorite } from '@/lib/actions'
+import {
+  clearLiveSession,
+  deleteStory,
+  openStory,
+  setStoryArchived,
+  setStoryFavorite,
+} from '@/lib/actions'
 import { db, runInTransaction } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import {
@@ -132,13 +138,22 @@ export default function Index() {
       {prompt ? (
         <ConcurrentStatePrompt
           trigger={prompt.trigger}
+          draftName={rows.find((r) => r.id === prompt.storyId)?.title}
           onContinueSession={() => {
             setPrompt(null)
             goWizard()
           }}
           onDiscard={() => {
-            setPrompt(null)
-            goWizard()
+            runAction(
+              clearLiveSession(ctx).then(() => {
+                setPrompt(null)
+                goWizard()
+              }),
+              {
+                event: 'action_layer.wizard_session_discard_failed',
+                toastMessage: t('landing:errors.discardSessionFailed'),
+              },
+            )
           }}
           onDismiss={() => setPrompt(null)}
         />

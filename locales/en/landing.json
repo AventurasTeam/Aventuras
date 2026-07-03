@@ -27,10 +27,25 @@
     "cancel": "Cancel",
     "confirm": "Delete"
   },
+  "concurrentSession": {
+    "title": "Unfinished story in progress",
+    "untitledDraft": "Untitled story",
+    "newStory": {
+      "body": "You have an unfinished story in progress. Continue where you left off, or discard it and start fresh?",
+      "continue": "Continue",
+      "discard": "Discard session & start fresh"
+    },
+    "draft": {
+      "body": "You have an unfinished story in progress. Continue it, or discard it and open \"{{draftName}}\" instead?",
+      "continue": "Continue session",
+      "discard": "Discard session & open \"{{draftName}}\""
+    }
+  },
   "errors": {
     "openFailed": "Couldn't open the story. Please try again.",
     "favoriteFailed": "Couldn't update favorite. Please try again.",
     "archiveFailed": "Couldn't update the story. Please try again.",
-    "deleteFailed": "Couldn't delete the story. Please try again."
+    "deleteFailed": "Couldn't delete the story. Please try again.",
+    "discardSessionFailed": "Couldn't discard the session. Please try again."
   }
 }
