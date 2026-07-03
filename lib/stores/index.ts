@@ -15,6 +15,7 @@ import { navigationStore } from './navigation/navigation'
 import { rehydrateStories, storiesStore } from './stories/stories'
 import { threadsStore } from './threads/threads'
 import { translationsStore } from './translations/translations'
+import { wizardStore } from './wizard/wizard-store'
 
 // Test-harness seam: resets every domain store in one call
 export function resetAllStores(): void {
@@ -57,6 +58,7 @@ export {
   storiesStore,
   threadsStore,
   translationsStore,
+  wizardStore,
 }
 
 export { createWorkingSetStore } from './factory/working-set-store'
