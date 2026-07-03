@@ -6,6 +6,7 @@ import {
   __cacheSize,
   __originComputeCount,
   __resetCache,
+  tierMax,
   worldTimeToTuple,
 } from './world-time-to-tuple'
 
@@ -97,6 +98,32 @@ describe('worldTimeToTuple (earth-gregorian)', () => {
     expect(b).toEqual(a)
     // Same origin => memo hit, no second base-unit computation.
     expect(__originComputeCount()).toBe(1)
+  })
+})
+
+describe('tierMax', () => {
+  const ctx = { year: 2024, month: 2, day: 1, hour: 0, minute: 0, second: 0 }
+
+  it('returns constant-tier maxima (hour → 23, minute/second → 59)', () => {
+    expect(tierMax(EARTH_GREGORIAN, 'hour', ctx)).toBe(23)
+    expect(tierMax(EARTH_GREGORIAN, 'minute', ctx)).toBe(59)
+    expect(tierMax(EARTH_GREGORIAN, 'second', ctx)).toBe(59)
+    expect(tierMax(EARTH_GREGORIAN, 'month', ctx)).toBe(12)
+  })
+
+  it('resolves table-kind day length against the month + leap context', () => {
+    expect(tierMax(EARTH_GREGORIAN, 'day', { ...ctx, month: 1 })).toBe(31)
+    expect(tierMax(EARTH_GREGORIAN, 'day', { ...ctx, year: 2024, month: 2 })).toBe(29)
+    expect(tierMax(EARTH_GREGORIAN, 'day', { ...ctx, year: 2023, month: 2 })).toBe(28)
+  })
+
+  it('resolves rule-kind year length across a leap boundary', () => {
+    expect(tierMax(FIXTURE_RULE_CALENDAR, 'day', { year: 1, day: 1 })).toBe(365)
+    expect(tierMax(FIXTURE_RULE_CALENDAR, 'day', { year: 4, day: 1 })).toBe(366)
+  })
+
+  it('throws for an unknown tier name', () => {
+    expect(() => tierMax(EARTH_GREGORIAN, 'fortnight', ctx)).toThrow(/Unknown tier/)
   })
 })
 

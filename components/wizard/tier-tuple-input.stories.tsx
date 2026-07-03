@@ -1,11 +1,29 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
-import { View } from 'react-native'
+import { Pressable, View } from 'react-native'
 import { expect, screen, userEvent, waitFor } from 'storybook/test'
 
-import { EARTH_GREGORIAN } from '@/lib/calendar'
+import { Text } from '@/components/ui/text'
+import { EARTH_GREGORIAN, type CalendarSystem, type TierTuple } from '@/lib/calendar'
 
 import { TierTupleInput, type TierTupleInputProps } from './tier-tuple-input'
+
+// A calendar whose `day` tier tops out at 10 — swapping to it while a valid
+// Earth `day` value (e.g. 20) is retained makes that same-named tier invalid,
+// the exact scenario the touched-reset guard protects against.
+const SHORT_DAY_CALENDAR: CalendarSystem = {
+  id: 'test-short-day',
+  name: 'Short Day',
+  baseUnitName: 'day',
+  secondsPerBaseUnit: 86400,
+  tiers: [
+    { name: 'year', startValue: 1, rollover: { kind: 'constant', value: 1_000_000 } },
+    { name: 'day', startValue: 1, rollover: { kind: 'constant', value: 10 } },
+  ],
+  exampleStartValue: { year: 1, day: 1 },
+  displayFormat: '{{ year }}-{{ day }}',
+  eras: null,
+}
 
 const meta: Meta<typeof TierTupleInput> = {
   title: 'Compounds/Wizard/TierTupleInput',
@@ -101,5 +119,53 @@ export const ClearingAFieldShowsEmptyNotNaN: Story = {
 
     await userEvent.type(dayInput, '15')
     expect(dayInput).toHaveValue('15')
+  },
+}
+
+function SwapHarness() {
+  const [calendar, setCalendar] = useState<CalendarSystem>(EARTH_GREGORIAN)
+  const [value, setValue] = useState<TierTuple>({
+    year: 2024,
+    month: 1,
+    day: 20,
+    hour: 0,
+    minute: 0,
+    second: 0,
+  })
+  return (
+    <View className="gap-4">
+      <Pressable accessibilityRole="button" onPress={() => setCalendar(SHORT_DAY_CALENDAR)}>
+        <Text>Swap calendar</Text>
+      </Pressable>
+      <TierTupleInput calendar={calendar} value={value} onChange={setValue} />
+    </View>
+  )
+}
+
+// Blur `day`=20 under Earth (valid, no error), then swap to a calendar where
+// day's max is 10 (making the retained 20 invalid). The stale `touched` flag
+// must NOT flash an error — the swap resets it; the error only returns on a
+// fresh blur of the new calendar's field.
+export const SwapResetsTouchedState: Story = {
+  render: () => <SwapHarness />,
+  play: async () => {
+    const dayInput = screen.getByLabelText('Day')
+    await userEvent.click(dayInput)
+    await userEvent.tab()
+    expect(screen.queryByText(/Enter a value between/)).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Swap calendar' }))
+
+    // Retained day=20 is now out of range (max 10) but no interaction has
+    // happened on the new calendar — no error should show.
+    expect(screen.getByLabelText('Day')).toHaveValue('20')
+    expect(screen.queryByText(/Enter a value between/)).not.toBeInTheDocument()
+
+    // A fresh blur re-arms the error, proving validation still runs post-swap.
+    await userEvent.click(screen.getByLabelText('Day'))
+    await userEvent.tab()
+    await waitFor(() =>
+      expect(screen.getByText('Enter a value between 1 and 10.')).toBeInTheDocument(),
+    )
   },
 }
