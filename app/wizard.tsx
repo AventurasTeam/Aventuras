@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { BackHandler, Platform, View } from 'react-native'
 
 import { Text } from '@/components/ui/text'
+import { StepCalendar } from '@/components/wizard/step-calendar'
 import { StepFrame } from '@/components/wizard/step-frame'
 import { WizardShell } from '@/components/wizard/wizard-shell'
 import { t } from '@/lib/i18n'
@@ -10,8 +11,6 @@ import { wizardStore } from '@/lib/stores'
 
 function placeholderKey(step: number) {
   switch (step) {
-    case 2:
-      return 'wizard:placeholder.calendar' as const
     case 5:
       return 'wizard:placeholder.opening' as const
     default:
@@ -60,7 +59,13 @@ export default function WizardRoute() {
       }}
       onJump={(s) => wizardStore.setStep(s)}
     >
-      {step === 1 ? <StepFrame /> : <StepBodyPlaceholder step={step} />}
+      {step === 1 ? (
+        <StepFrame />
+      ) : step === 2 ? (
+        <StepCalendar />
+      ) : (
+        <StepBodyPlaceholder step={step} />
+      )}
     </WizardShell>
   )
 }

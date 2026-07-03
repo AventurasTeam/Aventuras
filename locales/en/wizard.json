@@ -18,7 +18,6 @@
   },
   "placeholder": {
     "frame": "Step 1 — Frame",
-    "calendar": "Step 2 — Calendar",
     "opening": "Step 5 — Opening & finish"
   },
   "frame": {
@@ -56,6 +55,39 @@
     }
   },
   "calendarStep": {
-    "originError": "Enter a value between {{min}} and {{max}}."
+    "originError": "Enter a value between {{min}} and {{max}}.",
+    "heading": "When does this story take place?",
+    "intro": "Pick a calendar system and your in-world starting moment. Every entry's worldTime is recorded relative to this start.",
+    "system": {
+      "label": "Calendar system",
+      "copy": "Pick a calendar that matches your story's setting. Default is Earth (Gregorian)."
+    },
+    "origin": {
+      "label": "Story start moment",
+      "copy": "What in-world date and time the story begins. Defaults seeded from this calendar's example start value."
+    },
+    "originResetNotice": "Origin reset for the new calendar.",
+    "era": {
+      "label": "Era",
+      "comingSoon": "Era selection lands in a later milestone."
+    },
+    "summary": {
+      "placeholderLabel": "Placeholder",
+      "detail": {
+        "constant": "constant: {{value}} {{unit}}",
+        "table": "table: {{min}}–{{max}} {{unit}}",
+        "rule": "rule: leap-adjusted ({{against}})",
+        "baseUnit": "base unit"
+      },
+      "subdivisions": {
+        "none": "none",
+        "weekday": "{{name}}: {{first}}–{{last}} ({{length}}-{{unit}} cycle)"
+      },
+      "eras": {
+        "disabled": "disabled",
+        "freeform": "enabled (free-form)",
+        "preset": "enabled (preset names: {{names}})"
+      }
+    }
   }
 }
