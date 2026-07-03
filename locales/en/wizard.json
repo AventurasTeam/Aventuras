@@ -54,5 +54,8 @@
       "label": "Lead character name",
       "placeholder": "e.g. Aria Stoneheart"
     }
+  },
+  "calendarStep": {
+    "originError": "Enter a value between {{min}} and {{max}}."
   }
 }

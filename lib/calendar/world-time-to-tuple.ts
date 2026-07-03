@@ -48,6 +48,17 @@ function tierLength(tier: Tier, context: TierTuple, tiers: Tier[]): number {
   return base
 }
 
+// Highest valid value for `tierName` given a context tuple that fixes every
+// coarser tier (e.g. day's max depends on month + leap-year context). Callers
+// must validate top-down — the context values below `tierName` are unused,
+// but values above it must already be confirmed valid for the range to mean
+// anything (an invalid month makes "days in that month" undefined).
+export function tierMax(calendar: CalendarSystem, tierName: string, context: TierTuple): number {
+  const tier = calendar.tiers.find((t) => t.name === tierName)
+  if (!tier) throw new Error(`Unknown tier: ${tierName}`)
+  return tier.startValue + tierLength(tier, context, calendar.tiers) - 1
+}
+
 function hasVariableBelow(tiers: Tier[], i: number): boolean {
   for (let j = i + 1; j < tiers.length; j++) {
     if (tiers[j].rollover.kind !== 'constant') return true
