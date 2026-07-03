@@ -27,6 +27,7 @@ describe('schema', () => {
         'threads',
         'translations',
         'vaultCalendars',
+        'wizardSessions',
       ].sort(),
     )
   })

@@ -12,6 +12,7 @@ import { chapters, storyEntries } from './story-entries/story-entries.table'
 import { deltas, pipelineRuns, probeCaptures, vaultCalendars } from './system/system.table'
 import { threads } from './threads/threads.table'
 import { translations } from './translations/translations.table'
+import { wizardSessions } from './wizard-sessions/wizard-sessions.table'
 
 export {
   appSettings,
@@ -34,6 +35,7 @@ export {
   threads,
   translations,
   vaultCalendars,
+  wizardSessions,
 }
 
 export const dbSchema = {
@@ -57,4 +59,5 @@ export const dbSchema = {
   appSettings,
   pipelineRuns,
   deltas,
+  wizardSessions,
 }
