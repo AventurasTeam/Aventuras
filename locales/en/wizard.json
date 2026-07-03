@@ -1,0 +1,24 @@
+{
+  "topBar": {
+    "cancel": "← Cancel",
+    "title": "New story · step {{step}} of 5"
+  },
+  "steps": {
+    "frame": "Frame",
+    "calendar": "Calendar",
+    "world": "World",
+    "cast": "Cast",
+    "opening": "Opening"
+  },
+  "footer": {
+    "saveDraft": "Save as draft",
+    "back": "← Back",
+    "next": "Next →",
+    "finish": "Finish"
+  },
+  "placeholder": {
+    "frame": "Step 1 — Frame",
+    "calendar": "Step 2 — Calendar",
+    "opening": "Step 5 — Opening & finish"
+  }
+}
