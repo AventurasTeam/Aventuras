@@ -81,6 +81,12 @@ describe('undoLastAction / redoLastAction', () => {
     const redoResult = await redoLastAction('b1', ctx)
     expect(redoResult.status).toBe('ok')
     expect(entriesStore.getById('e_turn')).toBeDefined()
+
+    // Proves redo re-inserted the delta row (not just the entry): a second undo
+    // must find it again and remove the entry a second time.
+    const secondUndo = await undoLastAction('b1', ctx)
+    expect(secondUndo.status).toBe('ok')
+    expect(entriesStore.getById('e_turn')).toBeUndefined()
   })
 
   it('rejects when there is nothing to undo', async () => {

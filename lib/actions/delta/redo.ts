@@ -35,8 +35,7 @@ export async function snapshotForRedo(rows: Delta[], ctx: DbCtx): Promise<RedoSn
   return snapshots
 }
 
-// Re-applies the forward state captured in each snapshot and re-inserts the
-// original delta row (so a subsequent CTRL-Z can undo the redo again).
+// Re-inserts the original delta row so a subsequent CTRL-Z can undo the redo again.
 export async function applyRedo(snapshots: RedoSnapshot[], ctx: DbCtx): Promise<void> {
   const ops = []
   for (const { delta, rowBeforeUndo } of snapshots) {
