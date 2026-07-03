@@ -1,11 +1,29 @@
 import type { CalendarSystem, LeapCondition, Tier, TierTuple } from './calendar-schema'
 
 const yearCostCache = new Map<string, number>()
+const originUnitsCache = new Map<string, number>()
+let originComputeCount = 0
 
+// Test seam — exposes the per-year cost cache size for the cache-population test.
 export function __cacheSize(): number {
   return yearCostCache.size
 }
 
+// Test seam — counts origin→base-unit conversions (memo misses) so a test can
+// prove repeated same-origin calls reuse the memo rather than recompute.
+export function __originComputeCount(): number {
+  return originComputeCount
+}
+
+// Test seam — clears memo state so a test can assert from a clean baseline.
+export function __resetCache(): void {
+  yearCostCache.clear()
+  originUnitsCache.clear()
+  originComputeCount = 0
+}
+
+// Conditions stack into a SIGNED delta (not first-match): Gregorian composes
+// +1 (÷4), −1 (÷100), +1 (÷400), so a ÷400 year re-includes what ÷100 excluded.
 function evalLeap(against: number, conditions: LeapCondition[]): number {
   let delta = 0
   for (const c of conditions) {
@@ -59,6 +77,20 @@ function unitsInOneUnit(tiers: Tier[], i: number, context: TierTuple): number {
   return total
 }
 
+// Base units in one whole top-tier unit (e.g. a year), memoized per value.
+// Both directions of the conversion walk the top tier one unit at a time, so
+// caching here keeps repeated calls off the O(units-in-a-year) recomputation.
+function cachedTopTierCost(calendar: CalendarSystem, value: number): number {
+  const { tiers } = calendar
+  const top = tiers[0]
+  const key = `${calendar.id}:${top.name}:${value}`
+  const cached = yearCostCache.get(key)
+  if (cached !== undefined) return cached
+  const cost = unitsInOneUnit(tiers, 0, { [top.name]: value })
+  yearCostCache.set(key, cost)
+  return cost
+}
+
 export function tupleToBaseUnits(calendar: CalendarSystem, tuple: TierTuple): number {
   const { tiers } = calendar
   let total = 0
@@ -68,7 +100,7 @@ export function tupleToBaseUnits(calendar: CalendarSystem, tuple: TierTuple): nu
     const target = tuple[tier.name]
     for (let v = tier.startValue; v < target; v++) {
       ctx[tier.name] = v
-      total += unitsInOneUnit(tiers, i, ctx)
+      total += i === 0 ? cachedTopTierCost(calendar, v) : unitsInOneUnit(tiers, i, ctx)
     }
     ctx[tier.name] = target
   }
@@ -86,24 +118,11 @@ export function baseUnitsToTuple(calendar: CalendarSystem, baseUnits: number): T
       break
     }
     // O(target - startValue) for the top tier: counting up from the calendar
-    // epoch is linear in the year, which the per-year cost cache keeps cheap
-    // across repeated calls.
+    // epoch is linear in the year, bounded by the per-year cost cache.
     let value = tier.startValue
     for (;;) {
       out[tier.name] = value
-      let cost: number
-      if (i === 0) {
-        const key = `${calendar.id}:${tier.name}:${value}`
-        const cached = yearCostCache.get(key)
-        if (cached === undefined) {
-          cost = unitsInOneUnit(tiers, i, out)
-          yearCostCache.set(key, cost)
-        } else {
-          cost = cached
-        }
-      } else {
-        cost = unitsInOneUnit(tiers, i, out)
-      }
+      const cost = i === 0 ? cachedTopTierCost(calendar, value) : unitsInOneUnit(tiers, i, out)
       if (remaining < cost) break
       remaining -= cost
       value += 1
@@ -112,12 +131,24 @@ export function baseUnitsToTuple(calendar: CalendarSystem, baseUnits: number): T
   return out
 }
 
+// The origin (worldTimeOrigin) is invariant across nearly every call for a given
+// story, so its base-unit conversion is memoized to avoid re-walking the epoch.
+function cachedOriginUnits(calendar: CalendarSystem, origin: TierTuple): number {
+  let key = calendar.id
+  for (const tier of calendar.tiers) key += `:${origin[tier.name]}`
+  const cached = originUnitsCache.get(key)
+  if (cached !== undefined) return cached
+  originComputeCount += 1
+  const units = tupleToBaseUnits(calendar, origin)
+  originUnitsCache.set(key, units)
+  return units
+}
+
 export function worldTimeToTuple(
   worldTime: number,
   calendar: CalendarSystem,
   origin: TierTuple,
 ): TierTuple {
-  const originUnits = tupleToBaseUnits(calendar, origin)
   const elapsed = Math.floor(worldTime / calendar.secondsPerBaseUnit)
-  return baseUnitsToTuple(calendar, originUnits + elapsed)
+  return baseUnitsToTuple(calendar, cachedOriginUnits(calendar, origin) + elapsed)
 }

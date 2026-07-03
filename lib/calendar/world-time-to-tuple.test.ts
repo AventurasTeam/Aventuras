@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import { EARTH_GREGORIAN } from './builtins/earth-gregorian'
-import { worldTimeToTuple, __cacheSize } from './world-time-to-tuple'
+import { FIXTURE_RULE_CALENDAR } from './builtins/fixtures'
+import {
+  __cacheSize,
+  __originComputeCount,
+  __resetCache,
+  worldTimeToTuple,
+} from './world-time-to-tuple'
 
 const ORIGIN = { year: 2024, month: 1, day: 1, hour: 0, minute: 0, second: 0 }
 
@@ -11,60 +17,105 @@ describe('worldTimeToTuple (earth-gregorian)', () => {
   })
 
   it('advances one day (86400s)', () => {
-    expect(worldTimeToTuple(86_400, EARTH_GREGORIAN, ORIGIN)).toMatchObject({
+    expect(worldTimeToTuple(86_400, EARTH_GREGORIAN, ORIGIN)).toEqual({
       year: 2024,
       month: 1,
       day: 2,
+      hour: 0,
+      minute: 0,
+      second: 0,
     })
   })
 
   it('rolls a full 31-day January into February (month table rollover)', () => {
-    expect(worldTimeToTuple(31 * 86_400, EARTH_GREGORIAN, ORIGIN)).toMatchObject({
+    expect(worldTimeToTuple(31 * 86_400, EARTH_GREGORIAN, ORIGIN)).toEqual({
       year: 2024,
       month: 2,
       day: 1,
+      hour: 0,
+      minute: 0,
+      second: 0,
     })
   })
 
   it('applies Gregorian leap: 2024 is leap (div4), Feb has 29 days', () => {
-    expect(worldTimeToTuple(59 * 86_400, EARTH_GREGORIAN, ORIGIN)).toMatchObject({
+    expect(worldTimeToTuple(59 * 86_400, EARTH_GREGORIAN, ORIGIN)).toEqual({
       year: 2024,
       month: 2,
       day: 29,
+      hour: 0,
+      minute: 0,
+      second: 0,
     })
   })
 
   it('applies the /100 exclusion: 1900 is NOT leap', () => {
     const o1900 = { year: 1900, month: 2, day: 28, hour: 0, minute: 0, second: 0 }
-    expect(worldTimeToTuple(86_400, EARTH_GREGORIAN, o1900)).toMatchObject({
+    expect(worldTimeToTuple(86_400, EARTH_GREGORIAN, o1900)).toEqual({
       year: 1900,
       month: 3,
       day: 1,
+      hour: 0,
+      minute: 0,
+      second: 0,
     })
   })
 
   it('applies the /400 re-inclusion: 2000 IS leap', () => {
     const o2000 = { year: 2000, month: 2, day: 28, hour: 0, minute: 0, second: 0 }
-    expect(worldTimeToTuple(86_400, EARTH_GREGORIAN, o2000)).toMatchObject({
+    expect(worldTimeToTuple(86_400, EARTH_GREGORIAN, o2000)).toEqual({
       year: 2000,
       month: 2,
       day: 29,
+      hour: 0,
+      minute: 0,
+      second: 0,
     })
   })
 
   it('carries hours/minutes/seconds', () => {
-    expect(worldTimeToTuple(3_661, EARTH_GREGORIAN, ORIGIN)).toMatchObject({
+    expect(worldTimeToTuple(3_661, EARTH_GREGORIAN, ORIGIN)).toEqual({
+      year: 2024,
+      month: 1,
+      day: 1,
       hour: 1,
       minute: 1,
       second: 1,
     })
   })
 
-  it('per-year cache: repeated calls are equivalent and populate the cache', () => {
+  it('memoizes the origin conversion and populates the year cost cache', () => {
+    __resetCache()
+    expect(__cacheSize()).toBe(0)
+    expect(__originComputeCount()).toBe(0)
+
     const a = worldTimeToTuple(400 * 86_400, EARTH_GREGORIAN, ORIGIN)
-    const before = __cacheSize()
+    expect(__cacheSize()).toBeGreaterThan(0)
+    expect(__originComputeCount()).toBe(1)
+
     const b = worldTimeToTuple(400 * 86_400, EARTH_GREGORIAN, ORIGIN)
-    expect(a).toEqual(b)
-    expect(__cacheSize()).toBeGreaterThanOrEqual(before)
+    expect(b).toEqual(a)
+    // Same origin => memo hit, no second base-unit computation.
+    expect(__originComputeCount()).toBe(1)
+  })
+})
+
+describe('worldTimeToTuple (rule-kind rollover)', () => {
+  it('derives year length from base + evalLeap across a leap boundary', () => {
+    // Year 1 is non-leap (365 days): +365 days rolls into year 2.
+    expect(worldTimeToTuple(365 * 86_400, FIXTURE_RULE_CALENDAR, { year: 1, day: 1 })).toEqual({
+      year: 2,
+      day: 1,
+    })
+    // Year 4 is leap (366 days): +365 days lands on day 366, no rollover.
+    expect(worldTimeToTuple(365 * 86_400, FIXTURE_RULE_CALENDAR, { year: 4, day: 1 })).toEqual({
+      year: 4,
+      day: 366,
+    })
+    // +366 days from a leap year rolls into year 5.
+    expect(worldTimeToTuple(366 * 86_400, FIXTURE_RULE_CALENDAR, { year: 4, day: 1 })).toEqual({
+      year: 5,
+      day: 1,
+    })
   })
 })
