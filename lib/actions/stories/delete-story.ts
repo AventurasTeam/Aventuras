@@ -19,6 +19,7 @@ import {
   storyEntries,
   threads,
   translations,
+  wizardSessions,
   type SqlOp,
 } from '@/lib/db'
 import { rehydrateStories } from '@/lib/stores'
@@ -59,6 +60,8 @@ export async function deleteStory(storyId: string, ctx: DbCtx): Promise<void> {
     }
   }
   ops.push(ctx.db.delete(pipelineRuns).where(eq(pipelineRuns.storyId, storyId)).toSQL())
+  // A draft carries a wizard_sessions row keyed by its story id; this slice owns that table.
+  ops.push(ctx.db.delete(wizardSessions).where(eq(wizardSessions.id, storyId)).toSQL())
   ops.push(ctx.db.delete(branches).where(eq(branches.storyId, storyId)).toSQL())
   ops.push(ctx.db.delete(stories).where(eq(stories.id, storyId)).toSQL())
 
