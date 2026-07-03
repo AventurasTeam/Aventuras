@@ -1,6 +1,6 @@
 import { Sparkles } from 'lucide-react-native'
-import { useRef, useState, type ComponentRef, type ReactNode } from 'react'
-import { ScrollView, View } from 'react-native'
+import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react'
+import { Platform, ScrollView, View } from 'react-native'
 import type { ZodType } from 'zod'
 
 import { Button } from '@/components/ui/button'
@@ -97,6 +97,11 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
   const requestSeqRef = useRef(0)
   const triggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
 
+  // Abort any in-flight request on unmount: a consumer navigating away mid-
+  // 'loading' would otherwise leave the (billable) LLM call running and let
+  // runGenerate's continuation setAssist on an unmounted instance.
+  useEffect(() => () => abortRef.current?.abort(), [])
+
   function resetOnClose() {
     abortRef.current?.abort()
     abortRef.current = null
@@ -109,6 +114,9 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
     // rn-primitives Popover has no controlled `open` prop; PopoverTrigger's
     // ref exposes an imperative close() that flips the shared root context.
     else triggerRef.current?.close()
+    // Direct call is load-bearing on the phone path (setPhoneOpen doesn't fire
+    // the Sheet's onOpenChange) and an idempotent no-op on desktop (close()
+    // already routed through handlePopoverOpenChange → resetOnClose).
     resetOnClose()
   }
 
@@ -125,6 +133,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
   }
 
   function handleTriggerPress() {
+    if (disabled) return
     const resolved = resolveModel('wizard-assist', resolveConfig())
     if (!resolved.ok) {
       setAssist({ kind: 'not-configured' })
@@ -162,6 +171,10 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
 
   function handleCancelLoading() {
     abortRef.current?.abort()
+    // Bump the seq alongside the abort so a response that loses the abort race
+    // (e.g. a future multi-tick runAssist) can't resurrect a stale 'result'
+    // over the user's cancel — same backstop resetOnClose relies on.
+    requestSeqRef.current += 1
     setAssist({ kind: 'guidance' })
   }
 
@@ -304,6 +317,12 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
             </View>
           </View>
         )
+
+      default: {
+        // A future AssistState variant must add a branch — fails to compile here.
+        const _exhaustive: never = assist
+        return _exhaustive
+      }
     }
   }
 
@@ -313,6 +332,12 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
       label={ariaLabel}
       onPress={handleTriggerPress}
       disabled={disabled}
+      // rn-primitives + Radix let the Trigger's own onClick open the popover
+      // even when the child Pressable is `disabled` (per lessons-learned/
+      // rn-primitives-disabled.md). The inline DOM-level pointerEvents gate is
+      // the reliable web block; native/phone are covered by IconAction's
+      // disabled onPress + the handleTriggerPress guard.
+      style={Platform.OS === 'web' && disabled ? ({ pointerEvents: 'none' } as never) : undefined}
     />
   )
 
@@ -334,7 +359,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
 
   return (
     <Popover ariaLabel={ariaLabel} onOpenChange={handlePopoverOpenChange}>
-      <PopoverTrigger ref={triggerRef} asChild>
+      <PopoverTrigger ref={triggerRef} asChild disabled={disabled}>
         {trigger}
       </PopoverTrigger>
       <PopoverContent className="w-80">{renderBody()}</PopoverContent>

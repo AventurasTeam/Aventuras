@@ -393,6 +393,34 @@ export const NotConfigured_SetupClosesOverlay: Story = {
   },
 }
 
+export const DisabledTrigger: Story = {
+  render: () => (
+    <View className="w-96 gap-3 rounded-md bg-bg-base p-6">
+      <AiAssist
+        ariaLabel="Suggest description"
+        buildPrompt={() => 'unused'}
+        schema={descriptionOutputSchema}
+        result="prose"
+        getProse={(v) => v.description}
+        onUse={fn()}
+        onSetup={fn()}
+        disabled
+        resolveConfig={() => CONFIGURED_CONFIG}
+        runAssist={okAssist<DescriptionValue>({ description: 'should never appear' })}
+      />
+    </View>
+  ),
+  play: async () => {
+    const trigger = screen.getByRole('button', { name: 'Suggest description' })
+    // The web disabled gate (lessons-learned/rn-primitives-disabled.md): the
+    // inline pointer-events:none is what actually blocks the Radix trigger's
+    // onClick, since Pressable's own `disabled` doesn't stop it.
+    expect(trigger).toHaveStyle({ pointerEvents: 'none' })
+    // Nothing opened — no guidance chrome.
+    expect(screen.queryByText('Optional guidance')).not.toBeInTheDocument()
+  },
+}
+
 // useTier() reads the real browser window width, not a wrapper's — resize the
 // Storybook preview below 640px to see the ✨ trigger open a bottom Sheet
 // instead of a Popover (mirrors GenerationStatusPill's PhonePopover story).
