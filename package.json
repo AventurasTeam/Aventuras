@@ -83,6 +83,7 @@
     "expo-symbols": "~55.0.7",
     "expo-system-ui": "~55.0.16",
     "expo-web-browser": "~55.0.14",
+    "harper.js": "^2.4.0",
     "i18next": "^26.3.0",
     "juice": "^12.1.1",
     "liquidjs": "^10.27.0",
