@@ -54,7 +54,7 @@ export type RollbackCounts = { entries: number; chapters: number; worldStateChan
 // Resolves the rollback-window predicate shared by the preview (counts) and
 // execute paths, so each builds its own select — the count path skips the
 // undo_payload blob it never reads.
-async function resolveRollbackWindow(
+export async function resolveRollbackWindow(
   branchId: string,
   targetId: string,
   ctx: DbCtx,
