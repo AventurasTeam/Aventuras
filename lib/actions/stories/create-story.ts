@@ -35,6 +35,12 @@ export async function createStoryWithBranch(
   const settings = storySettingsSchema.parse(input.settings)
   const metadata = entryMetadataSchema.parse(input.openingMetadata)
 
+  // leadEntityId lives in JSON, so no FK guards a definition whose lead is never
+  // materialized as an entity row — reject before the write instead of committing a dangling ref.
+  if (definition.leadEntityId != null && input.lead == null) {
+    throw new Error('definition.leadEntityId requires a lead entity')
+  }
+
   const storyId = input.storyId ?? generateId('story')
   const branchId = generateId('br')
   const openingId = generateId('entry')

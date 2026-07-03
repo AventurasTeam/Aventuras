@@ -104,6 +104,63 @@ describe('createStoryWithBranch', () => {
     expect(await db.select().from(deltas)).toHaveLength(0)
   })
 
+  it('is all-or-nothing: a mid-commit failure leaves nothing behind', async () => {
+    const { db, ctx } = await setup()
+    const existingId = 'story_existing'
+    await db
+      .insert(stories)
+      .values({ id: existingId, title: 'Existing', status: 'active', createdAt: 1, updatedAt: 1 })
+
+    await expect(
+      createStoryWithBranch(
+        {
+          storyId: existingId,
+          title: 'Conflict',
+          definition: makeDefinition(),
+          settings: buildStorySettings({}, null),
+          openingContent: 'boom',
+          openingMetadata: metadata,
+        },
+        ctx,
+        4000,
+      ),
+    ).rejects.toThrow()
+
+    const storyRows = await db.select().from(stories)
+    expect(storyRows).toHaveLength(1)
+    expect(storyRows[0].id).toBe(existingId)
+    expect(await db.select().from(branches)).toHaveLength(0)
+    expect(await db.select().from(storyEntries)).toHaveLength(0)
+    expect(await db.select().from(entities)).toHaveLength(0)
+  })
+
+  it('rejects a definition whose leadEntityId has no matching lead entity', async () => {
+    const { db, ctx } = await setup()
+
+    await expect(
+      createStoryWithBranch(
+        {
+          title: 'Orphan lead',
+          definition: makeDefinition({
+            mode: 'adventure',
+            narration: 'first',
+            leadEntityId: LEAD_ID,
+          }),
+          settings: buildStorySettings({}, null),
+          openingContent: 'x',
+          openingMetadata: metadata,
+        },
+        ctx,
+        5000,
+      ),
+    ).rejects.toThrow()
+
+    expect(await db.select().from(stories)).toHaveLength(0)
+    expect(await db.select().from(branches)).toHaveLength(0)
+    expect(await db.select().from(storyEntries)).toHaveLength(0)
+    expect(await db.select().from(entities)).toHaveLength(0)
+  })
+
   it('adventure with null leadEntityId is rejected by the definition schema', async () => {
     const { ctx } = await setup()
 
