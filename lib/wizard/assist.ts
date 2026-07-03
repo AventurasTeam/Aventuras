@@ -6,6 +6,7 @@ import {
   resolveModel,
   runProviderCall,
   type CallRetryError,
+  type ResolveFailureKind,
   type ResolveModelConfig,
 } from '@/lib/ai'
 
@@ -13,7 +14,7 @@ import { parseStructured } from './assist-schemas'
 
 export type WizardAssistResult<T> =
   | { status: 'ok'; value: T }
-  | { status: 'not-configured'; kind: string }
+  | { status: 'not-configured'; kind: ResolveFailureKind }
   | { status: 'failed'; detail: string }
   | { status: 'aborted' }
 
