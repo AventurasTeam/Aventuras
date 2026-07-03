@@ -20,6 +20,7 @@ import { runAction } from '@/lib/utils'
 const ctx = { db, runInTransaction }
 
 const AUTOSAVE_DEBOUNCE_MS = 500
+const EMPTY_STATE_JSON = JSON.stringify(emptyWorkingState())
 
 const FINISH_REASON_KEY = {
   title: 'wizard:finish.missing.title',
@@ -73,7 +74,7 @@ export default function WizardRoute() {
       // (net no-op) must cancel an already-scheduled write from the
       // intermediate change, not just skip scheduling a new one.
       if (timer) clearTimeout(timer)
-      if (JSON.stringify(s.state) === JSON.stringify(emptyWorkingState())) return
+      if (JSON.stringify(s.state) === EMPTY_STATE_JSON) return
       timer = setTimeout(() => {
         runAction(saveLiveSession(wizardStore.getWizard().state, ctx), {
           event: 'action_layer.wizard_autosave_failed',

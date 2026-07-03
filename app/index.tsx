@@ -76,6 +76,9 @@ export default function Index() {
       setPrompt({ trigger: 'new-story' })
       return
     }
+    // No persisted session, but the in-memory store can hold stale state from an
+    // instant-cancel inside the autosave debounce window — start from a clean slate.
+    wizardStore.reset()
     goWizard()
   }
   const openDraft = (storyId: string) => {
