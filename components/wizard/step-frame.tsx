@@ -106,7 +106,8 @@ function FrameSegment({
 function LeadRequirementNotice() {
   return (
     <View
-      accessibilityRole="alert"
+      role="status"
+      aria-live="polite"
       className="flex-row items-start gap-2 rounded-r-md border-l-4 border-l-border-strong bg-bg-sunken px-3 py-2.5"
     >
       <Icon as={Info} size="sm" className="mt-0.5 shrink-0 text-fg-muted" />
