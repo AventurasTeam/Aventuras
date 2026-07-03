@@ -1,30 +1,19 @@
-import { useRouter } from 'expo-router'
+import { useRouter, type Href } from 'expo-router'
 import { useEffect } from 'react'
-import { BackHandler, Platform, View } from 'react-native'
+import { BackHandler, Platform } from 'react-native'
 
-import { Text } from '@/components/ui/text'
+import { finishWizard } from '@/components/wizard/finish'
 import { StepCalendar } from '@/components/wizard/step-calendar'
 import { StepFrame } from '@/components/wizard/step-frame'
+import { StepOpening } from '@/components/wizard/step-opening'
 import { WizardShell } from '@/components/wizard/wizard-shell'
+import { db, runInTransaction } from '@/lib/db'
 import { t } from '@/lib/i18n'
-import { wizardStore } from '@/lib/stores'
+import { appSettingsStore, wizardStore } from '@/lib/stores'
+import { toast } from '@/lib/toast'
+import { runAction } from '@/lib/utils'
 
-function placeholderKey(step: number) {
-  switch (step) {
-    case 5:
-      return 'wizard:placeholder.opening' as const
-    default:
-      return 'wizard:placeholder.frame' as const
-  }
-}
-
-function StepBodyPlaceholder({ step }: { step: number }) {
-  return (
-    <View className="flex-1 items-center justify-center py-12">
-      <Text variant="muted">{t(placeholderKey(step))}</Text>
-    </View>
-  )
-}
+const ctx = { db, runInTransaction }
 
 export default function WizardRoute() {
   const router = useRouter()
@@ -46,6 +35,24 @@ export default function WizardRoute() {
     return () => sub.remove()
   }, [router])
 
+  const finish = () => {
+    const { defaultStorySettings, embeddingModelId } = appSettingsStore.getAppSettings()
+    runAction(
+      finishWizard(
+        wizardStore.getWizard().state,
+        ctx,
+        (branchId) => router.replace(`/reader-composer/${branchId}` as Href),
+        { defaultStorySettings, embeddingModelId },
+      ).then((result) => {
+        if (result.status === 'invalid') toast.error(t('wizard:finish.invalid'))
+      }),
+      {
+        event: 'action_layer.wizard_finish_failed',
+        toastMessage: t('wizard:finish.failed'),
+      },
+    )
+  }
+
   return (
     <WizardShell
       step={step}
@@ -53,7 +60,7 @@ export default function WizardRoute() {
       isFinish={step === 5}
       onCancel={() => router.back()}
       onBack={goBack}
-      onNext={goNext}
+      onNext={step === 5 ? finish : goNext}
       onSaveDraft={() => {
         // Task 22: wire the SQLite mirror + save-draft action.
       }}
@@ -64,7 +71,7 @@ export default function WizardRoute() {
       ) : step === 2 ? (
         <StepCalendar />
       ) : (
-        <StepBodyPlaceholder step={step} />
+        <StepOpening onSetupAssist={() => router.push('/settings' as Href)} />
       )}
     </WizardShell>
   )

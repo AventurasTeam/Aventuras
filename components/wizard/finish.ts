@@ -1,0 +1,90 @@
+import { clearLiveSession, createStoryWithBranch, openStory, type DbCtx } from '@/lib/actions'
+import {
+  buildStorySettings,
+  type EntryMetadata,
+  type StoryDefinition,
+  type StorySettings,
+  type WizardWorkingState,
+} from '@/lib/db'
+import { generateId } from '@/lib/ids'
+
+import { needsLead } from './step-frame-logic'
+
+export type FinishResult =
+  | { status: 'ok'; storyId: string }
+  | { status: 'invalid'; reasons: string[] }
+
+export type FinishAppDefaults = {
+  defaultStorySettings: Partial<StorySettings>
+  embeddingModelId: string | null
+}
+
+export async function finishWizard(
+  s: WizardWorkingState,
+  ctx: DbCtx,
+  navigate: (branchId: string) => void,
+  appDefaults: FinishAppDefaults,
+  nowMs?: number,
+  // Draft-resume seam (Task 22 owns draft-resume): when the working-state came
+  // from a promoted draft, its stories row is reused instead of minting a new
+  // id. Undefined on a fresh Finish → createStoryWithBranch generates one.
+  promoteDraftStoryId?: string,
+): Promise<FinishResult> {
+  const reasons: string[] = []
+  if (s.definition.title.trim().length === 0) reasons.push('title')
+  if (s.opening.content.trim().length === 0) reasons.push('opening')
+  const requiresLead = needsLead(s.definition.mode, s.definition.narration)
+  if (requiresLead && s.leadName.trim().length === 0) reasons.push('lead')
+  if (reasons.length > 0) return { status: 'invalid', reasons }
+
+  const lead = requiresLead
+    ? { id: s.leadEntityId ?? generateId('char'), name: s.leadName }
+    : undefined
+
+  const definition: StoryDefinition = {
+    mode: s.definition.mode,
+    leadEntityId: lead?.id ?? null,
+    narration: s.definition.narration,
+    genre: s.definition.genre,
+    tone: s.definition.tone,
+    setting: s.definition.setting,
+    calendarSystemId: s.definition.calendarSystemId,
+    worldTimeOrigin: s.definition.worldTimeOrigin,
+  }
+
+  const settings = buildStorySettings(
+    appDefaults.defaultStorySettings,
+    appDefaults.embeddingModelId,
+  )
+
+  // The lead is the only entity the M2 commit materializes, so it's the only id
+  // opening refs can legitimately point at. Drop anything else — a back-jump that
+  // clears the lead requirement after an AI opening was generated would otherwise
+  // leave a dangling sceneEntities ref to an entity row that never gets created.
+  const openingMetadata: EntryMetadata = {
+    sceneEntities: lead ? s.opening.sceneEntities.filter((id) => id === lead.id) : [],
+    currentLocationId: lead ? s.opening.currentLocationId : null,
+    worldTime: 0,
+    ...(s.opening.model ? { model: s.opening.model } : {}),
+  }
+
+  const { storyId } = await createStoryWithBranch(
+    {
+      storyId: promoteDraftStoryId,
+      title: s.definition.title,
+      description:
+        s.definition.description.trim().length > 0 ? s.definition.description : undefined,
+      definition,
+      settings,
+      openingContent: s.opening.content,
+      openingMetadata,
+      lead,
+    },
+    ctx,
+    nowMs,
+  )
+
+  await clearLiveSession(ctx)
+  await openStory(storyId, ctx, navigate, nowMs)
+  return { status: 'ok', storyId }
+}

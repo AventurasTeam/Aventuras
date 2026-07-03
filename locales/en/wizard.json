@@ -16,9 +16,31 @@
     "next": "Next →",
     "finish": "Finish"
   },
-  "placeholder": {
-    "frame": "Step 1 — Frame",
-    "opening": "Step 5 — Opening & finish"
+  "opening": {
+    "heading": "How does this story begin?",
+    "emptyHint": "Generate with ✨, or start typing below.",
+    "placeholder": "Write the opening, or generate one with ✨.",
+    "sceneMetadata": "Scene metadata: {{value}}",
+    "storyName": "Story name",
+    "opening": {
+      "label": "Opening",
+      "assist": "Suggest opening",
+      "guidance": "e.g. \"open in the thick of a storm\""
+    },
+    "title": {
+      "label": "Title",
+      "assist": "Suggest title",
+      "placeholder": "Name your story"
+    },
+    "description": {
+      "label": "Description",
+      "assist": "Suggest description",
+      "placeholder": "A one-line synopsis (optional)"
+    }
+  },
+  "finish": {
+    "invalid": "Add a title and an opening before finishing.",
+    "failed": "Couldn't create the story."
   },
   "frame": {
     "heading": "How is this story told?",

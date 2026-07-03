@@ -28,6 +28,10 @@ export const wizardWorkingStateSchema = z.object({
   step: z.number().int().min(1).max(5).default(1),
   definition: wizardDefinitionDraftSchema.default(() => wizardDefinitionDraftSchema.parse({})),
   leadName: z.string().default(''),
+  // Real UUID minted once when the opening ✨ runs on a lead-requiring path, so
+  // the opening's sceneEntities refs, the lead entities row, and
+  // definition.leadEntityId all resolve to the same id at Finish.
+  leadEntityId: z.string().nullable().default(null),
   opening: wizardOpeningDraftSchema.default(() => wizardOpeningDraftSchema.parse({})),
 })
 

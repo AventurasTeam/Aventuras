@@ -12,6 +12,7 @@ type WizardState = WizardSnapshot & {
   patchDefinition: (patch: Partial<WizardWorkingState['definition']>) => void
   patchOpening: (patch: Partial<WizardWorkingState['opening']>) => void
   setLeadName: (leadName: string) => void
+  setLeadEntityId: (leadEntityId: string | null) => void
   hydrate: (state: WizardWorkingState) => void
   reset: () => void
 }
@@ -24,6 +25,7 @@ const store = createStore<WizardState>()((set) => ({
   patchOpening: (patch) =>
     set((s) => ({ state: { ...s.state, opening: { ...s.state.opening, ...patch } } })),
   setLeadName: (leadName) => set((s) => ({ state: { ...s.state, leadName } })),
+  setLeadEntityId: (leadEntityId) => set((s) => ({ state: { ...s.state, leadEntityId } })),
   hydrate: (state) => set({ state }),
   reset: () => set({ state: emptyWorkingState() }),
 }))
@@ -44,6 +46,7 @@ export const wizardStore = {
   patchDefinition: api.patchDefinition,
   patchOpening: api.patchOpening,
   setLeadName: api.setLeadName,
+  setLeadEntityId: api.setLeadEntityId,
   hydrate: api.hydrate,
   reset: api.reset,
   subscribe: store.subscribe,
