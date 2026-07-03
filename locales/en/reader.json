@@ -8,10 +8,12 @@
   "rollbackConfirm": {
     "title": "Delete from entry {{entryNumber}}?",
     "body": "This rolls the story back to before entry {{entryNumber}}. The following are removed:",
-    "entries": "{{count}} entries",
+    "entries": "{{count}} entry",
+    "entries_other": "{{count}} entries",
     "chapters": "{{count}} chapter re-opened",
     "chapters_other": "{{count}} chapters re-opened",
-    "worldState": "{{count}} world-state changes",
+    "worldState": "{{count}} world-state change",
+    "worldState_other": "{{count}} world-state changes",
     "confirm": "Delete entries"
   }
 }

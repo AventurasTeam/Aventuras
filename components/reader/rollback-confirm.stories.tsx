@@ -4,7 +4,7 @@ import { fn } from 'storybook/test'
 import { RollbackConfirmModal } from './rollback-confirm'
 
 const meta: Meta<typeof RollbackConfirmModal> = {
-  title: 'Reader/RollbackConfirmModal',
+  title: 'Compounds/Reader/RollbackConfirmModal',
   component: RollbackConfirmModal,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],
