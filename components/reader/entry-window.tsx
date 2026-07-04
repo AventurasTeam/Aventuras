@@ -3,7 +3,6 @@ import {
   useCallback,
   useLayoutEffect,
   useRef,
-  useState,
   type CSSProperties,
   type ReactNode,
   type UIEvent,
@@ -63,9 +62,12 @@ function EntryWindowWeb<T extends { id: string }>({
     getItemKey: (index) => rows[index]!.id,
   })
 
-  const [paddingTopPx, setPaddingTopPx] = useState(0)
   const prevFirstIdRef = useRef<string | undefined>(rows[0]?.id)
 
+  // react-virtual's track height (getTotalSize) recomputes synchronously when
+  // `count` grows, so the prepended block's height is already reflected in
+  // this render's layout — only the scroll-position delta needs correcting,
+  // not a temporary padding reservation (that's the non-virtualized recipe).
   useLayoutEffect(() => {
     const el = scrollRef.current
     const prevFirstId = prevFirstIdRef.current
@@ -79,13 +81,8 @@ function EntryWindowWeb<T extends { id: string }>({
     const prependedBlockHeightPx = virtualizer.getOffsetForIndex(insertedCount, 'start')?.[0] ?? 0
     if (prependedBlockHeightPx <= 0) return
 
-    const { paddingTopPx: pad, scrollTopDeltaPx } = computePrependCompensation({
-      prependedBlockHeightPx,
-    })
-    setPaddingTopPx(pad)
+    const { scrollTopDeltaPx } = computePrependCompensation({ prependedBlockHeightPx })
     el.scrollTop += scrollTopDeltaPx
-    const raf = requestAnimationFrame(() => setPaddingTopPx(0))
-    return () => cancelAnimationFrame(raf)
   }, [rows, virtualizer])
 
   const nearTopRef = useRef(false)
@@ -104,12 +101,7 @@ function EntryWindowWeb<T extends { id: string }>({
   )
 
   return (
-    <div
-      ref={scrollRef}
-      className="h-full overflow-y-auto"
-      style={{ paddingTop: paddingTopPx }}
-      onScroll={handleScroll}
-    >
+    <div ref={scrollRef} className="h-full overflow-y-auto" onScroll={handleScroll}>
       <div style={trackStyle(virtualizer.getTotalSize())}>
         {virtualizer.getVirtualItems().map((virtualRow) => (
           <div
