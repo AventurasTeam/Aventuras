@@ -31,10 +31,6 @@ const FINISH_REASON_KEY = {
 export default function WizardRoute() {
   const router = useRouter()
   const { draftId } = useLocalSearchParams<{ draftId?: string }>()
-  // The draft this session was resumed from, if any — carried as a nav param
-  // (set by app/index.tsx's openDraft, mirroring the existing /settings?tab=
-  // precedent) rather than in wizardStore's own state, since it's navigation
-  // provenance, not part of the working-state the store persists/commits.
   const [sourceDraftId] = useState<string | null>(() =>
     typeof draftId === 'string' ? draftId : null,
   )

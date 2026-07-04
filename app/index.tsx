@@ -65,12 +65,9 @@ export default function Index() {
 
   const cards = useMemo(() => selectStoryCards(rows, query, Date.now()), [rows, query])
 
-  // draftId rides the URL (mirrors the existing /settings?tab= precedent)
-  // so app/wizard.tsx knows which draft to update on Save-as-draft/Finish —
-  // the working-state itself is already delivered via wizardStore.hydrate,
-  // called synchronously before this navigation.
   const goWizard = (draftId?: string) =>
     router.push((draftId ? `/wizard?draftId=${draftId}` : '/wizard') as Href)
+
   const onNewStory = () => {
     if (sessionExists) {
       setPrompt({ trigger: 'new-story' })
@@ -81,6 +78,7 @@ export default function Index() {
     wizardStore.reset()
     goWizard()
   }
+
   const openDraft = (storyId: string) => {
     if (sessionExists) {
       setPrompt({ trigger: 'draft', storyId })

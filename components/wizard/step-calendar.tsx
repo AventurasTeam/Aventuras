@@ -123,9 +123,7 @@ function OriginResetNotice() {
 type StepCalendarProps = {
   /**
    * Calendar registry to choose from. Defaults to the app's built-in
-   * registry. Injectable so tests can drive a multi-calendar swap: the M2
-   * registry ships only earth-gregorian, so a real pick change is otherwise
-   * unreachable through the picker.
+   * registry. Injectable so tests can drive a multi-calendar swap.
    */
   calendars?: readonly CalendarSystem[]
 }
@@ -137,19 +135,9 @@ export function StepCalendar({ calendars = listCalendars() }: StepCalendarProps 
 
   const byId = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars])
 
-  // App Settings' default drives only the initial pick (copy-at-creation);
-  // once the session has a calendar the store value wins, so a mid-session
-  // app-default change can't re-seed an in-flight wizard.
   const appDefaultId = appSettingsStore.getAppSettings().defaultCalendarId ?? DEFAULT_CALENDAR_ID
   const appDefaultCalendar = byId.get(appDefaultId) ?? byId.get(DEFAULT_CALENDAR_ID) ?? calendars[0]
 
-  // An empty worldTimeOrigin ({}) is the "never entered this step" sentinel
-  // (the wizard-session schema always defaults calendarSystemId to
-  // earth-gregorian, so origin emptiness is the only reliable first-entry
-  // signal). Derive the effective calendar/origin at render time — rather
-  // than seeding the store in an effect and reading the empty tuple for one
-  // frame — so TierTupleInput's Select never flips from uncontrolled to
-  // controlled and the first paint already shows real values.
   const isSeeded = Object.keys(storedOrigin).length > 0
   const selectedCalendar: CalendarSystem = isSeeded
     ? (byId.get(calendarSystemId) ?? appDefaultCalendar)
@@ -162,9 +150,6 @@ export function StepCalendar({ calendars = listCalendars() }: StepCalendarProps 
       calendarSystemId: selectedCalendar.id,
       worldTimeOrigin: { ...selectedCalendar.exampleStartValue },
     })
-    // Persists the render-time seed above into the store exactly once; both
-    // values are recomputed from appDefaultCalendar, not read back out of
-    // the effect's own deps, so they're intentionally omitted here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSeeded])
 

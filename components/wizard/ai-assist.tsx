@@ -97,9 +97,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
   const requestSeqRef = useRef(0)
   const triggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
 
-  // Abort any in-flight request on unmount: a consumer navigating away mid-
-  // 'loading' would otherwise leave the (billable) LLM call running and let
-  // runGenerate's continuation setAssist on an unmounted instance.
+  // Abort any in-flight request on unmount
   useEffect(() => () => abortRef.current?.abort(), [])
 
   function resetOnClose() {
