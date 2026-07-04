@@ -27,5 +27,13 @@
     "worldState": "{{count}} world-state change",
     "worldState_other": "{{count}} world-state changes",
     "confirm": "Delete entries"
+  },
+  "systemEntry": {
+    "retry": "Retry",
+    "viewDetails": "View details",
+    "dismiss": "Dismiss",
+    "assignProfile": "Assign profile",
+    "fixProfile": "Fix profile",
+    "fixDefault": "Fix default"
   }
 }
