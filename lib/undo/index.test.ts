@@ -60,6 +60,33 @@ describe('selectUndoTarget', () => {
     })
   })
 
+  it('anchors at the earliest story_entries create when a turn group has two (user_action + ai_reply)', () => {
+    // DESC-ordered (newest first): the ai_reply's create appears before the
+    // user_action's create in the array, but the user_action has the lower
+    // log_position and must be the anchor so the reversal window sweeps both.
+    const rows = [
+      delta({
+        actionId: 'act_turn',
+        source: 'ai_classifier',
+        targetTable: 'story_entries',
+        op: 'create',
+        targetId: 'entry_ai_reply',
+      }),
+      delta({
+        actionId: 'act_turn',
+        source: 'user_edit',
+        targetTable: 'story_entries',
+        op: 'create',
+        targetId: 'entry_user_action',
+      }),
+    ]
+    expect(selectUndoTarget(rows)).toEqual({
+      actionId: 'act_turn',
+      kind: 'turn',
+      entryId: 'entry_user_action',
+    })
+  })
+
   it('classifies a non-turn group (no story_entries create) as a plain group', () => {
     const rows = [
       delta({

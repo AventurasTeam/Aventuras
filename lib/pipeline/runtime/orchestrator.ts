@@ -38,7 +38,7 @@ class ActionRejectedError extends ActionLayerError {
   }
 }
 
-export type RunCtx = { storyId: string | null; branchId: string } & DbCtx
+export type RunCtx = { storyId: string | null; branchId: string; actionId?: string } & DbCtx
 
 function newRunState(kind: string, ctx: RunCtx): RunState {
   let resolveTerminal!: () => void
@@ -49,7 +49,7 @@ function newRunState(kind: string, ctx: RunCtx): RunState {
     runId: generateId('run'),
     kind,
     gateBehavior: getPipeline(kind).gateBehavior,
-    actionId: generateId('act'),
+    actionId: ctx.actionId ?? generateId('act'),
     storyId: ctx.storyId,
     branchId: ctx.branchId,
     abortController: new AbortController(),

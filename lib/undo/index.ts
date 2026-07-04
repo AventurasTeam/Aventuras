@@ -17,7 +17,11 @@ export function selectUndoTarget(rows: readonly UndoCandidateDelta[]): UndoTarge
   if (!head) return null
 
   const group = rows.filter((r) => r.actionId === head.actionId)
-  const turnCreate = group.find((r) => r.targetTable === 'story_entries' && r.op === 'create')
+  const creates = group.filter((r) => r.targetTable === 'story_entries' && r.op === 'create')
+  // DESC-ordered input: a turn's group can hold two creates (user_action, ai_reply)
+  // sharing one actionId. The last match is the earliest (lowest log_position),
+  // anchoring the reversal window at the turn's true start.
+  const turnCreate = creates.at(-1)
   if (turnCreate) return { actionId: head.actionId, kind: 'turn', entryId: turnCreate.targetId }
   return { actionId: head.actionId, kind: 'group' }
 }

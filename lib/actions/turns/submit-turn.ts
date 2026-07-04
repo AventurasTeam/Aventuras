@@ -1,8 +1,8 @@
-import { storyEntries } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { runPipeline, type RunCtx } from '@/lib/pipeline'
 import { entriesStore } from '@/lib/stores'
 
+import { applyDeltaAction } from '../delta/apply-delta-action'
 import type { DbCtx } from '../types'
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './pipeline'
 
@@ -21,38 +21,41 @@ export async function submitTurn(
   const position = existing.length + 1
   const entryId = generateId('entry')
   const createdAt = Date.now()
+  // Shared across the user_action's delta and the pipeline run it kicks off, so
+  // CTRL-Z reverses the whole turn as one group (milestone.md C6).
+  const turnActionId = generateId('act')
 
-  await ctx.runInTransaction([
-    ctx.db
-      .insert(storyEntries)
-      .values({
-        id: entryId,
-        branchId: ids.branchId,
-        position,
-        kind: 'user_action',
-        content: meta.content,
-        createdAt,
-      })
-      .toSQL(),
-  ])
-  entriesStore.patch(ids.branchId, {
-    op: 'create',
-    id: entryId,
-    row: {
-      id: entryId,
+  const result = await applyDeltaAction(
+    {
+      action: {
+        kind: 'createStoryEntry',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id: entryId,
+            branchId: ids.branchId,
+            position,
+            kind: 'user_action',
+            content: meta.content,
+            chapterId: null,
+            metadata: null,
+            createdAt,
+          },
+        },
+      },
+      actionId: turnActionId,
       branchId: ids.branchId,
-      position,
-      kind: 'user_action',
-      content: meta.content,
-      chapterId: null,
-      metadata: null,
-      createdAt,
+      entryId: null,
     },
-  })
+    ctx,
+  )
+  if (result.status === 'rejected')
+    throw new Error(`submitTurn: user_action write rejected: ${result.reason}`)
 
   const runCtx: RunCtx = {
     storyId: ids.storyId,
     branchId: ids.branchId,
+    actionId: turnActionId,
     db: ctx.db,
     runInTransaction: ctx.runInTransaction,
   }

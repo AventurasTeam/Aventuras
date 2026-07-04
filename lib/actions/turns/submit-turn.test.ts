@@ -108,7 +108,7 @@ describe('submitTurn', () => {
     ])
   })
 
-  it('halts at preflight when no narrative profile resolves, keeping the user action', async () => {
+  it('halts at preflight when no narrative profile resolves, reversing the user action too', async () => {
     const { ctx } = await makeHarness()
     entriesStore.hydrate('b1', [])
     await hydrateAppSettings(async () => ({ ...WORKING_CONFIG, profiles: [] }))
@@ -123,9 +123,10 @@ describe('submitTurn', () => {
 
     expect(result.outcome).toBe('failed')
     expect(result.error?.kind).toBe('config-resolver')
-    const rows = branchEntries('b1')
-    expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({ kind: 'user_action', content: 'Hello there' })
-    expect(rows.some((r) => r.kind === 'ai_reply')).toBe(false)
+    // The user_action's delta shares the turn's actionId (C6), so abortRun's
+    // actionId-scoped reverseReplayDeltas reverses it along with the run's own
+    // partial writes — the turn fails atomically, matching 07-wiring.md's
+    // "no story_entries row, no orphan deltas" abort contract.
+    expect(branchEntries('b1')).toHaveLength(0)
   })
 })

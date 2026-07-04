@@ -89,6 +89,110 @@ describe('undoLastAction / redoLastAction', () => {
     expect(entriesStore.getById('e_turn')).toBeUndefined()
   })
 
+  it('removes a real turn (user_action + ai_reply sharing one actionId) and redo restores both', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    await db.insert(storyEntries).values({
+      id: 'e_opening',
+      branchId: 'b1',
+      position: 1,
+      kind: 'opening',
+      content: 'once upon a time',
+      createdAt: 1,
+    })
+    await db.insert(storyEntries).values({
+      id: 'e_user',
+      branchId: 'b1',
+      position: 2,
+      kind: 'user_action',
+      content: 'I open the door',
+      createdAt: 2,
+    })
+    await db.insert(storyEntries).values({
+      id: 'e_ai',
+      branchId: 'b1',
+      position: 3,
+      kind: 'ai_reply',
+      content: 'a reply',
+      createdAt: 3,
+    })
+    // Both deltas share one actionId (submit-turn.ts's turnActionId contract) at
+    // increasing log_positions — the user_action's create is the earlier one.
+    await db.insert(deltas).values({
+      id: 'd_user',
+      branchId: 'b1',
+      actionId: 'act_turn',
+      op: 'create',
+      targetTable: 'story_entries',
+      targetId: 'e_user',
+      entryId: null,
+      source: 'user_edit',
+      undoPayload: null,
+      logPosition: 1,
+      encodingVersion: 1,
+      createdAt: 2,
+    })
+    await db.insert(deltas).values({
+      id: 'd_ai',
+      branchId: 'b1',
+      actionId: 'act_turn',
+      op: 'create',
+      targetTable: 'story_entries',
+      targetId: 'e_ai',
+      entryId: null,
+      source: 'ai_classifier',
+      undoPayload: null,
+      logPosition: 2,
+      encodingVersion: 1,
+      createdAt: 3,
+    })
+    entriesStore.hydrate('b1', [
+      {
+        id: 'e_opening',
+        branchId: 'b1',
+        position: 1,
+        kind: 'opening',
+        content: 'once upon a time',
+        chapterId: null,
+        metadata: null,
+        createdAt: 1,
+      },
+      {
+        id: 'e_user',
+        branchId: 'b1',
+        position: 2,
+        kind: 'user_action',
+        content: 'I open the door',
+        chapterId: null,
+        metadata: null,
+        createdAt: 2,
+      },
+      {
+        id: 'e_ai',
+        branchId: 'b1',
+        position: 3,
+        kind: 'ai_reply',
+        content: 'a reply',
+        chapterId: null,
+        metadata: null,
+        createdAt: 3,
+      },
+    ])
+
+    const result = await undoLastAction('b1', ctx)
+    expect(result.status).toBe('ok')
+    expect(entriesStore.getById('e_user')).toBeUndefined()
+    expect(entriesStore.getById('e_ai')).toBeUndefined()
+    expect(entriesStore.getById('e_opening')).toBeDefined()
+
+    const redoResult = await redoLastAction('b1', ctx)
+    expect(redoResult.status).toBe('ok')
+    expect(entriesStore.getById('e_user')).toBeDefined()
+    expect(entriesStore.getById('e_ai')).toBeDefined()
+  })
+
   it('rejects when there is nothing to undo', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
