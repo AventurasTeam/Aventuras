@@ -125,8 +125,10 @@ describe('submitTurn', () => {
     expect(result.error?.kind).toBe('config-resolver')
     // The user_action's delta shares the turn's actionId (C6), so abortRun's
     // actionId-scoped reverseReplayDeltas reverses it along with the run's own
-    // partial writes — the turn fails atomically, matching 07-wiring.md's
-    // "no story_entries row, no orphan deltas" abort contract.
+    // partial writes. This is provisional for M2.5: C6 mandates the shared
+    // actionId, but whether abort-before-stream should keep or reverse the
+    // user's text is explicitly open (07-wiring.md -> Open questions) and
+    // owned by Slice 2.7 — only mid-stream cancel is settled as "reverse".
     expect(branchEntries('b1')).toHaveLength(0)
   })
 })

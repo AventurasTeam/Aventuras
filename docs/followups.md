@@ -22,3 +22,12 @@ for the placement rule.
   scaffolding flagged `TODO(spine)`; remove the module, the reader-route
   trigger, and the `lib/ai` seam when real story-creation and
   provider-settings UI land.
+- **Abort-before-stream keep-vs-reverse is unresolved.** Slice 2.5's
+  `submitTurn` shares one actionId between the user_action write and
+  the pipeline run (C6), so a preflight failure (e.g. no narrative
+  profile resolves) now reverses the user's typed turn along with
+  the failed generation, not just mid-stream cancel. Whether that's
+  the right UX for this specific case — as opposed to mid-stream
+  cancel, which [Slice 2.7](./implementation/milestones/02-first-user-loop/slices/07-wiring.md)
+  already settles as "reverse" — is still open; resolve at Slice 2.7
+  planning.
