@@ -7,6 +7,16 @@
   "railPlaceholder": "World-state browse",
   "jumpToTop": "Jump to top",
   "jumpToBottom": "Jump to bottom",
+  "composerMode": {
+    "do": "Do",
+    "say": "Say",
+    "think": "Think",
+    "free": "Free"
+  },
+  "spellcheck": "Spellcheck",
+  "spellcheckClean": "No issues",
+  "spellcheckIssues": "{{count}} issue",
+  "spellcheckIssues_other": "{{count}} issues",
   "rollbackConfirm": {
     "title": "Delete from entry {{entryNumber}}?",
     "body": "This rolls the story back to before entry {{entryNumber}}. The following are removed:",
