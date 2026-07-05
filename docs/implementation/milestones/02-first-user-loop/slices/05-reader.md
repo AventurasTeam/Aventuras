@@ -200,14 +200,89 @@ chapter management (M5), branch picker (M6).
 
 ## Open questions
 
-- Whether the web prepend compensation lives in a reusable
-  `NarrativeStream` component or stays reader-local — the
-  component-inventory deferral lands here; decide once the
-  second consumer's needs are visible (chapter timeline, M5.3).
-- Harper.js bundle-size impact on the Android dev client —
-  measure at install; tech-stack flags WASM weight as
-  composer-only by design.
+- Harper.js bundle-size impact on the Android dev client — still
+  unmeasured (no Android build ran during this slice's
+  implementation); measure before the milestone closes. Tech-stack
+  flags WASM weight as composer-only by design.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **Web prepend compensation stays reader-local.** `EntryWindow`
+  (`components/reader/entry-window.tsx`) is not extracted into a
+  shared `NarrativeStream` component — resolves this slice's own
+  open question. Revisit only when a second consumer appears
+  (chapter timeline, M5.3).
+- **`computePrependCompensation`'s `paddingTopPx` is unused in
+  practice.** `@tanstack/react-virtual`'s track height
+  (`getTotalSize()`) already grows synchronously with row count on
+  prepend, so applying additional top padding on top of that
+  double-counts the shift for one frame. `EntryWindow`'s web branch
+  applies only `scrollTopDeltaPx`; the padding field survives in
+  `lib/reader-scroll/prepend-compensation.ts`'s return shape but has
+  no live caller. Left as-is (that module isn't this slice's file to
+  unilaterally re-shape) — worth a follow-up doc/type cleanup if a
+  second caller never materializes.
+- **`submitTurn` delta-logs the `user_action` write, sharing one
+  `actionId` with the pipeline run.** The milestone's C6 contract
+  ("the pipeline kick under one turn `actionId`") wasn't satisfiable
+  with `runPipeline`'s original signature (no caller-supplied
+  `actionId`), so `RunCtx` gained an optional `actionId?: string`
+  field (additive, `lib/pipeline/runtime/orchestrator.ts`) that
+  `submitTurn` populates. This also fixed a real bug: the original
+  interim design wrote `user_action` via a raw insert, bypassing the
+  delta log entirely, so CTRL-Z could only reverse the `ai_reply`
+  and orphaned the user's entry. `lib/undo`'s `selectUndoTarget` was
+  corrected in the same pass to anchor a turn at its **earliest**
+  `story_entries` create (not the first one encountered in the
+  DESC-ordered log), since a turn's action-id group can now
+  legitimately contain two creates.
+- **Abort-before-stream now reverses the user's typed turn as a side
+  effect of the actionId-sharing above** (a preflight failure, e.g.
+  no narrative profile resolves, removes the `user_action` entry
+  along with the failed generation — not just mid-stream cancel).
+  Whether that's the intended UX for this specific case is
+  [Slice 2.7](./07-wiring.md)'s own open question already (its
+  Open questions section lists abort-before-stream keep-vs-reverse
+  as unresolved); this slice's implementation forces "reverse" as
+  the interim default because the shared-actionId requirement is
+  unconditional. Also logged in
+  [`followups.md`](../../../../followups.md).
+- **The interim per-turn pipeline lives in `lib/actions/turns/`**
+  (`pipeline.ts` + `submit-turn.ts`), not inside
+  `components/reader/`. A phase has no direct access to
+  `branchId`/`storyId` (`PhaseContext` carries only
+  `actionId`/`abortSignal`/`intermediates`/`log`), so the phase
+  looks up its own run via
+  `generationStore.getTxState().runs` filtered by `actionId` — the
+  same lookup shape already used internally by
+  `lib/pipeline/runtime/orchestrator.ts`'s `awaitRunTerminal`. Slice
+  2.7 replaces this phase's internals (full per-turn declaration,
+  buffer composition, real provider wiring) without changing
+  `submitTurn`'s call site.
+- **`EntryCard` (a Slice 1.x/pre-2.5 compound) never actually
+  renders markdown as HTML** — it renders `content` via plain
+  `<Text>` in every path. This slice's `lib/markdown` pipeline
+  (web sanitize/render, native `react-native-render-html` config,
+  the streaming tag-boundary buffer) is fully built and tested but
+  has no consumer; the reader's live-streaming preview
+  (`app/reader-composer/[branchId].tsx`) buffers raw markdown
+  through the tag-boundary guard before handing it to the same
+  plain-`Text` render, so it prevents broken HTML fragments without
+  actually rendering markdown. Closing this needs a real `EntryCard`
+  API change (a platform-split HTML render path) that touches every
+  entry kind plus its Storybook stories — out of scope for a
+  route-level integration pass. Logged in
+  [`followups.md`](../../../../followups.md).
+- **Jump buttons and autoscroll are not functionally wired.**
+  `EntryWindow` doesn't expose an imperative scroll-to/scroll-state
+  API, so `JumpButtons` mounts with heuristic visibility but
+  no-op handlers, and the autoscroll state machine
+  (`lib/reader-scroll/autoscroll.ts`) isn't consumed by the route at
+  all. A future pass needs `EntryWindow` to expose an imperative
+  ref (jump-to-top/bottom, current scroll-edge distance) before this
+  closes — not attempted here to avoid re-opening an
+  already-reviewed component's contract mid-integration.
+- **Composer wrap POV/lead name are hardcoded** (`pov: 'first'`,
+  `leadName: 'You'`) since no story-settings/definition read path
+  exists in this route yet; swap for real `stories.settings`/
+  `stories.definition` values once a settings-read surface lands.
