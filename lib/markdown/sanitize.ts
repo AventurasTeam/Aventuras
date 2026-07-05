@@ -16,7 +16,7 @@ const ALLOWED_TAGS = [
   'a',
   'span',
 ]
-const ALLOWED_ATTR = ['href', 'class', 'style']
+const ALLOWED_ATTR = ['href', 'class']
 
 export function sanitizeHtml(html: string): string {
   const inlined = juice(html)

@@ -21,4 +21,11 @@ describe('sanitizeHtml', () => {
   it('drops disallowed tags but keeps their text content', () => {
     expect(sanitizeHtml('<iframe src="evil">nope</iframe>')).not.toContain('<iframe')
   })
+
+  it('strips inline style with a url() payload (CSS-exfiltration surface)', () => {
+    const clean = sanitizeHtml('<p style="background: url(https://evil.example/x)">text</p>')
+    expect(clean).not.toContain('style')
+    expect(clean).not.toContain('url(')
+    expect(clean).toContain('<p>text</p>')
+  })
 })
