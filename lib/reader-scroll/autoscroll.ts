@@ -28,14 +28,12 @@ export function createAutoscrollMachine(): AutoscrollMachine {
       lastProgrammaticDistance = null
     },
     userScrolled(pos) {
-      // Ignore scroll events that merely echo the last programmatic write.
-      if (
-        lastProgrammaticDistance !== null &&
-        pos.distanceFromBottomPx === lastProgrammaticDistance
-      ) {
-        lastProgrammaticDistance = null
-        return
-      }
+      // One-shot guard: the marker only ever suppresses the immediately-next
+      // event (the DOM echo of a programmatic write), so clear it on every call.
+      const wasProgrammaticEcho =
+        lastProgrammaticDistance !== null && pos.distanceFromBottomPx === lastProgrammaticDistance
+      lastProgrammaticDistance = null
+      if (wasProgrammaticEcho) return
       state = atBottom(pos.distanceFromBottomPx) ? 'engaged' : 'disengaged'
     },
     autoscrollApplied(pos) {

@@ -54,4 +54,13 @@ describe('createAutoscrollMachine', () => {
     m.autoscrollApplied({ distanceFromBottomPx: 0 })
     expect(m.state).toBe('engaged')
   })
+
+  it('clears the programmatic marker after any user scroll, so a later coincidental match is not swallowed', () => {
+    const m = createAutoscrollMachine()
+    m.streamStarted({ distanceFromBottomPx: 300 })
+    m.autoscrollApplied({ distanceFromBottomPx: 50 })
+    m.userScrolled({ distanceFromBottomPx: 300 }) // genuine scroll, doesn't match the marker
+    m.userScrolled({ distanceFromBottomPx: 50 }) // genuine scroll back to 50 — must be processed as real input, not swallowed as a stale echo
+    expect(m.state).toBe('engaged')
+  })
 })
