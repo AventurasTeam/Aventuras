@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, View } from 'react-native'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
@@ -30,12 +30,15 @@ import {
 import { wrapComposerText } from '@/lib/composer-wrap'
 import { branches, db, runInTransaction, storyEntries, type StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
-import { awaitRunTerminal, type PipelineError } from '@/lib/pipeline'
+import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
+import { awaitRunTerminal, pipelineEventBus, type PipelineError } from '@/lib/pipeline'
 import { entriesStore, generationStore, isUserEditBlocked, undoRedoStore } from '@/lib/stores'
 
 const ctx = { db, runInTransaction }
 
 type RollbackState = { targetId: string; targetNumber: number; counts: RollbackCounts }
+type StreamingRow = { id: string; kind: 'streaming'; content: string }
+type WindowRow = StoryEntry | StreamingRow
 
 export default function ReaderComposerRoute() {
   const router = useRouter()
@@ -69,6 +72,59 @@ export default function ReaderComposerRoute() {
   const isGenerating = generationStore.useGeneration((s) =>
     [...s.txState.runs.values()].some((r) => r.branchId === branchId),
   )
+
+  // Buffer instance lives in a ref (mutable, not render state); the safe output
+  // it computes on each push drives the re-render via streamingContent.
+  const streamBufferRef = useRef<{ entryId: string; buffer: HtmlStreamBuffer } | null>(null)
+  const [streamingContent, setStreamingContent] = useState<{
+    entryId: string
+    content: string
+  } | null>(null)
+
+  // A branch switch must drop any in-flight buffer from the prior branch —
+  // it belongs to a different entry list and would otherwise leak forward.
+  useEffect(() => {
+    streamBufferRef.current = null
+    setStreamingContent(null)
+  }, [branchId])
+
+  useEffect(
+    () =>
+      pipelineEventBus.subscribe('stream_chunk', (event) => {
+        // stream_chunk carries no branchId/runId — correlate to this route via
+        // the current live txState instead of a stale render-time closure.
+        const isOurRun = [...generationStore.getTxState().runs.values()].some(
+          (r) => r.branchId === branchId,
+        )
+        if (!isOurRun) return
+        if (streamBufferRef.current?.entryId !== event.targetEntryId) {
+          streamBufferRef.current = {
+            entryId: event.targetEntryId,
+            buffer: createHtmlStreamBuffer(),
+          }
+        }
+        const safe = streamBufferRef.current.buffer.push(event.text)
+        setStreamingContent({ entryId: event.targetEntryId, content: safe })
+      }),
+    [branchId],
+  )
+
+  // Covers the abort/failure paths where no committed row ever lands to
+  // trigger the entries.some(...) hide check below.
+  useEffect(() => {
+    if (!isGenerating) {
+      streamBufferRef.current = null
+      setStreamingContent(null)
+    }
+  }, [isGenerating])
+
+  // The real commit lands in entriesStore mid-phase, before isGenerating flips
+  // false — checking against entries (not just isGenerating) prevents a frame
+  // where both the synthetic and the real committed card are visible.
+  const streamingVisible =
+    isGenerating &&
+    streamingContent != null &&
+    !entries.some((e) => e.id === streamingContent.entryId)
 
   const reload = useCallback(async () => {
     const fresh = (await db
@@ -182,7 +238,21 @@ export default function ReaderComposerRoute() {
     return () => window.removeEventListener('keydown', handler)
   }, [branchId])
 
-  const renderRow = (e: StoryEntry) => {
+  const windowRows: WindowRow[] = useMemo(() => {
+    if (streamingVisible && streamingContent) {
+      return [
+        ...entries,
+        { id: streamingContent.entryId, kind: 'streaming', content: streamingContent.content },
+      ]
+    }
+    return entries
+  }, [entries, streamingVisible, streamingContent])
+
+  const renderRow = (row: WindowRow) => {
+    if (row.kind === 'streaming') {
+      return <EntryCard kind="streaming" content={row.content} streamingPhase="reply" />
+    }
+    const e = row
     const isEditing = editingId === e.id
     const isSystem = e.kind === 'system'
     return (
@@ -230,7 +300,7 @@ export default function ReaderComposerRoute() {
               </View>
             ) : (
               <EntryWindow
-                rows={entries}
+                rows={windowRows}
                 renderRow={renderRow}
                 onNearTop={() => {}}
                 onNearBottom={() => {}}
