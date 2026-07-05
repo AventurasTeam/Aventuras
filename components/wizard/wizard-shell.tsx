@@ -26,6 +26,8 @@ type WizardShellProps = {
   onNext: () => void
   onSaveDraft: () => void
   onJump: (step: number) => void
+  /** Whether a given step's pill is jumpable from the current step (back always; forward only when visited + valid). */
+  canJumpTo: (step: number) => boolean
   children: ReactNode
 }
 
@@ -62,14 +64,15 @@ type StepPillProps = {
   stepNumber: (typeof STEP_ORDER)[number]
   activeStep: number
   showLabel: boolean
+  canJumpTo: (step: number) => boolean
   onJump: (step: number) => void
 }
 
-function StepPill({ stepNumber, activeStep, showLabel, onJump }: StepPillProps) {
+function StepPill({ stepNumber, activeStep, showLabel, canJumpTo, onJump }: StepPillProps) {
   const disabled = DISABLED_STEPS.has(stepNumber)
   const state = disabled ? 'pending' : pillState(stepNumber, activeStep)
   const label = t(STEP_LABEL_KEYS[stepNumber])
-  const interactive = !disabled && state === 'done'
+  const interactive = !disabled && canJumpTo(stepNumber)
 
   return (
     <Pressable
@@ -96,7 +99,7 @@ function StepPill({ stepNumber, activeStep, showLabel, onJump }: StepPillProps) 
         )}
       />
       {showLabel ? (
-        <Text size="xs" className={state === 'active' ? 'text-accent-fg' : 'text-fg-muted'}>
+        <Text size="xs" className={state === 'active' ? 'text-bg-base' : 'text-fg-muted'}>
           {label}
         </Text>
       ) : null}
@@ -113,6 +116,7 @@ export function WizardShell({
   onNext,
   onSaveDraft,
   onJump,
+  canJumpTo,
   children,
 }: WizardShellProps) {
   const insets = useSafeAreaInsets()
@@ -166,7 +170,14 @@ export function WizardShell({
         )}
       >
         {STEP_ORDER.map((n) => (
-          <StepPill key={n} stepNumber={n} activeStep={step} showLabel={!isPhone} onJump={onJump} />
+          <StepPill
+            key={n}
+            stepNumber={n}
+            activeStep={step}
+            showLabel={!isPhone}
+            canJumpTo={canJumpTo}
+            onJump={onJump}
+          />
         ))}
       </View>
 

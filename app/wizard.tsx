@@ -5,9 +5,12 @@ import { BackHandler, Platform } from 'react-native'
 import { finishWizard } from '@/components/wizard/finish'
 import { StepCalendar } from '@/components/wizard/step-calendar'
 import { StepFrame } from '@/components/wizard/step-frame'
-import { needsLead } from '@/components/wizard/step-frame-logic'
 import { StepOpening } from '@/components/wizard/step-opening'
-import { validateOriginTuple } from '@/components/wizard/tier-tuple-input-logic'
+import {
+  canJumpToStep,
+  stepForwardValid,
+  type StepValidityParams,
+} from '@/components/wizard/wizard-nav-logic'
 import { WizardShell } from '@/components/wizard/wizard-shell'
 import { saveLiveSession, saveStoryDraft } from '@/lib/actions'
 import { DEFAULT_CALENDAR_ID, getCalendar } from '@/lib/calendar'
@@ -36,6 +39,7 @@ export default function WizardRoute() {
   )
 
   const step = wizardStore.useWizard((s) => s.state.step)
+  const furthestStep = wizardStore.useWizard((s) => s.furthestStep)
   const mode = wizardStore.useWizard((s) => s.state.definition.mode)
   const narration = wizardStore.useWizard((s) => s.state.definition.narration)
   const leadName = wizardStore.useWizard((s) => s.state.leadName)
@@ -84,12 +88,15 @@ export default function WizardRoute() {
   }, [])
 
   const selectedCalendar = getCalendar(calendarSystemId) ?? getCalendar(DEFAULT_CALENDAR_ID)
-  const canGoNext =
-    step === 1
-      ? !needsLead(mode, narration) || leadName.trim() !== ''
-      : step === 2
-        ? selectedCalendar != null && validateOriginTuple(worldTimeOrigin, selectedCalendar).ok
-        : true
+  const validityParams: StepValidityParams = {
+    mode,
+    narration,
+    leadName,
+    worldTimeOrigin,
+    calendar: selectedCalendar ?? null,
+  }
+  const canGoNext = stepForwardValid(step, validityParams)
+  const canJumpTo = (target: number) => canJumpToStep(target, step, furthestStep, validityParams)
 
   const finish = () => {
     const { defaultStorySettings, embeddingModelId } = appSettingsStore.getAppSettings()
@@ -146,6 +153,7 @@ export default function WizardRoute() {
       onNext={step === 5 ? finish : goNext}
       onSaveDraft={saveDraft}
       onJump={(s) => wizardStore.setStep(s)}
+      canJumpTo={canJumpTo}
     >
       {step === 1 ? (
         <StepFrame />

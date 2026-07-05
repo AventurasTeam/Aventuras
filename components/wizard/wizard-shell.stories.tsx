@@ -33,6 +33,7 @@ export const Step1Frame: Story = {
     onNext: fn(),
     onSaveDraft: fn(),
     onJump: fn(),
+    canJumpTo: () => false,
     children: <StepBodyPlaceholder label="Step 1 — Frame" />,
   },
   play: async ({ canvas, args }) => {
@@ -60,6 +61,7 @@ export const Step2Calendar: Story = {
     onNext: fn(),
     onSaveDraft: fn(),
     onJump: fn(),
+    canJumpTo: (target: number) => target < 2,
     children: <StepBodyPlaceholder label="Step 2 — Calendar" />,
   },
   play: async ({ canvas, args }) => {
@@ -74,6 +76,32 @@ export const Step2Calendar: Story = {
   },
 }
 
+export const ForwardJumpToVisited: Story = {
+  args: {
+    step: 1,
+    canGoNext: true,
+    isFinish: false,
+    onCancel: fn(),
+    onBack: fn(),
+    onNext: fn(),
+    onSaveDraft: fn(),
+    onJump: fn(),
+    // Simulates a session that reached Opening then stepped back to Frame:
+    // every non-active step is a valid forward/backward jump target.
+    canJumpTo: (target: number) => target !== 1,
+    children: <StepBodyPlaceholder label="Step 1 — forward-jump to a visited step" />,
+  },
+  play: async ({ canvas, args }) => {
+    // Opening (step 5) was visited — forward-jump is clickable.
+    const opening = await canvas.findByRole('button', { name: 'Opening' })
+    await userEvent.click(opening)
+    await waitFor(() => expect(args.onJump).toHaveBeenCalledWith(5))
+
+    // World / Cast stay disabled even though canJumpTo would return true.
+    expect(await canvas.findByRole('button', { name: 'World' })).toBeDisabled()
+  },
+}
+
 export const Step5Opening: Story = {
   args: {
     step: 5,
@@ -84,6 +112,7 @@ export const Step5Opening: Story = {
     onNext: fn(),
     onSaveDraft: fn(),
     onJump: fn(),
+    canJumpTo: (target: number) => target < 5,
     children: <StepBodyPlaceholder label="Step 5 — Opening & finish" />,
   },
   play: async ({ canvas }) => {
@@ -103,6 +132,7 @@ export const NextDisabledUntilValid: Story = {
     onNext: fn(),
     onSaveDraft: fn(),
     onJump: fn(),
+    canJumpTo: () => false,
     children: <StepBodyPlaceholder label="Next → disabled until the step passes validation" />,
   },
   play: async ({ canvas }) => {
@@ -135,6 +165,7 @@ export const PhoneCollapsed: Story = {
     onNext: fn(),
     onSaveDraft: fn(),
     onJump: fn(),
+    canJumpTo: () => false,
     children: <StepBodyPlaceholder label="Phone tier — pill labels collapse to dots-only" />,
   },
 }
