@@ -31,3 +31,17 @@ for the placement rule.
   cancel, which [Slice 2.7](./implementation/milestones/02-first-user-loop/slices/07-wiring.md)
   already settles as "reverse" — is still open; resolve at Slice 2.7
   planning.
+- **Markdown pipeline is built but consumed by nothing — EntryCard
+  renders content as plain text.** Slice 2.5's `lib/markdown`
+  (`renderNarrativeHtml`/`sanitizeHtml` for web,
+  `native.ts`'s `react-native-render-html` config for native) is
+  fully built and tested, but `components/compounds/entry-card.tsx`
+  still renders `content` via plain `<Text>` in every path (committed
+  and streaming), so no markdown ever renders and the reader's
+  streaming buffer feeds raw markdown rather than HTML. Wiring it in
+  is a real `EntryCard` API decision (a new HTML-render path,
+  platform-split web/native) that touches every kind plus the
+  component's Storybook stories and `app/dev` harness — out of scope
+  for a route-level integration pass and not doable narrowly, since
+  `EntryCard` exposes only `content: string`. Close with a dedicated
+  `EntryCard`-render task before Slice 2.5 is considered done.
