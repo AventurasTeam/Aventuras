@@ -34,6 +34,7 @@
     "dismiss": "Dismiss",
     "assignProfile": "Assign profile",
     "fixProfile": "Fix profile",
-    "fixDefault": "Fix default"
+    "fixDefault": "Fix default",
+    "failureMessage": "Generation failed. Retry to try again."
   }
 }
