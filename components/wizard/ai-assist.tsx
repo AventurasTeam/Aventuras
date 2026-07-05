@@ -1,7 +1,6 @@
 import { Sparkles } from 'lucide-react-native'
 import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react'
 import { Platform, ScrollView, View } from 'react-native'
-import type { ZodType } from 'zod'
 
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
@@ -13,14 +12,8 @@ import { Spinner } from '@/components/ui/spinner'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
-import {
-  generateStructured,
-  resolveModel,
-  type GenerateStructuredResult,
-  type ResolveModelConfig,
-} from '@/lib/ai'
+import { type GenerateStructuredResult } from '@/lib/ai'
 import { t } from '@/lib/i18n'
-import { appSettingsStore } from '@/lib/stores'
 
 const GUIDANCE_MAX_LENGTH = 200
 
@@ -36,26 +29,21 @@ type AiAssistCommonProps<T> = {
   /** Accessible name for the trigger AND the overlay's visible heading (e.g. "Suggest setting"). */
   ariaLabel: string
   guidancePlaceholder?: string
-  /** Builds the full prompt from current wizard state + the optional guidance text. */
-  buildPrompt: (guidance: string) => string
-  schema: ZodType<T>
+  /**
+   * Runs the assist from the optional guidance text. The caller bakes in the
+   * template, schema, config and any post-processing — this component only drives
+   * the popover state machine around the async result.
+   */
+  run: (guidance: string, signal: AbortSignal) => Promise<GenerateStructuredResult<T>>
+  /**
+   * The configured model id, or null when unconfigured. Drives the pre-generate
+   * "set up in Settings" branch and the loading label; the caller owns which
+   * agent target it resolves.
+   */
+  resolveModelId: () => string | null
   /** "Set up in Settings" from the not-configured state. Caller owns the navigation. */
   onSetup: () => void
   disabled?: boolean
-  /**
-   * DI seam for tests/stories — defaults to the real wizard-assist call. Typed
-   * against this instance's own T (not the fully generic `typeof
-   * generateStructured`) so a story can inject a fake tied to its one concrete
-   * schema without fighting generic-function assignability.
-   */
-  runAssist?: (
-    prompt: string,
-    schema: ZodType<T>,
-    config: ResolveModelConfig,
-    signal: AbortSignal,
-  ) => Promise<GenerateStructuredResult<T>>
-  /** DI seam for tests/stories — defaults to reading the live app-settings store. */
-  resolveConfig?: () => ResolveModelConfig
 }
 
 type AiAssistProseProps<T> = AiAssistCommonProps<T> & {
@@ -72,30 +60,8 @@ type AiAssistChipsProps<T> = AiAssistCommonProps<T> & {
 
 export type AiAssistProps<T> = AiAssistProseProps<T> | AiAssistChipsProps<T>
 
-function defaultResolveConfig(): ResolveModelConfig {
-  return appSettingsStore.getAppSettings()
-}
-
-function defaultRunAssist<T>(
-  prompt: string,
-  schema: ZodType<T>,
-  config: ResolveModelConfig,
-  signal: AbortSignal,
-): Promise<GenerateStructuredResult<T>> {
-  return generateStructured('wizard-assist', prompt, schema, config, signal)
-}
-
 export function AiAssist<T>(props: AiAssistProps<T>) {
-  const {
-    ariaLabel,
-    guidancePlaceholder,
-    buildPrompt,
-    schema,
-    onSetup,
-    disabled,
-    runAssist = defaultRunAssist,
-    resolveConfig = defaultResolveConfig,
-  } = props
+  const { ariaLabel, guidancePlaceholder, run, resolveModelId, onSetup, disabled } = props
 
   const isPhone = useTier() === 'phone'
 
@@ -145,8 +111,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
 
   function handleTriggerPress() {
     if (disabled) return
-    const resolved = resolveModel('wizard-assist', resolveConfig())
-    if (!resolved.ok) {
+    if (resolveModelId() == null) {
       setAssist({ kind: 'not-configured' })
     } else {
       setGuidanceText('')
@@ -156,9 +121,8 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
   }
 
   async function runGenerate(guidance: string) {
-    const config = resolveConfig()
-    const resolved = resolveModel('wizard-assist', config)
-    if (!resolved.ok) {
+    const modelId = resolveModelId()
+    if (modelId == null) {
       setAssist({ kind: 'not-configured' })
       return
     }
@@ -167,9 +131,9 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
     const controller = new AbortController()
     abortRef.current = controller
     const seq = ++requestSeqRef.current
-    setAssist({ kind: 'loading', modelId: resolved.modelId })
+    setAssist({ kind: 'loading', modelId })
 
-    const result = await runAssist(buildPrompt(guidance), schema, config, controller.signal)
+    const result = await run(guidance, controller.signal)
     if (requestSeqRef.current !== seq) return
 
     if (result.status === 'ok') setAssist({ kind: 'result', value: result.value })
@@ -183,7 +147,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
   function handleCancelLoading() {
     abortRef.current?.abort()
     // Bump the seq alongside the abort so a response that loses the abort race
-    // (e.g. a future multi-tick runAssist) can't resurrect a stale 'result'
+    // (e.g. a future multi-tick run) can't resurrect a stale 'result'
     // over the user's cancel — same backstop resetOnClose relies on.
     requestSeqRef.current += 1
     setAssist({ kind: 'guidance' })

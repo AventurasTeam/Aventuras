@@ -67,18 +67,33 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: true,
     },
     {
-      name: 'lead',
-      type: '{ name: string; id: string }',
+      name: 'leadName',
+      type: 'string',
       category: 'Entities',
       description:
-        'Minimal lead character (name + placeholder cast id for sceneEntities). Absent on lead-less paths (creative + third-person).',
+        'Lead character display name; blank on lead-less paths (creative + third-person).',
+      required: false,
+    },
+    {
+      name: 'leadEntityId',
+      type: 'string',
+      category: 'Entities',
+      description:
+        'Lead cast id — a placeholder after id-substitution, so a model can echo it in sceneEntities; blank on lead-less paths.',
       required: false,
     },
     {
       name: 'opening',
+      type: '{ content: string }',
+      category: 'Generation Results',
+      description: 'In-progress opening; title/description templates read opening.content.',
+      required: false,
+    },
+    {
+      name: 'guidance',
       type: 'string',
       category: 'Generation Results',
-      description: 'Generated opening passage (title/description templates).',
+      description: 'Optional per-invocation user steer appended to the prompt.',
       required: false,
     },
   ],
@@ -98,9 +113,9 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
 // no defined variable is "dangling" and reported by validateRegistry.
 export const DISPLAY_GROUPS: Record<string, string[]> = {
   Story: ['entries'],
-  Entities: ['entities', 'sceneEntities', 'lead'],
+  Entities: ['entities', 'sceneEntities', 'leadName', 'leadEntityId'],
   'Story Config': ['definition', 'userSettings'],
-  'Generation Results': ['intermediates', 'opening'],
+  'Generation Results': ['intermediates', 'opening', 'guidance'],
 }
 
 export type RegistryIssue =

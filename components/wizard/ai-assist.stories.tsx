@@ -2,81 +2,37 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
-import type { ZodType } from 'zod'
 
 import { Text } from '@/components/ui/text'
-import type { GenerateStructuredResult, ResolveModelConfig } from '@/lib/ai'
-import { descriptionOutputSchema, titleChipsSchema } from '@/lib/wizard'
+import type { GenerateStructuredResult } from '@/lib/ai'
 
 import { AiAssist } from './ai-assist'
 
-// AiAssist resolves its ResolveModelConfig from the live appSettingsStore and
-// calls the real wizard-assist by default. Both are injectable seams
-// (`resolveConfig` / `runAssist`) — the same shape Task 19's `calendars?` prop
-// used on StepCalendar — so these stories drive the real component end to end
-// without a provider network call or module-level mocking.
+// AiAssist drives the popover state machine around two injected seams: `run`
+// (the bound assist call) and `resolveModelId` (configured model id, or null).
+// The stories feed fakes so nothing hits a real provider or the settings store.
 
-const PROVIDER_ID = 'provider-1'
-const PROFILE_ID = 'profile-1'
 const MODEL_ID = 'gpt-4o-mini'
 
-const CONFIGURED_CONFIG: ResolveModelConfig = {
-  providers: [
-    {
-      id: PROVIDER_ID,
-      type: 'openai-compatible',
-      displayName: 'Test Provider',
-      apiKey: 'test-key',
-      favoriteModelIds: [],
-    },
-  ],
-  profiles: [
-    {
-      id: PROFILE_ID,
-      kind: 'agent',
-      name: 'Wizard Assist',
-      modelRef: { providerId: PROVIDER_ID, modelId: MODEL_ID },
-    },
-  ],
-  assignments: { 'wizard-assist': PROFILE_ID },
-  defaultProviderId: PROVIDER_ID,
+function okRun<T>(value: T) {
+  return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => ({
+    status: 'ok',
+    value,
+  })
 }
 
-const NOT_CONFIGURED_CONFIG: ResolveModelConfig = {
-  providers: [],
-  profiles: [],
-  assignments: {},
-  defaultProviderId: null,
-}
-
-function okAssist<T>(value: T) {
-  return async (
-    _prompt: string,
-    _schema: ZodType<T>,
-    _config: ResolveModelConfig,
-    _signal: AbortSignal,
-  ): Promise<GenerateStructuredResult<T>> => ({ status: 'ok', value })
-}
-
-function failAssist<T>(detail: string) {
-  return async (
-    _prompt: string,
-    _schema: ZodType<T>,
-    _config: ResolveModelConfig,
-    _signal: AbortSignal,
-  ): Promise<GenerateStructuredResult<T>> => ({ status: 'failed', detail })
+function failRun<T>(detail: string) {
+  return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => ({
+    status: 'failed',
+    detail,
+  })
 }
 
 // Fails once (drives the Failure state), then succeeds — exercises "Try
 // again" re-invoking the same call rather than just re-showing guidance.
-function flakyThenOkAssist<T>(value: T, detail: string) {
+function flakyThenOkRun<T>(value: T, detail: string) {
   let calls = 0
-  return async (
-    _prompt: string,
-    _schema: ZodType<T>,
-    _config: ResolveModelConfig,
-    _signal: AbortSignal,
-  ): Promise<GenerateStructuredResult<T>> => {
+  return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => {
     calls += 1
     if (calls === 1) return { status: 'failed', detail }
     return { status: 'ok', value }
@@ -85,28 +41,18 @@ function flakyThenOkAssist<T>(value: T, detail: string) {
 
 // Never settles — holds the component in 'loading' so a play function can
 // assert the spinner + model name without racing a real resolution.
-function neverResolvingAssist<T>() {
-  return (
-    _prompt: string,
-    _schema: ZodType<T>,
-    _config: ResolveModelConfig,
-    _signal: AbortSignal,
-  ): Promise<GenerateStructuredResult<T>> => new Promise(() => {})
+function neverResolvingRun<T>() {
+  return (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> =>
+    new Promise(() => {})
 }
 
 type DescriptionValue = { description: string }
 type TitlesValue = { titles: string[] }
 
 type ProseDemoProps = {
-  resolveConfig: () => ResolveModelConfig
-  // Matches AiAssist's own `runAssist` prop shape (schema: ZodType<T>, not the
-  // concrete ZodObject) — zod v4's ZodObject and ZodType carry distinct
-  // internals branding, so a function typed against the concrete schema
-  // doesn't structurally satisfy the generic-T slot.
-  runAssist: (
-    prompt: string,
-    schema: ZodType<DescriptionValue>,
-    config: ResolveModelConfig,
+  resolveModelId: () => string | null
+  run: (
+    guidance: string,
     signal: AbortSignal,
   ) => Promise<GenerateStructuredResult<DescriptionValue>>
   onSetup: () => void
@@ -116,7 +62,7 @@ type ProseDemoProps = {
 // Shared demo for every prose-result scenario (guidance / loading / result /
 // failure / not-configured) — result presentation only diverges at the
 // 'result' state, so one wrapper covers the rest of the state machine too.
-function ProseDemo({ resolveConfig, runAssist, onSetup, onUse }: ProseDemoProps) {
+function ProseDemo({ resolveModelId, run, onSetup, onUse }: ProseDemoProps) {
   const [committed, setCommitted] = useState('(none)')
   return (
     <View className="w-96 gap-3 rounded-md bg-bg-base p-6">
@@ -126,8 +72,8 @@ function ProseDemo({ resolveConfig, runAssist, onSetup, onUse }: ProseDemoProps)
       <AiAssist
         ariaLabel="Suggest description"
         guidancePlaceholder='e.g. "a tense heist thriller"'
-        buildPrompt={(guidance) => `Write a short story description. Guidance: ${guidance}`}
-        schema={descriptionOutputSchema}
+        run={run}
+        resolveModelId={resolveModelId}
         result="prose"
         getProse={(v) => v.description}
         onUse={(v) => {
@@ -135,26 +81,19 @@ function ProseDemo({ resolveConfig, runAssist, onSetup, onUse }: ProseDemoProps)
           onUse(v)
         }}
         onSetup={onSetup}
-        resolveConfig={resolveConfig}
-        runAssist={runAssist}
       />
     </View>
   )
 }
 
 type ChipsDemoProps = {
-  resolveConfig: () => ResolveModelConfig
-  runAssist: (
-    prompt: string,
-    schema: ZodType<TitlesValue>,
-    config: ResolveModelConfig,
-    signal: AbortSignal,
-  ) => Promise<GenerateStructuredResult<TitlesValue>>
+  resolveModelId: () => string | null
+  run: (guidance: string, signal: AbortSignal) => Promise<GenerateStructuredResult<TitlesValue>>
   onSetup: () => void
   onPickChip: (chip: string, value: TitlesValue) => void
 }
 
-function ChipsDemo({ resolveConfig, runAssist, onSetup, onPickChip }: ChipsDemoProps) {
+function ChipsDemo({ resolveModelId, run, onSetup, onPickChip }: ChipsDemoProps) {
   const [committed, setCommitted] = useState('(none)')
   return (
     <View className="w-96 gap-3 rounded-md bg-bg-base p-6">
@@ -164,8 +103,8 @@ function ChipsDemo({ resolveConfig, runAssist, onSetup, onPickChip }: ChipsDemoP
       <AiAssist
         ariaLabel="Suggest title"
         guidancePlaceholder='e.g. "punchy, one word"'
-        buildPrompt={(guidance) => `Suggest 5 titles. Guidance: ${guidance}`}
-        schema={titleChipsSchema}
+        run={run}
+        resolveModelId={resolveModelId}
         result="chips"
         getChips={(v) => v.titles}
         onPickChip={(chip, value) => {
@@ -173,8 +112,6 @@ function ChipsDemo({ resolveConfig, runAssist, onSetup, onPickChip }: ChipsDemoP
           onPickChip(chip, value)
         }}
         onSetup={onSetup}
-        resolveConfig={resolveConfig}
-        runAssist={runAssist}
       />
     </View>
   )
@@ -192,8 +129,8 @@ type Story = StoryObj<typeof AiAssist>
 export const Guidance: Story = {
   render: () => (
     <ProseDemo
-      resolveConfig={() => CONFIGURED_CONFIG}
-      runAssist={neverResolvingAssist<DescriptionValue>()}
+      resolveModelId={() => MODEL_ID}
+      run={neverResolvingRun<DescriptionValue>()}
       onSetup={fn()}
       onUse={fn()}
     />
@@ -210,8 +147,8 @@ export const Guidance: Story = {
 export const Loading: Story = {
   render: () => (
     <ProseDemo
-      resolveConfig={() => CONFIGURED_CONFIG}
-      runAssist={neverResolvingAssist<DescriptionValue>()}
+      resolveModelId={() => MODEL_ID}
+      run={neverResolvingRun<DescriptionValue>()}
       onSetup={fn()}
       onUse={fn()}
     />
@@ -233,8 +170,8 @@ const proseUseThisMock = fn()
 export const ProseResult_UseThis: Story = {
   render: () => (
     <ProseDemo
-      resolveConfig={() => CONFIGURED_CONFIG}
-      runAssist={okAssist<DescriptionValue>({
+      resolveModelId={() => MODEL_ID}
+      run={okRun<DescriptionValue>({
         description: 'A grizzled captain smuggles refugees past a naval blockade.',
       })}
       onSetup={fn()}
@@ -266,8 +203,8 @@ const proseDiscardMock = fn()
 export const ProseResult_Discard: Story = {
   render: () => (
     <ProseDemo
-      resolveConfig={() => CONFIGURED_CONFIG}
-      runAssist={okAssist<DescriptionValue>({ description: 'Discarded suggestion text.' })}
+      resolveModelId={() => MODEL_ID}
+      run={okRun<DescriptionValue>({ description: 'Discarded suggestion text.' })}
       onSetup={fn()}
       onUse={proseDiscardMock}
     />
@@ -289,8 +226,8 @@ const chipsPickMock = fn()
 export const ChipsResult: Story = {
   render: () => (
     <ChipsDemo
-      resolveConfig={() => CONFIGURED_CONFIG}
-      runAssist={okAssist<TitlesValue>({
+      resolveModelId={() => MODEL_ID}
+      run={okRun<TitlesValue>({
         titles: ['The Last Blockade', 'Smoke and Salt', 'Iron Tide'],
       })}
       onSetup={fn()}
@@ -317,8 +254,8 @@ export const ChipsResult: Story = {
 export const Failure: Story = {
   render: () => (
     <ProseDemo
-      resolveConfig={() => CONFIGURED_CONFIG}
-      runAssist={failAssist<DescriptionValue>('Provider request timed out after 3 retries')}
+      resolveModelId={() => MODEL_ID}
+      run={failRun<DescriptionValue>('Provider request timed out after 3 retries')}
       onSetup={fn()}
       onUse={fn()}
     />
@@ -337,8 +274,8 @@ export const Failure: Story = {
 export const FailureThenRetrySucceeds: Story = {
   render: () => (
     <ProseDemo
-      resolveConfig={() => CONFIGURED_CONFIG}
-      runAssist={flakyThenOkAssist<DescriptionValue>(
+      resolveModelId={() => MODEL_ID}
+      run={flakyThenOkRun<DescriptionValue>(
         { description: 'Recovered description after retry.' },
         'Provider request timed out after 3 retries',
       )}
@@ -361,8 +298,8 @@ export const FailureThenRetrySucceeds: Story = {
 export const NotConfigured: Story = {
   render: () => (
     <ProseDemo
-      resolveConfig={() => NOT_CONFIGURED_CONFIG}
-      runAssist={okAssist<DescriptionValue>({ description: 'unreachable — never configured' })}
+      resolveModelId={() => null}
+      run={okRun<DescriptionValue>({ description: 'unreachable — never configured' })}
       onSetup={fn()}
       onUse={fn()}
     />
@@ -379,8 +316,8 @@ const notConfiguredSetupMock = fn()
 export const NotConfigured_SetupClosesOverlay: Story = {
   render: () => (
     <ProseDemo
-      resolveConfig={() => NOT_CONFIGURED_CONFIG}
-      runAssist={okAssist<DescriptionValue>({ description: 'unreachable — never configured' })}
+      resolveModelId={() => null}
+      run={okRun<DescriptionValue>({ description: 'unreachable — never configured' })}
       onSetup={notConfiguredSetupMock}
       onUse={fn()}
     />
@@ -398,15 +335,13 @@ export const DisabledTrigger: Story = {
     <View className="w-96 gap-3 rounded-md bg-bg-base p-6">
       <AiAssist
         ariaLabel="Suggest description"
-        buildPrompt={() => 'unused'}
-        schema={descriptionOutputSchema}
+        run={okRun<DescriptionValue>({ description: 'should never appear' })}
+        resolveModelId={() => MODEL_ID}
         result="prose"
         getProse={(v) => v.description}
         onUse={fn()}
         onSetup={fn()}
         disabled
-        resolveConfig={() => CONFIGURED_CONFIG}
-        runAssist={okAssist<DescriptionValue>({ description: 'should never appear' })}
       />
     </View>
   ),
@@ -432,8 +367,8 @@ export const PhoneSheetNote: Story = {
         instead of a Popover.
       </Text>
       <ProseDemo
-        resolveConfig={() => CONFIGURED_CONFIG}
-        runAssist={okAssist<DescriptionValue>({ description: 'Phone-tier sample result.' })}
+        resolveModelId={() => MODEL_ID}
+        run={okRun<DescriptionValue>({ description: 'Phone-tier sample result.' })}
         onSetup={fn()}
         onUse={fn()}
       />

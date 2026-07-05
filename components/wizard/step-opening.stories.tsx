@@ -1,46 +1,20 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
-import type { ZodType } from 'zod'
 
-import type { GenerateStructuredResult, ResolveModelConfig } from '@/lib/ai'
+import type { GenerateStructuredResult } from '@/lib/ai'
 import { appSettingsStore, wizardStore } from '@/lib/stores'
-import type { OpeningOutput } from '@/lib/wizard'
 
 import { StepOpening } from './step-opening'
 
 const LEAD_ID = 'char_11111111-1111-1111-1111-111111111111'
 const MODEL_ID = 'gpt-4o-mini'
 
-const CONFIGURED_CONFIG: ResolveModelConfig = {
-  providers: [
-    {
-      id: 'provider-1',
-      type: 'openai-compatible',
-      displayName: 'Test Provider',
-      apiKey: 'test-key',
-      favoriteModelIds: [],
-    },
-  ],
-  profiles: [
-    {
-      id: 'profile-1',
-      kind: 'agent',
-      name: 'Wizard Assist',
-      modelRef: { providerId: 'provider-1', modelId: MODEL_ID },
-    },
-  ],
-  assignments: { 'wizard-assist': 'profile-1' },
-  defaultProviderId: 'provider-1',
-}
-
-function okAssist<T>(value: T) {
-  return async (
-    _prompt: string,
-    _schema: ZodType<T>,
-    _config: ResolveModelConfig,
-    _signal: AbortSignal,
-  ): Promise<GenerateStructuredResult<T>> => ({ status: 'ok', value })
+function okRun<T>(value: T) {
+  return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => ({
+    status: 'ok',
+    value,
+  })
 }
 
 const meta: Meta<typeof StepOpening> = {
@@ -94,10 +68,10 @@ export const CommittedUserWritten: Story = {
   },
 }
 
-// The load-bearing id-consistency path: the model returns a placeholder ('c1')
-// for the lead; onUse round-trips it back to the SAME real lead id stored in
-// working-state, and marks the opening AI-generated.
-export const OpeningAssistRoundTripsLeadId: Story = {
+// Wiring: a resolved opening (the op already round-tripped the lead placeholder
+// back to the real id) commits through onUse and surfaces the scene metadata.
+// The placeholder round-trip itself is unit-tested in wizard-assist.test.ts.
+export const OpeningAssistCommits: Story = {
   beforeEach: () => {
     wizardStore.reset()
     appSettingsStore.__reset()
@@ -109,12 +83,12 @@ export const OpeningAssistRoundTripsLeadId: Story = {
     <StepOpening
       onSetupAssist={fn()}
       assist={{
-        resolveConfig: () => CONFIGURED_CONFIG,
-        opening: okAssist<OpeningOutput>({
-          prose: 'Aria drew her blade as the storm broke over the harbor.',
-          sceneEntities: ['c1'],
+        resolveModelId: () => MODEL_ID,
+        opening: okRun({
+          content: 'Aria drew her blade as the storm broke over the harbor.',
+          sceneEntities: [LEAD_ID],
           currentLocationId: null,
-          worldTime: 0,
+          model: MODEL_ID,
         }),
       }}
     />
@@ -128,49 +102,11 @@ export const OpeningAssistRoundTripsLeadId: Story = {
     await waitFor(() => {
       const opening = wizardStore.getWizard().state.opening
       expect(opening.content).toBe('Aria drew her blade as the storm broke over the harbor.')
-      // 'c1' resolved back to the real lead id — refs, working-state, and (at
-      // Finish) the lead entities row + definition.leadEntityId all agree.
       expect(opening.sceneEntities).toEqual([LEAD_ID])
       expect(opening.model).toBe(MODEL_ID)
     })
     // Committed state surfaces the resolved cast name in the metadata line.
     expect(await screen.findByText('Scene metadata: Aria')).toBeInTheDocument()
-  },
-}
-
-// Malformed refs (an unresolvable placeholder on a lead-less path) fall back to
-// user-written semantics: keep the prose, drop the metadata, model = null.
-export const MalformedRefsFallBackToUserWritten: Story = {
-  beforeEach: () => {
-    wizardStore.reset()
-    appSettingsStore.__reset()
-  },
-  render: () => (
-    <StepOpening
-      onSetupAssist={fn()}
-      assist={{
-        resolveConfig: () => CONFIGURED_CONFIG,
-        opening: okAssist<OpeningOutput>({
-          prose: 'The archivist unrolled a map no living hand had drawn.',
-          sceneEntities: ['c1'],
-          currentLocationId: null,
-          worldTime: 0,
-        }),
-      }}
-    />
-  ),
-  play: async () => {
-    await userEvent.click(screen.getByRole('button', { name: 'Suggest opening' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Use this' }))
-
-    await waitFor(() => {
-      const opening = wizardStore.getWizard().state.opening
-      expect(opening.content).toBe('The archivist unrolled a map no living hand had drawn.')
-      expect(opening.sceneEntities).toEqual([])
-      expect(opening.model).toBeNull()
-    })
-    expect(screen.queryByText(/Scene metadata/)).not.toBeInTheDocument()
   },
 }
 
@@ -184,8 +120,8 @@ export const TitleChipsFillTitle: Story = {
     <StepOpening
       onSetupAssist={fn()}
       assist={{
-        resolveConfig: () => CONFIGURED_CONFIG,
-        title: okAssist({ titles: ['The Bruised Sky', 'Harbor of Ash', 'Still Water'] }),
+        resolveModelId: () => MODEL_ID,
+        title: okRun({ titles: ['The Bruised Sky', 'Harbor of Ash', 'Still Water'] }),
       }}
     />
   ),
@@ -211,8 +147,8 @@ export const DescriptionAssistFillsDescription: Story = {
     <StepOpening
       onSetupAssist={fn()}
       assist={{
-        resolveConfig: () => CONFIGURED_CONFIG,
-        description: okAssist({
+        resolveModelId: () => MODEL_ID,
+        description: okRun({
           description: 'A smuggler races a rising storm to reach open water.',
         }),
       }}

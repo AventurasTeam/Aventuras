@@ -1,44 +1,37 @@
-import { useRef } from 'react'
 import { View } from 'react-native'
-import type { z } from 'zod'
 
 import { FormRow } from '@/components/compounds/form-row'
 import { Heading } from '@/components/ui/heading'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
-import { resolveModel, type GenerateStructuredResult, type ResolveModelConfig } from '@/lib/ai'
+import type { GenerateStructuredResult } from '@/lib/ai'
 import { t } from '@/lib/i18n'
-import { generateId, IdBiMap, parseAndSubstitute } from '@/lib/ids'
-import { TEMPLATE_IDS, renderTemplate } from '@/lib/prompts'
-import { appSettingsStore, wizardStore } from '@/lib/stores'
-import {
-  descriptionOutputSchema,
-  openingOutputSchema,
-  titleChipsSchema,
-  type OpeningOutput,
-} from '@/lib/wizard'
+import { wizardStore } from '@/lib/stores'
 
 import { AiAssist } from './ai-assist'
-import { needsLead } from './step-frame-logic'
+import {
+  resolveWizardAssistModelId,
+  runDescriptionAssist,
+  runOpeningAssist,
+  runTitleAssist,
+  type DescriptionAssistValue,
+  type OpeningAssistValue,
+  type TitleAssistValue,
+} from './wizard-assist'
 
-type TitleOutput = z.infer<typeof titleChipsSchema>
-type DescriptionOutput = z.infer<typeof descriptionOutputSchema>
-
-type RunAssist<T> = (
-  prompt: string,
-  schema: z.ZodType<T>,
-  config: ResolveModelConfig,
+type WizardAssistRun<T> = (
+  guidance: string,
   signal: AbortSignal,
 ) => Promise<GenerateStructuredResult<T>>
 
-// DI seams mirroring AiAssist's own `runAssist` / `resolveConfig` props — stories
-// and tests inject fakes so no real provider is hit. Production omits all of these.
+// DI seams — stories/tests inject fakes so no real provider is hit. Production
+// omits all of these and the live ops read the app-settings store.
 export type StepOpeningAssistSeams = {
-  resolveConfig?: () => ResolveModelConfig
-  opening?: RunAssist<OpeningOutput>
-  title?: RunAssist<TitleOutput>
-  description?: RunAssist<DescriptionOutput>
+  resolveModelId?: () => string | null
+  opening?: WizardAssistRun<OpeningAssistValue>
+  title?: WizardAssistRun<TitleAssistValue>
+  description?: WizardAssistRun<DescriptionAssistValue>
 }
 
 export type StepOpeningProps = {
@@ -47,73 +40,17 @@ export type StepOpeningProps = {
   assist?: StepOpeningAssistSeams
 }
 
-const OPENING_MODEL_MARKER = 'wizard-assist'
-
-function withGuidance(prompt: string, guidance: string): string {
-  return guidance.trim().length > 0 ? `${prompt}\n\nGuidance: ${guidance}` : prompt
-}
-
 export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
   const definition = wizardStore.useWizard((s) => s.state.definition)
   const opening = wizardStore.useWizard((s) => s.state.opening)
   const leadName = wizardStore.useWizard((s) => s.state.leadName)
   const leadEntityId = wizardStore.useWizard((s) => s.state.leadEntityId)
 
-  const requiresLead = needsLead(definition.mode, definition.narration)
   const hasContent = opening.content.trim().length > 0
   const isAiGenerated = opening.model != null
 
-  const resolveConfig: () => ResolveModelConfig =
-    assist?.resolveConfig ?? (() => appSettingsStore.getAppSettings())
   const handleSetup = onSetupAssist ?? (() => {})
-
-  // The idMap allocated at buildPrompt time is reused at onUse time so the
-  // model's placeholder round-trips back to the SAME real lead id.
-  const openingIdMapRef = useRef<IdBiMap>(new IdBiMap())
-
-  function buildOpeningPrompt(guidance: string): string {
-    const idMap = new IdBiMap()
-    openingIdMapRef.current = idMap
-    let lead: { name: string; id: string } | undefined
-    if (requiresLead) {
-      let id = leadEntityId
-      if (id == null) {
-        id = generateId('char')
-        wizardStore.setLeadEntityId(id)
-      }
-      lead = { name: leadName, id: idMap.allocate(id) }
-    }
-    return withGuidance(renderTemplate(TEMPLATE_IDS.wizardOpening, { definition, lead }), guidance)
-  }
-
-  function commitOpening(value: OpeningOutput) {
-    const modelId = (() => {
-      const resolved = resolveModel('wizard-assist', resolveConfig())
-      return resolved.ok ? resolved.modelId : OPENING_MODEL_MARKER
-    })()
-    try {
-      const sceneEntities = parseAndSubstitute(value.sceneEntities, openingIdMapRef.current)
-      const currentLocationId =
-        value.currentLocationId == null
-          ? null
-          : parseAndSubstitute(value.currentLocationId, openingIdMapRef.current)
-      wizardStore.patchOpening({
-        content: value.prose,
-        sceneEntities,
-        currentLocationId,
-        model: modelId,
-      })
-    } catch {
-      // Malformed refs (an unresolvable placeholder) → treat the prose as
-      // user-written: keep it, drop the metadata (turn-2 classifier recovers it).
-      wizardStore.patchOpening({
-        content: value.prose,
-        sceneEntities: [],
-        currentLocationId: null,
-        model: null,
-      })
-    }
-  }
+  const resolveModelId = assist?.resolveModelId ?? (() => resolveWizardAssistModelId())
 
   const sceneName =
     leadEntityId != null &&
@@ -133,14 +70,12 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
           <AiAssist
             ariaLabel={t('wizard:opening.opening.assist')}
             guidancePlaceholder={t('wizard:opening.opening.guidance')}
-            buildPrompt={buildOpeningPrompt}
-            schema={openingOutputSchema}
+            run={assist?.opening ?? runOpeningAssist}
+            resolveModelId={resolveModelId}
             result="prose"
-            getProse={(v) => v.prose}
-            onUse={commitOpening}
+            getProse={(v) => v.content}
+            onUse={(v) => wizardStore.patchOpening(v)}
             onSetup={handleSetup}
-            resolveConfig={resolveConfig}
-            runAssist={assist?.opening}
           />
         </View>
         {!hasContent ? (
@@ -178,19 +113,12 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
             <AiAssist
               ariaLabel={t('wizard:opening.title.assist')}
               guidancePlaceholder={t('wizard:opening.title.guidance')}
-              buildPrompt={(guidance) =>
-                withGuidance(
-                  renderTemplate(TEMPLATE_IDS.wizardTitleChips, { opening: opening.content }),
-                  guidance,
-                )
-              }
-              schema={titleChipsSchema}
+              run={assist?.title ?? runTitleAssist}
+              resolveModelId={resolveModelId}
               result="chips"
               getChips={(v) => v.titles}
               onPickChip={(chip) => wizardStore.patchDefinition({ title: chip })}
               onSetup={handleSetup}
-              resolveConfig={resolveConfig}
-              runAssist={assist?.title}
             />
           </View>
         </FormRow>
@@ -208,19 +136,12 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
             <AiAssist
               ariaLabel={t('wizard:opening.description.assist')}
               guidancePlaceholder={t('wizard:opening.description.guidance')}
-              buildPrompt={(guidance) =>
-                withGuidance(
-                  renderTemplate(TEMPLATE_IDS.wizardDescription, { opening: opening.content }),
-                  guidance,
-                )
-              }
-              schema={descriptionOutputSchema}
+              run={assist?.description ?? runDescriptionAssist}
+              resolveModelId={resolveModelId}
               result="prose"
               getProse={(v) => v.description}
               onUse={(v) => wizardStore.patchDefinition({ description: v.description })}
               onSetup={handleSetup}
-              resolveConfig={resolveConfig}
-              runAssist={assist?.description}
             />
           </View>
         </FormRow>

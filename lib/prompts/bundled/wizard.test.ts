@@ -10,7 +10,8 @@ const leadCtx = {
     genre: { promptBody: '' },
     tone: { promptBody: '' },
   },
-  lead: { name: 'Aria', id: 'c1' },
+  leadName: 'Aria',
+  leadEntityId: 'c1',
 }
 const leadlessCtx = {
   definition: {
@@ -45,11 +46,23 @@ describe('WIZARD_OPENING template', () => {
     expect(out).not.toMatch(/lead character is/i)
     expect(out).not.toContain('cast id:')
   })
+
+  it('renders per-invocation guidance only when present', () => {
+    expect(renderTemplate(TEMPLATE_IDS.wizardOpening, leadlessCtx)).not.toContain('guidance')
+    const withGuidance = renderTemplate(TEMPLATE_IDS.wizardOpening, {
+      ...leadlessCtx,
+      guidance: 'darker tone',
+    })
+    expect(withGuidance).toContain('Additional guidance: darker tone')
+  })
 })
 
 describe('WIZARD_DESCRIPTION template', () => {
   it('asks for a synopsis/description and emits JSON, not next-beat narrative', () => {
-    const out = renderTemplate(TEMPLATE_IDS.wizardDescription, { opening: 'Once upon a time.' })
+    const out = renderTemplate(TEMPLATE_IDS.wizardDescription, {
+      opening: { content: 'Once upon a time.' },
+    })
+    expect(out).toContain('Once upon a time.')
     expect(out.toLowerCase()).toMatch(/description|synopsis|log line|log-line/)
     // must NOT include the narrative next-beat macro text:
     expect(out.toLowerCase()).not.toContain('next beat')
