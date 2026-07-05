@@ -13,6 +13,8 @@
     "think": "Think",
     "free": "Free"
   },
+  "editFailed": "Couldn't save your edit. Please try again.",
+  "rollbackFailed": "Couldn't roll back the story. Please try again.",
   "spellcheck": "Spellcheck",
   "spellcheckClean": "No issues",
   "spellcheckIssues": "{{count}} issue",

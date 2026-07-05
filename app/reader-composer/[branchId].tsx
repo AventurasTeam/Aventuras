@@ -33,6 +33,7 @@ import { t } from '@/lib/i18n'
 import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
 import { awaitRunTerminal, pipelineEventBus, type PipelineError } from '@/lib/pipeline'
 import { entriesStore, generationStore, isUserEditBlocked, undoRedoStore } from '@/lib/stores'
+import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
 
@@ -153,6 +154,15 @@ export default function ReaderComposerRoute() {
     if (entriesStore.getLoadedBranch() !== branchId) void reload()
   }, [branchId, reload])
 
+  const surfaceTurnFailure = useCallback(
+    async (error: PipelineError | undefined) => {
+      setLastError(error)
+      await writeSystemEntry({ branchId, content: t('reader:systemEntry.failureMessage') }, ctx)
+      await reload()
+    },
+    [branchId, reload],
+  )
+
   const runSubmit = useCallback(
     async (content: string, composerMode: string) => {
       if (!storyId) return
@@ -170,14 +180,20 @@ export default function ReaderComposerRoute() {
         await reload()
       }
       setLastSubmission({ content, composerMode })
-      const result = await submitTurn({ storyId, branchId }, { content, composerMode }, ctx)
-      if (result.outcome === 'failed') {
-        setLastError(result.error)
-        await writeSystemEntry({ branchId, content: t('reader:systemEntry.failureMessage') }, ctx)
-        await reload()
+      try {
+        const result = await submitTurn({ storyId, branchId }, { content, composerMode }, ctx)
+        if (result.outcome === 'failed') await surfaceTurnFailure(result.error)
+      } catch (err) {
+        // submitTurn throws on a rejected user_action write (and runPipeline can
+        // reject) — treat a thrown failure like a structured 'failed' outcome so
+        // the UI surfaces an error and stays retriable instead of hanging.
+        await surfaceTurnFailure({
+          kind: 'orchestrator',
+          detail: err instanceof Error ? err.message : String(err),
+        })
       }
     },
-    [storyId, branchId, reload],
+    [storyId, branchId, reload, surfaceTurnFailure],
   )
 
   // fixAction (config-resolver fixes) has no EntryCard slot in the M2 subset;
@@ -204,7 +220,12 @@ export default function ReaderComposerRoute() {
 
   const confirmRollback = useCallback(async () => {
     if (!rollback) return
-    await rollbackToEntry(branchId, rollback.targetId, ctx)
+    const result = await rollbackToEntry(branchId, rollback.targetId, ctx)
+    if (result.status === 'rejected') {
+      // Keep the modal open so the user doesn't assume the delete happened.
+      toast.error(t('reader:rollbackFailed'))
+      return
+    }
     setRollback(null)
   }, [branchId, rollback])
 
@@ -215,7 +236,12 @@ export default function ReaderComposerRoute() {
 
   const commitEdit = useCallback(async () => {
     if (!editingId) return
-    await updateStoryEntryContent(branchId, editingId, editDraft, ctx)
+    const result = await updateStoryEntryContent(branchId, editingId, editDraft, ctx)
+    if (result.status === 'rejected') {
+      // Keep the draft open so a rejected edit doesn't silently discard typing.
+      toast.error(t('reader:editFailed'))
+      return
+    }
     setEditingId(null)
     setEditDraft('')
   }, [branchId, editingId, editDraft])
@@ -228,6 +254,11 @@ export default function ReaderComposerRoute() {
   useEffect(() => {
     if (Platform.OS !== 'web') return undefined
     const handler = (ev: KeyboardEvent) => {
+      // Let the browser's native undo/redo win when focus is in a text input —
+      // otherwise Ctrl/Cmd+Z on a composer typo reverses the last story turn.
+      const target = ev.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
       if ((ev.metaKey || ev.ctrlKey) && (ev.key === 'z' || ev.key === 'Z')) {
         ev.preventDefault()
         if (ev.shiftKey) void redoLastAction(branchId, ctx)
