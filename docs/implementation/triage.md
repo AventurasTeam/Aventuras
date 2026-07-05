@@ -60,6 +60,29 @@ slice-planning gate forces its resolution before that slice is planned.
   string without special-casing "Gregorian". Reconcile the doc example
   to the actual schema shape (or add the derivation the doc implies).
   Surfaced by Slice 2.3.
+- **Wizard assist prompts hard-code their JSON schema.** The wizard-group
+  templates (`WIZARD_OPENING`, `WIZARD_TITLE_CHIPS`, `WIZARD_DESCRIPTION`)
+  hand-write the "Return a JSON object with these fields…" block as prose,
+  while the reply is validated against a separate Zod schema
+  (`openingOutputSchema` etc.). Two sources of truth that drift silently — a
+  renamed or added schema field won't update the prompt. Derive the field
+  list from the Zod schema instead (zod-to-json-schema, a small schema→prose
+  renderer, or native structured outputs where the provider supports them).
+  **Reconcile at the end of M2**, alongside the pack/render-surface work.
+  Surfaced by Slice 2.3.
+- **Theme is never persisted/restored, and Generate can flip it.**
+  `ThemeProvider` seeds its active theme once from `useColorScheme()` into
+  local state and never reads or writes `app_settings.themeId` — the column
+  is effectively dead (schema default `'system'`, yet a runtime value such as
+  `'aventuras'` can exist with no write path from settings). Nothing calls
+  `setTheme` at runtime outside the Storybook theme-picker, yet pressing
+  Generate in the wizard AI-assist popover was observed flipping light→dark.
+  The assist code touches nothing theme-related, so a provider remount
+  re-seeding from `useColorScheme()` is the likely trigger — needs a live
+  desktop repro to confirm. Fix: wire the provider to persisted `themeId`
+  (restore on boot, persist on change) and identify the remount. Pre-existing
+  (the theme system predates M2.3); no single slice owns it. Surfaced by
+  Slice 2.3.
 
 ### Composer-mode wrap: canonical reframe to in-code i18n
 
