@@ -35,4 +35,16 @@ describe('createHtmlStreamBuffer', () => {
     buf.push('trailing <e')
     expect(buf.flush()).toBe('trailing <e')
   })
+
+  it('renders a literal < in prose immediately (not a tag-start)', () => {
+    const buf = createHtmlStreamBuffer()
+    expect(buf.push('the count was < 10, ok')).toBe('the count was < 10, ok')
+  })
+
+  it('withholds a quoted > inside an attribute value until the tag truly closes', () => {
+    const buf = createHtmlStreamBuffer()
+    // The '>' here is data inside the still-open href quote, not the tag close.
+    expect(buf.push('<a href="x>y')).toBe('')
+    expect(buf.push('">done</a>')).toBe('<a href="x>y">done</a>')
+  })
 })

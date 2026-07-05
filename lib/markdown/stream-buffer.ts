@@ -11,9 +11,39 @@ export function createHtmlStreamBuffer(): HtmlStreamBuffer {
   let full = ''
 
   function recompute(): string {
-    const lastOpen = full.lastIndexOf('<')
-    const lastClose = full.lastIndexOf('>')
-    return lastOpen > lastClose ? full.slice(0, lastOpen) : full
+    let inTag = false
+    let quote: '"' | "'" | null = null
+    let tagStart = -1
+
+    for (let i = 0; i < full.length; i++) {
+      const ch = full[i]
+      if (quote) {
+        if (ch === quote) quote = null
+        continue
+      }
+      if (inTag) {
+        if (ch === '"' || ch === "'") {
+          quote = ch
+          continue
+        }
+        if (ch === '>') {
+          inTag = false
+          tagStart = -1
+        }
+        continue
+      }
+      if (ch === '<') {
+        const next = full[i + 1]
+        // Only a genuine tag-start if what follows looks like markup; a bare '<'
+        // in prose ("x < y") isn't withheld. undefined => end of buffer, stay safe.
+        if (next === undefined || /[a-zA-Z/!]/.test(next)) {
+          inTag = true
+          tagStart = i
+        }
+      }
+    }
+
+    return inTag && tagStart >= 0 ? full.slice(0, tagStart) : full
   }
 
   return {
