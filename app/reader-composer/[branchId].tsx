@@ -300,6 +300,7 @@ export default function ReaderComposerRoute() {
               </View>
             ) : (
               <EntryWindow
+                key={branchId}
                 rows={windowRows}
                 renderRow={renderRow}
                 onNearTop={() => {}}

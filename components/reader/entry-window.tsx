@@ -85,6 +85,17 @@ function EntryWindowWeb<T extends { id: string }>({
     el.scrollTop += scrollTopDeltaPx
   }, [rows, virtualizer])
 
+  // Land at the tail on first open: rows may be empty on first render, so fire
+  // when they first arrive. The one-shot flag keeps this off the user's later
+  // scrolling and the prepend anchor above; scrollToIndex self-reconciles to
+  // the true bottom as estimated row heights get measured.
+  const didInitialScrollRef = useRef(false)
+  useLayoutEffect(() => {
+    if (didInitialScrollRef.current || rows.length === 0) return
+    didInitialScrollRef.current = true
+    virtualizer.scrollToIndex(rows.length - 1, { align: 'end' })
+  }, [rows, virtualizer])
+
   const nearTopRef = useRef(false)
   const nearBottomRef = useRef(false)
   const handleScroll = useCallback(
@@ -124,11 +135,24 @@ function EntryWindowNative<T extends { id: string }>({
   onNearTop,
   onNearBottom,
 }: EntryWindowProps<T>) {
+  const listRef = useRef<FlatList<T>>(null)
+  // Land at the tail on first open. onContentSizeChange fires once the initial
+  // rows have laid out (firmer than a rows-keyed effect); the one-shot flag
+  // keeps later size changes off the user's scrolling.
+  const didInitialScrollRef = useRef(false)
+  const handleContentSizeChange = useCallback(() => {
+    if (didInitialScrollRef.current || rows.length === 0) return
+    didInitialScrollRef.current = true
+    listRef.current?.scrollToEnd({ animated: false })
+  }, [rows.length])
+
   return (
     <FlatList
+      ref={listRef}
       data={rows}
       keyExtractor={(row) => row.id}
       renderItem={({ item }) => <>{renderRow(item)}</>}
+      onContentSizeChange={handleContentSizeChange}
       maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
       onStartReached={onNearTop}
       onStartReachedThreshold={EDGE_THRESHOLD_VIEWPORTS}
