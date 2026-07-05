@@ -56,13 +56,17 @@ export async function applyRedo(snapshots: RedoSnapshot[], ctx: DbCtx): Promise<
   await ctx.runInTransaction(ops)
   for (const { delta, rowBeforeUndo } of snapshots) {
     const entry = resolveByTable(delta.targetTable)
-    entry?.patcher?.(
-      delta.branchId,
-      delta.op === 'create'
-        ? { op: 'create', id: delta.targetId, row: rowBeforeUndo ?? {} }
-        : delta.op === 'delete'
-          ? { op: 'delete', id: delta.targetId }
-          : { op: 'update', id: delta.targetId, columns: rowBeforeUndo ?? {} },
-    )
+    if (delta.op === 'delete') {
+      entry?.patcher?.(delta.branchId, { op: 'delete', id: delta.targetId })
+    } else if (rowBeforeUndo) {
+      entry?.patcher?.(
+        delta.branchId,
+        delta.op === 'create'
+          ? { op: 'create', id: delta.targetId, row: rowBeforeUndo }
+          : { op: 'update', id: delta.targetId, columns: rowBeforeUndo },
+      )
+    }
+    // create/update with no rowBeforeUndo wrote nothing to the DB above; skip the
+    // patcher too so the store never gains a phantom row.
   }
 }
