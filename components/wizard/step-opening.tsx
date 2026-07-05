@@ -7,7 +7,7 @@ import { Heading } from '@/components/ui/heading'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
-import { resolveModel, type ResolveModelConfig } from '@/lib/ai'
+import { resolveModel, type GenerateStructuredResult, type ResolveModelConfig } from '@/lib/ai'
 import { t } from '@/lib/i18n'
 import { generateId, IdBiMap, parseAndSubstitute } from '@/lib/ids'
 import { TEMPLATE_IDS, renderTemplate } from '@/lib/prompts'
@@ -17,7 +17,6 @@ import {
   openingOutputSchema,
   titleChipsSchema,
   type OpeningOutput,
-  type WizardAssistResult,
 } from '@/lib/wizard'
 
 import { AiAssist } from './ai-assist'
@@ -31,7 +30,7 @@ type RunAssist<T> = (
   schema: z.ZodType<T>,
   config: ResolveModelConfig,
   signal: AbortSignal,
-) => Promise<WizardAssistResult<T>>
+) => Promise<GenerateStructuredResult<T>>
 
 // DI seams mirroring AiAssist's own `runAssist` / `resolveConfig` props — stories
 // and tests inject fakes so no real provider is hit. Production omits all of these.

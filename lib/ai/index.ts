@@ -10,6 +10,7 @@ export {
   type ResolvedParams,
 } from './resolve-model'
 export { registerStubProvider } from './stub/temporary-registry'
+export { parseStructured, generateStructured, type GenerateStructuredResult } from './structured'
 export {
   callWithRetry,
   type CallRetryError,

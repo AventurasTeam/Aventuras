@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 
 import { loadDraft, saveStoryDraft } from '@/lib/actions'
+import { parseStructured } from '@/lib/ai'
 import {
   branches,
   deltas,
@@ -15,7 +16,7 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { generateId, IdBiMap, parseAndSubstitute } from '@/lib/ids'
 import { navigationStore, storiesStore } from '@/lib/stores'
-import { openingOutputSchema, parseStructured } from '@/lib/wizard'
+import { openingOutputSchema } from '@/lib/wizard'
 
 import { finishWizard } from './finish'
 

@@ -13,10 +13,14 @@ import { Spinner } from '@/components/ui/spinner'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
-import { resolveModel, type ResolveModelConfig } from '@/lib/ai'
+import {
+  generateStructured,
+  resolveModel,
+  type GenerateStructuredResult,
+  type ResolveModelConfig,
+} from '@/lib/ai'
 import { t } from '@/lib/i18n'
 import { appSettingsStore } from '@/lib/stores'
-import { runWizardAssist, type WizardAssistResult } from '@/lib/wizard'
 
 const GUIDANCE_MAX_LENGTH = 200
 
@@ -39,9 +43,9 @@ type AiAssistCommonProps<T> = {
   onSetup: () => void
   disabled?: boolean
   /**
-   * DI seam for tests/stories — defaults to the real runWizardAssist. Typed
+   * DI seam for tests/stories — defaults to the real wizard-assist call. Typed
    * against this instance's own T (not the fully generic `typeof
-   * runWizardAssist`) so a story can inject a fake tied to its one concrete
+   * generateStructured`) so a story can inject a fake tied to its one concrete
    * schema without fighting generic-function assignability.
    */
   runAssist?: (
@@ -49,7 +53,7 @@ type AiAssistCommonProps<T> = {
     schema: ZodType<T>,
     config: ResolveModelConfig,
     signal: AbortSignal,
-  ) => Promise<WizardAssistResult<T>>
+  ) => Promise<GenerateStructuredResult<T>>
   /** DI seam for tests/stories — defaults to reading the live app-settings store. */
   resolveConfig?: () => ResolveModelConfig
 }
@@ -72,6 +76,15 @@ function defaultResolveConfig(): ResolveModelConfig {
   return appSettingsStore.getAppSettings()
 }
 
+function defaultRunAssist<T>(
+  prompt: string,
+  schema: ZodType<T>,
+  config: ResolveModelConfig,
+  signal: AbortSignal,
+): Promise<GenerateStructuredResult<T>> {
+  return generateStructured('wizard-assist', prompt, schema, config, signal)
+}
+
 export function AiAssist<T>(props: AiAssistProps<T>) {
   const {
     ariaLabel,
@@ -80,7 +93,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
     schema,
     onSetup,
     disabled,
-    runAssist = runWizardAssist,
+    runAssist = defaultRunAssist,
     resolveConfig = defaultResolveConfig,
   } = props
 

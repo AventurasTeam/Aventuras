@@ -3,9 +3,9 @@ import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 import type { ZodType } from 'zod'
 
-import type { ResolveModelConfig } from '@/lib/ai'
+import type { GenerateStructuredResult, ResolveModelConfig } from '@/lib/ai'
 import { appSettingsStore, wizardStore } from '@/lib/stores'
-import type { OpeningOutput, WizardAssistResult } from '@/lib/wizard'
+import type { OpeningOutput } from '@/lib/wizard'
 
 import { StepOpening } from './step-opening'
 
@@ -40,7 +40,7 @@ function okAssist<T>(value: T) {
     _schema: ZodType<T>,
     _config: ResolveModelConfig,
     _signal: AbortSignal,
-  ): Promise<WizardAssistResult<T>> => ({ status: 'ok', value })
+  ): Promise<GenerateStructuredResult<T>> => ({ status: 'ok', value })
 }
 
 const meta: Meta<typeof StepOpening> = {

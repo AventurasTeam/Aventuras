@@ -5,13 +5,13 @@ import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 import type { ZodType } from 'zod'
 
 import { Text } from '@/components/ui/text'
-import type { ResolveModelConfig } from '@/lib/ai'
-import { descriptionOutputSchema, titleChipsSchema, type WizardAssistResult } from '@/lib/wizard'
+import type { GenerateStructuredResult, ResolveModelConfig } from '@/lib/ai'
+import { descriptionOutputSchema, titleChipsSchema } from '@/lib/wizard'
 
 import { AiAssist } from './ai-assist'
 
 // AiAssist resolves its ResolveModelConfig from the live appSettingsStore and
-// calls the real runWizardAssist by default. Both are injectable seams
+// calls the real wizard-assist by default. Both are injectable seams
 // (`resolveConfig` / `runAssist`) — the same shape Task 19's `calendars?` prop
 // used on StepCalendar — so these stories drive the real component end to end
 // without a provider network call or module-level mocking.
@@ -55,7 +55,7 @@ function okAssist<T>(value: T) {
     _schema: ZodType<T>,
     _config: ResolveModelConfig,
     _signal: AbortSignal,
-  ): Promise<WizardAssistResult<T>> => ({ status: 'ok', value })
+  ): Promise<GenerateStructuredResult<T>> => ({ status: 'ok', value })
 }
 
 function failAssist<T>(detail: string) {
@@ -64,7 +64,7 @@ function failAssist<T>(detail: string) {
     _schema: ZodType<T>,
     _config: ResolveModelConfig,
     _signal: AbortSignal,
-  ): Promise<WizardAssistResult<T>> => ({ status: 'failed', detail })
+  ): Promise<GenerateStructuredResult<T>> => ({ status: 'failed', detail })
 }
 
 // Fails once (drives the Failure state), then succeeds — exercises "Try
@@ -76,7 +76,7 @@ function flakyThenOkAssist<T>(value: T, detail: string) {
     _schema: ZodType<T>,
     _config: ResolveModelConfig,
     _signal: AbortSignal,
-  ): Promise<WizardAssistResult<T>> => {
+  ): Promise<GenerateStructuredResult<T>> => {
     calls += 1
     if (calls === 1) return { status: 'failed', detail }
     return { status: 'ok', value }
@@ -91,7 +91,7 @@ function neverResolvingAssist<T>() {
     _schema: ZodType<T>,
     _config: ResolveModelConfig,
     _signal: AbortSignal,
-  ): Promise<WizardAssistResult<T>> => new Promise(() => {})
+  ): Promise<GenerateStructuredResult<T>> => new Promise(() => {})
 }
 
 type DescriptionValue = { description: string }
@@ -108,7 +108,7 @@ type ProseDemoProps = {
     schema: ZodType<DescriptionValue>,
     config: ResolveModelConfig,
     signal: AbortSignal,
-  ) => Promise<WizardAssistResult<DescriptionValue>>
+  ) => Promise<GenerateStructuredResult<DescriptionValue>>
   onSetup: () => void
   onUse: (value: DescriptionValue) => void
 }
@@ -149,7 +149,7 @@ type ChipsDemoProps = {
     schema: ZodType<TitlesValue>,
     config: ResolveModelConfig,
     signal: AbortSignal,
-  ) => Promise<WizardAssistResult<TitlesValue>>
+  ) => Promise<GenerateStructuredResult<TitlesValue>>
   onSetup: () => void
   onPickChip: (chip: string, value: TitlesValue) => void
 }
