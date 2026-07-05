@@ -148,12 +148,13 @@ async function consumePhase(
   }
 }
 
-function phaseContextOf(run: RunState): PhaseContext {
+function phaseContextOf(run: RunState, ctx: RunCtx): PhaseContext {
   return {
     actionId: run.actionId,
     abortSignal: run.abortController.signal,
     intermediates: run.intermediates,
     log: makeLogger(run.actionId),
+    db: ctx.db,
   }
 }
 
@@ -165,7 +166,7 @@ async function runParallelGroup(
   const results = await Promise.all(
     branches.map(async (b) => {
       pipelineEventBus.emit({ type: 'phase_start', runId: run.runId, name: b.name })
-      const result = await consumePhase(b.run(phaseContextOf(run)), run, ctx)
+      const result = await consumePhase(b.run(phaseContextOf(run, ctx)), run, ctx)
       pipelineEventBus.emit({ type: 'phase_complete', runId: run.runId, name: b.name, result })
       if (result.status === 'failed') run.abortController.abort() // wind down siblings that poll
       return result
@@ -188,7 +189,7 @@ async function runNode(node: PhaseNode, run: RunState, ctx: RunCtx): Promise<Pha
   const result =
     'parallel' in node
       ? await runParallelGroup(node.parallel, run, ctx)
-      : await consumePhase(node.run(phaseContextOf(run)), run, ctx)
+      : await consumePhase(node.run(phaseContextOf(run, ctx)), run, ctx)
   turnCaptureSink.appendPhaseEvent(run.actionId, { phase: node.name, kind: 'exit', at: Date.now() })
   generationStore.recordPhaseResult(run.runId, node.name, result)
   pipelineEventBus.emit({ type: 'phase_complete', runId: run.runId, name: node.name, result })

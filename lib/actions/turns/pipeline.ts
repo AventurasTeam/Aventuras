@@ -1,4 +1,7 @@
+import { eq, sql } from 'drizzle-orm'
+
 import { getModel, resolveModel, streamProviderCall } from '@/lib/ai'
+import { storyEntries } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import {
   definePipeline,
@@ -51,12 +54,45 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
 
   const entryId = generateId('entry')
   const model = getModel(resolved.providerId, resolved.modelId, ctx.actionId)
-  const stream = streamProviderCall({ model, prompt, abortSignal: ctx.abortSignal })
+  // streamText (ai@6) does NOT throw from textStream on a network/connection
+  // failure — it terminates the iteration silently and surfaces the error only
+  // through onError. Capture it there and gate the commit on it.
+  let streamError: unknown
+  const stream = streamProviderCall({
+    model,
+    prompt,
+    abortSignal: ctx.abortSignal,
+    onError: ({ error }) => {
+      streamError = error
+    },
+  })
   let content = ''
-  for await (const chunk of stream.textStream) {
-    content += chunk
-    yield { type: 'stream_chunk', targetEntryId: entryId, text: chunk }
+  try {
+    for await (const chunk of stream.textStream) {
+      content += chunk
+      yield { type: 'stream_chunk', targetEntryId: entryId, text: chunk }
+    }
+  } catch (e) {
+    streamError = e
   }
+  if (streamError !== undefined) {
+    // A cancel (abort) rides the same error path; classify it as an abort, not a
+    // provider failure, so CTRL-Z semantics stay distinct from a real fault.
+    if (ctx.abortSignal.aborted) return { status: 'aborted' }
+    return {
+      status: 'failed',
+      error: {
+        kind: 'provider',
+        reason: 'network',
+        detail: streamError instanceof Error ? streamError.message : String(streamError),
+      },
+    }
+  }
+
+  const [tail] = await ctx.db
+    .select({ next: sql<number>`COALESCE(MAX(${storyEntries.position}), 0) + 1` })
+    .from(storyEntries)
+    .where(eq(storyEntries.branchId, branchId))
 
   yield {
     type: 'delta_emitted',
@@ -68,7 +104,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         entry: {
           id: entryId,
           branchId,
-          position: entries.length + 1,
+          position: tail?.next ?? 1,
           kind: 'ai_reply',
           content,
           createdAt: Date.now(),

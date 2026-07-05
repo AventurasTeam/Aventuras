@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { storyEntries, type StoryEntry } from '@/lib/db'
 import { getPipeline } from '@/lib/pipeline'
 import { entriesStore, hydrateAppSettings } from '@/lib/stores'
 
@@ -106,6 +107,68 @@ describe('submitTurn', () => {
       { kind: 'user_action', content: 'Hello there', position: 1 },
       { kind: 'ai_reply', content: 'A reply.', position: 2 },
     ])
+  })
+
+  it('positions the new user action at MAX(position)+1, not the store row count', async () => {
+    const { ctx } = await makeHarness()
+    // Non-contiguous tail: gaps mean the store's row count (4) is LOWER than the
+    // real MAX(position) (5), so a count-based position would collide at 5.
+    const seeded: StoryEntry[] = [1, 2, 3, 5].map((position) => ({
+      id: `seed-${position}`,
+      branchId: 'b1',
+      position,
+      kind: position === 1 ? 'opening' : 'ai_reply',
+      content: `seed ${position}`,
+      chapterId: null,
+      metadata: null,
+      createdAt: position,
+    }))
+    for (const row of seeded) await ctx.db.insert(storyEntries).values(row)
+    entriesStore.hydrate('b1', seeded)
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    await submitTurn(
+      { storyId: 's1', branchId: 'b1' },
+      { content: 'next', composerMode: 'do' },
+      ctx,
+    )
+
+    const userAction = branchEntries('b1').find((e) => e.kind === 'user_action')
+    expect(userAction?.position).toBe(6)
+    const aiReply = branchEntries('b1').find(
+      (e) => e.kind === 'ai_reply' && !e.id.startsWith('seed-'),
+    )
+    expect(aiReply?.position).toBe(7)
+  })
+
+  it('fails the turn and writes no ai_reply when the provider stream errors', async () => {
+    const { ctx } = await makeHarness()
+    entriesStore.hydrate('b1', [])
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    // Matches the live "TypeError: Failed to fetch" — a network reject, not an
+    // HTTP error status.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch')
+      }),
+    )
+
+    const result = expectRan(
+      await submitTurn(
+        { storyId: 's1', branchId: 'b1' },
+        { content: 'Hello', composerMode: 'say' },
+        ctx,
+      ),
+    )
+
+    expect(result.outcome).toBe('failed')
+    expect(result.error).toEqual(expect.objectContaining({ kind: 'provider', reason: 'network' }))
+    // No empty ai_reply lands (the bug), and the whole turn reverses on failure:
+    // the user_action shares the turn's actionId (C6), so abortRun's
+    // reverse-replay drops it too — same clean-rollback path as preflight
+    // failure. The composer preserves the text for retry, not a persisted row.
+    expect(branchEntries('b1')).toHaveLength(0)
   })
 
   it('halts at preflight when no narrative profile resolves, reversing the user action too', async () => {

@@ -1,4 +1,4 @@
-import type { PipelineAction } from '@/lib/actions'
+import type { DbCtx, PipelineAction } from '@/lib/actions'
 import type { ResolveFailureKind, ResolveTarget } from '@/lib/ai'
 import type { StorySettings } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
@@ -53,6 +53,9 @@ export type PhaseContext = {
   intermediates: Record<string, unknown>
   // Run-bound logger so a phase's logs are turn-attributed without a global.
   log: Logger
+  // The run's db handle, so a phase can resolve tail positions (MAX(position)+1)
+  // against committed rows rather than a possibly-gappy in-memory store.
+  db: DbCtx['db']
 }
 
 export type PhaseFn = (ctx: PhaseContext) => AsyncGenerator<PhaseEmittedEvent, PhaseResult>

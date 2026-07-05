@@ -1,6 +1,8 @@
+import { eq, sql } from 'drizzle-orm'
+
+import { storyEntries } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { runPipeline, type RunCtx } from '@/lib/pipeline'
-import { entriesStore } from '@/lib/stores'
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import type { DbCtx } from '../types'
@@ -15,10 +17,13 @@ export async function submitTurn(
 ): ReturnType<typeof runPipeline> {
   ensurePerTurnPipelineRegistered()
 
-  const existing = [...entriesStore.getEntries().values()].filter(
-    (e) => e.branchId === ids.branchId,
-  )
-  const position = existing.length + 1
+  // Tail position from committed rows, not the in-memory store's count: real
+  // branches have position gaps, so a count lands mid-story and collides.
+  const [tail] = await ctx.db
+    .select({ next: sql<number>`COALESCE(MAX(${storyEntries.position}), 0) + 1` })
+    .from(storyEntries)
+    .where(eq(storyEntries.branchId, ids.branchId))
+  const position = tail?.next ?? 1
   const entryId = generateId('entry')
   const createdAt = Date.now()
   // Shared across the user_action's delta and the pipeline run it kicks off, so
