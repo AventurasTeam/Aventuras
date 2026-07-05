@@ -1,9 +1,11 @@
+import { DeltaReplayError, applyDeltaAction, reverseReplayDeltas } from '@/lib/actions'
 import { branches, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { clearBuffers, configureDiagnosticsGate } from '@/lib/diagnostics'
 import {
   __resetBus,
   __resetRegistry,
+  configureDeltaActionPort,
   type RejectedStart,
   type RunCtx,
   type TxResult,
@@ -33,4 +35,9 @@ export function resetSingletons(): void {
   resetAllStores()
   clearBuffers()
   configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+  configureDeltaActionPort({
+    applyDeltaAction,
+    reverseReplayDeltas,
+    describeReplayError: (e) => (e instanceof DeltaReplayError ? String(e.cause) : undefined),
+  })
 }

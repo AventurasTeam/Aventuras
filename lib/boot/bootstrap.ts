@@ -1,7 +1,12 @@
 import type { DbCtx } from '@/lib/actions'
-import { registerAllDomains } from '@/lib/actions'
+import {
+  DeltaReplayError,
+  applyDeltaAction,
+  registerAllDomains,
+  reverseReplayDeltas,
+} from '@/lib/actions'
 import { configureDiagnosticsGate, logger } from '@/lib/diagnostics'
-import { recoverInFlightRuns } from '@/lib/pipeline'
+import { configureDeltaActionPort, recoverInFlightRuns } from '@/lib/pipeline'
 import {
   appSettingsStore,
   type BootHydrateResult,
@@ -20,10 +25,21 @@ export function ensureDiagnosticsGate(): void {
   })
 }
 
+// lib/pipeline can't import @/lib/actions directly (require cycle through
+// turns/pipeline.ts), so the real delta-action functions are wired in here.
+export function ensureDeltaActionPort(): void {
+  configureDeltaActionPort({
+    applyDeltaAction,
+    reverseReplayDeltas,
+    describeReplayError: (e) => (e instanceof DeltaReplayError ? String(e.cause) : undefined),
+  })
+}
+
 export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
   // Registry must be populated before recovery drives reverse-replay (resolves by target_table).
   registerAllDomains()
   ensureDiagnosticsGate()
+  ensureDeltaActionPort()
   // Recovery must never block boot: a failure of the orphan pass itself (not just
   // a per-orphan delta) is logged and boot proceeds to hydrate.
   try {

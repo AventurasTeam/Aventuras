@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { DeltaReplayError, applyDeltaAction, reverseReplayDeltas } from '@/lib/actions'
 import { resetTemporaryProvidersForTests } from '@/lib/ai/stub/temporary-registry'
 import { branches, deltas, pipelineRuns, stories, storyEntries } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -10,7 +11,12 @@ import {
   configureDiagnosticsGate,
   getDiagnosticsSnapshot,
 } from '@/lib/diagnostics'
-import { __resetBus, __resetRegistry, pipelineEventBus } from '@/lib/pipeline'
+import {
+  __resetBus,
+  __resetRegistry,
+  configureDeltaActionPort,
+  pipelineEventBus,
+} from '@/lib/pipeline'
 import { generationStore, resetAllStores } from '@/lib/stores'
 import { toastStore } from '@/lib/toast'
 
@@ -25,6 +31,11 @@ beforeEach(() => {
   resetTemporaryProvidersForTests()
   toastStore.__reset()
   configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+  configureDeltaActionPort({
+    applyDeltaAction,
+    reverseReplayDeltas,
+    describeReplayError: (e) => (e instanceof DeltaReplayError ? String(e.cause) : undefined),
+  })
 })
 
 afterEach(() => {

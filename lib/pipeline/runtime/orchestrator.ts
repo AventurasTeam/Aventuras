@@ -1,12 +1,6 @@
 import { eq } from 'drizzle-orm'
 
-import {
-  DeltaReplayError,
-  applyDeltaAction,
-  reverseReplayDeltas,
-  type DbCtx,
-  type MutationResult,
-} from '@/lib/actions'
+import type { DbCtx, MutationResult } from '@/lib/actions'
 import { pipelineRuns } from '@/lib/db'
 import { logger, makeLogger, turnCaptureSink } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
@@ -23,6 +17,7 @@ import type {
   RejectedStart,
   TxResult,
 } from '../types'
+import { applyDeltaAction, describeReplayError, reverseReplayDeltas } from './action-port'
 import { checkConcurrencyContract } from './concurrency'
 import { pipelineEventBus } from './event-bus'
 import { runPreflight } from './preflight'
@@ -276,8 +271,9 @@ async function abortRun(
   try {
     await reverseReplayDeltas(run.actionId, ctx)
   } catch (e) {
-    if (!(e instanceof DeltaReplayError)) throw e
-    error = { kind: 'orchestrator', detail: `reverse-replay failed: ${String(e.cause)}` }
+    const detail = describeReplayError(e)
+    if (detail === undefined) throw e
+    error = { kind: 'orchestrator', detail: `reverse-replay failed: ${detail}` }
     outcome = 'failed'
   }
   generationStore.abortRun(run.runId)
