@@ -1,10 +1,12 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { eq } from 'drizzle-orm'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { branches, deltas, stories, storyEntries } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entriesStore, undoRedoStore } from '@/lib/stores'
 
 import { redoLastAction, undoLastAction } from './undo'
+import { DeltaReplayError } from '../delta/reverse-replay'
 
 afterEach(() => {
   entriesStore.__reset()
@@ -44,6 +46,31 @@ async function seed(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
     encodingVersion: 1,
     createdAt: 2,
   })
+}
+
+function hydrateOpeningAndTurn() {
+  entriesStore.hydrate('b1', [
+    {
+      id: 'e_opening',
+      branchId: 'b1',
+      position: 1,
+      kind: 'opening',
+      content: 'once upon a time',
+      chapterId: null,
+      metadata: null,
+      createdAt: 1,
+    },
+    {
+      id: 'e_turn',
+      branchId: 'b1',
+      position: 2,
+      kind: 'ai_reply',
+      content: 'a reply',
+      chapterId: null,
+      metadata: null,
+      createdAt: 2,
+    },
+  ])
 }
 
 describe('undoLastAction / redoLastAction', () => {
@@ -200,5 +227,76 @@ describe('undoLastAction / redoLastAction', () => {
     await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
     const result = await undoLastAction('b1', ctx)
     expect(result.status).toBe('rejected')
+  })
+
+  it('does not pop the redo stack when applyRedo throws (retry still works)', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    hydrateOpeningAndTurn()
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    expect(undoRedoStore.hasRedo()).toBe(true)
+
+    // Re-insert the row undo deleted so applyRedo's forward INSERT hits a PK
+    // conflict inside its transaction and throws — a genuine, recoverable
+    // failure (no mocking of the redo primitive).
+    await db.insert(storyEntries).values({
+      id: 'e_turn',
+      branchId: 'b1',
+      position: 2,
+      kind: 'ai_reply',
+      content: 'a reply',
+      createdAt: 2,
+    })
+    await expect(redoLastAction('b1', ctx)).rejects.toThrow()
+
+    // Snapshot survives the failure: nothing was popped, redo is still pending.
+    expect(undoRedoStore.hasRedo()).toBe(true)
+
+    // Clear the conflict; the still-present snapshot now redoes successfully.
+    await db.delete(storyEntries).where(eq(storyEntries.id, 'e_turn'))
+    expect((await redoLastAction('b1', ctx)).status).toBe('ok')
+    expect(entriesStore.getById('e_turn')).toBeDefined()
+    expect(undoRedoStore.hasRedo()).toBe(false)
+  })
+
+  it('rejects redo whose snapshot belongs to a different branch, leaving the stack', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    hydrateOpeningAndTurn()
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    expect(undoRedoStore.hasRedo()).toBe(true)
+
+    const wrong = await redoLastAction('b_other', ctx)
+    expect(wrong.status).toBe('rejected')
+    if (wrong.status === 'rejected') expect(wrong.reason).toMatch(/branch/i)
+
+    // The mismatch must not consume branch b1's own redo.
+    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect((await redoLastAction('b1', ctx)).status).toBe('ok')
+    expect(entriesStore.getById('e_turn')).toBeDefined()
+    expect(undoRedoStore.hasRedo()).toBe(false)
+  })
+
+  it('preserves the redo snapshot when reversal commits but post-commit store sync fails', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    hydrateOpeningAndTurn()
+
+    // The reversal + prune tx commits, then the patcher throws → committed:true.
+    const patchSpy = vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+    await expect(undoLastAction('b1', ctx)).rejects.toBeInstanceOf(DeltaReplayError)
+    patchSpy.mockRestore()
+
+    // The DB change is real and committed: the delta row was pruned.
+    expect((await db.select().from(deltas).where(eq(deltas.id, 'd_turn'))).length).toBe(0)
+    // ...and redo capability was preserved despite the thrown store-sync error.
+    expect(undoRedoStore.hasRedo()).toBe(true)
   })
 })

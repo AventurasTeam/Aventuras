@@ -6,7 +6,7 @@ import { undoRedoStore } from '@/lib/stores'
 import { selectUndoTarget } from '@/lib/undo'
 
 import { applyRedo, snapshotForRedo } from '../delta/redo'
-import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
+import { DeltaReplayError, reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
 import { resolveRollbackWindow } from './operational'
 
@@ -39,14 +39,27 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
   }
 
   const snapshot = await snapshotForRedo(rows, ctx)
-  await reverseAndPruneDeltaRows(rows, ctx)
+  try {
+    await reverseAndPruneDeltaRows(rows, ctx)
+  } catch (e) {
+    // A committed DeltaReplayError means the reversal + prune already landed in
+    // SQLite; only the post-commit store sync failed. The data change is real,
+    // so preserve redo capability before surfacing the sync failure.
+    if (e instanceof DeltaReplayError && e.committed) undoRedoStore.pushRedoGroup(snapshot)
+    throw e
+  }
   undoRedoStore.pushRedoGroup(snapshot)
   return { status: 'ok' }
 }
 
-export async function redoLastAction(_branchId: string, ctx: DbCtx): Promise<UndoResult> {
-  const snapshot = undoRedoStore.popRedoGroup()
+export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<UndoResult> {
+  const snapshot = undoRedoStore.peekRedoGroup()
   if (!snapshot) return { status: 'rejected', reason: 'nothing to redo' }
+  // The redo stack is a single global stack, not partitioned per branch. Guard
+  // against applying another branch's snapshot to this context.
+  if (snapshot.some((s) => s.delta.branchId !== branchId))
+    return { status: 'rejected', reason: 'redo stack does not belong to this branch' }
   await applyRedo(snapshot, ctx)
+  undoRedoStore.popRedoGroup()
   return { status: 'ok' }
 }
