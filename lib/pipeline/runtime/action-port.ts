@@ -25,6 +25,10 @@ function requirePort(): DeltaActionPort {
   return port
 }
 
+export function __resetDeltaActionPort(): void {
+  port = undefined
+}
+
 export function applyDeltaAction(
   ...args: Parameters<DeltaActionPort['applyDeltaAction']>
 ): ReturnType<DeltaActionPort['applyDeltaAction']> {
