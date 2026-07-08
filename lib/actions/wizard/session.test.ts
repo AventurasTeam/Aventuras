@@ -123,4 +123,23 @@ describe('wizard session/draft actions', () => {
     expect(story.createdAt).toBe(1)
     expect(story.updatedAt).toBe(999)
   })
+
+  it('saveStoryDraft writes the card-backing definition and description', async () => {
+    const s = emptyWorkingState()
+    s.definition.description = 'A tale of woe'
+    const { storyId } = await saveStoryDraft(s, ctx, 1)
+    const [story] = await ctx.db.select().from(stories).where(eq(stories.id, storyId))
+    expect(story.description).toBe('A tale of woe')
+    expect(story.definition?.mode).toBe(s.definition.mode)
+  })
+
+  it('saveStoryDraft re-save preserves a favorited draft', async () => {
+    const { storyId } = await saveStoryDraft(emptyWorkingState(), ctx, 1)
+    await ctx.runInTransaction([
+      ctx.db.update(stories).set({ favorite: 1 }).where(eq(stories.id, storyId)).toSQL(),
+    ])
+    await saveStoryDraft(emptyWorkingState(), ctx, 2, storyId)
+    const [story] = await ctx.db.select().from(stories).where(eq(stories.id, storyId))
+    expect(story.favorite).toBe(1)
+  })
 })

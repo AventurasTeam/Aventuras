@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 
-import { stories, wizardSessions, type WizardWorkingState } from '@/lib/db'
+import { stories, wizardSessions, type StoryDefinition, type WizardWorkingState } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { rehydrateStories } from '@/lib/stores'
 
@@ -44,20 +44,39 @@ export async function saveStoryDraft(
 ): Promise<{ storyId: string }> {
   const storyId = existingStoryId ?? generateId('story')
   const title = state.definition.title || 'Untitled story'
-
-  const [existing] = existingStoryId
-    ? await ctx.db
-        .select({ createdAt: stories.createdAt })
-        .from(stories)
-        .where(eq(stories.id, existingStoryId))
-    : []
-  const createdAt = existing?.createdAt ?? nowMs
+  const description =
+    state.definition.description.trim().length > 0 ? state.definition.description : null
+  const definition: StoryDefinition = {
+    mode: state.definition.mode,
+    leadEntityId: state.leadEntityId ?? null,
+    narration: state.definition.narration,
+    genre: state.definition.genre,
+    tone: state.definition.tone,
+    setting: state.definition.setting,
+    calendarSystemId: state.definition.calendarSystemId,
+    worldTimeOrigin: state.definition.worldTimeOrigin,
+  }
 
   await ctx.runInTransaction([
-    ctx.db.delete(stories).where(eq(stories.id, storyId)).toSQL(),
+    // Upsert, not delete+insert: a re-saved draft must keep the card-backing
+    // columns the wizard doesn't own (favorite, createdAt), which selectStoryCards
+    // reads for filter/sort. definition + description carry mode accent, genre
+    // search, and the card description — the same fields Finish writes.
     ctx.db
       .insert(stories)
-      .values({ id: storyId, title, status: 'draft', createdAt, updatedAt: nowMs })
+      .values({
+        id: storyId,
+        title,
+        description,
+        status: 'draft',
+        definition,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      })
+      .onConflictDoUpdate({
+        target: stories.id,
+        set: { title, description, status: 'draft', definition, updatedAt: nowMs },
+      })
       .toSQL(),
     ctx.db.delete(wizardSessions).where(eq(wizardSessions.id, storyId)).toSQL(),
     ctx.db.insert(wizardSessions).values({ id: storyId, storyId, state, updatedAt: nowMs }).toSQL(),
