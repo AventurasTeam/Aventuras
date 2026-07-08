@@ -21,6 +21,8 @@ type WizardShellProps = {
   step: number
   canGoNext: boolean
   isFinish: boolean
+  /** Primary action is in flight (e.g. Finish committing); disables it against re-entry. */
+  busy?: boolean
   onCancel: () => void
   onBack: () => void
   onNext: () => void
@@ -111,6 +113,7 @@ export function WizardShell({
   step,
   canGoNext,
   isFinish,
+  busy = false,
   onCancel,
   onBack,
   onNext,
@@ -217,7 +220,7 @@ export function WizardShell({
                 <Text>{t('wizard:footer.back')}</Text>
               </Button>
             ) : null}
-            <Button variant="primary" size="sm" onPress={onNext} disabled={!canGoNext}>
+            <Button variant="primary" size="sm" onPress={onNext} disabled={!canGoNext || busy}>
               <Text>{isFinish ? t('wizard:footer.finish') : t('wizard:footer.next')}</Text>
             </Button>
           </View>

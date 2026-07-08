@@ -56,4 +56,11 @@ describe('calendarSystemSchema', () => {
     }
     expect(calendarSystemSchema.parse(withEras).eras?.defaultStartName).toBe('First Age')
   })
+
+  it('rejects a definition whose exampleStartValue omits a tier key', () => {
+    const { second: _second, ...partialOrigin } = EARTH_ISH.exampleStartValue
+    expect(() =>
+      calendarSystemSchema.parse({ ...EARTH_ISH, exampleStartValue: partialOrigin }),
+    ).toThrow(/missing tier/)
+  })
 })

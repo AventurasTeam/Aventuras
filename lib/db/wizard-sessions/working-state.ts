@@ -14,12 +14,12 @@ const wizardDefinitionDraftSchema = z.object({
   tone: labeledPromptSchema.default(() => labeledPromptSchema.parse({})),
   setting: z.string().default(''),
   calendarSystemId: z.string().default('earth-gregorian'),
-  worldTimeOrigin: z.record(z.string(), z.number()).default({}),
+  worldTimeOrigin: z.record(z.string(), z.number()).default(() => ({})),
 })
 
 const wizardOpeningDraftSchema = z.object({
   content: z.string().default(''),
-  sceneEntities: z.array(z.string()).default([]),
+  sceneEntities: z.array(z.string()).default(() => []),
   currentLocationId: z.string().nullable().default(null),
   model: z.string().nullable().default(null),
 })

@@ -137,15 +137,17 @@ function SwapHarness() {
       <Pressable accessibilityRole="button" onPress={() => setCalendar(SHORT_DAY_CALENDAR)}>
         <Text>Swap calendar</Text>
       </Pressable>
-      <TierTupleInput calendar={calendar} value={value} onChange={setValue} />
+      {/* Keyed by calendar id, mirroring StepCalendar: a swap remounts the
+          input, which is what clears its name-keyed `touched` state. */}
+      <TierTupleInput key={calendar.id} calendar={calendar} value={value} onChange={setValue} />
     </View>
   )
 }
 
 // Blur `day`=20 under Earth (valid, no error), then swap to a calendar where
 // day's max is 10 (making the retained 20 invalid). The stale `touched` flag
-// must NOT flash an error — the swap resets it; the error only returns on a
-// fresh blur of the new calendar's field.
+// must NOT flash an error — the keyed remount resets it; the error only returns
+// on a fresh blur of the new calendar's field.
 export const SwapResetsTouchedState: Story = {
   render: () => <SwapHarness />,
   play: async () => {

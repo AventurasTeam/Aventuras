@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BackHandler, Platform } from 'react-native'
 
 import { finishWizard } from '@/components/wizard/finish'
@@ -98,7 +98,16 @@ export default function WizardRoute() {
   const canGoNext = stepForwardValid(step, validityParams)
   const canJumpTo = (target: number) => canJumpToStep(target, step, furthestStep, validityParams)
 
+  // Finish commits a story; a double-tap before navigation would re-enter and
+  // mint a second one. The ref gates re-entry synchronously (state flips a tick
+  // late); `isFinishing` drives the button's disabled state for feedback.
+  const finishingRef = useRef(false)
+  const [isFinishing, setIsFinishing] = useState(false)
+
   const finish = () => {
+    if (finishingRef.current) return
+    finishingRef.current = true
+    setIsFinishing(true)
     const { defaultStorySettings, embeddingModelId } = appSettingsStore.getAppSettings()
     runAction(
       finishWizard(
@@ -108,16 +117,21 @@ export default function WizardRoute() {
         { defaultStorySettings, embeddingModelId },
         undefined,
         sourceDraftId ?? undefined,
-      ).then((result) => {
-        if (result.status === 'ok') {
-          wizardStore.reset()
-          return
-        }
-        const fields = result.reasons
-          .map((reason) => t(FINISH_REASON_KEY[reason as keyof typeof FINISH_REASON_KEY]))
-          .join(', ')
-        toast.error(t('wizard:finish.invalidList', { fields }))
-      }),
+      )
+        .then((result) => {
+          if (result.status === 'ok') {
+            wizardStore.reset()
+            return
+          }
+          const fields = result.reasons
+            .map((reason) => t(FINISH_REASON_KEY[reason as keyof typeof FINISH_REASON_KEY]))
+            .join(', ')
+          toast.error(t('wizard:finish.invalidList', { fields }))
+        })
+        .finally(() => {
+          finishingRef.current = false
+          setIsFinishing(false)
+        }),
       {
         event: 'action_layer.wizard_finish_failed',
         toastMessage: t('wizard:finish.failed'),
@@ -148,6 +162,7 @@ export default function WizardRoute() {
       step={step}
       canGoNext={canGoNext}
       isFinish={step === 5}
+      busy={isFinishing}
       onCancel={() => router.back()}
       onBack={goBack}
       onNext={step === 5 ? finish : goNext}

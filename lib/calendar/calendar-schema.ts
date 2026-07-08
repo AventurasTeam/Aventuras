@@ -55,16 +55,31 @@ const eraDeclarationSchema = z.object({
 
 const tierTupleSchema = z.record(z.string(), z.number())
 
-export const calendarSystemSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  baseUnitName: z.string(),
-  secondsPerBaseUnit: z.number().int().positive(),
-  tiers: z.array(tierSchema).min(1),
-  exampleStartValue: tierTupleSchema,
-  displayFormat: z.string(),
-  eras: eraDeclarationSchema.nullable(),
-})
+export const calendarSystemSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    baseUnitName: z.string(),
+    secondsPerBaseUnit: z.number().int().positive(),
+    tiers: z.array(tierSchema).min(1),
+    exampleStartValue: tierTupleSchema,
+    displayFormat: z.string(),
+    eras: eraDeclarationSchema.nullable(),
+  })
+  // Origin conversion (worldTimeToTuple, preserveOriginOnSwap) reads
+  // exampleStartValue[tier.name] for every tier; a missing key silently reads as
+  // undefined and corrupts the base-unit math, so require full coverage at parse.
+  .superRefine((cal, ctx) => {
+    for (const tier of cal.tiers) {
+      if (cal.exampleStartValue[tier.name] === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['exampleStartValue', tier.name],
+          message: `exampleStartValue is missing tier "${tier.name}"`,
+        })
+      }
+    }
+  })
 
 export type LeapCondition = z.infer<typeof leapConditionSchema>
 export type TierRollover = z.infer<typeof tierRolloverSchema>

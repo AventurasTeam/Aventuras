@@ -48,6 +48,7 @@
     "deleteFailed": "Couldn't delete the story. Please try again.",
     "discardSessionFailed": "Couldn't discard the session. Please try again.",
     "draftLoadFailed": "Couldn't open the draft. Please try again.",
-    "resumeSessionFailed": "Couldn't resume the session. Please try again."
+    "resumeSessionFailed": "Couldn't resume the session. Please try again.",
+    "sessionStateCorrupt": "Your saved progress couldn't be restored and was reset."
   }
 }

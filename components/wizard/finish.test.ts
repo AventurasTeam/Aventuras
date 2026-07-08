@@ -10,6 +10,7 @@ import {
   stories,
   storyEntries,
   wizardSessions,
+  type SqlOp,
   type WizardWorkingState,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -322,5 +323,41 @@ describe('finishWizard', () => {
 
     expect(await db.select().from(deltas)).toHaveLength(0)
     expect(navigate).toHaveBeenCalledWith(branchRows[0].id)
+  })
+
+  it('still navigates and returns ok when clearing the live session fails post-commit', async () => {
+    const { db, ctx } = await setup()
+    const navigate = vi.fn()
+    await db
+      .insert(wizardSessions)
+      .values({ id: 'live', storyId: null, state: emptyWorkingState(), updatedAt: 1 })
+
+    // Fail only the live-session clear — its lone single-op wizard_sessions
+    // delete. The story commit (multi-op) and the open must still go through.
+    const failingCtx = {
+      ...ctx,
+      runInTransaction: (ops: SqlOp[]) =>
+        ops.length === 1 && /wizard_sessions/.test(ops[0].sql)
+          ? Promise.reject(new Error('clear failed'))
+          : ctx.runInTransaction(ops),
+    }
+
+    const result = await finishWizard(
+      makeState({ title: 'Survives', opening: { content: 'Committed anyway.' } }),
+      failingCtx,
+      navigate,
+      APP_DEFAULTS,
+      1000,
+    )
+
+    expect(result).toEqual({ status: 'ok', storyId: expect.any(String) })
+    expect(navigate).toHaveBeenCalledTimes(1)
+
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
+    expect(storyRow.status).toBe('active')
+    // Cleanup threw, so the live row is intentionally left behind.
+    const liveRows = await db.select().from(wizardSessions).where(eq(wizardSessions.id, 'live'))
+    expect(liveRows).toHaveLength(1)
   })
 })

@@ -6,6 +6,7 @@ import {
   type StorySettings,
   type WizardWorkingState,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 
 import { needsLead } from './step-frame-logic'
@@ -85,7 +86,17 @@ export async function finishWizard(
     nowMs,
   )
 
-  await clearLiveSession(ctx)
+  // The story is already committed; clearing the live session is cleanup. If it
+  // throws, swallow it so navigation still fires — otherwise Finish stalls on
+  // the wizard and a retry would mint a second story from the same working state.
+  try {
+    await clearLiveSession(ctx)
+  } catch (err) {
+    logger.warn('action_layer.wizard_live_session_cleanup_failed', {
+      storyId,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
   await openStory(storyId, ctx, navigate, nowMs)
   return { status: 'ok', storyId }
 }

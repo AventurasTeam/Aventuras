@@ -134,7 +134,11 @@ export function baseUnitsToTuple(calendar: CalendarSystem, baseUnits: number): T
     for (;;) {
       out[tier.name] = value
       const cost = i === 0 ? cachedTopTierCost(calendar, value) : unitsInOneUnit(tiers, i, out)
-      if (remaining < cost) break
+      // A rule/table tier can legitimately compute a zero-length unit (e.g. a
+      // `rule` base of 1 with an always-matching `exclude`), which would make
+      // `remaining -= cost` a no-op and spin this loop forever. Stop counting up
+      // once a unit costs nothing.
+      if (remaining < cost || cost <= 0) break
       remaining -= cost
       value += 1
     }

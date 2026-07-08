@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { emptyWorkingState, stories, wizardSessions } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { storiesStore } from '@/lib/stores'
+import { toastStore } from '@/lib/toast'
 
 import {
   clearLiveSession,
@@ -23,6 +24,7 @@ beforeEach(async () => {
   const { db, runInTransaction } = await createTestDb()
   ctx = { db, runInTransaction }
   storiesStore.__reset()
+  toastStore.__reset()
 })
 
 afterEach(() => {
@@ -141,5 +143,33 @@ describe('wizard session/draft actions', () => {
     await saveStoryDraft(emptyWorkingState(), ctx, 2, storyId)
     const [story] = await ctx.db.select().from(stories).where(eq(stories.id, storyId))
     expect(story.favorite).toBe(1)
+  })
+
+  it('loadDraft returns null when no row exists', async () => {
+    expect(await loadDraft('missing', ctx)).toBeNull()
+  })
+
+  it('loadLiveSession recovers to a fresh state and toasts when the blob fails validation', async () => {
+    let sawError = false
+    const unsub = toastStore.subscribe((items) => {
+      sawError = items.some((item) => item.severity === 'error')
+    })
+    await ctx.db
+      .insert(wizardSessions)
+      .values({ id: 'live', storyId: null, state: { step: 99 } as never, updatedAt: 1 })
+
+    const loaded = await loadLiveSession(ctx)
+    unsub()
+
+    expect(loaded).toEqual(emptyWorkingState())
+    expect(sawError).toBe(true)
+  })
+
+  it('loadDraft recovers to a fresh state when the blob fails validation', async () => {
+    await ctx.db
+      .insert(wizardSessions)
+      .values({ id: 'story_x', storyId: 'story_x', state: { step: 99 } as never, updatedAt: 1 })
+
+    expect(await loadDraft('story_x', ctx)).toEqual(emptyWorkingState())
   })
 })

@@ -1,8 +1,18 @@
 import { eq } from 'drizzle-orm'
 
-import { stories, wizardSessions, type StoryDefinition, type WizardWorkingState } from '@/lib/db'
+import {
+  emptyWorkingState,
+  stories,
+  wizardSessions,
+  wizardWorkingStateSchema,
+  type StoryDefinition,
+  type WizardWorkingState,
+} from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
+import { t } from '@/lib/i18n'
 import { generateId } from '@/lib/ids'
 import { rehydrateStories } from '@/lib/stores'
+import { toast } from '@/lib/toast'
 
 import type { DbCtx } from '../types'
 
@@ -87,9 +97,26 @@ export async function saveStoryDraft(
   return { storyId }
 }
 
+// Persisted rows predate the current schema: a field the wizard now reads may
+// be missing or the wrong shape after an app upgrade, and returning the raw
+// blob would surface that as a crash deep in the wizard. Re-validate on load and
+// fall back to a fresh state, toasting so the reset is visible rather than a
+// silently blanked draft.
+function parsePersistedState(raw: unknown, source: string): WizardWorkingState {
+  const parsed = wizardWorkingStateSchema.safeParse(raw)
+  if (parsed.success) return parsed.data
+  logger.warn('action_layer.wizard_session_parse_failed', {
+    source,
+    issues: parsed.error.issues.length,
+  })
+  toast.error(t('landing:errors.sessionStateCorrupt'))
+  return emptyWorkingState()
+}
+
 export async function loadDraft(storyId: string, ctx: DbCtx): Promise<WizardWorkingState | null> {
   const [row] = await ctx.db.select().from(wizardSessions).where(eq(wizardSessions.id, storyId))
-  return row?.state ?? null
+  if (!row) return null
+  return parsePersistedState(row.state, 'draft')
 }
 
 // The live singleton's state must be re-hydrated into wizardStore on Continue —
@@ -101,5 +128,6 @@ export async function loadLiveSession(ctx: DbCtx): Promise<WizardWorkingState | 
     .select()
     .from(wizardSessions)
     .where(eq(wizardSessions.id, LIVE_SESSION_ID))
-  return row?.state ?? null
+  if (!row) return null
+  return parsePersistedState(row.state, 'live')
 }

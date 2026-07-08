@@ -210,7 +210,14 @@ export function StepCalendar({ calendars = listCalendars() }: StepCalendarProps 
         <Text size="sm" variant="muted">
           {t('wizard:calendarStep.origin.copy')}
         </Text>
-        <TierTupleInput calendar={selectedCalendar} value={origin} onChange={handleOriginChange} />
+        {/* Key by calendar id so a swap remounts the input, clearing its
+            name-keyed `touched` state (tier names collide across calendars). */}
+        <TierTupleInput
+          key={selectedCalendar.id}
+          calendar={selectedCalendar}
+          value={origin}
+          onChange={handleOriginChange}
+        />
       </View>
 
       {selectedCalendar.eras !== null ? <EraStub eras={selectedCalendar.eras} /> : null}

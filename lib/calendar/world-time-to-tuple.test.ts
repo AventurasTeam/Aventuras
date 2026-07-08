@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { EARTH_GREGORIAN } from './builtins/earth-gregorian'
 import { FIXTURE_RULE_CALENDAR } from './builtins/fixtures'
+import type { CalendarSystem } from './calendar-schema'
 import {
   __cacheSize,
   __originComputeCount,
@@ -143,6 +144,41 @@ describe('worldTimeToTuple (rule-kind rollover)', () => {
     expect(worldTimeToTuple(366 * 86_400, FIXTURE_RULE_CALENDAR, { year: 4, day: 1 })).toEqual({
       year: 5,
       day: 1,
+    })
+  })
+})
+
+describe('worldTimeToTuple (degenerate zero-length tier)', () => {
+  // A `rule` base of 1 with an always-matching `exclude` yields length 1 - 1 = 0,
+  // making the top-tier cost zero. Before the guard this spun forever.
+  const ZERO_COST_CALENDAR: CalendarSystem = {
+    id: 'fixture-zero-cost',
+    name: 'Zero Cost',
+    baseUnitName: 'tick',
+    secondsPerBaseUnit: 1,
+    tiers: [
+      { name: 'era', startValue: 0, rollover: { kind: 'constant', value: 10 } },
+      {
+        name: 'phase',
+        startValue: 0,
+        rollover: {
+          kind: 'rule',
+          against: 'era',
+          base: 1,
+          conditions: [{ every: 1, exclude: true }],
+        },
+      },
+    ],
+    exampleStartValue: { era: 0, phase: 0 },
+    displayFormat: '{{ era }}:{{ phase }}',
+    eras: null,
+  }
+
+  it('terminates and returns a tuple instead of looping forever', () => {
+    __resetCache()
+    expect(worldTimeToTuple(5, ZERO_COST_CALENDAR, { era: 0, phase: 0 })).toEqual({
+      era: 0,
+      phase: 5,
     })
   })
 })

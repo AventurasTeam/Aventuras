@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { View } from 'react-native'
 
 import { FormRow } from '@/components/compounds/form-row'
@@ -36,22 +36,11 @@ function displayValue(value: number | undefined): string {
 }
 
 export function TierTupleInput({ calendar, value, onChange, className }: TierTupleInputProps) {
+  // `touched` is keyed by tier NAME, and names collide across calendars (both
+  // Earth and Shire have `day`). StepCalendar keys this component by calendar
+  // id, so a swap remounts and resets `touched` — otherwise a stale flag would
+  // flash a validation error on the new calendar with zero interaction.
   const [touched, setTouched] = useState<Record<string, boolean>>({})
-
-  // `touched` is keyed by tier NAME, but names aren't unique across calendars
-  // (Earth and Shire both have `day` with different day-in-month ranges). A
-  // calendar swap preserves overlapping tier values (per wizard.md), so a
-  // same-named tier can carry a value that was valid under the old calendar
-  // and invalid under the new one — without this reset a stale `touched` flag
-  // would flash the error with zero interaction on the new calendar. Reset at
-  // render time (not in an effect, which fires a frame late) so the first
-  // painted frame already reflects the new calendar. See "No harmless id
-  // leaks" — prune name-keyed state when the identity space (calendar) changes.
-  const lastCalendarId = useRef(calendar.id)
-  if (lastCalendarId.current !== calendar.id) {
-    lastCalendarId.current = calendar.id
-    if (Object.keys(touched).length > 0) setTouched({})
-  }
 
   const validity = validateOriginTuple(value, calendar)
   const invalidTier = validity.ok ? null : validity.tier

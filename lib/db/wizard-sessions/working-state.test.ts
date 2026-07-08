@@ -19,4 +19,16 @@ describe('wizardWorkingStateSchema', () => {
     s.opening.model = 'gpt-x'
     expect(() => wizardWorkingStateSchema.parse(s)).not.toThrow()
   })
+
+  it('gives each call fresh object/array defaults (no shared mutable references)', () => {
+    const a = emptyWorkingState()
+    const b = emptyWorkingState()
+    expect(a.definition.worldTimeOrigin).not.toBe(b.definition.worldTimeOrigin)
+    expect(a.opening.sceneEntities).not.toBe(b.opening.sceneEntities)
+
+    a.definition.worldTimeOrigin.year = 5
+    a.opening.sceneEntities.push('entity_1')
+    expect(b.definition.worldTimeOrigin).toEqual({})
+    expect(b.opening.sceneEntities).toEqual([])
+  })
 })
