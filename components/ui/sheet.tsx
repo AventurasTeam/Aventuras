@@ -135,11 +135,11 @@ function BottomSheetContent({
       ref={sheetRef}
       snapPoints={snapPoints}
       enableDynamicSizing={enableDynamicSizing}
-      // 'interactive' (gorhom default) translates the sheet up by keyboard height,
-      // overshooting the max detent for tall sheets. 'extend' snaps to the max
-      // detent and lets the content reflow within — the right shape for picker /
-      // search surfaces that are already at 95%.
-      keyboardBehavior="extend"
+      // 'extend' snaps to the max detent and reflows content within — right for
+      // fixed tall search surfaces already near 95%. An 'auto' sheet has no higher
+      // detent to extend to, so 'extend' leaves the keyboard sitting over the input;
+      // 'interactive' translates the content-sized sheet up by the keyboard height.
+      keyboardBehavior={size === 'auto' ? 'interactive' : 'extend'}
       keyboardBlurBehavior="restore"
       backgroundStyle={backgroundStyle}
       handleIndicatorStyle={handleIndicatorStyle}

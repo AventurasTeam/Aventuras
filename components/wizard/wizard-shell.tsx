@@ -149,18 +149,23 @@ export function WizardShell({
         paddingLeft: insets.left,
       }}
     >
+      {/* Balanced side slots: the empty right View mirrors the Cancel button's
+          flex weight so the content-sized title centers on the full header, not
+          on the space left of the button. */}
       <View className="h-bar-md flex-row items-center border-b border-border bg-bg-base px-3">
-        <View className="shrink-0">
+        <View className="flex-1 items-start">
           <Button variant="secondary" size="sm" onPress={onCancel}>
             <Text>{t('wizard:topBar.cancel')}</Text>
           </Button>
         </View>
-        <View className="flex-1 items-center px-2">
-          <Text className="font-semibold" size={isPhone ? 'sm' : 'base'} numberOfLines={1}>
-            {t('wizard:topBar.title', { step })}
-          </Text>
-        </View>
-        <View className="w-0 shrink-0" aria-hidden />
+        <Text
+          className="min-w-0 shrink px-2 font-semibold"
+          size={isPhone ? 'sm' : 'base'}
+          numberOfLines={1}
+        >
+          {t('wizard:topBar.title', { step })}
+        </Text>
+        <View className="flex-1" />
       </View>
 
       <View

@@ -324,7 +324,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
       <View>
         {trigger}
         <Sheet open={phoneOpen} onOpenChange={handlePhoneOpenChange} ariaLabel={ariaLabel}>
-          <SheetContent anchor="bottom" size="medium">
+          <SheetContent anchor="bottom" size="auto">
             {renderBody()}
           </SheetContent>
         </Sheet>
