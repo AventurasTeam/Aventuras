@@ -120,7 +120,7 @@ turn-capture sink, not the logger. The logger is reserved for
 
 ```ts
 type LogEntry = {
-  id: string // ulid
+  id: string // uuid
   emittedAt: number // ms epoch
   level: 'debug' | 'warn' | 'error'
   kind: LogKind // template-literal-typed
@@ -213,7 +213,7 @@ mental model.
 
 ```ts
 type HttpCall = {
-  id: string                       // ulid, assigned at beginCall
+  id: string                       // uuid, assigned at beginCall
   startedAt: number
   method: string
   url: string
@@ -297,7 +297,7 @@ then resolves to completed in one transition.
   cross-tab nav from per-turn inspector for buffer-resident
   turns).
 - `completeCall` / `failCall` mutate the existing slot in place;
-  state flips to `'completed'` or `'failed'`. Row identity (ULID)
+  state flips to `'completed'` or `'failed'`. Row identity (uuid)
   stable across the transition, so React keys don't churn.
 - Pathological "all 200 concurrent in-flight" → silent skip + a
   debug log entry. Essentially impossible in practice.

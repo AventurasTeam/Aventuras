@@ -107,7 +107,6 @@
     "reanimated-color-picker": "^4.2.0",
     "sqlite-vec": "^0.1.9",
     "tailwind-merge": "^3.5.0",
-    "ulid": "^3.0.2",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },

@@ -1,4 +1,4 @@
-import { ulid } from 'ulid'
+import { generateId } from '@/lib/ids'
 
 import { EVENT_NAME_REGEX, eventNameOf, type LogKind } from '../kinds'
 import type { LogEntry, LogLevel } from '../types'
@@ -30,7 +30,7 @@ function emit(
   }
 
   const entry: LogEntry = {
-    id: ulid(),
+    id: generateId('log'),
     emittedAt: Date.now(),
     level,
     kind,

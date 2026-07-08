@@ -1,5 +1,4 @@
 import { eq } from 'drizzle-orm'
-import { ulid } from 'ulid'
 
 import {
   AGENT_IDS,
@@ -10,6 +9,7 @@ import {
   modelProfileSchema,
   providerInstanceSchema,
 } from '@/lib/db'
+import { generateId } from '@/lib/ids'
 import { appSettingsStore, rehydrateAppSettings } from '@/lib/stores'
 
 import type { SettingsActionCtx } from './types'
@@ -82,13 +82,13 @@ export async function quickWireModel(
   ctx: SettingsActionCtx,
 ): Promise<void> {
   const narrative: ModelProfile = modelProfileSchema.parse({
-    id: ulid(),
+    id: generateId('prof'),
     kind: 'narrative',
     name: 'Narrative',
     modelRef,
   })
   const agent: ModelProfile = modelProfileSchema.parse({
-    id: ulid(),
+    id: generateId('prof'),
     kind: 'agent',
     name: 'Agent tasks',
     modelRef,

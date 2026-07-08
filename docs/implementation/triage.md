@@ -154,3 +154,13 @@ doc-amendment before Slice 2.5.
   call site. Array/record level is enough — deep-per-field readonly is overkill unless
   a consumer actually mutates a nested field. Cross-cutting (whole stores layer), no
   single slice owner.
+- **Native `crypto.randomUUID` uses `Math.random`, not a CSPRNG.** ULID was
+  dropped, so every id now flows through `generateId` → `crypto.randomUUID`, and
+  the `lib/polyfills` shim fills Hermes's missing global `crypto` with a
+  `Math.random`-backed v4 `randomUUID` (native only; web, Electron, and Node keep
+  their secure `crypto`). Fine for these local, single-user primary keys — they
+  need uniqueness, not unpredictability. Revisit only if an id ever becomes
+  externally exposed or guessing-sensitive, or a real crypto need appears (e.g.
+  asset sha256 content-addressing): point the shim at `expo-crypto`'s `randomUUID`
+  — one file, one native dep, a dev-client rebuild. Cross-cutting, no single slice
+  owner.

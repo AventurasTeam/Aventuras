@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context'
 
+import '@/lib/polyfills'
 import '@/global.css'
 import { SettingsRecoveryScreen } from '@/components/shells/settings-recovery-screen'
 import { Toaster } from '@/components/ui/toast'

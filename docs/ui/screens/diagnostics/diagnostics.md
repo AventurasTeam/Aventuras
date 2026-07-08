@@ -354,7 +354,7 @@ The selected run (or, at turn-scope, any child) may be in-flight
 - **Calls / Logs / Deltas** — rows append live, scroll-anchored per
   section.
 - **Child row** — neutral pulsing dot; ~200ms crossfade to the outcome
-  dot on resolve (ULID identity preserved). A turn whose per-turn run
+  dot on resolve (uuid identity preserved). A turn whose per-turn run
   completed but whose classifier is still running shows a completed
   per-turn child and an in-flight classifier child — the turn parent
   has no aggregate state of its own to mislead.
@@ -479,7 +479,7 @@ handled by progressive push:
 - **Deltas query**: sources the persisted delta log (Tab 5's query
   layer), filtered by the turn's run `actionId`s plus the positional
   user-edit span; cheap, runs on selection.
-- **Cross-cut row identity**: ULID-keyed for Calls / Logs / Deltas
+- **Cross-cut row identity**: uuid-keyed for Calls / Logs / Deltas
   (same contract as Tab 3 / 4 / 5 row identity), so in-flight rows
   updating in place don't churn React keys.
 - **Selection lifecycle**: stored in the diagnostics store alongside
@@ -540,13 +540,13 @@ The status slot adapts per `state`:
 **Transition**: in-flight → completed/failed = ~200ms crossfade
 in the status slot. Dot fades out, chip fades in. Duration
 populates simultaneously. Row position stable (reverse-chrono by
-`startedAt`); identity is ULID-keyed per the
+`startedAt`); identity is uuid-keyed per the
 [Row identity stability](#row-identity-stability-call-log)
 contract below. No list re-sort, no React-key churn.
 
 ##### Row identity stability (Call log)
 
-Per-row state (expand, hover) is keyed on the call's ULID, not
+Per-row state (expand, hover) is keyed on the call's uuid, not
 on its rendering state. Filter predicates evaluate against the
 live row's current state (not a snapshot) — a completing
 in-flight call doesn't pop in/out of a State-filtered view; it
@@ -699,7 +699,7 @@ cascade.
 
 #### Implementation notes (Call log)
 
-- **Stable ULID-keyed identity** across the in-flight →
+- **Stable uuid-keyed identity** across the in-flight →
   completed/failed transition. Filter predicates evaluate live
   state per render, not snapshot.
 - **Pulse animation**: web via CSS keyframes; native via

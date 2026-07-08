@@ -1,4 +1,4 @@
-import { ulid } from 'ulid'
+import { generateId } from '@/lib/ids'
 
 import { redactHeaders, redactResponseHeaders, redactUrl } from './http-redaction'
 import { isDiagnosticsEnabled } from '../core/gate'
@@ -87,7 +87,7 @@ function finalizeCall(
 
 export const httpCallSink = {
   beginCall(args: BeginCallArgs): string {
-    const id = ulid()
+    const id = generateId('call')
     if (!isDiagnosticsEnabled()) return id
 
     const row: HttpCall = {
