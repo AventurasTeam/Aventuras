@@ -1,11 +1,11 @@
-import { and, desc, eq } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 
 import type { Delta, SqlOp } from '@/lib/db'
 import { deltas } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 import { applyUndoPayload } from './delta-encoding'
-import { resolveByTable, type StorePatch } from './registry'
+import { resolveByTable, whereForDelta, type StorePatch } from './registry'
 
 export class DeltaReplayError extends Error {
   readonly actionId: string
@@ -37,10 +37,8 @@ async function buildUndoOps(
   for (const delta of rows) {
     const entry = resolveByTable(delta.targetTable)
     if (!entry) throw new Error(`reverse-replay: unknown target_table ${delta.targetTable}`)
-    const { table, idCol, branchCol } = entry.descriptor
-    const where = branchCol
-      ? and(eq(branchCol, delta.branchId), eq(idCol, delta.targetId))
-      : eq(idCol, delta.targetId)
+    const { table } = entry.descriptor
+    const where = whereForDelta(entry.descriptor, delta)
     const key = `${delta.targetTable}:${delta.branchId}:${delta.targetId}`
 
     if (delta.op === 'create') {

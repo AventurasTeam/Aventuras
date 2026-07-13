@@ -1,10 +1,9 @@
-import { and, eq } from 'drizzle-orm'
-
 import type { Delta } from '@/lib/db'
 import { deltas } from '@/lib/db'
 
 import type { DbCtx } from '../types'
-import { resolveByTable, type TableDescriptor } from './registry'
+import { resolveByTable, whereForDelta } from './registry'
+import { DeltaReplayError } from './reverse-replay'
 
 export type RedoSnapshot = {
   delta: Delta
@@ -12,12 +11,6 @@ export type RedoSnapshot = {
   // is the "forward" state redo restores to, since deltas only store the
   // backward (undo_payload) diff, never a forward one.
   rowBeforeUndo: Record<string, unknown> | null
-}
-
-function whereForDelta(descriptor: TableDescriptor, delta: Delta) {
-  return descriptor.branchCol
-    ? and(eq(descriptor.branchCol, delta.branchId), eq(descriptor.idCol, delta.targetId))
-    : eq(descriptor.idCol, delta.targetId)
 }
 
 // Call this BEFORE reverseAndPruneDeltaRows/reverseReplayDeltas executes on `rows`.
@@ -54,19 +47,30 @@ export async function applyRedo(snapshots: RedoSnapshot[], ctx: DbCtx): Promise<
     ops.push(ctx.db.insert(deltas).values(delta).toSQL())
   }
   await ctx.runInTransaction(ops)
-  for (const { delta, rowBeforeUndo } of snapshots) {
-    const entry = resolveByTable(delta.targetTable)
-    if (delta.op === 'delete') {
-      entry?.patcher?.(delta.branchId, { op: 'delete', id: delta.targetId })
-    } else if (rowBeforeUndo) {
-      entry?.patcher?.(
-        delta.branchId,
-        delta.op === 'create'
-          ? { op: 'create', id: delta.targetId, row: rowBeforeUndo }
-          : { op: 'update', id: delta.targetId, columns: rowBeforeUndo },
-      )
+  // Past this point the redo is committed; a patcher throw is a store-sync
+  // failure, not a redo failure. Flag committed so redoLastAction still pops
+  // the (now-applied) snapshot instead of leaving it for a doomed retry.
+  try {
+    for (const { delta, rowBeforeUndo } of snapshots) {
+      const entry = resolveByTable(delta.targetTable)
+      if (delta.op === 'delete') {
+        entry?.patcher?.(delta.branchId, { op: 'delete', id: delta.targetId })
+      } else if (rowBeforeUndo) {
+        entry?.patcher?.(
+          delta.branchId,
+          delta.op === 'create'
+            ? { op: 'create', id: delta.targetId, row: rowBeforeUndo }
+            : { op: 'update', id: delta.targetId, columns: rowBeforeUndo },
+        )
+      }
+      // create/update with no rowBeforeUndo wrote nothing to the DB above; skip
+      // the patcher too so the store never gains a phantom row.
     }
-    // create/update with no rowBeforeUndo wrote nothing to the DB above; skip the
-    // patcher too so the store never gains a phantom row.
+  } catch (e) {
+    throw new DeltaReplayError('Post-commit redo patch sync failed', {
+      cause: e,
+      actionId: snapshots[0]?.delta.actionId ?? 'redo',
+      committed: true,
+    })
   }
 }
