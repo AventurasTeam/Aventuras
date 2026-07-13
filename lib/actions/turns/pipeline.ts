@@ -14,8 +14,8 @@ import { appSettingsStore, entriesStore, generationStore } from '@/lib/stores'
 
 export const PER_TURN_KIND = 'per-turn'
 
-// INTERIM (Slice 2.5): one phase, real provider, streamed reply. No memory /
-// classifier piggyback, no per-turn buffer/template — Slice 2.7 swaps this
+// Interim: one phase, real provider, streamed reply. No memory / classifier
+// piggyback, no per-turn buffer/template yet — later work can swap this
 // phase's internals without touching submitTurn's call site.
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
   // PhaseContext carries no branchId; the run's own record is the only place it
