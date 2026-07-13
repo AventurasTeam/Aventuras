@@ -12,6 +12,16 @@ describe('conjugateThirdPersonPresent', () => {
     expect(conjugateThirdPersonPresent('watch')).toBe('watches')
   })
 
+  it('changes a consonant + y ending to -ies', () => {
+    expect(conjugateThirdPersonPresent('carry')).toBe('carries')
+    expect(conjugateThirdPersonPresent('worry')).toBe('worries')
+  })
+
+  it('keeps a vowel + y ending as a plain -s', () => {
+    expect(conjugateThirdPersonPresent('play')).toBe('plays')
+    expect(conjugateThirdPersonPresent('buy')).toBe('buys')
+  })
+
   it('uses the irregular-verb table when present', () => {
     expect(conjugateThirdPersonPresent('go')).toBe('goes')
     expect(conjugateThirdPersonPresent('have')).toBe('has')
