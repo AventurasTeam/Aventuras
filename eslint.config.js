@@ -70,10 +70,22 @@ module.exports = defineConfig([
         {
           default: 'allow',
           rules: [
+            // Disallow deep imports for everything except from pipeline to actions/types.ts to avoid circular require warnings in Metro/Expo
             {
+              from: [
+                { type: 'app-code' },
+                { type: 'lib-file' },
+                { type: 'lib-module', captured: { name: '!pipeline' } },
+              ],
               disallow: [{ to: { type: 'lib-module', internalPath: '!index.ts' } }],
               message:
                 'Import a lib module through its public API (index.ts), not its internal files. See docs/code-conventions.md.',
+            },
+            {
+              from: [{ type: 'lib-module', captured: { name: 'pipeline' } }],
+              disallow: [{ to: { type: 'lib-module', internalPath: '!{index.ts,types.ts}' } }],
+              message:
+                'Import a lib module through its public API (index.ts) or types.ts, not its internal files. See docs/code-conventions.md.',
             },
             // lib/diagnostics is zero-dependency infrastructure; importing
             // lib/stores would invert the layering and close an import cycle
@@ -168,7 +180,7 @@ module.exports = defineConfig([
   // unaffected; the boundaries rule is still asserted via eslint.lintText on
   // non-test fixture paths. See docs/code-conventions.md.
   {
-    files: ['**/*.test.{ts,tsx}', '**/__tests__/**'],
+    files: ['**/*.test.{ts,tsx}', '**/__tests__/**', 'vitest.setup.ts'],
     rules: {
       'boundaries/dependencies': 'off',
     },

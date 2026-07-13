@@ -1,6 +1,6 @@
-import type { DbCtx, PipelineAction } from '@/lib/actions'
+import type { PipelineAction } from '@/lib/actions/types'
 import type { ResolveFailureKind, ResolveTarget } from '@/lib/ai'
-import type { StorySettings } from '@/lib/db'
+import type { DbCtx, StorySettings } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import type { AppSettingsSnapshot, RunState } from '@/lib/stores'
 

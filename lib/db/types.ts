@@ -1,3 +1,5 @@
+import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core'
+
 import type {
   appSettings,
   assets,
@@ -5,6 +7,7 @@ import type {
   branches,
   chapters,
   characterRelationships,
+  dbSchema,
   deltas,
   entities,
   entryAssets,
@@ -22,6 +25,11 @@ import type {
 } from './schema'
 
 export type SqlOp = { sql: string; params: unknown[] }
+
+export type DbCtx = {
+  db: BaseSQLiteDatabase<'async' | 'sync', unknown, typeof dbSchema>
+  runInTransaction: (ops: SqlOp[]) => Promise<void>
+}
 
 export type Story = typeof stories.$inferSelect
 export type NewStory = typeof stories.$inferInsert

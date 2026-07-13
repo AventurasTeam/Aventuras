@@ -1,10 +1,10 @@
-import type { DbCtx } from '@/lib/actions'
 import {
   DeltaReplayError,
   applyDeltaAction,
   registerAllDomains,
   reverseReplayDeltas,
 } from '@/lib/actions'
+import type { DbCtx } from '@/lib/db'
 import { configureDiagnosticsGate, logger } from '@/lib/diagnostics'
 import { configureDeltaActionPort, recoverInFlightRuns } from '@/lib/pipeline'
 import {

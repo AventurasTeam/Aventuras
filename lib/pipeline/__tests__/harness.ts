@@ -1,15 +1,16 @@
-import { DeltaReplayError, applyDeltaAction, reverseReplayDeltas } from '@/lib/actions'
+import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import { DeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { branches, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { clearBuffers, configureDiagnosticsGate } from '@/lib/diagnostics'
 import {
   __resetBus,
   __resetRegistry,
-  configureDeltaActionPort,
   type RejectedStart,
   type RunCtx,
   type TxResult,
 } from '@/lib/pipeline'
+import { configureDeltaActionPort } from '@/lib/pipeline/runtime/action-port'
 import { resetAllStores } from '@/lib/stores'
 
 // Narrows runPipeline's union for the single-run tests that never hit a blocked start.

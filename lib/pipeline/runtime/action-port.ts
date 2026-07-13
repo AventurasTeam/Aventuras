@@ -1,4 +1,5 @@
-import type { DbCtx, MutationResult, PipelineAction } from '@/lib/actions'
+import type { MutationResult, PipelineAction } from '@/lib/actions/types'
+import type { DbCtx } from '@/lib/db'
 
 export type DeltaActionPort = {
   applyDeltaAction: (
