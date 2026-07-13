@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Platform, View } from 'react-native'
+import { View } from 'react-native'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { EntryCard } from '@/components/compounds/entry-card'
@@ -14,6 +14,7 @@ import { useSystemEntryActions } from '@/components/reader/system-entry-actions'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
+import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { useTier } from '@/hooks/use-tier'
 import {
   clearSystemEntry,
@@ -32,7 +33,7 @@ import { branches, db, runInTransaction, storyEntries, type StoryEntry } from '@
 import { t } from '@/lib/i18n'
 import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
 import { awaitRunTerminal, pipelineEventBus, type PipelineError } from '@/lib/pipeline'
-import { entriesStore, generationStore, isUserEditBlocked, undoRedoStore } from '@/lib/stores'
+import { entriesStore, generationStore, isUserEditBlocked } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
@@ -167,8 +168,6 @@ export default function ReaderComposerRoute() {
     async (content: string, composerMode: string) => {
       if (!storyId) return
       setLastError(undefined)
-      // A second unrelated action clears the redo stack (data-model.md).
-      undoRedoStore.clear()
       // A prior failure leaves a system entry as the branch tail; drop it (and
       // resync the store) before the turn so the pipeline's prompt/position
       // reads the real content tail, not the failure singleton.
@@ -251,23 +250,21 @@ export default function ReaderComposerRoute() {
     setEditDraft('')
   }, [])
 
-  useEffect(() => {
-    if (Platform.OS !== 'web') return undefined
-    const handler = (ev: KeyboardEvent) => {
-      // Let the browser's native undo/redo win when focus is in a text input —
-      // otherwise Ctrl/Cmd+Z on a composer typo reverses the last story turn.
-      const target = ev.target as HTMLElement | null
-      const tag = target?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
-      if ((ev.metaKey || ev.ctrlKey) && (ev.key === 'z' || ev.key === 'Z')) {
-        ev.preventDefault()
-        if (ev.shiftKey) void redoLastAction(branchId, ctx)
-        else void undoLastAction(branchId, ctx)
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [branchId])
+  const matchesUndoRedoShortcut = useCallback(
+    (ev: KeyboardEvent) => (ev.metaKey || ev.ctrlKey) && (ev.key === 'z' || ev.key === 'Z'),
+    [],
+  )
+  // Editable-target exclusion lets the browser's native undo/redo win when
+  // focus is in a text input — otherwise Ctrl/Cmd+Z on a composer typo
+  // reverses the last story turn instead of the typo.
+  const handleUndoRedoShortcut = useCallback(
+    (ev: KeyboardEvent) => {
+      if (ev.shiftKey) void redoLastAction(branchId, ctx)
+      else void undoLastAction(branchId, ctx)
+    },
+    [branchId],
+  )
+  useGlobalHotkey(matchesUndoRedoShortcut, handleUndoRedoShortcut, { ignoreEditableTargets: true })
 
   const windowRows: WindowRow[] = useMemo(() => {
     if (streamingVisible && streamingContent) {

@@ -3,13 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { branches, deltas, stories, storyEntries } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { entriesStore, undoRedoStore } from '@/lib/stores'
+import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { redoLastAction, undoLastAction } from './undo'
 import { DeltaReplayError } from '../delta/reverse-replay'
 
 afterEach(() => {
   entriesStore.__reset()
+  generationStore.__reset()
   undoRedoStore.clear()
 })
 
@@ -298,5 +299,53 @@ describe('undoLastAction / redoLastAction', () => {
     expect((await db.select().from(deltas).where(eq(deltas.id, 'd_turn'))).length).toBe(0)
     // ...and redo capability was preserved despite the thrown store-sync error.
     expect(undoRedoStore.hasRedo()).toBe(true)
+  })
+
+  it('rejects undo/redo while generation blocks user edits', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    hydrateOpeningAndTurn()
+    generationStore.setReversalInProgress(true)
+
+    const undoResult = await undoLastAction('b1', ctx)
+    expect(undoResult.status).toBe('rejected')
+    const redoResult = await redoLastAction('b1', ctx)
+    expect(redoResult.status).toBe('rejected')
+  })
+
+  it('brackets the sweep with reversalInProgress (set then cleared)', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    hydrateOpeningAndTurn()
+    const spy = vi.spyOn(generationStore, 'setReversalInProgress')
+
+    await undoLastAction('b1', ctx)
+    expect(spy.mock.calls.map((c) => c[0])).toEqual([true, false])
+    expect(generationStore.getTxState().reversalInProgress).toBe(false)
+
+    spy.mockClear()
+    await redoLastAction('b1', ctx)
+    expect(spy.mock.calls.map((c) => c[0])).toEqual([true, false])
+    expect(generationStore.getTxState().reversalInProgress).toBe(false)
+    spy.mockRestore()
+  })
+
+  it('rejects undo/redo when the branch is not the one loaded in entriesStore', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    // Loaded branch is 'b2', not 'b1' — simulates a stale branchId mid branch-switch.
+    entriesStore.hydrate('b2', [])
+
+    const undoResult = await undoLastAction('b1', ctx)
+    expect(undoResult.status).toBe('rejected')
+
+    hydrateOpeningAndTurn()
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    entriesStore.hydrate('b2', [])
+    const redoResult = await redoLastAction('b1', ctx)
+    expect(redoResult.status).toBe('rejected')
   })
 })

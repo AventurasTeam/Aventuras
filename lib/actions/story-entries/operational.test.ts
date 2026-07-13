@@ -4,13 +4,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { applyDeltaAction, type DbCtx } from '@/lib/actions'
 import { branches, deltas, stories, storyEntries } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { entriesStore, generationStore } from '@/lib/stores'
+import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { getRollbackCounts, rollbackToEntry, updateStoryEntryContent } from './operational'
 
 afterEach(() => {
   entriesStore.__reset()
   generationStore.__reset()
+  undoRedoStore.clear()
 })
 
 async function seed(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
@@ -54,6 +55,29 @@ describe('updateStoryEntryContent', () => {
     expect(row.content).toBe('new text')
     expect((await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).length).toBe(0)
     expect(entriesStore.getById('e1')?.content).toBe('new text')
+  })
+
+  it('clears the redo stack on success (an edit is a new unrelated action)', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    entriesStore.hydrate('b1', [
+      {
+        id: 'e1',
+        branchId: 'b1',
+        position: 1,
+        kind: 'ai_reply',
+        content: 'old',
+        chapterId: null,
+        metadata: null,
+        createdAt: 1,
+      },
+    ])
+    undoRedoStore.pushRedoGroup([])
+    expect(undoRedoStore.hasRedo()).toBe(true)
+
+    await updateStoryEntryContent('b1', 'e1', 'new text', ctx)
+    expect(undoRedoStore.hasRedo()).toBe(false)
   })
 
   it('rejects while a hard-gate run is in flight', async () => {
@@ -242,5 +266,18 @@ describe('rollbackToEntry', () => {
     const result = await rollbackToEntry('b1', 'op', ctx)
     expect(result.status).toBe('rejected')
     expect(generationStore.getTxState().reversalInProgress).toBe(false)
+  })
+
+  it('clears the redo stack on success (a rollback is a new unrelated action)', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    undoRedoStore.pushRedoGroup([])
+    expect(undoRedoStore.hasRedo()).toBe(true)
+
+    const result = await rollbackToEntry('b1', 't2', ctx)
+    expect(result.status).toBe('ok')
+    expect(undoRedoStore.hasRedo()).toBe(false)
   })
 })

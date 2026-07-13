@@ -2,7 +2,7 @@ import { and, desc, eq, sql, type SQL } from 'drizzle-orm'
 
 import type { Delta } from '@/lib/db'
 import { deltas, storyEntries } from '@/lib/db'
-import { entriesStore, generationStore } from '@/lib/stores'
+import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
@@ -46,6 +46,8 @@ export async function updateStoryEntryContent(
       .toSQL(),
   ])
   entriesStore.patch(branchId, { op: 'update', id, columns: { content } })
+  // A second unrelated action clears the redo stack (data-model.md).
+  undoRedoStore.clear()
   return { status: 'ok' }
 }
 
@@ -156,6 +158,8 @@ export async function rollbackToEntry(
       .orderBy(desc(deltas.logPosition))) as Delta[]
     const counts = countBuckets(rows)
     await reverseAndPruneDeltaRows(rows, ctx)
+    // A second unrelated action clears the redo stack (data-model.md).
+    undoRedoStore.clear()
     return { status: 'ok', counts }
   } finally {
     generationStore.setReversalInProgress(false)
