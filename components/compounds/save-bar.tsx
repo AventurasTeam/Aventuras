@@ -1,10 +1,11 @@
 import { AlertTriangle } from 'lucide-react-native'
-import { useEffect, useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Platform, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Text } from '@/components/ui/text'
+import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { cn } from '@/lib/utils'
 
 type SaveBarProps = {
@@ -47,18 +48,14 @@ export function SaveBar({
   const count = dirtyCount ?? dirtyFields.length
   const fieldList = dirtyFields.length > 0 ? dirtyFields.join(', ') : null
 
-  useEffect(() => {
-    if (Platform.OS !== 'web') return
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
-        e.preventDefault()
-        e.stopPropagation()
-        if (!saving) onSave()
-      }
-    }
-    window.addEventListener('keydown', handler, true)
-    return () => window.removeEventListener('keydown', handler, true)
+  const matchesSaveShortcut = useCallback(
+    (e: KeyboardEvent) => (e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S'),
+    [],
+  )
+  const handleSaveShortcut = useCallback(() => {
+    if (!saving) onSave()
   }, [onSave, saving])
+  useGlobalHotkey(matchesSaveShortcut, handleSaveShortcut, { capture: true, stopPropagation: true })
 
   const shortcutHint = useMemo(() => {
     if (Platform.OS !== 'web') return null

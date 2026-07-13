@@ -1,5 +1,5 @@
 import { MoreVertical } from 'lucide-react-native'
-import { useCallback, useEffect, useMemo, useState, type Ref } from 'react'
+import { useCallback, useMemo, useState, type Ref } from 'react'
 import { Platform, View } from 'react-native'
 
 import { IconAction, type IconActionSize } from '@/components/ui/icon-action'
@@ -10,6 +10,7 @@ import {
   type TriggerProps,
 } from '@/components/ui/searchable-overlay-list'
 import { Text } from '@/components/ui/text'
+import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 
 type ActionEntry = {
   /** Stable id; unique across all entries the menu surfaces this render. */
@@ -156,19 +157,12 @@ function ActionsMenu({
   const [query, setQuery] = useState('')
   const shortcutHint = useShortcutHint()
 
-  useEffect(() => {
-    if (Platform.OS !== 'web') return
-    const handler = (e: KeyboardEvent) => {
-      if (blocked) return
-      if (!(e.metaKey || e.ctrlKey)) return
-      if (e.key !== 'k' && e.key !== 'K') return
-      e.preventDefault()
-      e.stopPropagation()
-      setOpen((prev) => !prev)
-    }
-    window.addEventListener('keydown', handler, true)
-    return () => window.removeEventListener('keydown', handler, true)
-  }, [blocked])
+  const matchesMenuShortcut = useCallback(
+    (e: KeyboardEvent) => !blocked && (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K'),
+    [blocked],
+  )
+  const toggleOpen = useCallback(() => setOpen((prev) => !prev), [])
+  useGlobalHotkey(matchesMenuShortcut, toggleOpen, { capture: true, stopPropagation: true })
 
   const sections = useMemo<Section<MenuRowData>[]>(() => {
     const out: Section<MenuRowData>[] = []
