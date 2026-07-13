@@ -154,7 +154,7 @@ export default function ReaderComposerRoute() {
     if (entriesStore.getLoadedBranch() !== branchId) void reload()
   }, [branchId, reload])
 
-  const surfaceTurnFailure = useCallback(
+  const showTurnFailure = useCallback(
     async (error: PipelineError | undefined) => {
       setLastError(error)
       await writeSystemEntry({ branchId, content: t('reader:systemEntry.failureMessage') }, ctx)
@@ -182,18 +182,18 @@ export default function ReaderComposerRoute() {
       setLastSubmission({ content, composerMode })
       try {
         const result = await submitTurn({ storyId, branchId }, { content, composerMode }, ctx)
-        if (result.outcome === 'failed') await surfaceTurnFailure(result.error)
+        if (result.outcome === 'failed') await showTurnFailure(result.error)
       } catch (err) {
         // submitTurn throws on a rejected user_action write (and runPipeline can
         // reject) — treat a thrown failure like a structured 'failed' outcome so
         // the UI surfaces an error and stays retriable instead of hanging.
-        await surfaceTurnFailure({
+        await showTurnFailure({
           kind: 'orchestrator',
           detail: err instanceof Error ? err.message : String(err),
         })
       }
     },
-    [storyId, branchId, reload, surfaceTurnFailure],
+    [storyId, branchId, reload, showTurnFailure],
   )
 
   // fixAction (config-resolver fixes) has no EntryCard slot in the M2 subset;
