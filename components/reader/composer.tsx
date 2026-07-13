@@ -21,12 +21,14 @@ type ComposerProps = {
   onCancel: () => void
 }
 
-const MODE_OPTIONS: SelectOption[] = [
-  { value: 'do', label: t('reader:composerMode.do') },
-  { value: 'say', label: t('reader:composerMode.say') },
-  { value: 'think', label: t('reader:composerMode.think') },
-  { value: 'free', label: t('reader:composerMode.free') },
-]
+function getModeOptions(): SelectOption[] {
+  return [
+    { value: 'do', label: t('reader:composerMode.do') },
+    { value: 'say', label: t('reader:composerMode.say') },
+    { value: 'think', label: t('reader:composerMode.think') },
+    { value: 'free', label: t('reader:composerMode.free') },
+  ]
+}
 
 const LINT_DEBOUNCE_MS = 400
 
@@ -79,7 +81,7 @@ export function Composer({
     <View className="gap-2">
       {modesEnabled ? (
         <Select
-          options={MODE_OPTIONS}
+          options={getModeOptions()}
           value={mode}
           onValueChange={(value) => setMode(value as ComposerMode)}
           mode="segment"
