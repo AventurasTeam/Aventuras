@@ -28,4 +28,22 @@ describe('sanitizeHtml', () => {
     expect(clean).not.toContain('url(')
     expect(clean).toContain('<p>text</p>')
   })
+
+  it('keeps allowlisted style properties (color, font-weight)', () => {
+    const clean = sanitizeHtml('<p style="color: red; font-weight: bold">text</p>')
+    expect(clean).toContain('style="color: red; font-weight: bold"')
+  })
+
+  it('drops disallowed style properties while keeping allowlisted ones', () => {
+    const clean = sanitizeHtml(
+      '<p style="color: red; background: url(https://evil.example/x)">text</p>',
+    )
+    expect(clean).toContain('style="color: red"')
+    expect(clean).not.toContain('url(')
+  })
+
+  it('keeps font/color for legacy AI output presets', () => {
+    const clean = sanitizeHtml('<font color="red">text</font>')
+    expect(clean).toBe('<font color="red">text</font>')
+  })
 })
