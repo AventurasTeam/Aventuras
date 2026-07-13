@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { storyEntries, type StoryEntry } from '@/lib/db'
 import { getPipeline } from '@/lib/pipeline'
-import { entriesStore, hydrateAppSettings } from '@/lib/stores'
+import { entriesStore, hydrateAppSettings, undoRedoStore } from '@/lib/stores'
 
 import { PER_TURN_KIND } from './pipeline'
 import { submitTurn } from './submit-turn'
@@ -139,6 +139,38 @@ describe('submitTurn', () => {
       (e) => e.kind === 'ai_reply' && !e.id.startsWith('seed-'),
     )
     expect(aiReply?.position).toBe(7)
+  })
+
+  it('assigns distinct positions to two turns submitted concurrently on the same branch', async () => {
+    const { ctx } = await makeHarness()
+    entriesStore.hydrate('b1', [])
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    const [a, b] = await Promise.all([
+      submitTurn({ storyId: 's1', branchId: 'b1' }, { content: 'first', composerMode: 'do' }, ctx),
+      submitTurn({ storyId: 's1', branchId: 'b1' }, { content: 'second', composerMode: 'do' }, ctx),
+    ])
+    expectRan(a)
+    expectRan(b)
+
+    const userActions = branchEntries('b1').filter((e) => e.kind === 'user_action')
+    expect(userActions).toHaveLength(2)
+    // Every entry in the branch must land at a unique position — a race on the
+    // MAX(position)+1 read would otherwise collide both turns on the same slot.
+    const positions = branchEntries('b1').map((e) => e.position)
+    expect(new Set(positions).size).toBe(positions.length)
+  })
+
+  it('clears the redo stack on success (a new turn is a new unrelated action)', async () => {
+    const { ctx } = await makeHarness()
+    entriesStore.hydrate('b1', [])
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    undoRedoStore.pushRedoGroup([])
+    expect(undoRedoStore.hasRedo()).toBe(true)
+
+    await submitTurn({ storyId: 's1', branchId: 'b1' }, { content: 'x', composerMode: 'do' }, ctx)
+
+    expect(undoRedoStore.hasRedo()).toBe(false)
   })
 
   it('fails the turn and writes no ai_reply when the provider stream errors', async () => {
