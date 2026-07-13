@@ -11,6 +11,7 @@ if (typeof window !== 'undefined') {
   purifyInstance = DOMPurify
 } else {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { JSDOM } = require('jsdom')
     purifyInstance = DOMPurify(new JSDOM('').window)
   } catch {

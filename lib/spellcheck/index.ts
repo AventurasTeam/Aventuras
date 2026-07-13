@@ -1,4 +1,5 @@
-import { LocalLinter, Dialect, type Lint, binaryInlined } from 'harper.js'
+import { LocalLinter, Dialect, type Lint } from 'harper.js'
+import { binaryInlined } from 'harper.js/binaryInlined'
 
 let linter: LocalLinter | null = null
 
