@@ -182,10 +182,12 @@ export default function ReaderComposerRoute() {
       try {
         const result = await submitTurn({ storyId, branchId }, { content, composerMode }, ctx)
         if (result.outcome === 'failed') await showTurnFailure(result.error)
+        else if (result.outcome === 'rejected')
+          await showTurnFailure({ kind: 'orchestrator', detail: `blocked by ${result.blockedBy}` })
       } catch (err) {
-        // submitTurn throws on a rejected user_action write (and runPipeline can
-        // reject) — treat a thrown failure like a structured 'failed' outcome so
-        // the UI surfaces an error and stays retriable instead of hanging.
+        // submitTurn throws on a rejected user_action write — treat a thrown
+        // failure like a structured 'failed' outcome so the UI surfaces an
+        // error and stays retriable instead of hanging.
         await showTurnFailure({
           kind: 'orchestrator',
           detail: err instanceof Error ? err.message : String(err),

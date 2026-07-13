@@ -6,6 +6,7 @@ import { runPipeline, type RunCtx } from '@/lib/pipeline'
 import { undoRedoStore } from '@/lib/stores'
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
+import { DeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './pipeline'
 
@@ -95,6 +96,20 @@ export async function submitTurn(
     // Held for the whole run, not just the user_action insert above:
     // narrativePhase (pipeline.ts) does its own MAX(position)+1 read for the
     // ai_reply, which needs the same per-branch exclusion.
-    return runPipeline(PER_TURN_KIND, runCtx)
+    const runResult = await runPipeline(PER_TURN_KIND, runCtx)
+    if (runResult.outcome === 'rejected') {
+      // A rejected admission never reaches abortRun (orchestrator.ts) — no run
+      // was ever reserved — so the user_action committed above is never
+      // reversed the way a failed/aborted run's is (C6). Reverse it here so no
+      // orphaned entry survives a turn that never actually started.
+      try {
+        await reverseReplayDeltas(turnActionId, ctx)
+      } catch (e) {
+        // Deltas are reversed even if the post-commit store sync failed; the
+        // caller still sees the rejection, same tolerance abortRun applies.
+        if (!(e instanceof DeltaReplayError)) throw e
+      }
+    }
+    return runResult
   })
 }

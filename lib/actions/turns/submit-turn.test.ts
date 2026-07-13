@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { storyEntries, type StoryEntry } from '@/lib/db'
-import { getPipeline } from '@/lib/pipeline'
+import { branches, storyEntries, type StoryEntry } from '@/lib/db'
+import { definePipeline, getPipeline, type PhaseResult } from '@/lib/pipeline'
 import { entriesStore, hydrateAppSettings, undoRedoStore } from '@/lib/stores'
 
 import { PER_TURN_KIND } from './pipeline'
@@ -159,6 +159,62 @@ describe('submitTurn', () => {
     // MAX(position)+1 read would otherwise collide both turns on the same slot.
     const positions = branchEntries('b1').map((e) => e.position)
     expect(new Set(positions).size).toBe(positions.length)
+  })
+
+  it('reverses the user_action and leaves no orphan when pipeline admission is rejected', async () => {
+    const { ctx, db } = await makeHarness()
+    await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'm2', createdAt: 1 })
+    entriesStore.hydrate('b1', [])
+    entriesStore.hydrate('b2', [])
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    // Self-blocking policy + a gated phase: the first submit's run stays
+    // reserved and in-flight, so the second submit's admission is rejected —
+    // exercising the path runPipeline can take before any run reserves,
+    // which abortRun's usual delta-reversal never sees.
+    let phaseStarted!: () => void
+    const started = new Promise<void>((r) => {
+      phaseStarted = r
+    })
+    let release!: () => void
+    const gate = new Promise<void>((r) => {
+      release = r
+    })
+    definePipeline({
+      kind: PER_TURN_KIND,
+      phases: [
+        {
+          name: 'p',
+          run: async function* (): AsyncGenerator<never, PhaseResult> {
+            phaseStarted()
+            await gate
+            return { status: 'completed' }
+          },
+        },
+      ],
+      concurrencyPolicy: { blockedBy: [PER_TURN_KIND] },
+      affordance: 'pill-only',
+      gateBehavior: 'hard-gate',
+    })
+
+    const first = submitTurn(
+      { storyId: 's1', branchId: 'b1' },
+      { content: 'first', composerMode: 'do' },
+      ctx,
+    )
+    await started
+
+    const second = await submitTurn(
+      { storyId: 's1', branchId: 'b2' },
+      { content: 'second', composerMode: 'do' },
+      ctx,
+    )
+    expect(second.outcome).toBe('rejected')
+    if (second.outcome === 'rejected') expect(second.blockedBy).toBe(PER_TURN_KIND)
+    expect(branchEntries('b2')).toHaveLength(0)
+
+    release()
+    expectRan(await first)
   })
 
   it('clears the redo stack on success (a new turn is a new unrelated action)', async () => {
