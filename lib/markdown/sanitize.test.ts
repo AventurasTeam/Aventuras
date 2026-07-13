@@ -46,4 +46,13 @@ describe('sanitizeHtml', () => {
     const clean = sanitizeHtml('<font color="red">text</font>')
     expect(clean).toBe('<font color="red">text</font>')
   })
+
+  it('allows rich safe HTML tags (div, table, tr, td) and custom layout CSS styles (margin, padding, background-color)', () => {
+    const dirty =
+      '<div style="margin: 10px; padding: 20px; background-color: blue;"><table><tr><td>cell</td></tr></table></div>'
+    const clean = sanitizeHtml(dirty)
+    expect(clean).toContain('<div')
+    expect(clean).toContain('style="margin: 10px; padding: 20px; background-color: blue"')
+    expect(clean).toContain('<table><tbody><tr><td>cell</td></tr></tbody></table></div>')
+  })
 })
