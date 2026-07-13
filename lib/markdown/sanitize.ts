@@ -1,6 +1,26 @@
 import DOMPurify from 'dompurify'
 import juice from 'juice'
 
+// DOMPurify requires a DOM window to initialize its hooks and sanitization methods.
+// During Expo Router's static pre-rendering (which runs on Node.js), `window` is undefined,
+// causing DOMPurify to return an empty unsupported instance lacking these methods.
+// We dynamically initialize it using JSDOM on the server, or a non-crashing fallback.
+let purifyInstance: typeof DOMPurify
+
+if (typeof window !== 'undefined') {
+  purifyInstance = DOMPurify
+} else {
+  try {
+    const { JSDOM } = require('jsdom')
+    purifyInstance = DOMPurify(new JSDOM('').window)
+  } catch {
+    const mock = (() => {}) as any
+    mock.addHook = () => {}
+    mock.sanitize = (html: string) => html
+    purifyInstance = mock
+  }
+}
+
 const ALLOWED_TAGS = [
   'p',
   'em',
@@ -35,7 +55,7 @@ function sanitizeStyleValue(value: string): string {
     .join('; ')
 }
 
-DOMPurify.addHook('uponSanitizeAttribute', (_node, data) => {
+purifyInstance.addHook('uponSanitizeAttribute', (_node, data) => {
   if (data.attrName !== 'style') return
   const safe = sanitizeStyleValue(data.attrValue)
   if (safe.length === 0) {
@@ -47,5 +67,5 @@ DOMPurify.addHook('uponSanitizeAttribute', (_node, data) => {
 
 export function sanitizeHtml(html: string): string {
   const inlined = juice(html)
-  return DOMPurify.sanitize(inlined, { ALLOWED_TAGS, ALLOWED_ATTR })
+  return purifyInstance.sanitize(inlined, { ALLOWED_TAGS, ALLOWED_ATTR })
 }
