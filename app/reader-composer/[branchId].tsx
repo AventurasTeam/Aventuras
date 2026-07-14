@@ -304,8 +304,6 @@ export default function ReaderComposerRoute() {
     )
   }
 
-  const showJump = entries.length > 0
-
   return (
     <ScreenShell
       variant="in-story"
@@ -337,13 +335,7 @@ export default function ReaderComposerRoute() {
                 onNearBottom={() => {}}
               />
             )}
-            {/* Real scroll linkage awaits an imperative EntryWindow ref (later pass); Home/End keys wait on the same seam. */}
-            <JumpButtons
-              showJumpToTop={showJump}
-              showJumpToBottom={showJump}
-              onJumpToTop={() => {}}
-              onJumpToBottom={() => {}}
-            />
+            <JumpButtons showJumpToBottom={false} onJumpToBottom={() => {}} />
           </View>
           <View className="border-t border-border p-3">
             <Composer

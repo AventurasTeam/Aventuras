@@ -670,23 +670,13 @@ state would be a surprise; the reader's auto-load fires only on
 **boundary approach** — the user explicitly asking for more in
 that direction.
 
-**Swap on jump.** When the user invokes
-[jump-to-top or jump-to-bottom](#jump-buttons) to a region not
-adjacent to the current window, the entire window swaps:
-
-- Jump-to-top → unload current, fetch entries 1..50 of the branch,
-  render. Instant cut to entry 1 in viewport.
-- Jump-to-bottom from a non-recent window → unload current, fetch
-  entries `last-49..last`, render. Instant cut to bottom.
-- Jump-to-bottom while already in the recent window → smooth scroll
-  (~150ms) to bottom. No swap.
-
-**Scroll-position restoration per window.** Each branch has up to
-two remembered scroll positions — one for the recent window, one
-for the top window (if either has been visited this session). Save
-the current window's `scrollTop` before unloading; restore on
-return. Without it, the swap loses the user's place every time
-they peek at the start. Positions reset on branch switch.
+**No window swap.** The reader holds exactly one window at a time,
+and the only navigation that could jump to a disconnected region —
+jump-to-top — doesn't exist (see [Jump buttons](#jump-buttons)).
+[Jump-to-bottom](#jump-buttons) is always a same-window smooth
+scroll; auto-load-on-boundary always prepends/appends into the
+window already in memory. No unload, no scroll-position bookkeeping
+across windows.
 
 **"Branch top" semantics.** First entry of the **current branch** —
 first post-fork entry on a non-root branch, or entry #1 of the root
@@ -696,8 +686,7 @@ Cross-branch navigation is the
 domain.
 
 **Branch switch.** Resets the window to the recent ~50 entries of
-the new branch, scrolled to bottom. Saved scroll positions for the
-previous branch are dropped.
+the new branch, scrolled to bottom.
 
 ### Autoscroll
 
@@ -758,51 +747,31 @@ by the in-flight transaction gate.
 
 ### Jump buttons
 
-Two floating affordances in the scroll viewport, stacked vertically
-near the right edge, above the suggestion panel + composer chrome.
+One floating affordance in the scroll viewport, near the right
+edge, above the suggestion panel + composer chrome. There's no
+jump-to-top — returning to the live edge is the near-universal
+chat-app need; jumping to branch start wasn't, so it's cut rather
+than shipped as a rarely-used toggle.
 
-**Visibility — conditional.**
+**Visibility — conditional.** Jump-to-bottom is visible when the
+user is not at-bottom of the window (same ~viewport-height
+tolerance as the auto-load boundary check). Slides in / out on
+threshold cross. Hidden at-bottom.
 
-- **Jump-to-bottom** — visible when the user is not at-bottom of
-  the recent window, OR when the current window is not the recent
-  window. Slides in / out on threshold cross.
-- **Jump-to-top** — visible when (a) the
-  [`Show jump-to-top button` App Settings toggle](../app-settings/app-settings.md#show-jump-to-top-button)
-  is on AND (b) the current window is not the top window OR the
-  user is not scrolled to entry 1 within it. Hidden otherwise.
+**Click behavior.** Smooth scroll (~150ms) to bottom — always a
+same-window scroll (see [No window swap](#loaded-set-model); the
+reader never holds a disconnected region to swap from). Re-engages
+autoscroll if a stream is in flight and the user lands at-bottom.
 
-**Click behavior.**
+**Keyboard shortcut:** `End` — jump-to-bottom.
 
-- **Jump-to-bottom.** In the recent window: smooth scroll (~150ms)
-  to bottom. In the top window: swap (unload top, load recent),
-  instant cut to bottom of recent. Re-engages autoscroll if a
-  stream is in flight and the user lands at-bottom.
-- **Jump-to-top.** In the top window already loaded: smooth scroll
-  to entry 1. In the recent window: swap (unload recent, load
-  entries 1..50), instant cut to entry 1.
-
-The swap path is always instant cut — there's no in-between content
-to traverse smoothly. The same-window path is smooth.
-
-**Keyboard shortcuts** (always available regardless of toggle):
-
-- `Home` — jump-to-top
-- `End` — jump-to-bottom
-
-**Actions menu entries** (always available):
-
-- `Jump to top of branch`
-- `Jump to bottom`
-
-The App Settings toggle gates the visible button only, never the
-capability — keyboard and Actions remain on regardless.
+**Actions menu entry:** `Jump to bottom`.
 
 **Chapter-top is not a separate scroll button.** The chapter chip in
 the [top-bar — chapter navigation](#top-bar--chapter-navigation)
 already exposes per-chapter jumps via the chapter popover.
-Scroll-chrome buttons stay focused on terminal endpoints (top /
-bottom of branch); chapter-anchored navigation lives with chapter
-chrome.
+Scroll-chrome stays focused on the terminal endpoint (bottom of
+branch); chapter-anchored navigation lives with chapter chrome.
 
 ### Anchor preservation under shifts
 

@@ -142,7 +142,7 @@ not reader-contextual.
 
 | Surface                                                             | `ON THIS SCREEN` entries                            |
 | ------------------------------------------------------------------- | --------------------------------------------------- |
-| [Reader / composer](../screens/reader-composer/reader-composer.md)  | Jump to top of branch · Jump to bottom              |
+| [Reader / composer](../screens/reader-composer/reader-composer.md)  | Jump to bottom                                      |
 | [World](../screens/world/world.md)                                  | Add entity… · Add lore…                             |
 | [Plot](../screens/plot/plot.md)                                     | Add thread… · Add happening…                        |
 | [Story List](../screens/story-list/story-list.md)                   | New story… · Import story…                          |
@@ -205,8 +205,7 @@ first**:
   navigate-away guards. The menu adds no bespoke guard.
 - _Opens a further surface_ (`Set lead character…`, `Flip era…`,
   `New story…`, `Add entity…`…) → open that modal / picker / flow.
-- _Immediate_ (`Jump to top of branch`, `Jump to bottom`) →
-  perform at once.
+- _Immediate_ (`Jump to bottom`) → perform at once.
 
 ## Gating
 

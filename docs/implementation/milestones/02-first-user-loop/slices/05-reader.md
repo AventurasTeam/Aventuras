@@ -92,13 +92,15 @@ chapter management (M5), branch picker (M6).
 
 - **Entry window:** single contiguous ~50-entry window over the
   hydrated entries store; auto-load older / forward on boundary
-  approach with shimmer; window swap on jump; per-branch scroll
-  position memory; `@tanstack/react-virtual` (web) + `FlatList`
-  with `maintainVisibleContentPosition` (native); the web
-  prepend / height-change anchor compensation.
+  approach with shimmer; `@tanstack/react-virtual` (web) +
+  `FlatList` with `maintainVisibleContentPosition` (native); the
+  web prepend / height-change anchor compensation. No window swap
+  or per-branch scroll-position memory — jump-to-top is out (see
+  [reader-composer.md → Jump buttons](../../../../ui/screens/reader-composer/reader-composer.md#jump-buttons)),
+  so the window never disconnects from the live edge.
 - **Autoscroll state machine** (engage / disengage / re-engage,
-  per-stream) and **jump buttons** (visibility rules, swap vs
-  smooth paths, `Home` / `End`, Actions-menu entries).
+  per-stream) and a **jump-to-bottom button** (visibility rule,
+  smooth scroll, `End` key, Actions-menu entry).
 - **Composer:** textarea (Harper.js wired, user-toggleable;
   install lands here per tech-stack), mode picker
   (`Do / Say / Think / Free` — adventure + `composerModesEnabled`
@@ -155,10 +157,11 @@ chapter management (M5), branch picker (M6).
   ~50 loaded; scrolling near top prepends the next chunk with no
   visible jump on web and native (manual matrix, both
   platforms, backed by the compensation-math unit test below);
-  jump-to-top swaps windows and restores position on return;
-  autoscroll engages at-bottom (~80 px tolerance per the spec),
-  disengages on user upscroll mid-stream, re-engages when the
-  user returns within the same tolerance.
+  jump-to-bottom appears once scrolled away from the live edge and
+  smooth-scrolls back on click; autoscroll engages at-bottom
+  (~80 px tolerance per the spec), disengages on user upscroll
+  mid-stream, re-engages when the user returns within the same
+  tolerance.
 - Composer wrap matrix: `Do` / `Say` / `Think` × `first` /
   `third` produce the principle doc's exact shapes; `Free` and
   creative mode send verbatim; the wrapped text is what lands in
@@ -273,13 +276,13 @@ chapter management (M5), branch picker (M6).
   entry kind plus its Storybook stories — out of scope for a
   route-level integration pass. Logged in
   [`followups.md`](../../../../followups.md).
-- **Jump buttons and autoscroll are not functionally wired.**
+- **Jump-to-bottom and autoscroll are not functionally wired.**
   `EntryWindow` doesn't expose an imperative scroll-to/scroll-state
   API, so `JumpButtons` mounts with heuristic visibility but
   no-op handlers, and the autoscroll state machine
   (`lib/reader-scroll/autoscroll.ts`) isn't consumed by the route at
   all. A future pass needs `EntryWindow` to expose an imperative
-  ref (jump-to-top/bottom, current scroll-edge distance) before this
+  ref (jump-to-bottom, current scroll-edge distance) before this
   closes — not attempted here to avoid re-opening an
   already-reviewed component's contract mid-integration.
 - **Composer wrap POV/lead name are hardcoded** (`pov: 'first'`,

@@ -1,31 +1,16 @@
-import { ArrowDown, ArrowUp } from 'lucide-react-native'
+import { ArrowDown } from 'lucide-react-native'
 
 import { IconAction } from '@/components/ui/icon-action'
 import { t } from '@/lib/i18n'
 
 type JumpButtonsProps = {
-  showJumpToTop: boolean
   showJumpToBottom: boolean
-  onJumpToTop: () => void
   onJumpToBottom: () => void
 }
 
-export function JumpButtons({
-  showJumpToTop,
-  showJumpToBottom,
-  onJumpToTop,
-  onJumpToBottom,
-}: JumpButtonsProps) {
+export function JumpButtons({ showJumpToBottom, onJumpToBottom }: JumpButtonsProps) {
   return (
     <>
-      {showJumpToTop && (
-        <IconAction
-          icon={ArrowUp}
-          label={t('reader:jumpToTop')}
-          onPress={onJumpToTop}
-          className="absolute bottom-24 right-4 rounded-full bg-bg-overlay shadow-md"
-        />
-      )}
       {showJumpToBottom && (
         <IconAction
           icon={ArrowDown}
