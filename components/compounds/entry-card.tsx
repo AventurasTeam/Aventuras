@@ -25,6 +25,7 @@ import {
   narrativeTagsStyles,
   renderNarrativeHtml,
 } from '@/lib/markdown'
+import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
 type EntryKind = StoryEntry['kind'] | 'streaming'
@@ -83,25 +84,32 @@ const KIND_BUBBLE: Record<EntryKind, string> = {
   streaming: 'bg-bg-raised border-border border-dashed',
 }
 
-function NarrativeContent({ text, className }: { text: string; className?: string }) {
+function NarrativeContent({ text, muted }: { text: string; muted?: boolean }) {
   const { width } = useWindowDimensions()
+  const { theme } = useTheme()
   const html = useMemo(() => renderNarrativeHtml(text), [text])
+  const mutedBaseStyle = useMemo(
+    () => (muted ? { fontStyle: 'italic' as const, color: theme.colors['--fg-muted'] } : undefined),
+    [muted, theme],
+  )
 
   if (Platform.OS === 'web') {
     return (
-      <div className={cn('narrative-html', className)} dangerouslySetInnerHTML={{ __html: html }} />
+      <div
+        className={cn('narrative-html', muted && 'italic text-fg-muted')}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
     )
   }
 
   return (
-    <View className={className}>
-      <RenderHTML
-        contentWidth={width}
-        source={{ html }}
-        tagsStyles={narrativeTagsStyles}
-        customHTMLElementModels={narrativeCustomHTMLElementModels}
-      />
-    </View>
+    <RenderHTML
+      contentWidth={width}
+      source={{ html }}
+      tagsStyles={narrativeTagsStyles}
+      customHTMLElementModels={narrativeCustomHTMLElementModels}
+      baseStyle={mutedBaseStyle}
+    />
   )
 }
 
@@ -189,13 +197,13 @@ export function EntryCard({
 
       {hasReasoning && expanded && !editing ? (
         <View className="mb-3 border-l-2 border-border pl-3">
-          <NarrativeContent text={reasoning ?? ''} className="italic text-fg-muted" />
+          <NarrativeContent text={reasoning ?? ''} muted />
         </View>
       ) : null}
 
       {isStreamingReasoning && content.length > 0 ? (
         <View className="mb-3 border-l-2 border-border pl-3">
-          <NarrativeContent text={content} className="italic text-fg-muted" />
+          <NarrativeContent text={content} muted />
         </View>
       ) : null}
 
@@ -222,7 +230,7 @@ export function EntryCard({
         </View>
       ) : kind === 'system' ? (
         <View className="gap-3">
-          <Text size="sm">{content}</Text>
+          <NarrativeContent text={content} />
           {detail != null ? (
             <Text size="xs" variant="muted">
               {detail}
