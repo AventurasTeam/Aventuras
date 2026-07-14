@@ -1,13 +1,23 @@
+// components/reader/entry-window.tsx
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
+  forwardRef,
   useCallback,
+  useImperativeHandle,
   useLayoutEffect,
   useRef,
   type CSSProperties,
+  type ForwardedRef,
   type ReactNode,
   type UIEvent,
 } from 'react'
-import { FlatList, Platform, StyleSheet } from 'react-native'
+import {
+  FlatList,
+  Platform,
+  StyleSheet,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native'
 
 import { computePrependCompensation } from '@/lib/reader-scroll'
 
@@ -15,7 +25,12 @@ type EntryWindowProps<T extends { id: string }> = {
   rows: readonly T[]
   renderRow: (row: T) => ReactNode
   onNearTop: () => void
-  onNearBottom: () => void
+  onNearBottomChange: (isNearBottom: boolean) => void
+  onScrollPositionChange: (pos: { distanceFromBottomPx: number }) => void
+}
+
+type EntryWindowHandle = {
+  scrollToBottom: (opts?: { smooth?: boolean }) => void
 }
 
 const ESTIMATED_ROW_HEIGHT_PX = 120
@@ -44,12 +59,10 @@ function rowStyle(offsetPx: number): CSSProperties {
   }
 }
 
-function EntryWindowWeb<T extends { id: string }>({
-  rows,
-  renderRow,
-  onNearTop,
-  onNearBottom,
-}: EntryWindowProps<T>) {
+function EntryWindowWebInner<T extends { id: string }>(
+  { rows, renderRow, onNearTop, onNearBottomChange, onScrollPositionChange }: EntryWindowProps<T>,
+  ref: ForwardedRef<EntryWindowHandle>,
+) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -61,6 +74,20 @@ function EntryWindowWeb<T extends { id: string }>({
     // getOffsetForIndex reports the true prepended-block height.
     getItemKey: (index) => rows[index]!.id,
   })
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollToBottom: (opts) => {
+        if (rows.length === 0) return
+        virtualizer.scrollToIndex(rows.length - 1, {
+          align: 'end',
+          behavior: opts?.smooth ? 'smooth' : 'auto',
+        })
+      },
+    }),
+    [rows.length, virtualizer],
+  )
 
   const prevFirstIdRef = useRef<string | undefined>(rows[0]?.id)
 
@@ -102,13 +129,15 @@ function EntryWindowWeb<T extends { id: string }>({
     (event: UIEvent<HTMLDivElement>) => {
       const { scrollTop, clientHeight, scrollHeight } = event.currentTarget
       const withinTop = scrollTop <= clientHeight
-      const withinBottom = scrollHeight - scrollTop - clientHeight <= clientHeight
+      const distanceFromBottomPx = scrollHeight - scrollTop - clientHeight
+      const withinBottom = distanceFromBottomPx <= clientHeight
       if (withinTop && !nearTopRef.current) onNearTop()
       nearTopRef.current = withinTop
-      if (withinBottom && !nearBottomRef.current) onNearBottom()
+      if (withinBottom !== nearBottomRef.current) onNearBottomChange(withinBottom)
       nearBottomRef.current = withinBottom
+      onScrollPositionChange({ distanceFromBottomPx })
     },
-    [onNearTop, onNearBottom],
+    [onNearTop, onNearBottomChange, onScrollPositionChange],
   )
 
   return (
@@ -128,14 +157,26 @@ function EntryWindowWeb<T extends { id: string }>({
     </div>
   )
 }
+const EntryWindowWeb = forwardRef(EntryWindowWebInner) as <T extends { id: string }>(
+  props: EntryWindowProps<T> & { ref?: ForwardedRef<EntryWindowHandle> },
+) => ReturnType<typeof EntryWindowWebInner>
 
-function EntryWindowNative<T extends { id: string }>({
-  rows,
-  renderRow,
-  onNearTop,
-  onNearBottom,
-}: EntryWindowProps<T>) {
+function EntryWindowNativeInner<T extends { id: string }>(
+  { rows, renderRow, onNearTop, onNearBottomChange, onScrollPositionChange }: EntryWindowProps<T>,
+  ref: ForwardedRef<EntryWindowHandle>,
+) {
   const listRef = useRef<FlatList<T>>(null)
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollToBottom: (opts) => {
+        listRef.current?.scrollToEnd({ animated: opts?.smooth ?? false })
+      },
+    }),
+    [],
+  )
+
   // Land at the tail on first open. onContentSizeChange fires once the initial
   // rows have laid out (firmer than a rows-keyed effect); the one-shot flag
   // keeps later size changes off the user's scrolling.
@@ -146,6 +187,19 @@ function EntryWindowNative<T extends { id: string }>({
     listRef.current?.scrollToEnd({ animated: false })
   }, [rows.length])
 
+  const nearBottomRef = useRef(false)
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
+      const distanceFromBottomPx = contentSize.height - contentOffset.y - layoutMeasurement.height
+      const withinBottom = distanceFromBottomPx <= layoutMeasurement.height
+      if (withinBottom !== nearBottomRef.current) onNearBottomChange(withinBottom)
+      nearBottomRef.current = withinBottom
+      onScrollPositionChange({ distanceFromBottomPx })
+    },
+    [onNearBottomChange, onScrollPositionChange],
+  )
+
   return (
     <FlatList
       ref={listRef}
@@ -153,19 +207,32 @@ function EntryWindowNative<T extends { id: string }>({
       keyExtractor={(row) => row.id}
       renderItem={({ item }) => <>{renderRow(item)}</>}
       onContentSizeChange={handleContentSizeChange}
+      onScroll={handleScroll}
+      scrollEventThrottle={100}
       maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
       onStartReached={onNearTop}
       onStartReachedThreshold={EDGE_THRESHOLD_VIEWPORTS}
-      onEndReached={onNearBottom}
-      onEndReachedThreshold={EDGE_THRESHOLD_VIEWPORTS}
       style={styles.list}
     />
   )
 }
+const EntryWindowNative = forwardRef(EntryWindowNativeInner) as <T extends { id: string }>(
+  props: EntryWindowProps<T> & { ref?: ForwardedRef<EntryWindowHandle> },
+) => ReturnType<typeof EntryWindowNativeInner>
 
-function EntryWindow<T extends { id: string }>(props: EntryWindowProps<T>) {
-  return Platform.OS === 'web' ? <EntryWindowWeb {...props} /> : <EntryWindowNative {...props} />
+function EntryWindowInner<T extends { id: string }>(
+  props: EntryWindowProps<T>,
+  ref: ForwardedRef<EntryWindowHandle>,
+) {
+  return Platform.OS === 'web' ? (
+    <EntryWindowWeb {...props} ref={ref} />
+  ) : (
+    <EntryWindowNative {...props} ref={ref} />
+  )
 }
+const EntryWindow = forwardRef(EntryWindowInner) as <T extends { id: string }>(
+  props: EntryWindowProps<T> & { ref?: ForwardedRef<EntryWindowHandle> },
+) => ReturnType<typeof EntryWindowInner>
 
 export { EntryWindow }
-export type { EntryWindowProps }
+export type { EntryWindowProps, EntryWindowHandle }
