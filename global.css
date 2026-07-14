@@ -590,7 +590,7 @@
     font-style: italic;
   }
   .narrative-html code {
-    font-family: monospace;
+    font-family: var(--font-mono);
   }
   .narrative-html em {
     font-style: italic;
