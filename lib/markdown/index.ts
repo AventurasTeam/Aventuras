@@ -8,3 +8,4 @@ export function renderNarrativeHtml(markdown: string): string {
 export { sanitizeHtml } from './sanitize'
 export { parseMarkdownToHtml } from './parse'
 export { createHtmlStreamBuffer, type HtmlStreamBuffer } from './stream-buffer'
+export { narrativeTagsStyles, narrativeCustomHTMLElementModels } from './native'

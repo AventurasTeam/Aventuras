@@ -10,8 +10,9 @@ import {
   Trash2,
   X,
 } from 'lucide-react-native'
-import { useState } from 'react'
-import { View } from 'react-native'
+import { useMemo, useState } from 'react'
+import { Platform, useWindowDimensions, View } from 'react-native'
+import { RenderHTML } from 'react-native-render-html'
 
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
@@ -19,6 +20,11 @@ import { IconAction } from '@/components/ui/icon-action'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
+import {
+  narrativeCustomHTMLElementModels,
+  narrativeTagsStyles,
+  renderNarrativeHtml,
+} from '@/lib/markdown'
 import { cn } from '@/lib/utils'
 
 type EntryKind = StoryEntry['kind'] | 'streaming'
@@ -75,6 +81,28 @@ const KIND_BUBBLE: Record<EntryKind, string> = {
   opening: 'bg-bg-raised border-border',
   system: 'bg-bg-base border-warning',
   streaming: 'bg-bg-raised border-border border-dashed',
+}
+
+function NarrativeContent({ text, className }: { text: string; className?: string }) {
+  const { width } = useWindowDimensions()
+  const html = useMemo(() => renderNarrativeHtml(text), [text])
+
+  if (Platform.OS === 'web') {
+    return (
+      <div className={cn('narrative-html', className)} dangerouslySetInnerHTML={{ __html: html }} />
+    )
+  }
+
+  return (
+    <View className={className}>
+      <RenderHTML
+        contentWidth={width}
+        source={{ html }}
+        tagsStyles={narrativeTagsStyles}
+        customHTMLElementModels={narrativeCustomHTMLElementModels}
+      />
+    </View>
+  )
 }
 
 export function EntryCard({
@@ -161,17 +189,13 @@ export function EntryCard({
 
       {hasReasoning && expanded && !editing ? (
         <View className="mb-3 border-l-2 border-border pl-3">
-          <Text size="sm" variant="muted" className="italic">
-            {reasoning}
-          </Text>
+          <NarrativeContent text={reasoning ?? ''} className="italic text-fg-muted" />
         </View>
       ) : null}
 
       {isStreamingReasoning && content.length > 0 ? (
         <View className="mb-3 border-l-2 border-border pl-3">
-          <Text size="sm" variant="muted" className="italic">
-            {content}
-          </Text>
+          <NarrativeContent text={content} className="italic text-fg-muted" />
         </View>
       ) : null}
 
@@ -222,7 +246,7 @@ export function EntryCard({
           )}
         </View>
       ) : kind === 'streaming' && streamingPhase === 'reasoning' ? null : ( // until the stream transitions to 'reply'. // the live preview block above. The reply slot stays empty // Reasoning-phase streaming — content is already shown in
-        <Text size="sm">{content}</Text>
+        <NarrativeContent text={content} />
       )}
 
       {showActions ? (
