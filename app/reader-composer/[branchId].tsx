@@ -44,6 +44,7 @@ type StreamingRow = { id: string; kind: 'streaming'; content: string }
 type WindowRow = StoryEntry | StreamingRow
 
 const RECENT_WINDOW_SIZE = 50
+const JUMP_TO_BOTTOM_SETTLE_MS = 500
 
 export default function ReaderComposerRoute() {
   const router = useRouter()
@@ -88,12 +89,13 @@ export default function ReaderComposerRoute() {
   const entryWindowRef = useRef<EntryWindowHandle>(null)
   const autoscrollRef = useRef(createAutoscrollMachine())
   const lastDistanceRef = useRef(0)
-  // Set on a jump-to-bottom click, consumed once by the next stream_chunk's
-  // streamStarted() — a smooth-scroll animation reports several intermediate
-  // distanceFromBottomPx values before settling, and any of those could
-  // otherwise overwrite lastDistanceRef before a fast-following stream reads
-  // it, silently breaking "jump-to-bottom re-engages autoscroll."
-  const pendingJumpToBottomRef = useRef(false)
+  // Timestamp of the last jump-to-bottom click while idle. The smooth-scroll
+  // it triggers reports several intermediate, non-zero distanceFromBottomPx
+  // values before settling, so a bounded time window — not a plain flag —
+  // is what lets a fast-following stream still treat it as "at bottom"
+  // without also capturing an unrelated, much-later stream after the user
+  // has genuinely scrolled away in between.
+  const pendingJumpToBottomAtRef = useRef(0)
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
 
   // A branch switch must drop any in-flight buffer from the prior branch —
@@ -117,9 +119,11 @@ export default function ReaderComposerRoute() {
             entryId: event.targetEntryId,
             buffer: createHtmlStreamBuffer(),
           }
-          const distanceFromBottomPx = pendingJumpToBottomRef.current ? 0 : lastDistanceRef.current
-          pendingJumpToBottomRef.current = false
-          autoscrollRef.current.streamStarted({ distanceFromBottomPx })
+          const jumpedRecently =
+            Date.now() - pendingJumpToBottomAtRef.current < JUMP_TO_BOTTOM_SETTLE_MS
+          autoscrollRef.current.streamStarted({
+            distanceFromBottomPx: jumpedRecently ? 0 : lastDistanceRef.current,
+          })
         }
         const safe = streamBufferRef.current.buffer.push(event.text)
         setStreamingContent({ entryId: event.targetEntryId, content: safe })
@@ -128,9 +132,7 @@ export default function ReaderComposerRoute() {
   )
 
   // Runs after React commits streamingContent, so the scroll targets the row
-  // height the just-arrived chunk actually produced — not the prior render's
-  // (calling scrollToBottom() straight from the stream_chunk callback above
-  // would race the DOM commit by one cycle).
+  // height the just-arrived chunk actually produced.
   useLayoutEffect(() => {
     if (streamingContent == null || autoscrollRef.current.state !== 'engaged') return
     entryWindowRef.current?.scrollToBottom()
@@ -395,18 +397,15 @@ export default function ReaderComposerRoute() {
                 entryWindowRef.current?.scrollToBottom({ smooth: true })
                 lastDistanceRef.current = 0
                 if (isGenerating) {
-                  // Already engaged by this call — no future streamStarted()
-                  // will read lastDistanceRef for this run, so there's
-                  // nothing for the pending-jump flag to protect here.
+                  // Today's single-phase per-turn pipeline streams exactly one
+                  // entryId per run, so this forced engage already covers the
+                  // rest of it — nothing later reads pendingJumpToBottomAtRef
+                  // for this run. Revisit if a phase ever streams a second
+                  // entryId under the same run.
                   autoscrollRef.current.streamStarted({ distanceFromBottomPx: 0 })
                 } else {
                   autoscrollRef.current.autoscrollApplied({ distanceFromBottomPx: 0 })
-                  // No stream is running yet — the smooth-scroll animation
-                  // reports intermediate, non-zero distances before settling,
-                  // which would otherwise overwrite lastDistanceRef before a
-                  // fast-following stream's streamStarted() reads it. Survive
-                  // that window; consumed once by the next new entryId.
-                  pendingJumpToBottomRef.current = true
+                  pendingJumpToBottomAtRef.current = Date.now()
                 }
               }}
             />
