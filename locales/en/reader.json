@@ -14,10 +14,7 @@
   },
   "editFailed": "Couldn't save your edit. Please try again.",
   "rollbackFailed": "Couldn't roll back the story. Please try again.",
-  "spellcheck": "Spellcheck",
-  "spellcheckClean": "No issues",
-  "spellcheckIssues": "{{count}} issue",
-  "spellcheckIssues_other": "{{count}} issues",
+  "spellcheckSuggestion": "→ {{text}}",
   "rollbackConfirm": {
     "title": "Delete from entry {{entryNumber}}?",
     "body": "This rolls the story back to before entry {{entryNumber}}. The following are removed:",

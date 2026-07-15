@@ -4,10 +4,11 @@ import { View } from 'react-native'
 import { Button } from '@/components/ui/button'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
-import { Textarea } from '@/components/ui/textarea'
 import type { ComposerMode } from '@/lib/composer-wrap'
 import { t } from '@/lib/i18n'
 import { lintNarrativeText } from '@/lib/spellcheck'
+
+import { SpellcheckTextarea } from './spellcheck-textarea'
 
 type Lint = Awaited<ReturnType<typeof lintNarrativeText>>[number]
 
@@ -30,7 +31,9 @@ function getModeOptions(): SelectOption[] {
   ]
 }
 
-const LINT_DEBOUNCE_MS = 400
+// Long enough that a normal typing cadence never trips it — this fires only
+// once the user has actually paused, not between keystrokes.
+const LINT_DEBOUNCE_MS = 2000
 
 export function Composer({
   modesEnabled,
@@ -42,11 +45,10 @@ export function Composer({
 }: ComposerProps) {
   const [text, setText] = useState('')
   const [mode, setMode] = useState<ComposerMode>('free')
-  const [spellcheckOn, setSpellcheckOn] = useState(false)
   const [lints, setLints] = useState<Lint[]>([])
 
   useEffect(() => {
-    if (!spellcheckOn || text.trim().length === 0) {
+    if (text.trim().length === 0) {
       setLints([])
       return
     }
@@ -60,7 +62,7 @@ export function Composer({
       cancelled = true
       clearTimeout(handle)
     }
-  }, [text, spellcheckOn])
+  }, [text])
 
   const canSend = text.trim().length > 0
   const sendDisabled = disabled || !canSend
@@ -71,11 +73,6 @@ export function Composer({
     setText('')
     setLints([])
   }
-
-  const spellcheckStatus =
-    lints.length === 0
-      ? t('reader:spellcheckClean')
-      : t('reader:spellcheckIssues', { count: lints.length })
 
   return (
     <View className="gap-2">
@@ -89,29 +86,15 @@ export function Composer({
         />
       ) : null}
 
-      <Textarea
-        value={text}
-        onChangeText={setText}
-        editable={!disabled}
-        placeholder={t('reader:composerPlaceholder')}
-      />
-
-      <View className="flex-row items-center justify-between gap-2">
-        <View className="flex-row items-center gap-2">
-          <Button
-            variant={spellcheckOn ? 'secondary' : 'ghost'}
-            size="sm"
-            disabled={disabled}
-            accessibilityState={{ checked: spellcheckOn }}
-            onPress={() => setSpellcheckOn((on) => !on)}
-          >
-            <Text>{t('reader:spellcheck')}</Text>
-          </Button>
-          {spellcheckOn ? (
-            <Text size="xs" variant="muted">
-              {spellcheckStatus}
-            </Text>
-          ) : null}
+      <View className="flex-row items-end gap-2">
+        <View className="flex-1">
+          <SpellcheckTextarea
+            value={text}
+            onChangeText={setText}
+            editable={!disabled}
+            placeholder={t('reader:composerPlaceholder')}
+            lints={lints}
+          />
         </View>
 
         {isGenerating ? (
