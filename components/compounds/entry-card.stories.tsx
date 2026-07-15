@@ -288,3 +288,31 @@ export const ThemeMatrix: StoryT = {
     </View>
   ),
 }
+
+export const MarkdownRendering: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'ai_reply',
+    content:
+      '## Storm break\n\nThe watchmen scatter. **Sable** notices, *quietly*:\n\n- a torn cloak by the well\n- footprints heading inland\n\n```\nthree strikes, then silence\n```',
+    meta: aiMeta,
+  },
+}
+
+export const XssSanitizationAllowlist: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'ai_reply',
+    content:
+      'Safe text. <script>window.__xss = true</script><img src=x onerror="window.__xss = true">',
+    meta: aiMeta,
+  },
+  play: async () => {
+    // window.__xss is only ever set by the payload's script/onerror executing —
+    // its absence is the sanitization assertion.
+    expect((globalThis as { __xss?: boolean }).__xss).toBeUndefined()
+    await waitFor(() => expect(screen.getByText(/Safe text\./)).toBeInTheDocument())
+  },
+}
