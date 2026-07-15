@@ -7,7 +7,7 @@ import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { EntryCard } from '@/components/compounds/entry-card'
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
 import { Composer } from '@/components/reader/composer'
-import { EntryWindow } from '@/components/reader/entry-window'
+import { EntryWindow, type EntryWindowHandle } from '@/components/reader/entry-window'
 import { JumpButtons } from '@/components/reader/jump-buttons'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
 import { useSystemEntryActions } from '@/components/reader/system-entry-actions'
@@ -33,6 +33,7 @@ import { branches, db, runInTransaction, storyEntries, type StoryEntry } from '@
 import { t } from '@/lib/i18n'
 import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
 import { awaitRunTerminal, pipelineEventBus, type PipelineError } from '@/lib/pipeline'
+import { createAutoscrollMachine } from '@/lib/reader-scroll'
 import { entriesStore, generationStore, isUserEditBlocked } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
@@ -84,6 +85,10 @@ export default function ReaderComposerRoute() {
     entryId: string
     content: string
   } | null>(null)
+  const entryWindowRef = useRef<EntryWindowHandle>(null)
+  const autoscrollRef = useRef(createAutoscrollMachine())
+  const lastDistanceRef = useRef(0)
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false)
 
   // A branch switch must drop any in-flight buffer from the prior branch —
   // it belongs to a different entry list and would otherwise leak forward.
@@ -106,9 +111,14 @@ export default function ReaderComposerRoute() {
             entryId: event.targetEntryId,
             buffer: createHtmlStreamBuffer(),
           }
+          autoscrollRef.current.streamStarted({ distanceFromBottomPx: lastDistanceRef.current })
         }
         const safe = streamBufferRef.current.buffer.push(event.text)
         setStreamingContent({ entryId: event.targetEntryId, content: safe })
+        if (autoscrollRef.current.state === 'engaged') {
+          entryWindowRef.current?.scrollToBottom()
+          autoscrollRef.current.autoscrollApplied({ distanceFromBottomPx: 0 })
+        }
       }),
     [branchId],
   )
@@ -119,6 +129,7 @@ export default function ReaderComposerRoute() {
     if (!isGenerating) {
       streamBufferRef.current = null
       setStreamingContent(null)
+      autoscrollRef.current.streamEnded()
     }
   }, [isGenerating])
 
@@ -326,6 +337,8 @@ export default function ReaderComposerRoute() {
     )
   }
 
+  const showJump = entries.length > 0
+
   return (
     <ScreenShell
       variant="in-story"
@@ -350,14 +363,27 @@ export default function ReaderComposerRoute() {
               </View>
             ) : (
               <EntryWindow
+                ref={entryWindowRef}
                 key={branchId}
                 rows={windowRows}
                 renderRow={renderRow}
                 onNearTop={() => void loadOlderEntries()}
-                onNearBottom={() => {}}
+                onNearBottomChange={(isNearBottom) => setShowJumpToBottom(!isNearBottom)}
+                onScrollPositionChange={(pos) => {
+                  lastDistanceRef.current = pos.distanceFromBottomPx
+                  autoscrollRef.current.userScrolled(pos)
+                }}
               />
             )}
-            <JumpButtons showJumpToBottom={false} onJumpToBottom={() => {}} />
+            <JumpButtons
+              showJumpToBottom={showJump && showJumpToBottom}
+              onJumpToBottom={() => {
+                entryWindowRef.current?.scrollToBottom({ smooth: true })
+                lastDistanceRef.current = 0
+                if (isGenerating) autoscrollRef.current.streamStarted({ distanceFromBottomPx: 0 })
+                else autoscrollRef.current.autoscrollApplied({ distanceFromBottomPx: 0 })
+              }}
+            />
           </View>
           <View className="border-t border-border p-3">
             <Composer
