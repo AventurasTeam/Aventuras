@@ -34,7 +34,13 @@ import { t } from '@/lib/i18n'
 import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
 import { awaitRunTerminal, pipelineEventBus, type PipelineError } from '@/lib/pipeline'
 import { createAutoscrollMachine } from '@/lib/reader-scroll'
-import { entriesStore, generationStore, isUserEditBlocked } from '@/lib/stores'
+import {
+  entriesStore,
+  generationStore,
+  isUserEditBlocked,
+  rehydrateStories,
+  storiesStore,
+} from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
@@ -204,6 +210,15 @@ export default function ReaderComposerRoute() {
     if (entriesStore.getLoadedBranch() !== branchId) void reload()
   }, [branchId, reload])
 
+  const storyRows = storiesStore.useStories((s) => s.rows)
+  useEffect(() => {
+    void rehydrateStories(db)
+  }, [])
+  const storyTitle = useMemo(
+    () => storyRows.find((r) => r.id === storyId)?.title,
+    [storyRows, storyId],
+  )
+
   const showTurnFailure = useCallback(
     async (error: PipelineError | undefined) => {
       setLastError(error)
@@ -358,7 +373,7 @@ export default function ReaderComposerRoute() {
   return (
     <ScreenShell
       variant="in-story"
-      title={<Text className="font-semibold">{t('reader:placeholderTitle')}</Text>}
+      title={<Text className="font-semibold">{storyTitle ?? t('reader:placeholderTitle')}</Text>}
       chapterProgress={0}
       onBack={() => router.back()}
       actions={<AppActionsMenu />}
