@@ -253,7 +253,9 @@ export function EntryCard({
             </View>
           )}
         </View>
-      ) : kind === 'streaming' && streamingPhase === 'reasoning' ? null : ( // until the stream transitions to 'reply'. // the live preview block above. The reply slot stays empty // Reasoning-phase streaming — content is already shown in
+      ) : kind === 'streaming' &&
+        streamingPhase === 'reasoning' ? // until the stream transitions to 'reply'. // the live preview block above. The reply slot stays empty // Reasoning-phase streaming — content is already shown in
+      null : (
         <NarrativeContent text={content} />
       )}
 

@@ -88,6 +88,10 @@ slice plans when relevant.
   — an eager setup import (e.g. an action pulling a heavy barrel) loads
   modules before test files register their `vi.mock`, silently breaking
   the mocks; relocate the offending symbol to a light module.
+- [Vite eagerly bundles a runtime-guarded `require()`, Metro doesn't](./storybook-vite-eager-guarded-require.md)
+  — a `typeof window` guard around a Node-only `require()` is safe under
+  Metro but can crash every Storybook story importing that module; alias
+  the specifier to a stub in `viteFinal`, don't touch the guard.
 
 ### Native deps / install ritual
 

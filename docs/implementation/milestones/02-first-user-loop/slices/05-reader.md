@@ -262,29 +262,57 @@ chapter management (M5), branch picker (M6).
   2.7 replaces this phase's internals (full per-turn declaration,
   buffer composition, real provider wiring) without changing
   `submitTurn`'s call site.
-- **`EntryCard` (a Slice 1.x/pre-2.5 compound) never actually
-  renders markdown as HTML** — it renders `content` via plain
-  `<Text>` in every path. This slice's `lib/markdown` pipeline
-  (web sanitize/render, native `react-native-render-html` config,
-  the streaming tag-boundary buffer) is fully built and tested but
-  has no consumer; the reader's live-streaming preview
-  (`app/reader-composer/[branchId].tsx`) buffers raw markdown
-  through the tag-boundary guard before handing it to the same
-  plain-`Text` render, so it prevents broken HTML fragments without
-  actually rendering markdown. Closing this needs a real `EntryCard`
-  API change (a platform-split HTML render path) that touches every
-  entry kind plus its Storybook stories — out of scope for a
-  route-level integration pass. Logged in
-  [`followups.md`](../../../../followups.md).
-- **Jump-to-bottom and autoscroll are not functionally wired.**
-  `EntryWindow` doesn't expose an imperative scroll-to/scroll-state
-  API, so `JumpButtons` mounts with heuristic visibility but
-  no-op handlers, and the autoscroll state machine
-  (`lib/reader-scroll/autoscroll.ts`) isn't consumed by the route at
-  all. A future pass needs `EntryWindow` to expose an imperative
-  ref (jump-to-bottom, current scroll-edge distance) before this
-  closes — not attempted here to avoid re-opening an
-  already-reviewed component's contract mid-integration.
+- **`EntryCard` now renders markdown as sanitized HTML, closing the
+  gap above.** A local `NarrativeContent` helper inside
+  `entry-card.tsx` calls `renderNarrativeHtml` and platform-splits
+  the render tail (`dangerouslySetInnerHTML` on web,
+  `react-native-render-html` on native), applied uniformly to every
+  entry kind and the reasoning body — `EntryCard`'s public API is
+  unchanged (`content: string` in, no new prop). `lib/markdown`
+  gained one additive export (`native.ts`'s `narrativeTagsStyles`/
+  `narrativeCustomHTMLElementModels` re-exported from the module's
+  root, per the `lib/*` public-API rule). `global.css` gained a
+  `.narrative-html` typography block mirroring `native.ts`'s values
+  for cross-platform parity.
+- **Jump-to-top was cut; jump-to-bottom is the only jump affordance
+  now.** A developer decision, not an implementation shortcut — the
+  design exploration that introduced jump-to-top
+  (`docs/explorations/2026-04-30-reader-scroll-polish.md`) already
+  treated it as the weaker, opt-in case (shipped off by default);
+  jump-to-bottom is the near-universal chat-app affordance. This
+  removes the App Settings toggle, the `Home` key, the Actions-menu
+  "Jump to top of branch" entry, and — since the window can no
+  longer disconnect from the live edge — the whole window-swap /
+  per-window-scroll-position-memory machinery
+  [`reader-composer.md`](../../../../ui/screens/reader-composer/reader-composer.md#loaded-set-model)
+  once described.
+- **Jump-to-bottom and autoscroll are now functionally wired, and
+  real pagination replaced the "load the whole branch" interim.**
+  `EntryWindow` gained a `forwardRef`-based imperative
+  `scrollToBottom(opts?: {smooth?})` handle plus a continuous
+  `onScrollPositionChange({distanceFromBottomPx})` callback
+  (`onNearBottomChange` replaces the old fire-once `onNearBottom`,
+  now firing on both threshold-crossing directions since jump-button
+  visibility needs to know when the user leaves near-bottom, not
+  just enters it). The route feeds that signal directly into the
+  already-built `lib/reader-scroll/autoscroll.ts` state machine.
+  `reload()` now fetches only the last ~50 entries
+  (`ORDER BY position DESC LIMIT 50`, reversed) instead of the whole
+  branch; a new `loadOlderEntries()` fetches older chunks on
+  scroll-near-top via a cursor query (`position < min-loaded`) and
+  patches rows into `entriesStore` in a loop, reusing the store's
+  existing `patch()` primitive rather than touching
+  `createWorkingSetStore` (shared by 9 other domain stores — out of
+  scope for this slice). No sliding-window eviction: the loaded set
+  simply grows: virtualization keeps DOM cost flat regardless of
+  in-memory row count, which is fine at this milestone's scale.
+  A subtlety worth remembering: a jump-to-bottom click's smooth-scroll
+  animation reports several intermediate, non-zero
+  `distanceFromBottomPx` values before settling, so "re-engage
+  autoscroll on jump" needed a short (500ms) time-bounded pending
+  window rather than a plain one-shot flag — an unbounded flag would
+  wrongly force-engage a much-later, unrelated stream if the user
+  scrolled away in between.
 - **Composer wrap POV/lead name are hardcoded** (`pov: 'first'`,
   `leadName: 'You'`) since no story-settings/definition read path
   exists in this route yet; swap for real `stories.settings`/
