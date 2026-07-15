@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, desc, eq, lt } from 'drizzle-orm'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View } from 'react-native'
@@ -41,6 +41,8 @@ const ctx = { db, runInTransaction }
 type RollbackState = { targetId: string; targetNumber: number; counts: RollbackCounts }
 type StreamingRow = { id: string; kind: 'streaming'; content: string }
 type WindowRow = StoryEntry | StreamingRow
+
+const RECENT_WINDOW_SIZE = 50
 
 export default function ReaderComposerRoute() {
   const router = useRouter()
@@ -129,12 +131,32 @@ export default function ReaderComposerRoute() {
     !entries.some((e) => e.id === streamingContent.entryId)
 
   const reload = useCallback(async () => {
-    const fresh = (await db
+    const recent = (await db
       .select()
       .from(storyEntries)
       .where(eq(storyEntries.branchId, branchId))
-      .orderBy(storyEntries.position)) as StoryEntry[]
-    entriesStore.hydrate(branchId, fresh)
+      .orderBy(desc(storyEntries.position))
+      .limit(RECENT_WINDOW_SIZE)) as StoryEntry[]
+    entriesStore.hydrate(branchId, recent.reverse())
+  }, [branchId])
+
+  const loadOlderEntries = useCallback(async () => {
+    const loadedPositions = [...entriesStore.getEntries().values()]
+      .filter((e) => e.branchId === branchId)
+      .map((e) => e.position)
+    if (loadedPositions.length === 0) return
+    const minPosition = Math.min(...loadedPositions)
+
+    const older = (await db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, branchId), lt(storyEntries.position, minPosition)))
+      .orderBy(desc(storyEntries.position))
+      .limit(RECENT_WINDOW_SIZE)) as StoryEntry[]
+
+    for (const row of older) {
+      entriesStore.patch(branchId, { op: 'create', id: row.id, row })
+    }
   }, [branchId])
 
   useEffect(() => {
@@ -331,7 +353,7 @@ export default function ReaderComposerRoute() {
                 key={branchId}
                 rows={windowRows}
                 renderRow={renderRow}
-                onNearTop={() => {}}
+                onNearTop={() => void loadOlderEntries()}
                 onNearBottom={() => {}}
               />
             )}
