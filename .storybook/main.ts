@@ -28,9 +28,19 @@ const config: StorybookConfig = {
     },
   },
   async viteFinal(viteConfig) {
+    const existingAlias = viteConfig.resolve?.alias
+    // Vite's AliasOptions allows either an array of {find, replacement} or a
+    // plain object map — normalize the object form instead of discarding it,
+    // so a future preset/config that sets alias as an object doesn't silently
+    // lose its entries here.
+    const existingAliasEntries = Array.isArray(existingAlias)
+      ? existingAlias
+      : existingAlias
+        ? Object.entries(existingAlias).map(([find, replacement]) => ({ find, replacement }))
+        : []
     viteConfig.resolve ??= {}
     viteConfig.resolve.alias = [
-      ...(Array.isArray(viteConfig.resolve.alias) ? viteConfig.resolve.alias : []),
+      ...existingAliasEntries,
       // lib/markdown/sanitize.ts's Node/SSG-only jsdom fallback is dead code
       // in Storybook (window always exists there) — Vite's dep pre-bundler
       // doesn't know that and pulls jsdom in anyway, crashing on

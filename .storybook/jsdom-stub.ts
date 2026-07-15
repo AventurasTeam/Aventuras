@@ -21,3 +21,9 @@ export class JSDOM {
     )
   }
 }
+
+// Real `jsdom` is CJS (`module.exports = { JSDOM, ... }`); mirroring that
+// shape as the default export avoids a build-time "default will always be
+// undefined" warning from bundlers whose CJS-interop probes `.default`
+// before falling back to named exports.
+export default { JSDOM }
