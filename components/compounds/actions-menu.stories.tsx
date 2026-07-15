@@ -40,10 +40,7 @@ const APP: ActionGroup = {
 const READER_CONTEXT: ActionGroup = {
   id: 'reader-context',
   header: 'On this screen',
-  entries: [
-    { id: 'jump-top', label: 'Jump to top of branch', onActivate: noop },
-    { id: 'jump-bottom', label: 'Jump to bottom', onActivate: noop },
-  ],
+  entries: [{ id: 'jump-bottom', label: 'Jump to bottom', onActivate: noop }],
 }
 
 const WORLD_CONTEXT: ActionGroup = {
