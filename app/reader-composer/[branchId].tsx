@@ -1,6 +1,6 @@
 import { and, desc, eq, lt } from 'drizzle-orm'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { View } from 'react-native'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
@@ -88,6 +88,12 @@ export default function ReaderComposerRoute() {
   const entryWindowRef = useRef<EntryWindowHandle>(null)
   const autoscrollRef = useRef(createAutoscrollMachine())
   const lastDistanceRef = useRef(0)
+  // Set on a jump-to-bottom click, consumed once by the next stream_chunk's
+  // streamStarted() — a smooth-scroll animation reports several intermediate
+  // distanceFromBottomPx values before settling, and any of those could
+  // otherwise overwrite lastDistanceRef before a fast-following stream reads
+  // it, silently breaking "jump-to-bottom re-engages autoscroll."
+  const pendingJumpToBottomRef = useRef(false)
   const [showJumpToBottom, setShowJumpToBottom] = useState(false)
 
   // A branch switch must drop any in-flight buffer from the prior branch —
@@ -111,17 +117,25 @@ export default function ReaderComposerRoute() {
             entryId: event.targetEntryId,
             buffer: createHtmlStreamBuffer(),
           }
-          autoscrollRef.current.streamStarted({ distanceFromBottomPx: lastDistanceRef.current })
+          const distanceFromBottomPx = pendingJumpToBottomRef.current ? 0 : lastDistanceRef.current
+          pendingJumpToBottomRef.current = false
+          autoscrollRef.current.streamStarted({ distanceFromBottomPx })
         }
         const safe = streamBufferRef.current.buffer.push(event.text)
         setStreamingContent({ entryId: event.targetEntryId, content: safe })
-        if (autoscrollRef.current.state === 'engaged') {
-          entryWindowRef.current?.scrollToBottom()
-          autoscrollRef.current.autoscrollApplied({ distanceFromBottomPx: 0 })
-        }
       }),
     [branchId],
   )
+
+  // Runs after React commits streamingContent, so the scroll targets the row
+  // height the just-arrived chunk actually produced — not the prior render's
+  // (calling scrollToBottom() straight from the stream_chunk callback above
+  // would race the DOM commit by one cycle).
+  useLayoutEffect(() => {
+    if (streamingContent == null || autoscrollRef.current.state !== 'engaged') return
+    entryWindowRef.current?.scrollToBottom()
+    autoscrollRef.current.autoscrollApplied({ distanceFromBottomPx: 0 })
+  }, [streamingContent])
 
   // Covers the abort/failure paths where no committed row ever lands to
   // trigger the entries.some(...) hide check below.
@@ -380,8 +394,20 @@ export default function ReaderComposerRoute() {
               onJumpToBottom={() => {
                 entryWindowRef.current?.scrollToBottom({ smooth: true })
                 lastDistanceRef.current = 0
-                if (isGenerating) autoscrollRef.current.streamStarted({ distanceFromBottomPx: 0 })
-                else autoscrollRef.current.autoscrollApplied({ distanceFromBottomPx: 0 })
+                if (isGenerating) {
+                  // Already engaged by this call — no future streamStarted()
+                  // will read lastDistanceRef for this run, so there's
+                  // nothing for the pending-jump flag to protect here.
+                  autoscrollRef.current.streamStarted({ distanceFromBottomPx: 0 })
+                } else {
+                  autoscrollRef.current.autoscrollApplied({ distanceFromBottomPx: 0 })
+                  // No stream is running yet — the smooth-scroll animation
+                  // reports intermediate, non-zero distances before settling,
+                  // which would otherwise overwrite lastDistanceRef before a
+                  // fast-following stream's streamStarted() reads it. Survive
+                  // that window; consumed once by the next new entryId.
+                  pendingJumpToBottomRef.current = true
+                }
               }}
             />
           </View>
