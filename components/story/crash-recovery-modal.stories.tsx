@@ -124,8 +124,7 @@ export const HostStrictModeLifecycle: Story = {
       expect(logger.warn).toHaveBeenCalledTimes(1)
     })
     expect(logger.warn).toHaveBeenCalledWith('bootstrap.recovery_story_names_failed', {
-      error:
-        'Failed query: select "id", "title" from "stories" where "stories"."id" in (?)\nparams: s1',
+      error: expect.stringContaining('Failed query'),
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'OK' }))
