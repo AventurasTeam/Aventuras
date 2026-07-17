@@ -19,6 +19,7 @@ import { useTier } from '@/hooks/use-tier'
 import {
   clearSystemEntry,
   getRollbackCounts,
+  loadOpenStory,
   PER_TURN_KIND,
   redoLastAction,
   rollbackToEntry,
@@ -35,6 +36,8 @@ import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
 import { awaitRunTerminal, pipelineEventBus, type PipelineError } from '@/lib/pipeline'
 import { createAutoscrollMachine } from '@/lib/reader-scroll'
 import {
+  currentStoryStore,
+  entitiesStore,
   entriesStore,
   generationStore,
   isUserEditBlocked,
@@ -84,6 +87,15 @@ export default function ReaderComposerRoute() {
   const isGenerating = generationStore.useGeneration((s) =>
     [...s.txState.runs.values()].some((r) => r.branchId === branchId),
   )
+
+  const open = currentStoryStore.useCurrentStory((s) => s)
+  const leadEntityId = open?.definition.leadEntityId ?? null
+  const leadName = entitiesStore.useEntities((m) =>
+    leadEntityId ? (m.get(leadEntityId)?.name ?? '') : '',
+  )
+  const modesEnabled =
+    open?.settings.composerModesEnabled === true && open?.definition.mode === 'adventure'
+  const wrapPov = open?.settings.composerWrapPov ?? 'first'
 
   // Buffer instance lives in a ref (mutable, not render state); the safe output
   // it computes on each push drives the re-render via streamingContent.
@@ -209,6 +221,14 @@ export default function ReaderComposerRoute() {
   useEffect(() => {
     if (entriesStore.getLoadedBranch() !== branchId) void reload()
   }, [branchId, reload])
+
+  // Deep-link / hard-refresh lands here without going through openStory; populate
+  // the working set + parsed story if it's stale for this branch.
+  useEffect(() => {
+    if (currentStoryStore.getCurrentStory()?.branchId !== branchId) {
+      void loadOpenStory(branchId, ctx)
+    }
+  }, [branchId])
 
   const storyRows = storiesStore.useStories((s) => s.rows)
   useEffect(() => {
@@ -427,19 +447,11 @@ export default function ReaderComposerRoute() {
           </View>
           <View className="border-t border-border p-3">
             <Composer
-              // modesEnabled should AND stories.settings.composerModesEnabled with
-              // adventure-mode once story settings are readable here.
-              modesEnabled
+              modesEnabled={modesEnabled}
               isGenerating={isGenerating}
               disabled={editBlocked}
               onSend={(rawText, mode) => {
-                // pov / leadName come from stories.settings / stories.definition
-                // once readable here; interim first-person defaults.
-                const wrapped = wrapComposerText(rawText, {
-                  mode,
-                  pov: 'first',
-                  leadName: 'You',
-                })
+                const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
                 void runSubmit(wrapped, mode)
               }}
               onCancel={() => void awaitRunTerminal(PER_TURN_KIND, 'cancel')}
