@@ -7,6 +7,7 @@ import {
   entitiesStore,
   generationStore,
   navigationStore,
+  recoveryReportStore,
   resetAllStores,
   storiesStore,
   type RunState,
@@ -47,6 +48,12 @@ describe('lib/stores public surface', () => {
     expect(typeof storiesStore.clearOpenFailure).toBe('function')
   })
 
+  it('exposes the recovery-report mutators', () => {
+    expect(typeof recoveryReportStore.publish).toBe('function')
+    expect(typeof recoveryReportStore.claim).toBe('function')
+    expect(typeof recoveryReportStore.acknowledge).toBe('function')
+  })
+
   it('resetAllStores clears every store', () => {
     const run: RunState = {
       runId: 'r1',
@@ -80,12 +87,28 @@ describe('lib/stores public surface', () => {
     generationStore.startRun(run)
     navigationStore.setCurrentStory('s1')
     entitiesStore.hydrate('br_1', [entity])
+    recoveryReportStore.publish({
+      reversed: [
+        {
+          runId: 'r1',
+          kind: 'per-turn',
+          actionId: 'a1',
+          storyId: 's1',
+          deltas: 1,
+        },
+      ],
+      failures: [],
+    })
 
     resetAllStores()
 
     expect(generationStore.getTxState().runs.size).toBe(0)
     expect(navigationStore.getNavigation().currentStoryId).toBeNull()
     expect(entitiesStore.getEntities().size).toBe(0)
+    expect(recoveryReportStore.getSnapshot()).toEqual({
+      pendingRecoveryReport: null,
+      activeRecoveryReport: null,
+    })
     const settings = appSettingsStore.getAppSettings()
     expect(settings.providers).toEqual([])
     expect(settings.profiles).toEqual([])

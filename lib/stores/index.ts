@@ -16,6 +16,7 @@ import { navigationStore } from './navigation/navigation'
 import { rehydrateStories, storiesStore } from './stories/stories'
 import { threadsStore } from './threads/threads'
 import { translationsStore } from './translations/translations'
+import { recoveryReportStore } from './ui/recovery-report'
 import { undoRedoStore } from './ui/undo-redo'
 import { wizardStore } from './wizard/wizard'
 
@@ -38,6 +39,7 @@ export function resetAllStores(): void {
   translationsStore.__reset()
   navigationStore.__reset()
   appSettingsStore.__reset()
+  recoveryReportStore.__reset()
   undoRedoStore.clear()
   wizardStore.reset()
 }
@@ -59,6 +61,7 @@ export {
   loreStore,
   navigationStore,
   readAppSettingsRow,
+  recoveryReportStore,
   rehydrateAppSettings,
   rehydrateStories,
   storiesStore,
@@ -78,6 +81,7 @@ export { isUserEditBlocked } from './generation/generation'
 export type { RunState, TxState } from './generation/generation'
 export type { NavigationSnapshot } from './navigation/navigation'
 export type { OpenFailure, OpenFailureKind, StoriesSnapshot } from './stories/stories'
+export type { RecoveryReportSnapshot } from './ui/recovery-report'
 export type { StoryCardData } from './stories/view-model'
 export type { StoryFilter, StoryListQuery, StorySort } from './stories/selectors'
 export { selectStoryCards } from './stories/selectors'

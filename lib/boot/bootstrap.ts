@@ -12,6 +12,7 @@ import {
   type BootHydrateResult,
   hydrateAppSettings,
   readAppSettingsRow,
+  recoveryReportStore,
 } from '@/lib/stores'
 
 // __DEV__ force-on folds into isEnabled so dev captures the recovery pass; both
@@ -43,7 +44,8 @@ export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
   // Recovery must never block boot: a failure of the orphan pass itself (not just
   // a per-orphan delta) is logged and boot proceeds to hydrate.
   try {
-    await recoverInFlightRuns(ctx)
+    const report = await recoverInFlightRuns(ctx)
+    if (report.reversed.length > 0) recoveryReportStore.publish(report)
   } catch (err) {
     logger.error('bootstrap.recovery_failed', {
       error: err instanceof Error ? err.message : String(err),

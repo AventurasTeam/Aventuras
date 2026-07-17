@@ -14,7 +14,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { __resetDiagnosticsGate } from '@/lib/diagnostics'
-import { appSettingsStore, resetAllStores } from '@/lib/stores'
+import { appSettingsStore, recoveryReportStore, resetAllStores } from '@/lib/stores'
 
 import { runBootstrap } from './bootstrap'
 
@@ -79,6 +79,7 @@ describe('runBootstrap', () => {
     await runBootstrap(ctx)
     const rows = await ctx.db.select().from(pipelineRuns).where(eq(pipelineRuns.runId, 'r1'))
     expect(rows).toHaveLength(0)
+    expect(recoveryReportStore.getSnapshot().pendingRecoveryReport).toBeNull()
   })
 
   it('recovery failure does not block boot (still hydrates)', async () => {
@@ -86,6 +87,41 @@ describe('runBootstrap', () => {
     ctx.sqlite.exec('DROP TABLE pipeline_runs')
     const r = await runBootstrap(ctx)
     expect(r).toEqual({ status: 'ok' })
+    expect(recoveryReportStore.getSnapshot().pendingRecoveryReport).toBeNull()
+  })
+
+  it('a per-orphan reversal failure does not block boot or publish a report', async () => {
+    await seedRow()
+    await ctx.db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await ctx.db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    await ctx.db.insert(pipelineRuns).values({
+      runId: 'r-failed',
+      kind: 'per-turn',
+      actionId: 'a-failed',
+      storyId: 's1',
+      startedAt: 1,
+      finishedAt: null,
+      outcome: null,
+    })
+    await ctx.db.insert(deltas).values({
+      id: 'd-failed',
+      branchId: 'b1',
+      entryId: null,
+      actionId: 'a-failed',
+      logPosition: 1,
+      source: 'ai_classifier',
+      targetTable: 'not_registered' as never,
+      targetId: 'missing',
+      op: 'create',
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: 1,
+    })
+
+    const r = await runBootstrap(ctx)
+
+    expect(r).toEqual({ status: 'ok' })
+    expect(recoveryReportStore.getSnapshot().pendingRecoveryReport).toBeNull()
   })
 
   // Guards the load-bearing registerAllDomains()-before-recovery order. Simulate a
@@ -138,5 +174,8 @@ describe('runBootstrap', () => {
     )
     const [run] = await ctx.db.select().from(pipelineRuns).where(eq(pipelineRuns.runId, 'r1'))
     expect(run.outcome).toBe('recovered')
+    expect(recoveryReportStore.getSnapshot().pendingRecoveryReport?.reversed).toMatchObject([
+      { runId: 'r1', storyId: 's1', deltas: 1 },
+    ])
   })
 })
