@@ -3,10 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { callWithRetry, getModel, ProviderTimeoutError } from '@/lib/ai'
 import { type StubScenario } from '@/lib/ai/stub/scenarios'
-import {
-  resetTemporaryProvidersForTests,
-  setTemporaryProvidersForTests,
-} from '@/lib/ai/stub/temporary-registry'
+import { resetTestProviders, setTestProviders } from '@/lib/ai/stub/test-provider-registry'
 import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
 import {
   definePipeline,
@@ -93,10 +90,10 @@ function recoverableCount(): number {
 describe('stub fault scenarios', () => {
   beforeEach(() => {
     resetSingletons()
-    setTemporaryProvidersForTests([STUB])
+    setTestProviders([STUB])
   })
   afterEach(() => {
-    resetTemporaryProvidersForTests()
+    resetTestProviders()
     resetSingletons()
   })
 

@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getModel } from './model'
 import {
-  findTemporaryProvider,
-  resetTemporaryProvidersForTests,
-  setTemporaryProvidersForTests,
-} from './stub/temporary-registry'
+  findTestProvider,
+  resetTestProviders,
+  setTestProviders,
+} from './stub/test-provider-registry'
 
 const sink = vi.hoisted(() => ({
   beginCall: vi.fn(() => 'call-1'),
@@ -29,7 +29,7 @@ vi.mock('@/lib/stores', () => ({
 describe('getModel', () => {
   beforeEach(() => {
     appSettings.providers = []
-    resetTemporaryProvidersForTests()
+    resetTestProviders()
     sink.beginCall.mockClear()
     sink.completeCall.mockClear()
     sink.failCall.mockClear()
@@ -38,7 +38,7 @@ describe('getModel', () => {
   })
 
   it('publishes provider secrets to diagnostics redaction', () => {
-    setTemporaryProvidersForTests([
+    setTestProviders([
       {
         id: 'anthropic-test',
         type: 'anthropic',
@@ -59,14 +59,14 @@ describe('getModel', () => {
       'sk-ant-secret',
       'sk-openai-secret',
     ])
-    expect(findTemporaryProvider('anthropic-test')).toMatchObject({
+    expect(findTestProvider('anthropic-test')).toMatchObject({
       id: 'anthropic-test',
       type: 'anthropic',
     })
   })
 
   it('returns an Anthropic language model with provider and modelId fields', () => {
-    setTemporaryProvidersForTests([
+    setTestProviders([
       {
         id: 'anthropic-test',
         type: 'anthropic',
@@ -108,7 +108,7 @@ describe('getModel', () => {
   })
 
   it('throws a clear error when the provider type is unsupported', () => {
-    setTemporaryProvidersForTests([
+    setTestProviders([
       {
         id: 'openai-test',
         type: 'openai',
@@ -147,7 +147,7 @@ describe('getModel', () => {
       ),
     )
 
-    setTemporaryProvidersForTests([
+    setTestProviders([
       {
         id: 'anthropic-test',
         type: 'anthropic',

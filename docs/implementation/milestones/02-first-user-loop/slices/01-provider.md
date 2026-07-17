@@ -24,7 +24,7 @@ a shipped helper).
 
 M1.4 shipped the provider abstraction as a stub:
 `lib/ai/model.ts` resolves only an explicit `providerId` +
-`modelId` through the `findTemporaryProvider` dev seam, and the
+`modelId` through the `findTestProvider` dev seam, and the
 fetch wrapper already routes through `httpCallSink` with
 value-matching redaction. M1.5 landed the full `app_settings`
 config Zod (providers, profiles, assignments, capability flags)
@@ -68,9 +68,11 @@ definition of done requires a _user_ to complete the loop and the
 - **Resolution chain.** `resolveModel(agentId | 'narrative')`
   walking story-override → assignment → profile → provider per
   C3 in [the milestone doc](../milestone.md#c3--model-resolution-surface);
-  typed failure per missing link. Replaces the
-  `findTemporaryProvider` call in `lib/ai/model.ts` (the seam
-  itself is removed in [Slice 2.7](./07-wiring.md)).
+  typed failure per missing link. Supersedes the
+  `findTestProvider` call in `lib/ai/model.ts` as the production
+  resolution surface ([Slice 2.7](./07-wiring.md) removes the
+  runtime stub registration but retains the call as the
+  test-injection seam).
 - **Provider-config mutators** in the action layer
   (settings-style writes, not delta-logged): add / update an
   OAI-compat provider instance, create / update profiles

@@ -11,16 +11,16 @@ function syncProviderSecrets(): void {
   setHttpCallKnownSecretValues([...configuredKeys, ...stubKeys])
 }
 
-export function findTemporaryProvider(providerId: string): ProviderInstanceWithStub | undefined {
+export function findTestProvider(providerId: string): ProviderInstanceWithStub | undefined {
   return providers.find((provider) => provider.id === providerId)
 }
 
-export function setTemporaryProvidersForTests(nextProviders: ProviderInstanceWithStub[]): void {
+export function setTestProviders(nextProviders: ProviderInstanceWithStub[]): void {
   providers = [...nextProviders]
   syncProviderSecrets()
 }
 
-export function resetTemporaryProvidersForTests(): void {
+export function resetTestProviders(): void {
   providers = []
   syncProviderSecrets()
 }

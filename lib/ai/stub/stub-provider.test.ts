@@ -2,10 +2,7 @@ import { generateText } from 'ai'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { getModel } from '../model'
-import {
-  resetTemporaryProvidersForTests,
-  setTemporaryProvidersForTests,
-} from './temporary-registry'
+import { resetTestProviders, setTestProviders } from './test-provider-registry'
 
 const stub = {
   id: 'stub-1',
@@ -17,19 +14,19 @@ const stub = {
 
 describe('stub provider', () => {
   afterEach(() => {
-    resetTemporaryProvidersForTests()
+    resetTestProviders()
     vi.unstubAllGlobals()
   })
 
   it('happy scenario routes through the captured fetch and returns the canned reply', async () => {
-    setTemporaryProvidersForTests([stub])
+    setTestProviders([stub])
     const { text } = await generateText({ model: getModel('stub-1', 'happy'), prompt: 'go' })
     expect(text).toBe('{"reply":"hi"}')
   })
 
   it('rejects stub creation in production builds', () => {
     vi.stubGlobal('__DEV__', false)
-    setTemporaryProvidersForTests([stub])
+    setTestProviders([stub])
     expect(() => getModel('stub-1', 'happy')).toThrow(/production/)
   })
 })
