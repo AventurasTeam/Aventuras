@@ -150,4 +150,29 @@ describe('resetStorySettings', () => {
 
     expect(await db.select().from(stories)).toEqual([])
   })
+
+  it('retains the open failure when the stories mirror cannot refresh', async () => {
+    const { db, sqlite, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({
+      id: 'story_1',
+      title: 'Broken',
+      status: 'active',
+      definition: STORY_DEFINITION,
+      settings: buildStorySettings({ classifierCadence: 2 }, 'old-embed'),
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await hydrateCurrentDefaults()
+    storiesStore.setOpenFailure({ storyId: 'story_1', kind: 'settings-corrupt' })
+    const writeThenBreakRefresh: typeof runInTransaction = async (ops) => {
+      await runInTransaction(ops)
+      sqlite.exec('DROP TABLE stories')
+    }
+
+    await expect(
+      resetStorySettings('story_1', { db, runInTransaction: writeThenBreakRefresh }, 99),
+    ).resolves.toBeUndefined()
+
+    expect(storiesStore.getStories().openFailures.story_1).toBe('settings-corrupt')
+  })
 })

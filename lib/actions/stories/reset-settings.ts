@@ -27,6 +27,6 @@ export async function resetStorySettings(
       .where(eq(stories.id, storyId))
       .toSQL(),
   ])
-  await rehydrateStories(ctx.db)
-  storiesStore.clearOpenFailure(storyId)
+  const refreshed = await rehydrateStories(ctx.db)
+  if (refreshed) storiesStore.clearOpenFailure(storyId)
 }

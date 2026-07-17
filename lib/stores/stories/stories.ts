@@ -49,14 +49,16 @@ type Db = BaseSQLiteDatabase<'async' | 'sync', unknown, typeof dbSchema>
 
 /** Re-read story rows from the caller-supplied DB and apply them — keeps the store a pure function
  *  of SQLite. Takes `db` so a write and its re-hydrate hit the same instance (test isolation). */
-export async function rehydrateStories(db: Db): Promise<void> {
+export async function rehydrateStories(db: Db): Promise<boolean> {
   try {
     store.getState().apply(await db.select().from(stories))
+    return true
   } catch (err) {
     // A transient read failure keeps the current store (the write already committed).
     logger.error('bootstrap.stories_hydrate_failed', {
       error: err instanceof Error ? err.message : String(err),
     })
+    return false
   }
 }
 
