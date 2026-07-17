@@ -24,6 +24,7 @@ export function CrashRecoveryModalHost() {
         if (!cancelled) setStoryNames(names)
       })
       .catch((error: unknown) => {
+        if (cancelled) return
         logger.warn('bootstrap.recovery_story_names_failed', {
           error: error instanceof Error ? error.message : String(error),
         })

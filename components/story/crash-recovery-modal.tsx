@@ -1,3 +1,6 @@
+import { useRef, type ComponentRef } from 'react'
+import { Platform } from 'react-native'
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,9 +29,20 @@ export function CrashRecoveryModal({
   storyNames,
   onAcknowledge,
 }: CrashRecoveryModalProps) {
+  const okActionRef = useRef<ComponentRef<typeof AlertDialogAction>>(null)
+
   return (
     <AlertDialog open={open} onOpenChange={() => undefined}>
-      <AlertDialogContent>
+      <AlertDialogContent
+        onOpenAutoFocus={
+          Platform.OS === 'web'
+            ? (event) => {
+                event.preventDefault()
+                okActionRef.current?.focus()
+              }
+            : undefined
+        }
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{t('crashRecovery.title')}</AlertDialogTitle>
           <AlertDialogDescription>
@@ -36,7 +50,7 @@ export function CrashRecoveryModal({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogAction asChild>
+          <AlertDialogAction ref={okActionRef} asChild>
             <Button onPress={onAcknowledge}>
               <Text>{t('crashRecovery.ok')}</Text>
             </Button>

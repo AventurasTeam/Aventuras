@@ -1,9 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { expect, fn, screen, userEvent } from 'storybook/test'
+import { StrictMode, useEffect, useState } from 'react'
+import { expect, fn, screen, spyOn, userEvent, waitFor } from 'storybook/test'
 
+import { logger } from '@/lib/diagnostics'
 import type { RecoveryReport } from '@/lib/pipeline'
+import { recoveryReportStore } from '@/lib/stores'
 
 import { CrashRecoveryModal } from './crash-recovery-modal'
+import { CrashRecoveryModalHost } from './crash-recovery-modal-host'
 
 const singleReport: RecoveryReport = {
   reversed: [
@@ -45,6 +49,12 @@ const meta: Meta<typeof CrashRecoveryModal> = {
 export default meta
 type Story = StoryObj<typeof meta>
 
+function StrictModeReplayHost() {
+  const [mountKey, setMountKey] = useState(0)
+  useEffect(() => setMountKey(1), [])
+  return <CrashRecoveryModalHost key={mountKey} />
+}
+
 export const NamedPerTurn: Story = {
   args: {
     report: singleReport,
@@ -52,7 +62,9 @@ export const NamedPerTurn: Story = {
   },
   play: async ({ args }) => {
     expect(screen.getByText(/detected in Mornstone/)).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'OK' }))
+    const ok = screen.getByRole('button', { name: 'OK' })
+    expect(ok).toHaveFocus()
+    await userEvent.click(ok)
     expect(args.onAcknowledge).toHaveBeenCalledTimes(1)
   },
 }
@@ -76,5 +88,49 @@ export const MissingStoryName: Story = {
   play: async () => {
     const description = screen.getByText(/An interrupted shutdown was detected\./)
     expect(description.textContent?.startsWith('An interrupted shutdown was detected.')).toBe(true)
+  },
+}
+
+export const HostStrictModeLifecycle: Story = {
+  args: {
+    report: singleReport,
+    storyNames: {},
+  },
+  beforeEach: () => {
+    recoveryReportStore.__reset()
+    recoveryReportStore.publish(singleReport)
+    const warnSpy = spyOn(logger, 'warn')
+    const claimSpy = spyOn(recoveryReportStore, 'claim')
+    return () => {
+      warnSpy.mockRestore()
+      claimSpy.mockRestore()
+      recoveryReportStore.__reset()
+    }
+  },
+  render: () => (
+    <StrictMode>
+      <StrictModeReplayHost />
+    </StrictMode>
+  ),
+  play: async () => {
+    const copy =
+      'An interrupted shutdown was detected. Your last AI response was reverted to keep the story consistent.'
+    const notice = await screen.findByText(copy)
+
+    expect(screen.getAllByText(copy)).toHaveLength(1)
+    expect(recoveryReportStore.claim).toHaveBeenCalledTimes(3)
+    expect(recoveryReportStore.getSnapshot().activeRecoveryReport).toBe(singleReport)
+    await waitFor(() => {
+      expect(logger.warn).toHaveBeenCalledTimes(1)
+    })
+    expect(logger.warn).toHaveBeenCalledWith('bootstrap.recovery_story_names_failed', {
+      error:
+        'Failed query: select "id", "title" from "stories" where "stories"."id" in (?)\nparams: s1',
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }))
+
+    expect(recoveryReportStore.getSnapshot().activeRecoveryReport).toBeNull()
+    expect(notice).not.toBeInTheDocument()
   },
 }
