@@ -99,6 +99,12 @@ describe('lib/stores public surface', () => {
       ],
       failures: [],
     })
+    const claimedReport = recoveryReportStore.claim()
+    expect(claimedReport).not.toBeNull()
+    expect(recoveryReportStore.getSnapshot()).toEqual({
+      pendingRecoveryReport: null,
+      activeRecoveryReport: claimedReport,
+    })
 
     resetAllStores()
 
