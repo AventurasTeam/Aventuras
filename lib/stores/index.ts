@@ -2,6 +2,7 @@ import { appSettingsStore, hydrateAppSettings } from './app-settings/app-setting
 import { readAppSettingsRow, rehydrateAppSettings } from './app-settings/app-settings-read'
 import { chaptersStore } from './chapters/chapters'
 import { characterRelationshipsStore } from './character-relationships/character-relationships'
+import { currentStoryStore } from './current-story/current-story'
 import { entitiesStore } from './entities/entities'
 import { entriesStore } from './entries/entries'
 import { entryAssetsStore } from './entry-assets/entry-assets'
@@ -22,6 +23,7 @@ import { wizardStore } from './wizard/wizard'
 export function resetAllStores(): void {
   chaptersStore.__reset()
   characterRelationshipsStore.__reset()
+  currentStoryStore.__reset()
   entitiesStore.__reset()
   entriesStore.__reset()
   entryAssetsStore.__reset()
@@ -44,6 +46,7 @@ export {
   appSettingsStore,
   chaptersStore,
   characterRelationshipsStore,
+  currentStoryStore,
   entitiesStore,
   entriesStore,
   entryAssetsStore,
@@ -69,6 +72,7 @@ export { createWorkingSetStore } from './factory/working-set-store'
 
 export type { AppSettingsSnapshot, BootHydrateResult } from './app-settings/app-settings'
 export type { RelationshipView } from './character-relationships/character-relationships'
+export type { OpenStory } from './current-story/current-story'
 export type { WorkingSetStore } from './factory/working-set-store'
 export { isUserEditBlocked } from './generation/generation'
 export type { RunState, TxState } from './generation/generation'
