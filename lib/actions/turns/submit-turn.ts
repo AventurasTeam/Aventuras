@@ -1,6 +1,6 @@
-import { eq, sql } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 
-import { storyEntries } from '@/lib/db'
+import { storyEntries, type EntryMetadata } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { runPipeline, type RunCtx } from '@/lib/pipeline'
 import { undoRedoStore } from '@/lib/stores'
@@ -50,12 +50,19 @@ export async function submitTurn(
     // Queued per-branch so a second submit can't read the same MAX before the
     // first one's insert lands.
     const [tail] = await ctx.db
-      .select({ next: sql<number>`COALESCE(MAX(${storyEntries.position}), 0) + 1` })
+      .select({ position: storyEntries.position, metadata: storyEntries.metadata })
       .from(storyEntries)
       .where(eq(storyEntries.branchId, ids.branchId))
-    const position = tail?.next ?? 1
+      .orderBy(desc(storyEntries.position))
+      .limit(1)
+    const position = (tail?.position ?? 0) + 1
     const entryId = generateId('entry')
     const createdAt = Date.now()
+    const metadata: EntryMetadata = {
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: tail?.metadata?.worldTime ?? 0,
+    }
 
     const result = await applyDeltaAction(
       {
@@ -70,7 +77,7 @@ export async function submitTurn(
               kind: 'user_action',
               content: meta.content,
               chapterId: null,
-              metadata: null,
+              metadata,
               createdAt,
             },
           },

@@ -176,6 +176,44 @@ describe('submitTurn', () => {
     expect(typeof reply?.metadata?.model).toBe('string')
   })
 
+  it('inherits worldTime from the tail entry onto the user_action, and the ai_reply inherits it too', async () => {
+    const { ctx } = await makeHarness()
+    const opening: StoryEntry = {
+      id: 'seed-opening',
+      branchId: 'b1',
+      position: 1,
+      kind: 'opening',
+      content: 'The keep looms over the valley.',
+      chapterId: null,
+      metadata: { sceneEntities: [], currentLocationId: null, worldTime: 5 },
+      createdAt: 1,
+    }
+    await ctx.db.insert(storyEntries).values(opening)
+    openStory('s1', 'b1')
+    entriesStore.hydrate('b1', [opening])
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    await submitTurn(
+      { storyId: 's1', branchId: 'b1' },
+      { content: 'I look around.', composerMode: 'do' },
+      ctx,
+    )
+
+    const [ua] = await ctx.db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.kind, 'user_action')))
+    expect(ua?.metadata?.worldTime).toBe(5)
+    expect(ua?.metadata?.sceneEntities).toEqual([])
+    expect(ua?.metadata?.currentLocationId).toBeNull()
+
+    const [reply] = await ctx.db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.kind, 'ai_reply')))
+    expect(reply?.metadata?.worldTime).toBe(5)
+  })
+
   it('positions the new user action at MAX(position)+1, not the store row count', async () => {
     const { ctx } = await makeHarness()
     // Non-contiguous tail: gaps mean the store's row count (4) is LOWER than the
