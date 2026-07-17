@@ -18,7 +18,13 @@ import {
   storiesStore,
 } from '@/lib/stores'
 
-import { openStory, setStoryArchived, setStoryFavorite, touchStoryOpened } from './operational'
+import {
+  loadOpenStory,
+  openStory,
+  setStoryArchived,
+  setStoryFavorite,
+  touchStoryOpened,
+} from './operational'
 
 // openStory now runs loadOpenStory (Slice 2.7 Task 7) before navigating, which
 // requires a config that parses — story_1 needs a valid definition/settings so
@@ -62,7 +68,7 @@ const STORY_SETTINGS = storySettingsSchema.parse({
 })
 
 async function setup() {
-  const { db, runInTransaction } = await createTestDb()
+  const { db, sqlite, runInTransaction } = await createTestDb()
   await db.insert(stories).values({
     id: 'story_1',
     title: 'Aria',
@@ -88,7 +94,7 @@ async function setup() {
   currentStoryStore.__reset()
   entriesStore.__reset()
   entitiesStore.__reset()
-  return { db, ctx: { db, runInTransaction } }
+  return { db, sqlite, ctx: { db, runInTransaction } }
 }
 
 describe('stories column writes', () => {
@@ -143,6 +149,26 @@ describe('stories column writes', () => {
     const result = await openStory('story_1', failingCtx, navigate, 999)
     expect(result).toEqual({ status: 'ok', branchId: 'br_1' })
     expect(navigate).toHaveBeenCalledWith('br_1')
+  })
+
+  it('loadOpenStory publishes no working-set state when the entity query fails', async () => {
+    const { ctx, sqlite } = await setup()
+    entriesStore.hydrate('old_branch', [])
+    entitiesStore.hydrate('old_branch', [])
+    const previousOpen = {
+      storyId: 'old_story',
+      branchId: 'old_branch',
+      definition: STORY_DEFINITION,
+      settings: STORY_SETTINGS,
+    }
+    currentStoryStore.set(previousOpen)
+    sqlite.exec('DROP TABLE entities')
+
+    await expect(loadOpenStory('br_1', ctx)).rejects.toThrow()
+
+    expect(entriesStore.getLoadedBranch()).toBe('old_branch')
+    expect(entitiesStore.getLoadedBranch()).toBe('old_branch')
+    expect(currentStoryStore.getCurrentStory()).toEqual(previousOpen)
   })
 
   it('openStory does not navigate when the config is corrupt; badges the story', async () => {

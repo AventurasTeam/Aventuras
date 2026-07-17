@@ -27,6 +27,7 @@ import {
   undoLastAction,
   updateStoryEntryContent,
   writeSystemEntry,
+  type LoadOpenStoryResult,
   type RollbackCounts,
 } from '@/lib/actions'
 import { wrapComposerText } from '@/lib/composer-wrap'
@@ -51,6 +52,14 @@ const ctx = { db, runInTransaction }
 type RollbackState = { targetId: string; targetNumber: number; counts: RollbackCounts }
 type StreamingRow = { id: string; kind: 'streaming'; content: string }
 type WindowRow = StoryEntry | StreamingRow
+type BranchHydrationState =
+  | { branchId: string; status: 'loading' }
+  | {
+      branchId: string
+      status: 'success'
+      result: Extract<LoadOpenStoryResult, { status: 'ok' }>
+    }
+  | { branchId: string; status: 'failure'; result: LoadOpenStoryResult | null }
 
 const RECENT_WINDOW_SIZE = 50
 const JUMP_TO_BOTTOM_SETTLE_MS = 500
@@ -89,13 +98,23 @@ export default function ReaderComposerRoute() {
   )
 
   const open = currentStoryStore.useCurrentStory((s) => s)
-  const leadEntityId = open?.definition.leadEntityId ?? null
+  const [hydration, setHydration] = useState<BranchHydrationState>({
+    branchId,
+    status: 'loading',
+  })
+  const hydrationIsCurrent = hydration.branchId === branchId
+  const hydrationSucceeded =
+    hydrationIsCurrent && hydration.status === 'success' && hydration.result.branchId === branchId
+  const hydrationFailed = hydrationIsCurrent && hydration.status === 'failure'
+  const openForBranch = hydrationSucceeded && open?.branchId === branchId ? open : null
+  const leadEntityId = openForBranch?.definition.leadEntityId ?? null
   const leadName = entitiesStore.useEntities((m) =>
     leadEntityId ? (m.get(leadEntityId)?.name ?? '') : '',
   )
   const modesEnabled =
-    open?.settings.composerModesEnabled === true && open?.definition.mode === 'adventure'
-  const wrapPov = open?.settings.composerWrapPov ?? 'first'
+    openForBranch?.settings.composerModesEnabled === true &&
+    openForBranch.definition.mode === 'adventure'
+  const wrapPov = openForBranch?.settings.composerWrapPov ?? 'first'
 
   // Buffer instance lives in a ref (mutable, not render state); the safe output
   // it computes on each push drives the re-render via streamingContent.
@@ -219,14 +238,32 @@ export default function ReaderComposerRoute() {
   }, [branchId])
 
   useEffect(() => {
-    if (entriesStore.getLoadedBranch() !== branchId) void reload()
-  }, [branchId, reload])
+    let cancelled = false
+    const current = currentStoryStore.getCurrentStory()
+    if (current?.branchId === branchId) {
+      setHydration({
+        branchId,
+        status: 'success',
+        result: { status: 'ok', storyId: current.storyId, branchId },
+      })
+      return
+    }
 
-  // Deep-link / hard-refresh lands here without going through openStory; populate
-  // the working set + parsed story if it's stale for this branch.
-  useEffect(() => {
-    if (currentStoryStore.getCurrentStory()?.branchId !== branchId) {
-      void loadOpenStory(branchId, ctx)
+    setHydration({ branchId, status: 'loading' })
+    void loadOpenStory(branchId, ctx)
+      .then((result) => {
+        if (cancelled) return
+        if (result.status === 'ok' && result.branchId === branchId) {
+          setHydration({ branchId, status: 'success', result })
+        } else {
+          setHydration({ branchId, status: 'failure', result })
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setHydration({ branchId, status: 'failure', result: null })
+      })
+    return () => {
+      cancelled = true
     }
   }, [branchId])
 
@@ -250,7 +287,7 @@ export default function ReaderComposerRoute() {
 
   const runSubmit = useCallback(
     async (content: string, composerMode: string) => {
-      if (!storyId) return
+      if (!storyId || !hydrationSucceeded) return
       setLastError(undefined)
       // A prior failure leaves a system entry as the branch tail; drop it (and
       // resync the store) before the turn so the pipeline's prompt/position
@@ -278,7 +315,7 @@ export default function ReaderComposerRoute() {
         })
       }
     },
-    [storyId, branchId, reload, showTurnFailure],
+    [storyId, branchId, hydrationSucceeded, reload, showTurnFailure],
   )
 
   // fixAction (config-resolver fixes) has no EntryCard slot in the M2 subset;
@@ -408,7 +445,18 @@ export default function ReaderComposerRoute() {
       <View className="flex-1 flex-row">
         <View className="flex-1">
           <View className="flex-1">
-            {entries.length === 0 ? (
+            {hydrationFailed ? (
+              <View className="flex-1 items-center justify-center">
+                <EmptyState
+                  title={t('reader:hydrationFailedTitle')}
+                  subtext={t('reader:hydrationFailedBody')}
+                />
+              </View>
+            ) : !hydrationSucceeded ? (
+              <View className="flex-1 items-center justify-center">
+                <EmptyState title={t('reader:hydrationLoading')} />
+              </View>
+            ) : entries.length === 0 ? (
               <View className="flex-1 items-center justify-center">
                 <EmptyState title={t('reader:emptyTitle')} subtext={t('reader:emptyBody')} />
               </View>
@@ -449,7 +497,14 @@ export default function ReaderComposerRoute() {
             <Composer
               modesEnabled={modesEnabled}
               isGenerating={isGenerating}
-              disabled={editBlocked}
+              disabled={editBlocked || !hydrationSucceeded}
+              disabledReason={
+                hydrationFailed
+                  ? t('reader:hydrationFailedBody')
+                  : !hydrationSucceeded
+                    ? t('reader:hydrationLoading')
+                    : undefined
+              }
               onSend={(rawText, mode) => {
                 const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
                 void runSubmit(wrapped, mode)

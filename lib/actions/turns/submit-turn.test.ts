@@ -144,6 +144,7 @@ describe('submitTurn', () => {
     expect(pipeline.phases).toHaveLength(2)
     expect(pipeline.affordance).toBe('pill-and-banner')
     expect(pipeline.gateBehavior).toBe('hard-gate')
+    expect(pipeline.concurrencyPolicy.blockedBy).toEqual([PER_TURN_KIND, 'chapter-close'])
   })
 
   it('completes a turn: persists the user action and the streamed AI reply', async () => {

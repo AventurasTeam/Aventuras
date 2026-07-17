@@ -167,15 +167,19 @@ single-open-chapter degenerate case: the last
 
 ## Open questions
 
-Both resolved during Slice 2.7 planning / implementation — see
-Implementation notes.
-
-- **`user_action` create location + abort-before-stream semantics** —
-  resolved: write stays in the submit action before `runPipeline`;
-  abort is reverse-all.
-- **Per-turn context-builder hygiene** (surfaced by Slice 2.6) —
-  resolved: variable names + id substitution implemented; the
-  whitespace-`blank` premise turned out false (see notes).
+- Whether the `user_action` entry create lives inside phase 0 of
+  the run or in the submit action before `runPipeline` — both
+  satisfy the `actionId` grouping contract; pick at planning
+  against how abort-before-stream should treat the user's text
+  (keep vs reverse).
+- **Per-turn context-builder hygiene** (surfaced by Slice 2.6). The
+  builder must emit the `generationContext` variable names pinned in
+  `lib/prompts`'s `templateContextMap.ts` (a mismatch only fails at
+  integration); normalize empty or whitespace-only definitional
+  fields, since LiquidJS `!= blank` treats whitespace as non-empty
+  and would leak an otherwise-guarded section header; and guard
+  array contents passed to the `prose_join` / `json` filters, which
+  stringify `null` / `undefined` literally.
 
 ## Implementation notes
 

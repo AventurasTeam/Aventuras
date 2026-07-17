@@ -117,11 +117,10 @@ export async function loadOpenStory(branchId: string, ctx: DbCtx): Promise<LoadO
     .where(eq(storyEntries.branchId, branchId))
     .orderBy(desc(storyEntries.position))
     .limit(OPEN_WINDOW_SIZE)) as StoryEntry[]
-  entriesStore.hydrate(branchId, entryRows.reverse())
-
   const entityRows = await ctx.db.select().from(entities).where(eq(entities.branchId, branchId))
-  entitiesStore.hydrate(branchId, entityRows)
 
+  entriesStore.hydrate(branchId, entryRows.reverse())
+  entitiesStore.hydrate(branchId, entityRows)
   currentStoryStore.set({ storyId: row.storyId, branchId, definition, settings })
   return { status: 'ok', storyId: row.storyId, branchId }
 }

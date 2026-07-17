@@ -24,7 +24,7 @@ a shipped helper).
 
 M1.4 shipped the provider abstraction as a stub:
 `lib/ai/model.ts` resolves only an explicit `providerId` +
-`modelId` through the `findTestProvider` dev seam, and the
+`modelId` through the `findTemporaryProvider` dev seam, and the
 fetch wrapper already routes through `httpCallSink` with
 value-matching redaction. M1.5 landed the full `app_settings`
 config Zod (providers, profiles, assignments, capability flags)
@@ -68,11 +68,9 @@ definition of done requires a _user_ to complete the loop and the
 - **Resolution chain.** `resolveModel(agentId | 'narrative')`
   walking story-override → assignment → profile → provider per
   C3 in [the milestone doc](../milestone.md#c3--model-resolution-surface);
-  typed failure per missing link. Supersedes the
-  `findTestProvider` call in `lib/ai/model.ts` as the production
-  resolution surface ([Slice 2.7](./07-wiring.md) removes the
-  runtime stub registration but retains the call as the
-  test-injection seam).
+  typed failure per missing link. Replaces the
+  `findTemporaryProvider` call in `lib/ai/model.ts` (the seam
+  itself is removed in [Slice 2.7](./07-wiring.md)).
 - **Provider-config mutators** in the action layer
   (settings-style writes, not delta-logged): add / update an
   OAI-compat provider instance, create / update profiles
@@ -203,8 +201,11 @@ fetch }` endpoints; the choice is invisible above `lib/ai`. The interim
 defaultProviderId, storyModels }` explicitly (no store read), so 2.9
   pre-flight calls it per agent and 2.7 builds the store adapter at the
   call site. `getModel` does read `appSettingsStore` to resolve a real
-  provider instance, with the temporary stub registry as a fallback until
-  [Slice 2.7](./07-wiring.md) removes the smoke seam.
+  provider instance, then falls back to the empty-in-production
+  `findTestProvider(providerId)` test seam. The `modelId` remains a separate
+  `getModel` argument passed to the provider factory; the test registry does
+  not resolve it. [Slice 2.7](./07-wiring.md) removed runtime stub
+  registration but intentionally retained this injection seam.
 - **Configured provider keys are registered into the `httpCallSink`
   redaction comparator at `app_settings` hydrate.** The M1 redaction was
   fed only by the stub registry, so a real OAI-compat call would have

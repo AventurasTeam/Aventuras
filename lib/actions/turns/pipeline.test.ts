@@ -129,6 +129,26 @@ describe('per-turn pipeline declaration', () => {
     expect(getModelMock).toHaveBeenCalledWith(provider.id, 'story-model', 'act_1')
   })
 
+  it('rejects an open story from a different story on the same branch', async () => {
+    currentStoryStore.set({
+      storyId: 's2',
+      branchId: 'b1',
+      definition,
+      settings: { partialChapterBuffer: 3, models: {} } as never,
+    })
+
+    const result = await runNarrativePhase()
+
+    expect(result).toEqual({
+      done: true,
+      value: {
+        status: 'failed',
+        error: { kind: 'orchestrator', detail: 'per-turn: no open story for branch' },
+      },
+    })
+    expect(getModelMock).not.toHaveBeenCalled()
+  })
+
   it('maps narrative profile parameters to SDK stream options', async () => {
     currentStoryStore.set({
       storyId: 's1',

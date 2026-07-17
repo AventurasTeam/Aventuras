@@ -18,9 +18,9 @@ import { buildPerTurnGenerationContext } from './context'
 export const PER_TURN_KIND = 'per-turn'
 
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
-  const { branchId } = ctx
+  const { branchId, storyId } = ctx
   const open = currentStoryStore.getCurrentStory()
-  if (!open || open.branchId !== branchId)
+  if (!open || open.branchId !== branchId || open.storyId !== storyId)
     return {
       status: 'failed',
       error: { kind: 'orchestrator', detail: 'per-turn: no open story for branch' },
