@@ -125,6 +125,9 @@ async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx)
       throw new ActionLayerError(e instanceof Error ? e.message : String(e))
     }
     if (result.status === 'rejected') throw new ActionRejectedError(result.reason)
+    if (event.action.kind === 'createStoryEntry' && event.entryId) {
+      turnCaptureSink.recordTargetEntry(run.actionId, event.entryId)
+    }
   } else if (event.type === 'recoverable_error') {
     logger.warn(
       'pipeline.recoverable_error',
@@ -155,6 +158,8 @@ function phaseContextOf(run: RunState, ctx: RunCtx): PhaseContext {
     intermediates: run.intermediates,
     log: makeLogger(run.actionId),
     db: ctx.db,
+    storyId: run.storyId,
+    branchId: run.branchId,
   }
 }
 

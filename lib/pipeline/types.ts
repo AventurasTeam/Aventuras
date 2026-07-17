@@ -56,6 +56,10 @@ export type PhaseContext = {
   // The run's db handle, so a phase can resolve tail positions (MAX(position)+1)
   // against committed rows rather than a possibly-gappy in-memory store.
   db: DbCtx['db']
+  // Run identity, so a per-turn phase can read the open story / branch stores
+  // without the generationStore self-lookup the interim narrative phase used.
+  storyId: string | null
+  branchId: string
 }
 
 export type PhaseFn = (ctx: PhaseContext) => AsyncGenerator<PhaseEmittedEvent, PhaseResult>
