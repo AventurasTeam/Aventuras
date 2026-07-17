@@ -61,11 +61,11 @@ describe('formatRecoveryReport', () => {
   it('joins multiple recovered runs into one paragraph', () => {
     expect(
       formatRecoveryReport(
-        report(recovered('per-turn', 'story_1'), recovered('periodic-classifier', 'story_1')),
+        report(recovered('per-turn', 'story_1'), recovered('periodic-classifier', null)),
         { story_1: 'Mornstone' },
       ),
     ).toBe(
-      'An interrupted shutdown was detected in Mornstone. Your last AI response was reverted to keep the story consistent. An interrupted shutdown was detected in Mornstone. A background memory update was reverted; your story content is intact.',
+      'An interrupted shutdown was detected in Mornstone. Your last AI response was reverted to keep the story consistent. An interrupted shutdown was detected. A background memory update was reverted; your story content is intact.',
     )
   })
 
