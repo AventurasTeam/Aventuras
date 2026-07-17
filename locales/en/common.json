@@ -7,6 +7,18 @@
     "resetSettings": "Reset settings",
     "resetWarning": "Resetting erases your saved providers and API keys. Your stories are not affected."
   },
+  "crashRecovery": {
+    "title": "Story recovered",
+    "ok": "OK",
+    "perTurnNamed": "An interrupted shutdown was detected in {{storyName}}. Your last AI response was reverted to keep the story consistent.",
+    "perTurnUnnamed": "An interrupted shutdown was detected. Your last AI response was reverted to keep the story consistent.",
+    "chapterCloseNamed": "An interrupted shutdown was detected in {{storyName}}. The chapter-close pass was reverted; your story content is intact.",
+    "chapterCloseUnnamed": "An interrupted shutdown was detected. The chapter-close pass was reverted; your story content is intact.",
+    "periodicClassifierNamed": "An interrupted shutdown was detected in {{storyName}}. A background memory update was reverted; your story content is intact.",
+    "periodicClassifierUnnamed": "An interrupted shutdown was detected. A background memory update was reverted; your story content is intact.",
+    "genericNamed": "An interrupted shutdown was detected in {{storyName}}. An incomplete background update was reverted to keep the story consistent.",
+    "genericUnnamed": "An interrupted shutdown was detected. An incomplete background update was reverted to keep the story consistent."
+  },
   "chrome": {
     "appSettings": "App Settings",
     "storySettings": "Story Settings",
