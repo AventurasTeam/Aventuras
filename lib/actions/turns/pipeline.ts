@@ -1,8 +1,8 @@
 import { eq, sql } from 'drizzle-orm'
 
 import { getModel, resolveModel, streamProviderCall } from '@/lib/ai'
-import { storyEntries } from '@/lib/db'
-import { generateId } from '@/lib/ids'
+import { storyEntries, type EntryMetadata } from '@/lib/db'
+import { generateId, IdBiMap } from '@/lib/ids'
 import {
   definePipeline,
   getPipeline,
@@ -10,26 +10,37 @@ import {
   type PhaseEmittedEvent,
   type PhaseResult,
 } from '@/lib/pipeline'
-import { appSettingsStore, entriesStore, generationStore } from '@/lib/stores'
+import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
+import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
+
+import { buildPerTurnGenerationContext } from './context'
 
 export const PER_TURN_KIND = 'per-turn'
 
-// Interim: one phase, real provider, streamed reply. No memory / classifier
-// piggyback, no per-turn buffer/template yet — later work can swap this
-// phase's internals without touching submitTurn's call site.
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
-  // PhaseContext carries no branchId; the run's own record is the only place it
-  // lives at phase time (same lookup shape as orchestrator.ts awaitRunTerminal).
-  const run = [...generationStore.getTxState().runs.values()].find(
-    (r) => r.actionId === ctx.actionId,
-  )
-  if (!run) throw new Error('per-turn phase: no matching run in generationStore')
-  const { branchId } = run
+  const { branchId } = ctx
+  const open = currentStoryStore.getCurrentStory()
+  if (!open || open.branchId !== branchId)
+    return {
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'per-turn: no open story for branch' },
+    }
 
   const entries = [...entriesStore.getEntries().values()]
     .filter((e) => e.branchId === branchId)
     .sort((a, b) => a.position - b.position)
-  const prompt = entries.at(-1)?.content ?? ''
+  const entities = [...entitiesStore.getEntities().values()].filter((e) => e.branchId === branchId)
+
+  const idMap = new IdBiMap()
+  ctx.intermediates.idMap = idMap
+  const context = buildPerTurnGenerationContext({
+    entries,
+    entities,
+    definition: open.definition,
+    settings: open.settings,
+    idMap,
+  })
+  const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, context)
 
   const cfg = appSettingsStore.getAppSettings()
   const resolved = resolveModel('narrative', {
@@ -38,9 +49,6 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     assignments: cfg.assignments,
     defaultProviderId: cfg.defaultProviderId,
   })
-  // Preflight (the phase's `resolves` declaration) halts before this phase on a
-  // broken resolver, so a failure here only covers a resolver-time race the
-  // preflight snapshot missed — surface it as a phase failure, don't fabricate.
   if (!resolved.ok)
     return {
       status: 'failed',
@@ -54,9 +62,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
 
   const entryId = generateId('entry')
   const model = getModel(resolved.providerId, resolved.modelId, ctx.actionId)
-  // streamText (ai@6) does NOT throw from textStream on a network/connection
-  // failure — it terminates the iteration silently and surfaces the error only
-  // through onError. Capture it there and gate the commit on it.
+  const startedAt = Date.now()
   let streamError: unknown
   const stream = streamProviderCall({
     model,
@@ -76,8 +82,6 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     streamError = e
   }
   if (streamError !== undefined) {
-    // A cancel (abort) rides the same error path; classify it as an abort, not a
-    // provider failure, so CTRL-Z semantics stay distinct from a real fault.
     if (ctx.abortSignal.aborted) return { status: 'aborted' }
     return {
       status: 'failed',
@@ -89,7 +93,31 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     }
   }
 
-  const [tail] = await ctx.db
+  // Provenance is best-effort — every field below is optional on EntryMetadata,
+  // so a provider that omits usage/reasoning simply yields undefined.
+  const usage = await Promise.resolve(stream.usage).catch(() => undefined)
+  const reasoningText = await Promise.resolve(stream.reasoningText).catch(() => undefined)
+  const tail = entries.at(-1)
+  const worldTime = tail?.metadata?.worldTime ?? 0
+  const metadata: EntryMetadata = {
+    ...(usage
+      ? {
+          tokens: {
+            prompt: usage.inputTokens ?? 0,
+            completion: usage.outputTokens ?? 0,
+            ...(usage.reasoningTokens != null ? { reasoning: usage.reasoningTokens } : {}),
+          },
+        }
+      : {}),
+    model: resolved.modelId,
+    generationTimingMs: Date.now() - startedAt,
+    ...(reasoningText ? { reasoning: reasoningText } : {}),
+    sceneEntities: [],
+    currentLocationId: null,
+    worldTime,
+  }
+
+  const [next] = await ctx.db
     .select({ next: sql<number>`COALESCE(MAX(${storyEntries.position}), 0) + 1` })
     .from(storyEntries)
     .where(eq(storyEntries.branchId, branchId))
@@ -104,9 +132,11 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         entry: {
           id: entryId,
           branchId,
-          position: tail?.next ?? 1,
+          position: next?.next ?? 1,
           kind: 'ai_reply',
           content,
+          chapterId: null,
+          metadata,
           createdAt: Date.now(),
         },
       },
