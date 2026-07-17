@@ -164,3 +164,41 @@ doc-amendment before Slice 2.5.
   asset sha256 content-addressing): point the shim at `expo-crypto`'s `randomUUID`
   — one file, one native dep, a dev-client rebuild. Cross-cutting, no single slice
   owner.
+- **Per-turn turn-capture stamping is not kind-gated.** `orchestrator.handleEvent`
+  calls `turnCaptureSink.recordTargetEntry` on any `createStoryEntry` delta. Correct
+  while `per-turn` is the only registered pipeline kind, but `recordTargetEntry` sets
+  `anchorEntryId`+`targetEntryId` with per-turn semantics; a future `chapter-close`
+  (M5.2) or other kind that emits a `createStoryEntry` delta would mis-stamp its run's
+  anchor. Gate on `run.kind === 'per-turn'` (or "beginTurn set no anchor") when the
+  second such kind lands. Surfaced by Slice 2.7.
+- **`submitTurn` tail read + the M2 metadata placeholder shape.** (a) `submit-turn.ts`'s
+  tail read has no `kind` filter: an un-cleared `system`-error tail (metadata null) would
+  reset the inherited `worldTime` to 0 (position unaffected). Only reachable via a second
+  `submitTurn` caller — the sole caller (the reader) clears the system tail before submit.
+  Harden (worldTime from the last non-system entry; position from overall MAX) before a
+  second caller lands. (b) The `{ sceneEntities: [], currentLocationId: null, worldTime }`
+  placeholder is now hand-built in both `submit-turn.ts` (user_action) and `pipeline.ts`
+  (ai_reply); extract a shared helper when M3's classifier fills real scene/location
+  values. Surfaced by Slice 2.7.
+- **Buffer-size floor + entries-hydrate-window duplication.** (a)
+  `buildPerTurnGenerationContext`'s `slice(-partialChapterBuffer)` returns the whole
+  buffer when the value is 0 (`slice(-0)`); no M2 path sets 0, but the story-settings UI
+  edits this field later — add a `>= 1` floor (schema `.min(1)` or a guard) when that UI
+  ships. (b) The last-50-desc-then-reverse entries-hydrate window is duplicated across
+  `loadOpenStory` and the reader's `reload()` with an independent `50` under two constant
+  names; a shared `lib/actions/story-entries` helper removes the drift risk. Surfaced by
+  Slice 2.7.
+- **`narrativePhase` store-consistency defense-in-depth.** The phase guards
+  `currentStoryStore.branchId === ctx.branchId` but reads the entry buffer + worldTime tail
+  from the separate `entriesStore` (whose `loadedBranch` it never asserts). Not reachable
+  in M2 (both stores track the single mounted branch; the branch-guarded patcher never
+  moves `loadedBranch`), but a future multi-branch/background path could desync them into a
+  silent degenerate prompt. Assert `entriesStore.getLoadedBranch() === ctx.branchId`, or
+  read the buffer from `ctx.db`. Surfaced by Slice 2.7.
+- **Corrupt-config story open has no interim user feedback (pre-2.10).** `openStory` now
+  returns a resolved `{ status: 'open-failed' }` on a config parse failure, which
+  `runAction`'s rejection-only toast can't surface — so a corrupt-config tap is silent
+  except the `logger.error` + the `openFailures` store write.
+  [Slice 2.10](./milestones/02-first-user-loop/slices/10-recovery-ui.md) owns the
+  parse-failure badge that renders this; confirm 2.10 also covers the tap-with-no-feedback
+  interim (or accept silent-until-badge). Surfaced by Slice 2.7.

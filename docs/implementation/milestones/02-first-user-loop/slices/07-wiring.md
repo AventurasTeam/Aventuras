@@ -167,20 +167,51 @@ single-open-chapter degenerate case: the last
 
 ## Open questions
 
-- Whether the `user_action` entry create lives inside phase 0 of
-  the run or in the submit action before `runPipeline` — both
-  satisfy the `actionId` grouping contract; pick at planning
-  against how abort-before-stream should treat the user's text
-  (keep vs reverse).
-- **Per-turn context-builder hygiene** (surfaced by Slice 2.6). The
-  builder must emit the `generationContext` variable names pinned in
-  `lib/prompts`'s `templateContextMap.ts` (a mismatch only fails at
-  integration); normalize empty or whitespace-only definitional
-  fields, since LiquidJS `!= blank` treats whitespace as non-empty
-  and would leak an otherwise-guarded section header; and guard
-  array contents passed to the `prose_join` / `json` filters, which
-  stringify `null` / `undefined` literally.
+Both resolved during Slice 2.7 planning / implementation — see
+Implementation notes.
+
+- **`user_action` create location + abort-before-stream semantics** —
+  resolved: write stays in the submit action before `runPipeline`;
+  abort is reverse-all.
+- **Per-turn context-builder hygiene** (surfaced by Slice 2.6) —
+  resolved: variable names + id substitution implemented; the
+  whitespace-`blank` premise turned out false (see notes).
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+Resolved developer decisions and notable deviations from the brief.
+
+- **Abort semantics.** The `user_action` write stays in `submitTurn`
+  before `runPipeline` (not phase 0); a config/preflight or provider
+  failure reverses the `user_action` with the failed run (reverse-all),
+  same as mid-stream cancel. In-session recovery is the reader's
+  `lastSubmission` Retry. This resolves the `followups.md`
+  "Abort-before-stream keep-vs-reverse" entry.
+- **Reader definitional consumption.** Full-wired the composer's
+  `composerModesEnabled` (settings ∧ adventure-mode), `pov`
+  (`composerWrapPov`), and `leadName` (lead entity) from the parsed
+  open story, replacing the 2.5 first-person hardcodes.
+- **Context-builder hygiene / LiquidJS `blank`.** The builder emits the
+  pinned `templateContextMap` variable names and substitutes entity ids
+  pre-render. The Open-question premise that LiquidJS `!= blank` leaks
+  whitespace-only headers is **empirically false** for liquidjs 10.27
+  (`blank` already matches `/^\s*$/`); the whitespace normalization is
+  kept only as defense-in-depth (robust to a custom pack using `!= ""`).
+  Worth dropping + correcting the premise in a future pass.
+- **Streaming / retry deviation.** The narrative call streams via
+  `streamProviderCall` and maps a mid-stream error straight to a fatal
+  phase return — **not** wrapped in `callWithRetry` (buffered-only), per
+  [`generation-pipeline.md → Streaming resilience — thin v1`](../../../../generation-pipeline.md#streaming-resilience--thin-v1).
+  The `commitStreamingEntry` name in the brief does not exist; 2.5's
+  `stream_chunk` + `createStoryEntry` commit satisfies the placeholder /
+  commit contract.
+- **`PerTurnContext` realization.** The per-kind `inputs`/`story`/
+  `settings` fields land as `storyId`/`branchId` on the generic
+  `PhaseContext` plus store-reads of the parsed story
+  (`currentStoryStore`); `inputs` is deferred (YAGNI — no M2 phase reads
+  the raw user action separately).
+- **Open-failure surfacing.** `OpenStoryResult` widened with
+  `open-failed`; the story-list badge that renders it is
+  [Slice 2.10](./10-recovery-ui.md).
+- Deferred hardening from the task reviews is queued in
+  [`triage.md`](../../../triage.md) under the Slice 2.7 entries.
