@@ -1,3 +1,5 @@
+import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import { DeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { branches, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { clearBuffers, configureDiagnosticsGate } from '@/lib/diagnostics'
@@ -8,6 +10,7 @@ import {
   type RunCtx,
   type TxResult,
 } from '@/lib/pipeline'
+import { configureDeltaActionPort } from '@/lib/pipeline/runtime/action-port'
 import { resetAllStores } from '@/lib/stores'
 
 // Narrows runPipeline's union for the single-run tests that never hit a blocked start.
@@ -33,4 +36,9 @@ export function resetSingletons(): void {
   resetAllStores()
   clearBuffers()
   configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+  configureDeltaActionPort({
+    applyDeltaAction,
+    reverseReplayDeltas,
+    describeReplayError: (e) => (e instanceof DeltaReplayError ? String(e.cause) : undefined),
+  })
 }

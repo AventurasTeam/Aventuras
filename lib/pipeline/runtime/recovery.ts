@@ -1,8 +1,9 @@
 import { asc, eq, isNull } from 'drizzle-orm'
 
-import { reverseReplayDeltas, type DbCtx } from '@/lib/actions'
-import { pipelineRuns } from '@/lib/db'
+import { pipelineRuns, type DbCtx } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+
+import { reverseReplayDeltas } from './action-port'
 
 export type RecoveredRun = {
   runId: string

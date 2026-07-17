@@ -3,6 +3,7 @@ export { applyDeltaAction } from './delta/apply-delta-action'
 export { applyUndoPayload, computeUndoPayload } from './delta/delta-encoding'
 export { __resetRegistrationGuard, registerAllDomains } from './delta/registrations'
 export { __resetRegistry, type StorePatch } from './delta/registry'
+export { type RedoSnapshot } from './delta/redo'
 export { DeltaReplayError, reverseReplayDeltas } from './delta/reverse-replay'
 export {
   addProvider,
@@ -33,7 +34,10 @@ export {
   type StoryEntryRejection,
 } from './story-entries/operational'
 export { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './story-entries/register'
+export { redoLastAction, undoLastAction, type UndoResult } from './story-entries/undo'
 export { clearSystemEntry, writeSystemEntry } from './story-entries/system-entry'
+export { PER_TURN_KIND } from './turns/pipeline'
+export { submitTurn, type SubmitTurnMeta } from './turns/submit-turn'
 export type { DbCtx, DeltaSource, MutationResult, PipelineAction } from './types'
 export {
   clearLiveSession,

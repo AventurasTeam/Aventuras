@@ -15,6 +15,7 @@ import { navigationStore } from './navigation/navigation'
 import { rehydrateStories, storiesStore } from './stories/stories'
 import { threadsStore } from './threads/threads'
 import { translationsStore } from './translations/translations'
+import { undoRedoStore } from './ui/undo-redo'
 import { wizardStore } from './wizard/wizard'
 
 // Test-harness seam: resets every domain store in one call
@@ -35,6 +36,7 @@ export function resetAllStores(): void {
   translationsStore.__reset()
   navigationStore.__reset()
   appSettingsStore.__reset()
+  undoRedoStore.clear()
   wizardStore.reset()
 }
 
@@ -59,6 +61,7 @@ export {
   storiesStore,
   threadsStore,
   translationsStore,
+  undoRedoStore,
   wizardStore,
 }
 

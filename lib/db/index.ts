@@ -151,7 +151,7 @@ export type {
   WizardSession,
 } from './types'
 export { runInTransaction } from './runtime/transaction'
-export type { SqlOp } from './types'
+export type { DbCtx, SqlOp } from './types'
 export { useDbMigrations } from './runtime/use-db-migrations'
 export { emptyWorkingState, wizardWorkingStateSchema } from './wizard-sessions/working-state'
 export type { WizardWorkingState } from './wizard-sessions/working-state'

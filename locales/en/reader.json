@@ -4,5 +4,35 @@
   "emptyBody": "Your story will begin here.",
   "composerPlaceholder": "Write your next turn…",
   "send": "Send",
-  "railPlaceholder": "World-state browse"
+  "railPlaceholder": "World-state browse",
+  "jumpToBottom": "Jump to bottom",
+  "composerMode": {
+    "do": "Do",
+    "say": "Say",
+    "think": "Think",
+    "free": "Free"
+  },
+  "editFailed": "Couldn't save your edit. Please try again.",
+  "rollbackFailed": "Couldn't roll back the story. Please try again.",
+  "spellcheckSuggestion": "→ {{text}}",
+  "rollbackConfirm": {
+    "title": "Delete from entry {{entryNumber}}?",
+    "body": "This rolls the story back to before entry {{entryNumber}}. The following are removed:",
+    "entries": "{{count}} entry",
+    "entries_other": "{{count}} entries",
+    "chapters": "{{count}} chapter re-opened",
+    "chapters_other": "{{count}} chapters re-opened",
+    "worldState": "{{count}} world-state change",
+    "worldState_other": "{{count}} world-state changes",
+    "confirm": "Delete entries"
+  },
+  "systemEntry": {
+    "retry": "Retry",
+    "viewDetails": "View details",
+    "dismiss": "Dismiss",
+    "assignProfile": "Assign profile",
+    "fixProfile": "Fix profile",
+    "fixDefault": "Fix default",
+    "failureMessage": "Generation failed. Retry to try again."
+  }
 }

@@ -92,13 +92,15 @@ chapter management (M5), branch picker (M6).
 
 - **Entry window:** single contiguous ~50-entry window over the
   hydrated entries store; auto-load older / forward on boundary
-  approach with shimmer; window swap on jump; per-branch scroll
-  position memory; `@tanstack/react-virtual` (web) + `FlatList`
-  with `maintainVisibleContentPosition` (native); the web
-  prepend / height-change anchor compensation.
+  approach with shimmer; `@tanstack/react-virtual` (web) +
+  `FlatList` with `maintainVisibleContentPosition` (native); the
+  web prepend / height-change anchor compensation. No window swap
+  or per-branch scroll-position memory — jump-to-top is out (see
+  [reader-composer.md → Jump buttons](../../../../ui/screens/reader-composer/reader-composer.md#jump-buttons)),
+  so the window never disconnects from the live edge.
 - **Autoscroll state machine** (engage / disengage / re-engage,
-  per-stream) and **jump buttons** (visibility rules, swap vs
-  smooth paths, `Home` / `End`, Actions-menu entries).
+  per-stream) and a **jump-to-bottom button** (visibility rule,
+  smooth scroll, `End` key, Actions-menu entry).
 - **Composer:** textarea (Harper.js wired, user-toggleable;
   install lands here per tech-stack), mode picker
   (`Do / Say / Think / Free` — adventure + `composerModesEnabled`
@@ -155,10 +157,11 @@ chapter management (M5), branch picker (M6).
   ~50 loaded; scrolling near top prepends the next chunk with no
   visible jump on web and native (manual matrix, both
   platforms, backed by the compensation-math unit test below);
-  jump-to-top swaps windows and restores position on return;
-  autoscroll engages at-bottom (~80 px tolerance per the spec),
-  disengages on user upscroll mid-stream, re-engages when the
-  user returns within the same tolerance.
+  jump-to-bottom appears once scrolled away from the live edge and
+  smooth-scrolls back on click; autoscroll engages at-bottom
+  (~80 px tolerance per the spec), disengages on user upscroll
+  mid-stream, re-engages when the user returns within the same
+  tolerance.
 - Composer wrap matrix: `Do` / `Say` / `Think` × `first` /
   `third` produce the principle doc's exact shapes; `Free` and
   creative mode send verbatim; the wrapped text is what lands in
@@ -200,14 +203,117 @@ chapter management (M5), branch picker (M6).
 
 ## Open questions
 
-- Whether the web prepend compensation lives in a reusable
-  `NarrativeStream` component or stays reader-local — the
-  component-inventory deferral lands here; decide once the
-  second consumer's needs are visible (chapter timeline, M5.3).
-- Harper.js bundle-size impact on the Android dev client —
-  measure at install; tech-stack flags WASM weight as
-  composer-only by design.
+- Harper.js bundle-size impact on the Android dev client — still
+  unmeasured (no Android build ran during this slice's
+  implementation); measure before the milestone closes. Tech-stack
+  flags WASM weight as composer-only by design.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **Web prepend compensation stays reader-local.** `EntryWindow`
+  (`components/reader/entry-window.tsx`) is not extracted into a
+  shared `NarrativeStream` component — resolves this slice's own
+  open question. Revisit only when a second consumer appears
+  (chapter timeline, M5.3).
+- **`computePrependCompensation`'s `paddingTopPx` is unused in
+  practice.** `@tanstack/react-virtual`'s track height
+  (`getTotalSize()`) already grows synchronously with row count on
+  prepend, so applying additional top padding on top of that
+  double-counts the shift for one frame. `EntryWindow`'s web branch
+  applies only `scrollTopDeltaPx`; the padding field survives in
+  `lib/reader-scroll/prepend-compensation.ts`'s return shape but has
+  no live caller. Left as-is (that module isn't this slice's file to
+  unilaterally re-shape) — worth a follow-up doc/type cleanup if a
+  second caller never materializes.
+- **`submitTurn` delta-logs the `user_action` write, sharing one
+  `actionId` with the pipeline run.** The milestone's C6 contract
+  ("the pipeline kick under one turn `actionId`") wasn't satisfiable
+  with `runPipeline`'s original signature (no caller-supplied
+  `actionId`), so `RunCtx` gained an optional `actionId?: string`
+  field (additive, `lib/pipeline/runtime/orchestrator.ts`) that
+  `submitTurn` populates. This also fixed a real bug: the original
+  interim design wrote `user_action` via a raw insert, bypassing the
+  delta log entirely, so CTRL-Z could only reverse the `ai_reply`
+  and orphaned the user's entry. `lib/undo`'s `selectUndoTarget` was
+  corrected in the same pass to anchor a turn at its **earliest**
+  `story_entries` create (not the first one encountered in the
+  DESC-ordered log), since a turn's action-id group can now
+  legitimately contain two creates.
+- **Abort-before-stream now reverses the user's typed turn as a side
+  effect of the actionId-sharing above** (a preflight failure, e.g.
+  no narrative profile resolves, removes the `user_action` entry
+  along with the failed generation — not just mid-stream cancel).
+  Whether that's the intended UX for this specific case is
+  [Slice 2.7](./07-wiring.md)'s own open question already (its
+  Open questions section lists abort-before-stream keep-vs-reverse
+  as unresolved); this slice's implementation forces "reverse" as
+  the interim default because the shared-actionId requirement is
+  unconditional. Also logged in
+  [`followups.md`](../../../../followups.md).
+- **The interim per-turn pipeline lives in `lib/actions/turns/`**
+  (`pipeline.ts` + `submit-turn.ts`), not inside
+  `components/reader/`. A phase has no direct access to
+  `branchId`/`storyId` (`PhaseContext` carries only
+  `actionId`/`abortSignal`/`intermediates`/`log`), so the phase
+  looks up its own run via
+  `generationStore.getTxState().runs` filtered by `actionId` — the
+  same lookup shape already used internally by
+  `lib/pipeline/runtime/orchestrator.ts`'s `awaitRunTerminal`. Slice
+  2.7 replaces this phase's internals (full per-turn declaration,
+  buffer composition, real provider wiring) without changing
+  `submitTurn`'s call site.
+- **`EntryCard` now renders markdown as sanitized HTML, closing the
+  gap above.** A local `NarrativeContent` helper inside
+  `entry-card.tsx` calls `renderNarrativeHtml` and platform-splits
+  the render tail (`dangerouslySetInnerHTML` on web,
+  `react-native-render-html` on native), applied uniformly to every
+  entry kind and the reasoning body — `EntryCard`'s public API is
+  unchanged (`content: string` in, no new prop). `lib/markdown`
+  gained one additive export (`native.ts`'s `narrativeTagsStyles`/
+  `narrativeCustomHTMLElementModels` re-exported from the module's
+  root, per the `lib/*` public-API rule). `global.css` gained a
+  `.narrative-html` typography block mirroring `native.ts`'s values
+  for cross-platform parity.
+- **Jump-to-top was cut; jump-to-bottom is the only jump affordance
+  now.** A developer decision, not an implementation shortcut — the
+  design exploration that introduced jump-to-top
+  (`docs/explorations/2026-04-30-reader-scroll-polish.md`) already
+  treated it as the weaker, opt-in case (shipped off by default);
+  jump-to-bottom is the near-universal chat-app affordance. This
+  removes the App Settings toggle, the `Home` key, the Actions-menu
+  "Jump to top of branch" entry, and — since the window can no
+  longer disconnect from the live edge — the whole window-swap /
+  per-window-scroll-position-memory machinery
+  [`reader-composer.md`](../../../../ui/screens/reader-composer/reader-composer.md#loaded-set-model)
+  once described.
+- **Jump-to-bottom and autoscroll are now functionally wired, and
+  real pagination replaced the "load the whole branch" interim.**
+  `EntryWindow` gained a `forwardRef`-based imperative
+  `scrollToBottom(opts?: {smooth?})` handle plus a continuous
+  `onScrollPositionChange({distanceFromBottomPx})` callback
+  (`onNearBottomChange` replaces the old fire-once `onNearBottom`,
+  now firing on both threshold-crossing directions since jump-button
+  visibility needs to know when the user leaves near-bottom, not
+  just enters it). The route feeds that signal directly into the
+  already-built `lib/reader-scroll/autoscroll.ts` state machine.
+  `reload()` now fetches only the last ~50 entries
+  (`ORDER BY position DESC LIMIT 50`, reversed) instead of the whole
+  branch; a new `loadOlderEntries()` fetches older chunks on
+  scroll-near-top via a cursor query (`position < min-loaded`) and
+  patches rows into `entriesStore` in a loop, reusing the store's
+  existing `patch()` primitive rather than touching
+  `createWorkingSetStore` (shared by 9 other domain stores — out of
+  scope for this slice). No sliding-window eviction: the loaded set
+  simply grows: virtualization keeps DOM cost flat regardless of
+  in-memory row count, which is fine at this milestone's scale.
+  A subtlety worth remembering: a jump-to-bottom click's smooth-scroll
+  animation reports several intermediate, non-zero
+  `distanceFromBottomPx` values before settling, so "re-engage
+  autoscroll on jump" needed a short (500ms) time-bounded pending
+  window rather than a plain one-shot flag — an unbounded flag would
+  wrongly force-engage a much-later, unrelated stream if the user
+  scrolled away in between.
+- **Composer wrap POV/lead name are hardcoded** (`pov: 'first'`,
+  `leadName: 'You'`) since no story-settings/definition read path
+  exists in this route yet; swap for real `stories.settings`/
+  `stories.definition` values once a settings-read surface lands.

@@ -573,3 +573,29 @@
 *::-webkit-scrollbar-thumb:hover {
   background-color: var(--fg-secondary);
 }
+
+/* Narrative markdown render — mirrors lib/markdown/native.ts's
+ * narrativeTagsStyles for cross-platform parity (docs/tech-stack.md ->
+ * Markdown rendering + HTML sanitization).
+ */
+@layer components {
+  .narrative-html p {
+    margin-top: 4px;
+    margin-bottom: 4px;
+  }
+  .narrative-html blockquote {
+    border-left-width: 2px;
+    border-left-color: var(--border);
+    padding-left: 8px;
+    font-style: italic;
+  }
+  .narrative-html code {
+    font-family: var(--font-mono);
+  }
+  .narrative-html em {
+    font-style: italic;
+  }
+  .narrative-html strong {
+    font-weight: var(--font-weight-bold);
+  }
+}

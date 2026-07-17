@@ -1,13 +1,7 @@
 import { eq } from 'drizzle-orm'
 
-import {
-  DeltaReplayError,
-  applyDeltaAction,
-  reverseReplayDeltas,
-  type DbCtx,
-  type MutationResult,
-} from '@/lib/actions'
-import { pipelineRuns } from '@/lib/db'
+import type { MutationResult } from '@/lib/actions/types'
+import { pipelineRuns, type DbCtx } from '@/lib/db'
 import { logger, makeLogger, turnCaptureSink } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { appSettingsStore, generationStore, type RunState } from '@/lib/stores'
@@ -23,6 +17,7 @@ import type {
   RejectedStart,
   TxResult,
 } from '../types'
+import { applyDeltaAction, describeReplayError, reverseReplayDeltas } from './action-port'
 import { checkConcurrencyContract } from './concurrency'
 import { pipelineEventBus } from './event-bus'
 import { runPreflight } from './preflight'
@@ -43,7 +38,7 @@ class ActionRejectedError extends ActionLayerError {
   }
 }
 
-export type RunCtx = { storyId: string | null; branchId: string } & DbCtx
+export type RunCtx = { storyId: string | null; branchId: string; actionId?: string } & DbCtx
 
 function newRunState(kind: string, ctx: RunCtx): RunState {
   let resolveTerminal!: () => void
@@ -54,7 +49,7 @@ function newRunState(kind: string, ctx: RunCtx): RunState {
     runId: generateId('run'),
     kind,
     gateBehavior: getPipeline(kind).gateBehavior,
-    actionId: generateId('act'),
+    actionId: ctx.actionId ?? generateId('act'),
     storyId: ctx.storyId,
     branchId: ctx.branchId,
     abortController: new AbortController(),
@@ -153,12 +148,13 @@ async function consumePhase(
   }
 }
 
-function phaseContextOf(run: RunState): PhaseContext {
+function phaseContextOf(run: RunState, ctx: RunCtx): PhaseContext {
   return {
     actionId: run.actionId,
     abortSignal: run.abortController.signal,
     intermediates: run.intermediates,
     log: makeLogger(run.actionId),
+    db: ctx.db,
   }
 }
 
@@ -170,7 +166,7 @@ async function runParallelGroup(
   const results = await Promise.all(
     branches.map(async (b) => {
       pipelineEventBus.emit({ type: 'phase_start', runId: run.runId, name: b.name })
-      const result = await consumePhase(b.run(phaseContextOf(run)), run, ctx)
+      const result = await consumePhase(b.run(phaseContextOf(run, ctx)), run, ctx)
       pipelineEventBus.emit({ type: 'phase_complete', runId: run.runId, name: b.name, result })
       if (result.status === 'failed') run.abortController.abort() // wind down siblings that poll
       return result
@@ -193,7 +189,7 @@ async function runNode(node: PhaseNode, run: RunState, ctx: RunCtx): Promise<Pha
   const result =
     'parallel' in node
       ? await runParallelGroup(node.parallel, run, ctx)
-      : await consumePhase(node.run(phaseContextOf(run)), run, ctx)
+      : await consumePhase(node.run(phaseContextOf(run, ctx)), run, ctx)
   turnCaptureSink.appendPhaseEvent(run.actionId, { phase: node.name, kind: 'exit', at: Date.now() })
   generationStore.recordPhaseResult(run.runId, node.name, result)
   pipelineEventBus.emit({ type: 'phase_complete', runId: run.runId, name: node.name, result })
@@ -276,8 +272,9 @@ async function abortRun(
   try {
     await reverseReplayDeltas(run.actionId, ctx)
   } catch (e) {
-    if (!(e instanceof DeltaReplayError)) throw e
-    error = { kind: 'orchestrator', detail: `reverse-replay failed: ${String(e.cause)}` }
+    const detail = describeReplayError(e)
+    if (detail === undefined) throw e
+    error = { kind: 'orchestrator', detail: `reverse-replay failed: ${detail}` }
     outcome = 'failed'
   }
   generationStore.abortRun(run.runId)

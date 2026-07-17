@@ -1,7 +1,8 @@
+import { and, eq } from 'drizzle-orm'
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
 import type { ZodType } from 'zod'
 
-import type { SqlOp } from '@/lib/db'
+import type { Delta, SqlOp } from '@/lib/db'
 
 import type { DbCtx, PipelineAction } from '../types'
 
@@ -34,6 +35,14 @@ export type ActionHandler = (
 ) => Promise<HandlerOutcome> | HandlerOutcome
 
 export type TableDescriptor = { table: SQLiteTable; idCol: SQLiteColumn; branchCol?: SQLiteColumn }
+
+// Shared by undo (reverse-replay.ts) and redo (redo.ts) — both target the same
+// row for a given delta and descriptor.
+export function whereForDelta(descriptor: TableDescriptor, delta: Delta) {
+  return descriptor.branchCol
+    ? and(eq(descriptor.branchCol, delta.branchId), eq(descriptor.idCol, delta.targetId))
+    : eq(descriptor.idCol, delta.targetId)
+}
 
 export type DomainRegistration = {
   table: string

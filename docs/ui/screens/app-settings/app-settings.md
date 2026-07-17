@@ -726,16 +726,6 @@ difficulties (larger tap targets) but isn't a substitute for
 proper a11y affordances; OS-level accessibility settings (text
 size, bold text, reduced motion) still apply on top.
 
-### Show jump-to-top button
-
-Boolean toggle, default **off**. Controls whether the floating
-jump-to-top affordance renders in the
-[reader's scroll chrome](../reader-composer/reader-composer.md#jump-buttons).
-The underlying functionality (`Home` keyboard shortcut, Actions menu
-entry `Jump to top of branch`) stays available regardless — the
-toggle gates the visible button only, not the capability. Pure UI
-chrome preference; app-wide; not copied per-story.
-
 ## APP · Language
 
 UI language dropdown — i18next-driven. Language tags ISO 639-1.
