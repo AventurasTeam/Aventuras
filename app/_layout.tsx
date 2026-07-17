@@ -11,6 +11,7 @@ import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-c
 import '@/lib/polyfills'
 import '@/global.css'
 import { SettingsRecoveryScreen } from '@/components/shells/settings-recovery-screen'
+import { CrashRecoveryModalHost } from '@/components/story/crash-recovery-modal-host'
 import { Toaster } from '@/components/ui/toast'
 import { useBootstrap } from '@/lib/boot'
 import { queryClient } from '@/lib/cache'
@@ -60,6 +61,7 @@ export default function RootLayout() {
                 <I18nextProvider i18n={i18n}>
                   <BottomSheetModalProvider>
                     <Stack screenOptions={{ headerShown: false }} />
+                    <CrashRecoveryModalHost />
                     <Toaster />
                     <PortalHost />
                     <DrizzleStudioDevTools />
