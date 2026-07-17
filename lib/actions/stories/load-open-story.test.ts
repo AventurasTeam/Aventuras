@@ -8,6 +8,7 @@ import {
   storySettingsSchema,
   stories,
   type StoryDefinition,
+  type StorySettings,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import {
@@ -149,6 +150,37 @@ describe('loadOpenStory', () => {
 
     expect(result).toEqual({ status: 'failed', kind: 'definition-corrupt' })
     expect(storiesStore.getStories().openFailures.story_bad).toBe('definition-corrupt')
+    expect(currentStoryStore.getCurrentStory()).toBeNull()
+    expect(entriesStore.getLoadedBranch()).toBeNull()
+    expect(entitiesStore.getLoadedBranch()).toBeNull()
+  })
+
+  it('badges the story and skips population when the settings fail to parse', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(stories).values({
+      id: 'story_bad_settings',
+      title: 'Broken settings',
+      status: 'active',
+      favorite: 0,
+      createdAt: 1,
+      updatedAt: 1,
+      currentBranchId: 'br_bad_settings',
+      definition: STORY_DEFINITION,
+      // Valid definition, but settings omits every required field — fails
+      // storySettingsSchema.parse while the definition parse succeeds.
+      settings: {} as unknown as StorySettings,
+    })
+    await db.insert(branches).values({
+      id: 'br_bad_settings',
+      storyId: 'story_bad_settings',
+      name: 'main',
+      createdAt: 1,
+    })
+
+    const result = await loadOpenStory('br_bad_settings', ctx)
+
+    expect(result).toEqual({ status: 'failed', kind: 'settings-corrupt' })
+    expect(storiesStore.getStories().openFailures.story_bad_settings).toBe('settings-corrupt')
     expect(currentStoryStore.getCurrentStory()).toBeNull()
     expect(entriesStore.getLoadedBranch()).toBeNull()
     expect(entitiesStore.getLoadedBranch()).toBeNull()

@@ -17,6 +17,7 @@ import {
   navigationStore,
   rehydrateStories,
   storiesStore,
+  type OpenFailureKind,
 } from '@/lib/stores'
 
 import type { DbCtx } from '../types'
@@ -65,12 +66,12 @@ export async function touchStoryOpened(
 export type OpenStoryResult =
   | { status: 'ok'; branchId: string }
   | { status: 'no-branch' }
-  | { status: 'open-failed'; kind: 'definition-corrupt' | 'settings-corrupt' }
+  | { status: 'open-failed'; kind: OpenFailureKind }
 
 export type LoadOpenStoryResult =
   | { status: 'ok'; storyId: string; branchId: string }
   | { status: 'no-story' }
-  | { status: 'failed'; kind: 'definition-corrupt' | 'settings-corrupt' }
+  | { status: 'failed'; kind: OpenFailureKind }
 
 // Parses the story's config JSON, hydrates the working-set stores the per-turn
 // loop reads (entries + entities), and populates currentStoryStore — the single
@@ -87,14 +88,24 @@ export async function loadOpenStory(branchId: string, ctx: DbCtx): Promise<LoadO
   let definition
   try {
     definition = storyDefinitionSchema.parse(row.definition)
-  } catch {
+  } catch (err) {
+    logger.error('action_layer.story_open_failed', {
+      storyId: row.storyId,
+      kind: 'definition-corrupt',
+      error: err instanceof Error ? err.message : String(err),
+    })
     storiesStore.setOpenFailure({ storyId: row.storyId, kind: 'definition-corrupt' })
     return { status: 'failed', kind: 'definition-corrupt' }
   }
   let settings
   try {
     settings = storySettingsSchema.parse(row.settings)
-  } catch {
+  } catch (err) {
+    logger.error('action_layer.story_open_failed', {
+      storyId: row.storyId,
+      kind: 'settings-corrupt',
+      error: err instanceof Error ? err.message : String(err),
+    })
     storiesStore.setOpenFailure({ storyId: row.storyId, kind: 'settings-corrupt' })
     return { status: 'failed', kind: 'settings-corrupt' }
   }
