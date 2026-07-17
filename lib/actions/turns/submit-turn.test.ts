@@ -131,7 +131,7 @@ describe('submitTurn', () => {
     resetSingletons()
   })
 
-  it('registers a single-phase pill-only hard-gate per-turn pipeline', async () => {
+  it('registers a two-phase pill-and-banner hard-gate per-turn pipeline', async () => {
     const { ctx } = await makeHarness()
     openStory('s1', 'b1')
     entriesStore.hydrate('b1', [])
@@ -141,8 +141,8 @@ describe('submitTurn', () => {
 
     const pipeline = getPipeline(PER_TURN_KIND)
     expect(pipeline.kind).toBe(PER_TURN_KIND)
-    expect(pipeline.phases).toHaveLength(1)
-    expect(pipeline.affordance).toBe('pill-only')
+    expect(pipeline.phases).toHaveLength(2)
+    expect(pipeline.affordance).toBe('pill-and-banner')
     expect(pipeline.gateBehavior).toBe('hard-gate')
   })
 

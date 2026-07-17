@@ -156,16 +156,35 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   return { status: 'completed' }
 }
 
+// English is the fixed source language and no translation settings UI exists
+// before M7.2, so this phase only ever takes the same-language short-circuit:
+// the user_action content is already source-language, no translation row, no
+// LLM call. The slot exists so the M8.1 real target->source call drops in here.
+async function* userActionTranslationPhase(
+  ctx: PhaseContext,
+): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
+  const open = currentStoryStore.getCurrentStory()
+  const target = open?.settings.translation.targetLanguage ?? null
+  if (target !== null && target !== 'en') {
+    // Unreachable in M2 (no UI sets a non-en target); guard so M8.1 sees the seam.
+    ctx.log.debug('translation.short_circuit_bypassed', { target })
+  }
+  return { status: 'completed' }
+}
+
 export function ensurePerTurnPipelineRegistered(): void {
   try {
     getPipeline(PER_TURN_KIND)
   } catch {
     definePipeline({
       kind: PER_TURN_KIND,
-      phases: [{ name: 'narrative', run: narrativePhase, resolves: [{ target: 'narrative' }] }],
-      affordance: 'pill-only',
+      phases: [
+        { name: 'user-action-translation', run: userActionTranslationPhase },
+        { name: 'narrative', run: narrativePhase, resolves: [{ target: 'narrative' }] },
+      ],
+      affordance: 'pill-and-banner',
       gateBehavior: 'hard-gate',
-      concurrencyPolicy: {},
+      concurrencyPolicy: { blockedBy: ['per-turn', 'chapter-close'] },
     })
   }
 }
