@@ -48,6 +48,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     profiles: cfg.profiles,
     assignments: cfg.assignments,
     defaultProviderId: cfg.defaultProviderId,
+    storyModels: open.settings.models,
   })
   // Preflight halts before this phase on a broken resolver, so a failure here only
   // covers a resolver-time race the preflight snapshot missed — surface it, don't fabricate.
@@ -64,6 +65,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
 
   const entryId = generateId('entry')
   const model = getModel(resolved.providerId, resolved.modelId, ctx.actionId)
+  const provider = cfg.providers.find((candidate) => candidate.id === resolved.providerId)
   const startedAt = Date.now()
   let streamError: unknown
   // streamText (ai@6) does NOT throw from textStream on a network/connection failure —
@@ -73,6 +75,27 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     model,
     prompt,
     abortSignal: ctx.abortSignal,
+    ...(resolved.params.temperature !== undefined
+      ? { temperature: resolved.params.temperature }
+      : {}),
+    ...(resolved.params.maxOutput !== undefined
+      ? { maxOutputTokens: resolved.params.maxOutput }
+      : {}),
+    ...(resolved.params.thinking !== undefined && provider?.type === 'anthropic'
+      ? {
+          providerOptions: {
+            anthropic: {
+              thinking:
+                resolved.params.thinking > 0
+                  ? { type: 'enabled', budgetTokens: resolved.params.thinking }
+                  : { type: 'disabled' },
+            },
+          },
+        }
+      : {}),
+    ...(resolved.params.timeout !== undefined
+      ? { timeout: { totalMs: resolved.params.timeout * 1000 } }
+      : {}),
     onError: ({ error }) => {
       streamError = error
     },
