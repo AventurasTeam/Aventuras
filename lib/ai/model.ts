@@ -11,8 +11,8 @@ function findConfiguredProvider(providerId: string): ProviderInstanceWithStub | 
 }
 
 export function getModel(providerId: string, modelId: string, actionId?: string): LanguageModel {
-  // Real configured providers win; the temporary stub registry stays a fallback
-  // until Slice 2.7 removes the smoke seam.
+  // Real configured providers resolve here; findTemporaryProvider is the
+  // test-only injection seam (setTemporaryProvidersForTests) and is empty in prod.
   const provider = findConfiguredProvider(providerId) ?? findTemporaryProvider(providerId)
 
   if (provider === undefined) {
