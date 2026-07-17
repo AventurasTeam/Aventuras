@@ -1,10 +1,27 @@
-import { eq } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 
-import { stories } from '@/lib/db'
+import {
+  branches,
+  entities,
+  storyDefinitionSchema,
+  storyEntries,
+  storySettingsSchema,
+  stories,
+  type StoryEntry,
+} from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { navigationStore, rehydrateStories } from '@/lib/stores'
+import {
+  currentStoryStore,
+  entitiesStore,
+  entriesStore,
+  navigationStore,
+  rehydrateStories,
+  storiesStore,
+} from '@/lib/stores'
 
 import type { DbCtx } from '../types'
+
+const OPEN_WINDOW_SIZE = 50
 
 export async function setStoryFavorite(id: string, favorite: boolean, ctx: DbCtx): Promise<void> {
   await ctx.runInTransaction([
@@ -45,7 +62,58 @@ export async function touchStoryOpened(
   await rehydrateStories(ctx.db)
 }
 
-export type OpenStoryResult = { status: 'ok'; branchId: string } | { status: 'no-branch' }
+export type OpenStoryResult =
+  | { status: 'ok'; branchId: string }
+  | { status: 'no-branch' }
+  | { status: 'open-failed'; kind: 'definition-corrupt' | 'settings-corrupt' }
+
+export type LoadOpenStoryResult =
+  | { status: 'ok'; storyId: string; branchId: string }
+  | { status: 'no-story' }
+  | { status: 'failed'; kind: 'definition-corrupt' | 'settings-corrupt' }
+
+// Parses the story's config JSON, hydrates the working-set stores the per-turn
+// loop reads (entries + entities), and populates currentStoryStore — the single
+// place that does all three, so any story-open path (landing, wizard finish,
+// future deep-link) gets the same guarantees a corrupt-JSON badge included.
+export async function loadOpenStory(branchId: string, ctx: DbCtx): Promise<LoadOpenStoryResult> {
+  const [row] = await ctx.db
+    .select({ storyId: stories.id, definition: stories.definition, settings: stories.settings })
+    .from(branches)
+    .innerJoin(stories, eq(stories.id, branches.storyId))
+    .where(eq(branches.id, branchId))
+  if (!row) return { status: 'no-story' }
+
+  let definition
+  try {
+    definition = storyDefinitionSchema.parse(row.definition)
+  } catch {
+    storiesStore.setOpenFailure({ storyId: row.storyId, kind: 'definition-corrupt' })
+    return { status: 'failed', kind: 'definition-corrupt' }
+  }
+  let settings
+  try {
+    settings = storySettingsSchema.parse(row.settings)
+  } catch {
+    storiesStore.setOpenFailure({ storyId: row.storyId, kind: 'settings-corrupt' })
+    return { status: 'failed', kind: 'settings-corrupt' }
+  }
+  storiesStore.clearOpenFailure(row.storyId)
+
+  const entryRows = (await ctx.db
+    .select()
+    .from(storyEntries)
+    .where(eq(storyEntries.branchId, branchId))
+    .orderBy(desc(storyEntries.position))
+    .limit(OPEN_WINDOW_SIZE)) as StoryEntry[]
+  entriesStore.hydrate(branchId, entryRows.reverse())
+
+  const entityRows = await ctx.db.select().from(entities).where(eq(entities.branchId, branchId))
+  entitiesStore.hydrate(branchId, entityRows)
+
+  currentStoryStore.set({ storyId: row.storyId, branchId, definition, settings })
+  return { status: 'ok', storyId: row.storyId, branchId }
+}
 
 export async function openStory(
   id: string,
@@ -59,6 +127,11 @@ export async function openStory(
     .where(eq(stories.id, id))
   const branchId = row?.branchId ?? null
   if (branchId == null) return { status: 'no-branch' }
+
+  const load = await loadOpenStory(branchId, ctx)
+  if (load.status === 'failed') return { status: 'open-failed', kind: load.kind }
+  if (load.status !== 'ok') return { status: 'no-branch' }
+
   navigationStore.setCurrentStory(id)
   navigationStore.setCurrentBranch(branchId)
   navigate(branchId)

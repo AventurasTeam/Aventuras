@@ -1,11 +1,58 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 
-import { branches, deltas, stories } from '@/lib/db'
+import { branches, deltas, storyDefinitionSchema, storySettingsSchema, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { navigationStore, storiesStore } from '@/lib/stores'
+import {
+  currentStoryStore,
+  entitiesStore,
+  entriesStore,
+  navigationStore,
+  storiesStore,
+} from '@/lib/stores'
 
 import { openStory, setStoryArchived, setStoryFavorite, touchStoryOpened } from './operational'
+
+// openStory now runs loadOpenStory (Slice 2.7 Task 7) before navigating, which
+// requires a config that parses — story_1 needs a valid definition/settings so
+// the existing "resolves branch, touches, navigates" behavior stays reachable.
+const STORY_DEFINITION = storyDefinitionSchema.parse({
+  mode: 'adventure',
+  leadEntityId: 'char_00000000-0000-4000-8000-000000000001',
+  narration: 'third',
+  genre: { label: 'Fantasy', promptBody: 'high fantasy' },
+  tone: { label: 'Wry', promptBody: 'wry' },
+  setting: 'A keep on a hill.',
+  calendarSystemId: 'gregorian',
+  worldTimeOrigin: { year: 0 },
+})
+const STORY_SETTINGS = storySettingsSchema.parse({
+  classifierCadence: 8,
+  piggybackMode: 'off',
+  embeddingBackend: 'local',
+  embedding_model_id: 'm',
+  retrievalBudgets: { entities: 1, lore: 1, happenings: 1, threads: 1, chapters: 1 },
+  composerModesEnabled: true,
+  composerWrapPov: 'first',
+  suggestionsEnabled: false,
+  suggestionCategories: [],
+  translation: {
+    enabled: false,
+    targetLanguage: null,
+    granularToggles: {
+      narrative: false,
+      entityNames: false,
+      entityDescriptions: false,
+      lore: false,
+      threads: false,
+      happenings: false,
+      chapterMeta: false,
+    },
+  },
+  models: {},
+  activePackId: 'pack_bundled_default',
+  packVariables: {},
+})
 
 async function setup() {
   const { db, runInTransaction } = await createTestDb()
@@ -17,6 +64,8 @@ async function setup() {
     createdAt: 1,
     updatedAt: 1,
     currentBranchId: 'br_1',
+    definition: STORY_DEFINITION,
+    settings: STORY_SETTINGS,
   })
   await db.insert(stories).values({
     id: 'draft_1',
@@ -29,6 +78,9 @@ async function setup() {
   await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
   storiesStore.__reset()
   navigationStore.__reset()
+  currentStoryStore.__reset()
+  entriesStore.__reset()
+  entitiesStore.__reset()
   return { db, ctx: { db, runInTransaction } }
 }
 
