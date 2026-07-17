@@ -49,6 +49,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     assignments: cfg.assignments,
     defaultProviderId: cfg.defaultProviderId,
   })
+  // Preflight halts before this phase on a broken resolver, so a failure here only
+  // covers a resolver-time race the preflight snapshot missed — surface it, don't fabricate.
   if (!resolved.ok)
     return {
       status: 'failed',
@@ -64,6 +66,9 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   const model = getModel(resolved.providerId, resolved.modelId, ctx.actionId)
   const startedAt = Date.now()
   let streamError: unknown
+  // streamText (ai@6) does NOT throw from textStream on a network/connection failure —
+  // it terminates iteration silently and surfaces the error only via onError. Capture it
+  // there and gate the commit on it.
   const stream = streamProviderCall({
     model,
     prompt,
@@ -82,6 +87,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     streamError = e
   }
   if (streamError !== undefined) {
+    // A cancel rides the same error path; classify it as abort, not provider failure,
+    // so CTRL-Z semantics stay distinct from a real fault.
     if (ctx.abortSignal.aborted) return { status: 'aborted' }
     return {
       status: 'failed',
@@ -98,6 +105,9 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   const usage = await Promise.resolve(stream.usage).catch(() => undefined)
   const reasoningText = await Promise.resolve(stream.reasoningText).catch(() => undefined)
   const tail = entries.at(-1)
+  // Inherited from the tail entry — by submitTurn ordering that is the just-written
+  // user_action, which carries the inherited worldTime (see submit-turn.ts). M2 has no
+  // time advancement, so this propagates the opening's worldTime forward.
   const worldTime = tail?.metadata?.worldTime ?? 0
   const metadata: EntryMetadata = {
     ...(usage
@@ -112,6 +122,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     model: resolved.modelId,
     generationTimingMs: Date.now() - startedAt,
     ...(reasoningText ? { reasoning: reasoningText } : {}),
+    // M2: scene membership + current location are piggyback/classifier-emitted (M3+); empty here.
     sceneEntities: [],
     currentLocationId: null,
     worldTime,

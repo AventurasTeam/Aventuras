@@ -1,3 +1,4 @@
+import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -165,6 +166,14 @@ describe('submitTurn', () => {
       { kind: 'user_action', content: 'Hello there', position: 1 },
       { kind: 'ai_reply', content: 'A reply.', position: 2 },
     ])
+
+    const [reply] = await ctx.db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.kind, 'ai_reply')))
+    expect(reply?.metadata?.sceneEntities).toEqual([])
+    expect(reply?.metadata?.currentLocationId).toBeNull()
+    expect(typeof reply?.metadata?.model).toBe('string')
   })
 
   it('positions the new user action at MAX(position)+1, not the store row count', async () => {
