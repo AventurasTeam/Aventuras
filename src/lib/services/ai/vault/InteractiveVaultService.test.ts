@@ -76,12 +76,8 @@ vi.mock('../sdk/agents/factory', () => ({
   })),
 }))
 
-const {
-  InteractiveVaultService,
-  getActiveToolNames,
-  TOOL_CATEGORIES,
-  ALWAYS_ACTIVE_TOOLS,
-} = await import('./InteractiveVaultService')
+const { InteractiveVaultService, getActiveToolNames, TOOL_CATEGORIES, ALWAYS_ACTIVE_TOOLS } =
+  await import('./InteractiveVaultService')
 type VaultState = import('./InteractiveVaultService').VaultState
 type VaultSummary = import('./InteractiveVaultService').VaultSummary
 type ToolCategory = import('./InteractiveVaultService').ToolCategory

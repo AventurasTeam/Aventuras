@@ -2,7 +2,6 @@
   import { isTouchDevice } from '$lib/utils/swipe'
   import { Textarea } from '$lib/components/ui/textarea'
   import { Button } from '$lib/components/ui/button'
-  import { cn } from '$lib/utils/cn'
   import { Send, Square } from 'lucide-svelte'
 
   let {
