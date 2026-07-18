@@ -1,0 +1,160 @@
+import { describe, expect, it, vi } from 'vitest'
+
+import { createStoryRecoveryCoordinator } from './story-recovery-coordinator'
+
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+  reject: (reason: unknown) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+function request(
+  overrides: Partial<
+    Parameters<ReturnType<typeof createStoryRecoveryCoordinator>['startReset']>[0]
+  > = {},
+) {
+  return {
+    storyId: 'story_1',
+    reset: vi.fn().mockResolvedValue(undefined),
+    open: vi.fn().mockResolvedValue({ status: 'ok' as const, branchId: 'br_1' }),
+    navigate: vi.fn(),
+    onOpened: vi.fn(),
+    onOpenFailed: vi.fn(),
+    ...overrides,
+  }
+}
+
+describe('story recovery coordinator', () => {
+  it('starts only one reset for duplicate requests on the active recovery', async () => {
+    const resetDeferred = deferred<void>()
+    const options = request({ reset: vi.fn(() => resetDeferred.promise) })
+    const coordinator = createStoryRecoveryCoordinator()
+
+    const first = coordinator.startReset(options)
+    const duplicate = coordinator.startReset(options)
+
+    expect(first).toBeInstanceOf(Promise)
+    expect(duplicate).toBeUndefined()
+    expect(options.reset).toHaveBeenCalledOnce()
+
+    resetDeferred.resolve(undefined)
+    await first
+  })
+
+  it('does not open when invalidated before reset settles', async () => {
+    const resetDeferred = deferred<void>()
+    const options = request({ reset: vi.fn(() => resetDeferred.promise) })
+    const coordinator = createStoryRecoveryCoordinator()
+    const operation = coordinator.startReset(options)
+
+    coordinator.invalidate()
+    resetDeferred.resolve(undefined)
+    await operation
+
+    expect(options.open).not.toHaveBeenCalled()
+    expect(options.navigate).not.toHaveBeenCalled()
+    expect(options.onOpened).not.toHaveBeenCalled()
+    expect(options.onOpenFailed).not.toHaveBeenCalled()
+  })
+
+  it('suppresses navigation and state callbacks when invalidated during open', async () => {
+    const openDeferred = deferred<{ status: 'ok'; branchId: string }>()
+    let guardedNavigate: ((branchId: string) => void) | undefined
+    const options = request({
+      open: vi.fn((navigate) => {
+        guardedNavigate = navigate
+        return openDeferred.promise
+      }),
+    })
+    const coordinator = createStoryRecoveryCoordinator()
+    const operation = coordinator.startReset(options)
+    await vi.waitFor(() => expect(options.open).toHaveBeenCalledOnce())
+
+    coordinator.invalidate()
+    guardedNavigate?.('br_1')
+    openDeferred.resolve({ status: 'ok', branchId: 'br_1' })
+    await operation
+
+    expect(options.navigate).not.toHaveBeenCalled()
+    expect(options.onOpened).not.toHaveBeenCalled()
+    expect(options.onOpenFailed).not.toHaveBeenCalled()
+  })
+
+  it('navigates and clears the current recovery after a successful open', async () => {
+    const options = request({
+      open: vi.fn(async (navigate) => {
+        navigate('br_1')
+        return { status: 'ok' as const, branchId: 'br_1' }
+      }),
+    })
+    const coordinator = createStoryRecoveryCoordinator()
+
+    await coordinator.startReset(options)
+
+    expect(options.navigate).toHaveBeenCalledWith('br_1')
+    expect(options.onOpened).toHaveBeenCalledOnce()
+    expect(options.onOpenFailed).not.toHaveBeenCalled()
+  })
+
+  it('updates the current recovery kind after an open failure', async () => {
+    const options = request({
+      open: vi
+        .fn()
+        .mockResolvedValue({ status: 'open-failed' as const, kind: 'definition-corrupt' as const }),
+    })
+    const coordinator = createStoryRecoveryCoordinator()
+
+    await coordinator.startReset(options)
+
+    expect(options.onOpenFailed).toHaveBeenCalledWith('definition-corrupt')
+    expect(options.onOpened).not.toHaveBeenCalled()
+  })
+
+  it('keeps reset rejection available to runAction', async () => {
+    const failure = new Error('reset failed')
+    const options = request({ reset: vi.fn().mockRejectedValue(failure) })
+    const coordinator = createStoryRecoveryCoordinator()
+
+    await expect(coordinator.startReset(options)).rejects.toBe(failure)
+
+    expect(options.open).not.toHaveBeenCalled()
+  })
+
+  it('prevents an older ordinary open from navigating or replacing a newer recovery', async () => {
+    const openDeferred = deferred<{
+      status: 'open-failed'
+      kind: 'definition-corrupt'
+    }>()
+    let guardedNavigate: ((branchId: string) => void) | undefined
+    const navigate = vi.fn()
+    const onOpenFailed = vi.fn()
+    const coordinator = createStoryRecoveryCoordinator()
+    const ordinaryOpen = coordinator.attemptOpen({
+      open: vi.fn((navigateToStory) => {
+        guardedNavigate = navigateToStory
+        return openDeferred.promise
+      }),
+      navigate,
+      onOpenFailed,
+    })
+
+    const newerRecovery = coordinator.startReset(request())
+    guardedNavigate?.('br_old')
+    openDeferred.resolve({ status: 'open-failed', kind: 'definition-corrupt' })
+    await ordinaryOpen
+    await newerRecovery
+
+    expect(navigate).not.toHaveBeenCalled()
+    expect(onOpenFailed).not.toHaveBeenCalled()
+  })
+})
