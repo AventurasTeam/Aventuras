@@ -98,6 +98,11 @@ slice plans when relevant.
 - [Native-module RN libs need a dev-client rebuild](./native-dep-expo-link.md)
   — `pnpm add` alone crashes Android for libs with native
   modules; config-plugin step is per-library, not universal.
+- [Metro's native resolution ignores browser-targeted builds](./metro-native-ignores-browser-builds.md)
+  — the `browser` main field and `browser` exports condition are
+  web-only; a dep can work on web and break every Android bundle.
+  Deep-import the client build or pin it via `resolveRequest`, and
+  verify with a real `expo export --platform android`.
 
 ### Doc authoring
 
