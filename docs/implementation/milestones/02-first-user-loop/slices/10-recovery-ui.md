@@ -147,4 +147,9 @@ None.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+Resolved developer decisions and notable implementation details.
+
+- **Recovery handoff.** M2.10 repairs the 1.7a bootstrap seam by publishing only reports with reversed deltas. The UI store uses a pending-to-active claim so React Strict Mode can replay the host's async effect without losing or duplicating the notice; explicit acknowledgement is the only terminal drain.
+- **Definition recovery.** `stories.definition` remains strict and non-recoverable because wizard-authored identity has no valid default. Desktop exposes the existing database-file reveal bridge for manual repair; Android has no definition-repair affordance in v1, and neither platform offers reset.
+- **Settings recovery.** `stories.settings` reset reuses `buildStorySettings` with the current app-level defaults, matching copy-on-create. The action updates only the settings and timestamp, preserving the definition and all narrative/world rows; reset is gated by confirmation on both platforms.
+- **Mobile file repair.** Per-story `Open file` is feature-detected from Electron's injected bridge and intentionally absent on Android; no un-designed mobile export/share path was added.
