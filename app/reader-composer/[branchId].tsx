@@ -445,7 +445,14 @@ export default function ReaderComposerRoute() {
     ]
   }, [entries, streamingVisible, streaming])
 
-  const renderRow = (row: WindowRow) => {
+  // Spacing must be padding on the measured wrapper, not margin: the web
+  // virtualizer's measureElement height excludes margins, which would overlap
+  // rows. Values approximate the wireframe's 860px centered measure.
+  const renderRow = (row: WindowRow) => (
+    <View className="mx-auto w-full max-w-[860px] px-7 py-2">{renderRowCard(row)}</View>
+  )
+
+  const renderRowCard = (row: WindowRow) => {
     if (row.kind === 'streaming') {
       return (
         <EntryCard
