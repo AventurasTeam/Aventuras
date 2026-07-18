@@ -747,7 +747,13 @@
     isThinking = false
     activeToolCalls = []
     streamingChanges = []
-    streamingMessageId = null
+    // Drop the in-progress assistant message entirely rather than leaving a
+    // frozen partial response behind — it never finished, so there's nothing
+    // worth keeping.
+    if (streamingMessageId) {
+      messages = messages.filter((m) => m.id !== streamingMessageId)
+      streamingMessageId = null
+    }
   }
 
   /**
