@@ -29,7 +29,7 @@ export async function snapshotForRedo(rows: Delta[], ctx: DbCtx): Promise<RedoSn
 }
 
 // Re-inserts the original delta row so a subsequent CTRL-Z can undo the redo again.
-export async function applyRedo(snapshots: RedoSnapshot[], ctx: DbCtx): Promise<void> {
+export async function applyRedo(snapshots: readonly RedoSnapshot[], ctx: DbCtx): Promise<void> {
   const ops = []
   for (const { delta, rowBeforeUndo } of snapshots) {
     const entry = resolveByTable(delta.targetTable)

@@ -10,7 +10,7 @@ export const entryAssetsStore = {
   getLoadedBranch: store.getLoadedBranch,
   getById: (id: string): EntryAsset | undefined => store.getRows().get(id),
   // entry_assets.position is the data-model's ordering-within-entry; unpositioned rows sort last.
-  getByEntry: (entryId: string): EntryAsset[] =>
+  getByEntry: (entryId: string): readonly EntryAsset[] =>
     Array.from(store.getRows().values())
       .filter((r) => r.entryId === entryId)
       .sort((a, b) => {

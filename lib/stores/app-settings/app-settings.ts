@@ -10,7 +10,23 @@ import {
 } from '@/lib/db'
 import { logger, setHttpCallKnownSecretValues } from '@/lib/diagnostics'
 
-type AppSettingsSnapshot = AppSettingsConfig & { diagnostics: AppSettingsDiagnostics }
+// getAppSettings/useAppSettings hand out the LIVE state object's collections;
+// readonly at array/record level makes in-place mutation (push, index-assign)
+// a compile error at the call site instead of a silent store write that fires
+// no subscriber notification.
+type ReadonlyConfig = Omit<
+  AppSettingsConfig,
+  'providers' | 'profiles' | 'assignments' | 'defaultSuggestionCategories'
+> & {
+  providers: readonly AppSettingsConfig['providers'][number][]
+  profiles: readonly AppSettingsConfig['profiles'][number][]
+  assignments: Readonly<AppSettingsConfig['assignments']>
+  defaultSuggestionCategories: {
+    readonly [K in keyof AppSettingsConfig['defaultSuggestionCategories']]: readonly AppSettingsConfig['defaultSuggestionCategories'][K][number][]
+  }
+}
+
+type AppSettingsSnapshot = ReadonlyConfig & { diagnostics: AppSettingsDiagnostics }
 
 type AppSettingsState = AppSettingsSnapshot & {
   apply: (snapshot: AppSettingsSnapshot) => void

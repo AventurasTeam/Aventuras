@@ -3,11 +3,15 @@ import { createStore } from 'zustand/vanilla'
 
 import type { RedoSnapshot } from '@/lib/actions'
 
+// peek returns (and the selector sees) the live stack arrays — readonly so a
+// caller can't splice store state in place.
+type RedoGroup = readonly RedoSnapshot[]
+
 type UndoRedoState = {
-  redoStack: RedoSnapshot[][]
-  pushRedoGroup: (group: RedoSnapshot[]) => void
-  peekRedoGroup: () => RedoSnapshot[] | undefined
-  popRedoGroup: () => RedoSnapshot[] | undefined
+  redoStack: readonly RedoGroup[]
+  pushRedoGroup: (group: RedoGroup) => void
+  peekRedoGroup: () => RedoGroup | undefined
+  popRedoGroup: () => RedoGroup | undefined
   clear: () => void
 }
 

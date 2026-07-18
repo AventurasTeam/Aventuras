@@ -9,7 +9,7 @@ export const entitiesStore = {
   getEntities: store.getRows,
   getLoadedBranch: store.getLoadedBranch,
   getById: (id: string): Entity | undefined => store.getRows().get(id),
-  getByKind: (kind: Entity['kind']): Entity[] =>
+  getByKind: (kind: Entity['kind']): readonly Entity[] =>
     [...store.getRows().values()].filter((e) => e.kind === kind),
   hydrate: store.hydrate,
   patch: store.patch,

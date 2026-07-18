@@ -21,7 +21,10 @@ export type RunState = {
 
 // reversalInProgress brackets a prose-reversal's wait->sweep window: while set it
 // blocks a periodic-classifier start and forces isUserEditBlocked true.
-export type TxState = { runs: Map<string, RunState>; reversalInProgress: boolean }
+// runs is the live state Map — ReadonlyMap so consumers can't set/delete
+// around the mutators. (RunState.intermediates stays mutable by design: it is
+// the run-scoped scratch phases write through PhaseContext.)
+export type TxState = { runs: ReadonlyMap<string, RunState>; reversalInProgress: boolean }
 
 export function isUserEditBlocked(txState: TxState): boolean {
   if (txState.reversalInProgress) return true

@@ -16,7 +16,7 @@ export const characterRelationshipsStore = {
   getRelationshipRows: store.getRows,
   getLoadedBranch: store.getLoadedBranch,
   getById: (id: string): CharacterRelationship | undefined => store.getRows().get(id),
-  getRelationships: (characterId: string, branchId: string): RelationshipView[] => {
+  getRelationships: (characterId: string, branchId: string): readonly RelationshipView[] => {
     if (store.getLoadedBranch() !== branchId) return []
     const out: RelationshipView[] = []
     for (const r of store.getRows().values()) {

@@ -9,7 +9,7 @@ export const happeningInvolvementsStore = {
   getInvolvements: store.getRows,
   getLoadedBranch: store.getLoadedBranch,
   getById: (id: string): HappeningInvolvement | undefined => store.getRows().get(id),
-  getByHappening: (happeningId: string): HappeningInvolvement[] =>
+  getByHappening: (happeningId: string): readonly HappeningInvolvement[] =>
     Array.from(store.getRows().values()).filter((r) => r.happeningId === happeningId),
   hydrate: store.hydrate,
   patch: store.patch,

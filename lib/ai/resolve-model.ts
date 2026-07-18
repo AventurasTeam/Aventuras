@@ -2,9 +2,9 @@ import type { ModelProfile, ProviderInstance, StorySettings } from '../db'
 import { isStoryOverrideTarget, type ResolveTarget } from './agents'
 
 export type ResolveModelConfig = {
-  providers: ProviderInstance[]
-  profiles: ModelProfile[]
-  assignments: Record<string, string>
+  providers: readonly ProviderInstance[]
+  profiles: readonly ModelProfile[]
+  assignments: Readonly<Record<string, string>>
   defaultProviderId: string | null
   storyModels?: StorySettings['models']
 }
