@@ -29,7 +29,7 @@ export type PhaseResult =
   | { status: 'failed'; error: PipelineError }
 
 export type PhaseEmittedEvent =
-  | { type: 'stream_chunk'; targetEntryId: string; text: string }
+  | { type: 'stream_chunk'; targetEntryId: string; text: string; channel: 'text' | 'reasoning' }
   | { type: 'delta_emitted'; action: PipelineAction; entryId?: string | null }
   | { type: 'recoverable_error'; error: PipelineError }
 

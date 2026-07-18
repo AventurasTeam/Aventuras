@@ -85,9 +85,20 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   const { stream } = call
   let content = ''
   try {
-    for await (const chunk of stream.textStream) {
-      content += chunk
-      yield { type: 'stream_chunk', targetEntryId: entryId, text: chunk }
+    // fullStream, not textStream: reasoning deltas stream to the UI as the
+    // model thinks instead of appearing only post-hoc in metadata.
+    for await (const part of stream.fullStream) {
+      if (part.type === 'text-delta') {
+        content += part.text
+        yield { type: 'stream_chunk', targetEntryId: entryId, text: part.text, channel: 'text' }
+      } else if (part.type === 'reasoning-delta') {
+        yield {
+          type: 'stream_chunk',
+          targetEntryId: entryId,
+          text: part.text,
+          channel: 'reasoning',
+        }
+      }
     }
   } catch (e) {
     streamError = e

@@ -121,7 +121,7 @@ type PipelineEvent =
   | { type: 'phase_start'; runId: string; name: string }
   | { type: 'phase_complete'; runId: string; name: string; result: PhaseResult }
   // phase-emitted core
-  | { type: 'stream_chunk'; targetEntryId: string; text: string }
+  | { type: 'stream_chunk'; targetEntryId: string; text: string; channel: 'text' | 'reasoning' }
   | { type: 'delta_emitted'; action: PipelineAction }
   | { type: 'recoverable_error'; error: PipelineError }
   // phase-emitted specific — grows additively
@@ -377,10 +377,11 @@ bug, not a runtime case to handle.
 - `delta_emitted` — every persisted write. Orchestrator routes
   through the action layer with `source: 'pipeline'` + the current
   `actionId`. Phase doesn't touch delta log / SQLite / undo_payload.
-- `stream_chunk` — narrative-token-only path. Orchestrator
-  dispatches a side-channel append action; **no delta** until
-  stream completion (commit fires a regular `delta_emitted` for
-  the entry's `op=create`).
+- `stream_chunk` — display-token path (`channel` splits narrative
+  text from streamed reasoning). Orchestrator dispatches a
+  side-channel append action; **no delta** until stream completion
+  (commit fires a regular `delta_emitted` for the entry's
+  `op=create`).
 
 **Never:** SQLite calls, delta-log appends, persisted-store
 mutations, another phase's intermediates.
@@ -801,7 +802,7 @@ async function* narrativePhase() {
   for await (const chunk of streamLLM(ctx)) {
     if (ctx.abortSignal.aborted) return { status: 'aborted' }
     content += chunk
-    yield { type: 'stream_chunk', targetEntryId: entryId, text: chunk }
+    yield { type: 'stream_chunk', targetEntryId: entryId, text: chunk, channel: 'text' }
   }
 
   // 3. Commit (Path A — delta logged)

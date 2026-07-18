@@ -43,7 +43,7 @@ function failingStreamCall() {
     ok: true,
     modelId: 'model-1',
     stream: {
-      textStream: (async function* () {
+      fullStream: (async function* () {
         throw new Error('stop after call')
       })(),
     },

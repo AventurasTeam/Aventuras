@@ -135,7 +135,7 @@ async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx)
       { actionId: run.actionId },
     )
   }
-  // stream_chunk: side-channel; no UI consumer in M1.
+  // stream_chunk: forwarded verbatim; the reader renders it live per channel.
   pipelineEventBus.emit(event)
 }
 

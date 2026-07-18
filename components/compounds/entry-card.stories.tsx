@@ -93,12 +93,22 @@ export const SystemKind: StoryT = {
   },
 }
 
+export const StreamingPending: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'streaming',
+    streamingPhase: 'reply',
+    content: '',
+  },
+}
+
 export const StreamingReasoning: StoryT = {
   ...wrap,
   args: {
     kind: 'streaming',
     streamingPhase: 'reasoning',
-    content: 'Thinking about how the warden would respond to direct aggression…',
+    content: '',
+    reasoning: 'Thinking about how the warden would respond to direct aggression…',
   },
 }
 
@@ -107,6 +117,7 @@ export const StreamingReply: StoryT = {
   args: {
     kind: 'streaming',
     streamingPhase: 'reply',
+    reasoning: 'Thought about how the warden would respond to direct aggression.',
     content: 'The figure raises a single gloved hand and the air thickens around your bla',
   },
 }
@@ -235,7 +246,8 @@ export const KindMatrix: StoryT = {
       <EntryCard
         kind="streaming"
         streamingPhase="reasoning"
-        content="Working out the warden's first words…"
+        content=""
+        reasoning="Working out the warden's first words…"
       />
       <EntryCard
         kind="system"

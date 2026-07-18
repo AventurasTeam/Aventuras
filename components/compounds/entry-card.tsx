@@ -10,8 +10,14 @@ import {
   Trash2,
   X,
 } from 'lucide-react-native'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Platform, useWindowDimensions, View } from 'react-native'
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated'
 import { RenderHTML } from 'react-native-render-html'
 
 import { Button } from '@/components/ui/button'
@@ -86,6 +92,21 @@ const KIND_BUBBLE: Record<EntryKind, string> = {
   streaming: 'bg-bg-raised border-border border-dashed',
 }
 
+// Tailwind's animate-pulse doesn't run on native, so the "model is thinking"
+// indication loops opacity through Reanimated instead.
+function PulsingBrain() {
+  const opacity = useSharedValue(1)
+  useEffect(() => {
+    opacity.set(withRepeat(withTiming(0.3, { duration: 600 }), -1, true))
+  }, [opacity])
+  const style = useAnimatedStyle(() => ({ opacity: opacity.get() }))
+  return (
+    <Animated.View style={style}>
+      <Icon as={Brain} size="sm" className="shrink-0 text-fg-muted" />
+    </Animated.View>
+  )
+}
+
 function NarrativeContent({ text, muted }: { text: string; muted?: boolean }) {
   const { width } = useWindowDimensions()
   const { theme } = useTheme()
@@ -141,7 +162,6 @@ export function EntryCard({
 }: EntryCardProps) {
   const [expanded, setExpanded] = useState(false)
   const hasReasoning = reasoning != null && reasoning.length > 0
-  const isStreamingReasoning = kind === 'streaming' && streamingPhase === 'reasoning'
 
   const showActions = !editing && kind !== 'system' && kind !== 'streaming'
   const showWorldTime = worldTimeLabel != null && kind !== 'system' && kind !== 'streaming'
@@ -171,7 +191,11 @@ export function EntryCard({
           </>
         ) : kind === 'streaming' ? (
           <>
-            <Icon as={Brain} size="sm" className="shrink-0 text-fg-muted" />
+            {streamingPhase === 'reasoning' ? (
+              <PulsingBrain />
+            ) : (
+              <Icon as={Brain} size="sm" className="shrink-0 text-fg-muted" />
+            )}
             <Text size="xs" variant="muted">
               {streamingPhase === 'reasoning' ? 'Thinking…' : 'Generating…'}
             </Text>
@@ -198,15 +222,11 @@ export function EntryCard({
         )}
       </View>
 
-      {hasReasoning && expanded && !editing ? (
+      {/* Streaming reasoning stays expanded live; committed entries collapse
+          behind the brain toggle. */}
+      {hasReasoning && (kind === 'streaming' || (expanded && !editing)) ? (
         <View className="mb-3 border-l-2 border-border pl-3">
           <NarrativeContent text={reasoning ?? ''} muted />
-        </View>
-      ) : null}
-
-      {isStreamingReasoning && content.length > 0 ? (
-        <View className="mb-3 border-l-2 border-border pl-3">
-          <NarrativeContent text={content} muted />
         </View>
       ) : null}
 
@@ -266,7 +286,7 @@ export function EntryCard({
             </View>
           )}
         </View>
-      ) : kind === 'streaming' && streamingPhase === 'reasoning' ? null : ( // until the stream transitions to 'reply'. // the live preview block above. The reply slot stays empty // Reasoning-phase streaming — content is already shown in
+      ) : kind === 'streaming' && content.length === 0 ? null : ( // pre-first-chunk / reasoning-phase placeholder: nothing to render yet
         <NarrativeContent text={content} />
       )}
 

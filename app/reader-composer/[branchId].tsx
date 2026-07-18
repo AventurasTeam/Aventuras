@@ -60,7 +60,7 @@ import { toast } from '@/lib/toast'
 const ctx = { db, runInTransaction }
 
 type RollbackState = { targetId: string; targetNumber: number; counts: RollbackCounts }
-type StreamingRow = { id: string; kind: 'streaming'; content: string }
+type StreamingRow = { id: string; kind: 'streaming'; content: string; reasoning: string }
 type WindowRow = StoryEntry | StreamingRow
 type BranchHydrationState =
   | { branchId: string; status: 'loading' }
@@ -124,12 +124,17 @@ export default function ReaderComposerRoute() {
     openForBranch.definition.mode === 'adventure'
   const wrapPov = openForBranch?.settings.composerWrapPov ?? 'first'
 
-  // Buffer instance lives in a ref (mutable, not render state); the safe output
-  // it computes on each push drives the re-render via streamingContent.
-  const streamBufferRef = useRef<{ entryId: string; buffer: HtmlStreamBuffer } | null>(null)
-  const [streamingContent, setStreamingContent] = useState<{
+  // Buffer instances live in a ref (mutable, not render state); the safe output
+  // they compute on each push drives the re-render via `streaming`.
+  const streamBufferRef = useRef<{
+    entryId: string
+    content: HtmlStreamBuffer
+    reasoning: HtmlStreamBuffer
+  } | null>(null)
+  const [streaming, setStreaming] = useState<{
     entryId: string
     content: string
+    reasoning: string
   } | null>(null)
   const entryWindowRef = useRef<EntryWindowHandle>(null)
   const autoscrollRef = useRef(createAutoscrollMachine())
@@ -147,7 +152,7 @@ export default function ReaderComposerRoute() {
   // it belongs to a different entry list and would otherwise leak forward.
   useEffect(() => {
     streamBufferRef.current = null
-    setStreamingContent(null)
+    setStreaming(null)
   }, [branchId])
 
   useEffect(
@@ -162,7 +167,8 @@ export default function ReaderComposerRoute() {
         if (streamBufferRef.current?.entryId !== event.targetEntryId) {
           streamBufferRef.current = {
             entryId: event.targetEntryId,
-            buffer: createHtmlStreamBuffer(),
+            content: createHtmlStreamBuffer(),
+            reasoning: createHtmlStreamBuffer(),
           }
           const jumpedRecently =
             Date.now() - pendingJumpToBottomAtRef.current < JUMP_TO_BOTTOM_SETTLE_MS
@@ -170,37 +176,48 @@ export default function ReaderComposerRoute() {
             distanceFromBottomPx: jumpedRecently ? 0 : lastDistanceRef.current,
           })
         }
-        const safe = streamBufferRef.current.buffer.push(event.text)
-        setStreamingContent({ entryId: event.targetEntryId, content: safe })
+        const buffers = streamBufferRef.current
+        const safe = (event.channel === 'reasoning' ? buffers.reasoning : buffers.content).push(
+          event.text,
+        )
+        setStreaming((prev) => {
+          const base =
+            prev?.entryId === event.targetEntryId
+              ? prev
+              : { entryId: event.targetEntryId, content: '', reasoning: '' }
+          return event.channel === 'reasoning'
+            ? { ...base, reasoning: safe }
+            : { ...base, content: safe }
+        })
       }),
     [branchId],
   )
 
-  // Runs after React commits streamingContent, so the scroll targets the row
-  // height the just-arrived chunk actually produced.
+  // Runs after React commits the streaming state, so the scroll targets the
+  // row height the just-arrived chunk actually produced.
   useLayoutEffect(() => {
-    if (streamingContent == null || autoscrollRef.current.state !== 'engaged') return
+    if (streaming == null || autoscrollRef.current.state !== 'engaged') return
     entryWindowRef.current?.scrollToBottom()
     autoscrollRef.current.autoscrollApplied({ distanceFromBottomPx: 0 })
-  }, [streamingContent])
+  }, [streaming])
 
   // Covers the abort/failure paths where no committed row ever lands to
   // trigger the entries.some(...) hide check below.
   useEffect(() => {
     if (!isGenerating) {
       streamBufferRef.current = null
-      setStreamingContent(null)
+      setStreaming(null)
       autoscrollRef.current.streamEnded()
     }
   }, [isGenerating])
 
-  // The real commit lands in entriesStore mid-phase, before isGenerating flips
-  // false — checking against entries (not just isGenerating) prevents a frame
-  // where both the synthetic and the real committed card are visible.
+  // Visible from the moment the run starts (pre-first-chunk placeholder), and
+  // hidden the frame the committed row lands: the real commit hits entriesStore
+  // mid-phase, before isGenerating flips false — checking against entries (not
+  // just isGenerating) prevents a frame where both the synthetic and the real
+  // committed card are visible.
   const streamingVisible =
-    isGenerating &&
-    streamingContent != null &&
-    !entries.some((e) => e.id === streamingContent.entryId)
+    isGenerating && !(streaming != null && entries.some((e) => e.id === streaming.entryId))
 
   const reload = useCallback(async () => {
     entriesStore.hydrate(branchId, await readRecentEntries(branchId, db))
@@ -414,18 +431,32 @@ export default function ReaderComposerRoute() {
   useGlobalHotkey(matchesUndoRedoShortcut, handleUndoRedoShortcut, { ignoreEditableTargets: true })
 
   const windowRows: WindowRow[] = useMemo(() => {
-    if (streamingVisible && streamingContent) {
-      return [
-        ...entries,
-        { id: streamingContent.entryId, kind: 'streaming', content: streamingContent.content },
-      ]
-    }
-    return entries
-  }, [entries, streamingVisible, streamingContent])
+    if (!streamingVisible) return entries
+    // Stable synthetic id: the row must not remount when the first chunk
+    // brings the real target entryId (the commit-hide check above uses it).
+    return [
+      ...entries,
+      {
+        id: 'streaming-row',
+        kind: 'streaming',
+        content: streaming?.content ?? '',
+        reasoning: streaming?.reasoning ?? '',
+      },
+    ]
+  }, [entries, streamingVisible, streaming])
 
   const renderRow = (row: WindowRow) => {
     if (row.kind === 'streaming') {
-      return <EntryCard kind="streaming" content={row.content} streamingPhase="reply" />
+      return (
+        <EntryCard
+          kind="streaming"
+          content={row.content}
+          reasoning={row.reasoning.length > 0 ? row.reasoning : undefined}
+          streamingPhase={
+            row.reasoning.length > 0 && row.content.length === 0 ? 'reasoning' : 'reply'
+          }
+        />
+      )
     }
     const e = row
     const isEditing = editingId === e.id
