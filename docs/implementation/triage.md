@@ -195,6 +195,39 @@ doc-amendment before Slice 2.5.
   moves `loadedBranch`), but a future multi-branch/background path could desync them into a
   silent degenerate prompt. Assert `entriesStore.getLoadedBranch() === ctx.branchId`, or
   read the buffer from `ctx.db`. Surfaced by Slice 2.7.
+- **System-entry failure copy is generic and failure metadata isn't persisted.** The
+  [error-surface spec](../ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill)
+  gives each failure kind its own bubble copy ("LLM call failed", the four
+  broken-reference variants); the shipped `writeSystemEntry` writes one generic
+  `reader:systemEntry.failureMessage` string for every kind and `metadata: null`. The
+  per-kind fix actions do match the spec vocabulary, but they derive from React state
+  (`lastError`), so after an app restart the persisted system entry loses its
+  kind-specific action and its View-details content. Decide: accept for M2 or persist
+  the failure discriminant in entry metadata and add per-kind copy. Surfaced by
+  post-M2 DoD verification.
+- **harper.js is 24.5 MB of dead weight in the native bundle.** Measured 2026-07-18
+  (`expo export --platform android --no-bytecode --source-maps`, source-map-explorer):
+  `harper.js/dist/binaryInlined.js` alone is 24.3 MB of a 33.2 MB Android JS bundle
+  (73.8%). Hermes has no `WebAssembly` or `Worker`, so the linter cannot execute on
+  native at all — and the composer's un-caught `lintNarrativeText(...).then(...)`
+  fires an unhandled rejection on every native lint pass. Fix: platform-split
+  `lib/spellcheck` (web keeps harper.js; native exports a no-op returning `[]`),
+  keeping `harper.js` imports in components type-only so native never pulls the
+  module graph. Resolves
+  [Slice 2.5](./milestones/02-first-user-loop/slices/05-reader.md)'s bundle-size open
+  question. Surfaced by post-M2 DoD verification.
+- **Android bundling is broken: `lib/markdown` pulls juice → jsdom → Node builtins.**
+  `expo export --platform android` fails (dev and prod alike) resolving `path` from
+  `jsdom/lib/api.js`; the chain is entry-card → `lib/markdown` → `sanitize.ts`, whose
+  `import juice` plus SSR-fallback `require('jsdom')` resolve to Node-only code under
+  Metro's android platform (web resolves browser fields instead). Consequence: current
+  `main` cannot produce a fresh Android bundle, so the M2 "loop on both platforms"
+  criterion is not reproducible from a cold build — likely active-defect territory
+  (route to `followups.md`) rather than a deferral. Fix direction: platform-split the
+  sanitize step — native renders through react-native-render-html with
+  `narrativeTagsStyles` and needs neither juice CSS-inlining nor DOMPurify's DOM, so a
+  `sanitize.native.ts` can skip both while web/SSR keep the current path. Surfaced by
+  post-M2 DoD verification.
 - **Corrupt-config story open has no interim user feedback (pre-2.10).** `openStory` now
   returns a resolved `{ status: 'open-failed' }` on a config parse failure, which
   `runAction`'s rejection-only toast can't surface — so a corrupt-config tap is silent

@@ -187,27 +187,25 @@ M3.1; the commit transaction is stories + branch + opening
 
 ## Open questions
 
-- Step-indicator presentation for the three-step M2 flow
-  (milestone open question; resolve here).
-- Where the minimal lead input renders — inside step 1 beneath
-  the pickers (recommended; the forward-pointer chip already
-  sits there) or as a step-5 pre-Finish field.
-- Whether `definition.genre` / `tone` / `setting` commit as empty
-  strings or the Zod gains explicit empty defaults — must not
-  violate the M1.5 "no fabricated frozen-spec values" rule;
-  check the shipped schema's posture at planning.
-- **Rewrite the bundled wizard templates** that
-  [Slice 2.6](./06-pack-engine.md) shipped as provisional
-  placeholders (`lib/prompts/bundled/wizard.ts`). Replace them
-  against this slice's own opening contract: `tmpl_wizard_opening`
-  must emit the structured-output JSON (prose, `sceneEntities`,
-  `currentLocationId`, `worldTime`) through the JSON output macro,
-  not plain narrative prose; the lead reference must be guarded for
-  lead-less paths (creative third-person), with the `wizard`-group
-  `lead` variable in `templateContextMap.ts` reconciled against
-  which paths actually pass it; and `tmpl_wizard_description` needs
-  a description-appropriate output directive rather than the
-  next-beat narrative macro. (Surfaced by Codex review of 2.6.)
+None outstanding — all four resolved during implementation:
+
+- **Step-indicator presentation** — all five pills with World /
+  Cast disabled; see Implementation notes.
+- **Minimal lead input placement** — inside step 1 beneath the
+  pickers (`components/wizard/step-frame.tsx`), the recommended
+  option.
+- **Empty-definition posture** — `genre` / `tone` / `setting`
+  commit as empty strings. The empty-string defaults live on the
+  wizard _draft_ schema (`lib/db/wizard-sessions/working-state.ts`);
+  the frozen story-config schema stays default-free, so the M1.5
+  "no fabricated frozen-spec values" rule holds.
+- **Bundled wizard-template rewrite** — landed in
+  `lib/prompts/bundled/wizard.ts`: `tmpl_wizard_opening` emits the
+  structured-output JSON (prose, `sceneEntities`,
+  `currentLocationId`, `worldTime`) through the JSON output macro
+  with the lead reference guarded for lead-less paths, and
+  `tmpl_wizard_description` carries a synopsis directive ("Do not
+  write narrative prose") instead of the next-beat narrative macro.
 
 ## Implementation notes
 

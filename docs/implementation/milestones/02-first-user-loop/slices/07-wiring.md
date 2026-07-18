@@ -167,19 +167,18 @@ single-open-chapter degenerate case: the last
 
 ## Open questions
 
-- Whether the `user_action` entry create lives inside phase 0 of
-  the run or in the submit action before `runPipeline` — both
-  satisfy the `actionId` grouping contract; pick at planning
-  against how abort-before-stream should treat the user's text
-  (keep vs reverse).
-- **Per-turn context-builder hygiene** (surfaced by Slice 2.6). The
-  builder must emit the `generationContext` variable names pinned in
-  `lib/prompts`'s `templateContextMap.ts` (a mismatch only fails at
-  integration); normalize empty or whitespace-only definitional
-  fields, since LiquidJS `!= blank` treats whitespace as non-empty
-  and would leak an otherwise-guarded section header; and guard
-  array contents passed to the `prose_join` / `json` filters, which
-  stringify `null` / `undefined` literally.
+None outstanding — both resolved during implementation:
+
+- **`user_action` entry placement** — in `submitTurn` before
+  `runPipeline`, with reverse-all abort semantics; see
+  Implementation notes → Abort semantics.
+- **Per-turn context-builder hygiene** (surfaced by Slice 2.6) —
+  `lib/actions/turns/context.ts` normalizes whitespace-only
+  definitional fields via `blankIfWhitespace` (covered by
+  `context.test.ts`, which also asserts the rendered template's
+  guarded headers and the pinned `generationContext` variable
+  names); filter-input arrays are built from typed store rows, so
+  `null` / `undefined` elements are unrepresentable.
 
 ## Implementation notes
 
