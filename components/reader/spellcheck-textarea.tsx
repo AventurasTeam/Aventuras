@@ -13,7 +13,16 @@ type SpellcheckTextareaProps = TextareaProps & {
   lints: readonly Lint[]
 }
 
-type TooltipState = { key: string; lint: Lint; left: number; top: number }
+type TooltipPosition = { left?: number; right?: number; top?: number; bottom?: number }
+type TooltipState = { key: string; lint: Lint; position: TooltipPosition }
+
+// Mirrors the tooltip's max-w-60 (240px); used to decide horizontal clamping
+// before the tooltip has rendered.
+const TOOLTIP_MAX_WIDTH = 240
+// Rough two-line-tooltip height for the flip decision only — the flipped
+// placement anchors via CSS `bottom`, so the real content height never
+// needs measuring.
+const TOOLTIP_EST_HEIGHT = 84
 
 const OVERLAY_TEXT_CLASS =
   'w-full rounded-md border border-transparent px-row-x-md py-row-y-md text-sm text-transparent'
@@ -58,15 +67,24 @@ export function SpellcheckTextarea({
     onScroll?.(event)
   }
 
+  // Flip/clamp against the viewport: the composer sits at the bottom of the
+  // screen, so the natural below-the-word placement usually clips off-screen,
+  // and a lint near the window's right edge clips right.
   const showTooltip = (key: string, lint: Lint, wordRect: DOMRect | null) => {
     const containerRect = boundingRectOf(containerRef.current)
     if (!wordRect || !containerRect) return
-    setTooltip({
-      key,
-      lint,
-      left: wordRect.left - containerRect.left,
-      top: wordRect.bottom - containerRect.top + 4,
-    })
+    const position: TooltipPosition = {}
+    if (wordRect.left + TOOLTIP_MAX_WIDTH > window.innerWidth) {
+      position.right = Math.max(0, containerRect.right - wordRect.right)
+    } else {
+      position.left = wordRect.left - containerRect.left
+    }
+    if (wordRect.bottom + TOOLTIP_EST_HEIGHT > window.innerHeight) {
+      position.bottom = containerRect.bottom - wordRect.top + 4
+    } else {
+      position.top = wordRect.bottom - containerRect.top + 4
+    }
+    setTooltip({ key, lint, position })
   }
 
   const hideTooltip = () => setTooltip(null)
@@ -130,7 +148,7 @@ export function SpellcheckTextarea({
         <View
           pointerEvents="none"
           className="absolute z-10 max-w-60 gap-1 rounded-md border border-border bg-bg-overlay p-2"
-          style={{ left: tooltip.left, top: tooltip.top }}
+          style={tooltip.position}
         >
           <Text size="xs">{tooltip.lint.message()}</Text>
           {(() => {
