@@ -61,10 +61,29 @@ export function mergeArrayLists(
     }
   }
 
-  // 2. Detect appended items (beyond previous length)
+  // 2. Detect appended items (beyond previous length), skipping any that
+  // already exist in baseArr. Without this, composing multiple sibling
+  // pending changes for the same entity (e.g. two update_character calls
+  // proposed back-to-back, before either is approved) re-appends the same
+  // "new" items every time: each change independently diffs against the
+  // same stale, not-yet-approved `previous`, so from its own perspective
+  // the item is genuinely new even though an earlier sibling in this same
+  // composition pass already added it to baseArr.
+  const baseValueCounts = new Map<string, number>()
+  for (const b of baseArr) {
+    const s = JSON.stringify(b)
+    baseValueCounts.set(s, (baseValueCounts.get(s) ?? 0) + 1)
+  }
   const appended: unknown[] = []
   for (let i = prevArr.length; i < dataArr.length; i++) {
-    appended.push(dataArr[i])
+    const item = dataArr[i]
+    const s = JSON.stringify(item)
+    const remaining = baseValueCounts.get(s) ?? 0
+    if (remaining > 0) {
+      baseValueCounts.set(s, remaining - 1)
+      continue
+    }
+    appended.push(item)
   }
 
   // 3. Compute removals using count-based multiset
