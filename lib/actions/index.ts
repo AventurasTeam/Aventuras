@@ -36,6 +36,7 @@ export {
   type RollbackCounts,
   type StoryEntryRejection,
 } from './story-entries/operational'
+export { ENTRIES_WINDOW_SIZE, readRecentEntries } from './story-entries/recent-window'
 export { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './story-entries/register'
 export { redoLastAction, undoLastAction, type UndoResult } from './story-entries/undo'
 export { clearSystemEntry, writeSystemEntry } from './story-entries/system-entry'

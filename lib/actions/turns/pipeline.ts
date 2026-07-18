@@ -26,6 +26,16 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       error: { kind: 'orchestrator', detail: 'per-turn: no open story for branch' },
     }
 
+  // Defense-in-depth against store desync: currentStoryStore is guarded above,
+  // but the entry buffer + worldTime tail read from entriesStore — a future
+  // multi-branch/background path hydrating it elsewhere would otherwise feed a
+  // silent degenerate prompt.
+  if (entriesStore.getLoadedBranch() !== branchId)
+    return {
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'per-turn: entries store loaded for another branch' },
+    }
+
   const entries = [...entriesStore.getEntries().values()]
     .filter((e) => e.branchId === branchId)
     .sort((a, b) => a.position - b.position)

@@ -20,9 +20,11 @@ function blankIfWhitespace(value: string): string {
 export function buildPerTurnGenerationContext(args: BuildArgs): Record<string, unknown> {
   const { entries, entities, definition, settings, idMap } = args
 
+  // Floor at 1: slice(-0) returns the whole array, so a future settings UI
+  // writing 0 would silently send the entire buffer instead of a minimal one.
   const buffer = entries
     .filter((e) => e.kind !== 'system')
-    .slice(-settings.partialChapterBuffer)
+    .slice(-Math.max(1, settings.partialChapterBuffer))
     .map((e) => ({ content: e.content }))
 
   const normalizedDefinition = {

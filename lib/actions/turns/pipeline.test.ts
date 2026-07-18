@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { APP_SETTINGS_DEFAULTS } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import { getPipeline } from '@/lib/pipeline'
-import { appSettingsStore, currentStoryStore, resetAllStores } from '@/lib/stores'
+import { appSettingsStore, currentStoryStore, entriesStore, resetAllStores } from '@/lib/stores'
 
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './pipeline'
 
@@ -110,6 +110,7 @@ describe('per-turn pipeline declaration', () => {
       definition,
       settings: { partialChapterBuffer: 3, models: { narrative: 'story-model' } } as never,
     })
+    entriesStore.hydrate('b1', [])
     vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
       ...APP_SETTINGS_DEFAULTS,
       providers: [provider],
@@ -149,6 +150,30 @@ describe('per-turn pipeline declaration', () => {
     expect(getModelMock).not.toHaveBeenCalled()
   })
 
+  it('fails when the entries store is loaded for another branch', async () => {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: { partialChapterBuffer: 3, models: {} } as never,
+    })
+    entriesStore.hydrate('b-other', [])
+
+    const result = await runNarrativePhase()
+
+    expect(result).toEqual({
+      done: true,
+      value: {
+        status: 'failed',
+        error: {
+          kind: 'orchestrator',
+          detail: 'per-turn: entries store loaded for another branch',
+        },
+      },
+    })
+    expect(getModelMock).not.toHaveBeenCalled()
+  })
+
   it('maps narrative profile parameters to SDK stream options', async () => {
     currentStoryStore.set({
       storyId: 's1',
@@ -156,6 +181,7 @@ describe('per-turn pipeline declaration', () => {
       definition,
       settings: { partialChapterBuffer: 3, models: {} } as never,
     })
+    entriesStore.hydrate('b1', [])
     vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
       ...APP_SETTINGS_DEFAULTS,
       providers: [provider],

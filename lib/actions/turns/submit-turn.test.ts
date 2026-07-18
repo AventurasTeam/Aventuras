@@ -215,6 +215,50 @@ describe('submitTurn', () => {
     expect(reply?.metadata?.worldTime).toBe(5)
   })
 
+  it('inherits worldTime from the last non-system entry when a system tail lingers', async () => {
+    const { ctx } = await makeHarness()
+    const opening: StoryEntry = {
+      id: 'seed-opening',
+      branchId: 'b1',
+      position: 1,
+      kind: 'opening',
+      content: 'The keep looms over the valley.',
+      chapterId: null,
+      metadata: { sceneEntities: [], currentLocationId: null, worldTime: 5 },
+      createdAt: 1,
+    }
+    // An un-cleared failure singleton (metadata null) sitting at the tail —
+    // only reachable via a submitTurn caller that skips the reader's
+    // clear-system-tail step; worldTime must not reset to 0 from it.
+    const systemTail: StoryEntry = {
+      id: 'seed-system',
+      branchId: 'b1',
+      position: 2,
+      kind: 'system',
+      content: 'Generation failed.',
+      chapterId: null,
+      metadata: null,
+      createdAt: 2,
+    }
+    await ctx.db.insert(storyEntries).values([opening, systemTail])
+    openStory('s1', 'b1')
+    entriesStore.hydrate('b1', [opening, systemTail])
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    await submitTurn(
+      { storyId: 's1', branchId: 'b1' },
+      { content: 'I look around.', composerMode: 'do' },
+      ctx,
+    )
+
+    const [ua] = await ctx.db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.kind, 'user_action')))
+    expect(ua?.metadata?.worldTime).toBe(5)
+    expect(ua?.position).toBe(3)
+  })
+
   it('positions the new user action at MAX(position)+1, not the store row count', async () => {
     const { ctx } = await makeHarness()
     // Non-contiguous tail: gaps mean the store's row count (4) is LOWER than the

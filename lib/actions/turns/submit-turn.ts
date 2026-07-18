@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq, ne } from 'drizzle-orm'
 
 import { storyEntries, type EntryMetadata } from '@/lib/db'
 import { generateId } from '@/lib/ids'
@@ -50,9 +50,18 @@ export async function submitTurn(
     // Queued per-branch so a second submit can't read the same MAX before the
     // first one's insert lands.
     const [tail] = await ctx.db
-      .select({ position: storyEntries.position, metadata: storyEntries.metadata })
+      .select({ position: storyEntries.position })
       .from(storyEntries)
       .where(eq(storyEntries.branchId, ids.branchId))
+      .orderBy(desc(storyEntries.position))
+      .limit(1)
+    // worldTime from the last non-system entry: a system tail carries null
+    // metadata and would reset the inherited worldTime to 0. Position still
+    // comes from the overall tail so numbering never collides.
+    const [timeTail] = await ctx.db
+      .select({ metadata: storyEntries.metadata })
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, ids.branchId), ne(storyEntries.kind, 'system')))
       .orderBy(desc(storyEntries.position))
       .limit(1)
     const position = (tail?.position ?? 0) + 1
@@ -61,7 +70,7 @@ export async function submitTurn(
     const metadata: EntryMetadata = {
       sceneEntities: [],
       currentLocationId: null,
-      worldTime: tail?.metadata?.worldTime ?? 0,
+      worldTime: timeTail?.metadata?.worldTime ?? 0,
     }
 
     const result = await applyDeltaAction(

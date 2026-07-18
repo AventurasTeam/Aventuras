@@ -1,14 +1,6 @@
-import { desc, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 
-import {
-  branches,
-  entities,
-  storyDefinitionSchema,
-  storyEntries,
-  storySettingsSchema,
-  stories,
-  type StoryEntry,
-} from '@/lib/db'
+import { branches, entities, storyDefinitionSchema, storySettingsSchema, stories } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
   currentStoryStore,
@@ -20,9 +12,8 @@ import {
   type OpenFailureKind,
 } from '@/lib/stores'
 
+import { readRecentEntries } from '../story-entries/recent-window'
 import type { DbCtx } from '../types'
-
-const OPEN_WINDOW_SIZE = 50
 
 export async function setStoryFavorite(id: string, favorite: boolean, ctx: DbCtx): Promise<void> {
   await ctx.runInTransaction([
@@ -123,18 +114,13 @@ export async function loadOpenStory(
     return { status: 'failed', kind: 'settings-corrupt' }
   }
 
-  const entryRows = (await ctx.db
-    .select()
-    .from(storyEntries)
-    .where(eq(storyEntries.branchId, branchId))
-    .orderBy(desc(storyEntries.position))
-    .limit(OPEN_WINDOW_SIZE)) as StoryEntry[]
+  const entryRows = await readRecentEntries(branchId, ctx.db)
   if (!isCurrentRequest()) return { status: 'cancelled' }
   const entityRows = await ctx.db.select().from(entities).where(eq(entities.branchId, branchId))
   if (!isCurrentRequest()) return { status: 'cancelled' }
 
   storiesStore.clearOpenFailure(row.storyId)
-  entriesStore.hydrate(branchId, entryRows.reverse())
+  entriesStore.hydrate(branchId, entryRows)
   entitiesStore.hydrate(branchId, entityRows)
   currentStoryStore.set({ storyId: row.storyId, branchId, definition, settings })
   return { status: 'ok', storyId: row.storyId, branchId }
