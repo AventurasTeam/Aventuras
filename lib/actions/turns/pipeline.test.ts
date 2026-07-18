@@ -7,17 +7,15 @@ import { appSettingsStore, currentStoryStore, entriesStore, resetAllStores } fro
 
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './pipeline'
 
-const { getModelMock, streamProviderCallMock } = vi.hoisted(() => ({
-  getModelMock: vi.fn(),
-  streamProviderCallMock: vi.fn(),
+const { streamAgentCallMock } = vi.hoisted(() => ({
+  streamAgentCallMock: vi.fn(),
 }))
 
 vi.mock('@/lib/ai', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return {
     ...actual,
-    getModel: getModelMock,
-    streamProviderCall: streamProviderCallMock,
+    streamAgentCall: streamAgentCallMock,
   }
 })
 
@@ -40,11 +38,15 @@ const definition = {
   worldTimeOrigin: { year: 0 },
 }
 
-function failingStream() {
+function failingStreamCall() {
   return {
-    textStream: (async function* () {
-      throw new Error('stop after call')
-    })(),
+    ok: true,
+    modelId: 'model-1',
+    stream: {
+      textStream: (async function* () {
+        throw new Error('stop after call')
+      })(),
+    },
   }
 }
 
@@ -67,8 +69,7 @@ async function runNarrativePhase() {
 
 beforeEach(() => {
   vi.restoreAllMocks()
-  getModelMock.mockReset().mockReturnValue({})
-  streamProviderCallMock.mockReset().mockReturnValue(failingStream())
+  streamAgentCallMock.mockReset().mockReturnValue(failingStreamCall())
   resetAllStores()
 })
 
@@ -127,7 +128,13 @@ describe('per-turn pipeline declaration', () => {
 
     await runNarrativePhase()
 
-    expect(getModelMock).toHaveBeenCalledWith(provider.id, 'story-model', 'act_1')
+    expect(streamAgentCallMock).toHaveBeenCalledWith(
+      'narrative',
+      expect.objectContaining({
+        actionId: 'act_1',
+        config: expect.objectContaining({ storyModels: { narrative: 'story-model' } }),
+      }),
+    )
   })
 
   it('rejects an open story from a different story on the same branch', async () => {
@@ -147,7 +154,7 @@ describe('per-turn pipeline declaration', () => {
         error: { kind: 'orchestrator', detail: 'per-turn: no open story for branch' },
       },
     })
-    expect(getModelMock).not.toHaveBeenCalled()
+    expect(streamAgentCallMock).not.toHaveBeenCalled()
   })
 
   it('fails when the entries store is loaded for another branch', async () => {
@@ -171,10 +178,10 @@ describe('per-turn pipeline declaration', () => {
         },
       },
     })
-    expect(getModelMock).not.toHaveBeenCalled()
+    expect(streamAgentCallMock).not.toHaveBeenCalled()
   })
 
-  it('maps narrative profile parameters to SDK stream options', async () => {
+  it('surfaces a resolve failure as a config-resolver phase error', async () => {
     currentStoryStore.set({
       storyId: 's1',
       branchId: 'b1',
@@ -182,35 +189,25 @@ describe('per-turn pipeline declaration', () => {
       settings: { partialChapterBuffer: 3, models: {} } as never,
     })
     entriesStore.hydrate('b1', [])
-    vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
-      ...APP_SETTINGS_DEFAULTS,
-      providers: [provider],
-      profiles: [
-        {
-          id: 'prof-narrative',
-          kind: 'narrative',
-          name: 'Narrative',
-          modelRef: { providerId: provider.id, modelId: 'global-model' },
-          temperature: 0.7,
-          maxOutput: 2048,
-          thinking: 1024,
-          timeout: 45,
-        },
-      ],
-      defaultProviderId: provider.id,
+    streamAgentCallMock.mockReturnValue({
+      ok: false,
+      kind: 'no-profile-assigned',
+      target: 'narrative',
     })
 
-    await runNarrativePhase()
+    const result = await runNarrativePhase()
 
-    expect(streamProviderCallMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        temperature: 0.7,
-        maxOutputTokens: 2048,
-        providerOptions: {
-          anthropic: { thinking: { type: 'enabled', budgetTokens: 1024 } },
+    expect(result).toEqual({
+      done: true,
+      value: {
+        status: 'failed',
+        error: {
+          kind: 'config-resolver',
+          failure: 'no-profile-assigned',
+          target: 'narrative',
+          phaseName: 'narrative',
         },
-        timeout: { totalMs: 45_000 },
-      }),
-    )
+      },
+    })
   })
 })

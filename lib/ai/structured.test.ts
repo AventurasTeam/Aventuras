@@ -56,6 +56,21 @@ describe('generateStructured', () => {
     )
     expect(res).toEqual({ status: 'ok', value: { description: 'A tale.' } })
   })
+  it('applies resolved profile params to the provider call', async () => {
+    const { resolveModel } = await import('./resolve-model')
+    const { runProviderCall } = await import('./transport/provider-call')
+    vi.mocked(resolveModel).mockReturnValueOnce({
+      ok: true,
+      providerId: 'p',
+      modelId: 'm',
+      params: { temperature: 0.5, maxOutput: 100 },
+    })
+    await generateStructured('wizard-assist', 'x', schema, CFG, new AbortController().signal)
+    expect(runProviderCall).toHaveBeenCalledWith(
+      expect.objectContaining({ temperature: 0.5, maxOutputTokens: 100 }),
+    )
+  })
+
   it('returns not-configured when the resolver fails', async () => {
     const { resolveModel } = await import('./resolve-model')
     vi.mocked(resolveModel).mockReturnValueOnce({

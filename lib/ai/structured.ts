@@ -1,9 +1,9 @@
 import { jsonrepair } from 'jsonrepair'
 import type { z } from 'zod'
 
+import { resolveProviderCall } from './agent-call'
 import { type ResolveTarget } from './agents'
-import { getModel } from './model'
-import { resolveModel, type ResolveFailureKind, type ResolveModelConfig } from './resolve-model'
+import { type ResolveFailureKind, type ResolveModelConfig } from './resolve-model'
 import { callWithRetry, type CallRetryError } from './transport/call-with-retry'
 import { runProviderCall } from './transport/provider-call'
 
@@ -40,12 +40,19 @@ export async function generateStructured<T>(
   config: ResolveModelConfig,
   signal: AbortSignal,
 ): Promise<GenerateStructuredResult<T>> {
-  const resolved = resolveModel(target, config)
+  const resolved = resolveProviderCall(target, config)
   if (!resolved.ok) return { status: 'not-configured', kind: resolved.kind }
 
-  const model = getModel(resolved.providerId, resolved.modelId)
   const result = await callWithRetry<T>(
-    async (sig) => (await runProviderCall({ model, prompt, abortSignal: sig })).text,
+    async (sig) =>
+      (
+        await runProviderCall({
+          model: resolved.model,
+          prompt,
+          abortSignal: sig,
+          ...resolved.callOptions,
+        })
+      ).text,
     (raw) => parseStructured(raw, schema),
     { maxProviderAttempts: 2, maxParseAttempts: 2, signal },
   )

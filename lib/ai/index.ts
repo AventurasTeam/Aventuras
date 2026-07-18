@@ -1,3 +1,9 @@
+export {
+  streamAgentCall,
+  type ProviderCallOptions,
+  type StreamAgentCallOptions,
+  type StreamAgentCallResult,
+} from './agent-call'
 export { AGENT_IDS, type AgentId, type ResolveTarget } from './agents'
 export { fetchModelCatalog } from './catalog'
 export { getModel } from './model'

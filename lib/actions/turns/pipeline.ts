@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm'
 
-import { getModel, resolveModel, streamProviderCall } from '@/lib/ai'
+import { streamAgentCall } from '@/lib/ai'
 import { storyEntries, type EntryMetadata } from '@/lib/db'
 import { generateId, IdBiMap } from '@/lib/ids'
 import {
@@ -53,63 +53,40 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, context)
 
   const cfg = appSettingsStore.getAppSettings()
-  const resolved = resolveModel('narrative', {
-    providers: cfg.providers,
-    profiles: cfg.profiles,
-    assignments: cfg.assignments,
-    defaultProviderId: cfg.defaultProviderId,
-    storyModels: open.settings.models,
-  })
-  // Preflight halts before this phase on a broken resolver, so a failure here only
-  // covers a resolver-time race the preflight snapshot missed — surface it, don't fabricate.
-  if (!resolved.ok)
-    return {
-      status: 'failed',
-      error: {
-        kind: 'config-resolver',
-        failure: resolved.kind,
-        target: resolved.target,
-        phaseName: 'narrative',
-      },
-    }
-
   const entryId = generateId('entry')
-  const model = getModel(resolved.providerId, resolved.modelId, ctx.actionId)
-  const provider = cfg.providers.find((candidate) => candidate.id === resolved.providerId)
   const startedAt = Date.now()
   let streamError: unknown
   // streamText (ai@6) does NOT throw from textStream on a network/connection failure —
   // it terminates iteration silently and surfaces the error only via onError. Capture it
   // there and gate the commit on it.
-  const stream = streamProviderCall({
-    model,
+  const call = streamAgentCall('narrative', {
     prompt,
+    config: {
+      providers: cfg.providers,
+      profiles: cfg.profiles,
+      assignments: cfg.assignments,
+      defaultProviderId: cfg.defaultProviderId,
+      storyModels: open.settings.models,
+    },
     abortSignal: ctx.abortSignal,
-    ...(resolved.params.temperature !== undefined
-      ? { temperature: resolved.params.temperature }
-      : {}),
-    ...(resolved.params.maxOutput !== undefined
-      ? { maxOutputTokens: resolved.params.maxOutput }
-      : {}),
-    ...(resolved.params.thinking !== undefined && provider?.type === 'anthropic'
-      ? {
-          providerOptions: {
-            anthropic: {
-              thinking:
-                resolved.params.thinking > 0
-                  ? { type: 'enabled', budgetTokens: resolved.params.thinking }
-                  : { type: 'disabled' },
-            },
-          },
-        }
-      : {}),
-    ...(resolved.params.timeout !== undefined
-      ? { timeout: { totalMs: resolved.params.timeout * 1000 } }
-      : {}),
+    actionId: ctx.actionId,
     onError: ({ error }) => {
       streamError = error
     },
   })
+  // Preflight halts before this phase on a broken resolver, so a failure here only
+  // covers a resolver-time race the preflight snapshot missed — surface it, don't fabricate.
+  if (!call.ok)
+    return {
+      status: 'failed',
+      error: {
+        kind: 'config-resolver',
+        failure: call.kind,
+        target: call.target,
+        phaseName: 'narrative',
+      },
+    }
+  const { stream } = call
   let content = ''
   try {
     for await (const chunk of stream.textStream) {
@@ -152,7 +129,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
           },
         }
       : {}),
-    model: resolved.modelId,
+    model: call.modelId,
     generationTimingMs: Date.now() - startedAt,
     ...(reasoningText ? { reasoning: reasoningText } : {}),
     // M2: scene membership + current location are piggyback/classifier-emitted (M3+); empty here.
