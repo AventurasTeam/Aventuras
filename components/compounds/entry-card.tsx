@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   ArrowLeftRight,
-  ArrowRight,
   Book,
   Brain,
   GitBranch,
@@ -10,7 +9,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react-native'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Platform, useWindowDimensions, View } from 'react-native'
 import Animated, {
   useAnimatedStyle,
@@ -89,22 +88,20 @@ const KIND_BUBBLE: Record<EntryKind, string> = {
   ai_reply: 'bg-bg-raised border-border',
   opening: 'bg-bg-raised border-border',
   system: 'bg-bg-base border-warning',
-  streaming: 'bg-bg-raised border-border border-dashed',
+  // Near-parity with ai_reply: the commit swap should not visually re-frame
+  // the card (reader note, 2026-07-19).
+  streaming: 'bg-bg-raised border-border',
 }
 
 // Tailwind's animate-pulse doesn't run on native, so the "model is thinking"
 // indication loops opacity through Reanimated instead.
-function PulsingBrain() {
+function Pulsing({ children }: { children: ReactNode }) {
   const opacity = useSharedValue(1)
   useEffect(() => {
     opacity.set(withRepeat(withTiming(0.3, { duration: 600 }), -1, true))
   }, [opacity])
   const style = useAnimatedStyle(() => ({ opacity: opacity.get() }))
-  return (
-    <Animated.View style={style}>
-      <Icon as={Brain} size="sm" className="shrink-0 text-fg-muted" />
-    </Animated.View>
-  )
+  return <Animated.View style={style}>{children}</Animated.View>
 }
 
 function NarrativeContent({ text, muted }: { text: string; muted?: boolean }) {
@@ -195,30 +192,35 @@ export function EntryCard({
               System
             </Text>
           </>
-        ) : kind === 'streaming' ? (
-          <>
-            {streamingPhase === 'reasoning' ? (
-              <PulsingBrain />
-            ) : (
-              <Icon as={Brain} size="sm" className="shrink-0 text-fg-muted" />
-            )}
-            <Text size="xs" variant="muted">
-              {streamingPhase === 'reasoning' ? 'Thinking…' : 'Generating…'}
-            </Text>
-            <Icon as={ArrowRight} size="sm" className="shrink-0 text-fg-muted" />
-          </>
         ) : (
+          // ai_reply / opening / streaming share one header anatomy so the
+          // commit swap only exchanges slot contents, never the layout.
           <>
             <Icon as={Book} size="sm" className="shrink-0 text-fg-muted" />
             {hasReasoning ? (
-              <IconAction
-                icon={Brain}
-                label={expanded ? 'Hide reasoning' : 'Show reasoning'}
-                size="sm"
-                onPress={() => setExpanded((v) => !v)}
-              />
+              kind === 'streaming' && streamingPhase === 'reasoning' ? (
+                <Pulsing>
+                  <IconAction
+                    icon={Brain}
+                    label={expanded ? 'Hide reasoning' : 'Show reasoning'}
+                    size="sm"
+                    onPress={() => setExpanded((v) => !v)}
+                  />
+                </Pulsing>
+              ) : (
+                <IconAction
+                  icon={Brain}
+                  label={expanded ? 'Hide reasoning' : 'Show reasoning'}
+                  size="sm"
+                  onPress={() => setExpanded((v) => !v)}
+                />
+              )
             ) : null}
-            {meta?.tokens != null ? (
+            {kind === 'streaming' ? (
+              <Text size="xs" variant="muted" className="leading-none">
+                {streamingPhase === 'reasoning' ? 'Thinking…' : 'Generating…'}
+              </Text>
+            ) : meta?.tokens != null ? (
               <Text size="xs" variant="muted" className="leading-none">
                 {meta.tokens.completion} tokens
                 {meta.tokens.reasoning != null ? ` (+${meta.tokens.reasoning} reasoning)` : ''}
@@ -228,9 +230,9 @@ export function EntryCard({
         )}
       </View>
 
-      {/* Streaming reasoning stays expanded live; committed entries collapse
-          behind the brain toggle. */}
-      {hasReasoning && (kind === 'streaming' || (expanded && !editing)) ? (
+      {/* Collapsed by default while streaming too — the pulsing brain signals
+          thinking; expanding shows the reasoning stream live. */}
+      {hasReasoning && expanded && !editing ? (
         <View className="mb-3 border-l-2 border-border pl-3">
           <NarrativeContent text={reasoning ?? ''} muted />
         </View>

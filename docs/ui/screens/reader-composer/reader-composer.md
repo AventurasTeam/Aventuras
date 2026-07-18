@@ -758,11 +758,11 @@ finer granularity — a branch-top button would duplicate "jump to
 chapter 1".
 
 **Visibility — conditional.** Jump-to-bottom is visible when the
-user is not near-bottom of the window (~200px tolerance —
-deliberately tighter than the auto-load boundary's
-~viewport-height, so the button appears as soon as the user leaves
-the live edge rather than a full viewport later). Slides in / out
-on threshold cross. Hidden near-bottom.
+user is not near-bottom of the window (~20px tolerance — the
+button appears as soon as the user leaves the live edge;
+deliberately decoupled from the auto-load boundary's
+~viewport-height tolerance). Slides in / out on threshold cross.
+Hidden near-bottom.
 
 **Click behavior.** Smooth scroll (~150ms) to bottom — always a
 same-window scroll (see [No window swap](#loaded-set-model); the
