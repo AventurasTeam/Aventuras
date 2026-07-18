@@ -131,6 +131,7 @@ export type StreamEvent =
   | { type: 'reasoning_delta'; text: string }
   | { type: 'message'; message: ChatMessage }
   | { type: 'done'; result: SendMessageResult }
+  | { type: 'aborted' }
   | { type: 'error'; error: string }
   | {
       type: 'show_entity'
@@ -684,6 +685,10 @@ export class InteractiveVaultService extends BaseAIService {
         },
       }
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        yield { type: 'aborted' }
+        return
+      }
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       log('Error in sendMessageStreaming', { error: errorMessage })
       yield { type: 'error', error: errorMessage }

@@ -104,14 +104,16 @@
   // Serializes conversation saves so a slower-resolving earlier write can never
   // overwrite a more complete later one (e.g. eager save vs. final save).
   let pendingSave: Promise<unknown> = Promise.resolve()
-  function queueSave() {
-    if (!service) return
-    pendingSave = pendingSave.then(() =>
+  function queueSave(): Promise<unknown> {
+    if (!service) return Promise.resolve()
+    const save = pendingSave.then(() =>
       service!
         .saveConversation(messages, vaultEditor.pendingChanges)
         .then(() => loadConversationsList())
         .catch((e) => console.error('[VaultAssistant] Save failed:', e)),
     )
+    pendingSave = save
+    return save
   }
 
   // Conversation history selector
@@ -297,11 +299,12 @@
   async function handleNewConversation() {
     if (!service) return
     handleAbort()
-    // Auto-save current conversation before starting new one
+    // Auto-save current conversation before starting new one. Routed through the
+    // pendingSave queue (not a direct call) so it can't race a still-in-flight
+    // save from handleSend and can't run against the service instance we're about
+    // to replace below.
     if (messages.some((m) => !m.isGreeting)) {
-      await service
-        .saveConversation(messages, vaultEditor.pendingChanges)
-        .catch((e) => console.error('[VaultAssistant] Save failed:', e))
+      await queueSave()
     }
     service.reset()
     vaultEditor.reset()
@@ -314,11 +317,10 @@
   async function handleSwitchConversation(id: string) {
     if (!service) return
     handleAbort()
-    // Auto-save current before switching
+    // Auto-save current before switching. Routed through the pendingSave queue —
+    // see handleNewConversation for why a direct call here would be unsafe.
     if (messages.some((m) => !m.isGreeting)) {
-      await service
-        .saveConversation(messages, vaultEditor.pendingChanges)
-        .catch((e) => console.error('[VaultAssistant] Save failed:', e))
+      await queueSave()
     }
     const loaded = await service.loadConversation(id)
     if (loaded) {
@@ -535,6 +537,9 @@
 
           case 'tool_start':
             isThinking = false
+            // Ensure a placeholder exists even when the model calls a tool with no
+            // preceding text/reasoning, so the tool chip has somewhere to render.
+            ensureStreamingMessage()
             activeToolCalls = [
               ...activeToolCalls,
               {
@@ -616,6 +621,11 @@
           case 'done':
             break
 
+          case 'aborted':
+            // User-initiated stop (button or Escape) — handleAbort() already reset
+            // the UI state; nothing else to do here, and no error should be shown.
+            break
+
           case 'error':
             error = event.error
             const errorMsg: ChatMessage = {
@@ -691,7 +701,7 @@
     if (!target) return
     try {
       await vaultEditor.approve(target, service)
-      await service.saveConversation(messages, vaultEditor.pendingChanges).catch(() => {})
+      await queueSave()
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to apply change'
     }
@@ -700,7 +710,7 @@
   async function handleReject(change: VaultPendingChange) {
     if (!service) return
     vaultEditor.reject(change, service)
-    await service.saveConversation(messages, vaultEditor.pendingChanges).catch(() => {})
+    await queueSave()
   }
 
   function handleEdit(change: VaultPendingChange) {
@@ -718,7 +728,7 @@
     const err = await vaultEditor.approveAll(service)
     if (err) error = err
     if (!err) {
-      await service.saveConversation(messages, vaultEditor.pendingChanges).catch(() => {})
+      await queueSave()
     }
     return err
   }
