@@ -135,7 +135,8 @@ export default function Index() {
     setStoryRecovery(null)
     runAction(
       recoveryCoordinator.attemptOpen({
-        open: (navigate) => openStory(storyId, ctx, navigate),
+        open: (navigate, isCurrentRequest) =>
+          openStory(storyId, ctx, navigate, undefined, isCurrentRequest),
         navigate: navigateToStory,
         onOpenFailed: (kind) => showStoryRecovery({ storyId, kind }),
       }),
@@ -270,7 +271,8 @@ export default function Index() {
             const operation = recoveryCoordinator.startReset({
               storyId,
               reset: () => resetStorySettings(storyId, ctx),
-              open: (navigate) => openStory(storyId, ctx, navigate),
+              open: (navigate, isCurrentRequest) =>
+                openStory(storyId, ctx, navigate, undefined, isCurrentRequest),
               navigate: navigateToStory,
               onOpened: () => setStoryRecovery(null),
               onOpenFailed: (kind) => showStoryRecovery({ storyId, kind }),

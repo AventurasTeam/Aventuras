@@ -68,11 +68,13 @@ describe('story recovery coordinator', () => {
   })
 
   it('suppresses navigation and state callbacks when invalidated during open', async () => {
-    const openDeferred = deferred<{ status: 'ok'; branchId: string }>()
+    const openDeferred = deferred<{ status: 'cancelled' }>()
     let guardedNavigate: ((branchId: string) => void) | undefined
+    let isCurrent: (() => boolean) | undefined
     const options = request({
-      open: vi.fn((navigate) => {
+      open: vi.fn((navigate, current) => {
         guardedNavigate = navigate
+        isCurrent = current
         return openDeferred.promise
       }),
     })
@@ -81,8 +83,9 @@ describe('story recovery coordinator', () => {
     await vi.waitFor(() => expect(options.open).toHaveBeenCalledOnce())
 
     coordinator.invalidate()
+    expect(isCurrent?.()).toBe(false)
     guardedNavigate?.('br_1')
-    openDeferred.resolve({ status: 'ok', branchId: 'br_1' })
+    openDeferred.resolve({ status: 'cancelled' })
     await operation
 
     expect(options.navigate).not.toHaveBeenCalled()
@@ -92,7 +95,8 @@ describe('story recovery coordinator', () => {
 
   it('navigates and clears the current recovery after a successful open', async () => {
     const options = request({
-      open: vi.fn(async (navigate) => {
+      open: vi.fn(async (navigate, isCurrent) => {
+        expect(isCurrent()).toBe(true)
         navigate('br_1')
         return { status: 'ok' as const, branchId: 'br_1' }
       }),
@@ -128,20 +132,46 @@ describe('story recovery coordinator', () => {
     await expect(coordinator.startReset(options)).rejects.toBe(failure)
 
     expect(options.open).not.toHaveBeenCalled()
+
+    const retryOptions = request()
+    await coordinator.startReset(retryOptions)
+    expect(retryOptions.reset).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the same-story reset locked after invalidation until its operation settles', async () => {
+    const firstReset = deferred<void>()
+    const firstOptions = request({ reset: vi.fn(() => firstReset.promise) })
+    const secondOptions = request()
+    const coordinator = createStoryRecoveryCoordinator()
+
+    const first = coordinator.startReset(firstOptions)
+    coordinator.invalidate()
+    const duplicate = coordinator.startReset(secondOptions)
+
+    expect(duplicate).toBeUndefined()
+    expect(secondOptions.reset).not.toHaveBeenCalled()
+
+    firstReset.resolve(undefined)
+    await first
+
+    const laterOptions = request()
+    const later = coordinator.startReset(laterOptions)
+    expect(later).toBeInstanceOf(Promise)
+    expect(laterOptions.reset).toHaveBeenCalledOnce()
+    await later
   })
 
   it('prevents an older ordinary open from navigating or replacing a newer recovery', async () => {
-    const openDeferred = deferred<{
-      status: 'open-failed'
-      kind: 'definition-corrupt'
-    }>()
+    const openDeferred = deferred<{ status: 'cancelled' }>()
     let guardedNavigate: ((branchId: string) => void) | undefined
+    let isCurrent: (() => boolean) | undefined
     const navigate = vi.fn()
     const onOpenFailed = vi.fn()
     const coordinator = createStoryRecoveryCoordinator()
     const ordinaryOpen = coordinator.attemptOpen({
-      open: vi.fn((navigateToStory) => {
+      open: vi.fn((navigateToStory, current) => {
         guardedNavigate = navigateToStory
+        isCurrent = current
         return openDeferred.promise
       }),
       navigate,
@@ -149,8 +179,9 @@ describe('story recovery coordinator', () => {
     })
 
     const newerRecovery = coordinator.startReset(request())
+    expect(isCurrent?.()).toBe(false)
     guardedNavigate?.('br_old')
-    openDeferred.resolve({ status: 'open-failed', kind: 'definition-corrupt' })
+    openDeferred.resolve({ status: 'cancelled' })
     await ordinaryOpen
     await newerRecovery
 

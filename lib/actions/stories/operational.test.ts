@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   branches,
   deltas,
+  entities,
   storyDefinitionSchema,
+  storyEntries,
   storySettingsSchema,
   stories,
   type StoryDefinition,
@@ -234,5 +236,51 @@ describe('stories column writes', () => {
 
     expect(healthyResult).toEqual({ status: 'ok', branchId: 'br_healthy' })
     expect(navigate).toHaveBeenCalledWith('br_healthy')
+  })
+
+  it('cancels a stale open before publishing its working set or navigation', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(storyEntries).values({
+      id: 'entry_1',
+      branchId: 'br_1',
+      position: 1,
+      kind: 'opening',
+      content: 'The keep looms over the valley.',
+      createdAt: 1,
+    })
+    await db.insert(entities).values({
+      id: 'entity_1',
+      branchId: 'br_1',
+      kind: 'character',
+      name: 'Aria',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const navigate = vi.fn()
+    const isCurrent = vi
+      .fn<() => boolean>()
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(true)
+      .mockReturnValue(false)
+
+    const result = await openStory('story_1', ctx, navigate, 999, isCurrent)
+
+    expect(result).toEqual({ status: 'cancelled' })
+    expect(currentStoryStore.getCurrentStory()).toBeNull()
+    expect(entriesStore.getLoadedBranch()).toBeNull()
+    expect(entriesStore.getEntries().size).toBe(0)
+    expect(entitiesStore.getLoadedBranch()).toBeNull()
+    expect(entitiesStore.getEntities().size).toBe(0)
+    expect(navigationStore.getNavigation()).toEqual({
+      currentStoryId: null,
+      currentBranchId: null,
+    })
+    expect(navigate).not.toHaveBeenCalled()
+    expect(
+      (await db.select().from(stories).where(eq(stories.id, 'story_1')))[0].lastOpenedAt,
+    ).toBeNull()
   })
 })

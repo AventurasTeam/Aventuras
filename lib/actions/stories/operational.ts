@@ -67,28 +67,40 @@ export type OpenStoryResult =
   | { status: 'ok'; branchId: string }
   | { status: 'no-branch' }
   | { status: 'open-failed'; kind: OpenFailureKind }
+  | { status: 'cancelled' }
 
 export type LoadOpenStoryResult =
   | { status: 'ok'; storyId: string; branchId: string }
   | { status: 'no-story' }
   | { status: 'failed'; kind: OpenFailureKind }
+  | { status: 'cancelled' }
+
+type IsCurrentRequest = () => boolean
+
+const alwaysCurrent: IsCurrentRequest = () => true
 
 // Parses the story's config JSON, hydrates the working-set stores the per-turn
 // loop reads (entries + entities), and populates currentStoryStore — the single
 // place that does all three, so any story-open path (landing, wizard finish,
 // future deep-link) gets the same guarantees a corrupt-JSON badge included.
-export async function loadOpenStory(branchId: string, ctx: DbCtx): Promise<LoadOpenStoryResult> {
+export async function loadOpenStory(
+  branchId: string,
+  ctx: DbCtx,
+  isCurrentRequest: IsCurrentRequest = alwaysCurrent,
+): Promise<LoadOpenStoryResult> {
   const [row] = await ctx.db
     .select({ storyId: stories.id, definition: stories.definition, settings: stories.settings })
     .from(branches)
     .innerJoin(stories, eq(stories.id, branches.storyId))
     .where(eq(branches.id, branchId))
+  if (!isCurrentRequest()) return { status: 'cancelled' }
   if (!row) return { status: 'no-story' }
 
   let definition
   try {
     definition = storyDefinitionSchema.parse(row.definition)
   } catch (err) {
+    if (!isCurrentRequest()) return { status: 'cancelled' }
     logger.error('action_layer.story_open_failed', {
       storyId: row.storyId,
       kind: 'definition-corrupt',
@@ -101,6 +113,7 @@ export async function loadOpenStory(branchId: string, ctx: DbCtx): Promise<LoadO
   try {
     settings = storySettingsSchema.parse(row.settings)
   } catch (err) {
+    if (!isCurrentRequest()) return { status: 'cancelled' }
     logger.error('action_layer.story_open_failed', {
       storyId: row.storyId,
       kind: 'settings-corrupt',
@@ -109,7 +122,6 @@ export async function loadOpenStory(branchId: string, ctx: DbCtx): Promise<LoadO
     storiesStore.setOpenFailure({ storyId: row.storyId, kind: 'settings-corrupt' })
     return { status: 'failed', kind: 'settings-corrupt' }
   }
-  storiesStore.clearOpenFailure(row.storyId)
 
   const entryRows = (await ctx.db
     .select()
@@ -117,8 +129,11 @@ export async function loadOpenStory(branchId: string, ctx: DbCtx): Promise<LoadO
     .where(eq(storyEntries.branchId, branchId))
     .orderBy(desc(storyEntries.position))
     .limit(OPEN_WINDOW_SIZE)) as StoryEntry[]
+  if (!isCurrentRequest()) return { status: 'cancelled' }
   const entityRows = await ctx.db.select().from(entities).where(eq(entities.branchId, branchId))
+  if (!isCurrentRequest()) return { status: 'cancelled' }
 
+  storiesStore.clearOpenFailure(row.storyId)
   entriesStore.hydrate(branchId, entryRows.reverse())
   entitiesStore.hydrate(branchId, entityRows)
   currentStoryStore.set({ storyId: row.storyId, branchId, definition, settings })
@@ -130,22 +145,27 @@ export async function openStory(
   ctx: DbCtx,
   navigate: (branchId: string) => void,
   nowMs: number = Date.now(),
+  isCurrentRequest: IsCurrentRequest = alwaysCurrent,
 ): Promise<OpenStoryResult> {
   const [row] = await ctx.db
     .select({ branchId: stories.currentBranchId })
     .from(stories)
     .where(eq(stories.id, id))
+  if (!isCurrentRequest()) return { status: 'cancelled' }
   const branchId = row?.branchId ?? null
   if (branchId == null) return { status: 'no-branch' }
 
-  const load = await loadOpenStory(branchId, ctx)
+  const load = await loadOpenStory(branchId, ctx, isCurrentRequest)
+  if (load.status === 'cancelled') return load
   if (load.status === 'failed') return { status: 'open-failed', kind: load.kind }
   if (load.status !== 'ok') return { status: 'no-branch' }
 
+  if (!isCurrentRequest()) return { status: 'cancelled' }
   navigationStore.setCurrentStory(id)
   navigationStore.setCurrentBranch(branchId)
+  if (!isCurrentRequest()) return { status: 'cancelled' }
   navigate(branchId)
-  // update the timestamp last so navigate isn't blocked
+  if (!isCurrentRequest()) return { status: 'cancelled' }
   await touchStoryOpened(id, ctx, nowMs).catch((err: unknown) => {
     logger.error('action_layer.story_touch_failed', {
       storyId: id,
