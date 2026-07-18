@@ -27,6 +27,20 @@
     "cancel": "Cancel",
     "confirm": "Delete"
   },
+  "storyRecovery": {
+    "definitionTitle": "Couldn't open {{storyName}}",
+    "definitionBody": "This story's definition is corrupted. Aventuras has no safe default to replace it.",
+    "settingsTitle": "Couldn't open {{storyName}}",
+    "settingsBody": "This story's settings are corrupted. You can restore them from your current app defaults without changing the story's content.",
+    "openFile": "Open file",
+    "resetStorySettings": "Reset settings for this story",
+    "dismiss": "OK",
+    "confirmTitle": "Reset settings for {{storyName}}?",
+    "confirmBody": "This replaces only this story's settings with your current app defaults.",
+    "confirmWarning": "The story definition, branches, entries, entities, and world data stay intact.",
+    "confirmReset": "Reset settings",
+    "cancel": "Cancel"
+  },
   "concurrentSession": {
     "title": "Unfinished story in progress",
     "untitledDraft": "Untitled story",
@@ -46,6 +60,8 @@
     "favoriteFailed": "Couldn't update favorite. Please try again.",
     "archiveFailed": "Couldn't update the story. Please try again.",
     "deleteFailed": "Couldn't delete the story. Please try again.",
+    "resetStorySettingsFailed": "Couldn't reset this story's settings. Please try again.",
+    "openDatabaseFileFailed": "Couldn't show the database file. Please try again.",
     "discardSessionFailed": "Couldn't discard the session. Please try again.",
     "draftLoadFailed": "Couldn't open the draft. Please try again.",
     "resumeSessionFailed": "Couldn't resume the session. Please try again.",

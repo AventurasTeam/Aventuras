@@ -1,14 +1,10 @@
-import { Platform, View } from 'react-native'
+import { View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
-
-// Desktop-only feature: Electron bridge injects window.native at boot; both
-// Platform.OS and window.native are immutable after startup, so stable at module level.
-const CAN_REVEAL_DB_FILE =
-  Platform.OS === 'web' && typeof window !== 'undefined' && !!window.native?.revealDbFile
+import { getDatabaseFileRevealAction } from '@/lib/recovery'
 
 type SettingsRecoveryScreenProps = {
   onReset: () => void | Promise<void>
@@ -19,6 +15,8 @@ type SettingsRecoveryScreenProps = {
 // desktop-only (feature-detected on the Electron bridge — no path on Android).
 export function SettingsRecoveryScreen({ onReset }: SettingsRecoveryScreenProps) {
   const insets = useSafeAreaInsets()
+  const revealDbFile = getDatabaseFileRevealAction()
+
   return (
     <View
       className="flex-1 bg-bg-base"
@@ -37,8 +35,8 @@ export function SettingsRecoveryScreen({ onReset }: SettingsRecoveryScreenProps)
           {t('recovery.body')}
         </Text>
         <View className="w-full max-w-[320px] gap-3">
-          {CAN_REVEAL_DB_FILE ? (
-            <Button variant="secondary" onPress={() => void window.native?.revealDbFile?.()}>
+          {revealDbFile ? (
+            <Button variant="secondary" onPress={() => void revealDbFile()}>
               <Text>{t('recovery.openFile')}</Text>
             </Button>
           ) : null}
