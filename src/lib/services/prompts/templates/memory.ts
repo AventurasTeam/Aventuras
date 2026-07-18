@@ -60,6 +60,26 @@ CHAPTER CONTENT:
 """`,
 }
 
+const chapterTimelinePromptTemplate: PromptTemplate = {
+  id: 'chapter-timeline',
+  name: 'Chapter Timeline Estimation',
+  category: 'service',
+  description: 'Estimates in-story time elapsed during a chapter, from its summary',
+  content: `You are a narrative timekeeper. Your task is to estimate how much in-story time elapsed during a chapter, based only on its summary.
+
+## Guidelines
+- Look for explicit time markers ("the next morning", "three weeks later", "by winter") and use them directly
+- If no explicit marker exists, infer a plausible duration from the pacing and scope of events described (a single conversation or fight is minutes to hours; a journey or extended activity is hours to days)
+- When genuinely uncertain, prefer a small, conservative estimate over a large one
+- Express the result as years/days/hours/minutes elapsed DURING this chapter (a duration, not a calendar date)`,
+  userContent: `Chapter summary:
+"""
+{{ chapterSummary }}
+"""
+
+Estimate the in-story time elapsed during this chapter.`,
+}
+
 const retrievalDecisionPromptTemplate: PromptTemplate = {
   id: 'retrieval-decision',
   name: 'Retrieval Decision',
@@ -207,6 +227,7 @@ Please gather relevant context from past chapters that will help respond to this
 export const memoryTemplates: PromptTemplate[] = [
   chapterAnalysisPromptTemplate,
   chapterSummarizationPromptTemplate,
+  chapterTimelinePromptTemplate,
   retrievalDecisionPromptTemplate,
   loreManagementPromptTemplate,
   interactiveLorebookPromptTemplate,

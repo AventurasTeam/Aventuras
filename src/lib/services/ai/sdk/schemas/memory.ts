@@ -40,3 +40,12 @@ export const retrievalDecisionSchema = z.object({
 })
 
 export type RetrievalDecision = z.infer<typeof retrievalDecisionSchema>
+
+export const chapterTimelineSchema = z.object({
+  years: z.number().int().min(0).describe('Full years elapsed during this chapter'),
+  days: z.number().int().min(0).describe('Days elapsed, beyond full years'),
+  hours: z.number().int().min(0).describe('Hours elapsed, beyond full days'),
+  minutes: z.number().int().min(0).describe('Minutes elapsed, beyond full hours'),
+})
+
+export type ChapterTimelineEstimate = z.infer<typeof chapterTimelineSchema>

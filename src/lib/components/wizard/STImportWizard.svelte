@@ -1,5 +1,6 @@
 <script lang="ts">
   import { STImportWizardStore } from '$lib/stores/wizard/stImportWizard.svelte'
+  import { story } from '$lib/stores/story.svelte'
   import { hasRequiredCredentials } from '$lib/services/ai/image'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -38,9 +39,14 @@
   ]
 </script>
 
-<ResponsiveModal.Root open={true} onOpenChange={(open) => !open && onClose()}>
+<ResponsiveModal.Root
+  open={true}
+  onOpenChange={(open) => !open && !wizard.isCreatingStory && onClose()}
+>
   <ResponsiveModal.Content
     class="flex h-full flex-col gap-0 p-0 sm:h-auto sm:max-h-[90vh] sm:max-w-3xl"
+    interactOutsideBehavior={wizard.isCreatingStory ? 'ignore' : 'close'}
+    escapeKeydownBehavior={wizard.isCreatingStory ? 'ignore' : 'close'}
   >
     <!-- Header -->
     <div class="flex flex-col border-b p-4 pb-4">
@@ -222,10 +228,24 @@
           hasCard={wizard.hasCard}
           vaultTag={wizard.vaultTag}
           vaultDescription={wizard.vaultDescription}
+          chapterizeAfterImport={wizard.chapterizeAfterImport}
+          chapterizeIncludeLorebook={wizard.chapterizeIncludeLorebook}
+          chapterizeIncludeTimeline={wizard.chapterizeIncludeTimeline}
+          chapterizeIncludeClassification={wizard.chapterizeIncludeClassification}
+          chapterizationProgress={story.chapterizationProgress}
+          chapterizationTimelineProgress={story.chapterizationTimelineProgress}
+          chapterizationClassificationProgress={story.chapterizationClassificationProgress}
+          chapterizationStatus={story.chapterizationStatus}
           onTitleChange={(v) => (wizard.storyTitle = v)}
           onSaveToVaultChange={(v) => (wizard.saveToVault = v)}
           onVaultTagChange={(v) => (wizard.vaultTag = v)}
           onVaultDescriptionChange={(v) => (wizard.vaultDescription = v)}
+          onChapterizeAfterImportChange={(v) => (wizard.chapterizeAfterImport = v)}
+          onChapterizeIncludeLorebookChange={(v) => (wizard.chapterizeIncludeLorebook = v)}
+          onChapterizeIncludeTimelineChange={(v) => (wizard.chapterizeIncludeTimeline = v)}
+          onChapterizeIncludeClassificationChange={(v) =>
+            (wizard.chapterizeIncludeClassification = v)}
+          onCancelChapterization={() => story.requestChapterizationCancel()}
         />
       {/if}
     </div>
@@ -233,7 +253,12 @@
     <!-- Footer Navigation -->
     <div class="flex shrink-0 justify-between border-t p-4">
       {#if wizard.currentStep > 1}
-        <Button variant="secondary" class="gap-1 pl-2" onclick={() => wizard.prevStep()}>
+        <Button
+          variant="secondary"
+          class="gap-1 pl-2"
+          onclick={() => wizard.prevStep()}
+          disabled={wizard.isCreatingStory}
+        >
           <ChevronLeft class="h-4 w-4" />
           Back
         </Button>

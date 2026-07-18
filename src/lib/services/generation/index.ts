@@ -61,6 +61,17 @@ export type {
   ChapterSummaryData,
 } from './ChapterService'
 
+// Chapter batch planner + service (deterministic backfill chapterization)
+export { planChapterBoundaries } from './ChapterBatchPlanner'
+export type { ChapterBoundary } from './ChapterBatchPlanner'
+export { ChapterBatchService } from './ChapterBatchService'
+export type {
+  ChapterBatchServiceDependencies,
+  ChapterBatchInput,
+  ChapterBatchCallbacks,
+  ChapterBatchResult,
+} from './ChapterBatchService'
+
 // Lore management coordinator
 export { LoreManagementCoordinator } from './LoreManagementCoordinator'
 export type {

@@ -10,9 +10,11 @@ import { ContextBuilder } from '$lib/services/context'
 import {
   chapterAnalysisSchema,
   chapterSummaryResultSchema,
+  chapterTimelineSchema,
   retrievalDecisionSchema,
   type ChapterAnalysis,
   type ChapterSummaryResult,
+  type ChapterTimelineEstimate,
   type RetrievalDecision,
 } from '../sdk/schemas/memory'
 import { AI_CONFIG } from '../core/config'
@@ -146,6 +148,26 @@ export class MemoryService extends BaseAIService {
       optimalEndIndex: result.optimalEndIndex,
       keywordCount: result.keywords.length,
     })
+
+    return result
+  }
+
+  /**
+   * Estimate in-story time elapsed during a chapter, from its summary alone.
+   * Used to backfill Chapter.startTime/endTime and Story.timeTracker for
+   * chapters batch-created from imported history, where entries carry no
+   * metadata.timeStart/timeEnd.
+   */
+  async estimateChapterTimeline(summary: string): Promise<ChapterTimelineEstimate> {
+    log('estimateChapterTimeline', { summaryLength: summary.length })
+
+    const ctx = new ContextBuilder()
+    ctx.add({ chapterSummary: summary })
+    const { system, user: prompt } = await ctx.render('chapter-timeline')
+
+    const result = await this.generate(chapterTimelineSchema, system, prompt, 'chapter-timeline')
+
+    log('estimateChapterTimeline complete', result)
 
     return result
   }

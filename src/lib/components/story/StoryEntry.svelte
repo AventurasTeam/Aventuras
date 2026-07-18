@@ -1269,7 +1269,7 @@
             <Volume2 class="h-4 w-4" />
           {/if}
         </Button>
-        {#if isLatestNarration && story.currentStory?.settings?.imageGenerationMode === 'agentic'}
+        {#if entry.type === 'narration' && story.currentStory?.settings?.imageGenerationMode === 'agentic'}
           <Button
             variant="text"
             size="icon"

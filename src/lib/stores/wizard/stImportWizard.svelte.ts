@@ -25,6 +25,33 @@ import { ImageStore } from '$lib/stores/wizard/imageStore.svelte'
 import { SvelteMap } from 'svelte/reactivity'
 import { packService } from '$lib/services/packs/pack-service'
 import type { PresetPack, CustomVariable } from '$lib/services/packs/types'
+import { AISDKError, APICallError, NoObjectGeneratedError } from 'ai'
+
+/**
+ * Extract a diagnostic message from an AI SDK error. `.message` alone is
+ * often generic ("No object generated") — the useful detail (HTTP status,
+ * raw model output that failed schema validation, underlying cause) lives
+ * on named fields that plain `err.message` doesn't surface. Particularly
+ * relevant for local/self-hosted models, which fail structured output
+ * validation far more often than hosted frontier models.
+ */
+function describeAIError(err: unknown): string {
+  if (APICallError.isInstance(err)) {
+    const status = err.statusCode ? `HTTP ${err.statusCode}` : 'request failed'
+    const body = err.responseBody ? ` — ${err.responseBody.slice(0, 300)}` : ''
+    return `${status} calling ${err.url}: ${err.message}${body}`
+  }
+  if (NoObjectGeneratedError.isInstance(err)) {
+    const output = err.text ? ` Model output: ${err.text.slice(0, 300)}` : ''
+    return `${err.message}${output}`
+  }
+  if (AISDKError.isInstance(err)) {
+    const cause = err.cause && err.cause !== err ? ` (${describeAIError(err.cause)})` : ''
+    return `${err.message}${cause}`
+  }
+  if (err instanceof Error) return err.message
+  return String(err)
+}
 
 export class STImportWizardStore {
   // Step navigation
@@ -98,6 +125,10 @@ export class STImportWizardStore {
   backgroundImagesEnabled = $state(false)
   referenceMode = $state(false)
   importChatAsEntries = $state(false) // true = import chat, false = fresh start with card opening
+  chapterizeAfterImport = $state(false)
+  chapterizeIncludeLorebook = $state(false)
+  chapterizeIncludeTimeline = $state(false)
+  chapterizeIncludeClassification = $state(false)
 
   // Step 6: Review
   storyTitle = $state('')
@@ -348,10 +379,16 @@ export class STImportWizardStore {
     this.cardProcessError = null
 
     try {
-      // Run scenario extraction and character sanitization in parallel
+      // Run scenario extraction and character sanitization in parallel.
+      // Tag which call failed — Promise.all alone would collapse both
+      // into a single opaque rejection.
       const [result, sanitized] = await Promise.all([
-        CharacterCardImport.clean(this.cardRawJson, this.selectedGenre),
-        CharacterCardImport.sanitize(this.cardRawJson),
+        CharacterCardImport.clean(this.cardRawJson, this.selectedGenre).catch((err) => {
+          throw new Error(`Scenario extraction failed: ${describeAIError(err)}`)
+        }),
+        CharacterCardImport.sanitize(this.cardRawJson).catch((err) => {
+          throw new Error(`Character sanitization failed: ${describeAIError(err)}`)
+        }),
       ])
 
       this.cardImportResult = result
@@ -403,8 +440,8 @@ export class STImportWizardStore {
         this.addEmbeddedLorebook()
       }
     } catch (err) {
-      this.cardProcessError =
-        err instanceof Error ? err.message : 'Failed to process character card'
+      console.error('[STImportWizard] processCardImport failed:', err)
+      this.cardProcessError = err instanceof Error ? err.message : describeAIError(err)
     } finally {
       this.isProcessingCard = false
     }
@@ -596,6 +633,16 @@ export class STImportWizardStore {
     this.isCreatingStory = true
     this.createError = null
 
+    // Reset progress/status of chapterization in the global story store
+    story.chapterizationProgress = null
+    story.chapterizationStatus = null
+
+    // Temporarily switch activePanel to 'library' during story creation and chapterization
+    // so that AppShell.svelte does not prematurely switch to the story view and unmount
+    // the wizard before chapterization completes.
+    const originalPanel = ui.activePanel
+    ui.setActivePanel('library')
+
     try {
       const protagonistName = this.protagonist?.name || 'the protagonist'
 
@@ -726,6 +773,18 @@ export class STImportWizardStore {
 
         if (messagesToImport.length > 0) {
           await story.importSTChat(messagesToImport)
+
+          if (this.chapterizeAfterImport) {
+            try {
+              await story.chapterizeFromBeginning({
+                includeLorebook: this.chapterizeIncludeLorebook,
+                includeTimeline: this.chapterizeIncludeTimeline,
+                includeClassification: this.chapterizeIncludeClassification,
+              })
+            } catch (chapterErr) {
+              console.error('Chapterization failed, but import succeeded:', chapterErr)
+            }
+          }
         }
       }
 
@@ -744,6 +803,7 @@ export class STImportWizardStore {
       ui.setActivePanel('story')
       this.onClose()
     } catch (err) {
+      ui.setActivePanel(originalPanel)
       console.error('Failed to create story from ST import:', err)
       this.createError = err instanceof Error ? err.message : 'Failed to create story'
     } finally {

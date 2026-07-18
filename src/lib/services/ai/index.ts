@@ -87,6 +87,7 @@ import type {
   ActionChoicesResult,
   ChapterAnalysis,
   ChapterSummaryResult,
+  ChapterTimelineEstimate,
   ClassificationResult,
   ImageableScene,
   RetrievalDecision,
@@ -448,6 +449,14 @@ class AIService {
   ): Promise<ChapterSummaryResult> {
     const memoryService = serviceFactory.createMemoryService()
     return memoryService.summarizeChapter(entries, allChapters, mode, pov, tense, summaryDetail)
+  }
+
+  /**
+   * Estimate in-story time elapsed during a chapter, from its summary alone.
+   */
+  async estimateChapterTimeline(summary: string): Promise<ChapterTimelineEstimate> {
+    const memoryService = serviceFactory.createMemoryService()
+    return memoryService.estimateChapterTimeline(summary)
   }
 
   /**

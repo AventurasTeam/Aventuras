@@ -43,6 +43,7 @@ import {
 } from '$lib/services/events'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { aiService } from '$lib/services/ai'
+import { ChapterBatchService, type WorldState } from '$lib/services/generation'
 import { createLogger } from '$lib/log'
 import { grammarService } from '$lib/services/grammar'
 
@@ -99,6 +100,16 @@ class StoryStore {
   // Memory system
   chapters = $state<Chapter[]>([])
   checkpoints = $state<Checkpoint[]>([])
+
+  // Batch chapterization (chapterizeFromBeginning) progress/cancel state.
+  // Local to the store (not ui.svelte.ts) because this is a blocking,
+  // single-operation flow owned by whichever screen started it, unlike
+  // ui.loreManagementProgress which tracks an ambient background task.
+  chapterizationProgress = $state<{ current: number; total: number } | null>(null)
+  chapterizationTimelineProgress = $state<{ current: number; total: number } | null>(null)
+  chapterizationClassificationProgress = $state<{ current: number; total: number } | null>(null)
+  chapterizationStatus = $state<string | null>(null)
+  private chapterizationCancelRequested = $state(false)
 
   // Branching system
   branches = $state<Branch[]>([])
@@ -233,6 +244,24 @@ class StoryStore {
 
     const lineageIds = new Set(lineage.map((branch) => branch.id))
     return this.chapters.filter((ch) => ch.branchId === null || lineageIds.has(ch.branchId))
+  }
+
+  /**
+   * Snapshot of world state for AI calls that need it (classification, action
+   * choices). Single source of truth for this shape — was previously
+   * duplicated inline at each call site.
+   */
+  get worldStateSnapshot(): WorldState {
+    return {
+      characters: this.characters,
+      locations: this.locations,
+      items: this.items,
+      storyBeats: this.storyBeats,
+      currentLocation: this.currentLocation,
+      chapters: this.currentBranchChapters,
+      memoryConfig: this.memoryConfig,
+      lorebookEntries: this.lorebookEntries,
+    }
   }
 
   get lastChapterEndIndex(): number {
@@ -624,8 +653,11 @@ class StoryStore {
       )
     }
 
-    // Wipe all existing main-branch entries
+    // Wipe all existing main-branch entries (and any chapters that
+    // referenced them — clearStoryEntries deletes both, see database.ts)
     await database.clearStoryEntries(storyId)
+    this.chapters = this.chapters.filter((ch) => ch.branchId !== null)
+    this.invalidateChapterCache()
 
     // Build entry objects up front, then bulk-insert in batches
     // (O(n/50) IPC calls instead of O(n))
@@ -3042,20 +3074,17 @@ class StoryStore {
     }
   }
 
-  // Create a manual chapter at a specific entry index
-  async createManualChapter(endEntryIndex: number): Promise<void> {
+  /**
+   * Build a chapter summary for entries[startIndex, endIndex) and persist it.
+   * Shared by createManualChapter (single, user-triggered) and
+   * chapterizeFromBeginning (batch, sequential loop) — both use a
+   * deterministic boundary and a single summarizeChapter call, never
+   * analyzeForChapter.
+   */
+  private async buildAndSaveChapter(startIndex: number, endIndex: number): Promise<Chapter> {
     if (!this.currentStory) throw new Error('No story loaded')
 
-    // Find the start index (after the last chapter or beginning)
-    const startIndex = this.lastChapterEndIndex
-
-    // Validate the end index
-    if (endEntryIndex <= startIndex || endEntryIndex > this.entries.length) {
-      throw new Error('Invalid entry index for chapter creation')
-    }
-
-    // Get the entries for this chapter
-    const chapterEntries = this.entries.slice(startIndex, endEntryIndex)
+    const chapterEntries = this.entries.slice(startIndex, endIndex)
     if (chapterEntries.length === 0) {
       throw new Error('No entries to create chapter from')
     }
@@ -3104,7 +3133,143 @@ class StoryStore {
     }
 
     await this.addChapter(chapter)
+    return chapter
+  }
+
+  // Create a manual chapter at a specific entry index
+  async createManualChapter(endEntryIndex: number): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+
+    // Find the start index (after the last chapter or beginning)
+    const startIndex = this.lastChapterEndIndex
+
+    // Validate the end index
+    if (endEntryIndex <= startIndex || endEntryIndex > this.entries.length) {
+      throw new Error('Invalid entry index for chapter creation')
+    }
+
+    const chapter = await this.buildAndSaveChapter(startIndex, endEntryIndex)
     log('Manual chapter created:', chapter.number, chapter.title)
+  }
+
+  /**
+   * Batch-create chapters for the entire un-chaptered history, starting from
+   * lastChapterEndIndex. Never uses analyzeForChapter: boundaries are
+   * precomputed deterministically from memoryConfig.tokenThreshold/chapterBuffer.
+   * Used after a SillyTavern import to backfill chapters for the whole
+   * imported history. Runs strictly sequentially (never in parallel) since
+   * each chapter depends on state (lastChapterEndIndex, chapter numbering)
+   * written by the previous one.
+   */
+  async chapterizeFromBeginning(options: {
+    includeLorebook: boolean
+    includeTimeline: boolean
+    includeClassification: boolean
+  }): Promise<{ chaptersCreated: number; cancelled: boolean }> {
+    if (!this.currentStory) throw new Error('No story loaded')
+
+    this.chapterizationCancelRequested = false
+    this.chapterizationProgress = { current: 0, total: 0 }
+
+    try {
+      const service = new ChapterBatchService({
+        buildAndSaveChapter: this.buildAndSaveChapter.bind(this),
+        runLoreManagement: aiService.runLoreManagement.bind(aiService),
+        estimateChapterTimeline: aiService.estimateChapterTimeline.bind(aiService),
+        getTimeTracker: () => this.timeTracker,
+        setTimeTracker: this.setTimeTracker.bind(this),
+        updateChapterTimes: (id, startTime, endTime) =>
+          this.updateChapter(id, { startTime, endTime }),
+        getChapterEntries: this.getChapterEntries.bind(this),
+        classifyChapter: (content, currentTime) =>
+          aiService.classifyResponse(
+            content,
+            '', // no single userAction maps onto a whole chapter
+            this.worldStateSnapshot,
+            this.currentStory ?? undefined,
+            undefined, // no "recent chat history" framing — the chapter content IS the input
+            currentTime,
+          ),
+        applyClassificationResult: (result) => this.applyClassificationResult(result),
+      })
+
+      const result = await service.run(
+        {
+          entries: this.entries,
+          startIndex: this.lastChapterEndIndex,
+          tokenThreshold: this.memoryConfig.tokenThreshold,
+          chapterBuffer: this.memoryConfig.chapterBuffer,
+          includeLorebook: options.includeLorebook,
+          includeTimeline: options.includeTimeline,
+          includeClassification: options.includeClassification,
+          storyId: this.currentStory.id,
+          currentBranchId: this.currentStory.currentBranchId,
+          lorebookEntries: this.lorebookEntries,
+          mode: this.currentStory.mode ?? 'adventure',
+          pov: this.pov,
+          tense: this.tense,
+        },
+        {
+          isCancelled: () => this.chapterizationCancelRequested,
+          onChapterProgress: (current, total) => {
+            this.chapterizationProgress = { current, total }
+          },
+          onTimelineProgress: (current, total) => {
+            this.chapterizationTimelineProgress = { current, total }
+          },
+          onClassificationProgress: (current, total) => {
+            this.chapterizationClassificationProgress = { current, total }
+          },
+          loreCallbacks: {
+            onCreateEntry: async (entry) => {
+              await this.addLorebookEntry(entry)
+            },
+            onUpdateEntry: this.updateLorebookEntry.bind(this),
+            onDeleteEntry: this.deleteLorebookEntry.bind(this),
+            onMergeEntries: async (entryIds, mergedEntry) => {
+              await this.deleteLorebookEntries(entryIds)
+              await this.addLorebookEntry(mergedEntry)
+            },
+            onQueryChapter: async (chapterNumber, question) =>
+              aiService.answerChapterQuestion(
+                chapterNumber,
+                question,
+                this.currentBranchChapters,
+                this.getChapterEntries.bind(this),
+              ),
+          },
+          loreUICallbacks: {
+            onStart: () => {
+              this.chapterizationStatus = 'Updating lorebook...'
+            },
+            onProgress: (message) => {
+              this.chapterizationStatus = message
+            },
+            onComplete: () => {
+              this.chapterizationStatus = null
+            },
+          },
+        },
+      )
+
+      log('Batch chapterization complete', {
+        chaptersCreated: result.chapters.length,
+        cancelled: result.cancelled,
+      })
+
+      return { chaptersCreated: result.chapters.length, cancelled: result.cancelled }
+    } finally {
+      this.chapterizationProgress = null
+      this.chapterizationTimelineProgress = null
+      this.chapterizationClassificationProgress = null
+      this.chapterizationStatus = null
+    }
+  }
+
+  // Request cancellation of an in-progress batch chapterization.
+  // Takes effect between chapters, not mid AI-call.
+  requestChapterizationCancel(): void {
+    this.chapterizationCancelRequested = true
   }
 
   // Create a checkpoint (snapshot of current state)

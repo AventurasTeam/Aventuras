@@ -12,10 +12,12 @@
     AlertTriangle,
     GitBranch,
     RefreshCw,
+    X,
   } from 'lucide-svelte'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
+  import ChapterizeOptions from '$lib/components/shared/ChapterizeOptions.svelte'
   import { cn } from '$lib/utils/cn'
 
   let dragOver = $state(false)
@@ -23,6 +25,11 @@
   let importing = $state(false)
   let imported = $state(false)
   let resettingWorldState = $state(false)
+  let chapterizeAfterImport = $state(false)
+  let chapterizeIncludeLorebook = $state(false)
+  let chapterizeIncludeTimeline = $state(false)
+  let chapterizeIncludeClassification = $state(false)
+  let chapterizing = $state(false)
 
   // Reset state each time modal opens
   $effect(() => {
@@ -32,6 +39,11 @@
       importing = false
       imported = false
       resettingWorldState = false
+      chapterizeAfterImport = false
+      chapterizeIncludeLorebook = false
+      chapterizeIncludeTimeline = false
+      chapterizeIncludeClassification = false
+      chapterizing = false
     }
   })
 
@@ -104,8 +116,26 @@
     }
   }
 
-  function handleKeepWorldState() {
+  async function runChapterizationIfRequested() {
+    if (!chapterizeAfterImport) return
+    chapterizing = true
+    try {
+      await story.chapterizeFromBeginning({
+        includeLorebook: chapterizeIncludeLorebook,
+        includeTimeline: chapterizeIncludeTimeline,
+        includeClassification: chapterizeIncludeClassification,
+      })
+    } catch (err) {
+      console.error('Chapterization failed:', err)
+      ui.showToast(err instanceof Error ? err.message : 'Chapterization failed', 'error')
+    } finally {
+      chapterizing = false
+    }
+  }
+
+  async function handleKeepWorldState() {
     story.triggerSuggestionsAfterImport()
+    await runChapterizationIfRequested()
     ui.showToast(`Imported ${total} messages`, 'info')
     ui.closeSTChatImport()
   }
@@ -115,6 +145,8 @@
     try {
       await story.resetWorldStateAfterImport()
       story.triggerSuggestionsAfterImport()
+      resettingWorldState = false
+      await runChapterizationIfRequested()
       ui.showToast(`Imported ${total} messages — world state reset`, 'info')
     } catch (err) {
       ui.showToast(err instanceof Error ? err.message : 'Reset failed', 'error')
@@ -157,6 +189,21 @@
             </p>
           </div>
         </div>
+      {:else if chapterizing}
+        <!-- Batch chapterization in progress -->
+        <div class="flex flex-col items-center gap-4 py-2 text-center">
+          <Loader2 class="text-primary h-8 w-8 animate-spin" />
+          <p class="text-foreground font-medium">
+            {#if story.chapterizationStatus}
+              {story.chapterizationStatus}
+            {:else if story.chapterizationProgress}
+              Generating chapters: {story.chapterizationProgress.current}/{story
+                .chapterizationProgress.total}
+            {:else}
+              Generating chapters…
+            {/if}
+          </p>
+        </div>
       {:else if imported}
         <!-- Post-import: world state choice -->
         <div class="flex flex-col items-center gap-4 py-2 text-center">
@@ -175,6 +222,18 @@
             — they are always preserved.
           </div>
         </div>
+
+        <!-- Generate Chapters Option -->
+        <ChapterizeOptions
+          {chapterizeAfterImport}
+          {chapterizeIncludeLorebook}
+          {chapterizeIncludeTimeline}
+          {chapterizeIncludeClassification}
+          onChapterizeAfterImportChange={(v) => (chapterizeAfterImport = v)}
+          onChapterizeIncludeLorebookChange={(v) => (chapterizeIncludeLorebook = v)}
+          onChapterizeIncludeTimelineChange={(v) => (chapterizeIncludeTimeline = v)}
+          onChapterizeIncludeClassificationChange={(v) => (chapterizeIncludeClassification = v)}
+        />
       {:else if !parseResult}
         <!-- File upload area -->
         <div
@@ -254,7 +313,12 @@
     </div>
 
     <ResponsiveModal.Footer class="mt-auto border-t px-6 py-4">
-      {#if imported}
+      {#if chapterizing && !story.chapterizationStatus}
+        <Button variant="outline" onclick={() => story.requestChapterizationCancel()} class="gap-2">
+          <X class="h-4 w-4" />
+          Cancel
+        </Button>
+      {:else if imported}
         <Button
           onclick={handleKeepWorldState}
           disabled={resettingWorldState}

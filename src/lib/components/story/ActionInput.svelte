@@ -490,16 +490,7 @@
     ui.resetBackgroundedFlag()
 
     try {
-      const worldState = {
-        characters: story.characters,
-        locations: story.locations,
-        items: story.items,
-        storyBeats: story.storyBeats,
-        currentLocation: story.currentLocation,
-        chapters: story.currentBranchChapters,
-        memoryConfig: story.memoryConfig,
-        lorebookEntries: story.lorebookEntries,
-      }
+      const worldState = story.worldStateSnapshot
 
       const storyPosition = story.entries.length
       const activationTracker = ui.getActivationTracker(storyPosition) as SimpleActivationTracker

@@ -8,6 +8,7 @@
 import type { APIProfile } from '$lib/types'
 import { settings } from '$lib/stores/settings.svelte'
 import { pingModel, getEffectiveBaseUrl } from '$lib/services/ai/sdk/providers/modelPing'
+import { pLimit } from '$lib/utils/async'
 import {
   upsertBatch,
   isFresh,
@@ -41,35 +42,6 @@ function pickModels(profile: APIProfile): string[] {
   for (const m of profile.fetchedModels) ids.add(m.id)
   for (const m of profile.customModels) ids.add(m)
   return [...ids].filter((id) => !hiddenSet.has(id) && shouldShowHealthFor(profile, id))
-}
-
-/**
- * Minimal concurrency limiter. Returns a function that wraps tasks and
- * runs at most `n` concurrently.
- */
-function pLimit(n: number) {
-  const queue: Array<() => void> = []
-  let active = 0
-  const next = () => {
-    active--
-    if (queue.length > 0) {
-      active++
-      queue.shift()!()
-    }
-  }
-  return function run<T>(fn: () => Promise<T>): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      const start = () => {
-        fn().then(resolve, reject).finally(next)
-      }
-      if (active < n) {
-        active++
-        start()
-      } else {
-        queue.push(start)
-      }
-    })
-  }
 }
 
 // Track active ping batches to prevent redundant parallel runs for the same profile
