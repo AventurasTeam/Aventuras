@@ -35,6 +35,7 @@
     "settingsCorrupt": "Couldn't open — settings corrupted",
     "actionsLabel": "Story actions",
     "open": "Open {{title}}",
+    "openWithFailure": "Open {{title}}. {{failure}}",
     "favorite": "Favorite story",
     "unfavorite": "Unfavorite story",
     "archive": "Archive",

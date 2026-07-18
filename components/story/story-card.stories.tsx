@@ -108,12 +108,11 @@ export const SettingsCorrupt: StoryT = {
   ...cardCentered,
   args: { story: baseStory, openFailure: 'settings-corrupt', ...handlers },
   play: async ({ args }) => {
-    expect(
-      screen.getByText("Couldn't open — settings corrupted", { exact: true }),
-    ).toBeInTheDocument()
+    const failureLabel = t('storyCard.settingsCorrupt')
+    expect(screen.getByText(failureLabel, { exact: true })).toBeInTheDocument()
 
     const card = screen.getByRole('button', {
-      name: t('storyCard.open', { title: baseStory.title }),
+      name: `${t('storyCard.open', { title: baseStory.title })}. ${failureLabel}`,
     })
     await userEvent.click(card)
     await waitFor(() => expect(args.onOpen).toHaveBeenCalledTimes(1))

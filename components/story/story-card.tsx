@@ -74,6 +74,7 @@ export function StoryCard({
   const overflowTriggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
 
   const modeLabel = t(MODE_LABEL_KEY[mode])
+  const failureLabel = openFailure ? t(OPEN_FAILURE_LABEL_KEY[openFailure]) : null
   const metaParts = [modeLabel, story.chapterLabel, story.lastOpenedRelative].filter(
     (part): part is string => part != null,
   )
@@ -97,7 +98,11 @@ export function StoryCard({
       <Pressable
         onPress={onOpen}
         accessibilityRole="button"
-        accessibilityLabel={t('storyCard.open', { title: story.title })}
+        accessibilityLabel={
+          failureLabel
+            ? t('storyCard.openWithFailure', { title: story.title, failure: failureLabel })
+            : t('storyCard.open', { title: story.title })
+        }
         className={cn(
           'flex-1 flex-col gap-1.5 p-4 pl-5',
           'active:bg-tint-press',
@@ -137,10 +142,10 @@ export function StoryCard({
           {metaParts.join(' · ')}
         </Text>
 
-        {openFailure ? (
+        {failureLabel ? (
           <Tag tone="danger" className="max-w-full self-start rounded-md">
             <Text size="xs" numberOfLines={2}>
-              {t(OPEN_FAILURE_LABEL_KEY[openFailure])}
+              {failureLabel}
             </Text>
           </Tag>
         ) : null}
