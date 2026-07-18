@@ -341,6 +341,35 @@ describe('sendMessageStreaming', () => {
     expect(events.at(-1)).toEqual({ type: 'aborted' })
   })
 
+  it('yields "aborted" even when the underlying runtime throws a non-Error abort value', async () => {
+    // Reproduces a real bug: in Tauri's WebKit-based webview, an aborted fetch
+    // can reject with a value that isn't `instanceof Error` at all, so relying
+    // on `error instanceof Error && error.name === 'AbortError'` alone missed
+    // it and fell through to a generic "Unknown error" bubble. The service
+    // must also trust `signal.aborted` regardless of what shape the thrown
+    // value has.
+    const service = new InteractiveVaultService('vault-test')
+    await service.initialize(emptySummary)
+
+    nextStreamEvents = [{ type: 'start-step' }]
+    nextStreamError = { name: 'AbortError', message: 'aborted' } as unknown as Error
+
+    const controller = new AbortController()
+    controller.abort()
+
+    const events = []
+    for await (const event of service.sendMessageStreaming(
+      emptyVaultState(),
+      'hi',
+      controller.signal,
+    )) {
+      events.push(event)
+    }
+
+    expect(events.filter((e) => e.type === 'error')).toHaveLength(0)
+    expect(events.at(-1)).toEqual({ type: 'aborted' })
+  })
+
   it('still yields a normal error event for a real (non-abort) failure', async () => {
     const service = new InteractiveVaultService('vault-test')
     await service.initialize(emptySummary)

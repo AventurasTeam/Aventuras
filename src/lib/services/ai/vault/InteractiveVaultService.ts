@@ -685,7 +685,16 @@ export class InteractiveVaultService extends BaseAIService {
         },
       }
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      // Prefer the signal as the source of truth for "was this a user-initiated
+      // stop": some runtimes (e.g. Tauri's WebKit-based webview) reject an
+      // aborted fetch with a value that isn't `instanceof Error` at all, so
+      // `error.name === 'AbortError'` alone can miss it and fall through to
+      // the generic error path below.
+      const errorName =
+        error && typeof error === 'object' && 'name' in error
+          ? (error as { name?: unknown }).name
+          : undefined
+      if (signal?.aborted || errorName === 'AbortError') {
         yield { type: 'aborted' }
         return
       }
