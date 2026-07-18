@@ -120,6 +120,14 @@
     --recently-classified-bg: #fef3c7;
   }
 
+  /* Theme-correct inheritance baseline: raw DOM islands (narrative HTML,
+   * dangerouslySetInnerHTML, DOM components) have no RN <Text> styling and
+   * would otherwise inherit the UA default (black on every theme). Vars live
+   * on documentElement (data-theme), so this resolves for all themes. */
+  body {
+    color: var(--fg-primary);
+  }
+
   [data-theme='default-light'] {
     --tint-hover: color-mix(in srgb, var(--fg-primary) 12%, transparent);
     --tint-press: color-mix(in srgb, var(--fg-primary) 20%, transparent);

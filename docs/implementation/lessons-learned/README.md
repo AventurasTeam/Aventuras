@@ -40,6 +40,10 @@ slice plans when relevant.
   surfaces use `hover:opacity-90` / `active:opacity-90`.
 - [Icon `fill="currentColor"`](./icon-fill-currentcolor.md) —
   broken on Android; drive fill via Tailwind `fill-*` className.
+- [Raw HTML islands need an explicit theme baseline](./raw-html-island-theme-baseline.md)
+  — web inherits `body { color: var(--fg-primary) }`, native
+  RenderHTML always gets a `baseStyle` color; never patch color
+  per-island.
 - [Wide-table scroll containment](./table-scroll-containment.md)
   — wide tables wrap in their own `overflow-x: auto`; horizontal
   scroll must not bubble.

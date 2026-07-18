@@ -111,8 +111,14 @@ function NarrativeContent({ text, muted }: { text: string; muted?: boolean }) {
   const { width } = useWindowDimensions()
   const { theme } = useTheme()
   const html = useMemo(() => renderNarrativeHtml(text), [text])
-  const mutedBaseStyle = useMemo(
-    () => (muted ? { fontStyle: 'italic' as const, color: theme.colors['--fg-muted'] } : undefined),
+  // RenderHTML has no theme inheritance (web's body-color baseline doesn't
+  // exist on native), so the base color is always passed explicitly — without
+  // it, non-muted text is default-black on dark themes.
+  const baseStyle = useMemo(
+    () => ({
+      color: theme.colors[muted ? '--fg-muted' : '--fg-primary'],
+      ...(muted ? { fontStyle: 'italic' as const } : {}),
+    }),
     [muted, theme],
   )
 
@@ -131,7 +137,7 @@ function NarrativeContent({ text, muted }: { text: string; muted?: boolean }) {
       source={{ html }}
       tagsStyles={narrativeTagsStyles}
       customHTMLElementModels={narrativeCustomHTMLElementModels}
-      baseStyle={mutedBaseStyle}
+      baseStyle={baseStyle}
     />
   )
 }
