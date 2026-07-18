@@ -121,7 +121,9 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
           tokens: {
             prompt: usage.inputTokens ?? 0,
             completion: usage.outputTokens ?? 0,
-            ...(usage.reasoningTokens != null ? { reasoning: usage.reasoningTokens } : {}),
+            ...(usage.outputTokenDetails?.reasoningTokens != null
+              ? { reasoning: usage.outputTokenDetails.reasoningTokens }
+              : {}),
           },
         }
       : {}),
