@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
+import { announceStorySettingsResetConfirmation } from '@/lib/recovery'
 import type { OpenFailureKind } from '@/lib/stores'
 
 type StoryConfigRecoveryDialogProps = {
@@ -24,6 +25,8 @@ type StoryConfigRecoveryDialogProps = {
   onDismiss: () => void
 }
 
+type ConfirmationTarget = Pick<StoryConfigRecoveryDialogProps, 'kind' | 'storyName'>
+
 export function StoryConfigRecoveryDialog({
   open,
   kind,
@@ -32,43 +35,67 @@ export function StoryConfigRecoveryDialog({
   onReset,
   onDismiss,
 }: StoryConfigRecoveryDialogProps) {
-  const [confirmingReset, setConfirmingReset] = useState(false)
+  const [confirmationTarget, setConfirmationTarget] = useState<ConfirmationTarget | null>(null)
   const restoreResetFocusRef = useRef(false)
   const focusId = useId()
   const resetButtonId = `${focusId}-reset`
   const cancelButtonId = `${focusId}-cancel`
+  const confirmationTitle = t('landing:storyRecovery.confirmTitle', { storyName })
+  const confirmationBody = t('landing:storyRecovery.confirmBody')
+  const confirmationWarning = t('landing:storyRecovery.confirmWarning')
+  const confirmingReset =
+    open && confirmationTarget?.kind === kind && confirmationTarget.storyName === storyName
 
   useEffect(() => {
-    if (Platform.OS !== 'web') return
+    restoreResetFocusRef.current = false
+    setConfirmationTarget(null)
+  }, [kind, open, storyName])
+
+  useEffect(() => {
     if (confirmingReset) {
-      document.getElementById(cancelButtonId)?.focus()
+      if (Platform.OS === 'web') {
+        document.getElementById(cancelButtonId)?.focus()
+      } else {
+        announceStorySettingsResetConfirmation({
+          title: confirmationTitle,
+          body: confirmationBody,
+          warning: confirmationWarning,
+        })
+      }
       return
     }
-    if (restoreResetFocusRef.current) {
+    if (Platform.OS === 'web' && restoreResetFocusRef.current) {
       restoreResetFocusRef.current = false
       document.getElementById(resetButtonId)?.focus()
     }
-  }, [cancelButtonId, confirmingReset, resetButtonId])
+  }, [
+    cancelButtonId,
+    confirmationBody,
+    confirmationTitle,
+    confirmationWarning,
+    confirmingReset,
+    resetButtonId,
+  ])
 
   function dismiss() {
     restoreResetFocusRef.current = false
-    setConfirmingReset(false)
+    setConfirmationTarget(null)
     onDismiss()
   }
 
   function cancelReset() {
     restoreResetFocusRef.current = true
-    setConfirmingReset(false)
+    setConfirmationTarget(null)
   }
 
   function confirmReset() {
     restoreResetFocusRef.current = true
-    setConfirmingReset(false)
+    setConfirmationTarget(null)
     void onReset()
   }
 
   const title = confirmingReset
-    ? t('landing:storyRecovery.confirmTitle', { storyName })
+    ? confirmationTitle
     : t(
         kind === 'definition-corrupt'
           ? 'landing:storyRecovery.definitionTitle'
@@ -76,7 +103,7 @@ export function StoryConfigRecoveryDialog({
         { storyName },
       )
   const body = confirmingReset
-    ? t('landing:storyRecovery.confirmBody')
+    ? confirmationBody
     : t(
         kind === 'definition-corrupt'
           ? 'landing:storyRecovery.definitionBody'
@@ -98,7 +125,7 @@ export function StoryConfigRecoveryDialog({
 
         {confirmingReset ? (
           <Text variant="muted" size="sm">
-            {t('landing:storyRecovery.confirmWarning')}
+            {confirmationWarning}
           </Text>
         ) : null}
 
@@ -123,7 +150,7 @@ export function StoryConfigRecoveryDialog({
                 <Button
                   nativeID={resetButtonId}
                   variant="destructive"
-                  onPress={() => setConfirmingReset(true)}
+                  onPress={() => setConfirmationTarget({ kind, storyName })}
                 >
                   <Text>{t('landing:storyRecovery.resetStorySettings')}</Text>
                 </Button>
