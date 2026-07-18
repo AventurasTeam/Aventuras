@@ -7,7 +7,13 @@ import { Chip } from '@/components/ui/chip'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
-import type { StoryCardData, StoryFilter, StoryListQuery, StorySort } from '@/lib/stores'
+import type {
+  OpenFailureKind,
+  StoryCardData,
+  StoryFilter,
+  StoryListQuery,
+  StorySort,
+} from '@/lib/stores'
 
 import { StoryCard } from './story-card'
 
@@ -28,6 +34,7 @@ export type StoryCardHandlers = {
 type StoryListProps = {
   cards: StoryCardData[]
   totalCount: number
+  openFailures: Readonly<Record<string, OpenFailureKind>>
   query: StoryListQuery
   onSearch: (v: string) => void
   onFilter: (f: StoryFilter) => void
@@ -40,6 +47,7 @@ type StoryListProps = {
 export function StoryList({
   cards,
   totalCount,
+  openFailures,
   query,
   onSearch,
   onFilter,
@@ -124,7 +132,7 @@ export function StoryList({
               >
                 {cards.map((c) => {
                   const h = cardHandlers(c.id)
-                  return <StoryCard key={c.id} story={c} {...h} />
+                  return <StoryCard key={c.id} story={c} openFailure={openFailures[c.id]} {...h} />
                 })}
               </View>
             )}

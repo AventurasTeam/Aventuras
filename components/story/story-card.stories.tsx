@@ -47,6 +47,9 @@ const meta: Meta<typeof StoryCard> = {
   component: StoryCard,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],
+  beforeEach: () => {
+    Object.values(handlers).forEach((handler) => handler.mockClear())
+  },
 }
 
 export default meta
@@ -99,6 +102,32 @@ export const ArchivedDraft: StoryT = {
 export const NoDescription: StoryT = {
   ...cardCentered,
   args: { story: makeStoryRow({ id: 's1', description: null }), ...handlers },
+}
+
+export const SettingsCorrupt: StoryT = {
+  ...cardCentered,
+  args: { story: baseStory, openFailure: 'settings-corrupt', ...handlers },
+  play: async ({ args }) => {
+    expect(
+      screen.getByText("Couldn't open — settings corrupted", { exact: true }),
+    ).toBeInTheDocument()
+
+    const card = screen.getByRole('button', {
+      name: t('storyCard.open', { title: baseStory.title }),
+    })
+    await userEvent.click(card)
+    await waitFor(() => expect(args.onOpen).toHaveBeenCalledTimes(1))
+  },
+}
+
+export const DefinitionCorrupt: StoryT = {
+  ...cardCentered,
+  args: { story: baseStory, openFailure: 'definition-corrupt', ...handlers },
+  play: async () => {
+    expect(
+      screen.getByText("Couldn't open — story definition corrupted", { exact: true }),
+    ).toBeInTheDocument()
+  },
 }
 
 export const NoGenre: StoryT = {

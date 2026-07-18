@@ -31,6 +31,8 @@
     "noDescription": "(no description yet)",
     "modeAdventure": "Adventure",
     "modeCreative": "Creative",
+    "definitionCorrupt": "Couldn't open — story definition corrupted",
+    "settingsCorrupt": "Couldn't open — settings corrupted",
     "actionsLabel": "Story actions",
     "open": "Open {{title}}",
     "favorite": "Favorite story",

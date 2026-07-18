@@ -50,6 +50,7 @@ type PromptState = { trigger: 'new-story' | 'draft'; storyId?: string }
 export default function Index() {
   const router = useRouter()
   const rows = storiesStore.useStories((s) => s.rows)
+  const openFailures = storiesStore.useStories((s) => s.openFailures)
   const [query, setQuery] = useState<StoryListQuery>({
     search: '',
     filter: 'all',
@@ -143,6 +144,7 @@ export default function Index() {
       <StoryList
         cards={cards}
         totalCount={rows.length}
+        openFailures={openFailures}
         query={query}
         onSearch={(search) => setQuery((q) => ({ ...q, search }))}
         onFilter={(filter: StoryFilter) => setQuery((q) => ({ ...q, filter }))}

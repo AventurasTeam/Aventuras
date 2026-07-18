@@ -6,16 +6,18 @@ import { Chip } from '@/components/ui/chip'
 import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { type StoryDefinition } from '@/lib/db'
 import { t } from '@/lib/i18n'
-import { type StoryCardData } from '@/lib/stores'
+import { type OpenFailureKind, type StoryCardData } from '@/lib/stores'
 import { cn } from '@/lib/utils'
 
 type StoryMode = StoryDefinition['mode']
 
 type StoryCardProps = {
   story: StoryCardData
+  openFailure?: OpenFailureKind
   onOpen: () => void
   onToggleFavorite: () => void
   onArchiveToggle: () => void
@@ -36,8 +38,14 @@ const MODE_LABEL_KEY = {
   creative: 'storyCard.modeCreative',
 } as const satisfies Record<StoryMode, string>
 
+const OPEN_FAILURE_LABEL_KEY = {
+  'definition-corrupt': 'storyCard.definitionCorrupt',
+  'settings-corrupt': 'storyCard.settingsCorrupt',
+} as const satisfies Record<OpenFailureKind, string>
+
 export function StoryCard({
   story,
+  openFailure,
   onOpen,
   onToggleFavorite,
   onArchiveToggle,
@@ -128,6 +136,14 @@ export function StoryCard({
         <Text size="xs" variant="muted" numberOfLines={1}>
           {metaParts.join(' · ')}
         </Text>
+
+        {openFailure ? (
+          <Tag tone="danger" className="max-w-full self-start rounded-md">
+            <Text size="xs" numberOfLines={2}>
+              {t(OPEN_FAILURE_LABEL_KEY[openFailure])}
+            </Text>
+          </Tag>
+        ) : null}
 
         <Text
           size="sm"

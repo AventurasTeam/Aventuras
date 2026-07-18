@@ -27,6 +27,7 @@ const makeCard = (p: Partial<StoryCardData> & { id: string }): StoryCardData => 
 })
 
 const base = {
+  openFailures: {},
   query: { search: '', filter: 'all' as const, sort: 'last-opened' as const },
   onSearch: fn(),
   onFilter: fn(),
@@ -62,6 +63,14 @@ const cards = [
 ]
 
 export const Populated: T = { args: { ...base, cards, totalCount: 3 } }
+export const WithOpenFailure: T = {
+  args: {
+    ...base,
+    cards,
+    totalCount: 3,
+    openFailures: { Iron: 'settings-corrupt' },
+  },
+}
 export const Empty: T = { args: { ...base, cards: [], totalCount: 0 } }
 export const WithDrafts: T = {
   args: {
