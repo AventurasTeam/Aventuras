@@ -44,9 +44,9 @@ const log = createLogger('InteractiveVault')
 // Dynamic Tool Loading
 // ============================================================================
 
-type ToolCategory = 'characters' | 'scenarios' | 'lorebooks' | 'images' | 'fandom'
+export type ToolCategory = 'characters' | 'scenarios' | 'lorebooks' | 'images' | 'fandom'
 
-const TOOL_CATEGORIES: Record<ToolCategory, string[]> = {
+export const TOOL_CATEGORIES: Record<ToolCategory, string[]> = {
   characters: [
     'list_characters',
     'read_character',
@@ -81,11 +81,11 @@ const TOOL_CATEGORIES: Record<ToolCategory, string[]> = {
   fandom: ['search_fandom', 'get_fandom_article_info', 'fetch_fandom_section'],
 }
 
-const ALWAYS_ACTIVE_TOOLS = ['load_toolset', 'show_entity']
+export const ALWAYS_ACTIVE_TOOLS = ['load_toolset', 'show_entity']
 
 const toolCategorySchema = z.enum(['characters', 'scenarios', 'lorebooks', 'images', 'fandom'])
 
-function getActiveToolNames(loaded: Set<ToolCategory>): string[] {
+export function getActiveToolNames(loaded: Set<ToolCategory>): string[] {
   return [...ALWAYS_ACTIVE_TOOLS, ...[...loaded].flatMap((c) => TOOL_CATEGORIES[c])]
 }
 
