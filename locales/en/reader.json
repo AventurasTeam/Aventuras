@@ -15,6 +15,13 @@
     "think": "Think",
     "free": "Free"
   },
+  "composerModeLabel": "Mode",
+  "composerModeHint": {
+    "do": "action wrapper",
+    "say": "dialogue wrapper",
+    "think": "internal monologue",
+    "free": "no wrapping"
+  },
   "editFailed": "Couldn't save your edit. Please try again.",
   "rollbackFailed": "Couldn't roll back the story. Please try again.",
   "spellcheckSuggestion": "→ {{text}}",

@@ -557,24 +557,26 @@ export default function ReaderComposerRoute() {
               }}
             />
           </View>
-          <View className="border-t border-border p-3">
-            <Composer
-              modesEnabled={modesEnabled}
-              isGenerating={isGenerating}
-              disabled={editBlocked || !hydrationSucceeded}
-              disabledReason={
-                hydrationFailed
-                  ? t('reader:hydrationFailedBody')
-                  : !hydrationSucceeded
-                    ? t('reader:hydrationLoading')
-                    : undefined
-              }
-              onSend={(rawText, mode) => {
-                const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
-                void runSubmit(wrapped, mode)
-              }}
-              onCancel={() => void awaitRunTerminal(PER_TURN_KIND, 'cancel')}
-            />
+          <View className="border-t border-border px-6 pb-3.5 pt-3">
+            <View className="mx-auto w-full max-w-[860px]">
+              <Composer
+                modesEnabled={modesEnabled}
+                isGenerating={isGenerating}
+                disabled={editBlocked || !hydrationSucceeded}
+                disabledReason={
+                  hydrationFailed
+                    ? t('reader:hydrationFailedBody')
+                    : !hydrationSucceeded
+                      ? t('reader:hydrationLoading')
+                      : undefined
+                }
+                onSend={(rawText, mode) => {
+                  const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
+                  void runSubmit(wrapped, mode)
+                }}
+                onCancel={() => void awaitRunTerminal(PER_TURN_KIND, 'cancel')}
+              />
+            </View>
           </View>
         </View>
         {showRail ? (
