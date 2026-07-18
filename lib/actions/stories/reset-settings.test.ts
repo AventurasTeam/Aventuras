@@ -28,6 +28,17 @@ const STORY_DEFINITION = storyDefinitionSchema.parse({
   worldTimeOrigin: { year: 0 },
 })
 
+const HEALTHY_STORY_DEFINITION = storyDefinitionSchema.parse({
+  mode: 'creative',
+  leadEntityId: null,
+  narration: 'third',
+  genre: { label: 'Mystery', promptBody: 'cozy mystery' },
+  tone: { label: 'Warm', promptBody: 'warm' },
+  setting: 'A quiet village.',
+  calendarSystemId: 'gregorian',
+  worldTimeOrigin: { year: 0 },
+})
+
 afterEach(() => {
   resetAllStores()
 })
@@ -65,7 +76,7 @@ describe('resetStorySettings', () => {
         id: 'story_2',
         title: 'Healthy',
         status: 'active',
-        definition: STORY_DEFINITION,
+        definition: HEALTHY_STORY_DEFINITION,
         settings: healthySettings,
         createdAt: 1,
         updatedAt: 1,
@@ -174,5 +185,24 @@ describe('resetStorySettings', () => {
     ).resolves.toBeUndefined()
 
     expect(storiesStore.getStories().openFailures.story_1).toBe('settings-corrupt')
+  })
+
+  it('retains a definition failure after successfully resetting settings', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({
+      id: 'story_1',
+      title: 'Broken',
+      status: 'active',
+      definition: STORY_DEFINITION,
+      settings: buildStorySettings({ classifierCadence: 2 }, 'old-embed'),
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await hydrateCurrentDefaults()
+    storiesStore.setOpenFailure({ storyId: 'story_1', kind: 'definition-corrupt' })
+
+    await resetStorySettings('story_1', { db, runInTransaction }, 99)
+
+    expect(storiesStore.getStories().openFailures.story_1).toBe('definition-corrupt')
   })
 })

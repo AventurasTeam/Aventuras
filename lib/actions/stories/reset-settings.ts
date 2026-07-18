@@ -28,5 +28,5 @@ export async function resetStorySettings(
       .toSQL(),
   ])
   const refreshed = await rehydrateStories(ctx.db)
-  if (refreshed) storiesStore.clearOpenFailure(storyId)
+  if (refreshed) storiesStore.clearOpenFailure(storyId, 'settings-corrupt')
 }

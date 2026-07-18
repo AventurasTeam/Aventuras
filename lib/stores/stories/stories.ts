@@ -16,7 +16,7 @@ type StoriesSnapshot = {
 type StoriesState = StoriesSnapshot & {
   apply: (rows: StoryRow[]) => void
   setOpenFailure: (failure: OpenFailure) => void
-  clearOpenFailure: (storyId: string) => void
+  clearOpenFailure: (storyId: string, expectedKind?: OpenFailureKind) => void
   __reset: () => void
 }
 
@@ -26,9 +26,15 @@ const store = createStore<StoriesState>()((set) => ({
   apply: (rows) => set({ rows }),
   setOpenFailure: ({ storyId, kind }) =>
     set((s) => ({ openFailures: { ...s.openFailures, [storyId]: kind } })),
-  clearOpenFailure: (storyId) =>
+  clearOpenFailure: (storyId, expectedKind) =>
     set((s) => {
-      if (!(storyId in s.openFailures)) return s
+      const currentKind = s.openFailures[storyId]
+      if (
+        currentKind === undefined ||
+        (expectedKind !== undefined && currentKind !== expectedKind)
+      ) {
+        return s
+      }
       const next = { ...s.openFailures }
       delete next[storyId]
       return { openFailures: next }
