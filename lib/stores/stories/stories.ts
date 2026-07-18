@@ -23,7 +23,17 @@ type StoriesState = StoriesSnapshot & {
 const store = createStore<StoriesState>()((set) => ({
   rows: [],
   openFailures: {},
-  apply: (rows) => set({ rows }),
+  apply: (rows) =>
+    set((s) => {
+      const storyIds = new Set(rows.map((row) => row.id))
+      const failureEntries = Object.entries(s.openFailures)
+      const retainedFailures = failureEntries.filter(([storyId]) => storyIds.has(storyId))
+      const openFailures =
+        retainedFailures.length === failureEntries.length
+          ? s.openFailures
+          : Object.fromEntries(retainedFailures)
+      return { rows, openFailures }
+    }),
   setOpenFailure: ({ storyId, kind }) =>
     set((s) => ({ openFailures: { ...s.openFailures, [storyId]: kind } })),
   clearOpenFailure: (storyId, expectedKind) =>

@@ -24,7 +24,7 @@ import {
   vaultCalendars,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { storiesStore } from '@/lib/stores'
+import { rehydrateStories, storiesStore } from '@/lib/stores'
 
 import { BRANCH_SCOPED, deleteStory } from './delete-story'
 
@@ -90,6 +90,32 @@ describe('deleteStory', () => {
     expect((await db.select().from(vaultCalendars)).length).toBe(1)
     // Store reflects the delete.
     expect(storiesStore.getStories().rows.map((r) => r.id)).toEqual(['survivor'])
+  })
+
+  it('prunes only the deleted story failure and does not restore it when the id is reused', async () => {
+    const { db, ctx } = await setup()
+    storiesStore.setOpenFailure({ storyId: 'victim', kind: 'settings-corrupt' })
+    storiesStore.setOpenFailure({ storyId: 'survivor', kind: 'definition-corrupt' })
+
+    await deleteStory('victim', ctx)
+
+    expect(storiesStore.getStories().openFailures).toEqual({
+      survivor: 'definition-corrupt',
+    })
+
+    await db.insert(stories).values({
+      id: 'victim',
+      title: 'replacement',
+      status: 'active',
+      favorite: 0,
+      createdAt: 2,
+      updatedAt: 2,
+    })
+    await rehydrateStories(db)
+
+    expect(storiesStore.getStories().openFailures).toEqual({
+      survivor: 'definition-corrupt',
+    })
   })
 
   it('is a no-op-safe full sweep across every owned table (empty tables included)', async () => {
