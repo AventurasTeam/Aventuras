@@ -10,7 +10,11 @@ import { Composer } from '@/components/reader/composer'
 import { EntryWindow, type EntryWindowHandle } from '@/components/reader/entry-window'
 import { JumpButtons } from '@/components/reader/jump-buttons'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
-import { useSystemEntryActions } from '@/components/reader/system-entry-actions'
+import {
+  describeTurnFailure,
+  toSystemFailureMeta,
+  useSystemEntryActions,
+} from '@/components/reader/system-entry-actions'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
@@ -18,9 +22,11 @@ import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { useTier } from '@/hooks/use-tier'
 import {
   clearSystemEntry,
+  ENTRIES_WINDOW_SIZE,
   getRollbackCounts,
   loadOpenStory,
   PER_TURN_KIND,
+  readRecentEntries,
   redoLastAction,
   rollbackToEntry,
   submitTurn,
@@ -61,7 +67,6 @@ type BranchHydrationState =
     }
   | { branchId: string; status: 'failure'; result: LoadOpenStoryResult | null }
 
-const RECENT_WINDOW_SIZE = 50
 const JUMP_TO_BOTTOM_SETTLE_MS = 500
 
 export default function ReaderComposerRoute() {
@@ -74,7 +79,6 @@ export default function ReaderComposerRoute() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
   const [rollback, setRollback] = useState<RollbackState | null>(null)
-  const [lastError, setLastError] = useState<PipelineError | undefined>(undefined)
   const [lastSubmission, setLastSubmission] = useState<{
     content: string
     composerMode: string
@@ -195,13 +199,7 @@ export default function ReaderComposerRoute() {
     !entries.some((e) => e.id === streamingContent.entryId)
 
   const reload = useCallback(async () => {
-    const recent = (await db
-      .select()
-      .from(storyEntries)
-      .where(eq(storyEntries.branchId, branchId))
-      .orderBy(desc(storyEntries.position))
-      .limit(RECENT_WINDOW_SIZE)) as StoryEntry[]
-    entriesStore.hydrate(branchId, recent.reverse())
+    entriesStore.hydrate(branchId, await readRecentEntries(branchId, db))
   }, [branchId])
 
   const loadOlderEntries = useCallback(async () => {
@@ -216,7 +214,7 @@ export default function ReaderComposerRoute() {
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, branchId), lt(storyEntries.position, minPosition)))
       .orderBy(desc(storyEntries.position))
-      .limit(RECENT_WINDOW_SIZE)) as StoryEntry[]
+      .limit(ENTRIES_WINDOW_SIZE)) as StoryEntry[]
 
     for (const row of older) {
       entriesStore.patch(branchId, { op: 'create', id: row.id, row })
@@ -277,9 +275,20 @@ export default function ReaderComposerRoute() {
   )
 
   const showTurnFailure = useCallback(
-    async (error: PipelineError | undefined) => {
-      setLastError(error)
-      await writeSystemEntry({ branchId, content: t('reader:systemEntry.failureMessage') }, ctx)
+    async (
+      error: PipelineError | undefined,
+      submission: { content: string; composerMode: string },
+    ) => {
+      // Copy + discriminant + the reversed user_action's text all persist on
+      // the entry, so kind-specific recovery survives an app restart.
+      await writeSystemEntry(
+        {
+          branchId,
+          content: describeTurnFailure(error).content,
+          failure: toSystemFailureMeta(error, submission),
+        },
+        ctx,
+      )
       await reload()
     },
     [branchId, reload],
@@ -288,7 +297,6 @@ export default function ReaderComposerRoute() {
   const runSubmit = useCallback(
     async (content: string, composerMode: string) => {
       if (!storyId || !hydrationSucceeded) return
-      setLastError(undefined)
       // A prior failure leaves a system entry as the branch tail; drop it (and
       // resync the store) before the turn so the pipeline's prompt/position
       // reads the real content tail, not the failure singleton.
@@ -299,34 +307,46 @@ export default function ReaderComposerRoute() {
         await clearSystemEntry(branchId, ctx)
         await reload()
       }
-      setLastSubmission({ content, composerMode })
+      const submission = { content, composerMode }
+      setLastSubmission(submission)
       try {
         const result = await submitTurn({ storyId, branchId }, { content, composerMode }, ctx)
-        if (result.outcome === 'failed') await showTurnFailure(result.error)
+        if (result.outcome === 'failed') await showTurnFailure(result.error, submission)
         else if (result.outcome === 'rejected')
-          await showTurnFailure({ kind: 'orchestrator', detail: `blocked by ${result.blockedBy}` })
+          await showTurnFailure(
+            { kind: 'orchestrator', detail: `blocked by ${result.blockedBy}` },
+            submission,
+          )
       } catch (err) {
         // submitTurn throws on a rejected user_action write — treat a thrown
         // failure like a structured 'failed' outcome so the UI surfaces an
         // error and stays retriable instead of hanging.
-        await showTurnFailure({
-          kind: 'orchestrator',
-          detail: err instanceof Error ? err.message : String(err),
-        })
+        await showTurnFailure(
+          {
+            kind: 'orchestrator',
+            detail: err instanceof Error ? err.message : String(err),
+          },
+          submission,
+        )
       }
     },
     [storyId, branchId, hydrationSucceeded, reload, showTurnFailure],
   )
 
-  // fixAction (config-resolver fixes) has no EntryCard slot in the M2 subset;
-  // only the retry passthrough is wired here.
-  const { onRetry: retrySystemEntry } = useSystemEntryActions(lastError, () => {
-    if (lastSubmission) void runSubmit(lastSubmission.content, lastSubmission.composerMode)
+  // Derived from the persisted entry, not React state, so the failure kind,
+  // fix action, and retryable submission all survive an app restart.
+  const systemFailure = useMemo(
+    () => entries.find((e) => e.kind === 'system')?.metadata?.systemFailure,
+    [entries],
+  )
+
+  const { onRetry: retrySystemEntry, fixAction } = useSystemEntryActions(systemFailure, () => {
+    const submission = lastSubmission ?? systemFailure?.submission
+    if (submission) void runSubmit(submission.content, submission.composerMode)
   })
 
   const dismissSystemEntry = useCallback(async () => {
     await clearSystemEntry(branchId, ctx)
-    setLastError(undefined)
     await reload()
   }, [branchId, reload])
 
@@ -419,6 +439,8 @@ export default function ReaderComposerRoute() {
         onCommitEdit={() => void commitEdit()}
         onCancelEdit={cancelEdit}
         onDelete={isSystem || e.kind === 'opening' ? undefined : () => void openRollback(e.id)}
+        detail={isSystem ? e.metadata?.systemFailure?.detail : undefined}
+        fixAction={isSystem ? fixAction : undefined}
         onRetry={isSystem ? retrySystemEntry : undefined}
         onDismiss={isSystem ? () => void dismissSystemEntry() : undefined}
       />

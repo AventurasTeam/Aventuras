@@ -17,6 +17,20 @@ export const entryMetadataSchema = z.object({
       refreshGuidance: z.string().optional(),
     })
     .optional(),
+  // System-entry failure record (reader-composer.md → Error surface): kind /
+  // failure mirror PipelineError / ResolveFailureKind as open strings — an
+  // unknown future pipeline kind must degrade to generic copy, not fail the
+  // whole metadata parse. submission preserves the reversed user_action's text
+  // so Retry survives an app restart.
+  systemFailure: z
+    .object({
+      kind: z.string(),
+      failure: z.string().optional(),
+      detail: z.string().optional(),
+      submission: z.object({ content: z.string(), composerMode: z.string() }).optional(),
+    })
+    .optional(),
 })
 
 export type EntryMetadata = z.infer<typeof entryMetadataSchema>
+export type SystemFailureMeta = NonNullable<EntryMetadata['systemFailure']>

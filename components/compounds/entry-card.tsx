@@ -60,6 +60,8 @@ type EntryCardProps = {
 
   // system-only:
   detail?: string
+  /** Kind-specific recovery route (e.g. "Fix profile" → settings); precedes Retry. */
+  fixAction?: { label: string; onPress: () => void }
   onRetry?: () => void
   onDismiss?: () => void
 
@@ -126,6 +128,7 @@ export function EntryCard({
   onFlipEra,
   streamingPhase,
   detail,
+  fixAction,
   onRetry,
   onDismiss,
   disabled,
@@ -236,8 +239,18 @@ export function EntryCard({
               {detail}
             </Text>
           ) : null}
-          {(onRetry != null || onDismiss != null) && (
+          {(fixAction != null || onRetry != null || onDismiss != null) && (
             <View className="flex-row gap-2">
+              {fixAction != null ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onPress={fixAction.onPress}
+                  disabled={disabled}
+                >
+                  <Text>{fixAction.label}</Text>
+                </Button>
+              ) : null}
               {onRetry != null ? (
                 <Button variant="secondary" size="sm" onPress={onRetry} disabled={disabled}>
                   <Icon as={RefreshCw} size="sm" />

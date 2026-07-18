@@ -81,7 +81,7 @@ export {
 export { db } from './runtime/client'
 export { DrizzleStudioDevTools } from './devtools/drizzle-studio-devtools'
 export { entryMetadataSchema } from './story-entries/entry-metadata'
-export type { EntryMetadata } from './story-entries/entry-metadata'
+export type { EntryMetadata, SystemFailureMeta } from './story-entries/entry-metadata'
 export {
   appSettings,
   assets,

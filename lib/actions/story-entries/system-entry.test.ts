@@ -50,6 +50,20 @@ describe('writeSystemEntry', () => {
     expect(rows[0].position).toBe(3) // prior system entry cleared before MAX(position) recomputed
   })
 
+  it('persists the failure discriminant and submission in metadata', async () => {
+    const failure = {
+      kind: 'config-resolver',
+      failure: 'no-profile-assigned',
+      detail: 'narrative has no profile',
+      submission: { content: 'go north', composerMode: 'do' },
+    }
+    await writeSystemEntry({ branchId: 'b1', content: 'no profile', failure }, ctx)
+    const rows = await systemRows()
+    expect(rows[0].metadata?.systemFailure).toEqual(failure)
+    // Inert placeholders — system entries are excluded from worldTime inheritance.
+    expect(rows[0].metadata?.worldTime).toBe(0)
+  })
+
   it('inserts at position 1 on an empty branch (COALESCE guard)', async () => {
     await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'empty', createdAt: 1 })
     const id = await writeSystemEntry({ branchId: 'b2', content: 'empty branch' }, ctx)
