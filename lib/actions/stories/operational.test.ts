@@ -8,6 +8,7 @@ import {
   storySettingsSchema,
   stories,
   type StoryDefinition,
+  type StorySettings,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import {
@@ -194,5 +195,44 @@ describe('stories column writes', () => {
     expect(result).toEqual({ status: 'open-failed', kind: 'definition-corrupt' })
     expect(navigate).not.toHaveBeenCalled()
     expect(storiesStore.getStories().openFailures.story_corrupt).toBe('definition-corrupt')
+  })
+
+  it('badges settings corruption distinctly while another story still opens', async () => {
+    const { db, ctx } = await setup()
+    await db
+      .update(stories)
+      .set({
+        settings: {
+          ...STORY_SETTINGS,
+          classifierCadence: 'invalid',
+        } as unknown as StorySettings,
+      })
+      .where(eq(stories.id, 'story_1'))
+    await db.insert(stories).values({
+      id: 'story_healthy',
+      title: 'Healthy',
+      status: 'active',
+      favorite: 0,
+      createdAt: 1,
+      updatedAt: 1,
+      currentBranchId: 'br_healthy',
+      definition: STORY_DEFINITION,
+      settings: STORY_SETTINGS,
+    })
+    await db
+      .insert(branches)
+      .values({ id: 'br_healthy', storyId: 'story_healthy', name: 'main', createdAt: 1 })
+
+    const navigate = vi.fn()
+    const corruptResult = await openStory('story_1', ctx, navigate)
+
+    expect(corruptResult).toEqual({ status: 'open-failed', kind: 'settings-corrupt' })
+    expect(navigate).not.toHaveBeenCalled()
+    expect(storiesStore.getStories().openFailures.story_1).toBe('settings-corrupt')
+
+    const healthyResult = await openStory('story_healthy', ctx, navigate)
+
+    expect(healthyResult).toEqual({ status: 'ok', branchId: 'br_healthy' })
+    expect(navigate).toHaveBeenCalledWith('br_healthy')
   })
 })

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { AppBannerHost } from '@/components/story/app-banner-host'
+import { StoryConfigRecoveryDialog } from '@/components/story/story-config-recovery-dialog'
 import { StoryList, type StoryCardHandlers } from '@/components/story/story-list'
 import {
   ConcurrentStatePrompt,
@@ -27,16 +28,19 @@ import {
   loadDraft,
   loadLiveSession,
   openStory,
+  resetStorySettings,
   setStoryArchived,
   setStoryFavorite,
 } from '@/lib/actions'
 import { db, runInTransaction } from '@/lib/db'
 import { t } from '@/lib/i18n'
+import { getDatabaseFileRevealAction } from '@/lib/recovery'
 import {
   rehydrateStories,
   selectStoryCards,
   storiesStore,
   wizardStore,
+  type OpenFailureKind,
   type StoryFilter,
   type StoryListQuery,
   type StorySort,
@@ -44,8 +48,10 @@ import {
 import { runAction } from '@/lib/utils'
 
 const ctx = { db, runInTransaction }
+const revealDatabaseFile = getDatabaseFileRevealAction()
 
 type PromptState = { trigger: 'new-story' | 'draft'; storyId?: string }
+type PendingStoryRecovery = { storyId: string; kind: OpenFailureKind }
 
 export default function Index() {
   const router = useRouter()
@@ -58,6 +64,7 @@ export default function Index() {
   })
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const [prompt, setPrompt] = useState<PromptState | null>(null)
+  const [storyRecovery, setStoryRecovery] = useState<PendingStoryRecovery | null>(null)
   const sessionExists = useWizardSessionExists()
 
   useEffect(() => {
@@ -68,6 +75,8 @@ export default function Index() {
 
   const goWizard = (draftId?: string) =>
     router.push((draftId ? `/wizard?draftId=${draftId}` : '/wizard') as Href)
+
+  const navigateToStory = (branchId: string) => router.push(`/reader-composer/${branchId}`)
 
   const onNewStory = () => {
     if (sessionExists) {
@@ -98,6 +107,27 @@ export default function Index() {
     )
   }
 
+  const attemptOpenStory = (storyId: string) => {
+    const knownFailure = openFailures[storyId]
+    if (knownFailure) {
+      setStoryRecovery({ storyId, kind: knownFailure })
+      return
+    }
+
+    runAction(
+      openStory(storyId, ctx, navigateToStory).then((result) => {
+        if (result.status === 'open-failed') {
+          setStoryRecovery({ storyId, kind: result.kind })
+        }
+      }),
+      {
+        event: 'action_layer.story_open_failed',
+        toastMessage: t('landing:errors.openFailed'),
+        context: { storyId },
+      },
+    )
+  }
+
   const cardHandlers = (storyId: string): StoryCardHandlers => {
     const row = rows.find((r) => r.id === storyId)
     const isDraft = row?.status === 'draft'
@@ -107,14 +137,7 @@ export default function Index() {
           openDraft(storyId)
           return
         }
-        runAction(
-          openStory(storyId, ctx, (branchId) => router.push(`/reader-composer/${branchId}`)),
-          {
-            event: 'action_layer.story_open_failed',
-            toastMessage: t('landing:errors.openFailed'),
-            context: { storyId },
-          },
-        )
+        attemptOpenStory(storyId)
       },
       onToggleFavorite: () => {
         runAction(setStoryFavorite(storyId, !(row?.favorite === 1), ctx), {
@@ -133,6 +156,10 @@ export default function Index() {
       onDelete: () => setPendingDelete(storyId),
     }
   }
+
+  const recoveryRow = storyRecovery
+    ? rows.find((row) => row.id === storyRecovery.storyId)
+    : undefined
 
   return (
     <ScreenShell
@@ -201,6 +228,45 @@ export default function Index() {
         }}
         onDismiss={() => setPrompt(null)}
       />
+
+      {storyRecovery && recoveryRow ? (
+        <StoryConfigRecoveryDialog
+          key={`${storyRecovery.storyId}:${storyRecovery.kind}`}
+          open
+          kind={storyRecovery.kind}
+          storyName={recoveryRow.title}
+          onOpenFile={
+            revealDatabaseFile
+              ? () => {
+                  runAction(revealDatabaseFile(), {
+                    event: 'action_layer.database_file_reveal_failed',
+                    toastMessage: t('landing:errors.openDatabaseFileFailed'),
+                    context: { storyId: storyRecovery.storyId },
+                  })
+                }
+              : undefined
+          }
+          onReset={() => {
+            const storyId = storyRecovery.storyId
+            runAction(
+              resetStorySettings(storyId, ctx).then(async () => {
+                const result = await openStory(storyId, ctx, navigateToStory)
+                if (result.status === 'ok') {
+                  setStoryRecovery(null)
+                } else if (result.status === 'open-failed') {
+                  setStoryRecovery({ storyId, kind: result.kind })
+                }
+              }),
+              {
+                event: 'action_layer.story_settings_reset_failed',
+                toastMessage: t('landing:errors.resetStorySettingsFailed'),
+                context: { storyId },
+              },
+            )
+          }}
+          onDismiss={() => setStoryRecovery(null)}
+        />
+      ) : null}
 
       <AlertDialog
         open={pendingDelete != null}
