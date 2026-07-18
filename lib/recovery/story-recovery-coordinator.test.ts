@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { createStoryRecoveryCoordinator } from './story-recovery-coordinator'
+import {
+  createStoryRecoveryCoordinator,
+  handleStoryRecoveryResetOutcome,
+} from './story-recovery-coordinator'
 
 type Deferred<T> = {
   promise: Promise<T>
@@ -124,18 +127,66 @@ describe('story recovery coordinator', () => {
     expect(options.onOpened).not.toHaveBeenCalled()
   })
 
-  it('keeps reset rejection available to runAction', async () => {
+  it('returns a reset-phase failure for the current reset rejection', async () => {
     const failure = new Error('reset failed')
     const options = request({ reset: vi.fn().mockRejectedValue(failure) })
     const coordinator = createStoryRecoveryCoordinator()
 
-    await expect(coordinator.startReset(options)).rejects.toBe(failure)
+    await expect(coordinator.startReset(options)).resolves.toEqual({
+      status: 'failed',
+      phase: 'reset',
+      error: failure,
+    })
 
     expect(options.open).not.toHaveBeenCalled()
 
     const retryOptions = request()
     await coordinator.startReset(retryOptions)
     expect(retryOptions.reset).toHaveBeenCalledOnce()
+  })
+
+  it('returns a reopen-phase failure for the current post-reset rejection', async () => {
+    const failure = new Error('open failed')
+    const options = request({ open: vi.fn().mockRejectedValue(failure) })
+    const coordinator = createStoryRecoveryCoordinator()
+
+    await expect(coordinator.startReset(options)).resolves.toEqual({
+      status: 'failed',
+      phase: 'reopen',
+      error: failure,
+    })
+
+    expect(options.reset).toHaveBeenCalledOnce()
+    expect(options.onOpened).not.toHaveBeenCalled()
+    expect(options.onOpenFailed).not.toHaveBeenCalled()
+  })
+
+  it('swallows an invalidated reset rejection', async () => {
+    const resetDeferred = deferred<void>()
+    const options = request({ reset: vi.fn(() => resetDeferred.promise) })
+    const coordinator = createStoryRecoveryCoordinator()
+    const operation = coordinator.startReset(options)
+
+    coordinator.invalidate()
+    resetDeferred.reject(new Error('obsolete reset failure'))
+
+    await expect(operation).resolves.toEqual({ status: 'cancelled' })
+    expect(options.open).not.toHaveBeenCalled()
+  })
+
+  it('swallows an invalidated post-reset open rejection', async () => {
+    const openDeferred = deferred<{ status: 'ok'; branchId: string }>()
+    const options = request({ open: vi.fn(() => openDeferred.promise) })
+    const coordinator = createStoryRecoveryCoordinator()
+    const operation = coordinator.startReset(options)
+    await vi.waitFor(() => expect(options.open).toHaveBeenCalledOnce())
+
+    coordinator.invalidate()
+    openDeferred.reject(new Error('obsolete open failure'))
+
+    await expect(operation).resolves.toEqual({ status: 'cancelled' })
+    expect(options.onOpened).not.toHaveBeenCalled()
+    expect(options.onOpenFailed).not.toHaveBeenCalled()
   })
 
   it('keeps the same-story reset locked after invalidation until its operation settles', async () => {
@@ -187,5 +238,57 @@ describe('story recovery coordinator', () => {
 
     expect(navigate).not.toHaveBeenCalled()
     expect(onOpenFailed).not.toHaveBeenCalled()
+  })
+
+  it('swallows an ordinary-open rejection invalidated by a newer intent', async () => {
+    const openDeferred = deferred<{ status: 'ok'; branchId: string }>()
+    const onOpenFailed = vi.fn()
+    const coordinator = createStoryRecoveryCoordinator()
+    const operation = coordinator.attemptOpen({
+      open: vi.fn(() => openDeferred.promise),
+      navigate: vi.fn(),
+      onOpenFailed,
+    })
+
+    coordinator.invalidate()
+    openDeferred.reject(new Error('obsolete open failure'))
+
+    await expect(operation).resolves.toBeUndefined()
+    expect(onOpenFailed).not.toHaveBeenCalled()
+  })
+
+  it('preserves an ordinary-open rejection while its request is current', async () => {
+    const failure = new Error('current open failure')
+    const coordinator = createStoryRecoveryCoordinator()
+
+    await expect(
+      coordinator.attemptOpen({
+        open: vi.fn().mockRejectedValue(failure),
+        navigate: vi.fn(),
+        onOpenFailed: vi.fn(),
+      }),
+    ).rejects.toBe(failure)
+  })
+
+  it('routes reset outcomes to the matching failure handler with the original error', () => {
+    const resetError = new Error('reset failed')
+    const reopenError = new Error('reopen failed')
+    const onResetFailure = vi.fn()
+    const onReopenFailure = vi.fn()
+
+    handleStoryRecoveryResetOutcome(
+      { status: 'failed', phase: 'reset', error: resetError },
+      { onResetFailure, onReopenFailure },
+    )
+    handleStoryRecoveryResetOutcome(
+      { status: 'failed', phase: 'reopen', error: reopenError },
+      { onResetFailure, onReopenFailure },
+    )
+    handleStoryRecoveryResetOutcome({ status: 'cancelled' }, { onResetFailure, onReopenFailure })
+
+    expect(onResetFailure).toHaveBeenCalledOnce()
+    expect(onResetFailure).toHaveBeenCalledWith(resetError)
+    expect(onReopenFailure).toHaveBeenCalledOnce()
+    expect(onReopenFailure).toHaveBeenCalledWith(reopenError)
   })
 })

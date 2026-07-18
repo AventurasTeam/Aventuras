@@ -34,7 +34,11 @@ import {
 } from '@/lib/actions'
 import { db, runInTransaction } from '@/lib/db'
 import { t } from '@/lib/i18n'
-import { createStoryRecoveryCoordinator, getDatabaseFileRevealAction } from '@/lib/recovery'
+import {
+  createStoryRecoveryCoordinator,
+  getDatabaseFileRevealAction,
+  handleStoryRecoveryResetOutcome,
+} from '@/lib/recovery'
 import {
   rehydrateStories,
   selectStoryCards,
@@ -97,6 +101,7 @@ export default function Index() {
   }
 
   const onNewStory = () => {
+    dismissStoryRecovery()
     if (sessionExists) {
       setPrompt({ trigger: 'new-story' })
       return
@@ -108,6 +113,7 @@ export default function Index() {
   }
 
   const openDraft = (storyId: string) => {
+    dismissStoryRecovery()
     if (sessionExists) {
       setPrompt({ trigger: 'draft', storyId })
       return
@@ -278,10 +284,24 @@ export default function Index() {
               onOpenFailed: (kind) => showStoryRecovery({ storyId, kind }),
             })
             if (operation) {
-              runAction(operation, {
-                event: 'action_layer.story_settings_reset_failed',
-                toastMessage: t('landing:errors.resetStorySettingsFailed'),
-                context: { storyId },
+              void operation.then((outcome) => {
+                handleStoryRecoveryResetOutcome(outcome, {
+                  onResetFailure: (error) => {
+                    runAction(Promise.reject(error), {
+                      event: 'action_layer.story_settings_reset_failed',
+                      toastMessage: t('landing:errors.resetStorySettingsFailed'),
+                      context: { storyId },
+                    })
+                  },
+                  onReopenFailure: (error) => {
+                    dismissStoryRecovery()
+                    runAction(Promise.reject(error), {
+                      event: 'action_layer.story_open_failed',
+                      toastMessage: t('landing:errors.openFailed'),
+                      context: { storyId },
+                    })
+                  },
+                })
               })
             }
           }}

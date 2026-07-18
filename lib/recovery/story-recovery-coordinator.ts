@@ -20,6 +20,28 @@ type StoryRecoveryRequest = {
 
 type StoryOpenAttempt = Pick<StoryRecoveryRequest, 'open' | 'navigate' | 'onOpenFailed'>
 
+export type StoryRecoveryResetOutcome =
+  | { status: 'completed' }
+  | { status: 'cancelled' }
+  | { status: 'failed'; phase: 'reset' | 'reopen'; error: unknown }
+
+type StoryRecoveryResetFailureHandlers = {
+  onResetFailure: (error: unknown) => void
+  onReopenFailure: (error: unknown) => void
+}
+
+export function handleStoryRecoveryResetOutcome(
+  outcome: StoryRecoveryResetOutcome,
+  handlers: StoryRecoveryResetFailureHandlers,
+): void {
+  if (outcome.status !== 'failed') return
+  if (outcome.phase === 'reset') {
+    handlers.onResetFailure(outcome.error)
+  } else {
+    handlers.onReopenFailure(outcome.error)
+  }
+}
+
 export function createStoryRecoveryCoordinator() {
   let generation = 0
   let currentToken: number | null = null
@@ -40,12 +62,18 @@ export function createStoryRecoveryCoordinator() {
   async function attemptOpen(request: StoryOpenAttempt): Promise<void> {
     const token = beginRequest()
     try {
-      const result = await request.open(
-        (branchId) => {
-          if (isCurrent(token)) request.navigate(branchId)
-        },
-        () => isCurrent(token),
-      )
+      let result: StoryRecoveryOpenResult
+      try {
+        result = await request.open(
+          (branchId) => {
+            if (isCurrent(token)) request.navigate(branchId)
+          },
+          () => isCurrent(token),
+        )
+      } catch (error) {
+        if (isCurrent(token)) throw error
+        return
+      }
       if (isCurrent(token) && result.status === 'open-failed') {
         request.onOpenFailed(result.kind)
       }
@@ -54,7 +82,9 @@ export function createStoryRecoveryCoordinator() {
     }
   }
 
-  function startReset(request: StoryRecoveryRequest): Promise<void> | undefined {
+  function startReset(
+    request: StoryRecoveryRequest,
+  ): Promise<StoryRecoveryResetOutcome> | undefined {
     if (resettingStories.has(request.storyId)) return undefined
 
     const token = beginRequest()
@@ -62,22 +92,36 @@ export function createStoryRecoveryCoordinator() {
 
     return (async () => {
       try {
-        await request.reset()
-        if (!isCurrent(token)) return
+        try {
+          await request.reset()
+        } catch (error) {
+          return isCurrent(token)
+            ? { status: 'failed', phase: 'reset', error }
+            : { status: 'cancelled' }
+        }
+        if (!isCurrent(token)) return { status: 'cancelled' }
 
-        const result = await request.open(
-          (branchId) => {
-            if (isCurrent(token)) request.navigate(branchId)
-          },
-          () => isCurrent(token),
-        )
-        if (!isCurrent(token)) return
+        let result: StoryRecoveryOpenResult
+        try {
+          result = await request.open(
+            (branchId) => {
+              if (isCurrent(token)) request.navigate(branchId)
+            },
+            () => isCurrent(token),
+          )
+        } catch (error) {
+          return isCurrent(token)
+            ? { status: 'failed', phase: 'reopen', error }
+            : { status: 'cancelled' }
+        }
+        if (!isCurrent(token)) return { status: 'cancelled' }
 
         if (result.status === 'ok') {
           request.onOpened()
         } else if (result.status === 'open-failed') {
           request.onOpenFailed(result.kind)
         }
+        return { status: 'completed' }
       } finally {
         resettingStories.delete(request.storyId)
         if (isCurrent(token)) {
