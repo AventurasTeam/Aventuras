@@ -1,5 +1,5 @@
 import { appSettingsStore, hydrateAppSettings } from './app-settings/app-settings'
-import { readAppSettingsRow, rehydrateAppSettings } from './app-settings/app-settings-read'
+import { rehydrateAppSettings } from './app-settings/app-settings-read'
 import { chaptersStore } from './chapters/chapters'
 import { characterRelationshipsStore } from './character-relationships/character-relationships'
 import { currentStoryStore } from './current-story/current-story'
@@ -60,7 +60,6 @@ export {
   hydrateAppSettings,
   loreStore,
   navigationStore,
-  readAppSettingsRow,
   recoveryReportStore,
   rehydrateAppSettings,
   rehydrateStories,

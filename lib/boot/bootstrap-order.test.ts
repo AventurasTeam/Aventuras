@@ -4,7 +4,7 @@ import { APP_SETTINGS_DEFAULTS, APP_SETTINGS_SINGLETON_ID, appSettings } from '@
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { __resetDiagnosticsGate } from '@/lib/diagnostics'
 import { recoverInFlightRuns } from '@/lib/pipeline'
-import { hydrateAppSettings, resetAllStores } from '@/lib/stores'
+import { rehydrateAppSettings, resetAllStores } from '@/lib/stores'
 
 import { runBootstrap } from './bootstrap'
 
@@ -34,7 +34,7 @@ describe('runBootstrap phase ordering', () => {
     expect(r).toEqual({ status: 'ok' })
 
     const recoverOrder = vi.mocked(recoverInFlightRuns).mock.invocationCallOrder[0]
-    const hydrateOrder = vi.mocked(hydrateAppSettings).mock.invocationCallOrder[0]
+    const hydrateOrder = vi.mocked(rehydrateAppSettings).mock.invocationCallOrder[0]
     expect(recoverOrder).toBeGreaterThan(0)
     expect(hydrateOrder).toBeGreaterThan(recoverOrder)
   })

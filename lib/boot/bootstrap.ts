@@ -10,9 +10,8 @@ import { configureDeltaActionPort, recoverInFlightRuns } from '@/lib/pipeline'
 import {
   appSettingsStore,
   type BootHydrateResult,
-  hydrateAppSettings,
-  readAppSettingsRow,
   recoveryReportStore,
+  rehydrateAppSettings,
 } from '@/lib/stores'
 
 // __DEV__ force-on folds into isEnabled so dev captures the recovery pass; both
@@ -51,5 +50,7 @@ export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
       error: err instanceof Error ? err.message : String(err),
     })
   }
-  return hydrateAppSettings(() => readAppSettingsRow(ctx.db))
+  // ctx.db (not the module-level default) so recovery and hydrate hit the
+  // same instance.
+  return rehydrateAppSettings(ctx.db)
 }
