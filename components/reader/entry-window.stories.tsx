@@ -34,7 +34,6 @@ const meta: Meta<typeof EntryWindow> = {
   parameters: { layout: 'fullscreen' },
 }
 
-export default meta
 type Story = StoryObj<typeof meta>
 
 export const Basic: Story = {
@@ -80,3 +79,5 @@ function PrependDemo() {
 // Exercises the scroll-anchoring path: prepending must not visually shift the
 // rows currently in view.
 export const PrependAnchoring: Story = { render: () => <PrependDemo /> }
+
+export default meta
