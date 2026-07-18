@@ -219,9 +219,12 @@ export default function Index() {
           // opening the wizard, or a resumed session would render blank.
           runAction(
             loadLiveSession(ctx).then((session) => {
-              if (session) wizardStore.hydrate(session)
+              if (session) wizardStore.hydrate(session.state)
               setPrompt(null)
-              goWizard()
+              // Carry the draft pointer back into the wizard route so a
+              // session that began as a resumed draft still promotes that
+              // draft on Finish instead of minting a duplicate story.
+              goWizard(session?.sourceStoryId ?? undefined)
             }),
             {
               event: 'action_layer.wizard_session_resume_failed',

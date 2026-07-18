@@ -67,25 +67,42 @@ export default function WizardRoute() {
   // edits survive a restart. Gated on "not the pristine default" rather than
   // "skip callback #1" — a lone Next click from step 1 is itself the first
   // meaningful change and must persist, so counting invocations would drop it.
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const autosaveSuppressedRef = useRef(false)
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined
     const unsubscribe = wizardStore.subscribe((s) => {
       // Always clear first: a field toggled away and back to its default
       // (net no-op) must cancel an already-scheduled write from the
       // intermediate change, not just skip scheduling a new one.
-      if (timer) clearTimeout(timer)
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
+      if (autosaveSuppressedRef.current) return
       if (JSON.stringify(s.state) === EMPTY_STATE_JSON) return
-      timer = setTimeout(() => {
-        runAction(saveLiveSession(wizardStore.getWizard().state, ctx), {
-          event: 'action_layer.wizard_autosave_failed',
-        })
+      autosaveTimerRef.current = setTimeout(() => {
+        runAction(
+          saveLiveSession(
+            wizardStore.getWizard().state,
+            ctx,
+            undefined,
+            sourceDraftId ?? undefined,
+          ),
+          {
+            event: 'action_layer.wizard_autosave_failed',
+          },
+        )
       }, AUTOSAVE_DEBOUNCE_MS)
     })
     return () => {
-      if (timer) clearTimeout(timer)
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
       unsubscribe()
     }
-  }, [])
+  }, [sourceDraftId])
+
+  // Once Finish / Save-as-draft starts, an in-flight debounce timer must not
+  // fire — it would recreate a stale 'live' row just after clearLiveSession.
+  const suppressAutosave = () => {
+    autosaveSuppressedRef.current = true
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
+  }
 
   const selectedCalendar = getCalendar(calendarSystemId) ?? getCalendar(DEFAULT_CALENDAR_ID)
   const validityParams: StepValidityParams = {
@@ -108,6 +125,7 @@ export default function WizardRoute() {
     if (finishingRef.current) return
     finishingRef.current = true
     setIsFinishing(true)
+    suppressAutosave()
     const { defaultStorySettings, embeddingModelId } = appSettingsStore.getAppSettings()
     runAction(
       finishWizard(
@@ -131,6 +149,9 @@ export default function WizardRoute() {
         .finally(() => {
           finishingRef.current = false
           setIsFinishing(false)
+          // Safe unconditionally: on success the route unmounts (subscriber
+          // gone) and the store is pristine, so nothing re-schedules.
+          autosaveSuppressedRef.current = false
         }),
       {
         event: 'action_layer.wizard_finish_failed',
@@ -140,16 +161,16 @@ export default function WizardRoute() {
   }
 
   const saveDraft = () => {
+    suppressAutosave()
     runAction(
-      saveStoryDraft(
-        wizardStore.getWizard().state,
-        ctx,
-        undefined,
-        sourceDraftId ?? undefined,
-      ).then(() => {
-        wizardStore.reset()
-        router.back()
-      }),
+      saveStoryDraft(wizardStore.getWizard().state, ctx, undefined, sourceDraftId ?? undefined)
+        .then(() => {
+          wizardStore.reset()
+          router.back()
+        })
+        .finally(() => {
+          autosaveSuppressedRef.current = false
+        }),
       {
         event: 'action_layer.wizard_save_draft_failed',
         toastMessage: t('wizard:errors.saveDraftFailed'),

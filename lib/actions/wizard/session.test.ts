@@ -95,10 +95,20 @@ describe('wizard session/draft actions', () => {
     s.step = 2
     await saveLiveSession(s, ctx, 1)
     const loaded = await loadLiveSession(ctx)
-    expect(loaded?.leadName).toBe('Bran')
-    expect(loaded?.step).toBe(2)
+    expect(loaded?.state.leadName).toBe('Bran')
+    expect(loaded?.state.step).toBe(2)
+    expect(loaded?.sourceStoryId).toBeNull()
     await clearLiveSession(ctx)
     expect(await loadLiveSession(ctx)).toBeNull()
+  })
+
+  it('saveLiveSession carries a resumed draft id through to loadLiveSession', async () => {
+    const s = emptyWorkingState()
+    s.definition.title = 'Resumed'
+    const { storyId } = await saveStoryDraft(s, ctx, 1)
+    await saveLiveSession(s, ctx, 2, storyId)
+    const loaded = await loadLiveSession(ctx)
+    expect(loaded?.sourceStoryId).toBe(storyId)
   })
 
   it('saveStoryDraft with an existingStoryId re-saves the same story row', async () => {
@@ -156,12 +166,14 @@ describe('wizard session/draft actions', () => {
     })
     await ctx.db
       .insert(wizardSessions)
-      .values({ id: 'live', storyId: null, state: { step: 99 } as never, updatedAt: 1 })
+      .values({ id: 'live', storyId: 'story_orig', state: { step: 99 } as never, updatedAt: 1 })
 
     const loaded = await loadLiveSession(ctx)
     unsub()
 
-    expect(loaded).toEqual(emptyWorkingState())
+    // sourceStoryId must drop with the corrupt blob — a fresh state finishing
+    // into the original draft would silently overwrite it.
+    expect(loaded).toEqual({ state: emptyWorkingState(), sourceStoryId: null })
     expect(sawError).toBe(true)
   })
 

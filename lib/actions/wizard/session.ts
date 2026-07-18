@@ -22,12 +22,13 @@ export async function saveLiveSession(
   state: WizardWorkingState,
   ctx: DbCtx,
   nowMs: number = Date.now(),
+  sourceStoryId?: string,
 ): Promise<void> {
   await ctx.runInTransaction([
     ctx.db.delete(wizardSessions).where(eq(wizardSessions.id, LIVE_SESSION_ID)).toSQL(),
     ctx.db
       .insert(wizardSessions)
-      .values({ id: LIVE_SESSION_ID, storyId: null, state, updatedAt: nowMs })
+      .values({ id: LIVE_SESSION_ID, storyId: sourceStoryId ?? null, state, updatedAt: nowMs })
       .toSQL(),
   ])
 }
@@ -102,32 +103,41 @@ export async function saveStoryDraft(
 // blob would surface that as a crash deep in the wizard. Re-validate on load and
 // fall back to a fresh state, toasting so the reset is visible rather than a
 // silently blanked draft.
-function parsePersistedState(raw: unknown, source: string): WizardWorkingState {
+function parsePersistedState(
+  raw: unknown,
+  source: string,
+): { state: WizardWorkingState; ok: boolean } {
   const parsed = wizardWorkingStateSchema.safeParse(raw)
-  if (parsed.success) return parsed.data
+  if (parsed.success) return { state: parsed.data, ok: true }
   logger.warn('action_layer.wizard_session_parse_failed', {
     source,
     issues: parsed.error.issues.length,
   })
   toast.error(t('landing:errors.sessionStateCorrupt'))
-  return emptyWorkingState()
+  return { state: emptyWorkingState(), ok: false }
 }
 
 export async function loadDraft(storyId: string, ctx: DbCtx): Promise<WizardWorkingState | null> {
   const [row] = await ctx.db.select().from(wizardSessions).where(eq(wizardSessions.id, storyId))
   if (!row) return null
-  return parsePersistedState(row.state, 'draft')
+  return parsePersistedState(row.state, 'draft').state
 }
+
+type LiveSession = { state: WizardWorkingState; sourceStoryId: string | null }
 
 // The live singleton's state must be re-hydrated into wizardStore on Continue —
 // the in-memory store resets on every app boot, so without this a restart's
 // worth of auto-saved progress would open as a blank wizard despite the row
-// surviving in SQLite.
-export async function loadLiveSession(ctx: DbCtx): Promise<WizardWorkingState | null> {
+// surviving in SQLite. sourceStoryId rides along so a session that began as a
+// resumed draft finishes as that draft's promotion, not a duplicate story.
+export async function loadLiveSession(ctx: DbCtx): Promise<LiveSession | null> {
   const [row] = await ctx.db
     .select()
     .from(wizardSessions)
     .where(eq(wizardSessions.id, LIVE_SESSION_ID))
   if (!row) return null
-  return parsePersistedState(row.state, 'live')
+  const { state, ok } = parsePersistedState(row.state, 'live')
+  // A corrupt blob resets to a fresh state; keeping the draft pointer would
+  // let Finish overwrite the original draft with that fresh state.
+  return { state, sourceStoryId: ok ? row.storyId : null }
 }
