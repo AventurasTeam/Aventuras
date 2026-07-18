@@ -20,10 +20,10 @@ function blankIfWhitespace(value: string): string {
 export function buildPerTurnGenerationContext(args: BuildArgs): Record<string, unknown> {
   const { entries, entities, definition, settings, idMap } = args
 
+  const narrative = entries.filter((e) => e.kind !== 'system')
   // Floor at 1: slice(-0) returns the whole array, so a future settings UI
   // writing 0 would silently send the entire buffer instead of a minimal one.
-  const buffer = entries
-    .filter((e) => e.kind !== 'system')
+  const buffer = narrative
     .slice(-Math.max(1, settings.partialChapterBuffer))
     .map((e) => ({ content: e.content }))
 
@@ -37,7 +37,9 @@ export function buildPerTurnGenerationContext(args: BuildArgs): Record<string, u
   const context = {
     entries: buffer,
     entities,
-    sceneEntities: [] as string[], // M2: no classifier populates scene membership yet
+    // Writers inherit scene membership forward (submit-turn, per-turn), so the
+    // non-system tail always carries the current scene state.
+    sceneEntities: narrative.at(-1)?.metadata?.sceneEntities ?? [],
     definition: normalizedDefinition,
     userSettings: {},
     intermediates: {},

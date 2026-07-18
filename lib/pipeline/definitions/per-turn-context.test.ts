@@ -86,6 +86,51 @@ describe('buildPerTurnGenerationContext', () => {
     expect((ctx.entities as { id: string }[])[0]!.id).toBe('c1')
   })
 
+  it('extracts sceneEntities from the last non-system entry, substituted like the entities', () => {
+    const leadId = 'char_00000000-0000-4000-8000-000000000001'
+    const entries = [
+      {
+        ...entry('e1', 1, 'The gate creaks open.', 'opening'),
+        metadata: { sceneEntities: [leadId], currentLocationId: null, worldTime: 0 },
+      },
+      entry('sys', 2, 'ERROR', 'system'),
+    ] as never[]
+    const entities = [
+      {
+        id: leadId,
+        branchId: 'b1',
+        kind: 'character',
+        name: 'Mara',
+        description: 'A knight.',
+        status: 'active',
+        injectionMode: 'auto',
+      },
+    ] as never[]
+    const ctx = buildPerTurnGenerationContext({
+      entries,
+      entities,
+      definition,
+      settings,
+      idMap: new IdBiMap(),
+    })
+    expect(ctx.sceneEntities).toEqual([(ctx.entities as { id: string }[])[0]!.id])
+
+    const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx)
+    expect(prompt).toContain('# Characters in scene')
+    expect(prompt).toContain('A knight.')
+  })
+
+  it('yields empty sceneEntities when no entry carries scene metadata', () => {
+    const ctx = buildPerTurnGenerationContext({
+      entries: [entry('e1', 1, 'one')] as never[],
+      entities: [],
+      definition,
+      settings,
+      idMap: new IdBiMap(),
+    })
+    expect(ctx.sceneEntities).toEqual([])
+  })
+
   it('renders the per-turn template with buffer + guarded headers', () => {
     const entries = [entry('e1', 1, 'The gate creaks open.')] as never[]
     const ctx = buildPerTurnGenerationContext({

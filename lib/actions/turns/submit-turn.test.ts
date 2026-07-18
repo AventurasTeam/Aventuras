@@ -176,7 +176,7 @@ describe('submitTurn', () => {
     expect(typeof reply?.metadata?.model).toBe('string')
   })
 
-  it('inherits worldTime from the tail entry onto the user_action, and the ai_reply inherits it too', async () => {
+  it('inherits scene state from the tail entry onto the user_action, and the ai_reply inherits it too', async () => {
     const { ctx } = await makeHarness()
     const opening: StoryEntry = {
       id: 'seed-opening',
@@ -185,7 +185,11 @@ describe('submitTurn', () => {
       kind: 'opening',
       content: 'The keep looms over the valley.',
       chapterId: null,
-      metadata: { sceneEntities: [], currentLocationId: null, worldTime: 5 },
+      metadata: {
+        sceneEntities: ['char_00000000-0000-4000-8000-000000000001'],
+        currentLocationId: 'loc_00000000-0000-4000-8000-000000000002',
+        worldTime: 5,
+      },
       createdAt: 1,
     }
     await ctx.db.insert(storyEntries).values(opening)
@@ -204,14 +208,16 @@ describe('submitTurn', () => {
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.kind, 'user_action')))
     expect(ua?.metadata?.worldTime).toBe(5)
-    expect(ua?.metadata?.sceneEntities).toEqual([])
-    expect(ua?.metadata?.currentLocationId).toBeNull()
+    expect(ua?.metadata?.sceneEntities).toEqual(['char_00000000-0000-4000-8000-000000000001'])
+    expect(ua?.metadata?.currentLocationId).toBe('loc_00000000-0000-4000-8000-000000000002')
 
     const [reply] = await ctx.db
       .select()
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.kind, 'ai_reply')))
     expect(reply?.metadata?.worldTime).toBe(5)
+    expect(reply?.metadata?.sceneEntities).toEqual(['char_00000000-0000-4000-8000-000000000001'])
+    expect(reply?.metadata?.currentLocationId).toBe('loc_00000000-0000-4000-8000-000000000002')
   })
 
   it('inherits worldTime from the last non-system entry when a system tail lingers', async () => {

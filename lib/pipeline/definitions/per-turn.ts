@@ -111,9 +111,11 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   const usage = await Promise.resolve(stream.usage).catch(() => undefined)
   const reasoningText = await Promise.resolve(stream.reasoningText).catch(() => undefined)
   const tail = entries.at(-1)
-  // Inherited from the tail entry — by submitTurn ordering that is the just-written
-  // user_action, which carries the inherited worldTime (see submit-turn.ts). M2 has no
-  // time advancement, so this propagates the opening's worldTime forward.
+  // Scene state (membership, location, worldTime) inherits from the tail — by
+  // submitTurn ordering that is the just-written user_action, which carries the
+  // inherited values (see submit-turn.ts). M2 has no classifier, so this
+  // propagates the opening's values forward until piggyback/classifier (M3+)
+  // emits fresh ones.
   const worldTime = tail?.metadata?.worldTime ?? 0
   const metadata: EntryMetadata = {
     ...(usage
@@ -130,9 +132,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     model: call.modelId,
     generationTimingMs: Date.now() - startedAt,
     ...(reasoningText ? { reasoning: reasoningText } : {}),
-    // M2: scene membership + current location are piggyback/classifier-emitted (M3+); empty here.
-    sceneEntities: [],
-    currentLocationId: null,
+    sceneEntities: tail?.metadata?.sceneEntities ?? [],
+    currentLocationId: tail?.metadata?.currentLocationId ?? null,
     worldTime,
   }
 

@@ -59,10 +59,12 @@ export async function submitTurn(
       .where(eq(storyEntries.branchId, ids.branchId))
       .orderBy(desc(storyEntries.position))
       .limit(1)
-    // worldTime from the last non-system entry: a system tail carries null
-    // metadata and would reset the inherited worldTime to 0. Position still
-    // comes from the overall tail so numbering never collides.
-    const [timeTail] = await ctx.db
+    // Scene state (membership, location, worldTime) inherits from the last
+    // non-system entry: a system tail carries null metadata and would reset
+    // it. M2 has no classifier, so this propagates the opening's values
+    // forward until piggyback/classifier (M3+) emits fresh ones. Position
+    // still comes from the overall tail so numbering never collides.
+    const [sceneTail] = await ctx.db
       .select({ metadata: storyEntries.metadata })
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, ids.branchId), ne(storyEntries.kind, 'system')))
@@ -72,9 +74,9 @@ export async function submitTurn(
     const entryId = generateId('entry')
     const createdAt = Date.now()
     const metadata: EntryMetadata = {
-      sceneEntities: [],
-      currentLocationId: null,
-      worldTime: timeTail?.metadata?.worldTime ?? 0,
+      sceneEntities: sceneTail?.metadata?.sceneEntities ?? [],
+      currentLocationId: sceneTail?.metadata?.currentLocationId ?? null,
+      worldTime: sceneTail?.metadata?.worldTime ?? 0,
     }
 
     const result = await applyDeltaAction(
