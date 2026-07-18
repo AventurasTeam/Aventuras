@@ -42,7 +42,7 @@ const EDGE_THRESHOLD_VIEWPORTS = 1
 // Near-bottom (jump-button visibility) is deliberately tighter than the
 // auto-load tolerance: the button should appear as soon as the user leaves
 // the live edge, not a full viewport later (reader-composer.md#jump-buttons).
-const NEAR_BOTTOM_THRESHOLD_PX = 200
+const NEAR_BOTTOM_THRESHOLD_PX = 20
 const MAINTAIN_VISIBLE_CONTENT_POSITION = { minIndexForVisible: 0 } as const
 
 const styles = StyleSheet.create({
@@ -239,4 +239,4 @@ const EntryWindow = forwardRef(EntryWindowInner) as <T extends { id: string }>(
 ) => ReturnType<typeof EntryWindowInner>
 
 export { EntryWindow }
-export type { EntryWindowProps, EntryWindowHandle }
+export type { EntryWindowHandle, EntryWindowProps }
