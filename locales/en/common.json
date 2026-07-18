@@ -26,6 +26,22 @@
     "back": "Back",
     "chapterProgress": "Chapter progress"
   },
+  "modelPicker": {
+    "placeholder": "Pick a model",
+    "searchPlaceholder": "Search models…",
+    "favoriteAdd": "Add to favorites",
+    "favoriteRemove": "Remove from favorites",
+    "selectedModel": "Selected model {{modelId}}",
+    "providerMissing": "Provider missing",
+    "addCustomExpand": "+ Add custom model…",
+    "addCustomTitle": "Add custom model",
+    "modelIdPlaceholder": "model-id",
+    "underLabel": "Under:",
+    "add": "Add",
+    "providerPlaceholder": "Pick a provider",
+    "noProviders": "No providers configured. Add one in App Settings → Providers.",
+    "noMatch": "No models match \"{{query}}\"."
+  },
   "storyCard": {
     "genreNotSet": "Genre not set",
     "noDescription": "(no description yet)",

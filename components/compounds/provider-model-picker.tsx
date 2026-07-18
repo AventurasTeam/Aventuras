@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/searchable-overlay-list'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type ModelRef = { providerId: string; modelId: string }
@@ -76,7 +77,6 @@ type PickerRowData = {
   brokenFavorite?: boolean
 }
 
-const DEFAULT_PLACEHOLDER = 'Pick a model'
 const DEFAULT_CAPABILITY_KEYWORDS: Record<string, keyof Capabilities> = {
   reasoning: 'reasoning',
   structured: 'structured',
@@ -127,7 +127,7 @@ function FavoriteToggle({ isFavorite, onToggle }: FavoriteToggleProps) {
   return (
     <Pressable
       accessibilityRole="button"
-      aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+      aria-label={isFavorite ? t('modelPicker.favoriteRemove') : t('modelPicker.favoriteAdd')}
       onPress={(e) => {
         // Don't activate the row when the user toggles the favorite — favorite
         // toggle and row body are two distinct gestures (per spec).
@@ -203,7 +203,7 @@ function PickerTrigger({
       aria-haspopup={ariaHaspopup}
       aria-expanded={ariaExpanded}
       aria-controls={ariaControls}
-      aria-label={value ? `Selected model ${value.modelId}` : placeholder}
+      aria-label={value ? t('modelPicker.selectedModel', { modelId: value.modelId }) : placeholder}
       className={cn(
         'h-control-md flex-row items-center justify-between gap-2 rounded-md border border-border bg-bg-base px-3',
         disabled && 'opacity-50',
@@ -214,7 +214,7 @@ function PickerTrigger({
       <View className="min-w-0 flex-1 flex-row items-center gap-2">
         {brokenState === 'provider-missing' ? (
           <Tag tone="warning">
-            <Text size="xs">⚠ Provider missing</Text>
+            <Text size="xs">⚠ {t('modelPicker.providerMissing')}</Text>
           </Tag>
         ) : brokenState === 'model-not-in-catalog' && value ? (
           <Tag tone="warning">
@@ -272,26 +272,26 @@ function CustomAddComposer({ providers, query, defaultProviderId, onCommit }: Co
   if (!expanded) {
     return (
       <Button variant="ghost" onPress={open}>
-        <Text>+ Add custom model…</Text>
+        <Text>{t('modelPicker.addCustomExpand')}</Text>
       </Button>
     )
   }
   return (
     <View className="flex-col gap-2">
       <Text size="sm" className="font-medium">
-        Add custom model
+        {t('modelPicker.addCustomTitle')}
       </Text>
       <Input
         value={modelIdInput}
         onChangeText={setModelIdInput}
-        placeholder="model-id"
+        placeholder={t('modelPicker.modelIdPlaceholder')}
         autoCorrect={false}
         autoCapitalize="none"
         onSubmitEditing={handleAdd}
       />
       <View className="flex-row items-center gap-2">
         <Text size="xs" variant="muted">
-          Under:
+          {t('modelPicker.underLabel')}
         </Text>
         <View className="flex-1">
           <ProviderInlinePicker providers={providers} value={providerId} onChange={setProviderId} />
@@ -299,10 +299,10 @@ function CustomAddComposer({ providers, query, defaultProviderId, onCommit }: Co
       </View>
       <View className="flex-row justify-end gap-2">
         <Button variant="ghost" size="sm" onPress={cancel}>
-          <Text>Cancel</Text>
+          <Text>{t('cancel')}</Text>
         </Button>
         <Button size="sm" disabled={!isValid} onPress={handleAdd}>
-          <Text>Add</Text>
+          <Text>{t('modelPicker.add')}</Text>
         </Button>
       </View>
     </View>
@@ -330,7 +330,7 @@ function ProviderInlinePicker({ providers, value, onChange }: ProviderInlinePick
         className="h-control-md flex-row items-center justify-between gap-2 rounded-md border border-border bg-bg-base px-3"
       >
         <Text size="sm" className="text-fg-primary" numberOfLines={1}>
-          {selected?.name ?? 'Pick a provider'}
+          {selected?.name ?? t('modelPicker.providerPlaceholder')}
         </Text>
         <Icon as={open ? ChevronUp : ChevronDown} size="sm" className="text-fg-muted" />
       </Pressable>
@@ -376,7 +376,7 @@ const inlinePanelStyle = { maxHeight: INLINE_PANEL_MAX_HEIGHT } as const
 function ProviderModelPicker({
   value,
   onChange,
-  placeholder = DEFAULT_PLACEHOLDER,
+  placeholder = t('modelPicker.placeholder'),
   providers,
   favorites,
   onFavoriteToggle,
@@ -526,8 +526,8 @@ function ProviderModelPicker({
       <View className="items-center gap-2 px-row-x-md py-6">
         <Text size="sm" variant="muted">
           {providers.length === 0
-            ? 'No providers configured. Add one in App Settings → Providers.'
-            : `No models match "${q}".`}
+            ? t('modelPicker.noProviders')
+            : t('modelPicker.noMatch', { query: q })}
         </Text>
       </View>
     ),
@@ -538,8 +538,8 @@ function ProviderModelPicker({
     <View className={className}>
       <SearchableOverlayList<PickerRowData>
         searchPlacement="in-overlay"
-        ariaLabel="Pick a model"
-        searchPlaceholder="Search models…"
+        ariaLabel={t('modelPicker.placeholder')}
+        searchPlaceholder={t('modelPicker.searchPlaceholder')}
         sections={sections}
         selectedRowIds={selectedRowIds}
         matchTriggerWidth
