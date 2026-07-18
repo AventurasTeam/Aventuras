@@ -142,8 +142,8 @@ git-ignored `.impl-plans/M02-04-story-list.md`).
   [`data-model.md → Story deletion`](../../../../data-model.md#story-deletion).
   A schema-derived completeness test fails if a branch-scoped table is added
   without wiring the cascade. The asset-trashing forward-coupling (M4/M9 GC
-  must hook the story-delete path) is tracked in
-  [`triage.md`](../../../triage.md).
+  must hook the story-delete path) is recorded as a slice-authoring note on
+  the [roadmap's M9.3 entry](../../../roadmap.md#m9--storybook--per-surface-visual-polish--ship-gate).
 - **Built against pinned contracts** (consumers unmerged). The C5 session
   selector + prompt are a local placeholder
   (`components/story/wizard-session-seam.tsx`) for

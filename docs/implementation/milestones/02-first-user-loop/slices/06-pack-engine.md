@@ -156,8 +156,8 @@ _Both resolved during planning — see Implementation notes
   in-code i18n in [Slice 2.5](./05-reader.md): the wrapped string is
   target-language user content, but a pack is English-source. The
   per-turn template receives the already-wrapped action. The
-  canonical reframe (principles, architecture, C2) is queued in
-  [triage.md](../../../triage.md).
+  canonical reframe landed post-M2 (principles → Composer mode and
+  the milestone's C2 now state the in-code model).
 - **Synchronous render.** `renderTemplate(templateId, context)`
   renders via LiquidJS `renderFileSync`; every M2 filter and
   in-memory include is synchronous. The `lib/prompts` barrel

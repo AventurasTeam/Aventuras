@@ -757,6 +757,19 @@ Reintroduction is additive — the schema goes from `number` to
 `{ mode, value }`, the UI adds a mode picker. No data migration
 beyond field-shape lifting.
 
+#### Native `crypto.randomUUID` uses `Math.random`, not a CSPRNG
+
+ULID was dropped, so every id flows through `generateId` →
+`crypto.randomUUID`, and the `lib/polyfills` shim fills Hermes's
+missing global `crypto` with a `Math.random`-backed v4 `randomUUID`
+(native only; web, Electron, and Node keep their secure `crypto`).
+Fine for these local, single-user primary keys — they need
+uniqueness, not unpredictability. Revisit only if an id ever becomes
+externally exposed or guessing-sensitive, or a real crypto need
+appears (e.g. asset sha256 content-addressing): point the shim at
+`expo-crypto`'s `randomUUID` — one file, one native dep, a
+dev-client rebuild.
+
 ### Memory pipeline (parked)
 
 Subsystem-scoped deferrals for the memory pipeline (retrieval,

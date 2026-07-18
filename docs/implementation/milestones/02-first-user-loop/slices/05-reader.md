@@ -205,8 +205,8 @@ chapter management (M5), branch picker (M6).
 
 None outstanding — the Harper bundle-size question resolved by
 measurement (see Implementation notes → Harper.js native
-bundle-size); the resulting platform-split work is queued in
-[`triage.md`](../../../triage.md).
+bundle-size); the resulting platform split landed post-M2
+(`lib/spellcheck/index.native.ts`).
 
 ## Implementation notes
 
@@ -217,9 +217,11 @@ bundle-size); the resulting platform-split work is queued in
   rest of the app is ~8.7 MB. The weight is also dead on native:
   Hermes has no `WebAssembly` (or `Worker`), so the linter cannot
   execute there, and the composer's un-caught `lintNarrativeText`
-  promise rejects on every lint pass. Resolution: platform-split
-  `lib/spellcheck` so harper.js stays web-only — queued in
-  [`triage.md`](../../../triage.md).
+  promise rejects on every lint pass. Resolution: `lib/spellcheck`
+  platform split landed post-M2 — web keeps harper.js, native's
+  `index.native.ts` no-ops (type-only harper imports erase), and
+  the sibling `lib/markdown/sanitize.native.ts` split dropped the
+  Android bundle to 8.7 MB.
 
 - **Web prepend compensation stays reader-local.** `EntryWindow`
   (`components/reader/entry-window.tsx`) is not extracted into a

@@ -125,16 +125,24 @@ in Wizard).
 
 Sections:
 
-- **Tier list with rollover descriptions** — one row per tier;
-  rollover detail beside.
+- **Tier list with rollover descriptions** — one row per tier; a
+  row shows how that tier subdivides, i.e. the **child** tier's
+  rollover (`constant: N <unit>`, `table: min–max <unit>`, or
+  `rule: leap-adjusted (<against>)`); the leaf tier is the
+  `base unit`. Built-in Gregorian renders:
   ```
-  year   · rule: Gregorian leap
+  year   · constant: 12 months
   month  · table: 28–31 days
   day    · constant: 24 hours
   hour   · constant: 60 minutes
   minute · constant: 60 seconds
   second · base unit
   ```
+  The Gregorian leap day is a `leap` augment **inside the day
+  tier's table** (indexed by year), not a `rule`-kind rollover on
+  the year tier, so the summary intentionally doesn't surface it —
+  the `rule:` wording appears only for calendars whose rollover is
+  genuinely rule-kind.
 - **Sub-divisions** — `weekday: Sun–Sat (7-day cycle)` or `none`.
 - **Eras** — `enabled (preset names: First Age, Second Age, …)`,
   `enabled (free-form)`, or `disabled`.

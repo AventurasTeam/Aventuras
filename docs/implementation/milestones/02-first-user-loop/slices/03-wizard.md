@@ -240,8 +240,12 @@ None outstanding — all four resolved during implementation:
   substitution placeholder id (so a real model can populate
   `sceneEntities`); the `wizard`-group `lead` variable is
   `{ name, id }`, `required: false`.
-- **Non-blocking followups** (logged in
-  [triage.md](../../../triage.md#inbox)): live-session draft-provenance
-  loss on resume→cancel→continue; autosave suppression during Finish;
-  hardening the draft-promote all-or-nothing test; the calendar-summary
-  `year`-row doc/schema drift.
+- **Draft-promote all-or-nothing test limitation.**
+  `createStoryWithBranch`'s promote path (`replaceExistingStoryId`) is
+  structurally atomic (one transaction), but its forced-failure test
+  fails on `ops[0]` (the DELETE, via a stray-branch FK), so it proves
+  "first-op-rejected", not "an already-executed delete is rolled
+  back". Forcing a post-delete op to fail is blocked by the fresh-UUID
+  design (no PK can collide) and the eager `vitest.setup` domain-load
+  (can't `vi.mock` `generateId`). Revisit if a deterministic
+  post-delete failure becomes reachable.

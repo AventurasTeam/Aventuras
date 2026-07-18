@@ -116,4 +116,4 @@ this same surface.
   inspection, but the dual-project vitest setup drops `lib/ids`
   from the merged `--coverage` report, so the acceptance bar isn't
   push-button reproducible — logged in
-  [`triage.md`](../../../triage.md).
+  [`followups.md → Tooling`](../../../../followups.md#tooling).

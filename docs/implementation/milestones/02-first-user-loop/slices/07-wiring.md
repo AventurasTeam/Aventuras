@@ -216,5 +216,10 @@ Resolved developer decisions and notable deviations from the brief.
 - **Open-failure surfacing.** `OpenStoryResult` widened with
   `open-failed`; the story-list badge that renders it is
   [Slice 2.10](./10-recovery-ui.md).
-- Deferred hardening from the task reviews is queued in
-  [`triage.md`](../../../triage.md) under the Slice 2.7 entries.
+- Deferred hardening from the task reviews landed post-M2 (tail-read
+  non-system worldTime filter, entries-store branch assert in
+  `narrativePhase`, `partialChapterBuffer` floor, shared
+  entries-hydrate window in `lib/actions/story-entries`); the two
+  cross-milestone remainders are recorded as roadmap slice-authoring
+  notes (M3.2 metadata-placeholder helper, M5.2 turn-capture
+  kind-gating) in [`roadmap.md`](../../../roadmap.md).

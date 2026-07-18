@@ -115,7 +115,7 @@ is the only reachable path.
 day-one: 2.1  2.2  2.4  2.6  2.8  2.9   (+ 2.5-bulk, 2.10-modal-half)
 
 2.1, 2.6, 2.8 ───────────────► 2.3
-2.2, 2.6, 2.3 ───────────────► 2.5    (partial gates; bulk is day-one)
+2.2, 2.3 ────────────────────► 2.5    (partial gates; bulk is day-one)
 2.1, 2.3, 2.5, 2.6, 2.8, 2.9 ► 2.7
 2.4 ─────────────────────────► 2.10   (badge host)
 2.7 ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄► 2.10   (badge-state feed; kill-mid-turn AC)
@@ -132,10 +132,11 @@ day-one: 2.1  2.2  2.4  2.6  2.8  2.9   (+ 2.5-bulk, 2.10-modal-half)
   render through the engine), and 2.8 (placeholder substitution on
   the opening call's structured output). Steps 1–2 and the
   `lib/calendar` substrate can start before those land.
-- **2.5 (reader)** takes three late inputs: the edit / delete
+- **2.5 (reader)** takes two late inputs: the edit / delete
   actions and rollback-confirm modal consume 2.2's arms and
-  rollback action; the composer mode wrap consumes 2.6's bundled
-  wrap macros; the time chrome consumes 2.3's `lib/calendar`.
+  rollback action; the time chrome consumes 2.3's `lib/calendar`.
+  (The composer mode wrap is 2.5-internal in-code i18n, not a 2.6
+  pack macro — see C2.)
 - **2.7 (wiring)** converges: it needs 2.1 (real provider), 2.3
   (a creatable story to open), 2.5 (the reader it wires), 2.6
   (the per-turn template), 2.8 (idMap on the per-turn context),
@@ -196,14 +197,16 @@ Pinned boundary: a render entry point taking
 `(templateId, context)` and returning the rendered string,
 synchronous-or-promise per LiquidJS; template ids and macro ids
 are exported constants from the engine module (consumers never
-inline string literals); the bundled pack ships one composer-wrap
-macro per `(mode × wrapPov)` cell — `Do` / `Say` / `Think`
-crossed with `first` / `third`, `Free` bypasses the engine. Wrap
-macros take `{ text: string; leadName: string }` (`leadName`
-required for third-person wraps).
+inline string literals). The composer-mode send-time wrap is
+**not** part of this surface — it is implemented in-code,
+i18n-keyed, in Slice 2.5 (`lib/composer-wrap`), per
+[`principles.md → Composer mode`](../../../ui/principles.md#composer-mode--send-time-transform-narration-aware)
+(decided at 2.6 planning; a pack is English-source with no
+per-language variant, while the wrapped string is target-language
+user content).
 Consumers: [Slice 2.3](./slices/03-wizard.md) (wizard-group
-templates), [Slice 2.5](./slices/05-reader.md) (send-time wrap),
-[Slice 2.7](./slices/07-wiring.md) (per-turn narrative template).
+templates), [Slice 2.7](./slices/07-wiring.md) (per-turn
+narrative template).
 Exact constant names are fixed in 2.6's first commit; the
 contract here is the surface shape, not the literals.
 

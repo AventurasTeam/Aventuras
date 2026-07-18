@@ -686,8 +686,13 @@ entry on the current branch.
 
 ## Composer mode — send-time transform, narration-aware
 
-Composer mode is a **send-time text wrapping** driven by pack
-templates — prepend and append around the user's typed text.
+Composer mode is a **send-time text wrapping** implemented in code
+(`lib/composer-wrap`), i18n-keyed — prepend and append around the
+user's typed text. It is deliberately **not** a pack/Liquid macro:
+the wrapped string is target-language user content, while a pack is
+English-source with no per-language variant; the in-code wrap keeps
+the `user-action-translation` phase fed clean monolingual input
+(decided at M2.6 pack-engine planning).
 
 **Wrapping POV is its own setting**, distinct from narration.
 Narration governs AI prose; wrap POV governs how the user's lazy-mode

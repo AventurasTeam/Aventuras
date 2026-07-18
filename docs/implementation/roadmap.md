@@ -176,7 +176,12 @@ to render against (the tables + stores exist from M1.5; M3 fills them).
   Embedder management UI extends in M7.1.
 - M3.2 — Piggyback layer: inline structured tool calls during
   main generation; scene metadata writes;
-  entities + lore + happenings stub creation.
+  entities + lore + happenings stub creation. Slice-authoring
+  note: the `{ sceneEntities: [], currentLocationId: null,
+worldTime }` entry-metadata placeholder is hand-built in both
+  `submit-turn.ts` (user_action) and `pipeline.ts` (ai_reply) —
+  extract a shared helper when this slice starts filling real
+  scene/location values (surfaced by Slice 2.7).
 - M3.3 — Periodic classifier: background pipeline; entity
   reconciliation; awareness graph; happenings extraction. Drives the
   `character_relationships` UPSERT-merge / canonical-ordering write
@@ -420,6 +425,13 @@ companions.
   through its own commit, threading its fresh `actionId` and
   active-run pointer) already landed in 1.5a during post-M1
   reconciliation, so M5.2 needs no orchestrator change.
+  Slice-authoring note: `orchestrator.handleEvent` stamps
+  `turnCaptureSink.recordTargetEntry` on **any** `createStoryEntry`
+  delta with per-turn anchor semantics — correct while `per-turn`
+  is the only registered kind, but chapter-close also emits
+  `createStoryEntry` deltas, so this slice must gate the stamping
+  on `run.kind === 'per-turn'` (or "beginTurn set no anchor") or
+  its runs mis-stamp their anchors (surfaced by Slice 2.7).
 - M5.3 — Chapter timeline screen per
   [`docs/ui/screens/chapter-timeline/chapter-timeline.md`](../ui/screens/chapter-timeline/chapter-timeline.md);
   chapter delete routes through the deep-rollback surface (M5.5).
@@ -723,6 +735,14 @@ isn't a per-feature concern.
   rows). First sub-design pass: backup / export packaging shape
   (JSON sidecar location, asset base64-inline vs sidecar) per
   [`parked.md → Backup / export packaging shape`](../parked.md#backup--export-packaging-shape).
+  Slice-authoring note: when refcount-driven trashing lands (here
+  or an M4 precursor), it must hook the **story-delete cascade
+  path** — M2.4's `deleteStory` bulk-removes `entry_assets`
+  junction rows without trashing the now-orphaned `assets`, and
+  `stories.cover_asset_id` needs clearing on story delete — not
+  just the standalone entry/branch delete arms, or deleting a
+  story with attached assets or a cover leaks blobs (surfaced by
+  Slice 2.4; no live impact before stories carry assets).
 - M9.4 — Per-story export `.avts` envelope; per-story import
   `.avts` (story list `[Import story…]` affordance routes through
   the `ImportDialog` compound, built in foundations and first
