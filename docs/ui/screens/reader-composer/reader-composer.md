@@ -751,12 +751,18 @@ One floating affordance in the scroll viewport, near the right
 edge, above the suggestion panel + composer chrome. There's no
 jump-to-top — returning to the live edge is the near-universal
 chat-app need; jumping to branch start wasn't, so it's cut rather
-than shipped as a rarely-used toggle.
+than shipped as a rarely-used toggle. Reaffirmed post-M2
+(2026-07-19): the M5 [chapter popover](#top-bar--chapter-navigation)
+ships per-chapter jumps, which subsume branch-top navigation with
+finer granularity — a branch-top button would duplicate "jump to
+chapter 1".
 
 **Visibility — conditional.** Jump-to-bottom is visible when the
-user is not at-bottom of the window (same ~viewport-height
-tolerance as the auto-load boundary check). Slides in / out on
-threshold cross. Hidden at-bottom.
+user is not near-bottom of the window (~200px tolerance —
+deliberately tighter than the auto-load boundary's
+~viewport-height, so the button appears as soon as the user leaves
+the live edge rather than a full viewport later). Slides in / out
+on threshold cross. Hidden near-bottom.
 
 **Click behavior.** Smooth scroll (~150ms) to bottom — always a
 same-window scroll (see [No window swap](#loaded-set-model); the

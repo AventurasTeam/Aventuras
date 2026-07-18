@@ -15,8 +15,9 @@ export function JumpButtons({ showJumpToBottom, onJumpToBottom }: JumpButtonsPro
         <IconAction
           icon={ArrowDown}
           label={t('reader:jumpToBottom')}
+          size="lg"
           onPress={onJumpToBottom}
-          className="absolute bottom-12 right-4 rounded-full bg-bg-overlay shadow-md"
+          className="absolute bottom-3 right-6 rounded-md border border-border bg-bg-overlay shadow-lg"
         />
       )}
     </>

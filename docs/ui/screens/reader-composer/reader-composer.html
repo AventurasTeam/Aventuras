@@ -655,12 +655,6 @@
   </div>
 
   <div class="rb-group">
-    <span class="gl">jump-to-top button:</span>
-    <button class="rb-btn active" data-jumptop="hidden">hidden</button>
-    <button class="rb-btn" data-jumptop="shown">shown</button>
-  </div>
-
-  <div class="rb-group">
     <span class="gl">window:</span>
     <button class="rb-btn active" data-window="recent">recent</button>
     <button class="rb-btn" data-window="top">top (post-jump)</button>
@@ -908,12 +902,11 @@
 
     </div>
 
-    <!-- Floating jump buttons — see Scroll behavior in reader-composer.md.
-         Visibility: jump-to-bottom shows when not at-bottom of recent (or in non-recent window).
-         Jump-to-top shows when App Settings toggle is on AND current window != top-window-at-entry-1.
+    <!-- Floating jump button — see Scroll behavior in reader-composer.md.
+         Visibility: jump-to-bottom shows when not near-bottom (tighter than the
+         auto-load tolerance). No jump-to-top: chapter-popover jumps subsume it.
          Engaged class: jump-to-bottom flashes briefly when autoscroll re-engages on stream-active landing. -->
     <div class="scroll-chrome">
-      <button class="scroll-jump" id="jump-top" title="Jump to top of branch (Home)" aria-label="Jump to top of branch">&uarr;</button>
       <button class="scroll-jump" id="jump-bottom" title="Jump to live edge (End)" aria-label="Jump to bottom">&darr;</button>
     </div>
     </div>
@@ -1922,18 +1915,9 @@
 
   // Scroll chrome — jump buttons + boundary shimmers. Review-controls only;
   // real engagement / visibility / fetch logic lives in the component implementation.
-  const jumpTopBtn = document.getElementById('jump-top');
   const jumpBottomBtn = document.getElementById('jump-bottom');
   const boundaryTop = document.getElementById('boundary-top');
   const boundaryBottom = document.getElementById('boundary-bottom');
-
-  function setJumpTop(state) {
-    jumpTopBtn.classList.toggle('visible', state === 'shown');
-    document.querySelectorAll('[data-jumptop]').forEach(b => b.classList.toggle('active', b.dataset.jumptop === state));
-  }
-  document.querySelectorAll('[data-jumptop]').forEach(b => {
-    b.addEventListener('click', () => setJumpTop(b.dataset.jumptop));
-  });
 
   function setWindow(state) {
     // Wireframe: both window states keep jump-to-bottom visible for review.

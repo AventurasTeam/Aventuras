@@ -37,8 +37,12 @@ const ESTIMATED_ROW_HEIGHT_PX = 120
 const OVERSCAN = 6
 
 // FlatList treats a threshold of 1 as "within one viewport of the edge",
-// matching the web branch's one-clientHeight boundary check below.
+// matching the web branch's one-clientHeight top boundary check below.
 const EDGE_THRESHOLD_VIEWPORTS = 1
+// Near-bottom (jump-button visibility) is deliberately tighter than the
+// auto-load tolerance: the button should appear as soon as the user leaves
+// the live edge, not a full viewport later (reader-composer.md#jump-buttons).
+const NEAR_BOTTOM_THRESHOLD_PX = 200
 const MAINTAIN_VISIBLE_CONTENT_POSITION = { minIndexForVisible: 0 } as const
 
 const styles = StyleSheet.create({
@@ -130,7 +134,7 @@ function EntryWindowWebInner<T extends { id: string }>(
       const { scrollTop, clientHeight, scrollHeight } = event.currentTarget
       const withinTop = scrollTop <= clientHeight
       const distanceFromBottomPx = scrollHeight - scrollTop - clientHeight
-      const withinBottom = distanceFromBottomPx <= clientHeight
+      const withinBottom = distanceFromBottomPx <= NEAR_BOTTOM_THRESHOLD_PX
       if (withinTop && !nearTopRef.current) onNearTop()
       nearTopRef.current = withinTop
       if (withinBottom !== nearBottomRef.current) onNearBottomChange(withinBottom)
@@ -192,7 +196,7 @@ function EntryWindowNativeInner<T extends { id: string }>(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
       const distanceFromBottomPx = contentSize.height - contentOffset.y - layoutMeasurement.height
-      const withinBottom = distanceFromBottomPx <= layoutMeasurement.height
+      const withinBottom = distanceFromBottomPx <= NEAR_BOTTOM_THRESHOLD_PX
       if (withinBottom !== nearBottomRef.current) onNearBottomChange(withinBottom)
       nearBottomRef.current = withinBottom
       onScrollPositionChange({ distanceFromBottomPx })
