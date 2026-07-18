@@ -4,6 +4,7 @@
   import { database } from '$lib/services/database'
   import { importExportService } from '$lib/services/packs/import-export'
   import { ui } from '$lib/stores/ui.svelte'
+  import { errMessage } from '$lib/utils/error'
   import { Skeleton } from '$lib/components/ui/skeleton'
   import { Button } from '$lib/components/ui/button'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
@@ -75,7 +76,7 @@
       if (success) ui.showToast('Pack exported successfully', 'info')
     } catch (e) {
       console.error('Export failed:', e)
-      ui.showToast('Export failed', 'error')
+      ui.showToast(`Export failed: ${errMessage(e)}`, 'error')
     }
   }
 

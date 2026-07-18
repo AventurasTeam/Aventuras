@@ -13,7 +13,6 @@ import type {
   Location,
   Item,
   StoryBeat,
-  EmbeddedImage,
   TimeTracker,
   ActionInputType,
   PersistentCharacterSnapshot,
@@ -33,7 +32,6 @@ export interface RetryBackupData {
   locations: Location[]
   items: Item[]
   storyBeats: StoryBeat[]
-  embeddedImages: EmbeddedImage[]
   userActionContent: string
   rawInput: string
   actionType: ActionInputType
@@ -63,7 +61,6 @@ export interface RetryStoreCallbacks {
     locations: Location[]
     items: Item[]
     storyBeats: StoryBeat[]
-    embeddedImages: EmbeddedImage[]
     timeTracker?: TimeTracker | null
     entryCountBeforeAction: number
   }) => Promise<void>
@@ -162,7 +159,6 @@ export class RetryService {
       locations: backup.locations,
       items: backup.items,
       storyBeats: backup.storyBeats,
-      embeddedImages: backup.embeddedImages,
       timeTracker: backup.timeTracker,
       entryCountBeforeAction: backup.entryCountBeforeAction,
     })

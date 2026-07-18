@@ -36,6 +36,9 @@ const chapterSummarizationPromptTemplate: PromptTemplate = {
 ## Task
 Create a 'story map' summary of the provided chapter. This summary will be used as part of a searchable timeline database for quick identification and location of specific scenes.
 
+## Length & Detail
+{{ detailInstruction }}
+
 ## What to Include
 For each chapter, create a concise summary that includes ONLY:
 1. The most critical plot developments that drive the story forward

@@ -42,7 +42,9 @@ export async function fetchModelsFromProvider(
   if (providerType === 'ollama') return wrap(fetchOllamaModels(baseUrl))
   if (providerType === 'zhipu') return wrap(fetchZhipuModels(baseUrl, apiKey))
   if (providerType === 'mistral') return wrap(fetchMistralModels(baseUrl, apiKey))
-  if (providerType === 'pollinations') return fetchPollinationsTextModels()
+  if (providerType === 'pollinations') return fetchPollinationsTextModels(apiKey)
+
+  if (providerType === 'nvidia-nim') return fetchNimModels(baseUrl, apiKey)
 
   // Standard OpenAI-compatible endpoint
   const effectiveBaseUrl = normalizeBaseUrl(baseUrl) || getBaseUrl(providerType)
@@ -79,6 +81,87 @@ export async function fetchModelsFromProvider(
 /** Wrap a plain string[] result into TextModel[] */
 function wrap(promise: Promise<string[]>): Promise<TextModel[]> {
   return promise.then((models) => dedupeTextModels(models.map((id) => ({ id }))))
+}
+
+// Substrings that, when found in a NIM model ID, identify non-text-generation models
+// that should be excluded at fetch time.
+const NIM_EXCLUDE_PATTERNS: readonly string[] = [
+  // Embedding / retrieval
+  'embed', // nv-embed, embed-qa, nemoretriever-embed, arctic-embed, …
+  'retriever', // nemoretriever-*
+  'bge-', // BAAI General Embedding (bge-m3)
+  // Guard / safety classifiers
+  'guard', // llama-guard, nemoguard, safety-guard
+  'shield', // shieldgemma
+  'safety', // content-safety, nemotron-content-safety
+  'gliner', // gliner-pii
+  // Reward models
+  'reward',
+  // Vision-only / multimodal
+  'vision', // vision-instruct, phi-3-vision
+  'multimodal', // phi-4-multimodal
+  '-vl-', // vision-language flag (nemotron-nano-vl)
+  'vlm', // vlm-embed
+  'nvclip', // NVIDIA CLIP
+  'paligemma', // Google PaLiGemma
+  'kosmos', // Microsoft Kosmos-2
+  'deplot', // Google DePlot
+  'fuyu', // Adept Fuyu-8b
+  'neva-', // NVIDIA NEVA (neva-22b)
+  'vila', // NVIDIA VILA
+  '-parse', // document-parsing services (nemotron-parse, nemoretriever-parse)
+  'video', // video analysis / detection models
+  'calibration', // physics/optimization tools (ising-calibration)
+  // Code models (not useful for interactive fiction)
+  'code', // starcoder, codellama, codegemma, codestral, deepseek-coder, granite-code, …
+  // Specialist / domain models
+  'med', // medical (palmyra-med)
+  'fin', // financial (palmyra-fin)
+  'chatqa', // Q&A specialist (llama3-chatqa)
+]
+
+/**
+ * Returns the largest parameter count in billions found in a NIM model ID,
+ * or null if none is detectable.
+ *
+ * Handles:
+ *   - Integer sizes:  `-8b`, `-70b`, `-340b`
+ *   - Decimal sizes:  `-10.7b`, `-6.7b`
+ *   - Embedded sizes: `e4b` (gemma-3n-e4b), `starcoder2-15b`
+ *
+ * Skips version numbers like `3.1` in `llama-3.1-8b` because the lookbehind
+ * `(?<![.\d])` rejects digits/dots before the match.
+ */
+function nimLargestSizeB(modelId: string): number | null {
+  const lower = modelId.toLowerCase()
+  const intHits = [...lower.matchAll(/(?<![.\d])(\d+)b(?!\d)/g)].map((m) => parseInt(m[1], 10))
+  const decHits = [...lower.matchAll(/(?<!\d)(\d+\.\d+)b(?!\d)/g)].map((m) => parseFloat(m[1]))
+  const all = [...intHits, ...decHits]
+  return all.length > 0 ? Math.max(...all) : null
+}
+
+function isNimTextGenModel(modelId: string): boolean {
+  const lower = modelId.toLowerCase()
+  if (NIM_EXCLUDE_PATTERNS.some((p) => lower.includes(p))) return false
+  const size = nimLargestSizeB(modelId)
+  return size === null || size >= 24
+}
+
+async function fetchNimModels(baseUrl?: string, apiKey?: string): Promise<TextModel[]> {
+  const effectiveBaseUrl = normalizeBaseUrl(baseUrl) || 'https://integrate.api.nvidia.com/v1'
+  const fetch = createTimeoutFetch(30000, 'model-fetch')
+  const response = await fetch(`${effectiveBaseUrl}/models`, {
+    method: 'GET',
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch NIM models: ${response.status} ${response.statusText}`)
+  }
+
+  const data = await response.json()
+  const raw: { id: string }[] = data.data && Array.isArray(data.data) ? data.data : []
+  return dedupeTextModels(raw.filter((m) => isNimTextGenModel(m.id)).map((m) => ({ id: m.id })))
 }
 
 interface NanogptModelEntry {
@@ -175,6 +258,11 @@ async function fetchAnthropicModels(baseUrl?: string, apiKey?: string): Promise<
   }
 }
 
+/** Models with -image in the ID or nano-banana in the ID are image generation models, not text */
+export function isGoogleImageModel(id: string): boolean {
+  return id.includes('-image') || id.includes('nano-banana')
+}
+
 interface GoogleModelEntry {
   name: string
   supportedGenerationMethods?: string[]
@@ -201,7 +289,11 @@ async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<Tex
     return getGoogleFallback()
   }
 
-  const modelsUrl = effectiveBaseUrl.replace(/\/$/, '') + '/models?key=' + apiKey
+  const modelsUrl =
+    effectiveBaseUrl.replace(/\/$/, '') +
+    '/models?key=' +
+    encodeURIComponent(apiKey) +
+    '&pageSize=200'
 
   try {
     const fetchFn = createTimeoutFetch(30000, 'model-fetch')
@@ -216,6 +308,7 @@ async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<Tex
     if (data.models && Array.isArray(data.models)) {
       const models = (data.models as GoogleModelEntry[])
         .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+        .filter((m) => !isGoogleImageModel(m.name.replace(/^models\//, '')))
         .map((m) => {
           const id = m.name.replace(/^models\//, '')
           // Gemini 2.5 uses thinkingBudget (token count), Gemini 3.x uses thinkingLevel
@@ -369,18 +462,22 @@ async function fetchMistralModels(baseUrl?: string, apiKey?: string): Promise<st
 interface PollinationsTextModelResponse {
   name: string
   is_specialized?: boolean
-  paid_only?: boolean
   reasoning?: boolean
   input_modalities?: string[]
   output_modalities?: string[]
 }
 
-async function fetchPollinationsTextModels(): Promise<TextModel[]> {
+async function fetchPollinationsTextModels(apiKey?: string): Promise<TextModel[]> {
   const url = 'https://gen.pollinations.ai/text/models'
   const fetchFn = createTimeoutFetch(30000, 'model-fetch')
 
   try {
-    const response = await fetchFn(url, { method: 'GET' })
+    // The API filters models by tier server-side based on the key, so the list
+    // already reflects what this key can actually generate.
+    const response = await fetchFn(url, {
+      method: 'GET',
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+    })
     if (!response.ok) return getPollinationsTextFallback()
 
     const data = await response.json()
@@ -390,7 +487,6 @@ async function fetchPollinationsTextModels(): Promise<TextModel[]> {
       .filter(
         (m) =>
           !m.is_specialized &&
-          !m.paid_only &&
           (m.input_modalities?.includes('text') ?? true) &&
           (m.output_modalities?.includes('text') ?? true),
       )

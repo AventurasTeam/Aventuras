@@ -33,7 +33,7 @@
   }
 
   // Group variables by entity type
-  let grouped = $derived(() => {
+  let grouped = $derived.by(() => {
     const groups: Record<RuntimeEntityType, RuntimeVariable[]> = {
       character: [],
       location: [],
@@ -51,7 +51,7 @@
   })
 
   // Compute entity type counts for soft warning
-  let entityTypeCounts = $derived(() => {
+  let entityTypeCounts = $derived.by(() => {
     const counts: Record<RuntimeEntityType, number> = {
       character: 0,
       location: 0,
@@ -65,7 +65,7 @@
   })
 
   // Active entity types (those with at least one variable)
-  let activeEntityTypes = $derived(ENTITY_TYPE_ORDER.filter((et) => grouped()[et].length > 0))
+  let activeEntityTypes = $derived(ENTITY_TYPE_ORDER.filter((et) => grouped[et].length > 0))
 
   function nextVariableName(): string {
     let max = 0
@@ -181,7 +181,7 @@
     index: number,
     direction: 'up' | 'down',
   ) {
-    const group = grouped()[entityType]
+    const group = grouped[entityType]
     const newIndex = direction === 'up' ? index - 1 : index + 1
     if (newIndex < 0 || newIndex >= group.length) return
 
@@ -242,12 +242,12 @@
                 {ENTITY_TYPE_LABELS[entityType]}
               </h4>
               <span class="text-muted-foreground text-xs">
-                ({grouped()[entityType].length})
+                ({grouped[entityType].length})
               </span>
             </div>
 
             <!-- Soft warning for 10+ variables -->
-            {#if entityTypeCounts()[entityType] >= 10}
+            {#if entityTypeCounts[entityType] >= 10}
               <div
                 class="text-muted-foreground mb-2 flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs"
               >
@@ -260,7 +260,7 @@
             {/if}
 
             <div class="space-y-2">
-              {#each grouped()[entityType] as variable, i (variable.id)}
+              {#each grouped[entityType] as variable, i (variable.id)}
                 <RuntimeVariableCard
                   {variable}
                   onUpdate={handleUpdateVariable}
@@ -271,7 +271,7 @@
                   initialExpanded={variable.id === newlyCreatedId}
                   entityTypeWarningCount={entityCounts[variable.id] ?? 0}
                   onMoveUp={i > 0 ? () => moveVariable(entityType, i, 'up') : undefined}
-                  onMoveDown={i < grouped()[entityType].length - 1
+                  onMoveDown={i < grouped[entityType].length - 1
                     ? () => moveVariable(entityType, i, 'down')
                     : undefined}
                 />

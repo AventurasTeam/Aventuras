@@ -30,6 +30,7 @@ import { createLogger } from '$lib/log'
 import { createModelFromProfile } from './providers'
 import { PROVIDERS, getReasoningExtraction, GOOGLE_SAFETY_SETTINGS } from './providers/config'
 import { promptSchemaMiddleware, patchResponseMiddleware, loggingMiddleware } from './middleware'
+import { retryOn429Middleware } from './middleware/retryMiddleware'
 import { debug } from '$lib/stores/debug.svelte'
 import type { OpenAICompatibleProviderOptions } from '@ai-sdk/openai-compatible'
 import type { DeepSeekChatOptions } from '@ai-sdk/deepseek'
@@ -148,21 +149,40 @@ export function buildProviderOptions(
           options = { thinking: { type: 'enabled' } } satisfies DeepSeekChatOptions
         }
         break
-      case 'google':
+      case 'google': {
         // Reinject safety settings here for complete model-request coverage
         options = {
           safetySettings: GOOGLE_SAFETY_SETTINGS,
         } satisfies GoogleGenerativeAIProviderOptions
-        if (reasoningEffort) {
-          // Gemini 2.5 uses thinkingBudget (token count), Gemini 3.x uses thinkingLevel
-          const usesBudget = modelInfo?.isBudgetReasoning ?? preset.model.includes('gemini-2.5')
+        // Gemini 2.5 uses thinkingBudget; Gemma 4 uses minimal/high; Gemini 3.x uses low/medium/high
+        const usesBudget = modelInfo?.isBudgetReasoning ?? preset.model.includes('gemini-2.5')
+        if (usesBudget) {
+          // Always send thinkingConfig for Gemini 2.5: 0=disabled, -1=unlimited, otherwise token count
+          const gemini25Budgets: Record<ReasoningEffort, number> = {
+            off: 0,
+            low: 2048,
+            medium: -1,
+            high: 8196,
+          }
           options = {
             ...options,
             thinkingConfig: {
               includeThoughts: true,
-              ...(usesBudget
-                ? { thinkingBudget: budgetTokens }
-                : { thinkingLevel: reasoningEffort }),
+              thinkingBudget: gemini25Budgets[preset.reasoningEffort],
+            },
+          } satisfies GoogleGenerativeAIProviderOptions
+        } else if (reasoningEffort) {
+          const isGemma = preset.model.toLowerCase().includes('gemma')
+          const thinkingLevel = isGemma
+            ? reasoningEffort === 'high'
+              ? 'high'
+              : 'minimal'
+            : reasoningEffort
+          options = {
+            ...options,
+            thinkingConfig: {
+              includeThoughts: true,
+              thinkingLevel,
             },
           } satisfies GoogleGenerativeAIProviderOptions
         }
@@ -170,6 +190,7 @@ export function buildProviderOptions(
           options = { ...options, structuredOutputs } satisfies GoogleGenerativeAIProviderOptions
         }
         break
+      }
       case 'pollinations':
         options = {
           reasoning_effort: reasoningEffort,
@@ -378,7 +399,11 @@ function buildStructuredMiddleware(
   reasoningEnabled: boolean,
   thinkingNudge: boolean,
 ): LanguageModelV3Middleware[] {
-  const base: LanguageModelV3Middleware[] = [patchResponseMiddleware()]
+  // retryOn429Middleware is intentionally outermost: it re-invokes the whole
+  // inner chain (including patchResponseMiddleware) on each retry. Do not
+  // reorder without understanding this — putting retry after patchResponse
+  // would cause patched state to leak across attempts.
+  const base: LanguageModelV3Middleware[] = [retryOn429Middleware, patchResponseMiddleware()]
 
   base.push(createJsonExtractMiddleware())
 
@@ -402,7 +427,11 @@ function buildStructuredMiddleware(
 }
 
 function buildPlainTextMiddleware(useThinkTag: boolean): LanguageModelV3Middleware[] {
-  const base: LanguageModelV3Middleware[] = [patchResponseMiddleware()]
+  // retryOn429Middleware is intentionally outermost: it re-invokes the whole
+  // inner chain (including patchResponseMiddleware) on each retry. Do not
+  // reorder without understanding this — putting retry after patchResponse
+  // would cause patched state to leak across attempts.
+  const base: LanguageModelV3Middleware[] = [retryOn429Middleware, patchResponseMiddleware()]
   if (useThinkTag) {
     base.push(thinkTagMiddleware)
   }

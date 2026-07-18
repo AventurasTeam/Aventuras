@@ -14,7 +14,6 @@ const log = createLogger('LorebookVault')
 class LorebookVaultStore {
   lorebooks = $state<VaultLorebook[]>([])
   isLoaded = $state(false)
-
   get favorites(): VaultLorebook[] {
     return this.lorebooks.filter((lb) => lb.favorite)
   }
@@ -163,6 +162,36 @@ class LorebookVaultStore {
    */
   getById(id: string): VaultLorebook | undefined {
     return this.lorebooks.find((lb) => lb.id === id)
+  }
+
+  /**
+   * Current version of a lorebook's entries, derived from its updatedAt timestamp.
+   * Used by the vault assistant to detect external entry changes between AI turns
+   * and across sessions. Naturally persists across reloads since updatedAt is
+   * part of the lorebook data loaded from the database.
+   */
+  getEntryVersion(id: string): number {
+    return this.lorebooks.find((lb) => lb.id === id)?.updatedAt ?? 0
+  }
+
+  /**
+   * Duplicate a lorebook with a new ID and "(Copy)" suffix.
+   */
+  async duplicate(id: string): Promise<VaultLorebook | null> {
+    const original = this.getById(id)
+    if (!original) return null
+
+    return this.add({
+      name: `${original.name} (Copy)`,
+      description: original.description,
+      entries: JSON.parse(JSON.stringify(original.entries)),
+      tags: [...original.tags],
+      favorite: false,
+      source: original.source,
+      originalFilename: null,
+      originalStoryId: null,
+      metadata: original.metadata ? JSON.parse(JSON.stringify(original.metadata)) : null,
+    })
   }
 
   /**

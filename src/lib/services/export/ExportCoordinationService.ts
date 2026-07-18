@@ -14,7 +14,7 @@ import type {
   Entry,
   Checkpoint,
   Branch,
-  EmbeddedImage,
+  EmbeddedImageMeta,
 } from '$lib/types'
 
 /** Complete story data for export */
@@ -25,7 +25,9 @@ export interface StoryExportData {
   items: Item[]
   storyBeats: StoryBeat[]
   lorebookEntries: Entry[]
-  embeddedImages: EmbeddedImage[]
+  // Metadata only (no base64): the native .avt exporter fills in imageData from SQLite, so the
+  // heavy image bytes never load into the JS heap (which caused Android OOM on export).
+  embeddedImages: EmbeddedImageMeta[]
   checkpoints: Checkpoint[]
   branches: Branch[]
   chapters: Chapter[]
@@ -55,7 +57,7 @@ export async function gatherStoryData(storyId: string): Promise<StoryExportData>
     database.getItems(storyId),
     database.getStoryBeats(storyId),
     database.getEntries(storyId),
-    database.getEmbeddedImagesForStory(storyId),
+    database.getEmbeddedImageMetaForStory(storyId),
     database.getCheckpoints(storyId),
     database.getBranches(storyId),
     database.getChapters(storyId),

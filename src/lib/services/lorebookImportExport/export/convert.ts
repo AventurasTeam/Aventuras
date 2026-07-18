@@ -6,7 +6,7 @@ import type { Entry } from '$lib/types'
 import type { SillyTavernEntry } from '../types'
 
 export function entryToSillyTavern(entry: Entry, index: number): SillyTavernEntry {
-  const keywords = [entry.name, ...entry.aliases, ...entry.injection.keywords]
+  const keywords = [entry.name, ...(entry.aliases ?? []), ...(entry.injection.keywords ?? [])]
 
   return {
     uid: index,

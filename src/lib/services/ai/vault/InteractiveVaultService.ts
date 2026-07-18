@@ -36,6 +36,7 @@ import {
 import type { VaultPendingChange } from '../sdk/schemas/vault'
 import { database } from '$lib/services/database'
 import { createStreamingAgenticAssistant } from '../sdk/agents/factory'
+import { mergeIntent, scenarioToRecord, characterToRecord } from '$lib/utils/vaultMerge'
 
 const log = createLogger('InteractiveVault')
 
@@ -183,6 +184,8 @@ export class InteractiveVaultService extends BaseAIService {
   private conversationHistory: ModelMessage[] = []
   private systemPrompt: string = ''
   private conversationId: string | null = null
+  /** Per-lorebook known entry version at last interaction — used to detect external changes */
+  private _knownEntryVersions = new Map<string, number>()
 
   /** Currently loaded tool categories — persists across messages in a session */
   readonly loadedCategories: Set<ToolCategory> = new Set()
@@ -356,6 +359,7 @@ export class InteractiveVaultService extends BaseAIService {
 
     const lorebookEntryContext: LorebookEntryToolContext = {
       entries: vaultState.activeEntries ?? [], // Default to empty if no active lorebook, relying on getLorebookEntries for global access
+      activeLorebookId: vaultState.activeLorebookId,
       getLorebookEntries: (id: string) => {
         const lb = vaultState.lorebooks().find((b) => b.id === id)
         return lb ? lb.entries : undefined
@@ -706,6 +710,32 @@ export class InteractiveVaultService extends BaseAIService {
       role: 'user',
       content: note,
     })
+
+    // Sync the known version so the AI doesn't get a redundant "entries changed"
+    // notification about work it just did.
+    if (change.entityType === 'lorebook-entry' && 'lorebookId' in change && change.lorebookId) {
+      this._knownEntryVersions.set(
+        change.lorebookId,
+        lorebookVault.getEntryVersion(change.lorebookId),
+      )
+    }
+  }
+
+  /**
+   * Before sending a message, check if the focused lorebook's entries
+   * have changed since the last interaction. If so, inject a system note.
+   */
+  injectLorebookChangeNote(lorebookId: string): void {
+    const currentVersion = lorebookVault.getEntryVersion(lorebookId)
+    const knownVersion = this._knownEntryVersions.get(lorebookId)
+    if (knownVersion !== undefined && currentVersion !== knownVersion) {
+      this.conversationHistory.push({
+        role: 'user',
+        content:
+          '[System: Lorebook entries were modified externally. Use list_entries to get the current state before making changes.]',
+      })
+    }
+    this._knownEntryVersions.set(lorebookId, currentVersion)
   }
 
   /**
@@ -780,9 +810,13 @@ export class InteractiveVaultService extends BaseAIService {
           metadata: null,
         })
         break
-      case 'update':
-        await characterVault.update(change.entityId, change.data)
+      case 'update': {
+        const live = characterVault.getById(change.entityId)
+        const current = live ? characterToRecord(live) : undefined
+        const delta = mergeIntent(change.data, change.previous, current)
+        await characterVault.update(change.entityId, delta)
         break
+      }
       case 'delete':
         await characterVault.delete(change.entityId)
         break
@@ -801,7 +835,6 @@ export class InteractiveVaultService extends BaseAIService {
       log('Lorebook not found for entry change', { lorebookId: change.lorebookId })
       return
     }
-
     const entries = [...lorebook.entries]
 
     switch (change.action) {
@@ -810,12 +843,36 @@ export class InteractiveVaultService extends BaseAIService {
         break
       case 'update':
         if (change.entryIndex >= 0 && change.entryIndex < entries.length) {
-          entries[change.entryIndex] = { ...entries[change.entryIndex], ...change.data }
+          // Strip empty strings from update data to avoid accidentally
+          // overwriting existing content (e.g. AI sending description: '')
+          const safeData = Object.fromEntries(
+            Object.entries(change.data ?? {}).filter(([_, v]) => v !== ''),
+          ) as Partial<VaultLorebookEntry>
+          entries[change.entryIndex] = { ...entries[change.entryIndex], ...safeData }
+        } else {
+          const error = `Update failed: index ${change.entryIndex} out of bounds (0-${entries.length - 1})`
+          log('Update entry index out of bounds', {
+            lorebookId: change.lorebookId,
+            entryIndex: change.entryIndex,
+            entriesLength: entries.length,
+            changeId: change.id,
+            changeData: change.data,
+          })
+          throw new Error(error)
         }
         break
       case 'delete':
         if (change.entryIndex >= 0 && change.entryIndex < entries.length) {
           entries.splice(change.entryIndex, 1)
+        } else {
+          const error = `Delete failed: index ${change.entryIndex} out of bounds (0-${entries.length - 1})`
+          log('Delete entry index out of bounds', {
+            lorebookId: change.lorebookId,
+            entryIndex: change.entryIndex,
+            entriesLength: entries.length,
+            changeId: change.id,
+          })
+          throw new Error(error)
         }
         break
       case 'merge':
@@ -834,6 +891,13 @@ export class InteractiveVaultService extends BaseAIService {
     }
 
     await lorebookVault.update(change.lorebookId, { entries })
+    log('Applied lorebook entry change', {
+      action: change.action,
+      lorebookId: change.lorebookId,
+      entryIndex:
+        change.action === 'update' || change.action === 'delete' ? change.entryIndex : undefined,
+      newEntriesCount: entries.length,
+    })
   }
 
   /**
@@ -859,9 +923,16 @@ export class InteractiveVaultService extends BaseAIService {
           metadata: null,
         })
         break
-      case 'update':
-        await scenarioVault.update(change.entityId, change.data)
+      case 'update': {
+        // Compute this change's intent (data vs previous) and merge it
+        // onto the current live state. This avoids sequential approvals
+        // overwriting each other's array/object changes (e.g. NPC additions).
+        const live = scenarioVault.getById(change.entityId)
+        const current = live ? scenarioToRecord(live) : undefined
+        const delta = mergeIntent(change.data, change.previous, current)
+        await scenarioVault.update(change.entityId, delta)
         break
+      }
       case 'delete':
         await scenarioVault.delete(change.entityId)
         break
@@ -895,12 +966,14 @@ export class InteractiveVaultService extends BaseAIService {
     const messagesJson = JSON.stringify(this.conversationHistory)
     const chatMessagesJson = JSON.stringify(chatMessages)
     const pendingChangesJson = JSON.stringify(pendingChanges)
+    const entryVersionsJson = JSON.stringify([...this._knownEntryVersions])
 
     if (this.conversationId) {
       await database.saveVaultConversation(this.conversationId, {
         messages: messagesJson,
         chatMessages: chatMessagesJson,
         pendingChanges: pendingChangesJson,
+        entryVersions: entryVersionsJson,
       })
       log('Saved conversation', { id: this.conversationId })
       return this.conversationId
@@ -919,6 +992,7 @@ export class InteractiveVaultService extends BaseAIService {
       messages: messagesJson,
       chatMessages: chatMessagesJson,
       pendingChanges: pendingChangesJson,
+      entryVersions: entryVersionsJson,
     })
 
     this.conversationId = id
@@ -959,6 +1033,13 @@ export class InteractiveVaultService extends BaseAIService {
           }
         }
       }
+
+      // Restore known entry versions for change detection across sessions
+      this._knownEntryVersions = new Map(
+        conversation.entryVersions
+          ? (JSON.parse(conversation.entryVersions) as [string, number][])
+          : [],
+      )
 
       log('Loaded conversation', {
         id: conversationId,
@@ -1012,6 +1093,7 @@ export class InteractiveVaultService extends BaseAIService {
     this.conversationId = null
     this.loadedCategories.clear()
     this.generatedImages.clear()
+    this._knownEntryVersions.clear()
   }
 
   /**

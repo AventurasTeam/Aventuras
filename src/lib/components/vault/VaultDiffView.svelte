@@ -22,6 +22,8 @@
     Zap,
   } from 'lucide-svelte'
   import { fade } from 'svelte/transition'
+  import { vaultEditor } from '$lib/stores/vaultEditorStore.svelte'
+  import { computeDelta } from '$lib/utils/vaultMerge'
 
   interface Props {
     change: VaultPendingChange
@@ -199,6 +201,12 @@
 
   // --- Computed display data per entity type ---
 
+  function formatEntityData(data: Record<string, unknown>): string {
+    if (change.entityType === 'character') return formatCharacter(data)
+    if (change.entityType === 'scenario') return formatScenario(data)
+    return ''
+  }
+
   function formatChangeData(): string {
     if (!('data' in change)) return ''
     if (change.entityType === 'character') {
@@ -241,11 +249,32 @@
       ? change.previousEntries
       : undefined,
   )
+
+  // --- Single-change preview for update entities (character / scenario) ---
+  // Shows what the entity would look like if ONLY this change were approved,
+  // starting from the original state and applying this change's delta.
+  // Uses the edited version if the user modified it in the editor.
+
+  const afterData = $derived.by(() => {
+    if (change.action !== 'update') return null
+    if (change.entityType !== 'character' && change.entityType !== 'scenario') return null
+    if (!('previous' in change) || !change.previous) return null
+
+    const effective = vaultEditor.getEffectiveChange(change)
+    const data = (effective as { data?: Record<string, unknown> }).data
+    const prev = (effective as { previous?: Record<string, unknown> }).previous
+    if (!data) return null
+
+    const base = JSON.parse(JSON.stringify(change.previous)) as Record<string, unknown>
+    const delta = computeDelta(data, prev ?? (change.previous as Record<string, unknown>))
+    Object.assign(base, delta)
+    return base
+  })
 </script>
 
 <div
-  class="overflow-hidden rounded-xl border transition-all {isAutoApproved
-    ? 'border-teal-500/20 bg-teal-500/5 opacity-85'
+  class="overflow-hidden rounded-xl border {isAutoApproved
+    ? 'border-teal-500/30 bg-teal-500/8'
     : isApproved
       ? 'border-emerald-500/20 bg-emerald-500/5 opacity-75'
       : isRejected
@@ -254,8 +283,10 @@
   in:fade={{ duration: 150 }}
 >
   <!-- Header -->
-  <div class="border-surface-700 bg-surface-800 flex items-center gap-2 border-b px-3 py-2">
-    <div class="flex min-w-0 flex-1 items-center gap-2">
+  <div
+    class="border-surface-700 bg-surface-800 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b px-3 py-2"
+  >
+    <div class="flex flex-auto items-center gap-2">
       <!-- Entity type badge -->
       <div
         class="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold tracking-wider whitespace-nowrap uppercase {entityConfig.color} {entityConfig.bg}"
@@ -328,8 +359,11 @@
         <div class="mb-1.5 text-[10px] font-bold tracking-wider text-emerald-400 uppercase">
           New {entityConfig.label}
         </div>
-        <pre
-          class="text-surface-200 font-mono text-xs leading-relaxed whitespace-pre-wrap">{formatChangeData()}</pre>
+        <div
+          class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
+        >
+          {formatChangeData()}
+        </div>
       </div>
     {:else if change.action === 'update'}
       <!-- Update: Before / After -->
@@ -338,15 +372,25 @@
           <div class="mb-1.5 text-[10px] font-bold tracking-wider text-red-400 uppercase">
             Before
           </div>
-          <pre
-            class="text-surface-400 font-mono text-xs leading-relaxed whitespace-pre-wrap">{formatPrevious()}</pre>
+          <div
+            class="text-surface-400 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
+          >
+            {formatPrevious()}
+          </div>
         </div>
         <div class="rounded-lg border border-emerald-500/20 bg-emerald-500/8 p-2.5">
           <div class="mb-1.5 text-[10px] font-bold tracking-wider text-emerald-400 uppercase">
             After
           </div>
-          <pre
-            class="text-surface-200 font-mono text-xs leading-relaxed whitespace-pre-wrap">{formatChangeData()}</pre>
+          <div
+            class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
+          >
+            {#if afterData}
+              {formatEntityData(afterData)}
+            {:else}
+              {formatChangeData()}
+            {/if}
+          </div>
         </div>
       </div>
     {:else if change.action === 'delete'}
@@ -355,8 +399,11 @@
         <div class="mb-1.5 text-[10px] font-bold tracking-wider text-red-400 uppercase">
           {entityConfig.label} to Delete
         </div>
-        <pre
-          class="text-surface-400 font-mono text-xs leading-relaxed whitespace-pre-wrap line-through opacity-70">{formatPrevious()}</pre>
+        <div
+          class="text-surface-400 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap line-through opacity-70"
+        >
+          {formatPrevious()}
+        </div>
       </div>
     {:else if change.action === 'merge'}
       <!-- Merge: Source entries and result (lorebook-entry only) -->
@@ -371,10 +418,11 @@
                 <div class="text-surface-400 mb-1 text-[10px] font-semibold">
                   Entry {i + 1}: {entry.name}
                 </div>
-                <pre
-                  class="text-surface-300 font-mono text-xs leading-relaxed whitespace-pre-wrap">{formatEntry(
-                    entry,
-                  )}</pre>
+                <div
+                  class="text-surface-300 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
+                >
+                  {formatEntry(entry)}
+                </div>
               </div>
             {/each}
           </div>
@@ -388,10 +436,11 @@
           <div class="mb-1.5 text-[10px] font-bold tracking-wider text-emerald-400 uppercase">
             Merged Entry
           </div>
-          <pre
-            class="text-surface-200 font-mono text-xs leading-relaxed whitespace-pre-wrap">{formatEntry(
-              mergeData as VaultLorebookEntry | undefined,
-            )}</pre>
+          <div
+            class="text-surface-200 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap"
+          >
+            {formatEntry(mergeData as VaultLorebookEntry | undefined)}
+          </div>
         </div>
       </div>
     {/if}

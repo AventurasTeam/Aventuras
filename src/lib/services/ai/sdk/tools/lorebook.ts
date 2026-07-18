@@ -25,6 +25,8 @@ export type { VaultLorebookPendingChangeSchema }
 export interface LorebookEntryToolContext {
   /** Current entries in the lorebook */
   entries: VaultLorebookEntry[]
+  /** The ID of the lorebook these entries belong to, if bound */
+  activeLorebookId?: string
   /** Callback to register a pending change */
   onPendingChange: (change: LorebookEntryPendingChangeSchema) => void
   /** Generate unique ID for pending changes */
@@ -41,7 +43,26 @@ export interface LorebookEntryToolContext {
  * Each invocation creates fresh tools bound to the current entries.
  */
 function createLorebookEntryTools(context: LorebookEntryToolContext) {
-  const { entries, onPendingChange, generateId, getLorebookEntries } = context
+  const { entries, activeLorebookId, onPendingChange, generateId, getLorebookEntries } = context
+
+  function resolveTargetEntries(
+    lorebookId: string | undefined,
+  ):
+    | { ok: true; targetEntries: VaultLorebookEntry[]; targetId: string | undefined }
+    | { ok: false; error: string } {
+    if (lorebookId && !getLorebookEntries) {
+      return { ok: false, error: 'Global lorebook access not available in this context' }
+    }
+    const targetId = lorebookId ?? activeLorebookId
+    if (getLorebookEntries && targetId) {
+      const found = getLorebookEntries(targetId)
+      if (!found) {
+        return { ok: false, error: `Lorebook with ID "${targetId}" not found` }
+      }
+      return { ok: true, targetEntries: found, targetId }
+    }
+    return { ok: true, targetEntries: entries, targetId }
+  }
 
   return {
     /**
@@ -63,26 +84,11 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         lorebookId?: string
         type?: z.infer<typeof entryTypeSchema>
       }) => {
-        let targetEntries = entries
-
-        if (lorebookId) {
-          if (!getLorebookEntries) {
-            return {
-              entries: [],
-              total: 0,
-              error: 'Global lorebook access not available in this context',
-            }
-          }
-          const found = getLorebookEntries(lorebookId)
-          if (!found) {
-            return {
-              entries: [],
-              total: 0,
-              error: `Lorebook with ID "${lorebookId}" not found`,
-            }
-          }
-          targetEntries = found
+        const resolved = resolveTargetEntries(lorebookId)
+        if (!resolved.ok) {
+          return { entries: [], total: 0, error: resolved.error }
         }
+        const targetEntries = resolved.targetEntries
 
         let filtered = targetEntries
 
@@ -92,10 +98,10 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
 
         return {
           entries: filtered.map((e) => {
-            // Find original index in full entries array
-            const originalIndex = entries.indexOf(e)
+            // Map to the full targetEntries array index
+            const fullIndex = targetEntries.indexOf(e)
             return {
-              index: originalIndex,
+              index: fullIndex,
               name: e.name,
               type: e.type,
               description: e.description.slice(0, 200) + (e.description.length > 200 ? '...' : ''),
@@ -118,29 +124,16 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         index: z.number().describe('The index of the entry to read (from list_entries)'),
       }),
       execute: async ({ lorebookId, index }: { lorebookId?: string; index: number }) => {
-        let targetEntries = entries
-
-        if (lorebookId) {
-          if (!getLorebookEntries) {
-            return {
-              found: false,
-              error: 'Global lorebook access not available in this context',
-            }
-          }
-          const found = getLorebookEntries(lorebookId)
-          if (!found) {
-            return {
-              found: false,
-              error: `Lorebook with ID "${lorebookId}" not found`,
-            }
-          }
-          targetEntries = found
+        const resolved = resolveTargetEntries(lorebookId)
+        if (!resolved.ok) {
+          return { found: false, error: resolved.error }
         }
+        const targetEntries = resolved.targetEntries
 
         if (index < 0 || index >= targetEntries.length) {
           return {
             found: false,
-            error: `Entry index ${index} out of range (0-${entries.length - 1})`,
+            error: `Entry index ${index} out of range (0-${targetEntries.length - 1})`,
           }
         }
 
@@ -201,16 +194,13 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         injectionMode?: z.infer<typeof injectionModeSchema>
         priority?: number
       }) => {
-        // Validation: require lorebookId if not bound?
-        // Actually, if we are in InteractiveMode, we might not have 'entries' bound at all
-        // but we can't easily check that without checking entries.length which might be 0 anyway.
-        // Best effort: if lorebookId is provided, use it.
-
-        if (lorebookId && getLorebookEntries) {
-          if (!getLorebookEntries(lorebookId)) {
+        // Validate the target lorebook exists
+        const targetId = lorebookId ?? activeLorebookId
+        if (getLorebookEntries) {
+          if (targetId && !getLorebookEntries(targetId)) {
             return {
               success: false,
-              error: `Lorebook with ID "${lorebookId}" not found`,
+              error: `Lorebook with ID "${targetId}" not found`,
             }
           }
         }
@@ -229,7 +219,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
           id: changeId,
           type: 'create',
           toolCallId: changeId,
-          lorebookId,
+          lorebookId: targetId,
           entry: newEntry,
           status: 'pending',
         }
@@ -256,7 +246,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         index: z.number().describe('Index of the entry to update'),
         name: z.string().optional().describe('New name'),
         type: entryTypeSchema.optional().describe('New type'),
-        description: z.string().optional().describe('New description'),
+        description: z.string().optional().describe('New description (only send if changing)'),
         keywords: z.array(z.string()).optional().describe('New keywords (replaces existing)'),
         aliases: z.array(z.string()).optional().describe('New aliases (replaces existing)'),
         injectionMode: injectionModeSchema.optional().describe('New injection mode'),
@@ -277,45 +267,33 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         injectionMode?: z.infer<typeof injectionModeSchema>
         priority?: number
       }) => {
-        let targetEntries = entries
-
-        if (lorebookId) {
-          if (!getLorebookEntries) {
-            return {
-              success: false,
-              error: 'Global lorebook access not available in this context',
-            }
-          }
-          const found = getLorebookEntries(lorebookId)
-          if (!found) {
-            return {
-              success: false,
-              error: `Lorebook with ID "${lorebookId}" not found`,
-            }
-          }
-          targetEntries = found
+        const resolved = resolveTargetEntries(lorebookId)
+        if (!resolved.ok) {
+          return { success: false, error: resolved.error }
         }
+        const { targetEntries, targetId } = resolved
 
         if (index < 0 || index >= targetEntries.length) {
           return {
             success: false,
-            error: `Entry index ${index} out of range (0-${entries.length - 1})`,
+            error: `Entry index ${index} out of range (0-${targetEntries.length - 1})`,
           }
         }
 
         const previous = targetEntries[index]
         const changeId = generateId()
 
-        // Filter out undefined values
+        // Filter out undefined and empty-string values to prevent
+        // accidental overwrites (e.g. the AI sending description: "")
         const cleanUpdates = Object.fromEntries(
-          Object.entries(updates).filter(([_, v]) => v !== undefined),
+          Object.entries(updates).filter(([_, v]) => v !== undefined && v !== ''),
         ) as Partial<VaultLorebookEntry>
 
         const pendingChange: LorebookEntryPendingChangeSchema = {
           id: changeId,
           type: 'update',
           toolCallId: changeId,
-          lorebookId,
+          lorebookId: targetId,
           index,
           updates: cleanUpdates,
           previous,
@@ -352,29 +330,16 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         index: number
         reason?: string
       }) => {
-        let targetEntries = entries
-
-        if (lorebookId) {
-          if (!getLorebookEntries) {
-            return {
-              success: false,
-              error: 'Global lorebook access not available in this context',
-            }
-          }
-          const found = getLorebookEntries(lorebookId)
-          if (!found) {
-            return {
-              success: false,
-              error: `Lorebook with ID "${lorebookId}" not found`,
-            }
-          }
-          targetEntries = found
+        const resolved = resolveTargetEntries(lorebookId)
+        if (!resolved.ok) {
+          return { success: false, error: resolved.error }
         }
+        const { targetEntries, targetId } = resolved
 
         if (index < 0 || index >= targetEntries.length) {
           return {
             success: false,
-            error: `Entry index ${index} out of range (0-${entries.length - 1})`,
+            error: `Entry index ${index} out of range (0-${targetEntries.length - 1})`,
           }
         }
 
@@ -385,7 +350,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
           id: changeId,
           type: 'delete',
           toolCallId: changeId,
-          lorebookId,
+          lorebookId: targetId,
           index,
           previous,
           status: 'pending',
@@ -407,7 +372,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
      */
     merge_entries: tool({
       description:
-        'Merge multiple lorebook entries into a single entry. Useful for consolidating duplicate or related entries. The change will be pending until approved.',
+        'Merge multiple lorebook entries into a single entry. Useful for consolidating duplicate or related entries. The change will be pending until approval.',
       inputSchema: z.object({
         lorebookId: z.string().optional().describe('ID of the lorebook containing the entries'),
         indices: z.array(z.number()).min(2).describe('Indices of entries to merge (at least 2)'),
@@ -422,24 +387,11 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         indices: number[]
         mergedEntry: VaultLorebookEntry
       }) => {
-        let targetEntries = entries
-
-        if (lorebookId) {
-          if (!getLorebookEntries) {
-            return {
-              success: false,
-              error: 'Global lorebook access not available in this context',
-            }
-          }
-          const found = getLorebookEntries(lorebookId)
-          if (!found) {
-            return {
-              success: false,
-              error: `Lorebook with ID "${lorebookId}" not found`,
-            }
-          }
-          targetEntries = found
+        const resolved = resolveTargetEntries(lorebookId)
+        if (!resolved.ok) {
+          return { success: false, error: resolved.error }
         }
+        const { targetEntries, targetId } = resolved
 
         // Validate all indices
         for (const idx of indices) {
@@ -468,7 +420,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
           type: 'merge',
           toolCallId: changeId,
           indices: uniqueIndices,
-          lorebookId,
+          lorebookId: targetId,
           entry: mergedEntry,
           previousEntries,
           status: 'pending',

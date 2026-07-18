@@ -1,0 +1,63 @@
+{
+  "1": {
+    "inputs": { "unet_name": "model.safetensors", "weight_dtype": "default" },
+    "class_type": "UNETLoader",
+    "_meta": { "title": "Load Diffusion Model" }
+  },
+  "2": {
+    "inputs": { "shift": 3, "model": ["1", 0] },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": { "title": "ModelSamplingAuraFlow" }
+  },
+  "3": {
+    "inputs": { "clip_name": "clip.safetensors", "type": "lumina2", "device": "default" },
+    "class_type": "CLIPLoader",
+    "_meta": { "title": "Load CLIP" }
+  },
+  "4": {
+    "inputs": { "vae_name": "ae.safetensors" },
+    "class_type": "VAELoader",
+    "_meta": { "title": "Load VAE" }
+  },
+  "5": {
+    "inputs": { "text": "prompt", "clip": ["3", 0] },
+    "class_type": "CLIPTextEncode",
+    "_meta": { "title": "CLIP Text Encode (Positive)" }
+  },
+  "6": {
+    "inputs": { "conditioning": ["5", 0] },
+    "class_type": "ConditioningZeroOut",
+    "_meta": { "title": "ConditioningZeroOut" }
+  },
+  "7": {
+    "inputs": { "width": 1024, "height": 1024, "batch_size": 1 },
+    "class_type": "EmptySD3LatentImage",
+    "_meta": { "title": "EmptySD3LatentImage" }
+  },
+  "8": {
+    "inputs": {
+      "seed": 0,
+      "steps": 8,
+      "cfg": 1,
+      "sampler_name": "res_multistep",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": ["2", 0],
+      "positive": ["5", 0],
+      "negative": ["6", 0],
+      "latent_image": ["7", 0]
+    },
+    "class_type": "KSampler",
+    "_meta": { "title": "KSampler" }
+  },
+  "9": {
+    "inputs": { "samples": ["8", 0], "vae": ["4", 0] },
+    "class_type": "VAEDecode",
+    "_meta": { "title": "VAE Decode" }
+  },
+  "10": {
+    "inputs": { "filename_prefix": "ComfyUI", "images": ["9", 0] },
+    "class_type": "SaveImage",
+    "_meta": { "title": "Save Image" }
+  }
+}

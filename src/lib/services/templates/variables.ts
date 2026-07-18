@@ -372,6 +372,13 @@ export const RUNTIME_VARIABLES: VariableDefinition[] = [
     required: false,
   },
   {
+    name: 'detailInstruction',
+    type: 'text',
+    category: 'runtime',
+    description: 'Summary length/detail instruction (from Memory Settings: Concise/Auto/Precise)',
+    required: false,
+  },
+  {
     name: 'messagesInRange',
     type: 'text',
     category: 'runtime',

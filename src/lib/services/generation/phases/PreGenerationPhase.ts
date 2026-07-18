@@ -19,7 +19,6 @@ import type {
   Location,
   Item,
   StoryBeat,
-  EmbeddedImage,
   TimeTracker,
   ActionInputType,
 } from '$lib/types'
@@ -34,7 +33,6 @@ export interface RetryBackupData {
   locations: Location[]
   items: Item[]
   storyBeats: StoryBeat[]
-  embeddedImages: EmbeddedImage[]
   userActionContent: string
   rawInput: string
   actionType: ActionInputType
@@ -57,7 +55,6 @@ export interface PreGenerationResult {
  */
 export interface PreGenerationInput {
   context: GenerationContext
-  embeddedImages: EmbeddedImage[]
   rawInput: string
   actionType: ActionInputType
   wasRawActionChoice: boolean
@@ -82,7 +79,7 @@ export class PreGenerationPhase {
       phase: 'pre',
     } satisfies PhaseStartEvent
 
-    const { context, embeddedImages, rawInput, actionType, wasRawActionChoice } = input
+    const { context, rawInput, actionType, wasRawActionChoice } = input
     const { story, worldState } = context
 
     // Prepare retry backup data
@@ -94,7 +91,6 @@ export class PreGenerationPhase {
       locations: [...worldState.locations],
       items: [...worldState.items],
       storyBeats: [...worldState.storyBeats],
-      embeddedImages: [...embeddedImages],
       userActionContent: context.userAction.content,
       rawInput,
       actionType,

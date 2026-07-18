@@ -2,6 +2,7 @@
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { exportService } from '$lib/services/export'
+  import { errMessage } from '$lib/utils/error'
   import { ask } from '@tauri-apps/plugin-dialog'
   import { BookOpen, Upload, RefreshCw, Archive, Plus, MessageSquareShare } from 'lucide-svelte'
   import SetupWizard from '../wizard/SetupWizard.svelte'
@@ -11,9 +12,7 @@
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
   import StoryCard from '$lib/components/story/StoryCard.svelte'
 
-  // File input for import (HTML-based for mobile compatibility)
-  let importFileInput: HTMLInputElement
-
+  let isImporting = $state(false)
   let showSetupWizard = $state(false)
   let setupWizardKey = $state(0)
   let showSTImportWizard = $state(false)
@@ -54,18 +53,15 @@
     }
   }
 
-  function triggerImport() {
-    importFileInput?.click()
-  }
-
-  async function handleImportFileSelect(event: Event) {
-    const input = event.target as HTMLInputElement
-    const file = input.files?.[0]
-    if (!file) return
-
+  // Imports through the native picker, NOT an <input type="file">. Reading the file in JS means
+  // materialising it as a string, and a .avt larger than V8's max string length (2^29-24 bytes,
+  // ~512 MiB) cannot be one — a 546 MB export failed with a bogus "not valid JSON" error, because
+  // the read never produced the whole file. The native path streams it instead.
+  async function triggerImport() {
+    if (isImporting) return
+    isImporting = true
     try {
-      const content = await file.text()
-      const result = await exportService.importFromContent(content)
+      const result = await exportService.importFromAventura()
 
       if (result.success && result.storyId) {
         await story.loadAllStories()
@@ -75,11 +71,10 @@
         ui.showToast(result.error, 'error')
       }
     } catch (error) {
-      ui.showToast(error instanceof Error ? error.message : 'Failed to read file', 'error')
+      ui.showToast(errMessage(error), 'error')
+    } finally {
+      isImporting = false
     }
-
-    // Reset file input for re-selection
-    input.value = ''
   }
 </script>
 
@@ -116,13 +111,6 @@
           variant="outline"
           title="Import Story"
           onclick={triggerImport}
-        />
-        <input
-          type="file"
-          accept="*/*,.avt,.json,application/json,application/octet-stream"
-          class="hidden"
-          bind:this={importFileInput}
-          onchange={handleImportFileSelect}
         />
         <Button
           icon={MessageSquareShare}
@@ -165,7 +153,8 @@
     href="https://discord.gg/aventuras"
     target="_blank"
     rel="noopener noreferrer"
-    class="bg-secondary text-secondary-foreground hover:bg-secondary/80 fixed bottom-6 left-6 z-40 hidden items-center gap-2 rounded-lg px-3 py-2 text-sm shadow-lg transition-all hover:scale-105 sm:flex"
+    class="bg-secondary text-secondary-foreground hover:bg-secondary/80 fixed z-40 hidden items-center gap-2 rounded-lg px-3 py-2 text-sm shadow-lg transition-all hover:scale-105 sm:flex"
+    style="bottom: calc(1.5rem + var(--safe-bottom)); left: calc(1.5rem + var(--safe-left));"
   >
     <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
       <path

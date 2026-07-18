@@ -54,6 +54,12 @@
   }
 
   let innerWidth = $state(0)
+  let scrollContainer = $state<HTMLDivElement | null>(null)
+
+  $effect(() => {
+    void ui.sidebarTab
+    if (scrollContainer) scrollContainer.scrollTop = 0
+  })
 </script>
 
 <svelte:window bind:innerWidth />
@@ -86,7 +92,7 @@
     </div>
 
     <!-- Panel content -->
-    <div class="min-h-0 flex-1 overflow-y-auto p-3">
+    <div bind:this={scrollContainer} class="min-h-0 flex-1 overflow-y-auto p-3">
       <Tabs.Content value="characters" class="mt-0 h-full space-y-4">
         <CharacterPanel />
       </Tabs.Content>
@@ -153,12 +159,6 @@
 
 <style>
   .bottom-context-nav {
-    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
-  }
-
-  @media (min-width: 769px) {
-    .bottom-context-nav {
-      padding-bottom: 0.5rem;
-    }
+    padding-bottom: 0.5rem;
   }
 </style>

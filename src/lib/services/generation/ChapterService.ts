@@ -11,6 +11,7 @@ import type {
   StoryMode,
   POV,
   Tense,
+  SummaryDetail,
 } from '$lib/types'
 import type { ChapterAnalysis, ChapterSummaryResult } from '$lib/services/ai/sdk/schemas/memory'
 import { createLogger } from '$lib/log'
@@ -55,6 +56,7 @@ export interface ChapterServiceDependencies {
     mode?: StoryMode,
     pov?: POV,
     tense?: Tense,
+    summaryDetail?: SummaryDetail,
   ) => Promise<ChapterSummaryData>
 
   getNextChapterNumber: () => Promise<number>
@@ -161,6 +163,7 @@ export class ChapterService {
       mode,
       pov,
       tense,
+      memoryConfig.summaryDetail,
     )
     const chapterNumber = await this.deps.getNextChapterNumber()
 

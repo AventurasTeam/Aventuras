@@ -1,6 +1,7 @@
 <script lang="ts">
   import { SvelteMap } from 'svelte/reactivity'
   import { onDestroy } from 'svelte'
+  import { createDebouncedSave } from '$lib/utils/debounce'
   import { settings, DEFAULT_SERVICE_PRESET_ASSIGNMENTS } from '$lib/stores/settings.svelte'
   import type { GenerationPreset } from '$lib/types'
   import { ask } from '@tauri-apps/plugin-dialog'
@@ -229,20 +230,9 @@
   let isLoadingPresetModels = $state(false)
 
   // Auto-persist: debounced save to avoid a DB write on every slider tick
-  let saveTimer: ReturnType<typeof setTimeout> | null = null
-
-  function debouncedSave() {
-    if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => settings.saveGenerationPresets(), 300)
-  }
-
-  function flushSave() {
-    if (saveTimer) {
-      clearTimeout(saveTimer)
-      saveTimer = null
-      settings.saveGenerationPresets()
-    }
-  }
+  const { trigger: debouncedSave, flush: flushSave } = createDebouncedSave(() =>
+    settings.saveGenerationPresets(),
+  )
 
   // Flush any pending save when the component is destroyed (e.g. Settings modal closed)
   onDestroy(() => flushSave())
@@ -659,13 +649,22 @@
                   No API profile
                 </div>
               {:else}
-                {@const _models = settings.getAvailableModels(
-                  preset.profileId || settings.getDefaultProfileIdForProvider(),
-                )}
+                {@const _profileId = preset.profileId || settings.getDefaultProfileIdForProvider()}
+                {@const _models = settings.getAvailableModels(_profileId)}
+                {@const _profile = settings.getProfile(_profileId)}
                 {#if _models.length > 0 && !_models.find((m) => m.id === preset.model)}
                   <div class="mt-0.5 flex items-center gap-1 text-xs text-yellow-500">
                     <AlertTriangle class="h-3 w-3" />
                     Model not in profile
+                  </div>
+                {:else if _models.length === 0 && _profile?.fetchedModels.length}
+                  <div class="mt-0.5 flex items-center gap-1 text-xs text-red-500">
+                    <AlertTriangle class="h-3 w-3" />
+                    No models available
+                  </div>
+                {:else if _models.length === 0}
+                  <div class="text-muted-foreground mt-0.5 flex items-center gap-1 text-xs">
+                    No models fetched
                   </div>
                 {/if}
               {/if}

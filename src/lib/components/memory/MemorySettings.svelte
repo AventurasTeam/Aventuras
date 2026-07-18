@@ -1,37 +1,46 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
+  import { onDestroy } from 'svelte'
   import { slide } from 'svelte/transition'
+  import { createDebouncedSave } from '$lib/utils/debounce'
   import { Card, CardContent } from '$lib/components/ui/card'
   import { Slider } from '$lib/components/ui/slider'
   import { Label } from '$lib/components/ui/label'
   import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group'
 
-  const threshold = $derived(story.memoryConfig.tokenThreshold)
-  const bufferMessages = $derived(story.memoryConfig.chapterBuffer)
+  // Local state for editing — seeded from store, written back on debounced save
+  let localThreshold = $state(story.memoryConfig.tokenThreshold)
+  let localBuffer = $state(story.memoryConfig.chapterBuffer)
 
-  // Local state for editing
-  let localThreshold = $derived(threshold)
-  let localBuffer = $derived(bufferMessages)
+  const detailOptions = [
+    { value: 'concise', label: 'Concise' },
+    { value: 'auto', label: 'Auto' },
+    { value: 'precise', label: 'Precise' },
+  ] as const
 
-  // Debounced save
-  let saveTimeout: ReturnType<typeof setTimeout> | null = null
+  function saveDetail(val: string) {
+    if (val === 'concise' || val === 'auto' || val === 'precise') {
+      story.updateMemoryConfig({ summaryDetail: val })
+    }
+  }
+
+  // Single debounced save: flushes both values in one call
+  const { trigger, flush } = createDebouncedSave(() =>
+    story.updateMemoryConfig({ tokenThreshold: localThreshold, chapterBuffer: localBuffer }),
+  )
 
   function scheduleThresholdSave(value: number) {
     localThreshold = value
-    if (saveTimeout) clearTimeout(saveTimeout)
-    saveTimeout = setTimeout(() => {
-      story.updateMemoryConfig({ tokenThreshold: value })
-    }, 500)
+    trigger()
   }
 
   function scheduleBufferSave(value: number) {
     localBuffer = value
-    if (saveTimeout) clearTimeout(saveTimeout)
-    saveTimeout = setTimeout(() => {
-      story.updateMemoryConfig({ chapterBuffer: value })
-    }, 500)
+    trigger()
   }
+
+  onDestroy(() => flush())
 
   function formatNumber(num: number): string {
     return num.toLocaleString()
@@ -85,6 +94,29 @@
 
           <p class="text-muted-foreground text-xs">
             Auto-summarization triggers when token count exceeds this threshold.
+          </p>
+        </div>
+
+        <!-- Summary Detail -->
+        <div class="space-y-4">
+          <Label class="text-muted-foreground">Summary Detail</Label>
+
+          <ToggleGroup
+            type="single"
+            value={story.memoryConfig.summaryDetail ?? 'auto'}
+            onValueChange={saveDetail}
+            class="justify-start"
+          >
+            {#each detailOptions as option (option.value)}
+              <ToggleGroupItem value={option.value} size="sm" class="h-7 px-3 text-xs">
+                {option.label}
+              </ToggleGroupItem>
+            {/each}
+          </ToggleGroup>
+
+          <p class="text-muted-foreground text-xs">
+            How much detail chapter summaries capture. Higher detail helps long chapters keep every
+            plot point.
           </p>
         </div>
 

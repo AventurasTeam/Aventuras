@@ -1,6 +1,6 @@
 [package]
 name = "aventura"
-version = "0.7.3-pre.1"
+version = "0.7.6"
 description = "AI-powered adventure and creative writing frontend"
 authors = ["Contributors"]
 edition = "2021"
@@ -24,8 +24,8 @@ tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri-plugin-updater = "2.9.0"
-tauri-plugin-process = "2.3.1"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 tauri-plugin-http = "2"
 tauri-plugin-notification = "2"
 
@@ -38,6 +38,9 @@ base64 = "0.22"
 local-ip-address = "0.6"
 uuid = { version = "1", features = ["v4"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 tauri-plugin-devtools = { version = "2", optional = true }
 sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio"] }
 hex = "0.4.3"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+futures-util = "0.3"

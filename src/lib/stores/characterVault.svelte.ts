@@ -156,6 +156,27 @@ class CharacterVaultStore {
   }
 
   /**
+   * Duplicate a character with a new ID and "(Copy)" suffix.
+   */
+  async duplicate(id: string): Promise<VaultCharacter | null> {
+    const original = this.getById(id)
+    if (!original) return null
+
+    return this.add({
+      name: `${original.name} (Copy)`,
+      description: original.description,
+      traits: [...original.traits],
+      visualDescriptors: { ...original.visualDescriptors },
+      portrait: original.portrait,
+      tags: [...original.tags],
+      favorite: false,
+      source: original.source,
+      originalStoryId: null,
+      metadata: original.metadata ? { ...original.metadata } : null,
+    })
+  }
+
+  /**
    * Import a sanitized character (from LLM processing).
    */
   async importSanitizedCharacter(

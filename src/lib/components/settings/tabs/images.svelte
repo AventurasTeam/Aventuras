@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, untrack } from 'svelte'
+  import { createDebouncedSave } from '$lib/utils/debounce'
   import { settings } from '$lib/stores/settings.svelte'
   import { Label } from '$lib/components/ui/label'
   import { Button } from '$lib/components/ui/button'
@@ -11,12 +12,19 @@
   import {
     listImageModels,
     listImageModelsByProvider,
-    getComfySamplerInfo,
+    getProviderSamplerInfo,
     listLoras,
     generateImage,
     ComfyMode,
     type ImageModelInfo,
   } from '$lib/services/ai/image'
+  import {
+    validateApiWorkflow,
+    detectWorkflowFields,
+    fetchModelList,
+    clearComfyCacheForUrl,
+  } from '$lib/services/ai/image/providers/comfy'
+  import type { ComfyCustomWorkflow } from '$lib/services/ai/image/providers/types'
   import ImageModelSelect from '$lib/components/settings/ImageModelSelect.svelte'
   import type { ImageProfile, ImageProviderType, APIProfile } from '$lib/types'
   import * as Tabs from '$lib/components/ui/tabs'
@@ -59,13 +67,34 @@
     { value: 'openrouter', label: 'OpenRouter' },
     { value: 'chutes', label: 'Chutes' },
     { value: 'pollinations', label: 'Pollinations' },
-    { value: 'google', label: 'Google Imagen' },
+    { value: 'google', label: 'Google AI Studio' },
     { value: 'zhipu', label: 'Zhipu CogView' },
     { value: 'comfyui', label: 'ComfyUI' },
+    { value: 'a1111', label: 'A1111 / SD.cpp / Kobold' },
   ]
   const profileModes = [
+    { value: ComfyMode.CustomWorkflow, label: 'Custom Workflow' },
     { value: ComfyMode.BasicTxt2Img, label: 'Basic Text to Image' },
     { value: ComfyMode.LoraTxt2Img, label: 'LoRA Text to Image' },
+    { value: ComfyMode.UnetTxt2Img, label: 'UNet / Flux Text to Image' },
+  ] as const
+
+  const clipTypeItems = [
+    { value: 'lumina2', label: 'Lumina 2' },
+    { value: 'flux', label: 'Flux' },
+    { value: 'sd3', label: 'SD3' },
+    { value: 'stable_audio', label: 'Stable Audio' },
+    { value: 'mochi', label: 'Mochi' },
+    { value: 'ltxv', label: 'LTX Video' },
+    { value: 'cosmos', label: 'Cosmos' },
+    { value: 'wan', label: 'Wan' },
+    { value: 'hidream', label: 'HiDream' },
+  ] as const
+  const weightDtypeItems = [
+    { value: 'default', label: 'default' },
+    { value: 'fp8_e4m3fn', label: 'fp8_e4m3fn' },
+    { value: 'fp8_e4m3fn_fast', label: 'fp8_e4m3fn_fast' },
+    { value: 'fp8_e5m2', label: 'fp8_e5m2' },
   ] as const
 
   // Tab state
@@ -117,6 +146,11 @@
   // Profile form model state
   let profileModel = $state('')
   let profileModels = $state<ImageModelInfo[]>([])
+  const referenceProfileImg2ImgWarning = $derived(
+    isEditingReferenceProfile &&
+      !!profileModel &&
+      profileModels.find((m) => m.id === profileModel)?.supportsImg2Img === false,
+  )
   let isLoadingProfileModels = $state(false)
   let profileModelsError = $state<string | null>(null)
 
@@ -134,14 +168,53 @@
   let profileLoraStrengthModel = $state(1.0)
   let profileLoraStrengthClip = $state(1.0)
   let availableLoras = $state<string[]>([])
-  let saveTimeout: ReturnType<typeof setTimeout> | null = null
+  const { trigger: triggerAutoSave, flush: flushAutoSave } = createDebouncedSave(autoSaveProfile)
 
-  onDestroy(() => {
-    if (saveTimeout) {
-      clearTimeout(saveTimeout)
-      saveTimeout = null
-    }
-  })
+  // Custom workflow state
+  let profileCustomWorkflow = $state<ComfyCustomWorkflow | null>(null)
+  // Holds parsed workflow data while the user resolves an ambiguous picker — not yet saved to profileCustomWorkflow
+  let pendingWorkflowData = $state<{
+    workflow: ComfyCustomWorkflow['workflow']
+    seedPath: string
+    outputNodeId: string
+    negativePromptPath: string | null
+  } | null>(null)
+  let workflowAmbiguousNodes = $state<
+    Array<{
+      nodeId: string
+      title: string
+      path: string
+      textPreview: string
+      kSamplerSlot: string | null
+    }>
+  >([])
+  let workflowPickerSelection = $state<string>('')
+  let workflowError = $state<string | null>(null)
+  let workflowFileName = $state<string | null>(null)
+
+  // Tracks the baseUrl active when the last cache population happened; used to
+  // detect URL changes and evict stale cache entries in comfy.ts.
+  let prevComfyBaseUrl: string | null = null
+
+  // UNet mode specific state
+  let profileClipName = $state('')
+  let profileVaeName = $state('')
+  let profileClipType = $state('lumina2')
+  let profileWeightDtype = $state('default')
+  let availableClips = $state<string[]>([])
+  let availableVaes = $state<string[]>([])
+  let isLoadingUnetModels = $state(false)
+  const clipItems = $derived(availableClips.map((c) => ({ value: c, label: c })))
+  const vaeItems = $derived(availableVaes.map((v) => ({ value: v, label: v })))
+
+  const needsWorkflow = $derived(
+    profileProviderType === 'comfyui' &&
+      profileMode === ComfyMode.CustomWorkflow &&
+      (!profileCustomWorkflow || !!pendingWorkflowData),
+  )
+  const canSaveProfile = $derived(!!profileName.trim() && !needsWorkflow)
+
+  onDestroy(() => flushAutoSave())
 
   // Model info cache for active profiles
   let activeProfilesModelInfo = $state<Record<string, ImageModelInfo[]>>({})
@@ -153,8 +226,7 @@
     if (loadingProfileModelsIds.has(profileId)) return
     loadingProfileModelsIds.add(profileId)
     try {
-      const models = await listImageModels(profileId)
-      activeProfilesModelInfo[profileId] = models
+      activeProfilesModelInfo[profileId] = await listImageModels(profileId)
     } finally {
       loadingProfileModelsIds.delete(profileId)
     }
@@ -245,6 +317,13 @@
   let testImageResult = $state<string | null>(null)
   let testError = $state<string | null>(null)
 
+  $effect(() => {
+    // Clear stale test result when the profile changes
+    void testProfileId
+    testImageResult = null
+    testError = null
+  })
+
   // Derived supported sizes — computed once per reactive change, not twice per Autocomplete render
   const standardSizes = $derived(getSupportedSizes('standard'))
   const referenceSizes = $derived(getSupportedSizes('reference'))
@@ -255,46 +334,82 @@
   // Derived LoRA items — avoids re-mapping on every render
   const loraItems = $derived(availableLoras.map((l) => ({ value: l, label: l })))
 
-  // Load models for the profile form when provider/apiKey change
-  async function loadProfileFormModels(providerType: ImageProviderType, apiKey: string) {
+  // Load models for the profile form when provider/apiKey/baseUrl change
+  let profileModelsReqId = 0
+
+  async function loadProfileFormModels(
+    providerType: ImageProviderType,
+    apiKey: string,
+    baseUrl: string,
+    forceReload: boolean,
+  ) {
+    const effectiveBaseUrl = baseUrl || undefined
+    const reqId = ++profileModelsReqId
     isLoadingProfileModels = true
     profileModelsError = null
     try {
-      const models = await listImageModelsByProvider(providerType, apiKey)
+      const models = await listImageModelsByProvider(
+        providerType,
+        apiKey,
+        forceReload,
+        effectiveBaseUrl,
+      )
+      // Discard stale results if a newer request has already started.
+      if (reqId !== profileModelsReqId) return
       profileModels = models
     } catch (error) {
+      if (reqId !== profileModelsReqId) return
       profileModelsError = error instanceof Error ? error.message : 'Failed to load models'
     } finally {
-      isLoadingProfileModels = false
+      if (reqId === profileModelsReqId) isLoadingProfileModels = false
     }
   }
 
-  // Reactively load models when provider or apiKey changes in profile form
+  // Reactively load models when provider, apiKey, or (for ComfyUI) baseUrl changes in profile form.
+  // Reactive deps are captured explicitly before untrack() so that reads inside the loader
+  // functions (e.g. settings.apiSettings.llmTimeoutMs) are NOT accidentally tracked as
+  // dependencies — which would cause the effect to re-run on unrelated settings changes.
   $effect(() => {
     if (editingProfileId && profileProviderType) {
-      loadProfileFormModels(profileProviderType, profileApiKey)
-      if (profileProviderType === 'comfyui') {
-        loadSamplerInfo(profileBaseUrl)
-        loadLoras(profileBaseUrl)
-      }
+      const providerType = profileProviderType
+      const apiKey = profileApiKey
+      const baseUrl = profileBaseUrl
+
+      untrack(() => {
+        loadProfileFormModels(providerType, apiKey, baseUrl, false)
+        if (providerType === 'comfyui') {
+          loadSamplerInfo(baseUrl || undefined, 'comfyui')
+          loadLoras(baseUrl || undefined)
+        } else if (providerType === 'a1111') {
+          loadSamplerInfo(baseUrl || undefined, 'a1111')
+        } else {
+          profileSamplers = []
+          profileSchedulers = []
+        }
+      })
     }
   })
 
-  async function loadSamplerInfo(baseUrl?: string) {
-    const info = await getComfySamplerInfo(baseUrl)
+  async function loadSamplerInfo(baseUrl?: string, providerType: 'comfyui' | 'a1111' = 'comfyui') {
+    const info = await getProviderSamplerInfo(baseUrl, providerType)
+    if ((profileBaseUrl || undefined) !== baseUrl) return
     profileSamplers = info.samplers.map((s) => ({ value: s, label: s }))
     profileSchedulers = info.schedulers.map((s) => ({ value: s, label: s }))
   }
 
   async function loadLoras(baseUrl?: string) {
-    availableLoras = await listLoras(baseUrl)
+    const loras = await listLoras(baseUrl)
+    if ((profileBaseUrl || undefined) !== baseUrl) return
+    availableLoras = loras
   }
 
   async function handleTestGenerate() {
-    if (!testProfileId || !testPrompt.trim()) return
+    if (isGeneratingTestImage || !testProfileId || !testPrompt.trim()) return
 
     const profile = settings.getImageProfile(testProfileId)
     if (!profile) return
+
+    const activeProfileId = testProfileId
 
     isGeneratingTestImage = true
     testError = null
@@ -308,20 +423,34 @@
         profileId: profile.id,
       })
 
+      if (testProfileId !== activeProfileId || !isGeneratingTestImage) return
+
       if (result.base64) {
         testImageResult = result.base64
       } else {
         testError = 'No image data returned'
       }
     } catch (e) {
+      if (testProfileId !== activeProfileId || !isGeneratingTestImage) return
       testError = e instanceof Error ? e.message : 'Unknown error'
     } finally {
-      isGeneratingTestImage = false
+      if (testProfileId === activeProfileId) {
+        isGeneratingTestImage = false
+      }
     }
   }
 
   // Builds the provider-specific options object from current form state
   function buildProviderOptions(): Record<string, any> {
+    if (profileProviderType === 'a1111') {
+      return {
+        steps: profileSteps,
+        cfg: profileCfg,
+        negativePrompt: profileNegativePrompt,
+        sampler: profileSampler,
+        scheduler: profileScheduler,
+      }
+    }
     if (profileProviderType !== 'comfyui') return {}
     const opts: Record<string, any> = {
       sampler: profileSampler,
@@ -339,12 +468,21 @@
         strengthClip: profileLoraStrengthClip ?? 1,
       }
     }
+    if (profileCustomWorkflow) {
+      opts.customWorkflow = profileCustomWorkflow
+    }
+    if (profileMode === ComfyMode.UnetTxt2Img) {
+      if (profileClipName) opts.clipName = profileClipName
+      if (profileVaeName) opts.vaeName = profileVaeName
+      if (profileClipType) opts.clipType = profileClipType
+      if (profileWeightDtype) opts.weightDtype = profileWeightDtype
+    }
     return opts
   }
 
   // Save current profile edits (called when collapsible closes)
   async function autoSaveProfile() {
-    if (isNewProfile || !editingProfileId || !profileName.trim()) return
+    if (isNewProfile || !editingProfileId || !canSaveProfile) return
 
     await settings.updateImageProfile(editingProfileId, {
       name: profileName.trim(),
@@ -354,14 +492,6 @@
       model: profileModel,
       providerOptions: buildProviderOptions(),
     })
-  }
-
-  function triggerAutoSave() {
-    if (saveTimeout) clearTimeout(saveTimeout)
-    saveTimeout = setTimeout(() => {
-      autoSaveProfile()
-      saveTimeout = null
-    }, 500)
   }
 
   $effect(() => {
@@ -383,6 +513,12 @@
         profileLoraName,
         profileLoraStrengthModel,
         profileLoraStrengthClip,
+        profileCustomWorkflow,
+        profileClipName,
+        profileVaeName,
+        profileClipType,
+        profileWeightDtype,
+        // a1111 fields reuse profileSteps, profileCfg, profileNegativePrompt, profileSampler
       ]
       // Skip the first run after startEditProfile populates the form
       if (suppressAutoSave) {
@@ -395,11 +531,7 @@
 
   // Aliased for clarity in UI but uses the same logic
   function saveEditingProfile() {
-    if (saveTimeout) {
-      clearTimeout(saveTimeout)
-      saveTimeout = null
-    }
-    autoSaveProfile()
+    flushAutoSave()
   }
 
   function startNewProfile() {
@@ -417,10 +549,23 @@
     profileSampler = 'dpmpp_2m_sde_gpu'
     profileScheduler = 'sgm_uniform'
     profileMode = ComfyMode.BasicTxt2Img
-    profileCfg = 1
-    profileSteps = 6
+    profileCfg = 7
+    profileSteps = 20
     profilePositivePrompt = ''
     profileNegativePrompt = ''
+    prevComfyBaseUrl = null
+    profileCustomWorkflow = null
+    pendingWorkflowData = null
+    workflowAmbiguousNodes = []
+    workflowPickerSelection = ''
+    workflowError = null
+    workflowFileName = null
+    profileClipName = ''
+    profileVaeName = ''
+    profileClipType = 'lumina2'
+    profileWeightDtype = 'default'
+    availableClips = []
+    availableVaes = []
     showApiKey = false
     showCopyDropdown = false
     openProfileIds.clear()
@@ -436,9 +581,19 @@
     profileName = profile.name
     profileProviderType = profile.providerType
     profileApiKey = profile.apiKey
+    prevComfyBaseUrl = null
     profileBaseUrl = profile.baseUrl || ''
     profileModel = profile.model || ''
     profileModels = []
+
+    if (profile.providerType === 'a1111') {
+      const opts = profile.providerOptions || {}
+      profileSteps = Number(opts.steps) || 20
+      profileCfg = Number(opts.cfg) || 7
+      profileNegativePrompt = (opts.negativePrompt as string) || ''
+      profileSampler = (opts.sampler as string) || 'Euler a'
+      profileScheduler = (opts.scheduler as string) || 'karras'
+    }
 
     if (profile.providerType === 'comfyui') {
       const opts = profile.providerOptions || {}
@@ -449,6 +604,18 @@
       profileSteps = Number(opts.step) || 6
       profilePositivePrompt = (opts.positivePrompt as string) || ''
       profileNegativePrompt = (opts.negativePrompt as string) || ''
+      profileCustomWorkflow = (opts.customWorkflow as ComfyCustomWorkflow) || null
+      pendingWorkflowData = null
+      workflowFileName = profileCustomWorkflow ? 'Loaded from profile' : null
+      workflowAmbiguousNodes = []
+      workflowPickerSelection = ''
+      workflowError = null
+      profileClipName = (opts.clipName as string) || ''
+      profileVaeName = (opts.vaeName as string) || ''
+      profileClipType = (opts.clipType as string) || 'lumina2'
+      profileWeightDtype = (opts.weightDtype as string) || 'default'
+      availableClips = []
+      availableVaes = []
       if (opts.lora) {
         const lora = opts.lora as any
         profileLoraName = lora.name || ''
@@ -473,7 +640,7 @@
   }
 
   async function handleSaveProfile() {
-    if (!profileName.trim()) return
+    if (!canSaveProfile) return
 
     await settings.addImageProfile({
       name: profileName.trim(),
@@ -508,6 +675,160 @@
       openProfileIds.delete(profile.id)
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Custom workflow handlers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Called after a file is selected or JSON is pasted.
+   * Validates the JSON, runs detection, and either auto-confirms or shows the picker.
+   */
+  function processWorkflowJson(json: unknown, filename: string) {
+    workflowError = null
+    workflowAmbiguousNodes = []
+    workflowPickerSelection = ''
+
+    const validationError = validateApiWorkflow(json)
+    if (validationError) {
+      workflowError = validationError
+      return
+    }
+
+    const workflow = json as ComfyCustomWorkflow['workflow']
+    const { positiveNodes, negativeNode, seedPath, outputNodeId, saveImageCount } =
+      detectWorkflowFields(workflow)
+
+    if (positiveNodes.length === 0) {
+      workflowError = 'No CLIPTextEncode (positive) node found in workflow.'
+      return
+    }
+    if (!seedPath) {
+      workflowError = 'No KSampler or KSamplerAdvanced node found — cannot detect seed path.'
+      return
+    }
+    if (saveImageCount === 0) {
+      workflowError = 'No SaveImage node found in workflow.'
+      return
+    }
+    if (saveImageCount > 1) {
+      workflowError = `Workflow has ${saveImageCount} SaveImage nodes. Please keep exactly one SaveImage node.`
+      return
+    }
+
+    workflowFileName = filename
+
+    if (positiveNodes.length > 1) {
+      // Ambiguous — show picker. Store parsed data in pending state; do NOT write
+      // profileCustomWorkflow yet so the auto-save effect doesn't fire prematurely.
+      pendingWorkflowData = {
+        workflow,
+        seedPath,
+        outputNodeId: outputNodeId!,
+        negativePromptPath: negativeNode?.path ?? null,
+      }
+      workflowAmbiguousNodes = positiveNodes
+      workflowPickerSelection = positiveNodes[0].path
+    } else {
+      // Unambiguous — auto-confirm immediately
+      pendingWorkflowData = null
+      profileCustomWorkflow = {
+        workflow,
+        positivePromptPath: positiveNodes[0].path,
+        seedPath,
+        outputNodeId: outputNodeId!,
+        negativePromptPath: negativeNode?.path ?? null,
+      }
+      workflowAmbiguousNodes = []
+    }
+  }
+
+  function handleWorkflowFileInput(event: Event) {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const json = JSON.parse(reader.result as string)
+        processWorkflowJson(json, file.name)
+      } catch {
+        workflowError = 'Invalid JSON file.'
+      }
+    }
+    reader.readAsText(file)
+    // Reset input so the same file can be re-selected after clearing
+    input.value = ''
+  }
+
+  function confirmWorkflowPicker() {
+    if (!pendingWorkflowData || !workflowPickerSelection) return
+    profileCustomWorkflow = { ...pendingWorkflowData, positivePromptPath: workflowPickerSelection }
+    pendingWorkflowData = null
+    workflowAmbiguousNodes = []
+  }
+
+  function clearCustomWorkflow() {
+    profileCustomWorkflow = null
+    pendingWorkflowData = null
+    workflowAmbiguousNodes = []
+    workflowPickerSelection = ''
+    workflowError = null
+    workflowFileName = null
+  }
+
+  // ---------------------------------------------------------------------------
+  // UNet model loading
+  // ---------------------------------------------------------------------------
+
+  let unetModelsReqId = 0
+
+  async function loadUnetModels() {
+    if (profileProviderType !== 'comfyui') return
+    const baseUrl = profileBaseUrl?.trim() || 'http://localhost:8188'
+    const reqId = ++unetModelsReqId
+    isLoadingUnetModels = true
+    try {
+      const [clips, vaes] = await Promise.all([
+        fetchModelList(baseUrl, 'text_encoders', settings.apiSettings.llmTimeoutMs),
+        fetchModelList(baseUrl, 'vae', settings.apiSettings.llmTimeoutMs),
+      ])
+      if (reqId !== unetModelsReqId) return
+      availableClips = clips
+      availableVaes = vaes
+    } finally {
+      if (reqId === unetModelsReqId) isLoadingUnetModels = false
+    }
+  }
+
+  // Auto-load when switching to UNet mode
+  $effect(() => {
+    if (profileMode === ComfyMode.UnetTxt2Img && availableClips.length === 0) {
+      untrack(() => void loadUnetModels())
+    }
+  })
+
+  // Evict comfy.ts caches when the user changes the ComfyUI base URL so that
+  // the next generate/listModels call fetches fresh model lists.
+  // Also clear availableClips/Vaes so the auto-load effect can trigger a fresh fetch.
+  $effect(() => {
+    if (profileProviderType === 'comfyui') {
+      const currentUrl = profileBaseUrl.trim() || 'http://localhost:8188'
+      if (prevComfyBaseUrl !== null && prevComfyBaseUrl !== currentUrl) {
+        clearComfyCacheForUrl(prevComfyBaseUrl)
+        availableClips = []
+        availableVaes = []
+      }
+      prevComfyBaseUrl = currentUrl
+    } else {
+      if (prevComfyBaseUrl !== null) {
+        clearComfyCacheForUrl(prevComfyBaseUrl)
+      }
+      prevComfyBaseUrl = null
+      availableClips = []
+      availableVaes = []
+    }
+  })
 </script>
 
 <div class="space-y-4">
@@ -547,9 +868,14 @@
           <Card class="border-primary/50 bg-primary/5">
             <CardContent>
               {@render profileForm()}
-              <div class="flex gap-2 pt-4">
+              {#if needsWorkflow}
+                <p class="text-destructive pt-2 text-xs">
+                  Upload and confirm a workflow before saving.
+                </p>
+              {/if}
+              <div class="flex gap-2 pt-2">
                 <Button variant="outline" onclick={resetEditState} class="flex-1">Cancel</Button>
-                <Button onclick={handleSaveProfile} disabled={!profileName.trim()} class="flex-1">
+                <Button onclick={handleSaveProfile} disabled={!canSaveProfile} class="flex-1">
                   <Check class="h-4 w-4" />
                   Create Profile
                 </Button>
@@ -1023,8 +1349,8 @@
       />
     </div>
 
-    <!-- comfy doesnt use API keys -->
-    {#if profileProviderType !== 'comfyui'}
+    <!-- comfy and a1111 don't require API keys -->
+    {#if profileProviderType !== 'comfyui' && profileProviderType !== 'a1111'}
       <div class="space-y-2">
         <Label>API Key</Label>
         <div class="flex gap-2">
@@ -1077,14 +1403,14 @@
       </div>
     {/if}
 
-    {#if profileProviderType === 'comfyui' || profileProviderType === 'openai' || profileProviderType === 'zhipu'}
+    {#if profileProviderType === 'comfyui' || profileProviderType === 'openai' || profileProviderType === 'zhipu' || profileProviderType === 'a1111'}
       <div class="space-y-2">
         <Label>Base URL (optional)</Label>
         <Input bind:value={profileBaseUrl} placeholder="Custom base URL" />
       </div>
     {/if}
 
-    <div class="space-y-2">
+    {#snippet modelSelectContent()}
       <Label>Model</Label>
       <ImageModelSelect
         models={profileModels}
@@ -1092,19 +1418,78 @@
         onModelChange={(id) => {
           profileModel = id
         }}
-        filterFunc={isEditingReferenceProfile ? (m) => m.supportsImg2Img : undefined}
+        filterFunc={undefined}
         showCost={true}
         showImg2ImgIndicator={true}
-        showDescription={false}
+        showDescription={profileProviderType === 'comfyui'}
         isLoading={isLoadingProfileModels}
         errorMessage={profileModelsError}
         showRefreshButton={true}
-        onRefresh={() => loadProfileFormModels(profileProviderType, profileApiKey)}
+        onRefresh={() =>
+          loadProfileFormModels(profileProviderType, profileApiKey, profileBaseUrl, true)}
       />
-      <p class="text-muted-foreground mt-1 text-xs">
-        The image model this profile will use for generation.
-      </p>
-    </div>
+      {#if referenceProfileImg2ImgWarning}
+        <p class="text-warning mt-1 text-xs">
+          This profile is used for reference image generation (img2img), but the selected model does
+          not support img2img.
+        </p>
+      {:else}
+        <p class="text-muted-foreground mt-1 text-xs">
+          The image model this profile will use for generation.
+        </p>
+      {/if}
+    {/snippet}
+
+    {#if profileProviderType !== 'comfyui' && profileProviderType !== 'a1111'}
+      <div class="space-y-2">
+        {@render modelSelectContent()}
+      </div>
+    {/if}
+    {#if profileProviderType === 'a1111'}
+      <div class="space-y-2">
+        {@render modelSelectContent()}
+      </div>
+      <div class="grid grid-cols-2 gap-4 pt-2">
+        <div class="space-y-2">
+          <Label>Steps</Label>
+          <Input type="number" bind:value={profileSteps} placeholder="20" min="1" />
+        </div>
+        <div class="space-y-2">
+          <Label>CFG Scale</Label>
+          <Input type="number" bind:value={profileCfg} placeholder="7" step="0.5" />
+        </div>
+        <div class="space-y-2">
+          <Label>Sampler</Label>
+          <Autocomplete
+            items={profileSamplers}
+            selected={profileSamplers.find((s) => s.value === profileSampler)}
+            onSelect={(v) => {
+              profileSampler = (v as { value: string }).value
+            }}
+            itemLabel={(s: { label: string }) => s.label}
+            itemValue={(s: { value: string }) => s.value}
+            placeholder="Euler a"
+          />
+        </div>
+        <div class="space-y-2">
+          <Label>Scheduler</Label>
+          <Autocomplete
+            items={profileSchedulers}
+            selected={profileSchedulers.find((s) => s.value === profileScheduler)}
+            onSelect={(v) => {
+              profileScheduler = (v as { value: string }).value
+            }}
+            itemLabel={(s: { label: string }) => s.label}
+            itemValue={(s: { value: string }) => s.value}
+            placeholder="karras"
+          />
+        </div>
+        <div class="col-span-2 space-y-2">
+          <Label>Negative Prompt</Label>
+          <Textarea bind:value={profileNegativePrompt} placeholder="Negative prompt..." />
+        </div>
+      </div>
+    {/if}
     {#if profileProviderType === 'comfyui'}
       <div class="grid grid-cols-2 gap-4 pt-2">
         <div class="col-span-2 space-y-2">
@@ -1120,48 +1505,192 @@
             placeholder="Select mode"
           />
         </div>
-        <div class="space-y-2">
-          <Label>Sampler</Label>
-          <Autocomplete
-            items={profileSamplers}
-            selected={profileSamplers.find((s) => s.value === profileSampler)}
-            onSelect={(v) => {
-              profileSampler = (v as { value: string }).value
-            }}
-            itemLabel={(s: { label: string }) => s.label}
-            itemValue={(s: { value: string }) => s.value}
-            placeholder="Select sampler"
-          />
-        </div>
-        <div class="space-y-2">
-          <Label>Scheduler</Label>
-          <Autocomplete
-            items={profileSchedulers}
-            selected={profileSchedulers.find((s) => s.value === profileScheduler)}
-            onSelect={(v) => {
-              profileScheduler = (v as { value: string }).value
-            }}
-            itemLabel={(s: { label: string }) => s.label}
-            itemValue={(s: { value: string }) => s.value}
-            placeholder="Select scheduler"
-          />
-        </div>
-        <div class="space-y-2">
-          <Label>CFG</Label>
-          <Input type="number" bind:value={profileCfg} placeholder="Enter CFG" step="0.1" />
-        </div>
-        <div class="space-y-2">
-          <Label>Steps</Label>
-          <Input type="number" bind:value={profileSteps} placeholder="Enter Steps" />
-        </div>
+        {#if profileMode !== ComfyMode.CustomWorkflow}
+          <div class="col-span-2 space-y-2">
+            {@render modelSelectContent()}
+          </div>
+          <div class="space-y-2">
+            <Label>Sampler</Label>
+            <Autocomplete
+              items={profileSamplers}
+              selected={profileSamplers.find((s) => s.value === profileSampler)}
+              onSelect={(v) => {
+                profileSampler = (v as { value: string }).value
+              }}
+              itemLabel={(s: { label: string }) => s.label}
+              itemValue={(s: { value: string }) => s.value}
+              placeholder="Select sampler"
+            />
+          </div>
+          <div class="space-y-2">
+            <Label>Scheduler</Label>
+            <Autocomplete
+              items={profileSchedulers}
+              selected={profileSchedulers.find((s) => s.value === profileScheduler)}
+              onSelect={(v) => {
+                profileScheduler = (v as { value: string }).value
+              }}
+              itemLabel={(s: { label: string }) => s.label}
+              itemValue={(s: { value: string }) => s.value}
+              placeholder="Select scheduler"
+            />
+          </div>
+          <div class="space-y-2">
+            <Label>CFG</Label>
+            <Input type="number" bind:value={profileCfg} placeholder="Enter CFG" step="0.1" />
+          </div>
+          <div class="space-y-2">
+            <Label>Steps</Label>
+            <Input type="number" bind:value={profileSteps} placeholder="Enter Steps" />
+          </div>
+        {/if}
         <div class="col-span-2 space-y-2">
           <Label>Positive Prompt Base</Label>
           <Textarea bind:value={profilePositivePrompt} placeholder="Base positive prompt..." />
         </div>
-        <div class="col-span-2 space-y-2">
-          <Label>Negative Prompt</Label>
-          <Textarea bind:value={profileNegativePrompt} placeholder="Negative prompt..." />
-        </div>
+        {#if (profileMode !== ComfyMode.CustomWorkflow && profileMode !== ComfyMode.UnetTxt2Img) || profileCustomWorkflow?.negativePromptPath}
+          <div class="col-span-2 space-y-2">
+            <Label>Negative Prompt</Label>
+            <Textarea bind:value={profileNegativePrompt} placeholder="Negative prompt..." />
+          </div>
+        {/if}
+
+        {#if profileMode === ComfyMode.CustomWorkflow}
+          <div class="col-span-2 space-y-3 border-t pt-3">
+            <div class="flex items-center justify-between">
+              <Label>Custom Workflow (API format)</Label>
+              {#if profileCustomWorkflow}
+                <button
+                  type="button"
+                  class="text-muted-foreground hover:text-destructive text-xs underline"
+                  onclick={clearCustomWorkflow}
+                >
+                  Clear
+                </button>
+              {/if}
+            </div>
+
+            {#if profileCustomWorkflow && workflowAmbiguousNodes.length === 0}
+              <!-- State B: workflow loaded and confirmed -->
+              <div class="bg-muted/40 space-y-1 rounded-md border px-3 py-2 text-xs">
+                <p class="text-foreground font-medium">
+                  ✓ {workflowFileName ?? 'Workflow loaded'} ({Object.keys(
+                    profileCustomWorkflow.workflow,
+                  ).length} nodes)
+                </p>
+                <p class="text-muted-foreground">
+                  Prompt → <code class="text-xs">{profileCustomWorkflow.positivePromptPath}</code>
+                </p>
+                <p class="text-muted-foreground">
+                  Seed → <code class="text-xs">{profileCustomWorkflow.seedPath}</code>
+                </p>
+                {#if profileCustomWorkflow.negativePromptPath}
+                  <p class="text-muted-foreground">
+                    Negative → <code class="text-xs"
+                      >{profileCustomWorkflow.negativePromptPath}</code
+                    >
+                  </p>
+                {:else}
+                  <p class="text-muted-foreground italic">
+                    No negative prompt node detected (ignored).
+                  </p>
+                {/if}
+              </div>
+            {:else if workflowAmbiguousNodes.length > 0}
+              <!-- Picker: multiple CLIPTextEncode positive nodes found -->
+              <div class="bg-muted/40 space-y-2 rounded-md border px-3 py-2">
+                <p class="text-muted-foreground text-xs">
+                  Multiple prompt nodes found. Select the one to use as the positive prompt:
+                </p>
+                {#each workflowAmbiguousNodes as node (node.nodeId)}
+                  <label
+                    class="hover:bg-muted/60 flex cursor-pointer items-start gap-2.5 rounded p-1.5 text-xs transition-colors"
+                  >
+                    <input
+                      type="radio"
+                      name="workflow-positive-node"
+                      value={node.path}
+                      bind:group={workflowPickerSelection}
+                      class="mt-0.5 shrink-0"
+                    />
+                    <span class="flex flex-col gap-0.5">
+                      <span class="font-mono text-[11px]"
+                        >{node.nodeId}{#if node.title}
+                          <span class="text-muted-foreground font-sans">— {node.title}</span>{/if}
+                        {#if node.kSamplerSlot}
+                          <span
+                            class="bg-primary/10 text-primary ml-1 rounded px-1 py-0.5 font-sans text-[10px] not-italic"
+                            >{node.kSamplerSlot}</span
+                          >
+                        {/if}
+                      </span>
+                      <span class="text-muted-foreground italic">{node.textPreview}</span>
+                    </span>
+                  </label>
+                {/each}
+                <Button size="sm" class="w-full" onclick={confirmWorkflowPicker}
+                  >Confirm selection</Button
+                >
+              </div>
+            {:else}
+              <!-- State A: no workflow loaded -->
+              <details class="group text-xs">
+                <summary
+                  class="text-muted-foreground hover:text-foreground mb-2 cursor-pointer list-none select-none"
+                >
+                  <span class="underline underline-offset-2">How to get the workflow file ›</span>
+                </summary>
+                <ol class="text-muted-foreground mt-1 space-y-1.5 pl-1">
+                  <li>
+                    <span class="text-foreground font-medium"
+                      >1. Start ComfyUI with CORS enabled:</span
+                    >
+                    <br />
+                    <code class="bg-muted mt-0.5 inline-block rounded px-1.5 py-0.5 text-[11px]">
+                      python main.py --enable-cors-header
+                    </code>
+                  </li>
+                  <li>
+                    <span class="text-foreground font-medium">2. Enable Dev Mode in ComfyUI:</span>
+                    <br />
+                    Open the ComfyUI web UI → click the
+                    <strong>gear icon (⚙)</strong> → enable
+                    <strong>Dev Mode</strong>. A new
+                    <em>"Save (API Format)"</em> button will appear in the toolbar.
+                  </li>
+                  <li>
+                    <span class="text-foreground font-medium">3. Export your workflow:</span>
+                    <br />
+                    Build or load your workflow, then click
+                    <strong>Save (API Format)</strong>. This saves a
+                    <code class="text-[11px]">.json</code> file that this app can read.
+                  </li>
+                  <li>
+                    <span class="text-foreground font-medium">4. Upload it below.</span>
+                    <br />
+                    The app will automatically detect your prompt and seed nodes. If multiple prompt nodes
+                    are found, you will be asked to pick one.
+                  </li>
+                </ol>
+              </details>
+              <label
+                class="border-input hover:border-primary flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed px-4 py-3 text-sm transition-colors"
+              >
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  class="hidden"
+                  onchange={handleWorkflowFileInput}
+                />
+                <span class="text-muted-foreground">Upload workflow JSON (API format)</span>
+              </label>
+            {/if}
+
+            {#if workflowError}
+              <p class="text-destructive text-xs">{workflowError}</p>
+            {/if}
+          </div>
+        {/if}
       </div>
       {#if profileMode === ComfyMode.LoraTxt2Img}
         <div class="grid grid-cols-2 gap-4 pt-2">
@@ -1204,6 +1733,97 @@
               />
             </div>
           {/if}
+        </div>
+      {/if}
+      {#if profileMode === ComfyMode.UnetTxt2Img}
+        <div class="grid grid-cols-2 gap-4 pt-2">
+          <div class="col-span-2 space-y-2">
+            <div class="flex items-center justify-between">
+              <Label>CLIP / Text Encoder</Label>
+              <button
+                type="button"
+                class="text-muted-foreground hover:text-foreground text-xs underline"
+                disabled={isLoadingUnetModels}
+                onclick={loadUnetModels}
+              >
+                {isLoadingUnetModels ? 'Loading…' : '↻ Refresh'}
+              </button>
+            </div>
+            <Autocomplete
+              items={clipItems}
+              selected={availableClips.includes(profileClipName)
+                ? { value: profileClipName, label: profileClipName }
+                : profileClipName
+                  ? { value: profileClipName, label: profileClipName }
+                  : undefined}
+              onSelect={(v) => {
+                profileClipName = (v as { value: string }).value
+              }}
+              allowCustom={true}
+              onCustomSelect={(v) => {
+                profileClipName = v
+              }}
+              itemLabel={(s: { label: string }) => s.label}
+              itemValue={(s: { value: string }) => s.value}
+              placeholder="Auto-detect first available"
+            />
+            <p class="text-muted-foreground text-xs">
+              Leave empty to auto-detect the first text encoder found in ComfyUI.
+            </p>
+          </div>
+
+          <div class="col-span-2 space-y-2">
+            <Label>VAE</Label>
+            <Autocomplete
+              items={vaeItems}
+              selected={availableVaes.includes(profileVaeName)
+                ? { value: profileVaeName, label: profileVaeName }
+                : profileVaeName
+                  ? { value: profileVaeName, label: profileVaeName }
+                  : undefined}
+              onSelect={(v) => {
+                profileVaeName = (v as { value: string }).value
+              }}
+              allowCustom={true}
+              onCustomSelect={(v) => {
+                profileVaeName = v
+              }}
+              itemLabel={(s: { label: string }) => s.label}
+              itemValue={(s: { value: string }) => s.value}
+              placeholder="Auto-detect first available"
+            />
+            <p class="text-muted-foreground text-xs">
+              Leave empty to auto-detect the first VAE found in ComfyUI.
+            </p>
+          </div>
+
+          <div class="space-y-2">
+            <Label>CLIP Type</Label>
+            <Autocomplete
+              items={clipTypeItems}
+              selected={clipTypeItems.find((s) => s.value === profileClipType)}
+              onSelect={(v) => {
+                profileClipType = (v as { value: string }).value
+              }}
+              itemLabel={(s: { label: string }) => s.label}
+              itemValue={(s: { value: string }) => s.value}
+              placeholder="Select CLIP type"
+            />
+          </div>
+
+          <div class="space-y-2">
+            <Label>Weight Dtype</Label>
+            <Autocomplete
+              items={weightDtypeItems}
+              selected={weightDtypeItems.find((s) => s.value === profileWeightDtype)}
+              onSelect={(v) => {
+                profileWeightDtype = (v as { value: string }).value
+              }}
+              itemLabel={(s: { label: string }) => s.label}
+              itemValue={(s: { value: string }) => s.value}
+              placeholder="Select dtype"
+            />
+          </div>
         </div>
       {/if}
     {/if}

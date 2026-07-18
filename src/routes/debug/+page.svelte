@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
-  import { type DebugLogEntry } from '$lib/stores/debug.svelte'
+  import { countRequests, type DebugLogEntry } from '$lib/stores/debug.svelte'
   import DebugLogView from '$lib/components/debug/DebugLogView.svelte'
   import { Button } from '$lib/components/ui/button'
   import { Minimize2 } from 'lucide-svelte'
@@ -86,7 +86,7 @@
     <div class="flex items-center gap-3">
       <h1 class="text-lg font-semibold">API Debug Logs</h1>
       <span class="bg-secondary text-secondary-foreground rounded px-2 py-0.5 font-mono text-xs">
-        {logs.length}
+        {countRequests(logs)}
       </span>
     </div>
 

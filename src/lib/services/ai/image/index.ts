@@ -25,7 +25,7 @@ export {
   generateImage,
   listImageModels,
   listImageModelsByProvider,
-  getComfySamplerInfo,
+  getProviderSamplerInfo,
   listLoras,
   clearModelsCache,
   supportsImageGeneration,

@@ -8,7 +8,9 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use super::server::{bind_listener, build_router, spawn_server, ServerState, StoriesData};
-use super::types::{QrCodeData, SyncAction, SyncRequest, SyncResponse, SyncServerInfo, SyncStoryPreview};
+use super::types::{
+    QrCodeData, SyncAction, SyncRequest, SyncResponse, SyncServerInfo, SyncStoryPreview,
+};
 
 /// State managed by Tauri for sync operations
 pub struct SyncState {
@@ -29,7 +31,8 @@ impl Default for SyncState {
 
 /// Generate a QR code as base64-encoded PNG
 fn generate_qr_code(data: &str) -> Result<String, String> {
-    let code = QrCode::new(data.as_bytes()).map_err(|e| format!("Failed to create QR code: {}", e))?;
+    let code =
+        QrCode::new(data.as_bytes()).map_err(|e| format!("Failed to create QR code: {}", e))?;
 
     let image = code.render::<Luma<u8>>().min_dimensions(256, 256).build();
 
@@ -53,9 +56,7 @@ fn parse_story_preview(json: &str) -> Result<SyncStoryPreview, String> {
     let data: serde_json::Value =
         serde_json::from_str(json).map_err(|e| format!("Invalid JSON: {}", e))?;
 
-    let story = data
-        .get("story")
-        .ok_or("Missing 'story' field in export")?;
+    let story = data.get("story").ok_or("Missing 'story' field in export")?;
     let entries = data
         .get("entries")
         .and_then(|e| e.as_array())
@@ -73,11 +74,11 @@ fn parse_story_preview(json: &str) -> Result<SyncStoryPreview, String> {
             .and_then(|v| v.as_str())
             .unwrap_or("Untitled")
             .to_string(),
-        genre: story.get("genre").and_then(|v| v.as_str()).map(String::from),
-        updated_at: story
-            .get("updatedAt")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0),
+        genre: story
+            .get("genre")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        updated_at: story.get("updatedAt").and_then(|v| v.as_i64()).unwrap_or(0),
         entry_count: entries,
     })
 }
@@ -133,7 +134,8 @@ pub async fn start_sync_server(
         token: token.clone(),
         version: app.package_info().version.to_string(),
     };
-    let qr_json = serde_json::to_string(&qr_data).map_err(|e| format!("Failed to serialize QR data: {}", e))?;
+    let qr_json = serde_json::to_string(&qr_data)
+        .map_err(|e| format!("Failed to serialize QR data: {}", e))?;
     let qr_code_base64 = generate_qr_code(&qr_json)?;
 
     // Start the server after QR data is ready
@@ -188,7 +190,11 @@ pub async fn clear_received_stories(state: State<'_, SyncState>) -> Result<(), S
 
 /// Connect to a remote sync server and list available stories
 #[tauri::command]
-pub async fn sync_connect(ip: String, port: u16, token: String) -> Result<Vec<SyncStoryPreview>, String> {
+pub async fn sync_connect(
+    ip: String,
+    port: u16,
+    token: String,
+) -> Result<Vec<SyncStoryPreview>, String> {
     let url = format!("http://{}:{}/sync", ip, port);
 
     let request = SyncRequest {

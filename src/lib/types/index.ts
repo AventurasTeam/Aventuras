@@ -97,12 +97,16 @@ export interface PersistentStyleReviewState {
   lastReview: PersistentStyleReviewResult | null
 }
 
+/** Level of detail requested for chapter summaries. */
+export type SummaryDetail = 'concise' | 'auto' | 'precise'
+
 export interface MemoryConfig {
   tokenThreshold: number // Token count before triggering summarization (default: 16000)
   chapterBuffer: number // Recent messages protected from chapter end (default: 10)
   autoSummarize: boolean // Enable auto-summarization
   enableRetrieval: boolean // Enable memory retrieval
   maxChaptersPerRetrieval: number // Max chapters to retrieve per query
+  summaryDetail?: SummaryDetail // Detail level for chapter summaries (default: 'auto')
 }
 
 export interface StorySettings {
@@ -117,6 +121,7 @@ export interface StorySettings {
   imageGenerationMode?: 'none' | 'agentic' | 'inline' // Image generation strategy
   backgroundImagesEnabled?: boolean
   referenceMode?: boolean
+  customSystemPrompt?: string // Per-story Liquid template override; bypasses pack template when set
 }
 
 export interface StoryEntry {
@@ -142,8 +147,12 @@ export interface StoryEntry {
 
 export interface EntryMetadata {
   tokenCount?: number
-  model?: string
-  generationTime?: number
+  model?: string // Model that generated this entry (narration only)
+  profileId?: string // API profile id used for generation
+  profileName?: string // API profile name at generation time (for display)
+  reasoningEffort?: ReasoningEffort // Thinking effort used for generation
+  temperature?: number // Sampling temperature used for generation
+  generationTime?: number // Wall-clock generation duration in ms (narration only)
   source?: string
   // Story time tracking - captures in-story time at entry creation and after classification
   timeStart?: TimeTracker // Story time when this entry began
@@ -695,6 +704,7 @@ export interface APIProfile {
   fetchedModels: TextModel[] // Auto-fetched from /models endpoint
   hiddenModels: string[] // Models hidden from selection lists
   favoriteModels: string[] // Models shown at the top of selection lists
+  pingEnabled?: boolean // Opt-in: enable pings to show model availability status (OR free / NIM only)
   createdAt: number // Timestamp
 }
 
@@ -741,6 +751,7 @@ export interface UISettings {
   autoScroll: boolean
   showScrollToTop: boolean
   showScrollToBottom: boolean
+  storyMaxWidth: '2xl' | '3xl' | '4xl' | '5xl' | '7xl' | '9xl'
 }
 
 export interface UpdateSettings {
@@ -761,6 +772,7 @@ export type ImageProviderType =
   | 'google'
   | 'zhipu'
   | 'comfyui'
+  | 'a1111'
 
 export interface ImageProfile {
   id: string
@@ -793,6 +805,16 @@ export interface EmbeddedImage {
   createdAt: number
   generationMode?: 'analyzed' | 'inline' // How image was triggered (analyzed = LLM scene analysis, inline = <pic> tag)
 }
+
+/**
+ * EmbeddedImage without the heavy base64 `imageData` payload.
+ *
+ * Used on hot paths (message send, retry backup) that only need metadata and never
+ * read the pixels. Loading the full base64 of every story image in one shot pushed a
+ * huge buffer through the Tauri IPC/SQL bridge and caused Android OOM crashes
+ * (RustWebViewClient.shouldInterceptRequest). Keep these paths metadata-only.
+ */
+export type EmbeddedImageMeta = Omit<EmbeddedImage, 'imageData'>
 
 // ===== Inline Image Generation System =====
 
@@ -1004,4 +1026,5 @@ export interface VaultConversation {
   messages: string // JSON blob — AI SDK ModelMessage[]
   chatMessages: string // JSON blob — ChatMessage[] (UI display state with diff cards, images, reasoning)
   pendingChanges: string // JSON blob — VaultPendingChange[] (full list including status)
+  entryVersions?: string // JSON blob — [lorebookId, version][] for change detection across sessions
 }

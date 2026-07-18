@@ -1,9 +1,12 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
+  import { createDebouncedSave } from '$lib/utils/debounce'
   import { settings } from '$lib/stores/settings.svelte'
   import type { APIProfile, ProviderType, TextModel } from '$lib/types'
   import { fetchModelsFromProvider } from '$lib/services/ai/sdk/providers'
   import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
+  import { pingProfileModels, isPingEligible } from '$lib/services/modelHealthOrchestrator'
+  import { isPingEligibleProvider } from '$lib/constants/modelHealth'
   import { Plus, Check, ChevronRight, Key as KeyIcon, Star } from 'lucide-svelte'
 
   import { Button } from '$lib/components/ui/button'
@@ -27,10 +30,12 @@
   let formFetchedModels = $state<TextModel[]>([])
   let formHiddenModels = $state<string[]>([])
   let formFavoriteModels = $state<string[]>([])
+  let formPingEnabled = $state(false)
 
   // Auto-save debounce state
-  let saveTimeout: ReturnType<typeof setTimeout> | null = null
-  let saveStatus = $state<'idle' | 'saving' | 'saved'>('idle')
+  let mounted = true
+  let saveStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const { trigger: triggerAutoSave, flush: flushAutoSave } = createDebouncedSave(autoSaveEdit)
 
   // UI state
   let isFetchingModels = $state(false)
@@ -39,8 +44,7 @@
 
   function startEdit(profile: APIProfile) {
     if (editingProfileId && editingProfileId !== profile.id && !isNewProfile) {
-      if (saveTimeout) clearTimeout(saveTimeout)
-      autoSaveEdit()
+      flushAutoSave()
     }
 
     editingProfileId = profile.id
@@ -53,6 +57,8 @@
     formFetchedModels = [...profile.fetchedModels]
     formHiddenModels = [...(profile.hiddenModels ?? [])]
     formFavoriteModels = [...(profile.favoriteModels ?? [])]
+    formPingEnabled = profile.pingEnabled ?? false
+    prevPingEnabled = formPingEnabled
     fetchError = null
     openCollapsibles = new SvelteSet([...openCollapsibles, profile.id])
   }
@@ -68,6 +74,8 @@
     formFetchedModels = []
     formHiddenModels = []
     formFavoriteModels = []
+    formPingEnabled = false
+    prevPingEnabled = false
     fetchError = null
   }
 
@@ -91,6 +99,7 @@
       fetchedModels: formFetchedModels,
       hiddenModels: formHiddenModels,
       favoriteModels: formFavoriteModels,
+      pingEnabled: formPingEnabled,
       createdAt: isNewProfile
         ? Date.now()
         : settings.apiSettings.profiles.find((p) => p.id === editingProfileId)?.createdAt ||
@@ -118,6 +127,20 @@
 
     try {
       formFetchedModels = await fetchModelsFromProvider(formProviderType, formBaseUrl, formApiKey)
+      if (formPingEnabled && editingProfileId && !isNewProfile) {
+        const existing = settings.getProfile(editingProfileId)
+        if (existing) {
+          pingProfileModels(
+            {
+              ...existing,
+              fetchedModels: formFetchedModels,
+              pingEnabled: true,
+            },
+            undefined,
+            'manual',
+          ).catch((e) => console.warn('[health] ping after fetch failed', e))
+        }
+      }
     } catch (err) {
       fetchError = err instanceof Error ? err.message : 'Failed to fetch models'
     } finally {
@@ -177,8 +200,7 @@
       openCollapsibles = new SvelteSet(openCollapsibles)
 
       if (editingProfileId === profile.id) {
-        if (saveTimeout) clearTimeout(saveTimeout)
-        autoSaveEdit()
+        flushAutoSave()
         editingProfileId = null
       }
     }
@@ -205,23 +227,26 @@
       fetchedModels: formFetchedModels,
       hiddenModels: formHiddenModels,
       favoriteModels: formFavoriteModels,
+      pingEnabled: formPingEnabled,
       createdAt: existingProfile.createdAt,
     }
 
     saveStatus = 'saving'
-    await settings.updateProfile(profile.id, profile)
-    saveStatus = 'saved'
-    setTimeout(() => {
-      saveStatus = 'idle'
-    }, 2000)
-  }
-
-  function triggerAutoSave() {
-    if (saveTimeout) clearTimeout(saveTimeout)
-    saveTimeout = setTimeout(() => {
-      autoSaveEdit()
-      saveTimeout = null
-    }, 500)
+    try {
+      await settings.updateProfile(profile.id, profile)
+      if (!mounted) return
+      saveStatus = 'saved'
+      setTimeout(() => {
+        if (mounted && saveStatus === 'saved') saveStatus = 'idle'
+      }, 2000)
+    } catch (err) {
+      console.error('Failed to save API profile', err)
+      if (!mounted) return
+      saveStatus = 'error'
+      setTimeout(() => {
+        if (mounted && saveStatus === 'error') saveStatus = 'idle'
+      }, 3000)
+    }
   }
 
   $effect(() => {
@@ -235,16 +260,30 @@
         formFetchedModels,
         formHiddenModels,
         formFavoriteModels,
+        formPingEnabled,
       ]
       triggerAutoSave()
     }
   })
 
-  onDestroy(() => {
-    if (saveTimeout) {
-      clearTimeout(saveTimeout)
-      saveTimeout = null
+  // Trigger ping immediately when the toggle is switched on for an existing profile.
+  // Plain `let` (not $state): the effect writes to prevPingEnabled and we don't want
+  // that write to schedule a redundant effect rerun.
+  let prevPingEnabled = false
+  $effect(() => {
+    const current = formPingEnabled
+    if (current && !prevPingEnabled && editingProfileId && !isNewProfile) {
+      const existing = settings.getProfile(editingProfileId)
+      if (existing && isPingEligible({ ...existing, pingEnabled: true })) {
+        void pingProfileModels({ ...existing, pingEnabled: true }, undefined, 'manual')
+      }
     }
+    prevPingEnabled = current
+  })
+
+  onDestroy(() => {
+    mounted = false
+    flushAutoSave()
   })
 
   // Fix #1: shared handler to avoid duplication between new-profile and edit forms
@@ -256,6 +295,7 @@
     formCustomModels = []
     formHiddenModels = []
     formFavoriteModels = []
+    if (!isPingEligibleProvider(v)) formPingEnabled = false
     fetchError = null
   }
 </script>
@@ -295,6 +335,7 @@
           bind:customModels={formCustomModels}
           bind:hiddenModels={formHiddenModels}
           bind:favoriteModels={formFavoriteModels}
+          bind:pingEnabled={formPingEnabled}
           {isFetchingModels}
           {fetchError}
           onFetchModels={handleFetchModels}
@@ -407,6 +448,7 @@
                 bind:customModels={formCustomModels}
                 bind:hiddenModels={formHiddenModels}
                 bind:favoriteModels={formFavoriteModels}
+                bind:pingEnabled={formPingEnabled}
                 {isFetchingModels}
                 {fetchError}
                 onFetchModels={handleFetchModels}
@@ -420,8 +462,10 @@
               <p class="text-muted-foreground mt-2 min-h-[1lh] text-right text-xs">
                 {#if saveStatus === 'saving'}
                   Saving...
-                {:else if saveStatus !== 'idle'}
+                {:else if saveStatus === 'saved'}
                   ✓ Saved
+                {:else if saveStatus === 'error'}
+                  <span class="text-destructive">⚠ Save failed</span>
                 {/if}
               </p>
             </div>

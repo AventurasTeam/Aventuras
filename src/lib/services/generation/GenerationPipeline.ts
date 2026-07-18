@@ -8,13 +8,7 @@ import { createLogger } from '$lib/log'
 const log = createLogger('GenerationPipeline')
 
 import type { GenerationEvent, GenerationContext, ErrorEvent, RetrievalResult } from './types'
-import type {
-  EmbeddedImage,
-  ActionInputType,
-  TranslationSettings,
-  Character,
-  StoryBeat,
-} from '$lib/types'
+import type { ActionInputType, TranslationSettings, Character, StoryBeat } from '$lib/types'
 import type { StoryMode, POV, Tense } from '$lib/types'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
 import type { ActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
@@ -60,7 +54,6 @@ export interface PipelineDependencies
     PostGenerationDependencies {}
 
 export interface PipelineConfig {
-  embeddedImages: EmbeddedImage[]
   rawInput: string
   actionType: ActionInputType
   wasRawActionChoice: boolean
@@ -128,7 +121,6 @@ export class GenerationPipeline {
     try {
       r.preGeneration = yield* this.prePhase.execute({
         context: ctx,
-        embeddedImages: cfg.embeddedImages,
         rawInput: cfg.rawInput,
         actionType: cfg.actionType,
         wasRawActionChoice: cfg.wasRawActionChoice,

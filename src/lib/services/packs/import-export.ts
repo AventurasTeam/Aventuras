@@ -1,5 +1,6 @@
-import { save, open } from '@tauri-apps/plugin-dialog'
+import { open } from '@tauri-apps/plugin-dialog'
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs'
+import { resolveSaveTarget } from '$lib/services/exportTarget'
 import { packService } from './pack-service'
 import { database } from '$lib/services/database'
 import { validatePackImport, type PackExport } from './validation'
@@ -52,14 +53,12 @@ class ImportExportService {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '') + '.prompt.json'
 
-    const filePath = await save({
-      defaultPath: suggestedName,
-      filters: [{ name: 'Prompt Pack', extensions: ['prompt.json'] }],
-    })
+    const target = await resolveSaveTarget(suggestedName, [
+      { name: 'Prompt Pack', extensions: ['prompt.json'] },
+    ])
+    if (!target) return false
 
-    if (!filePath) return false
-
-    await writeTextFile(filePath, JSON.stringify(exportData, null, 2))
+    await writeTextFile(target.destPath, JSON.stringify(exportData))
     return true
   }
 

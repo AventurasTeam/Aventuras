@@ -4,7 +4,7 @@
  * Handles chapter summarization and memory retrieval for long-form narratives.
  */
 
-import type { Chapter, StoryEntry } from '$lib/types'
+import type { Chapter, StoryEntry, SummaryDetail } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import {
@@ -26,6 +26,19 @@ export const DEFAULT_MEMORY_CONFIG = {
   autoSummarize: true,
   enableRetrieval: true,
   maxChaptersPerRetrieval: 3,
+  summaryDetail: 'auto' as SummaryDetail,
+}
+
+/**
+ * Instruction injected into the chapter-summarization prompt to control summary
+ * length and thoroughness. Selected by the story's MemoryConfig.summaryDetail.
+ */
+const SUMMARY_DETAIL_INSTRUCTIONS: Record<SummaryDetail, string> = {
+  concise:
+    'Keep the summary tight and focused: a few sentences capturing only the essential events of the arc. Write one paragraph.',
+  auto: 'Summarize the most important facts and events in chronological order. Write two paragraphs.',
+  precise:
+    'Be thorough and chronological: cover every significant event, decision, and state change in order, so no plot point is lost. Write at least two paragraphs.',
 }
 
 export interface RetrievedContext {
@@ -53,10 +66,12 @@ export class MemoryService extends BaseAIService {
     mode: string = 'adventure',
     pov: string = 'second',
     tense: string = 'present',
+    summaryDetail: SummaryDetail = 'auto',
   ): Promise<ChapterSummaryResult> {
     log('summarizeChapter', {
       entryCount: entries.length,
       previousChaptersCount: previousChapters?.length ?? 0,
+      summaryDetail,
     })
 
     const entriesText = entries.map((e) => `[${e.type}]: ${e.content}`).join('\n\n')
@@ -73,6 +88,8 @@ export class MemoryService extends BaseAIService {
       tense,
       chapterContent: entriesText,
       previousContext: previousChaptersContext,
+      detailInstruction:
+        SUMMARY_DETAIL_INSTRUCTIONS[summaryDetail] ?? SUMMARY_DETAIL_INSTRUCTIONS.auto,
     })
     const { system, user: prompt } = await ctx.render('chapter-summarization')
 

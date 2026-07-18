@@ -1,6 +1,12 @@
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 
+export function countRequests(debugLogs: Array<DebugLogEntry>) {
+  return debugLogs.reduce((req, e) => {
+    return req + (e.type === 'request' ? 1 : 0)
+  }, 0)
+}
+
 // Debug log entry for request/response logging
 export type DebugLogEntry = {
   id: string
@@ -15,7 +21,10 @@ export type DebugLogEntry = {
 class DebugStore {
   // Debug mode state - session-only request/response logging
   isActive = $state(false)
-  debugLogs = $state<DebugLogEntry[]>([])
+  // Non-reactive storage - UI pulls updates via getSnapshot()
+  private debugLogs: DebugLogEntry[] = []
+  // Reactive signal that increments when logs change - UI can track this
+  logsVersion = $state(0)
   debugModalOpen = $state(false)
   debugWindowActive = $state(false)
   debugRenderNewlines = $state(false)
@@ -25,7 +34,32 @@ class DebugStore {
   private unlistenClearLogs: UnlistenFn | null = null
   private unlistenToggleRenderNewlines: UnlistenFn | null = null
 
+  /**
+   * Get a snapshot of current logs. UI should call this when logsVersion changes.
+   */
+  getSnapshot(): DebugLogEntry[] {
+    return [...this.debugLogs]
+  }
+
+  /**
+   * Get current log count reactively.
+   */
+  get requestCount(): number {
+    // touch logsVersion to make this reactive
+    void this.logsVersion
+    return countRequests(this.debugLogs)
+  }
+
   // Debug log methods
+  private appendLogEntry(entry: DebugLogEntry) {
+    // Keep only last 100 entries to prevent memory issues
+    if (this.debugLogs.push(entry) > 100) {
+      this.debugLogs = this.debugLogs.slice(-100)
+    }
+
+    // Signal that logs have changed
+    this.logsVersion++
+  }
 
   /** Max IPC payload size for external window events (~500KB). */
   private static readonly DEBUG_IPC_LIMIT = 500_000
@@ -64,10 +98,8 @@ class DebugStore {
       serviceName,
       data,
     }
-    // Keep only last 100 entries to prevent memory issues
-    if (this.debugLogs.push(entry) > 100) {
-      this.debugLogs = this.debugLogs.slice(-100)
-    }
+
+    this.appendLogEntry(entry)
 
     // Notify external window if active
     if (this.debugWindowActive) {
@@ -101,6 +133,9 @@ class DebugStore {
       existingEntry.duration = Date.now() - startTime
       if (error) existingEntry.error = error
 
+      // Signal that logs have changed
+      this.logsVersion++
+
       // Notify external window
       if (this.debugWindowActive) {
         emit('debug-log-added', this.safeIpcEntry(existingEntry)).catch((err) => {
@@ -119,10 +154,8 @@ class DebugStore {
       duration: Date.now() - startTime,
       error,
     }
-    // Keep only last 100 entries to prevent memory issues
-    if (this.debugLogs.push(entry) > 100) {
-      this.debugLogs = this.debugLogs.slice(-100)
-    }
+
+    this.appendLogEntry(entry)
 
     // Notify external window if active
     if (this.debugWindowActive) {
@@ -138,6 +171,7 @@ class DebugStore {
    */
   clearDebugLogs() {
     this.debugLogs = []
+    this.logsVersion++
     if (this.debugWindowActive) {
       emit('debug-logs-cleared', {}).catch((err) => {
         console.warn('[UI] Failed to emit debug-logs-cleared:', err)

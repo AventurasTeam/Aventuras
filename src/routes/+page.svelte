@@ -5,6 +5,7 @@
   import { grammarService } from '$lib/services/grammar'
   import { updaterService } from '$lib/services/updater'
   import { packService } from '$lib/services/packs/pack-service'
+  import { warmupAllProfiles } from '$lib/services/modelHealthOrchestrator'
   import AppShell from '$lib/components/layout/AppShell.svelte'
   import WelcomeScreen from '$lib/components/intro/WelcomeScreen.svelte'
 
@@ -22,6 +23,9 @@
 
       // Initialize settings from database
       await settings.init()
+
+      // Warm up model health cache now that settings (profiles, models) are loaded
+      warmupAllProfiles().catch((err) => console.warn('[health] warmup failed', err))
 
       // Check if this is a first-run (new user)
       if (!settings.firstRunComplete) {

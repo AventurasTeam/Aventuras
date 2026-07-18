@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { debug, type DebugLogEntry } from '$lib/stores/debug.svelte'
+  import { untrack } from 'svelte'
+  import { countRequests, debug, type DebugLogEntry } from '$lib/stores/debug.svelte'
   import { ExternalLink, RefreshCcw } from 'lucide-svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -9,42 +10,47 @@
   let throttledLogs = $state<DebugLogEntry[]>([])
   let lastUpdateTime = 0
   let pendingUpdate: ReturnType<typeof setTimeout> | null = null
+  let showContent = $state(false)
 
-  // Update throttled logs when modal opens or logs change (throttled)
+  // Single effect to handle both modal opening and log updates
   $effect(() => {
+    // Early exit if modal is closed or window is popped out
     if (!debug.debugModalOpen || debug.debugWindowActive) {
       if (pendingUpdate) {
         clearTimeout(pendingUpdate)
         pendingUpdate = null
       }
+      showContent = false
+      lastUpdateTime = 0 // Reset to force immediate sync on next open
+      throttledLogs = [] // Clear stale snapshot
       return
     }
 
-    const logs = debug.debugLogs
+    // Track logsVersion to know when logs change
+    void debug.logsVersion
+
     const now = Date.now()
     const timeSinceLastUpdate = now - lastUpdateTime
 
-    if (timeSinceLastUpdate >= 500) {
-      throttledLogs = [...logs]
+    // Immediate update if: first open (lastUpdateTime === 0) or throttle period elapsed
+    if (lastUpdateTime === 0 || timeSinceLastUpdate >= 500) {
+      throttledLogs = debug.getSnapshot()
       lastUpdateTime = now
       if (pendingUpdate) {
         clearTimeout(pendingUpdate)
         pendingUpdate = null
       }
+
+      if (untrack(() => !showContent)) {
+        showContent = true
+      }
     } else if (!pendingUpdate) {
+      // Schedule update for remaining throttle time
       pendingUpdate = setTimeout(() => {
-        throttledLogs = [...debug.debugLogs]
+        throttledLogs = debug.getSnapshot()
         lastUpdateTime = Date.now()
         pendingUpdate = null
       }, 500 - timeSinceLastUpdate)
-    }
-  })
-
-  // Sync immediately when modal opens
-  $effect(() => {
-    if (debug.debugModalOpen && !debug.debugWindowActive) {
-      throttledLogs = [...debug.debugLogs]
-      lastUpdateTime = Date.now()
     }
   })
 
@@ -71,7 +77,7 @@
             <span
               class="bg-secondary text-secondary-foreground rounded px-2 py-0.5 font-mono text-xs"
             >
-              {debug.debugLogs.length}
+              {countRequests(throttledLogs)}
             </span>
           </div>
 
@@ -110,6 +116,10 @@
             <RefreshCcw class="h-4 w-4" />
             Bring Back to Modal
           </Button>
+        </div>
+      {:else if !showContent}
+        <div class="flex flex-1 flex-col items-center justify-center p-8">
+          <div class="text-muted-foreground animate-pulse text-sm">Loading logs...</div>
         </div>
       {:else}
         <DebugLogView

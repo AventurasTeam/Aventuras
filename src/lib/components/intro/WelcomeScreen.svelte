@@ -413,7 +413,7 @@
 
 <style>
   .welcome-screen {
-    padding-top: max(env(safe-area-inset-top, 0px), 1rem);
-    padding-bottom: max(env(safe-area-inset-bottom, 0px), 1rem);
+    padding-top: max(var(--safe-top), 1rem);
+    padding-bottom: max(var(--safe-bottom), 1rem);
   }
 </style>

@@ -54,6 +54,7 @@ import type {
   StoryEntry,
   StoryMode,
   StorySettings,
+  SummaryDetail,
   Tense,
   TimeTracker,
 } from '$lib/types'
@@ -420,9 +421,17 @@ class AIService {
     mode: StoryMode = 'adventure',
     pov?: POV,
     tense?: Tense,
+    summaryDetail: SummaryDetail = 'auto',
   ): Promise<ChapterSummaryResult> {
     const memoryService = serviceFactory.createMemoryService()
-    return memoryService.summarizeChapter(entries, previousChapters, mode, pov, tense)
+    return memoryService.summarizeChapter(
+      entries,
+      previousChapters,
+      mode,
+      pov,
+      tense,
+      summaryDetail,
+    )
   }
 
   /**
@@ -435,9 +444,10 @@ class AIService {
     mode: StoryMode = 'adventure',
     pov?: POV,
     tense?: Tense,
+    summaryDetail: SummaryDetail = 'auto',
   ): Promise<ChapterSummaryResult> {
     const memoryService = serviceFactory.createMemoryService()
-    return memoryService.summarizeChapter(entries, allChapters, mode, pov, tense)
+    return memoryService.summarizeChapter(entries, allChapters, mode, pov, tense, summaryDetail)
   }
 
   /**

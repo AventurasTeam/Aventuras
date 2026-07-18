@@ -13,7 +13,6 @@ import type {
   StorySettings,
   Entry,
   TimeTracker,
-  EmbeddedImage,
   PersistentCharacterSnapshot,
   WorldStateDelta,
   WorldStateSnapshot,
@@ -173,6 +172,16 @@ class StoryStore {
 
   get pendingQuests(): StoryBeat[] {
     return this.storyBeats.filter((b) => b.status === 'pending' || b.status === 'active')
+  }
+
+  get lastUserActionId(): string | null {
+    // Search from the end for efficiency
+    for (let i = this.entries.length - 1; i >= 0; i--) {
+      if (this.entries[i].type === 'user_action') {
+        return this.entries[i].id
+      }
+    }
+    return null
   }
 
   get wordCount(): number {
@@ -407,13 +416,13 @@ class StoryStore {
       }
     }
 
-    // Delete invalid chapters from database and local state
-    for (const chapterId of chaptersToDelete) {
+    // Delete invalid chapters from database and local state (batched)
+    if (chaptersToDelete.length > 0) {
       try {
-        await database.deleteChapter(chapterId)
-        log('Deleted invalid chapter:', chapterId)
+        await database.deleteChapters(chaptersToDelete)
+        log('Deleted invalid chapters:', chaptersToDelete)
       } catch (error) {
-        log('Failed to delete invalid chapter:', chapterId, error)
+        log('Failed to delete invalid chapters:', chaptersToDelete, error)
       }
     }
 
@@ -1090,17 +1099,13 @@ class StoryStore {
       })
 
       // Delete chapters first (to satisfy foreign key constraints)
-      for (const chapter of chaptersToDelete) {
-        await database.deleteChapter(chapter.id)
-      }
+      await database.deleteChapters(chaptersToDelete.map((ch) => ch.id))
       this.chapters = this.chapters.filter((ch) => !chaptersToDelete.some((d) => d.id === ch.id))
     }
 
     // Delete embedded images for entries being deleted
     // (explicit deletion to ensure cleanup even if CASCADE isn't working)
-    for (const entry of entriesToDelete) {
-      await database.deleteEmbeddedImagesForEntry(entry.id)
-    }
+    await database.deleteEmbeddedImagesForEntries(entriesToDelete.map((entry) => entry.id))
 
     // Now delete entries from database
     if (entriesToDelete.length > 0) {
@@ -1151,7 +1156,7 @@ class StoryStore {
 
     // Embedded images are not in memory - fetch from database to find ones to delete
     // Note: Many embedded images may already be deleted via CASCADE when entries are deleted
-    const currentEmbeddedImages = await database.getEmbeddedImagesForStory(this.currentStory.id)
+    const currentEmbeddedImages = await database.getEmbeddedImageMetaForStory(this.currentStory.id)
     const embeddedImagesToDelete = savedIds.embeddedImageIds
       ? currentEmbeddedImages.filter((ei) => !embeddedImageIdsSet.has(ei.id))
       : []
@@ -1164,22 +1169,12 @@ class StoryStore {
       embeddedImages: embeddedImagesToDelete.length,
     })
 
-    // Delete from database
-    for (const character of charactersToDelete) {
-      await database.deleteCharacter(character.id)
-    }
-    for (const location of locationsToDelete) {
-      await database.deleteLocation(location.id)
-    }
-    for (const item of itemsToDelete) {
-      await database.deleteItem(item.id)
-    }
-    for (const storyBeat of storyBeatsToDelete) {
-      await database.deleteStoryBeat(storyBeat.id)
-    }
-    for (const embeddedImage of embeddedImagesToDelete) {
-      await database.deleteEmbeddedImage(embeddedImage.id)
-    }
+    // Delete from database (batched: one query per entity type, not one per id)
+    await database.deleteCharacters(charactersToDelete.map((c) => c.id))
+    await database.deleteLocations(locationsToDelete.map((l) => l.id))
+    await database.deleteItems(itemsToDelete.map((i) => i.id))
+    await database.deleteStoryBeats(storyBeatsToDelete.map((sb) => sb.id))
+    await database.deleteEmbeddedImages(embeddedImagesToDelete.map((ei) => ei.id))
 
     // Update in-memory state
     this.characters = this.characters.filter((c) => characterIdsSet.has(c.id))
@@ -3068,9 +3063,6 @@ class StoryStore {
     // Get previous chapters for context (branch-filtered)
     const previousChapters = [...this.currentBranchChapters].sort((a, b) => a.number - b.number)
 
-    // Import aiService dynamically to avoid circular dependency
-    const { aiService } = await import('$lib/services/ai')
-
     // Generate summary with previous chapters as context
     const chapterData = await aiService.summarizeChapter(
       chapterEntries,
@@ -3078,6 +3070,7 @@ class StoryStore {
       this.currentStory?.mode ?? 'adventure',
       this.pov,
       this.tense,
+      this.memoryConfig.summaryDetail,
     )
 
     // Get the next chapter number
@@ -3885,7 +3878,6 @@ class StoryStore {
     items: Item[]
     storyBeats: StoryBeat[]
     lorebookEntries?: Entry[] // Optional - lorebook entries persist across retry operations
-    embeddedImages: EmbeddedImage[]
     timeTracker?: TimeTracker | null
     entryCountBeforeAction: number
   }): Promise<void> {
@@ -3920,7 +3912,6 @@ class StoryStore {
         entriesCount: backup.entries.length,
         currentEntriesCount: this.entries.length,
         entriesToDelete: entryIdsToDelete.length,
-        embeddedImagesCount: backup.embeddedImages.length,
       })
 
       // Restore to database (branch-aware: only delete/restore world state for current branch)
@@ -3966,7 +3957,6 @@ class StoryStore {
         entries: this.entries.length,
         characters: this.characters.length,
         locations: this.locations.length,
-        embeddedImages: backup.embeddedImages.length,
       })
     } finally {
       // Always unlock editing when restore completes or fails

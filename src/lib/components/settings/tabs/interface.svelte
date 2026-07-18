@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { settings } from '$lib/stores/settings.svelte'
+  import { settings, STORY_WIDTH_OPTIONS } from '$lib/stores/settings.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { database } from '$lib/services/database'
   import { grammarService } from '$lib/services/grammar'
   import { THEMES } from '../../../../themes/themes'
   import { Switch } from '$lib/components/ui/switch'
+  import { Slider } from '$lib/components/ui/slider'
   import { Label } from '$lib/components/ui/label'
   import * as Select from '$lib/components/ui/select'
   import { Button } from '$lib/components/ui/button'
@@ -16,6 +17,13 @@
   import { getSupportedLanguages } from '$lib/services/ai/utils/TranslationService'
   import { updaterService } from '$lib/services/updater'
   import { RefreshCw, Loader2, Languages, Plus, X, Trash2 } from 'lucide-svelte'
+
+  const storyWidthIndex = $derived(
+    Math.max(
+      0,
+      STORY_WIDTH_OPTIONS.findIndex((o) => o.key === settings.uiSettings.storyMaxWidth),
+    ),
+  )
 
   let isCheckingUpdates = $state(false)
   let updateMessage = $state<string | null>(null)
@@ -185,6 +193,31 @@
         {/each}
       </Select.Content>
     </Select.Root>
+  </div>
+
+  <!-- Story Content Width -->
+  <div class="space-y-2">
+    <div class="flex items-center justify-between">
+      <Label>Story Content Width</Label>
+      <span class="text-muted-foreground text-sm">
+        {STORY_WIDTH_OPTIONS[storyWidthIndex]?.label ?? 'Default'}
+      </span>
+    </div>
+    <p class="text-muted-foreground text-xs">
+      Max width of the story area — applies to text and inline images
+    </p>
+    <Slider
+      type="single"
+      min={0}
+      max={STORY_WIDTH_OPTIONS.length - 1}
+      step={1}
+      value={storyWidthIndex}
+      onValueChange={(idx) => settings.setStoryMaxWidth(STORY_WIDTH_OPTIONS[idx].key)}
+    />
+    <div class="text-muted-foreground flex justify-between text-xs">
+      <span>{STORY_WIDTH_OPTIONS[0].label}</span>
+      <span>{STORY_WIDTH_OPTIONS[STORY_WIDTH_OPTIONS.length - 1].label}</span>
+    </div>
   </div>
 
   <!-- Word Count Toggle -->

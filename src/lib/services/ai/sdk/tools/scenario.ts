@@ -281,8 +281,12 @@ export function createScenarioTools(context: ScenarioToolContext) {
 
         // Strip tool-only keys that aren't real schema fields
         const { replaceTags: _rt, replaceAlternateGreetings: _rag, ...scalarUpdates } = updates
+        // Strip undefined, null, and empty-string values to prevent
+        // accidental overwrites (e.g. the AI sending description: null)
         const cleanUpdates = Object.fromEntries(
-          Object.entries(scalarUpdates).filter(([_, v]) => v !== undefined),
+          Object.entries(scalarUpdates).filter(
+            ([_, v]) => v !== undefined && v !== null && v !== '',
+          ),
         ) as Partial<z.infer<typeof vaultScenarioInputSchema>>
 
         const previous = toScenarioInput(scenario)

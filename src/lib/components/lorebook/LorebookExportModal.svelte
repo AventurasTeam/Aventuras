@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ui } from '$lib/stores/ui.svelte'
+  import { errMessage } from '$lib/utils/error'
   import { story } from '$lib/stores/story.svelte'
   import { LorebookImportExport } from '$lib/services/lorebookImportExport'
   import { Download, FileJson, FileText, Loader2 } from 'lucide-svelte'
@@ -43,7 +44,7 @@
       ui.showToast('Export successful', 'info')
       ui.closeLorebookExport()
     } catch (err) {
-      ui.showToast(err instanceof Error ? err.message : 'Export failed', 'error')
+      ui.showToast(`Export failed: ${errMessage(err)}`, 'error')
     } finally {
       exporting = false
     }

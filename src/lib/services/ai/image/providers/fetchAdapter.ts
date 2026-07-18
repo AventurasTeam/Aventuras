@@ -103,27 +103,37 @@ export async function imageFetch(options: {
         startTime,
         errorText,
       )
+      const err = errorPayload as any
+      const humanMessage =
+        typeof errorPayload === 'string'
+          ? errorPayload
+          : (err?.error?.message ?? err?.message ?? err?.error)
       throw new Error(
-        `Image API error ${response.status}: ${typeof errorPayload === 'string' ? errorPayload : JSON.stringify(errorPayload)}`,
+        `Image API error ${response.status}: ${humanMessage ?? JSON.stringify(errorPayload)}`,
       )
     }
 
-    // Log successful response for debug panel
-    const text = await response.text()
-    let responsePayload: unknown
-    try {
-      responsePayload = JSON.parse(text)
-    } catch {
-      responsePayload = { size: text.length }
+    // Only buffer the body for the debug panel when debug is active. Otherwise hand the
+    // response straight to the caller (which chooses .json()/.blob()): this avoids forcing
+    // text() on every response — which would also corrupt binary image bodies — and skips a
+    // redundant full-body copy + double parse.
+    if (debug.isActive) {
+      response
+        .clone()
+        .text()
+        .then((text) => {
+          let responsePayload: unknown
+          try {
+            responsePayload = JSON.parse(text)
+          } catch {
+            responsePayload = { size: text.length }
+          }
+          debug.addDebugResponse(debugId, serviceId, { body: responsePayload }, startTime)
+        })
+        .catch(() => {})
     }
-    debug.addDebugResponse(debugId, serviceId, { body: responsePayload }, startTime)
 
-    // Return a new response with the consumed text
-    return new Response(text, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-    })
+    return response
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new Error(`Image generation timed out after ${timeoutMs / 1000}s`)

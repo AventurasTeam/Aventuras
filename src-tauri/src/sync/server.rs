@@ -77,7 +77,8 @@ async fn handle_sync(
     match request.action {
         SyncAction::ListStories => {
             let stories = state.stories.lock().await;
-            let previews: Vec<SyncStoryPreview> = stories.iter().map(|s| s.preview.clone()).collect();
+            let previews: Vec<SyncStoryPreview> =
+                stories.iter().map(|s| s.preview.clone()).collect();
             Json(SyncResponse::StoriesList { stories: previews })
         }
         SyncAction::PullStory { story_id } => {

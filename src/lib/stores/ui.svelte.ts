@@ -11,7 +11,7 @@ import type {
   PersistentStyleReviewState,
   PersistentStyleReviewResult,
   TimeTracker,
-  EmbeddedImage,
+  EmbeddedImageMeta,
   PersistentCharacterSnapshot,
 } from '$lib/types'
 import type { ActionChoice } from '$lib/services/ai/sdk/schemas/actionchoices'
@@ -42,7 +42,6 @@ export interface RetryBackup {
   locations: Location[]
   items: Item[]
   storyBeats: StoryBeat[]
-  embeddedImages: EmbeddedImage[]
   // The user's input to re-trigger
   userActionContent: string
   rawInput: string
@@ -110,7 +109,7 @@ class UIStore {
   imagesGenerating = $state(0) // Count of images currently being generated
 
   // Gallery image cache - persists across component unmounts
-  private galleryImageCache = new SvelteMap<string, EmbeddedImage[]>()
+  private galleryImageCache = new SvelteMap<string, EmbeddedImageMeta[]>()
 
   // Streaming state
   streamingContent = $state('')
@@ -158,11 +157,11 @@ class UIStore {
   }
 
   // Gallery image cache methods
-  getGalleryImages(storyId: string): EmbeddedImage[] | undefined {
+  getGalleryImages(storyId: string): EmbeddedImageMeta[] | undefined {
     return this.galleryImageCache.get(storyId)
   }
 
-  setGalleryImages(storyId: string, images: EmbeddedImage[]): void {
+  setGalleryImages(storyId: string, images: EmbeddedImageMeta[]): void {
     this.galleryImageCache.set(storyId, images)
   }
 
@@ -308,6 +307,9 @@ class UIStore {
 
   toggleSidebar() {
     this.sidebarOpen = !this.sidebarOpen
+    database
+      .setSetting('sidebar_open', this.sidebarOpen.toString())
+      .catch((err) => console.warn('[UI] Failed to persist sidebar state:', err))
   }
 
   /**
@@ -317,6 +319,8 @@ class UIStore {
   setMobileDefaults() {
     if (typeof window !== 'undefined' && window.innerWidth < 640) {
       this.sidebarOpen = false
+      // No DB persist — this is a layout constraint, not a user preference.
+      // Persisting here would overwrite the desktop sidebar preference.
     }
   }
 
@@ -480,7 +484,7 @@ class UIStore {
     locations: Location[],
     items: Item[],
     storyBeats: StoryBeat[],
-    embeddedImages: EmbeddedImage[],
+    embeddedImageIds: string[],
     userActionContent: string,
     rawInput: string,
     actionType: ActionInputType,
@@ -496,7 +500,6 @@ class UIStore {
     const locationIds = locations.map((l) => l.id)
     const itemIds = items.map((i) => i.id)
     const storyBeatIds = storyBeats.map((sb) => sb.id)
-    const embeddedImageIds = embeddedImages.map((ei) => ei.id)
     const characterSnapshots: PersistentCharacterSnapshot[] = characters.map((c) => ({
       id: c.id,
       traits: [...(c.traits ?? [])],
@@ -542,7 +545,6 @@ class UIStore {
       timestamp,
       // Large data - shallow copy to break potential proxy chains
       entries: [...entries],
-      embeddedImages: [...embeddedImages],
       // Smaller data - shallow copy to break proxy chains
       characters: copyCharacters(characters),
       locations: copyLocations(locations),
@@ -732,7 +734,6 @@ class UIStore {
       locations: [],
       items: [],
       storyBeats: [],
-      embeddedImages: [],
       // User input data
       userActionContent: retryState.userActionContent,
       rawInput: retryState.rawInput,

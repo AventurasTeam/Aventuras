@@ -114,155 +114,162 @@ export function createTimeoutFetch(
       // We log the error asynchronously and return the original response immediately.
       // This ensures the SDK receives the correct status and body for its own error handling.
       if (!response.ok) {
-        const clonedResponse = response.clone()
-        clonedResponse
-          .text()
-          .then((text) => {
-            let errorPayload
-            try {
-              errorPayload = JSON.parse(text)
-            } catch {
-              errorPayload = text
-            }
-            debug.addDebugResponse(
-              debugId,
-              serviceId,
-              {
-                status: response.status,
-                statusText: response.statusText,
-                error: errorPayload,
-              },
-              startTime,
-              text,
-            )
-          })
-          .catch((err) => {
-            console.warn('[Fetch] Failed to read error response for logging:', err)
-          })
+        // Only buffer the body when debug logging is active — otherwise reading a clone
+        // of every error response just wastes memory.
+        if (debug.isActive) {
+          const clonedResponse = response.clone()
+          clonedResponse
+            .text()
+            .then((text) => {
+              let errorPayload
+              try {
+                errorPayload = JSON.parse(text)
+              } catch {
+                errorPayload = text
+              }
+              debug.addDebugResponse(
+                debugId,
+                serviceId,
+                {
+                  status: response.status,
+                  statusText: response.statusText,
+                  error: errorPayload,
+                },
+                startTime,
+                text,
+              )
+            })
+            .catch((err) => {
+              console.warn('[Fetch] Failed to read error response for logging:', err)
+            })
+        }
         return response
       }
 
       // Path B: Non-JSON Success Response (mostly Streams)
       if (!response.headers.get('content-type')?.includes('application/json')) {
-        const clonedResponse = response.clone()
-        clonedResponse
-          .text()
-          .then((text) => {
-            let parsedBody: any = text
-            const providerMetadata: Record<string, any> = {}
-            try {
-              const chunks = text.split('\n\n').filter((c) => c.trim())
-              const parsedChunks = chunks.map((chunk) => {
-                if (chunk.startsWith('data: ')) {
-                  const dataStr = chunk.slice(6)
-                  if (dataStr === '[DONE]') return { done: true }
-                  try {
-                    const parsed = JSON.parse(dataStr)
-                    if (parsed.promptFeedback)
-                      providerMetadata.promptFeedback = parsed.promptFeedback
-                    if (parsed.candidates?.[0]?.safetyRatings) {
-                      providerMetadata.safetyRatings = parsed.candidates[0].safetyRatings
-                    }
-                    return parsed
-                  } catch {
-                    return chunk
-                  }
-                }
-                return chunk
-              })
-
-              // Aggregation logic for streaming choices...
-              const aggregatedChoices: Record<number, any> = {}
-              let aggregatedId = ''
-              let aggregatedModel = ''
-              let hasAggregation = false
-
-              for (const chunk of parsedChunks) {
-                if (typeof chunk !== 'object' || !chunk || !chunk.choices) continue
-                hasAggregation = true
-                if (chunk.id) aggregatedId = chunk.id
-                if (chunk.model) aggregatedModel = chunk.model
-
-                for (const choice of chunk.choices) {
-                  const idx = choice.index
-                  if (!aggregatedChoices[idx]) {
-                    aggregatedChoices[idx] = {
-                      index: idx,
-                      message: { role: 'assistant', content: '' },
-                      finish_reason: null,
-                    }
-                  }
-                  const agg = aggregatedChoices[idx]
-                  const delta = choice.delta || {}
-                  if (delta.role) agg.message.role = delta.role
-                  if (delta.content) agg.message.content += delta.content
-                  if (delta.reasoning)
-                    agg.message.reasoning = (agg.message.reasoning || '') + delta.reasoning
-                  if (delta.tool_calls) {
-                    if (!agg.message.tool_calls) agg.message.tool_calls = []
-                    for (const tc of delta.tool_calls) {
-                      const tcIdx = tc.index
-                      let aggTc = agg.message.tool_calls.find((t: any) => t.index === tcIdx)
-                      if (!aggTc) {
-                        aggTc = {
-                          index: tcIdx,
-                          id: '',
-                          type: 'function',
-                          function: { name: '', arguments: '' },
-                        }
-                        agg.message.tool_calls.push(aggTc)
+        // Stream/non-JSON success — only buffer the full body for the debug panel when active.
+        if (debug.isActive) {
+          const clonedResponse = response.clone()
+          clonedResponse
+            .text()
+            .then((text) => {
+              let parsedBody: any = text
+              const providerMetadata: Record<string, any> = {}
+              try {
+                const chunks = text.split('\n\n').filter((c) => c.trim())
+                const parsedChunks = chunks.map((chunk) => {
+                  if (chunk.startsWith('data: ')) {
+                    const dataStr = chunk.slice(6)
+                    if (dataStr === '[DONE]') return { done: true }
+                    try {
+                      const parsed = JSON.parse(dataStr)
+                      if (parsed.promptFeedback)
+                        providerMetadata.promptFeedback = parsed.promptFeedback
+                      if (parsed.candidates?.[0]?.safetyRatings) {
+                        providerMetadata.safetyRatings = parsed.candidates[0].safetyRatings
                       }
-                      if (tc.id) aggTc.id = tc.id
-                      if (tc.type) aggTc.type = tc.type
-                      if (tc.function?.name) aggTc.function.name = tc.function.name
-                      if (typeof tc.function?.arguments === 'string')
-                        aggTc.function.arguments += tc.function.arguments
+                      return parsed
+                    } catch {
+                      return chunk
                     }
                   }
-                  if (choice.finish_reason !== undefined && choice.finish_reason !== null)
-                    agg.finish_reason = choice.finish_reason
-                }
-              }
-
-              if (hasAggregation) {
-                const finalChoices = Object.values(aggregatedChoices).map((choice: any) => {
-                  if (choice.message.tool_calls) {
-                    choice.message.tool_calls = choice.message.tool_calls.map((tc: any) => {
-                      try {
-                        tc.function.parsed_arguments = JSON.parse(tc.function.arguments)
-                      } catch {}
-                      return tc
-                    })
-                  }
-                  return choice
+                  return chunk
                 })
 
-                parsedBody = {
-                  _note: 'Aggregated from stream',
-                  id: aggregatedId,
-                  model: aggregatedModel,
-                  choices: finalChoices,
-                }
-              } else if (parsedChunks.length > 0) {
-                parsedBody = parsedChunks
-              }
-            } catch {}
+                // Aggregation logic for streaming choices...
+                const aggregatedChoices: Record<number, any> = {}
+                let aggregatedId = ''
+                let aggregatedModel = ''
+                let hasAggregation = false
 
-            debug.addDebugResponse(
-              debugId,
-              serviceId,
-              {
-                body: parsedBody,
-                providerMetadata:
-                  Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined,
-                stream: true,
-              },
-              startTime,
-            )
-          })
-          .catch((err) => {
-            console.warn('[Fetch] Failed to read streaming response for logging:', err)
-          })
+                for (const chunk of parsedChunks) {
+                  if (typeof chunk !== 'object' || !chunk || !chunk.choices) continue
+                  hasAggregation = true
+                  if (chunk.id) aggregatedId = chunk.id
+                  if (chunk.model) aggregatedModel = chunk.model
+
+                  for (const choice of chunk.choices) {
+                    const idx = choice.index
+                    if (!aggregatedChoices[idx]) {
+                      aggregatedChoices[idx] = {
+                        index: idx,
+                        message: { role: 'assistant', content: '' },
+                        finish_reason: null,
+                      }
+                    }
+                    const agg = aggregatedChoices[idx]
+                    const delta = choice.delta || {}
+                    if (delta.role) agg.message.role = delta.role
+                    if (delta.content) agg.message.content += delta.content
+                    if (delta.reasoning)
+                      agg.message.reasoning = (agg.message.reasoning || '') + delta.reasoning
+                    if (delta.tool_calls) {
+                      if (!agg.message.tool_calls) agg.message.tool_calls = []
+                      for (const tc of delta.tool_calls) {
+                        const tcIdx = tc.index
+                        let aggTc = agg.message.tool_calls.find((t: any) => t.index === tcIdx)
+                        if (!aggTc) {
+                          aggTc = {
+                            index: tcIdx,
+                            id: '',
+                            type: 'function',
+                            function: { name: '', arguments: '' },
+                          }
+                          agg.message.tool_calls.push(aggTc)
+                        }
+                        if (tc.id) aggTc.id = tc.id
+                        if (tc.type) aggTc.type = tc.type
+                        if (tc.function?.name) aggTc.function.name = tc.function.name
+                        if (typeof tc.function?.arguments === 'string')
+                          aggTc.function.arguments += tc.function.arguments
+                      }
+                    }
+                    if (choice.finish_reason !== undefined && choice.finish_reason !== null)
+                      agg.finish_reason = choice.finish_reason
+                  }
+                }
+
+                if (hasAggregation) {
+                  const finalChoices = Object.values(aggregatedChoices).map((choice: any) => {
+                    if (choice.message.tool_calls) {
+                      choice.message.tool_calls = choice.message.tool_calls.map((tc: any) => {
+                        try {
+                          tc.function.parsed_arguments = JSON.parse(tc.function.arguments)
+                        } catch {}
+                        return tc
+                      })
+                    }
+                    return choice
+                  })
+
+                  parsedBody = {
+                    _note: 'Aggregated from stream',
+                    id: aggregatedId,
+                    model: aggregatedModel,
+                    choices: finalChoices,
+                  }
+                } else if (parsedChunks.length > 0) {
+                  parsedBody = parsedChunks
+                }
+              } catch {}
+
+              debug.addDebugResponse(
+                debugId,
+                serviceId,
+                {
+                  body: parsedBody,
+                  providerMetadata:
+                    Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined,
+                  stream: true,
+                },
+                startTime,
+              )
+            })
+            .catch((err) => {
+              console.warn('[Fetch] Failed to read streaming response for logging:', err)
+            })
+        }
         return response
       }
 

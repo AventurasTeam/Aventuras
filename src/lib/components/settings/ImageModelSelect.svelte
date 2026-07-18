@@ -113,7 +113,14 @@
       {/if}
     </div>
   {:else if filteredModels.length === 0}
-    <p class="text-muted-foreground text-sm">No models available</p>
+    <div class="flex items-center justify-between gap-2">
+      <p class="text-muted-foreground text-sm">No models available</p>
+      {#if showRefreshButton && onRefresh}
+        <Button variant="ghost" size="icon" onclick={onRefresh} aria-label="Refresh models">
+          <RefreshCw class="h-4 w-4" />
+        </Button>
+      {/if}
+    </div>
   {:else}
     <div class="flex items-center gap-2">
       <div class="flex-1">
@@ -170,8 +177,8 @@
         </Autocomplete>
       </div>
       {#if showRefreshButton && onRefresh}
-        <Button variant="ghost" size="icon" onclick={onRefresh} disabled={isLoading}>
-          <RefreshCw class="h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
+        <Button variant="ghost" size="icon" onclick={onRefresh} aria-label="Refresh models">
+          <RefreshCw class="h-4 w-4" />
         </Button>
       {/if}
     </div>

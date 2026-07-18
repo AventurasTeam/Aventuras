@@ -16,6 +16,7 @@ import type {
   PersistentStyleReviewState,
   TimeTracker,
   EmbeddedImage,
+  EmbeddedImageMeta,
   EmbeddedImageStatus,
   VaultCharacter,
   VaultLorebook,
@@ -112,12 +113,27 @@ function migrateVisualDescriptors(data: unknown): VisualDescriptors {
 
 class DatabaseService {
   private db: Database | null = null
+  /** Pending open promise — prevents concurrent callers from opening the DB twice. */
+  private dbPromise: Promise<Database> | null = null
 
   async init(): Promise<void> {
     if (this.db) return
-    this.db = await Database.load('sqlite:aventura.db')
-    // Enable foreign key enforcement (SQLite disables by default)
-    await this.db.execute('PRAGMA foreign_keys = ON')
+    if (!this.dbPromise) {
+      this.dbPromise = Database.load('sqlite:aventura.db')
+        .then(async (db) => {
+          // Enable foreign key enforcement (SQLite disables by default).
+          // Must run exactly once per connection; placing it here (instead of
+          // after the await below) avoids concurrent callers re-issuing it.
+          await db.execute('PRAGMA foreign_keys = ON')
+          this.db = db
+          return db
+        })
+        .catch((err) => {
+          this.dbPromise = null
+          throw err
+        })
+    }
+    await this.dbPromise
   }
 
   /**
@@ -128,6 +144,7 @@ class DatabaseService {
     if (this.db) {
       await this.db.close()
       this.db = null
+      this.dbPromise = null
     }
   }
 
@@ -202,6 +219,88 @@ class DatabaseService {
     await db.execute('DELETE FROM settings WHERE key = ?', [key])
   }
 
+  // Model health cache operations
+  async getModelHealthForKey(
+    providerId: string,
+    baseUrl: string,
+  ): Promise<
+    Array<{
+      model_id: string
+      status: string
+      http_code: number | null
+      latency_ms: number | null
+      quota_percent: number | null
+      checked_at: number
+    }>
+  > {
+    const db = await this.getDb()
+    return db.select(
+      `SELECT model_id, status, http_code, latency_ms, quota_percent, checked_at
+       FROM model_health_cache WHERE provider_id = ? AND base_url = ?`,
+      [providerId, baseUrl],
+    )
+  }
+
+  async upsertModelHealthBatch(
+    rows: Array<{
+      providerId: string
+      modelId: string
+      baseUrl: string
+      status: string
+      httpCode: number | null
+      latencyMs: number | null
+      quotaPercent: number | null
+      checkedAt: number
+    }>,
+  ): Promise<void> {
+    if (rows.length === 0) return
+    const db = await this.getDb()
+    // Chunked to stay below SQLite's SQLITE_LIMIT_VARIABLE_NUMBER.
+    // Modern SQLite supports 32766; 1000 rows × 8 params = 8000 — well within limits.
+    const BATCH_SIZE = 1000
+
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const chunk = rows.slice(i, i + BATCH_SIZE)
+      const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(',')
+      const values: unknown[] = []
+
+      for (const r of chunk) {
+        values.push(
+          r.providerId,
+          r.modelId,
+          r.baseUrl,
+          r.status,
+          r.httpCode,
+          r.latencyMs,
+          r.quotaPercent,
+          r.checkedAt,
+        )
+      }
+
+      await db.execute(
+        `INSERT INTO model_health_cache
+          (provider_id, model_id, base_url, status, http_code, latency_ms, quota_percent, checked_at)
+         VALUES ${placeholders}
+         ON CONFLICT(provider_id, model_id, base_url)
+         DO UPDATE SET
+           status        = excluded.status,
+           http_code     = excluded.http_code,
+           latency_ms    = excluded.latency_ms,
+           quota_percent = excluded.quota_percent,
+           checked_at    = excluded.checked_at`,
+        values,
+      )
+    }
+  }
+
+  async deleteModelHealthForKey(providerId: string, baseUrl: string): Promise<void> {
+    const db = await this.getDb()
+    await db.execute('DELETE FROM model_health_cache WHERE provider_id = ? AND base_url = ?', [
+      providerId,
+      baseUrl,
+    ])
+  }
+
   async getAllSettings(): Promise<Record<string, string>> {
     const db = await this.getDb()
     const results = await db.select<{ key: string; value: string }[]>(
@@ -227,6 +326,13 @@ class DatabaseService {
     const db = await this.getDb()
     const results = await db.select<any[]>('SELECT * FROM stories ORDER BY updated_at DESC')
     return results.map(this.mapStory)
+  }
+
+  /** Number of stories, without loading any row data (cheap COUNT query). */
+  async countStories(): Promise<number> {
+    const db = await this.getDb()
+    const results = await db.select<{ n: number }[]>('SELECT COUNT(*) as n FROM stories')
+    return results[0]?.n ?? 0
   }
 
   async getStory(id: string): Promise<Story | null> {
@@ -1555,23 +1661,8 @@ class DatabaseService {
       await this.addStoryBeat(beat)
     }
 
-    // Restore embedded images
-    /*     for (const image of embeddedImages) {
-      await this.createEmbeddedImage({
-        id: image.id,
-        storyId: image.storyId,
-        entryId: image.entryId,
-        sourceText: image.sourceText,
-        prompt: image.prompt,
-        styleId: image.styleId,
-        model: image.model,
-        imageData: image.imageData,
-        width: image.width,
-        height: image.height,
-        status: image.status,
-        errorMessage: image.errorMessage,
-      })
-    } */
+    // Embedded images are intentionally not restored here: they are cascade-deleted with
+    // their story_entries and re-created by generation, so there is nothing to re-insert.
   }
 
   // ===== Branch Operations (for story branching/alternate timelines) =====
@@ -2223,7 +2314,7 @@ class DatabaseService {
       'SELECT * FROM embedded_images WHERE entry_id = ? ORDER BY created_at ASC',
       [entryId],
     )
-    return results.map(this.mapEmbeddedImage)
+    return results.map((row) => this.mapEmbeddedImage(row))
   }
 
   async getEmbeddedImagesForStory(storyId: string): Promise<EmbeddedImage[]> {
@@ -2232,7 +2323,36 @@ class DatabaseService {
       'SELECT * FROM embedded_images WHERE story_id = ? ORDER BY created_at ASC',
       [storyId],
     )
-    return results.map(this.mapEmbeddedImage)
+    return results.map((row) => this.mapEmbeddedImage(row))
+  }
+
+  /** Just the ids of a story's embedded images (no row data) — for retry bookkeeping. */
+  async getEmbeddedImageIdsForStory(storyId: string): Promise<string[]> {
+    const db = await this.getDb()
+    const results = await db.select<{ id: string }[]>(
+      'SELECT id FROM embedded_images WHERE story_id = ?',
+      [storyId],
+    )
+    return results.map((r) => r.id)
+  }
+
+  /**
+   * Like getEmbeddedImagesForStory but WITHOUT the base64 `image_data` column.
+   *
+   * Used on hot paths (message send, retry backup) that only need metadata. Avoids
+   * pushing the base64 of every story image through the Tauri SQL/IPC bridge in a
+   * single buffer, which caused Android OOM crashes. Read the pixels per-id with
+   * getEmbeddedImage() only when actually needed.
+   */
+  async getEmbeddedImageMetaForStory(storyId: string): Promise<EmbeddedImageMeta[]> {
+    const db = await this.getDb()
+    const results = await db.select<any[]>(
+      `SELECT id, story_id, entry_id, source_text, prompt, style_id, model,
+              width, height, status, error_message, created_at
+       FROM embedded_images WHERE story_id = ? ORDER BY created_at ASC`,
+      [storyId],
+    )
+    return results.map((row) => this.mapEmbeddedImageMeta(row))
   }
 
   async createEmbeddedImage(image: Omit<EmbeddedImage, 'createdAt'>): Promise<EmbeddedImage> {
@@ -2323,6 +2443,49 @@ class DatabaseService {
   async deleteEmbeddedImagesForEntry(entryId: string): Promise<void> {
     const db = await this.getDb()
     await db.execute('DELETE FROM embedded_images WHERE entry_id = ?', [entryId])
+  }
+
+  /**
+   * Delete rows by id in a single query (chunked to stay under SQLite's variable limit),
+   * instead of one round-trip per id. `column`/`table` are internal literals, never user input.
+   */
+  private async deleteByIds(table: string, ids: string[], column = 'id'): Promise<void> {
+    if (ids.length === 0) return
+    const db = await this.getDb()
+    const CHUNK = 500 // well under SQLite's 999 bound-parameter limit
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const slice = ids.slice(i, i + CHUNK)
+      const placeholders = slice.map(() => '?').join(',')
+      await db.execute(`DELETE FROM ${table} WHERE ${column} IN (${placeholders})`, slice)
+    }
+  }
+
+  async deleteCharacters(ids: string[]): Promise<void> {
+    await this.deleteByIds('characters', ids)
+  }
+
+  async deleteLocations(ids: string[]): Promise<void> {
+    await this.deleteByIds('locations', ids)
+  }
+
+  async deleteItems(ids: string[]): Promise<void> {
+    await this.deleteByIds('items', ids)
+  }
+
+  async deleteStoryBeats(ids: string[]): Promise<void> {
+    await this.deleteByIds('story_beats', ids)
+  }
+
+  async deleteEmbeddedImages(ids: string[]): Promise<void> {
+    await this.deleteByIds('embedded_images', ids)
+  }
+
+  async deleteChapters(ids: string[]): Promise<void> {
+    await this.deleteByIds('chapters', ids)
+  }
+
+  async deleteEmbeddedImagesForEntries(entryIds: string[]): Promise<void> {
+    await this.deleteByIds('embedded_images', entryIds, 'entry_id')
   }
 
   /**
@@ -2422,7 +2585,7 @@ class DatabaseService {
     return deleted
   }
 
-  private mapEmbeddedImage(row: any): EmbeddedImage {
+  private mapEmbeddedImageMeta(row: any): EmbeddedImageMeta {
     const sourceText = row.source_text
     // Detect inline images by checking if sourceText is a <pic> tag
     const isInline = sourceText && sourceText.trim().startsWith('<pic ')
@@ -2435,13 +2598,19 @@ class DatabaseService {
       prompt: row.prompt,
       styleId: row.style_id,
       model: row.model,
-      imageData: row.image_data,
       width: row.width ?? undefined,
       height: row.height ?? undefined,
       status: row.status as EmbeddedImageStatus,
       errorMessage: row.error_message ?? undefined,
       generationMode: isInline ? 'inline' : 'analyzed',
       createdAt: row.created_at,
+    }
+  }
+
+  private mapEmbeddedImage(row: any): EmbeddedImage {
+    return {
+      ...this.mapEmbeddedImageMeta(row),
+      imageData: row.image_data,
     }
   }
 
@@ -3252,8 +3421,8 @@ class DatabaseService {
   async createVaultConversation(conversation: VaultConversation): Promise<void> {
     const db = await this.getDb()
     await db.execute(
-      `INSERT INTO vault_assistant_conversations (id, title, created_at, updated_at, messages, chat_messages, pending_changes)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO vault_assistant_conversations (id, title, created_at, updated_at, messages, chat_messages, pending_changes, entry_versions)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         conversation.id,
         conversation.title,
@@ -3262,6 +3431,7 @@ class DatabaseService {
         conversation.messages,
         conversation.chatMessages,
         conversation.pendingChanges,
+        conversation.entryVersions ?? '[]',
       ],
     )
   }
@@ -3285,7 +3455,13 @@ class DatabaseService {
 
   async saveVaultConversation(
     id: string,
-    updates: { title?: string; messages?: string; chatMessages?: string; pendingChanges?: string },
+    updates: {
+      title?: string
+      messages?: string
+      chatMessages?: string
+      pendingChanges?: string
+      entryVersions?: string
+    },
   ): Promise<void> {
     const db = await this.getDb()
     const setClauses: string[] = ['updated_at = ?']
@@ -3306,6 +3482,10 @@ class DatabaseService {
     if (updates.pendingChanges !== undefined) {
       setClauses.push('pending_changes = ?')
       values.push(updates.pendingChanges)
+    }
+    if (updates.entryVersions !== undefined) {
+      setClauses.push('entry_versions = ?')
+      values.push(updates.entryVersions)
     }
 
     values.push(id)
@@ -3329,6 +3509,7 @@ class DatabaseService {
       messages: row.messages,
       chatMessages: row.chat_messages ?? '[]',
       pendingChanges: row.pending_changes ?? '[]',
+      entryVersions: row.entry_versions ?? undefined,
     }
   }
 

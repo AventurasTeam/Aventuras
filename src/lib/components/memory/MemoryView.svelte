@@ -158,6 +158,7 @@
         story.currentStory?.mode ?? 'adventure',
         story.pov,
         story.tense,
+        story.memoryConfig.summaryDetail,
       )
 
       // Update the chapter with new summary and metadata

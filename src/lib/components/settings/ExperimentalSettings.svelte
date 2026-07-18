@@ -36,7 +36,10 @@
   import * as Dialog from '$lib/components/ui/dialog'
   import { database } from '$lib/services/database'
   import { isAndroid } from '$lib/utils/platform'
-  import { ask } from '@tauri-apps/plugin-dialog'
+  import { ask, open } from '@tauri-apps/plugin-dialog'
+  import { openFilters } from '$lib/utils/dialogFilters'
+  import { invoke } from '@tauri-apps/api/core'
+  import { errMessage } from '$lib/utils/error'
 
   // Local mirror so we can revert the visual state if the confirm dialog is cancelled
   let stateTrackingChecked = $state(settings.experimentalFeatures.stateTracking)
@@ -88,7 +91,7 @@
       queryResult = result
     } catch (error) {
       queryTime = Math.round(performance.now() - start)
-      queryError = error instanceof Error ? error.message : String(error)
+      queryError = errMessage(error)
     } finally {
       isQuerying = false
     }
@@ -117,9 +120,9 @@
     backupResult = null
     try {
       const { backupService } = await import('$lib/services/backupService')
-      const result = await backupService.createFullBackup()
-      if (result) {
-        backupResult = { success: true, message: 'Backup created successfully!' }
+      const savedPath = await backupService.createFullBackup()
+      if (savedPath) {
+        backupResult = { success: true, message: `Backup saved to:\n${savedPath}` }
         hasEverBackedUp = true
       } else {
         backupResult = { success: false, message: 'Backup cancelled.' }
@@ -128,7 +131,7 @@
       console.error('[ExperimentalSettings] Backup failed:', error)
       backupResult = {
         success: false,
-        message: `Backup failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        message: `Backup failed: ${errMessage(error)}`,
       }
     } finally {
       isBackingUp = false
@@ -141,26 +144,49 @@
 
   async function handleRestoreConfirmed() {
     showRestoreConfirm = false
+    restoreError = null
 
-    // Open file picker AFTER confirmation
-    const { open } = await import('@tauri-apps/plugin-dialog')
+    // Pick the backup file. On Android this returns a SAF content:// URI; on desktop a real path.
     const selected = await open({
       title: 'Select Aventura Backup to Restore',
-      filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
+      // openFilters drops these on Android. It matters here: SAF appends " (1)" AFTER ".zip" for
+      // duplicate names, and Android cannot resolve a MIME type for "backup.zip (1)", so a
+      // zip-filtered picker would grey out the very backup the user is trying to restore.
+      filters: openFilters([
+        { name: 'ZIP Archive', extensions: ['zip'] },
+        { name: 'All Files', extensions: ['*'] },
+      ]),
       multiple: false,
       directory: false,
     })
     if (!selected) return
 
+    let zipPath = selected as string
+    // Android: the picked content:// URI can't be std::fs-opened by the native restore, so stream
+    // it into a real temp file first (natively — no bytes cross the JS bridge), then restore that.
+    if (isAndroid()) {
+      isRestoring = true
+      try {
+        zipPath = await invoke<string>('import_saf_to_temp', { srcUri: selected })
+      } catch (error) {
+        restoreError = errMessage(error)
+        isRestoring = false
+        return
+      }
+    }
+    await doRestore(zipPath)
+  }
+
+  async function doRestore(zipPath: string) {
     isRestoring = true
     restoreError = null
     try {
       const { backupService } = await import('$lib/services/backupService')
-      await backupService.restoreFromBackup(selected as string)
+      await backupService.restoreFromBackup(zipPath)
       // App will exit — we won't reach here
     } catch (error) {
       console.error('[ExperimentalSettings] Restore failed:', error)
-      restoreError = error instanceof Error ? error.message : String(error)
+      restoreError = errMessage(error)
     } finally {
       isRestoring = false
     }
@@ -270,9 +296,9 @@
       <Label class="text-sm font-medium">Data Safety</Label>
     </div>
     <p class="text-muted-foreground text-xs">
-      Download a full backup of your database and all stories as a ZIP archive. Includes the raw
-      SQLite database and individual story exports (.avt) for maximum safety. You can restore from a
-      backup to revert to a previous state.
+      Download a full backup of your database as a ZIP archive. It contains the raw SQLite database,
+      which holds every story, lorebook entry and image. You can restore from a backup to revert to
+      a previous state.
     </p>
     <div class="flex items-center gap-3">
       <Button
