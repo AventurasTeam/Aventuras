@@ -1,11 +1,19 @@
-// The web sanitize step exists for dangerouslySetInnerHTML: juice inlines
-// <style> blocks and DOMPurify strips executable content. Neither tool runs
-// under Metro's native resolution (both reach Node builtins via jsdom), and
-// neither threat applies: react-native-render-html has no script execution
-// and ignores <style>/<script> tags, and its inline-style translation covers
-// only the RN style subset (no url()-bearing properties). Passthrough keeps
-// native renders identical to what RenderHTML would extract from the
-// sanitized document anyway.
+// The explicit client build: cheerio-only, no Node builtins (Metro's android
+// resolution ignores the package's `browser` main field and would pull the
+// fs-dependent Node entry).
+import juice from 'juice/client'
+
+// Native keeps the juice step so <style> blocks a provider emits inline into style=""
+// attributes react-native-render-html can translate; without it stylesheet
+// styling silently disappears on Android while web renders it. DOMPurify is
+// skipped: it needs a DOM, and its threats don't apply — RNRH executes no
+// scripts, ignores <script>, and its style translation covers only the RN
+// style subset (no url()-bearing properties).
 export function sanitizeHtml(html: string): string {
-  return html
+  try {
+    return juice(html)
+  } catch {
+    // Malformed provider CSS must degrade to unstyled content, not a crash.
+    return html
+  }
 }
