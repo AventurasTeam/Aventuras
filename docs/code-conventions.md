@@ -110,6 +110,31 @@ caller can desync it from the database — the footgun of a setter that
 mutates memory without persisting (silently lost on the next hydrate)
 never exists to be called.
 
+Two hydrate shapes, split by who touches the DB:
+
+- **Row-fed `hydrate(...)` is a method on the store object**
+  (`entriesStore.hydrate(branchId, rows)`,
+  `wizardStore.hydrate(state)`) — the caller (an action) already
+  holds the rows; the store just applies them.
+- **DB-reading refresh is a free `rehydrateX(db)` export colocated
+  with its store** (`rehydrateStories`, `rehydrateAppSettings`) —
+  it reads SQLite itself, so it sits beside the store rather than
+  on it, keeping the store object free of query code. Don't fold
+  these into the store namespace.
+
+### Read-view immutability
+
+Wherever a store hands out a reference that aliases live state — a
+getter return, a `useX` selector input, an exported snapshot type —
+array, `Record`, and `Map` fields are typed `readonly` /
+`ReadonlyMap`, so in-place mutation (`push`, index-assign, `set`)
+is a compile error at the call site instead of a silent store write
+that fires no subscriber notification. Array/record level is
+enough; deep per-field `readonly` is overkill. Derived helpers that
+return freshly-built arrays (`getByKind` and friends) carry the
+same `readonly` annotation for consistency, and downstream
+signatures accept `readonly T[]` rather than forcing copies.
+
 Re-hydrate is the default and, for a singleton or small row, is
 effectively instant: one indexed read, a few milliseconds across the
 desktop IPC bridge. A store hot enough that re-reading it per edit
