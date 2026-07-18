@@ -13,7 +13,6 @@ export const TEMPLATE_IDS = {
 
 export const MACRO_IDS = {
   outputFormatNarrative: 'macro_output_format_narrative',
-  outputFormatJson: 'macro_output_format_json',
 } as const
 
 export type TemplateId = (typeof TEMPLATE_IDS)[keyof typeof TEMPLATE_IDS]

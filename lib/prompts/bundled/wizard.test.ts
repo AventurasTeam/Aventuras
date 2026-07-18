@@ -23,13 +23,12 @@ const leadlessCtx = {
 }
 
 describe('WIZARD_OPENING template', () => {
-  it('instructs the JSON fields (prose, sceneEntities, currentLocationId, worldTime)', () => {
+  it('carries creative content only — no output-format directives (middleware-injected)', () => {
     const out = renderTemplate(TEMPLATE_IDS.wizardOpening, leadCtx)
-    expect(out).toContain('prose')
-    expect(out).toContain('sceneEntities')
-    expect(out).toContain('currentLocationId')
-    expect(out).toContain('worldTime')
-    expect(out.toLowerCase()).toContain('json') // from macro_output_format_json ("single JSON object")
+    expect(out).toContain('opening passage')
+    // The JSON contract (field list + format directive) is injected at call
+    // time by lib/ai's prompt-schema middleware, never baked into the pack.
+    expect(out.toLowerCase()).not.toContain('json')
   })
 
   it('names the lead and its cast id when present', () => {
@@ -58,7 +57,7 @@ describe('WIZARD_OPENING template', () => {
 })
 
 describe('WIZARD_DESCRIPTION template', () => {
-  it('asks for a synopsis/description and emits JSON, not next-beat narrative', () => {
+  it('asks for a synopsis/description, not next-beat narrative', () => {
     const out = renderTemplate(TEMPLATE_IDS.wizardDescription, {
       opening: { content: 'Once upon a time.' },
     })

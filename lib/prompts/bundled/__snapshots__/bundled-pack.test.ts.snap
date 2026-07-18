@@ -4,10 +4,5 @@ exports[`bundled pack > renders the wizard opening from definition + lead 1`] = 
 "Write the opening passage of a adventure story.
 Setting: A frozen coast.
 The lead character is Aria (cast id: c1).
-Return a JSON object with these fields:
-- "prose" (string): the opening passage as a string.
-- "sceneEntities" (array of string): cast ids present in the scene (use the exact cast id(s) provided above; [] if none).
-- "currentLocationId" (string or null): the location id where the scene opens, or null.
-- "worldTime" (always 0).
-Respond with a single JSON object and nothing else. Do not wrap it in markdown fences."
+"
 `;

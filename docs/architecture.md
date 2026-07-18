@@ -139,8 +139,21 @@ Example built-in macros:
   the source descriptor
 - `macro_output_format_narrative` (`staticContent`) — the output
   instruction block for narrative generation
-- `macro_output_format_json` (`staticContent`) — generic JSON output
-  directive
+
+### Structured output — the JSON contract is not pack content
+
+Agent calls that parse a typed reply (wizard assist, classifiers)
+declare a Zod schema in code; `lib/ai` renders it into the call at
+request time, so templates carry creative content only and a pack
+edit can never break reply parsing. Field descriptions authored with
+`.describe()` on the schema reach the model as comments on the
+rendered interface. The profile's `structuredOutput` param picks the
+mechanism: `force-on` sends the schema as the provider-native
+response format; `force-off` appends it to the prompt as a
+TypeScript `interface Response` block via AI SDK middleware
+(`lib/ai/prompt-schema.ts`); `auto` takes the prompt-injection path
+until provider capability detection lands, at which point it will
+follow the detected capability.
 
 ### Template and macro id space
 

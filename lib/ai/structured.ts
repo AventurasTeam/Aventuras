@@ -1,8 +1,14 @@
+import { wrapLanguageModel } from 'ai'
 import { jsonrepair } from 'jsonrepair'
-import type { z } from 'zod'
+import { z } from 'zod'
 
 import { resolveProviderCall } from './agent-call'
 import { type ResolveTarget } from './agents'
+import {
+  jsonResponseFormatMiddleware,
+  promptSchemaMiddleware,
+  type JsonSchema,
+} from './prompt-schema'
 import { type ResolveFailureKind, type ResolveModelConfig } from './resolve-model'
 import { callWithRetry, type CallRetryError } from './transport/call-with-retry'
 import { runProviderCall } from './transport/provider-call'
@@ -43,11 +49,24 @@ export async function generateStructured<T>(
   const resolved = resolveProviderCall(target, config)
   if (!resolved.ok) return { status: 'not-configured', kind: resolved.kind }
 
+  const jsonSchema = z.toJSONSchema(schema) as JsonSchema
+  // 'auto' takes the prompt-injection path: there is no provider capability
+  // signal yet, so native responseFormat stays opt-in via 'force-on'.
+  const model = wrapLanguageModel({
+    // getModel only ever returns provider instances, never the
+    // gateway-model-id string arm of LanguageModel.
+    model: resolved.model as Parameters<typeof wrapLanguageModel>[0]['model'],
+    middleware:
+      resolved.params.structuredOutput === 'force-on'
+        ? [jsonResponseFormatMiddleware(jsonSchema)]
+        : [jsonResponseFormatMiddleware(jsonSchema), promptSchemaMiddleware()],
+  })
+
   const result = await callWithRetry<T>(
     async (sig) =>
       (
         await runProviderCall({
-          model: resolved.model,
+          model,
           prompt,
           abortSignal: sig,
           ...resolved.callOptions,
