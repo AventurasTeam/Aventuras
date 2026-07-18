@@ -1363,6 +1363,14 @@ to `detail` alone otherwise.
 
 ### V1 declarations
 
+Concrete pipeline definitions (declaration + phase functions +
+prompt-context builders) live in `lib/pipeline/definitions/`, not in
+`lib/actions/` — a definition is declarative pipeline content that
+writes exclusively through emitted events, while an action is an
+imperative store+SQLite write function. The action layer keeps only
+the triggers (e.g. `submitTurn` writes the user_action row, then
+starts the run).
+
 ```ts
 const perTurnPipeline: Pipeline = {
   kind: 'per-turn',

@@ -173,7 +173,7 @@ None outstanding — both resolved during implementation:
   `runPipeline`, with reverse-all abort semantics; see
   Implementation notes → Abort semantics.
 - **Per-turn context-builder hygiene** (surfaced by Slice 2.6) —
-  `lib/actions/turns/context.ts` normalizes whitespace-only
+  `lib/pipeline/definitions/per-turn-context.ts` normalizes whitespace-only
   definitional fields via `blankIfWhitespace` (covered by
   `context.test.ts`, which also asserts the rendered template's
   guarded headers and the pinned `generationContext` variable

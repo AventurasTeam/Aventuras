@@ -25,7 +25,6 @@ import {
   ENTRIES_WINDOW_SIZE,
   getRollbackCounts,
   loadOpenStory,
-  PER_TURN_KIND,
   readRecentEntries,
   redoLastAction,
   rollbackToEntry,
@@ -40,7 +39,12 @@ import { wrapComposerText } from '@/lib/composer-wrap'
 import { branches, db, runInTransaction, storyEntries, type StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
-import { awaitRunTerminal, pipelineEventBus, type PipelineError } from '@/lib/pipeline'
+import {
+  awaitRunTerminal,
+  PER_TURN_KIND,
+  pipelineEventBus,
+  type PipelineError,
+} from '@/lib/pipeline'
 import { createAutoscrollMachine } from '@/lib/reader-scroll'
 import {
   currentStoryStore,

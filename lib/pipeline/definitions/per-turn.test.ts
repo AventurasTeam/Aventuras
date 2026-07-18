@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { APP_SETTINGS_DEFAULTS } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
-import { getPipeline } from '@/lib/pipeline'
 import { appSettingsStore, currentStoryStore, entriesStore, resetAllStores } from '@/lib/stores'
 
-import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './pipeline'
+import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './per-turn'
+import { getPipeline } from '../authoring/registry'
 
 const { streamAgentCallMock } = vi.hoisted(() => ({
   streamAgentCallMock: vi.fn(),

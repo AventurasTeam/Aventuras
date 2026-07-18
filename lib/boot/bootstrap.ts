@@ -26,7 +26,7 @@ export function ensureDiagnosticsGate(): void {
 }
 
 // lib/pipeline can't import @/lib/actions directly (require cycle through
-// turns/pipeline.ts), so the real delta-action functions are wired in here.
+// submit-turn.ts), so the real delta-action functions are wired in here.
 export function ensureDeltaActionPort(): void {
   configureDeltaActionPort({
     applyDeltaAction,

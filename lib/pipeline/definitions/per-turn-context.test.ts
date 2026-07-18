@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { IdBiMap } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 
-import { buildPerTurnGenerationContext } from './context'
+import { buildPerTurnGenerationContext } from './per-turn-context'
 
 const definition = {
   mode: 'adventure' as const,

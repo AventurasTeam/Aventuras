@@ -3,17 +3,13 @@ import { eq, sql } from 'drizzle-orm'
 import { streamAgentCall } from '@/lib/ai'
 import { storyEntries, type EntryMetadata } from '@/lib/db'
 import { generateId, IdBiMap } from '@/lib/ids'
-import {
-  definePipeline,
-  getPipeline,
-  type PhaseContext,
-  type PhaseEmittedEvent,
-  type PhaseResult,
-} from '@/lib/pipeline'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
 
-import { buildPerTurnGenerationContext } from './context'
+import { buildPerTurnGenerationContext } from './per-turn-context'
+import { definePipeline } from '../authoring/define'
+import { getPipeline } from '../authoring/registry'
+import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
 export const PER_TURN_KIND = 'per-turn'
 

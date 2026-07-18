@@ -14,9 +14,10 @@ export type DeltaActionPort = {
 
 let port: DeltaActionPort | undefined
 
-// @/lib/actions/turns/pipeline.ts imports @/lib/pipeline, so lib/pipeline must
-// not import @/lib/actions directly — that would close a require cycle. The
-// real functions are wired in once at boot (lib/boot/bootstrap.ts).
+// @/lib/actions (submit-turn) imports @/lib/pipeline to trigger runs, so
+// lib/pipeline must not import @/lib/actions directly — that would close a
+// require cycle. The real functions are wired in once at boot
+// (lib/boot/bootstrap.ts).
 export function configureDeltaActionPort(p: DeltaActionPort): void {
   port = p
 }

@@ -8,10 +8,9 @@ import {
   storySettingsSchema,
   type StoryEntry,
 } from '@/lib/db'
-import { definePipeline, getPipeline, type PhaseResult } from '@/lib/pipeline'
+import { definePipeline, getPipeline, PER_TURN_KIND, type PhaseResult } from '@/lib/pipeline'
 import { currentStoryStore, entriesStore, hydrateAppSettings, undoRedoStore } from '@/lib/stores'
 
-import { PER_TURN_KIND } from './pipeline'
 import { submitTurn } from './submit-turn'
 import { expectRan, makeHarness, resetSingletons } from '../../pipeline/__tests__/harness'
 
