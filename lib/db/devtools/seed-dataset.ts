@@ -1233,6 +1233,186 @@ function fillerStoryRows(): {
 }
 
 // ---------------------------------------------------------------------------
+// Rich-rendering story — provider-authored visual HTML that exceeds the RNRH
+// subset, driving the rich-entry path (ui/patterns/rich-entry-rendering.md).
+// Feeds the on-device validation checklist: boot latency, WebView count,
+// scroll fps, and the item-7 security probes (which must render inert).
+// ---------------------------------------------------------------------------
+
+const RICH = 'story_rich'
+const RMAIN = 'branch_rich_main'
+
+const RICH_OPENING =
+  'A plain opening: the gallery of impossible rooms admits one visitor at a time. Every door beyond this one is painted in styles no honest wall should hold.'
+
+const RICH_ACTIONS = [
+  'I step into the next room and study the wall.',
+  'I run a hand along the frame, checking for seams.',
+  'I note what the plaque claims and move on.',
+  'I compare this room with the one before it.',
+]
+
+// Each payload is one provider-authored rich rendering the plain RNRH tail
+// cannot express. Labels keep on-device triage readable.
+const RICH_PAYLOADS: readonly { label: string; md: string }[] = [
+  {
+    label: 'gradient panel',
+    md: 'The first room breathes color.\n\n<div style="background: linear-gradient(135deg, #0f172a, #6d28d9); color: #f8fafc; padding: 14px; border-radius: 10px">A wall of dusk-to-violet light, edge to edge.</div>',
+  },
+  {
+    label: 'keyframes glow',
+    md: 'Something in here pulses.\n\n<style>@keyframes seed-pulse { 50% { opacity: 0.35 } } .seed-glow { animation: seed-pulse 1.6s infinite }</style><p class="seed-glow">The lantern dims and returns, dims and returns.</p>',
+  },
+  {
+    label: 'pipe table',
+    md: 'The plaque lists the exhibits:\n\n| Room | Style | Verdict |\n| ---- | ----- | ------- |\n| I | Gradient | unsettling |\n| II | Animated | worse |\n| III | Tabular | honest |',
+  },
+  {
+    label: 'grid layout',
+    md: 'Two alcoves face each other.\n\n<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px"><div style="background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 6px">Left: a chair, facing away.</div><div style="background: #334155; color: #e2e8f0; padding: 10px; border-radius: 6px">Right: a chair, facing you.</div></div>',
+  },
+  {
+    label: 'positioned badge',
+    md: 'A catalogue card hangs crooked.\n\n<div style="position: relative; border: 1px solid #64748b; border-radius: 8px; padding: 12px">Exhibit IV — the frame is empty.<span style="position: absolute; top: -8px; right: 10px; background: #dc2626; color: #fff; padding: 2px 8px; border-radius: 999px; font-size: 12px">ON LOAN</span></div>',
+  },
+  {
+    label: 'media query',
+    md: 'The room resizes to fit its visitor.\n\n<style>.seed-resp { padding: 10px; border-radius: 6px; background: #14532d; color: #dcfce7 } @media (max-width: 480px) { .seed-resp { background: #7c2d12; color: #ffedd5 } }</style><div class="seed-resp">Wide walls are green; narrow walls burn orange.</div>',
+  },
+  {
+    label: 'shadow card',
+    md: 'One plinth floats a finger above its shadow.\n\n<div style="box-shadow: 0 8px 24px rgba(0,0,0,0.45); border-radius: 12px; padding: 14px; border: 1px solid #475569">The stone does not touch the floor. The shadow disagrees.</div>',
+  },
+  {
+    label: 'pseudo-element',
+    md: 'The corridor numbers itself.\n\n<style>.seed-orn::before { content: "❖ "; color: #a855f7 }</style><p class="seed-orn">Every doorway wears the same violet mark.</p>',
+  },
+  {
+    label: 'long mixed rich',
+    md: [
+      '## The Long Gallery\n',
+      'It keeps going past where the building should end.\n',
+      '<div style="background: linear-gradient(90deg, #164e63, #0f172a); color: #e0f2fe; padding: 12px; border-radius: 8px">Case after case, the glass sweating cold.</div>\n',
+      '<style>@keyframes seed-drift { from { transform: translateX(0) } to { transform: translateX(6px) } } .seed-drift { animation: seed-drift 2.2s infinite alternate }</style><p class="seed-drift">The dust motes drift the wrong way.</p>\n',
+      '| Case | Contents |\n| ---- | -------- |\n| 12 | a key, label missing |\n| 13 | a label, key missing |\n| 14 | neither |\n',
+      'At the far end, a door you are certain was not there when you entered.',
+    ].join('\n'),
+  },
+  // Security probes — checklist item 7. Each must render as inert text /
+  // styling: scrub strips the fetch vectors, CSP backstops, the navigation
+  // lock catches the links. A network request or navigation here is a FAIL.
+  {
+    label: 'probe: url exfil',
+    md: 'PROBE url(): nothing in this room may phone home.\n\n<div style="background: url(https://probe.invalid/exfil.png); border: 1px solid #ef4444; padding: 10px">If this box fetched an image, the scrub failed.</div><style>.seed-exfil { background: url(/**/https://probe.invalid/comment.png) } @media screen { .seed-exfil2 { background: url(https://probe.invalid/media.png) } }</style>',
+  },
+  {
+    label: 'probe: import/font-face',
+    md: 'PROBE @import: external stylesheets must not load.\n\n<style>@import url("https://probe.invalid/x.css"); @font-face { font-family: Exfil; src: url(https://probe.invalid/f.woff2) } .seed-imp { border: 1px dashed #f59e0b; padding: 8px }</style><div class="seed-imp">A dashed amber border is the only styling this entry may keep.</div>',
+  },
+  {
+    label: 'probe: style breakout',
+    md: 'PROBE breakout: the stylesheet tries to close itself.\n\n<style>.seed-brk::after { content: "</style><img src=x onerror=console.error(\'breakout\')>" }</style><p class="seed-brk">If an image error fired, the escape hatch worked for the attacker.</p>',
+  },
+  {
+    label: 'probe: navigation lock',
+    // The gradient wrapper is load-bearing: bare anchors are RNRH-modeled and
+    // would stay on the plain path, never reaching the WebView this probes.
+    md: 'PROBE links: tapping these must never navigate the card.\n\n<div style="background: linear-gradient(90deg, #312e81, #111827); color: #e0e7ff; padding: 10px; border-radius: 8px"><p><a href="https://example.com">http link — should open the system browser</a></p><p><a href="javascript:console.error(\'js-href\')">javascript: link — should do nothing</a></p></div>',
+  },
+  {
+    label: 'probe: script',
+    md: 'PROBE script: no code runs in this room.\n\n<script>console.error("seed script executed")</script><img src="x" onerror="console.error(\'seed onerror executed\')"><p>Both payloads above must be stripped before this renders.</p>',
+  },
+]
+
+const N_RICH = 60
+
+function richEntries(): NewStoryEntry[] {
+  const rows: NewStoryEntry[] = []
+  let payloadIndex = 0
+  for (let i = 1; i <= N_RICH; i++) {
+    const kind: NewStoryEntry['kind'] =
+      i === 1 ? 'opening' : i % 2 === 0 ? 'user_action' : 'ai_reply'
+    let content: string
+    if (kind === 'opening') {
+      content = RICH_OPENING
+    } else if (kind === 'user_action') {
+      content = RICH_ACTIONS[(i / 2) % RICH_ACTIONS.length]!
+    } else {
+      // Every third reply stays plain so scroll runs cross mixed rows; the
+      // rest cycle the payload deck (probes included) and the deck restarts
+      // near the tail so a bottom-open lands on a dense rich stretch.
+      if (i % 3 === 0) {
+        content = `Room ${i}: an ordinary wall, restfully beige. ${REPLY_BEATS[i % REPLY_BEATS.length]}`
+      } else {
+        const payload = RICH_PAYLOADS[payloadIndex % RICH_PAYLOADS.length]!
+        payloadIndex += 1
+        content = payload.md
+      }
+    }
+    rows.push({
+      id: entryId('rich', i),
+      branchId: RMAIN,
+      position: i,
+      kind,
+      content,
+      chapterId: null,
+      metadata: entryMetadataSchema.parse({
+        sceneEntities: [],
+        currentLocationId: null,
+        worldTime: i,
+        ...(kind === 'ai_reply'
+          ? { model: 'seed/rich', tokens: { prompt: 600 + i, completion: 180 + i } }
+          : {}),
+      }),
+      createdAt: BASE + 2 * DAY + i * MIN,
+    })
+  }
+  return rows
+}
+
+function richStoryRows(): { story: NewStory; branch: NewBranch; entries: NewStoryEntry[] } {
+  const t0 = BASE + 2 * DAY
+  return {
+    story: {
+      id: RICH,
+      title: 'The Gallery of Impossible Rooms',
+      description:
+        'Rich-rendering validation set: gradients, animations, tables, layout, and the item-7 security probes.',
+      tags: ['dev', 'rich-rendering'],
+      accentColor: '#0ea5e9',
+      status: 'active',
+      favorite: 0,
+      lastOpenedAt: t0 + N_RICH * MIN,
+      // creative + third person: the only lead-entity-free combination, and
+      // this story needs no entity graph — it exists to render, not to play.
+      definition: definition({
+        mode: 'creative',
+        narration: 'third',
+        leadEntityId: null,
+        genre: 'surreal museum',
+        tone: 'deadpan curatorial',
+        setting: 'a gallery whose rooms are rendering testcases',
+      }),
+      settings: settings(),
+      createdAt: t0,
+      updatedAt: t0 + N_RICH * MIN,
+      currentBranchId: RMAIN,
+    },
+    branch: {
+      id: RMAIN,
+      storyId: RICH,
+      parentBranchId: null,
+      forkEntryId: null,
+      name: 'Main',
+      createdAt: t0,
+      classifierStatus: null,
+    },
+    entries: richEntries(),
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Cross-story singletons.
 // ---------------------------------------------------------------------------
 
@@ -1323,6 +1503,7 @@ const appSettingsRow: NewAppSettings = {
 
 export function buildSeedSteps(): SeedStep[] {
   const filler = fillerStoryRows()
+  const rich = richStoryRows()
 
   const heroStory: NewStory = {
     id: HERO,
@@ -1377,9 +1558,14 @@ export function buildSeedSteps(): SeedStep[] {
   return [
     step('vault_calendars', vaultCalendars, vaultCalendarRows),
     step('assets', assets, assetRows),
-    step('stories', stories, [heroStory, ...filler.stories]),
-    step('branches', branches, branchRows),
-    step('story_entries', storyEntries, [...heroEntries(), ...forkEntries(), ...filler.entries]),
+    step('stories', stories, [heroStory, rich.story, ...filler.stories]),
+    step('branches', branches, [...branchRows, rich.branch]),
+    step('story_entries', storyEntries, [
+      ...heroEntries(),
+      ...forkEntries(),
+      ...rich.entries,
+      ...filler.entries,
+    ]),
     step('chapters', chapters, heroChapters),
     step('entities', entities, [...heroEntities, ...filler.entities]),
     step('character_relationships', characterRelationships, heroRelationships),
