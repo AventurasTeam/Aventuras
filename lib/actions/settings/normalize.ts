@@ -31,13 +31,31 @@ function jsonEqual(a: unknown, b: unknown): boolean {
   return false
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+// Add-only merge: fill object keys present in the parsed (schema-defaulted)
+// shape but absent from storage; never overwrite a stored value or drop a
+// stored key. Keeps a downgrade (older build, unknown newer key) from
+// permanently pruning that key — the row is the only settings store until M7.
+function addMissingDefaults(stored: unknown, parsed: unknown): unknown {
+  if (!isPlainObject(stored) || !isPlainObject(parsed)) return stored
+  const merged: Record<string, unknown> = { ...stored }
+  for (const [key, parsedValue] of Object.entries(parsed)) {
+    merged[key] = key in stored ? addMissingDefaults(stored[key], parsedValue) : parsedValue
+  }
+  return merged
+}
+
 /**
- * Boot-time row normalization: rewrite any app-settings column whose stored
- * JSON differs from its parsed (schema-defaulted, unknown-key-stripped) shape,
- * so schema-added fields materialize in the DB instead of living only as
- * parse-time defaults — the row is the settings editing surface until M7.
- * Columns that fail to parse are left untouched (corrupt data stays
- * inspectable); steady-state boots diff clean and write nothing.
+ * Boot-time row normalization: materialize schema-added default fields that are
+ * absent from a stored app-settings column, so new fields live in the DB
+ * instead of only as parse-time defaults — the row is the settings editing
+ * surface until M7. Add-only: unknown keys and stored values are preserved, so
+ * a downgrade never prunes a newer build's data. Columns that fail to parse are
+ * left untouched (corrupt data stays inspectable); steady-state boots diff
+ * clean and write nothing.
  */
 export async function normalizeAppSettingsRow(
   ctx: SettingsActionCtx,
@@ -53,13 +71,18 @@ export async function normalizeAppSettingsRow(
 
   const patch: Record<string, unknown> = {}
   // defaultStorySettings stays partial through the parse (see
-  // storySettingsPartialSchema) — materializing defaults here would freeze
-  // them as if user-chosen; the diff below must stay a natural noop for it.
+  // storySettingsPartialSchema) — its parsed shape materializes no defaults,
+  // so add-only leaves it a natural noop.
   for (const [key, parsedValue] of Object.entries(config.data)) {
-    if (!jsonEqual(parsedValue, (row as Record<string, unknown>)[key])) patch[key] = parsedValue
+    const stored = (row as Record<string, unknown>)[key]
+    const merged = addMissingDefaults(stored, parsedValue)
+    if (!jsonEqual(merged, stored)) patch[key] = merged
   }
   const diag = appSettingsDiagnosticsSchema.safeParse(row.diagnostics)
-  if (diag.success && !jsonEqual(diag.data, row.diagnostics)) patch.diagnostics = diag.data
+  if (diag.success) {
+    const merged = addMissingDefaults(row.diagnostics, diag.data)
+    if (!jsonEqual(merged, row.diagnostics)) patch.diagnostics = merged
+  }
 
   const columns = Object.keys(patch)
   if (columns.length === 0) return { status: 'noop' }

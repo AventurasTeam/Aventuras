@@ -34,22 +34,34 @@ describe('normalizeAppSettingsRow', () => {
     expect((await readRow())?.appearance.showJumpToBottom).toBe(true)
   })
 
-  it('prunes unknown keys left behind by renamed fields', async () => {
+  it('adds missing defaults add-only — unknown keys and stored values survive', async () => {
     await db.insert(appSettings).values({
       id: APP_SETTINGS_SINGLETON_ID,
       ...APP_SETTINGS_DEFAULTS,
-      appearance: {
-        ...APP_SETTINGS_DEFAULTS.appearance,
-        showJumpToBottom: false,
-        deadKey: 1,
-      } as never,
+      // Missing themeId/readerFontScale/density; carries a user value and an
+      // unknown key from a newer build.
+      appearance: { showJumpToBottom: false, unknownKey: 1 } as never,
     })
     const res = await normalizeAppSettingsRow({ db })
     expect(res.status).toBe('normalized')
-    // The user-set value survives; only the dead key is dropped.
     expect((await readRow())?.appearance).toEqual({
       ...APP_SETTINGS_DEFAULTS.appearance,
       showJumpToBottom: false,
+      unknownKey: 1,
+    })
+  })
+
+  it('is a noop when a column only carries an unknown key (nothing to add)', async () => {
+    await db.insert(appSettings).values({
+      id: APP_SETTINGS_SINGLETON_ID,
+      ...APP_SETTINGS_DEFAULTS,
+      appearance: { ...APP_SETTINGS_DEFAULTS.appearance, unknownKey: 1 } as never,
+    })
+    const res = await normalizeAppSettingsRow({ db })
+    expect(res).toEqual({ status: 'noop' })
+    expect((await readRow())?.appearance).toEqual({
+      ...APP_SETTINGS_DEFAULTS.appearance,
+      unknownKey: 1,
     })
   })
 
