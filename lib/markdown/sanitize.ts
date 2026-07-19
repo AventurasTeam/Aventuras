@@ -1,26 +1,8 @@
-import DOMPurify from 'dompurify'
 import juice from 'juice'
 
-// DOMPurify requires a DOM window to initialize its hooks and sanitization methods.
-// During Expo Router's static pre-rendering (which runs on Node.js), `window` is undefined,
-// causing DOMPurify to return an empty unsupported instance lacking these methods.
-// We dynamically initialize it using JSDOM on the server, or a non-crashing fallback.
-let purifyInstance: typeof DOMPurify
+import { createDomPurify } from './purify-instance'
 
-if (typeof window !== 'undefined') {
-  purifyInstance = DOMPurify
-} else {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { JSDOM } = require('jsdom')
-    purifyInstance = DOMPurify(new JSDOM('').window)
-  } catch {
-    const mock = (() => {}) as any
-    mock.addHook = () => {}
-    mock.sanitize = (html: string) => html
-    purifyInstance = mock
-  }
-}
+const purifyInstance = createDomPurify()
 
 // Allow any CSS property, but strip any declaration containing url() to prevent external data exfiltration/tracking,
 // or other browser-specific executable expressions.
