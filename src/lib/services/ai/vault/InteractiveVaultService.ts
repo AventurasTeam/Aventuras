@@ -668,6 +668,15 @@ export class InteractiveVaultService extends BaseAIService {
           case 'error':
             yield { type: 'error', error: String(event.error) }
             return
+
+          case 'abort':
+            // The AI SDK can signal a cancelled stream as a native fullStream
+            // part instead of (or in addition to) throwing — without this,
+            // that part would fall through unhandled, the loop would end
+            // normally, and the caller would see a 'done' event as if the
+            // response had actually completed.
+            yield { type: 'aborted' }
+            return
         }
       }
 

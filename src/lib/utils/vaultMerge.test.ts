@@ -26,6 +26,13 @@ describe('mergeArrayLists', () => {
   it('still applies a genuine positional replacement', () => {
     expect(mergeArrayLists(['a', 'z'], ['a', 'b'], ['a', 'b'])).toEqual(['a', 'z'])
   })
+
+  it('preserves an intentional duplicate addition even if the value already exists in the base', () => {
+    // `data` explicitly has two copies of 'x': one was already in previous/base,
+    // the second is a genuine new addition, not an artifact of composing
+    // sibling changes. The base-count subtraction must not eat this one.
+    expect(mergeArrayLists(['x', 'x'], ['x'], ['x'])).toEqual(['x', 'x'])
+  })
 })
 
 describe('composePendingOnto — duplicate tag regression', () => {

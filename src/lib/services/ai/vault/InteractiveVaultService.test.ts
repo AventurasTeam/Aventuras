@@ -63,17 +63,24 @@ vi.mock('$lib/services/database', () => ({
 // completing normally (e.g. an aborted fetch).
 let nextStreamEvents: unknown[] = []
 let nextStreamError: Error | null = null
+// Captures the options (tools, prepareStep, ...) passed to the factory on the
+// most recent call, so tests can exercise the load_toolset tool and prepareStep
+// directly instead of only the pure getActiveToolNames helper.
+let lastCreateOptions: { tools: Record<string, any>; prepareStep: () => unknown } | null = null
 
 vi.mock('../sdk/agents/factory', () => ({
-  createStreamingAgenticAssistant: vi.fn(() => ({
-    stream: vi.fn(async () => ({
-      fullStream: (async function* () {
-        for (const event of nextStreamEvents) yield event
-        if (nextStreamError) throw nextStreamError
-      })(),
-      response: Promise.resolve({ messages: [] }),
-    })),
-  })),
+  createStreamingAgenticAssistant: vi.fn((options: any) => {
+    lastCreateOptions = options
+    return {
+      stream: vi.fn(async () => ({
+        fullStream: (async function* () {
+          for (const event of nextStreamEvents) yield event
+          if (nextStreamError) throw nextStreamError
+        })(),
+        response: Promise.resolve({ messages: [] }),
+      })),
+    }
+  }),
 }))
 
 const { InteractiveVaultService, getActiveToolNames, TOOL_CATEGORIES, ALWAYS_ACTIVE_TOOLS } =
@@ -86,6 +93,7 @@ beforeEach(() => {
   conversationRows.clear()
   nextStreamEvents = []
   nextStreamError = null
+  lastCreateOptions = null
 })
 
 afterEach(() => {
@@ -366,6 +374,29 @@ describe('sendMessageStreaming', () => {
     expect(events.at(-1)).toEqual({ type: 'aborted' })
   })
 
+  it('yields "aborted" when the SDK emits a native abort stream part (no thrown error)', async () => {
+    // The AI SDK can signal cancellation as a fullStream part rather than
+    // throwing. Without a dedicated case for it, this part would fall through
+    // the switch unhandled, the loop would end normally, and the caller would
+    // see a 'done' event as if the response had actually completed.
+    const service = new InteractiveVaultService('vault-test')
+    await service.initialize(emptySummary)
+
+    nextStreamEvents = [
+      { type: 'start-step' },
+      { type: 'text-delta', text: 'partial' },
+      { type: 'abort', reason: 'user requested cancellation' },
+    ]
+
+    const events = []
+    for await (const event of service.sendMessageStreaming(emptyVaultState(), 'hi')) {
+      events.push(event)
+    }
+
+    expect(events.filter((e) => e.type === 'error' || e.type === 'done')).toHaveLength(0)
+    expect(events.at(-1)).toEqual({ type: 'aborted' })
+  })
+
   it('still yields a normal error event for a real (non-abort) failure', async () => {
     const service = new InteractiveVaultService('vault-test')
     await service.initialize(emptySummary)
@@ -379,5 +410,28 @@ describe('sendMessageStreaming', () => {
     }
 
     expect(events.at(-1)).toEqual({ type: 'error', error: 'model provider is down' })
+  })
+
+  it('load_toolset updates the activeTools prepareStep exposes for the next step', async () => {
+    const service = new InteractiveVaultService('vault-test')
+    await service.initialize(emptySummary)
+
+    nextStreamEvents = [{ type: 'start-step' }, { type: 'finish-step' }]
+    for await (const _event of service.sendMessageStreaming(emptyVaultState(), 'hi')) {
+      // Draining the generator is enough to reach the createStreamingAgenticAssistant
+      // call and capture its options — nothing to assert per-event here.
+    }
+
+    expect(lastCreateOptions).not.toBeNull()
+    const loadToolset = lastCreateOptions!.tools.load_toolset
+    expect(loadToolset).toBeDefined()
+
+    await loadToolset.execute({ categories: ['characters', 'images'] })
+
+    const activeTools = (lastCreateOptions!.prepareStep() as { activeTools: string[] }).activeTools
+    for (const name of ALWAYS_ACTIVE_TOOLS) expect(activeTools).toContain(name)
+    for (const name of TOOL_CATEGORIES.characters) expect(activeTools).toContain(name)
+    for (const name of TOOL_CATEGORIES.images) expect(activeTools).toContain(name)
+    for (const name of TOOL_CATEGORIES.scenarios) expect(activeTools).not.toContain(name)
   })
 })

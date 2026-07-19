@@ -65,6 +65,14 @@
   // AbortController for cancelling ongoing requests
   let abortController: AbortController | null = null
 
+  // Identifies which handleSend() invocation currently "owns" generation
+  // state. Bumped by handleAbort() and by each new handleSend() call so that
+  // a superseded invocation's finally block (which can still be resolving
+  // asynchronously well after the user moved on) can detect it's stale and
+  // skip finalizing/saving — otherwise it could clobber a newer generation's
+  // in-progress state or abortController, or write a stale save.
+  let activeGenerationId = 0
+
   // Service instance
   let service: InteractiveVaultService | null = $state(null)
 
@@ -103,17 +111,27 @@
 
   // Serializes conversation saves so a slower-resolving earlier write can never
   // overwrite a more complete later one (e.g. eager save vs. final save).
+  //
+  // pendingSave itself always resolves (even when a save fails) so one failed
+  // save can never block saves queued after it. The promise *returned* to the
+  // caller reflects the real outcome instead, so callers can avoid a
+  // destructive transition (new conversation / switch) when their own save
+  // just failed rather than silently discarding it.
   let pendingSave: Promise<unknown> = Promise.resolve()
-  function queueSave(): Promise<unknown> {
-    if (!service) return Promise.resolve()
-    const save = pendingSave.then(() =>
+  function queueSave(): Promise<boolean> {
+    if (!service) return Promise.resolve(false)
+    const attempt = pendingSave.then(() =>
       service!
         .saveConversation(messages, vaultEditor.pendingChanges)
-        .then(() => loadConversationsList())
-        .catch((e) => console.error('[VaultAssistant] Save failed:', e)),
+        .then(() => loadConversationsList()),
     )
-    pendingSave = save
-    return save
+    pendingSave = attempt.catch((e) => {
+      console.error('[VaultAssistant] Save failed:', e)
+    })
+    return attempt.then(
+      () => true,
+      () => false,
+    )
   }
 
   // Conversation history selector
@@ -302,9 +320,14 @@
     // Auto-save current conversation before starting new one. Routed through the
     // pendingSave queue (not a direct call) so it can't race a still-in-flight
     // save from handleSend and can't run against the service instance we're about
-    // to replace below.
+    // to replace below. Bail out on failure instead of silently discarding the
+    // conversation the user was just in.
     if (messages.some((m) => !m.isGreeting)) {
-      await queueSave()
+      const saved = await queueSave()
+      if (!saved) {
+        error = 'Failed to save the current conversation. Try again before starting a new one.'
+        return
+      }
     }
     service.reset()
     vaultEditor.reset()
@@ -320,7 +343,11 @@
     // Auto-save current before switching. Routed through the pendingSave queue —
     // see handleNewConversation for why a direct call here would be unsafe.
     if (messages.some((m) => !m.isGreeting)) {
-      await queueSave()
+      const saved = await queueSave()
+      if (!saved) {
+        error = 'Failed to save the current conversation. Try again before switching.'
+        return
+      }
     }
     const loaded = await service.loadConversation(id)
     if (loaded) {
@@ -360,6 +387,10 @@
     try {
       await database.deleteVaultConversation(id)
       if (service?.getConversationId() === id) {
+        // Abort any in-flight generation before replacing the service — same
+        // reasoning as handleNewConversation/handleSwitchConversation, this is
+        // the conversation currently being generated into.
+        handleAbort()
         service.reset()
         vaultEditor.reset()
         activeTab = 'chat'
@@ -446,6 +477,7 @@
     activeToolCalls = []
 
     abortController = new AbortController()
+    const myGenerationId = ++activeGenerationId
 
     try {
       // Check for external lorebook edits before streaming
@@ -651,15 +683,21 @@
       }
       messages = [...messages, errorMsg]
     } finally {
-      isGenerating = false
-      isThinking = false
-      activeToolCalls = []
-      streamingChanges = []
-      streamingMessageId = null
-      abortController = null
-      // Always save conversation (success, error, or abort)
-      if (messages.some((m) => !m.isGreeting)) {
-        queueSave()
+      // A newer generation (or an explicit abort) has already taken over —
+      // let it own the shared state instead of clobbering it out from under
+      // whoever's active now (their abortController, their isGenerating, or
+      // worse, a stale save of this stale generation's messages).
+      if (myGenerationId === activeGenerationId) {
+        isGenerating = false
+        isThinking = false
+        activeToolCalls = []
+        streamingChanges = []
+        streamingMessageId = null
+        abortController = null
+        // Always save conversation (success, error, or abort)
+        if (messages.some((m) => !m.isGreeting)) {
+          queueSave()
+        }
       }
     }
   }
@@ -739,6 +777,9 @@
    * stop button in VaultAssistantInput.
    */
   function handleAbort() {
+    // Invalidate any in-flight handleSend() so its finally block, whenever it
+    // gets around to resolving, recognizes it's stale and skips finalizing.
+    activeGenerationId++
     if (abortController) {
       abortController.abort()
       abortController = null
@@ -969,7 +1010,7 @@
                           </div>
                         </button>
                         <button
-                          class="text-surface-500 hover:bg-surface-600 hover:text-surface-200 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md opacity-0 transition-all group-hover:opacity-100"
+                          class="text-surface-500 hover:bg-surface-600 hover:text-surface-200 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-all focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                           onclick={(e) => {
                             e.stopPropagation()
                             startRename(conv)
@@ -979,7 +1020,7 @@
                           <Pencil class="h-3 w-3" />
                         </button>
                         <button
-                          class="text-surface-500 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md opacity-0 transition-all group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400"
+                          class="text-surface-500 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-all hover:bg-red-500/20 hover:text-red-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                           onclick={(e) => {
                             e.stopPropagation()
                             handleDeleteConversation(conv.id)
