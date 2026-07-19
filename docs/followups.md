@@ -51,15 +51,6 @@ scrollEnabled: false }}`) embedded as an EntryWindow row, running
   (restore on boot, persist on change) and identify the remount. Pre-existing
   (the theme system predates M2.3); the M7.1 appearance tab builds on the
   persistence wiring, so land it before then. Surfaced by Slice 2.3.
-- **Jump-to-bottom's `End` key and Actions-menu entry aren't wired.**
-  Slice 2.5's `reader-composer.md#jump-buttons` scope names all three
-  affordances (floating button, `End` key, Actions-menu "Jump to
-  bottom"), but only the floating button is wired
-  (`app/reader-composer/[branchId].tsx`) — no `End`-key handler, and
-  `AppActionsMenu` has no reader-contextual entries yet. Low priority
-  (the button alone satisfies the slice's acceptance criteria); wire
-  the other two whenever the reader's Actions-menu contextual zone is
-  next touched.
 
 ## Tooling
 

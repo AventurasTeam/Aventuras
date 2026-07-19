@@ -466,6 +466,9 @@ export default function ReaderComposerRoute() {
       pendingJumpToBottomAtRef.current = Date.now()
     }
   }, [isGenerating])
+  const matchesJumpToBottomShortcut = useCallback((ev: KeyboardEvent) => ev.key === 'End', [])
+  // Editable-target exclusion keeps End moving the caret inside the composer.
+  useGlobalHotkey(matchesJumpToBottomShortcut, jumpToBottom, { ignoreEditableTargets: true })
   const contextualActions: ActionGroup = useMemo(() => {
     const blocked = {
       disabled: isGenerating,
