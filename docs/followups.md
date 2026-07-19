@@ -21,6 +21,9 @@ for the placement rule.
   [lessons-learned → native deps](./implementation/lessons-learned/native-dep-expo-link.md)),
   then the
   [on-device validation checklist](./ui/patterns/rich-entry-rendering.md#validation-checklist)
-  on real low-end Android hardware. Until validated, Android rich
-  cards ride the untested WebView path (web/desktop shadow-host
-  path is exercised by Storybook tests).
+  on real low-end Android hardware. The checklist's rich-heavy
+  story ships in the seed dataset ("The Gallery of Impossible
+  Rooms", incl. the item-7 security probes); on device, seed it
+  via the dev surface's "Reseed database" action. Until
+  validated, Android rich cards ride the untested WebView path
+  (web/desktop shadow-host path is exercised by Storybook tests).
