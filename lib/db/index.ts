@@ -80,6 +80,7 @@ export {
 } from './app-settings/agents'
 export { db } from './runtime/client'
 export { DrizzleStudioDevTools } from './devtools/drizzle-studio-devtools'
+export { reseedDevDatabase, type ReseedSummary } from './devtools/reseed'
 export { entryMetadataSchema } from './story-entries/entry-metadata'
 export type { EntryMetadata, SystemFailureMeta } from './story-entries/entry-metadata'
 export {
