@@ -17,9 +17,10 @@ Sister patterns:
   the in-place edit textarea.
 - [`rich-entry-rendering.md`](./rich-entry-rendering.md) — the
   main content slot's rendering fork: entries exceeding the
-  native RNRH subset render through an isolated rich renderer.
-  The fork lives entirely inside the content slot; all chrome in
-  this pattern stays native.
+  plainly-translatable subset render through a shadow-root rich
+  host. The fork lives entirely inside the content slot; card
+  chrome never enters the shadow root. The card itself renders in
+  the [reader document](./reader-document.md) on every platform.
 
 Used by:
 

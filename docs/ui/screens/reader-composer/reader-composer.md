@@ -638,6 +638,10 @@ jump buttons for terminal-endpoint navigation. The composed
 fetching + virtualization pattern is documented at
 [`patterns/lists.md → Composing virtualization with load-older`](../../patterns/lists.md#composing-virtualization-with-load-older);
 this section covers the reader-specific behaviors layered on top.
+The reader's list deviates from that pattern's JS-virtualizer
+substrate: it renders in the
+[reader document](../../patterns/reader-document.md) as plain flow
+with engine culling, and scroll policy lives inside the document.
 
 ### Loaded-set model
 
@@ -645,8 +649,13 @@ At any moment the reader holds a **single contiguous window** of
 entries — never two disconnected windows.
 
 **Window.** The contiguous range in memory + DOM. On branch open:
-~50 most recent entries. Inside the window, only visible rows +
-small overscan render to DOM (virtualization).
+~50 most recent entries. Every window row exists in the document;
+off-screen rows are skipped for layout/paint by engine culling
+(`content-visibility` — see
+[`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-flow-layout--engine-culling)).
+If long backwards-reading sessions make window growth measurable,
+the designed lever is a far-end trim cap on the loaded set — the
+window stays contiguous, bounded at the edge opposite the load.
 
 **Auto-load on scroll boundary.** As the user scrolls within the
 window:
@@ -799,16 +808,18 @@ shift, but what's in front of the user must not jump.
   on an entry above the fold can change the footer label's pixel
   width, wrapping or de-wrapping the footer row.
 
-**Native (FlatList) — `maintainVisibleContentPosition`** handles
-all three transparently at the FlatList level. No additional glue.
-
-**Web (`@tanstack/react-virtual`)** does NOT preserve native
-browser scroll-anchoring across prepend or in-place height
-changes. The implementation measures the prepended (or expanded)
-block, adds equivalent top padding before the layout commit,
-scrolls by the same delta, then drops the padding on the next
-frame. Validate against a real prepend stream once
-reader-composer is wired against live data.
+All three ride **browser scroll anchoring**: the reader document
+renders rows in normal flow
+([`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-flow-layout--engine-culling)),
+which is the layout browser anchoring is built for — in-flow
+content above the viewport can change height without moving what
+the user is reading, with no compensation code on any platform.
+This replaces the earlier per-platform machinery (FlatList
+`maintainVisibleContentPosition` on native; a measured
+padding-and-scroll dance under the web virtualizer). Anchoring
+behavior across all three scenarios is a
+[reader-document validation item](../../patterns/reader-document.md#validation-checklist)
+on both Android and desktop.
 
 ## Browse rail — collapse / expand
 

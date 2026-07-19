@@ -1,50 +1,55 @@
 # Rich-entry rendering pattern
 
-Hybrid rendering for narrative entry content. Plain-markdown
-entries keep the existing platform tails (web `narrative-html`
-div, native `react-native-render-html`); entries whose HTML
-exceeds what native can translate render through an **isolated
-document renderer** — a Shadow DOM host on web, an Expo DOM
-component (WebView) on native. This is what makes the "LLM
-authors visual elements" use case (layouting, coloring, animated
-elements) actually render on Android instead of silently
-degrading, and it fixes web's own silent gap (see
-[Why](#why) below).
+The platform-neutral core of narrative-entry rendering: **detection**
+(which entries exceed the plainly-translatable subset), the **rich
+sanitize path**, and **shadow-root isolation** for rich content.
+Plain-markdown entries keep the juice-inlined `narrative-html` path;
+entries whose HTML exceeds it render through a shadow-root host with
+their stylesheets intact. This is what makes the "LLM authors visual
+elements" use case (layouting, coloring, animated elements) actually
+render instead of silently degrading.
+
+Where this runs is owned by
+[`reader-document.md`](./reader-document.md): the reader's narrative
+surface is one web document on every platform, so both the plain and
+rich paths here execute in a real DOM everywhere — directly in the
+page on web/desktop, inside the hosted document on native.
 
 Used by:
 
 - [`entry-card.md`](./entry-card.md) — the main content slot is
-  the **only** fork point. Reasoning bodies, system entries, and
-  the streaming card always render native (see
-  [Scope gates](#scope-gates)).
+  the **only** fork point. Reasoning bodies and system entries
+  always render plain (see [Scope gates](#scope-gates)).
 
 Baseline pipeline being extended:
 [`tech-stack.md → Markdown rendering + HTML sanitization`](../../tech-stack.md#9-markdown-rendering--html-sanitization).
 
 ## Why
 
-- **Native ceiling.** `react-native-render-html` translates a
-  fixed CSS subset (~76 native-compatible properties). Grid,
-  positioned layouts, shadows, gradients, animations,
-  pseudo-elements, and media queries are silently dropped on
-  Android while web renders (some of) them.
-- **Web has a silent gap too.** The web pipeline inlines styles
-  with juice, then DOMPurify's default allowlist strips the
-  `<style>` tag — so the non-inlinable residue (`@media`,
-  `@keyframes`, pseudo-selectors) is dropped on **both**
-  platforms today. The rich path repairs this on web as a side
-  effect.
+- **The plain path has a ceiling.** The juice pre-pass inlines
+  provider `<style>` blocks into attributes, and DOMPurify's
+  default allowlist strips the `<style>` tag — so non-inlinable
+  CSS (`@media`, `@keyframes`, pseudo-selectors) is silently
+  dropped, and layout-level authoring (grid, positioned elements,
+  animations) degrades to unstyled text.
+- **Historical note.** The detection oracle below was designed
+  against `react-native-render-html`'s CSS engine when native
+  rendered entries through RNRH. RNRH retires with the
+  single-document pivot, but the oracle remains the right
+  translatability boundary: it cleanly separates "survives
+  attribute inlining" from "needs a real stylesheet", tracks an
+  installed engine rather than a hand-pinned list, and catches
+  value-level failures (`background: red` inlines;
+  `background: linear-gradient(…)` needs the rich path).
 
 ## Detection: the engine is the oracle
 
-An entry goes rich when its HTML contains anything the installed
-RNRH engine cannot translate. There is **no hand-pinned property
-list** — the detector asks RNRH's own CSS engine
-(`CSSProcessor.compileInlineCSS` from `@native-html/css-processor`,
-already in the tree as an RNRH dependency), so the answer tracks
-the installed version automatically, including **value-level**
-failures a property-name list can never catch (`background: red`
-translates; `background: linear-gradient(…)` is dropped).
+An entry goes rich when its HTML contains anything the CSS oracle
+(`CSSProcessor.compileInlineCSS` from `@native-html/css-processor`)
+cannot translate to inline-safe declarations. There is **no
+hand-pinned property list** — the answer tracks the installed
+engine automatically, including **value-level** failures a
+property-name list can never catch.
 
 Detector input is the **marked output, pre-juice**. Signals, in
 order:
@@ -60,202 +65,80 @@ order:
    pinned explicitly: the engine _does_ ship a table element
    model, but core RNRH has no tabular renderer (the official
    table plugin is itself WebView-based), so GFM pipe tables take
-   the rich card and finally render properly on Android.
-4. Otherwise → the plain native path.
+   the rich path and render as real tables.
 
 Invalid values of supported properties (`color: notacolor`) are
-_not_ dropped by the oracle — they compile to native props and
-stay on the plain path, where RNRH ignores them. The
-false-positive class is narrower than originally budgeted: only
-genuinely untranslatable declarations flag rich, and the cost is
-always an unnecessary WebView, never a wrong rendering.
+_not_ dropped by the oracle — they compile to native props and stay
+on the plain path, where the value is inert. The false-positive
+class is narrower than originally budgeted: only genuinely
+untranslatable declarations flag rich, and the cost is always an
+unnecessary shadow-root host, never a wrong rendering.
 
-The verdict is computed at render, memoized per entry alongside
-the existing HTML memo — **not persisted** on the entry row.
-Detector improvements reclassify old entries retroactively;
-streaming needs no flag written at commit.
-
-## Render paths
-
-|        | plain entry                      | rich entry                   |
-| ------ | -------------------------------- | ---------------------------- |
-| web    | `narrative-html` div (unchanged) | Shadow DOM host              |
-| native | RNRH path (unchanged)            | Expo DOM component (WebView) |
-
-The detector is platform-neutral and shared; only the tails
-differ.
+The verdict is computed at render, memoized per entry alongside the
+existing HTML memo — **not persisted** on the entry row. Detector
+improvements reclassify old entries retroactively; streaming needs
+no flag written at commit.
 
 ## Rich sanitize path
 
 A second sanitize path in `lib/markdown`, used only by the rich
-renderers. It **skips juice entirely** (real stylesheets work in
-both isolated documents) and runs DOMPurify with `<style>` added
-to the allowlist, plus a CSS scrub applied uniformly to
-stylesheet content and style attributes:
+renderer. It **skips juice entirely** (real stylesheets work in the
+isolated host) and runs DOMPurify with `<style>` added to the
+allowlist, plus a CSS scrub applied uniformly to stylesheet content
+and style attributes:
 
 - strip any declaration containing `url(`, `expression(`, or
   `behavior` — the existing attribute-level exfiltration policy,
   now also enforced inside `@media` and `@keyframes` blocks;
 - strip `@import` and `@font-face` at-rules entirely (external
-  fetch vectors);
+  fetch vectors), and any at-rule not explicitly kept
+  (default-deny; `@media` and `@keyframes` are the kept set);
 - keep `@media`, `@keyframes`, and pseudo-selectors — the payload
   this pattern exists for.
 
-The scrub uses a real CSS parser (juice's own parser dependency
-is already bundled), not regex filtering — comment-obfuscated
-forms like `url(/**/…)` must not slip through.
-Implementation-time verification items: DOMPurify's handling of
-`</style>` breakout text inside CSS, and that the scrub survives
-the streaming buffer contract (rich entries never stream, but the
-sanitize entry points are shared).
+The scrub uses a real CSS parser (postcss, juice's own parser
+dependency), not regex filtering — comment-obfuscated forms like
+`url(/**/…)` must not slip through. `</style>` breakout is
+neutralized by CSS-escaping `<` in serialized stylesheet text, and
+`FORCE_BODY` keeps a leading `<style>` from being hoisted into
+`<head>` and silently dropped.
 
 ## Isolation
 
 `<style>` scoping is the load-bearing safety property — a
 provider-authored `p { … }` or `body { … }` selector must never
-touch the app document.
+touch the surrounding document.
 
-- **Native**: the DOM component is its own WebView document;
-  isolation is inherent. Defense in depth: the card document
-  carries a strict CSP (`default-src 'none'` shape, inline styles
-  and `data:` images only) so a scrub gap still cannot make a
-  network request.
-- **Web**: the entry HTML and its `<style>` mount inside a
-  **shadow root**. Selectors cannot escape; `@keyframes` are
-  scoped to the root; theme CSS variables inherit _through_ the
-  shadow boundary, so the
-  [theme baseline](../../implementation/lessons-learned/raw-html-island-theme-baseline.md)
-  keeps working without re-bridging. No per-entry CSP is possible
-  here (no document boundary), which is why the scrub — not the
-  CSP — is the primary guarantee on both platforms.
-
-Theme bridging into the native card: token values pass as
-serializable props into the DOM component and are applied as CSS
-variables on its root; font scale rides the same props. Prop
-updates re-render the card in place — live theme switches must
-not remount it (validation item 8).
-
-## Native card lifecycle: underlay + single swap
-
-A WebView row has no synchronous height: it mounts empty, boots
-(hundreds of ms on weak hardware), then `matchContents` resizes
-it asynchronously. Every timing problem — blank cards mid-scroll,
-prepend jitter, commit-swap reframe — is downstream of that. One
-mechanism covers all of them:
-
-**A rich card never mounts empty.** It mounts rendering the RNRH
-degraded version immediately (today's floor — cheap, synchronous,
-approximately right-sized) with the DOM component booting
-alongside, invisible. The DOM component calls an async `onReady`
-function prop once painted; visibility swaps, the row settles to
-measured height. One shift, content visible throughout.
-
-- `dom={{ matchContents: true, scrollEnabled: false }}` sizes the
-  card; a session-scoped height cache keyed by
-  `(entryId, contentWidth, fontScale)` lets remounting cards
-  claim their measured height instantly, with the underlay
-  bridging only WebView boot. Persisting the cache is deferred
-  until validation shows re-measure pain.
-- **Prepend anchoring**: prepended older entries mount underlay
-  first, so the post-measure correction is small and
-  `maintainVisibleContentPosition` absorbs it (see
-  [reader anchor preservation](../screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts)).
-  MVCP's behavior for _above-viewport_ async resizes is assumed,
-  not verified — validation item 5.
-- **Streaming promote**: streaming always renders native and
-  incremental (running the detector per chunk or booting a
-  WebView mid-stream is a non-starter). At commit the detector
-  runs on the final HTML; a rich verdict mounts the committed
-  card in underlay state — which _is_ the streaming rendering —
-  so the promote is visually a no-op until the ready-swap,
-  honoring the
-  [no-reframe commit-swap contract](./entry-card.md#per-kind-structure).
-  Bottom-pinned autoscroll absorbs the tail height change.
-
-Stated cost: every rich row pays a double render (RNRH and
-WebView) during its boot window. The underlay unmounts after the
-swap; validation watches the boot-window cost on low-end
-hardware.
-
-## Navigation lock
-
-Provider-authored HTML can contain `<a href>`; a tap inside the
-WebView would navigate the card's document away. The card blocks
-all navigation after the initial load
-(`onShouldStartLoadWithRequest` via the `dom` prop); `http(s)`
-taps route to the system browser via `Linking`; everything else
-is dropped. The wider anchor-`href` policy question (strip vs
-keep-and-intercept, across _all_ render paths — web's plain path
-navigates the Electron window today) is a separate triage item,
-predates this pattern, and is not resolved here.
+The entry HTML and its `<style>` mount inside a **shadow root**.
+Selectors cannot escape; `@keyframes` are scoped to the root; theme
+CSS variables inherit _through_ the shadow boundary, so the
+[theme baseline](../../implementation/lessons-learned/raw-html-island-theme-baseline.md)
+keeps working without re-bridging. The scrub — not any CSP — is the
+primary guarantee (there is no per-entry document boundary);
+[`reader-document.md → Isolation and security`](./reader-document.md#isolation-and-security)
+adds the document-level CSP and navigation lock as defense in depth
+on native.
 
 ## Scope gates
 
 - **Only the main content slot forks.** Reasoning bodies are
   chain-of-thought provenance, not an authoring surface — always
-  RNRH (muted italic), the detector never runs on them. System
-  entries likewise. The streaming card is always native by the
-  lifecycle above.
+  the plain path (muted italic), the detector never runs on them.
+  System entries likewise. The streaming card renders plain and
+  incremental; at commit the detector runs on the final HTML and
+  the committed entry takes whichever path it earns — inside the
+  shared document pipeline the promote carries no reframe.
 - **Content-based, not kind-based.** A user who pastes styled
-  HTML into their own entry gets the rich card too.
-- **Chrome stays native.** Header, action cluster, world-time
-  footer, and edit mode are RN views around the content slot and
-  never enter the WebView; edit mode unmounts the content region
-  entirely, so editing a rich entry is unchanged.
-- **Selection asymmetry, accepted.** WebView text is natively
-  selectable; RNRH text on Android currently is not. Rich cards
-  therefore gain selection plain cards lack — an improvement
-  inconsistency. Making RNRH selectable is a separate triage
-  item.
-
-## Validation checklist
-
-Empirical pass on real low-end Android hardware with a seeded
-rich-heavy story. Gated on the prerequisite install (below).
-
-1. **Boot latency** — mount → `onReady` timing; the underlay
-   bridges it invisibly.
-2. **Memory** — FlatList's default window keeps ~10 viewports of
-   rows alive; count concurrent WebViews on a rich-heavy story,
-   watch for OOM, tune `windowSize` down if needed.
-3. **Scroll fps** through a rich-heavy stretch, including with
-   running keyframe animations.
-4. **Touch capture** — a drag starting on a rich card must scroll
-   the list; Android WebViews can swallow drag gestures even with
-   `scrollEnabled: false`.
-5. **Prepend and above-viewport resize** — MVCP compensation
-   quality when a prepended batch contains rich entries.
-6. **Single-swap discipline** — no double shift on first measure;
-   height-cache remounts are instant.
-7. **Security probes** — deliberate `url()` / `@import` / link
-   payloads: scrub strips, CSP blocks what slips, navigation lock
-   holds.
-8. **Live theme switch and font scale** — bridged CSS vars update
-   without remounting cards.
-9. **`expo export --platform android` passes** — web green means
-   nothing for native bundles
-   ([Metro browser-builds lesson](../../implementation/lessons-learned/metro-native-ignores-browser-builds.md)).
-
-Worst-case fallback if touch capture proves unfixable:
-`pointerEvents: 'none'` on the card wrapper — costs in-card
-selection and links but keeps rendering. Named so validation has
-a floor, not a cliff.
-
-## Prerequisite
-
-`react-native-webview` install plus a dev-client rebuild before
-first import
-([native-dep lesson](../../implementation/lessons-learned/native-dep-expo-link.md)).
-Installed 2026-07-19; the dev-client rebuild is per-machine.
+  HTML into their own entry gets the rich path too.
+- **Card chrome never enters the shadow root.** Header, action
+  cluster, world-time footer, and edit mode surround the content
+  slot; edit mode unmounts the content region entirely, so editing
+  a rich entry is unchanged.
 
 ## What this design defers
 
-- **Persisted height cache** — session-scoped Map first; persist
-  only if validation shows re-measure pain.
-- **Anchor `href` policy across all render paths** — triage item;
-  the card's navigation lock covers only the rich path.
-- **RNRH text selection on native** — triage item; orthogonal to
-  this pattern.
-- **RNRH-selectability parity inside the fallback** — if the
-  touch-capture fallback ever ships, in-card selection dies with
-  it; revisit alongside the selection triage item.
+- **Anchor `href` policy across render paths** — triage item;
+  the document navigation lock covers native, desktop web still
+  navigates the Electron window.
+- **Persisted rich-verdict or height caches** — nothing is
+  persisted; the document architecture removed the need.

@@ -130,10 +130,16 @@ The split heuristic + when-to-add rules live in
   core, screen-specific contextual zone), self-contained-command
   inclusion test, per-tier Popover/Sheet via
   `SearchableOverlayList`, combobox/listbox semantics.
-- [`rich-entry-rendering.md`](./rich-entry-rendering.md) — hybrid
-  narrative-content rendering: engine-as-oracle detection of
-  entries exceeding the native RNRH subset, isolated rich
-  renderers (Shadow DOM host on web, Expo DOM component on
-  native), rich sanitize path with stylesheet-level CSS scrub,
-  underlay-plus-single-swap card lifecycle, on-device validation
+- [`rich-entry-rendering.md`](./rich-entry-rendering.md) —
+  platform-neutral narrative-content core: engine-as-oracle
+  detection of entries exceeding the plainly-translatable subset,
+  rich sanitize path with stylesheet-level CSS scrub, shadow-root
+  isolation with theme-variable inheritance.
+- [`reader-document.md`](./reader-document.md) — the reader's
+  narrative surface as one web document on every platform: flow
+  layout + engine culling instead of JS virtualization, native
+  hosting in a single long-lived `'use dom'` WebView, bridge
+  contract with readiness handshake, in-document scroll policy and
+  inline edit (native-sheet fallback), document-level CSP +
+  navigation lock, renderer-kill recovery, on-device validation
   checklist.

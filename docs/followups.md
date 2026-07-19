@@ -13,29 +13,19 @@ for the placement rule.
 
 ## UX
 
-- **Single-document reader spike — evaluate, then design pass.**
-  Per-entry WebView cards shift on swap-in and cost ~50MB each;
-  the candidate endgame hosts the existing web reader surface
-  (EntryWindow web branch + EntryCard) in **one** DOM component
-  on native. Read-only spike at dev route `/dev/reader-webview`
-  (seeded DB required). If the spike holds on device (boot
-  latency, scroll feel, memory, rich rendering), the pivot needs
-  a full design pass revising
-  [`ui/patterns/rich-entry-rendering.md`](./ui/patterns/rich-entry-rendering.md)
-  (it supersedes the per-entry native tail and the "chrome stays
-  native" scope gate). User-endorsed direction 2026-07-19.
-
-- **Rich-entry rendering — on-device validation.** Implementation
-  landed 2026-07-19 per
-  [`ui/patterns/rich-entry-rendering.md`](./ui/patterns/rich-entry-rendering.md).
-  Remaining work: per-machine dev-client rebuild
-  (`react-native-webview` is a new native module — see
-  [lessons-learned → native deps](./implementation/lessons-learned/native-dep-expo-link.md)),
-  then the
-  [on-device validation checklist](./ui/patterns/rich-entry-rendering.md#validation-checklist)
-  on real low-end Android hardware. The checklist's rich-heavy
-  story ships in the seed dataset ("The Gallery of Impossible
-  Rooms", incl. the item-7 security probes); on device, seed it
-  via the dev surface's "Reseed database" action. Until
-  validated, Android rich cards ride the untested WebView path
-  (web/desktop shadow-host path is exercised by Storybook tests).
+- **Single-document reader — implement per pattern doc.** Design
+  pass resolved 2026-07-19 (spike device-verified; exploration
+  record `2026-07-19-single-document-reader`); canonical spec in
+  [`ui/patterns/reader-document.md`](./ui/patterns/reader-document.md).
+  Work, in dependency order per the exploration's integration
+  plan: shared flow-and-engine-culling entry list (retires both
+  `EntryWindow` branches, desktop included), the `'use dom'`
+  reader document (in-document scroll policy, inline edit,
+  streaming), native host integration (loading treatment, bridge
+  and handshake, recovery), then the per-entry tail retirements
+  and the
+  [on-device validation checklist](./ui/patterns/reader-document.md#validation-checklist)
+  (IME is the go/no-go for the native-edit-sheet fallback). The
+  seeded Gallery story + PROBE entries (`/dev/reseed`) feed
+  validation; the shipped per-entry path remains the floor until
+  host integration lands.
