@@ -10,6 +10,7 @@ import type {
   ReaderSurfaceProps,
 } from '@/components/reader/reader-document-types'
 import { ReaderSurface } from '@/components/reader/reader-surface'
+import { DensityProvider } from '@/lib/density'
 import { ThemeProvider, useTheme } from '@/lib/themes'
 
 export interface ReaderDocumentRef extends DOMImperativeFactory {
@@ -117,11 +118,13 @@ export default function ReaderDocument({
 
   return (
     <ThemeProvider initialThemeId={themeId}>
-      <ThemeSync themeId={themeId} />
-      <style>{RESET_CSS}</style>
-      <div className="reader-doc-root bg-bg-base" onClickCapture={handleClickCapture}>
-        <ReaderSurface {...surfaceProps} ref={surfaceRef} />
-      </div>
+      <DensityProvider>
+        <ThemeSync themeId={themeId} />
+        <style>{RESET_CSS}</style>
+        <div className="reader-doc-root bg-bg-base" onClickCapture={handleClickCapture}>
+          <ReaderSurface {...surfaceProps} ref={surfaceRef} />
+        </div>
+      </DensityProvider>
     </ThemeProvider>
   )
 }
