@@ -56,6 +56,8 @@ the modal carries the consequence in numeric form, not visual:
 │  • 1 chapter re-opened — chapter 5 will…     │  (only when cross-chapter)
 │  • 23 world-state changes                    │
 │                                              │
+│  **This cannot be undone.**                  │
+│                                              │
 │              [ Cancel ]  [ Delete entries ]  │
 └──────────────────────────────────────────────┘
 ```
@@ -63,7 +65,10 @@ the modal carries the consequence in numeric form, not visual:
 - **Width** ~440px. Centered. Backdrop dim.
 - **Title** — `Delete from entry <N>?` — names the trigger entry; the
   question mark signals consent gate.
-- **Body** — one-sentence framing + bulleted impact list.
+- **Body** — one-sentence framing + bulleted impact list, closed by a
+  bold `This cannot be undone.` line: deletion prunes the delta log
+  (it is itself the undo primitive), so no CTRL-Z or redo can restore
+  what the modal commits.
 - **Foot** — `Cancel` (secondary) + `Delete entries` (danger
   primary, warn-coloured per the inline-delete convention in
   [branch navigator](../branch-navigator/branch-navigator.md#inline-delete-confirm)).

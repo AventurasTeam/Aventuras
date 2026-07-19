@@ -34,6 +34,7 @@
     "chapters_other": "{{count}} chapters re-opened",
     "worldState": "{{count}} world-state change",
     "worldState_other": "{{count}} world-state changes",
+    "irreversible": "This cannot be undone.",
     "confirm": "Delete entries"
   },
   "systemEntry": {

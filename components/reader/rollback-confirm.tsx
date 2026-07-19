@@ -54,6 +54,9 @@ export function RollbackConfirmModal({
             {`• ${t('reader:rollbackConfirm.worldState', { count: counts.worldStateChanges })}`}
           </Text>
         </View>
+        <Text size="sm" className="font-bold">
+          {t('reader:rollbackConfirm.irreversible')}
+        </Text>
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
             <Button variant="secondary">
