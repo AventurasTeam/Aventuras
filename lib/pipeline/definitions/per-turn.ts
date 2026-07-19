@@ -6,7 +6,7 @@ import { generateId, IdBiMap } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
 
-import { buildPerTurnGenerationContext } from './per-turn-context'
+import { buildGenerationContext } from './generation-context'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
@@ -39,7 +39,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
 
   const idMap = new IdBiMap()
   ctx.intermediates.idMap = idMap
-  const context = buildPerTurnGenerationContext({
+  const context = buildGenerationContext({
     entries,
     entities,
     definition: open.definition,

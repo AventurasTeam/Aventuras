@@ -32,7 +32,8 @@ export const PER_TURN_NARRATIVE = `{% if definition.setting != blank -%}
 
 {% endif -%}
 # Story so far
-{% for entry in entries %}
+{%- assign recentEntries = entries | recent: userSettings.partialChapterBuffer %}
+{% for entry in recentEntries %}
 {{ entry.content }}
 {% endfor %}
 {% include 'macro_output_format_narrative' %}`

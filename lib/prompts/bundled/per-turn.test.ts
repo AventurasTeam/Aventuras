@@ -23,6 +23,7 @@ const m2Context = {
   ],
   sceneEntities: ['char_1'],
   entries: [{ content: 'The gate groaned open.' }, { content: 'Aria stepped through.' }],
+  userSettings: { partialChapterBuffer: 10 },
 }
 
 describe('bundled per-turn template — empty-guard contract', () => {

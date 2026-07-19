@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import { IdBiMap } from '@/lib/ids'
-import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
+import { renderTemplate, TEMPLATE_IDS, VARIABLES } from '@/lib/prompts'
 
-import { buildPerTurnGenerationContext } from './per-turn-context'
+import { buildGenerationContext } from './generation-context'
 
 const definition = {
   mode: 'adventure' as const,
@@ -31,8 +31,8 @@ function entry(id: string, position: number, content: string, kind = 'ai_reply')
   }
 }
 
-describe('buildPerTurnGenerationContext', () => {
-  it('keeps only the last partialChapterBuffer entries and drops system entries', () => {
+describe('buildGenerationContext', () => {
+  it('drops system entries outright and keeps the full caller-scoped window', () => {
     const entries = [
       entry('e1', 1, 'one'),
       entry('e2', 2, 'two'),
@@ -40,7 +40,7 @@ describe('buildPerTurnGenerationContext', () => {
       entry('sys', 4, 'ERROR', 'system'),
       entry('e5', 5, 'five'),
     ] as never[]
-    const ctx = buildPerTurnGenerationContext({
+    const ctx = buildGenerationContext({
       entries,
       entities: [],
       definition,
@@ -48,12 +48,36 @@ describe('buildPerTurnGenerationContext', () => {
       idMap: new IdBiMap(),
     })
     const contents = (ctx.entries as { content: string }[]).map((e) => e.content)
-    expect(contents).toEqual(['two', 'three', 'five'])
+    expect(contents).toEqual(['one', 'two', 'three', 'five'])
     expect(contents).not.toContain('ERROR')
   })
 
+  it('exposes partialChapterBuffer through userSettings for template-side windowing', () => {
+    const ctx = buildGenerationContext({
+      entries: [],
+      entities: [],
+      definition,
+      settings,
+      idMap: new IdBiMap(),
+    })
+    expect(ctx.userSettings).toEqual({ partialChapterBuffer: 3 })
+  })
+
+  it('emits every variable the generationContext registry pins', () => {
+    const ctx = buildGenerationContext({
+      entries: [],
+      entities: [],
+      definition,
+      settings,
+      idMap: new IdBiMap(),
+    })
+    for (const variable of VARIABLES.generationContext) {
+      expect(Object.keys(ctx)).toContain(variable.name)
+    }
+  })
+
   it('normalizes whitespace-only definitional fields to empty string', () => {
-    const ctx = buildPerTurnGenerationContext({
+    const ctx = buildGenerationContext({
       entries: [],
       entities: [],
       definition,
@@ -76,7 +100,7 @@ describe('buildPerTurnGenerationContext', () => {
         injectionMode: 'auto',
       },
     ] as never[]
-    const ctx = buildPerTurnGenerationContext({
+    const ctx = buildGenerationContext({
       entries: [],
       entities,
       definition,
@@ -106,7 +130,7 @@ describe('buildPerTurnGenerationContext', () => {
         injectionMode: 'auto',
       },
     ] as never[]
-    const ctx = buildPerTurnGenerationContext({
+    const ctx = buildGenerationContext({
       entries,
       entities,
       definition,
@@ -121,7 +145,7 @@ describe('buildPerTurnGenerationContext', () => {
   })
 
   it('yields empty sceneEntities when no entry carries scene metadata', () => {
-    const ctx = buildPerTurnGenerationContext({
+    const ctx = buildGenerationContext({
       entries: [entry('e1', 1, 'one')] as never[],
       entities: [],
       definition,
@@ -131,9 +155,15 @@ describe('buildPerTurnGenerationContext', () => {
     expect(ctx.sceneEntities).toEqual([])
   })
 
-  it('renders the per-turn template with buffer + guarded headers', () => {
-    const entries = [entry('e1', 1, 'The gate creaks open.')] as never[]
-    const ctx = buildPerTurnGenerationContext({
+  it('renders the per-turn template windowed to partialChapterBuffer', () => {
+    const entries = [
+      entry('e1', 1, 'first-line'),
+      entry('e2', 2, 'second-line'),
+      entry('e3', 3, 'third-line'),
+      entry('e4', 4, 'fourth-line'),
+      entry('e5', 5, 'The gate creaks open.'),
+    ] as never[]
+    const ctx = buildGenerationContext({
       entries,
       entities: [],
       definition,
@@ -145,5 +175,8 @@ describe('buildPerTurnGenerationContext', () => {
     expect(prompt).toContain('# Genre')
     expect(prompt).not.toContain('# Tone') // whitespace-only tone.promptBody guarded out
     expect(prompt).toContain('The gate creaks open.')
+    expect(prompt).toContain('third-line')
+    expect(prompt).not.toContain('first-line') // outside the 3-entry window
+    expect(prompt).not.toContain('second-line')
   })
 })

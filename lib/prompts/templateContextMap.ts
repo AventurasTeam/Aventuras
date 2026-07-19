@@ -10,8 +10,8 @@ export type VariableDef = {
   required?: boolean
 }
 
-// Pinned M2 variable names per group. Slice 2.7's per-turn context builder
-// must use these exact names (a name mismatch only fails at integration).
+// Pinned M2 variable names per group. buildGenerationContext must emit these
+// exact names — parity-tested in lib/pipeline/definitions/generation-context.test.ts.
 // Entity fields follow the drizzle row shape (camelCase).
 export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
   generationContext: [
@@ -19,7 +19,8 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       name: 'entries',
       type: 'Entry[]',
       category: 'Story',
-      description: 'Recent entry buffer (verbatim).',
+      description:
+        'Caller-scoped entry window (per-turn: the open partial chapter); system entries excluded. Window with `recent`.',
       required: true,
     },
     {
@@ -47,7 +48,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       name: 'userSettings',
       type: 'object',
       category: 'Story Config',
-      description: 'Operational knobs subset exposed to templates.',
+      description: 'Operational knobs exposed to templates (partialChapterBuffer).',
       required: false,
     },
     {
