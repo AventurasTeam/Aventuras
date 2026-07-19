@@ -546,6 +546,7 @@ export default function ReaderComposerRoute() {
       <EntryCard
         kind={e.kind}
         content={isEditing ? editDraft : e.content}
+        entryId={e.id}
         meta={e.metadata ?? undefined}
         reasoning={e.metadata?.reasoning}
         disabled={editBlocked}

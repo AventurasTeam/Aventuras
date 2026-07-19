@@ -26,12 +26,16 @@ import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
 import {
+  detectRichEntryHtml,
   narrativeCustomHTMLElementModels,
   narrativeTagsStyles,
-  renderNarrativeHtml,
+  parseMarkdownToHtml,
+  sanitizeHtml,
 } from '@/lib/markdown'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
+
+import { RichEntryContent } from './rich-entry-content'
 
 type EntryKind = StoryEntry['kind'] | 'streaming'
 
@@ -43,6 +47,8 @@ type EntryMeta = Pick<EntryMetadata, 'tokens'>
 type EntryCardProps = {
   kind: EntryKind
   content: string
+  /** Stable id for the native rich-card height cache; omit for streaming. */
+  entryId?: string
   /** Pre-formatted by the host's calendar renderer; opaque to the compound. */
   worldTimeLabel?: string
 
@@ -104,10 +110,10 @@ function Pulsing({ children }: { children: ReactNode }) {
   return <Animated.View style={style}>{children}</Animated.View>
 }
 
-function NarrativeContent({ text, muted }: { text: string; muted?: boolean }) {
+function PlainNarrative({ marked, muted }: { marked: string; muted?: boolean }) {
   const { width } = useWindowDimensions()
   const { theme } = useTheme()
-  const html = useMemo(() => renderNarrativeHtml(text), [text])
+  const html = useMemo(() => sanitizeHtml(marked), [marked])
   // RenderHTML has no theme inheritance (web's body-color baseline doesn't
   // exist on native), so the base color is always passed explicitly — without
   // it, non-muted text is default-black on dark themes.
@@ -139,9 +145,36 @@ function NarrativeContent({ text, muted }: { text: string; muted?: boolean }) {
   )
 }
 
+function NarrativeContent({
+  text,
+  muted,
+  allowRich,
+  entryId,
+}: {
+  text: string
+  muted?: boolean
+  allowRich?: boolean
+  entryId?: string
+}) {
+  const marked = useMemo(() => parseMarkdownToHtml(text), [text])
+  // Verdict is per-render, memoized alongside the HTML memo — never persisted,
+  // so detector improvements reclassify old entries retroactively.
+  const rich = useMemo(() => allowRich === true && detectRichEntryHtml(marked), [allowRich, marked])
+
+  if (!rich) return <PlainNarrative marked={marked} muted={muted} />
+  return (
+    <RichEntryContent
+      markedHtml={marked}
+      entryId={entryId}
+      underlay={<PlainNarrative marked={marked} />}
+    />
+  )
+}
+
 export function EntryCard({
   kind,
   content,
+  entryId,
   worldTimeLabel,
   onEdit,
   onDelete,
@@ -295,7 +328,11 @@ export function EntryCard({
           )}
         </View>
       ) : kind === 'streaming' && content.length === 0 ? null : ( // pre-first-chunk / reasoning-phase placeholder: nothing to render yet
-        <NarrativeContent text={content} />
+        <NarrativeContent
+          text={content}
+          allowRich={kind === 'user_action' || kind === 'ai_reply' || kind === 'opening'}
+          entryId={entryId}
+        />
       )}
 
       {showActions ? (

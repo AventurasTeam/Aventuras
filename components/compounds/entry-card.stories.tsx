@@ -312,19 +312,65 @@ export const MarkdownRendering: StoryT = {
   },
 }
 
+export const RichContent: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'ai_reply',
+    entryId: 'story-rich-1',
+    content: [
+      'A styled scene card:',
+      '',
+      '<div style="background: linear-gradient(135deg, #1f2937, #4c1d95); padding: 12px; border-radius: 8px; color: #f9fafb">',
+      '<style>@keyframes pulse { 50% { opacity: 0.5 } } .glow { animation: pulse 2s infinite }</style>',
+      '<span class="glow">The beacon pulses.</span>',
+      '</div>',
+      '',
+      '| Name | Role |',
+      '| ---- | ---- |',
+      '| Ana  | Scout |',
+    ].join('\n'),
+    meta: aiMeta,
+  },
+}
+
 export const XssSanitizationAllowlist: StoryT = {
   ...wrap,
   args: {
     ...baseProps,
     kind: 'ai_reply',
-    content:
-      'Safe text. <script>window.__xss = true</script><img src=x onerror="window.__xss = true">',
+    // No <script> here: a script tag has no RNRH element model, so it flips
+    // the entry to the rich path (shadow root) — RichXssSanitization covers
+    // that. An onerror-bearing <img> keeps the entry on the plain path.
+    content: 'Safe text. <img src=x onerror="window.__xss = true">',
     meta: aiMeta,
   },
   play: async () => {
-    // window.__xss is only ever set by the payload's script/onerror executing —
+    // window.__xss is only ever set by the payload's onerror executing —
     // its absence is the sanitization assertion.
     expect((globalThis as { __xss?: boolean }).__xss).toBeUndefined()
     await waitFor(() => expect(screen.getByText(/Safe text\./)).toBeInTheDocument())
+  },
+}
+
+export const RichXssSanitization: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'ai_reply',
+    entryId: 'story-rich-xss',
+    content:
+      'Safe rich text. <style>@keyframes x { to { opacity: 0.5 } }</style><script>window.__xssRich = true</script><img src=x onerror="window.__xssRich = true">',
+    meta: aiMeta,
+  },
+  play: async ({ canvasElement }) => {
+    await waitFor(() => {
+      const host = Array.from(canvasElement.querySelectorAll('div')).find(
+        (div) => div.shadowRoot != null,
+      )
+      expect(host).toBeDefined()
+      expect(host!.shadowRoot!.innerHTML).toContain('Safe rich text.')
+    })
+    expect((globalThis as { __xssRich?: boolean }).__xssRich).toBeUndefined()
   },
 }
