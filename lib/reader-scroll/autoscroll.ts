@@ -7,6 +7,14 @@ export type AutoscrollMachine = {
   readonly state: AutoscrollState
   streamStarted(pos: { distanceFromBottomPx: number }): void
   userScrolled(pos: { distanceFromBottomPx: number }): void
+  /**
+   * Hard disengage on an explicit user gesture (wheel-up, touch drag).
+   * Positional `userScrolled` alone can't win against per-chunk re-pins: the
+   * user never accumulates more than the at-bottom tolerance between two pins
+   * unless they out-scroll the token rate. Doesn't latch — the next
+   * `userScrolled` at the bottom re-engages.
+   */
+  userInterrupted(): void
   autoscrollApplied(pos: { distanceFromBottomPx: number }): void
   streamEnded(): void
 }
@@ -14,6 +22,11 @@ export type AutoscrollMachine = {
 export function createAutoscrollMachine(): AutoscrollMachine {
   let state: AutoscrollState = 'disengaged'
   let lastProgrammaticDistance: number | null = null
+  // Hysteresis after a gesture interrupt: the gesture's own scroll event still
+  // reports an at-bottom distance (the pin loop kept the user there), so
+  // positional re-engage must stay off until the user has actually left the
+  // at-bottom band once.
+  let interruptLatched = false
 
   function atBottom(distanceFromBottomPx: number): boolean {
     return distanceFromBottomPx <= AT_BOTTOM_TOLERANCE_PX
@@ -26,6 +39,12 @@ export function createAutoscrollMachine(): AutoscrollMachine {
     streamStarted(pos) {
       state = atBottom(pos.distanceFromBottomPx) ? 'engaged' : 'disengaged'
       lastProgrammaticDistance = null
+      interruptLatched = false
+    },
+    userInterrupted() {
+      state = 'disengaged'
+      lastProgrammaticDistance = null
+      interruptLatched = true
     },
     userScrolled(pos) {
       // One-shot guard: the marker only ever suppresses the immediately-next
@@ -34,6 +53,10 @@ export function createAutoscrollMachine(): AutoscrollMachine {
         lastProgrammaticDistance !== null && pos.distanceFromBottomPx === lastProgrammaticDistance
       lastProgrammaticDistance = null
       if (wasProgrammaticEcho) return
+      if (interruptLatched) {
+        if (atBottom(pos.distanceFromBottomPx)) return
+        interruptLatched = false
+      }
       state = atBottom(pos.distanceFromBottomPx) ? 'engaged' : 'disengaged'
     },
     autoscrollApplied(pos) {
@@ -41,6 +64,7 @@ export function createAutoscrollMachine(): AutoscrollMachine {
     },
     streamEnded() {
       lastProgrammaticDistance = null
+      interruptLatched = false
     },
   }
 }

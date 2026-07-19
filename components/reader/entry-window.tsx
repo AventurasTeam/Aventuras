@@ -10,6 +10,7 @@ import {
   type ForwardedRef,
   type ReactNode,
   type UIEvent,
+  type WheelEvent,
 } from 'react'
 import {
   FlatList,
@@ -27,6 +28,12 @@ type EntryWindowProps<T extends { id: string }> = {
   onNearTop: () => void
   onNearBottomChange: (isNearBottom: boolean) => void
   onScrollPositionChange: (pos: { distanceFromBottomPx: number }) => void
+  /**
+   * Explicit user scroll gesture: wheel-up on web, drag-begin on native.
+   * Unlike scroll-position events, gestures can't be raced by programmatic
+   * autoscroll pins — hosts use this to break the autoscroll pin loop.
+   */
+  onUserScrollGesture?: () => void
 }
 
 type EntryWindowHandle = {
@@ -64,7 +71,14 @@ function rowStyle(offsetPx: number): CSSProperties {
 }
 
 function EntryWindowWebInner<T extends { id: string }>(
-  { rows, renderRow, onNearTop, onNearBottomChange, onScrollPositionChange }: EntryWindowProps<T>,
+  {
+    rows,
+    renderRow,
+    onNearTop,
+    onNearBottomChange,
+    onScrollPositionChange,
+    onUserScrollGesture,
+  }: EntryWindowProps<T>,
   ref: ForwardedRef<EntryWindowHandle>,
 ) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -144,8 +158,22 @@ function EntryWindowWebInner<T extends { id: string }>(
     [onNearTop, onNearBottomChange, onScrollPositionChange],
   )
 
+  const handleWheel = useCallback(
+    (event: WheelEvent<HTMLDivElement>) => {
+      // Upward only: wheel-down toward the live edge should let the positional
+      // rule re-engage autoscroll, not interrupt it.
+      if (event.deltaY < 0) onUserScrollGesture?.()
+    },
+    [onUserScrollGesture],
+  )
+
   return (
-    <div ref={scrollRef} className="h-full overflow-y-auto" onScroll={handleScroll}>
+    <div
+      ref={scrollRef}
+      className="h-full overflow-y-auto"
+      onScroll={handleScroll}
+      onWheel={handleWheel}
+    >
       <div style={trackStyle(virtualizer.getTotalSize())}>
         {virtualizer.getVirtualItems().map((virtualRow) => (
           <div
@@ -166,7 +194,14 @@ const EntryWindowWeb = forwardRef(EntryWindowWebInner) as <T extends { id: strin
 ) => ReturnType<typeof EntryWindowWebInner>
 
 function EntryWindowNativeInner<T extends { id: string }>(
-  { rows, renderRow, onNearTop, onNearBottomChange, onScrollPositionChange }: EntryWindowProps<T>,
+  {
+    rows,
+    renderRow,
+    onNearTop,
+    onNearBottomChange,
+    onScrollPositionChange,
+    onUserScrollGesture,
+  }: EntryWindowProps<T>,
   ref: ForwardedRef<EntryWindowHandle>,
 ) {
   const listRef = useRef<FlatList<T>>(null)
@@ -212,6 +247,7 @@ function EntryWindowNativeInner<T extends { id: string }>(
       renderItem={({ item }) => <>{renderRow(item)}</>}
       onContentSizeChange={handleContentSizeChange}
       onScroll={handleScroll}
+      onScrollBeginDrag={onUserScrollGesture}
       scrollEventThrottle={100}
       maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
       onStartReached={onNearTop}

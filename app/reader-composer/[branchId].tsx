@@ -536,6 +536,7 @@ export default function ReaderComposerRoute() {
                   lastDistanceRef.current = pos.distanceFromBottomPx
                   autoscrollRef.current.userScrolled(pos)
                 }}
+                onUserScrollGesture={() => autoscrollRef.current.userInterrupted()}
               />
             )}
             <JumpButtons
