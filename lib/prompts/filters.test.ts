@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { byKind, active, proseJoin, jsonFilter } from './filters'
+import { byKind, active, recent, proseJoin, jsonFilter } from './filters'
 
 describe('prompt filters', () => {
   const entities = [
@@ -24,6 +24,22 @@ describe('prompt filters', () => {
 
   it('active filters to status active', () => {
     expect(active(entities).map((e) => e.id)).toEqual(['char_1', 'loc_1'])
+  })
+
+  it('recent keeps the last N items', () => {
+    expect(recent([1, 2, 3, 4], 2)).toEqual([3, 4])
+    expect(recent([1, 2], 10)).toEqual([1, 2])
+  })
+
+  it('recent floors at 1 so 0 or garbage cannot send everything', () => {
+    expect(recent([1, 2, 3], 0)).toEqual([3])
+    expect(recent([1, 2, 3], -5)).toEqual([3])
+    expect(recent([1, 2, 3], Number.NaN)).toEqual([3])
+    expect(recent([1, 2, 3], undefined as unknown as number)).toEqual([3])
+  })
+
+  it('recent returns [] for non-array input', () => {
+    expect(recent(undefined as unknown as never[], 3)).toEqual([])
   })
 
   it('proseJoin renders an Oxford-comma list', () => {
