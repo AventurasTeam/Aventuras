@@ -372,7 +372,11 @@ export default function ReaderComposerRoute() {
   const openRollback = useCallback(
     async (targetId: string) => {
       const counts = await getRollbackCounts(branchId, targetId, ctx)
-      if ('status' in counts) return
+      if ('status' in counts) {
+        // A tapped delete silently doing nothing reads as broken.
+        toast.error(t('reader:rollbackFailed'))
+        return
+      }
       const target = entriesStore.getById(targetId)
       setRollback({ targetId, targetNumber: target?.position ?? 0, counts })
     },

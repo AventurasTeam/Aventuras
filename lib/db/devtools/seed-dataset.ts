@@ -1013,6 +1013,32 @@ const heroDeltas: NewDelta[] = [
   },
 ]
 
+// Every persisted entry carries a create delta (the rollback window resolves
+// from it — operational.ts rejects without one); seeding rows bare makes
+// delete/rollback silently dead on every seeded story. Sources mirror the
+// real writers: user_edit for user turns, ai_classifier for model output.
+function entryCreateDeltas(allEntries: NewStoryEntry[]): NewDelta[] {
+  const nextLogPosition = new Map<string, number>()
+  return allEntries.map((e) => {
+    const lp = nextLogPosition.get(e.branchId) ?? 1
+    nextLogPosition.set(e.branchId, lp + 1)
+    return {
+      id: `delta_create_${e.branchId}_${e.id}`,
+      branchId: e.branchId,
+      entryId: null,
+      actionId: `seed_act_create_${e.branchId}_${e.id}`,
+      logPosition: lp,
+      source: e.kind === 'user_action' ? ('user_edit' as const) : ('ai_classifier' as const),
+      targetTable: 'story_entries',
+      targetId: e.id,
+      op: 'create' as const,
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: e.createdAt,
+    }
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Filler stories — breadth for the story-list screen + light open coverage.
 // Creative/third-person needs no lead entity; one adventure filler carries a lead.
@@ -1504,6 +1530,15 @@ const appSettingsRow: NewAppSettings = {
 export function buildSeedSteps(): SeedStep[] {
   const filler = fillerStoryRows()
   const rich = richStoryRows()
+  const allEntries = [...heroEntries(), ...forkEntries(), ...rich.entries, ...filler.entries]
+  const createDeltaRows = entryCreateDeltas(allEntries)
+  // The hand-authored hero deltas keep their order but slot after MAIN's
+  // create block — log_position is unique per branch.
+  const mainCreateCount = createDeltaRows.filter((d) => d.branchId === MAIN).length
+  const shiftedHeroDeltas = heroDeltas.map((d, i) => ({
+    ...d,
+    logPosition: mainCreateCount + i + 1,
+  }))
 
   const heroStory: NewStory = {
     id: HERO,
@@ -1560,12 +1595,7 @@ export function buildSeedSteps(): SeedStep[] {
     step('assets', assets, assetRows),
     step('stories', stories, [heroStory, rich.story, ...filler.stories]),
     step('branches', branches, [...branchRows, rich.branch]),
-    step('story_entries', storyEntries, [
-      ...heroEntries(),
-      ...forkEntries(),
-      ...rich.entries,
-      ...filler.entries,
-    ]),
+    step('story_entries', storyEntries, allEntries),
     step('chapters', chapters, heroChapters),
     step('entities', entities, [...heroEntities, ...filler.entities]),
     step('character_relationships', characterRelationships, heroRelationships),
@@ -1577,7 +1607,7 @@ export function buildSeedSteps(): SeedStep[] {
     step('branch_era_flips', branchEraFlips, heroEraFlips),
     step('translations', translations, heroTranslations),
     step('entry_assets', entryAssets, heroEntryAssets),
-    step('deltas', deltas, heroDeltas),
+    step('deltas', deltas, [...createDeltaRows, ...shiftedHeroDeltas]),
     step('pipeline_runs', pipelineRuns, pipelineRunRows),
     step('app_settings', appSettings, [appSettingsRow]),
   ]
