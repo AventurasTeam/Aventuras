@@ -56,18 +56,19 @@ order:
    time: any declaration yielding **zero native props** — or
    props landing only in the engine's web-compat bucket, like
    `position` — → rich.
-3. Any tag without an RNRH element model → rich. This
-   deliberately includes `<table>`: GFM pipe tables compile to
-   `<table>`, core RNRH cannot render them (the official table
-   plugin is itself WebView-based), so unstyled markdown-table
-   entries take the rich card and finally render properly on
-   Android.
+3. Any tag without an RNRH element model → rich — plus `<table>`,
+   pinned explicitly: the engine _does_ ship a table element
+   model, but core RNRH has no tabular renderer (the official
+   table plugin is itself WebView-based), so GFM pipe tables take
+   the rich card and finally render properly on Android.
 4. Otherwise → the plain native path.
 
-Known false-positive class, accepted: a supported property with
-an _invalid_ value (`color: notacolor`) is dropped by the oracle
-and flags rich; the WebView drops it too. Cost is an unnecessary
-WebView, never a wrong rendering.
+Invalid values of supported properties (`color: notacolor`) are
+_not_ dropped by the oracle — they compile to native props and
+stay on the plain path, where RNRH ignores them. The
+false-positive class is narrower than originally budgeted: only
+genuinely untranslatable declarations flag rich, and the cost is
+always an unnecessary WebView, never a wrong rendering.
 
 The verdict is computed at render, memoized per entry alongside
 the existing HTML memo — **not persisted** on the entry row.

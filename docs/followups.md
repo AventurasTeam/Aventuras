@@ -13,13 +13,14 @@ for the placement rule.
 
 ## UX
 
-- **Rich-entry rendering — implement per pattern doc.** Design
-  pass resolved 2026-07-19; canonical spec in
+- **Rich-entry rendering — on-device validation.** Implementation
+  landed 2026-07-19 per
   [`ui/patterns/rich-entry-rendering.md`](./ui/patterns/rich-entry-rendering.md).
-  Remaining work: `react-native-webview` install + dev-client
-  rebuild (see
+  Remaining work: per-machine dev-client rebuild
+  (`react-native-webview` is a new native module — see
   [lessons-learned → native deps](./implementation/lessons-learned/native-dep-expo-link.md)),
-  implementation, then the
-  [on-device validation checklist](./ui/patterns/rich-entry-rendering.md#validation-checklist).
-  Until it lands, the floor is the juice-inlined RNRH subset.
-  Wanted earlier rather than later (user-confirmed 2026-07-18).
+  then the
+  [on-device validation checklist](./ui/patterns/rich-entry-rendering.md#validation-checklist)
+  on real low-end Android hardware. Until validated, Android rich
+  cards ride the untested WebView path (web/desktop shadow-host
+  path is exercised by Storybook tests).
