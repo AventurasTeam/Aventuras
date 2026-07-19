@@ -7,6 +7,7 @@ export { type RedoSnapshot } from './delta/redo'
 export { DeltaReplayError, reverseReplayDeltas } from './delta/reverse-replay'
 export {
   addProvider,
+  normalizeAppSettingsRow,
   quickWireModel,
   resetAppSettings,
   setAssignments,

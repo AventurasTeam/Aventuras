@@ -1,6 +1,7 @@
 import {
   DeltaReplayError,
   applyDeltaAction,
+  normalizeAppSettingsRow,
   registerAllDomains,
   reverseReplayDeltas,
 } from '@/lib/actions'
@@ -52,5 +53,20 @@ export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
   }
   // ctx.db (not the module-level default) so recovery and hydrate hit the
   // same instance.
-  return rehydrateAppSettings(ctx.db)
+  const result = await rehydrateAppSettings(ctx.db)
+  // Materialize schema-added defaults into the row (the DB is the settings
+  // editing surface until M7). Gated on a clean hydrate — a corrupt row must
+  // stay inspectable — and a failure here never blocks boot.
+  if (result.status === 'ok') {
+    try {
+      const normalized = await normalizeAppSettingsRow(ctx)
+      if (normalized.status === 'normalized')
+        logger.debug('bootstrap.app_settings_normalized', { columns: normalized.columns })
+    } catch (err) {
+      logger.error('bootstrap.app_settings_normalize_failed', {
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+  return result
 }
