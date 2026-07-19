@@ -1,8 +1,15 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, type CSSProperties } from 'react'
 
 import { sanitizeRichHtml } from '@/lib/markdown'
 
 import type { RichEntryContentProps } from './rich-entry-content.types'
+
+// Containment establishes the host as the containing block for position:fixed/
+// absolute descendants and clips painting to its box — a rich entry can't lay a
+// full-viewport overlay over app chrome (it renders inline in the main document
+// on web/Electron). Layout containment also opens a stacking context, so an
+// entry's z-index can't outrank app chrome.
+const HOST_STYLE: CSSProperties = { contain: 'layout paint' }
 
 // Mirrors global.css's .narrative-html baseline — document class selectors
 // don't reach into a shadow tree, only inherited properties do. Entry styles
@@ -21,5 +28,5 @@ export function RichEntryContent({ markedHtml }: RichEntryContentProps) {
     root.innerHTML = `<style>${BASELINE_CSS}</style>${html}`
   }, [html])
 
-  return <div ref={hostRef} />
+  return <div ref={hostRef} style={HOST_STYLE} />
 }
