@@ -17,11 +17,7 @@ import { EntryCard } from '@/components/compounds/entry-card'
 import { JumpButtons } from '@/components/reader/jump-buttons'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { StoryEntry } from '@/lib/db'
-import {
-  computePrependCompensation,
-  computeScrollMetrics,
-  createAutoscrollMachine,
-} from '@/lib/reader-scroll'
+import { computeScrollMetrics, createAutoscrollMachine } from '@/lib/reader-scroll'
 
 import type { ReaderSurfaceHandle, ReaderSurfaceProps } from './reader-document-types'
 
@@ -106,44 +102,55 @@ export function ReaderSurface({
     }
   }, [branchKey, hasRows])
 
-  // Prepend compensation is manual and deterministic: Chrome's scroll
-  // anchoring skips the adjustment for this tree (desktop-observed), so the
-  // scroller opts out entirely via overflow-anchor:none — an engine that did
-  // anchor would otherwise double-adjust. In static flow the old first row's
-  // offsetTop after the commit IS the prepended block height; the short hold
-  // loop afterwards absorbs any late layout of the inserted block (same
-  // frame-loop shape as the landing pin). A branch switch never matches the
-  // previous first id, so this stays out of the landing pin's way.
-  const prevFirstIdRef = useRef<string | undefined>(undefined)
+  // Everything that changes height above the reading position — a prepended
+  // block, the boundary shimmer mounting or unmounting, or both in one
+  // commit — funnels through one anchor rule: the row that led the window
+  // last commit has its content-offset delta applied to scrollTop. Chrome's
+  // scroll anchoring skips this tree (desktop-observed), so the scroller
+  // opts out via overflow-anchor:none and this rule is the sole authority —
+  // split per-cause compensations fought each other here (a hold target
+  // captured before a sibling compensation ran re-asserted the stale
+  // position). The short hold loop absorbs late layout of inserted content;
+  // a branch switch never finds the memoized row, so landing stays untouched.
+  const anchorMemoRef = useRef<{ id: string; offsetTop: number } | null>(null)
   const anchorHoldActiveRef = useRef(false)
   useLayoutEffect(() => {
     const el = scrollRef.current
-    const prevFirstId = prevFirstIdRef.current
-    const nextFirstId = rows[0]?.id
-    prevFirstIdRef.current = nextFirstId
-    if (el == null || prevFirstId == null || nextFirstId == null || nextFirstId === prevFirstId)
+    const firstId = rows[0]?.id
+    const memo = anchorMemoRef.current
+    const firstEl =
+      el != null && firstId != null
+        ? el.querySelector(`[data-entry-row="${CSS.escape(firstId)}"]`)
+        : null
+    const recordCurrent = () => {
+      anchorMemoRef.current =
+        firstId != null && firstEl instanceof HTMLElement
+          ? { id: firstId, offsetTop: firstEl.offsetTop }
+          : null
+    }
+    if (el == null || memo == null) {
+      recordCurrent()
       return
-    const anchorRow = el.querySelector(`[data-entry-row="${CSS.escape(prevFirstId)}"]`)
-    if (!(anchorRow instanceof HTMLElement)) return
-    // Offset difference, not absolute offsetTop: the boundary shimmer sits
-    // above the rows, so the new first row's offset is the zero point.
-    const newFirstRow = el.querySelector(`[data-entry-row="${CSS.escape(nextFirstId)}"]`)
-    const baseOffsetPx = newFirstRow instanceof HTMLElement ? newFirstRow.offsetTop : 0
-    if (anchorRow.offsetTop - baseOffsetPx <= 0) return
-    const { scrollTopDeltaPx } = computePrependCompensation({
-      prependedBlockHeightPx: anchorRow.offsetTop - baseOffsetPx,
-    })
-    el.scrollTop += scrollTopDeltaPx
-    const targetTop = anchorRow.getBoundingClientRect().top
+    }
+    const anchorEl = el.querySelector(`[data-entry-row="${CSS.escape(memo.id)}"]`)
+    if (!(anchorEl instanceof HTMLElement)) {
+      recordCurrent()
+      return
+    }
+    const deltaPx = anchorEl.offsetTop - memo.offsetTop
+    recordCurrent()
+    if (deltaPx === 0) return
+    el.scrollTop = Math.max(0, el.scrollTop + deltaPx)
+    const targetTop = anchorEl.getBoundingClientRect().top
     anchorHoldActiveRef.current = true
     let stableFrames = 0
     let totalFrames = 0
     let raf = 0
     const hold = () => {
-      if (!anchorHoldActiveRef.current || !anchorRow.isConnected) return
+      if (!anchorHoldActiveRef.current || !anchorEl.isConnected) return
       // Sub-pixel tolerance: scrollTop writes round, so a fractional drift
       // can never fully clear — without it this loop would spin to the cap.
-      const drift = anchorRow.getBoundingClientRect().top - targetTop
+      const drift = anchorEl.getBoundingClientRect().top - targetTop
       if (Math.abs(drift) >= 1) {
         el.scrollTop += drift
         stableFrames = 0
@@ -162,24 +169,7 @@ export function ReaderSurface({
       anchorHoldActiveRef.current = false
       cancelAnimationFrame(raf)
     }
-  }, [rows])
-
-  // The boundary shimmer occupies its space permanently while older entries
-  // may exist — mounting it mid-scroll would itself shift content. Its
-  // one-time unmount (branch top proven) is compensated here so the resting
-  // viewport doesn't move; the height is remembered across the unmount.
-  const shimmerRef = useRef<HTMLDivElement>(null)
-  const shimmerHeightRef = useRef(0)
-  const prevHasOlderRef = useRef(hasOlder)
-  useLayoutEffect(() => {
-    if (shimmerRef.current != null) shimmerHeightRef.current = shimmerRef.current.offsetHeight
-    const wasShowing = prevHasOlderRef.current
-    prevHasOlderRef.current = hasOlder
-    if (!wasShowing || hasOlder) return
-    nearTopPendingRef.current = false
-    const el = scrollRef.current
-    if (el != null) el.scrollTop = Math.max(0, el.scrollTop - shimmerHeightRef.current)
-  })
+  }, [rows, hasOlder])
 
   // The near-top load fires only at scroll rest: prepending (and the
   // compensating scrollTop write) mid-drag or mid-fling fights the
@@ -205,6 +195,9 @@ export function ReaderSurface({
     },
     [],
   )
+  useEffect(() => {
+    if (!hasOlder) nearTopPendingRef.current = false
+  }, [hasOlder])
 
   const handleScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {
@@ -348,7 +341,7 @@ export function ReaderSurface({
         onTouchCancel={handleTouchEnd}
       >
         {hasOlder && rows.length > 0 ? (
-          <div ref={shimmerRef} aria-hidden className={ROW_FRAME_CLASS}>
+          <div aria-hidden className={ROW_FRAME_CLASS}>
             <div className="rounded-lg border border-border bg-bg-raised p-4">
               <Skeleton className="mb-3 h-4 w-24" />
               <Skeleton className="mb-2 h-3 w-full" />
