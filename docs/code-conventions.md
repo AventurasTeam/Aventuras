@@ -191,6 +191,15 @@ Component behavior is verified by **UI smoke test, Storybook, or
 manual** check — not by exhaustive render assertions. There are **no
 coverage thresholds**; coverage is a diagnostic, not a gate.
 
+`pnpm coverage:lib` prints the per-module `lib/*` coverage table
+(unit project only; every `lib/**` module is enumerated, so an
+untested module shows as a `0%` row rather than dropping out, and
+`skipFull` is disabled so fully-covered modules stay visible — the
+text reporter otherwise hides exactly the rows that prove a 100%
+bar). Coverage settings live exclusively in `vitest.config.ts` —
+CLI `--coverage.*` dot-overrides crash the storybook project's
+preset loader, so never pass them; change the config instead.
+
 ## Forms
 
 Input clusters with a submit button use `react-hook-form` — multi

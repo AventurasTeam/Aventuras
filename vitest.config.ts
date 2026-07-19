@@ -16,6 +16,19 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
   },
   test: {
+    // Coverage is root-level only (vitest ignores per-project coverage), and
+    // CLI --coverage.* dot-overrides crash the storybook project's preset
+    // loader — keep all coverage settings here and pass none on the CLI
+    // (pnpm coverage:lib).
+    coverage: {
+      include: ['lib/**'],
+      // Overriding exclude drops vitest's defaults — restate the test-file
+      // pattern alongside the __tests__ support-file dirs.
+      exclude: ['**/*.test.*', '**/__tests__/**'],
+      // text hides fully-covered files by default (skipFull); verifying a
+      // per-module coverage bar needs the 100% rows visible.
+      reporter: [['text', { skipFull: false }]],
+    },
     projects: [
       {
         extends: true,

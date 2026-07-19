@@ -38,16 +38,3 @@ scrollEnabled: false }}`) embedded as an EntryWindow row, running
   Until it lands, the floor is the juice-inlined RNRH subset
   (see [lessons-learned → Metro browser builds](./implementation/lessons-learned/metro-native-ignores-browser-builds.md)).
   Wanted earlier rather than later (user-confirmed 2026-07-18).
-
-## Tooling
-
-- **Scoped coverage is not push-button reproducible.** The
-  dual-project vitest setup (storybook browser + unit node) drops a
-  single `lib/*` module from the merged `--coverage` report, and CLI
-  `--coverage.include` overrides crash the storybook project loader.
-  Slices that assert per-module line coverage (e.g.
-  [Slice 2.8](./implementation/milestones/02-first-user-loop/slices/08-id-substitution.md))
-  can only confirm the bar by inspection, and the gap recurs in every
-  milestone that sets a coverage bar. Fix: a `lib`-only coverage
-  script or vitest project so the bar is verifiable on demand.
-  Surfaced by Slice 2.8.

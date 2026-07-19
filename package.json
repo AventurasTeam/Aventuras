@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
+    "coverage:lib": "vitest run --project unit --coverage",
     "electron:compile": "tsc -p electron/tsconfig.json",
     "electron:start": "electron electron/dist/main.js",
     "desktop": "concurrently -k -n expo,electron -c blue,magenta \"cross-env BROWSER=none expo start --web --port 8081\" \"wait-on http://localhost:8081 && pnpm electron:compile && pnpm electron:start\"",

@@ -115,5 +115,8 @@ this same surface.
 - **Coverage caveat.** 100% line coverage holds by line-by-line
   inspection, but the dual-project vitest setup drops `lib/ids`
   from the merged `--coverage` report, so the acceptance bar isn't
-  push-button reproducible — logged in
-  [`followups.md → Tooling`](../../../../followups.md#tooling).
+  push-button reproducible. Since resolved: the text reporter's
+  default `skipFull` was hiding fully-covered files — `lib/ids`
+  vanished _because_ it hit 100% — and `pnpm coverage:lib` now
+  prints every module (see
+  [`code-conventions.md → Testing discipline`](../../../../code-conventions.md#testing-discipline)).
