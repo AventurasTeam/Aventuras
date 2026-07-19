@@ -46,9 +46,6 @@ const OVERSCAN = 6
 // FlatList treats a threshold of 1 as "within one viewport of the edge",
 // matching the web branch's one-clientHeight top boundary check below.
 const EDGE_THRESHOLD_VIEWPORTS = 1
-// Near-bottom (jump-button visibility) is deliberately tighter than the
-// auto-load tolerance: the button should appear as soon as the user leaves
-// the live edge, not a full viewport later (reader-composer.md#jump-buttons).
 const NEAR_BOTTOM_THRESHOLD_PX = 20
 const MAINTAIN_VISIBLE_CONTENT_POSITION = { minIndexForVisible: 0 } as const
 

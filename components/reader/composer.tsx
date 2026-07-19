@@ -104,8 +104,6 @@ export const Composer = forwardRef(function Composer(
 
   return (
     <View className="gap-2">
-      {/* Wireframe structure: the input alone is the bordered box; the action
-          row (mode picker left, send/cancel right) sits bare beneath it. */}
       <SpellcheckTextarea
         value={text}
         onChangeText={setText}
@@ -178,4 +176,4 @@ export const Composer = forwardRef(function Composer(
   )
 })
 
-export type { ComposerProps, ComposerHandle }
+export type { ComposerHandle, ComposerProps }
