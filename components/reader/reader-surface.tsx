@@ -26,6 +26,7 @@ import type { ReaderSurfaceHandle, ReaderSurfaceProps } from './reader-document-
 
 const NEAR_BOTTOM_THRESHOLD_PX = 20
 const JUMP_TO_BOTTOM_SETTLE_MS = 500
+const NEAR_TOP_IDLE_MS = 150
 
 // No content-visibility culling on rows: placeholder-height settle shifted
 // content under the user's finger on every first upward pass (device-observed,
@@ -156,16 +157,42 @@ export function ReaderSurface({
     }
   }, [rows])
 
+  // The near-top load fires only at scroll rest: prepending (and the
+  // compensating scrollTop write) mid-drag or mid-fling fights the
+  // compositor-owned scroll and reads as a jump — the same pathology that
+  // disqualified JS virtualizers. Latch the boundary signal, fire it once
+  // scroll events go quiet and no finger is down; a stationary prepend with
+  // real heights compensates exactly, so the viewport never moves.
+  const gestureActiveRef = useRef(false)
+  const nearTopPendingRef = useRef(false)
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const armNearTopIdleTimer = useCallback(() => {
+    if (idleTimerRef.current != null) clearTimeout(idleTimerRef.current)
+    idleTimerRef.current = setTimeout(() => {
+      idleTimerRef.current = null
+      if (gestureActiveRef.current || !nearTopPendingRef.current) return
+      nearTopPendingRef.current = false
+      void onNearTop()
+    }, NEAR_TOP_IDLE_MS)
+  }, [onNearTop])
+  useEffect(
+    () => () => {
+      if (idleTimerRef.current != null) clearTimeout(idleTimerRef.current)
+    },
+    [],
+  )
+
   const handleScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {
       const metrics = computeScrollMetrics(event.currentTarget)
       lastDistanceRef.current = metrics.distanceFromBottomPx
       autoscrollRef.current.userScrolled({ distanceFromBottomPx: metrics.distanceFromBottomPx })
-      if (metrics.withinTopViewport && !nearTopRef.current) void onNearTop()
+      if (metrics.withinTopViewport && !nearTopRef.current) nearTopPendingRef.current = true
       nearTopRef.current = metrics.withinTopViewport
+      if (nearTopPendingRef.current) armNearTopIdleTimer()
       setShowJumpToBottom(metrics.distanceFromBottomPx > NEAR_BOTTOM_THRESHOLD_PX)
     },
-    [onNearTop],
+    [armNearTopIdleTimer],
   )
 
   // Upward only: wheel-down toward the live edge should let the positional
@@ -179,6 +206,9 @@ export function ReaderSurface({
 
   // Touch drags interrupt like native drag-begin did — keyed off the first
   // touchmove, not touchstart, so plain taps can't disengage a pinned stream.
+  const handleTouchStart = useCallback(() => {
+    gestureActiveRef.current = true
+  }, [])
   const handleTouchMove = useCallback(() => {
     pinActiveRef.current = false
     anchorHoldActiveRef.current = false
@@ -188,7 +218,11 @@ export function ReaderSurface({
   }, [])
   const handleTouchEnd = useCallback(() => {
     touchInterruptedRef.current = false
-  }, [])
+    gestureActiveRef.current = false
+    // Momentum scroll events re-arm the timer; a still-finger release with a
+    // pending boundary load needs this kick or the load never fires.
+    if (nearTopPendingRef.current) armNearTopIdleTimer()
+  }, [armNearTopIdleTimer])
 
   // Stream lifecycle + pin. Layout effect so the pin targets the row height
   // the just-arrived chunk actually produced.
@@ -283,6 +317,7 @@ export function ReaderSurface({
         className="h-full overflow-y-auto [overflow-anchor:none]"
         onScroll={handleScroll}
         onWheel={handleWheel}
+        onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
