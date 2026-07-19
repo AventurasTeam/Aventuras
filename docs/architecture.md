@@ -36,13 +36,15 @@ read them.
   that the narrative template used to receive `entries`.
 - **Pipeline intermediates flow through the context.** `retrievalResult`,
   `narrativeResult`, `classificationResult`, `translationResult`,
-  `chapterAnalysis` are written by phases into the generation store and
-  become available to later templates in the same run.
+  `chapterAnalysis` are written by phases into the run's `intermediates`
+  and become available to later templates in the same run.
 - **Pack variables (user-defined custom fields) sit alongside built-ins.**
   A pack author sees the same API surface a built-in template sees.
-- **No prop-drilling between phases or templates.** Phases read via
-  `useGenerationStore.getState().getPerTurnContext()` (or the kind's
-  matching getter); templates render against that output.
+- **No prop-drilling between phases or templates.** A phase reads the
+  domain stores directly and calls the group's context builder
+  (`buildGenerationContext`) per render; run-scoped values flow through
+  the pipeline's `intermediates` bag. Templates render against the
+  builder's output.
 - **`entity.id` exposed to templates is the placeholder, not the
   UUID.** Per
   [`data-model.md → ID shape`](./data-model.md#id-shape--kind-prefixed-uuids-throughout)
@@ -289,10 +291,11 @@ What the registry contains:
   the registry and the runtime shape agree — that discipline sits with
   the authors of both sides.
 
-The runtime shape of `generationContext` is whatever the kind-keyed
-getter on the generation store returns; TypeScript types on the
-runtime side are the real safety net. The registry mirrors that
-surface for authoring ergonomics.
+The runtime shape of `generationContext` is whatever
+`buildGenerationContext` emits; a parity test pins its keys to the
+registry's variable names, and TypeScript types on the runtime side
+are the safety net for the values. The registry mirrors that surface
+for authoring ergonomics.
 
 ### v2 shape of `generationContext` — what's carried over, what changes
 
@@ -306,7 +309,7 @@ surface for authoring ergonomics.
 | `genre` / `tone` (single-string fields)        | `definition.genre.{label,promptBody}` and `definition.tone.{label,promptBody}` — substantial preset+prose blocks (label + body)               |
 | `setting` (no v1 equivalent in old context)    | New: `definition.setting` — freeform prose injected into generation context                                                                   |
 | `translated_*` columns via `translationResult` | Reads through the `translations` table (polymorphic target) instead of per-column fields                                                      |
-| Pipeline intermediates (narrativeResult, etc.) | Same — written to generation store, available to later templates within the run                                                               |
+| Pipeline intermediates (narrativeResult, etc.) | Same — written to the run's intermediates, available to later templates within the run                                                        |
 | `packVariables.runtimeVariables`               | Same pattern; deferred until pack system lands (see [`parked.md → Pack runtimeVariables surface`](./parked.md#pack-runtimevariables-surface)) |
 
 Definitional fields (mode, lead, narration, genre, tone, setting,
@@ -443,10 +446,10 @@ not ambient `??` scattered everywhere. Every other
 setting read is a direct property access off the parsed story
 settings.
 
-The generation store doesn't own settings storage — it reads via
-`getState()` on the app-settings store and the loaded story's settings
-slice, and surfaces them through `userSettings` as a clean, flat,
-typed shape for templates to consume.
+The context builder doesn't own settings storage — the phase reads
+the app-settings store and the loaded story's settings slice, and the
+builder surfaces them through `userSettings` as a clean, flat, typed
+shape for templates to consume.
 
 ---
 
