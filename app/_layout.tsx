@@ -17,6 +17,7 @@ import { useBootstrap } from '@/lib/boot'
 import { queryClient } from '@/lib/cache'
 import { DrizzleStudioDevTools, db, ensureAppSettingsSingleton, useDbMigrations } from '@/lib/db'
 import { DensityProvider } from '@/lib/density'
+import { logger } from '@/lib/diagnostics'
 import { i18n } from '@/lib/i18n'
 import '@/lib/polyfills'
 import { appSettingsStore } from '@/lib/stores'
@@ -60,7 +61,14 @@ export default function RootLayout() {
           <KeyboardProvider>
             <ThemeProvider
               initialThemeId={appSettingsStore.getAppSettings().appearance.themeId}
-              onThemeChange={(id) => void setAppearanceThemeId(id, { db })}
+              onThemeChange={(id) =>
+                void setAppearanceThemeId(id, { db }).catch((err) =>
+                  logger.error('action_layer.theme_persist_failed', {
+                    themeId: id,
+                    error: err instanceof Error ? err.message : String(err),
+                  }),
+                )
+              }
             >
               <DensityProvider>
                 <I18nextProvider i18n={i18n}>
