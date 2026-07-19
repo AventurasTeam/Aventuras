@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { branches, deltas, stories, storyEntries } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { undoRedoStore } from '@/lib/stores'
 
 import { applyDeltaAction } from './apply-delta-action'
 
@@ -45,6 +46,38 @@ describe('applyDeltaAction', () => {
     expect(delta.undoPayload).toBeNull()
     expect(delta.logPosition).toBe(1)
     expect(delta.source).toBe('ai_classifier')
+  })
+
+  it('clears the redo stack on a committed write, not on a rejection', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seed(db)
+    const args = (id: string, branchId: string): Parameters<typeof applyDeltaAction>[0] => ({
+      action: {
+        kind: 'createStoryEntry',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id,
+            branchId: 'b1',
+            position: 9,
+            kind: 'user_action',
+            content: 'x',
+            createdAt: 1,
+          },
+        },
+      },
+      actionId: 'act_redo',
+      branchId,
+      entryId: null,
+    })
+
+    undoRedoStore.pushRedoGroup([])
+    // Branch mismatch rejects before any write — a rejection is not a new action.
+    await applyDeltaAction(args('entry_r1', 'b-other'), { db, runInTransaction })
+    expect(undoRedoStore.hasRedo()).toBe(true)
+
+    await applyDeltaAction(args('entry_r1', 'b1'), { db, runInTransaction })
+    expect(undoRedoStore.hasRedo()).toBe(false)
   })
 
   it('op=update: undo_payload captures pre-change metadata partial; log_position increments', async () => {

@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm'
 import type { SqlOp } from '@/lib/db'
 import { deltas } from '@/lib/db'
 import { generateId } from '@/lib/ids'
+import { undoRedoStore } from '@/lib/stores'
 
 import type { DbCtx, MutationResult, PipelineAction } from '../types'
 import { resolveByActionKind, resolveByTable } from './registry'
@@ -47,6 +48,11 @@ export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<Mutation
   ]
 
   await ctx.runInTransaction(ops)
+
+  // Any new delta-logged action invalidates redo (data-model.md → the stack
+  // clears on any new action). Cleared at this choke point so future forward
+  // writers can't forget it; redo's own re-insert bypasses this function.
+  undoRedoStore.clear()
 
   // Action layer owns the store mirror; the patcher branch-guards internally.
   if (outcome.patch) resolveByTable(outcome.targetTable)?.patcher?.(branchId, outcome.patch)
