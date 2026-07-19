@@ -317,7 +317,6 @@ export const RichContent: StoryT = {
   args: {
     ...baseProps,
     kind: 'ai_reply',
-    entryId: 'story-rich-1',
     content: [
       'A styled scene card:',
       '',
@@ -358,7 +357,6 @@ export const RichXssSanitization: StoryT = {
   args: {
     ...baseProps,
     kind: 'ai_reply',
-    entryId: 'story-rich-xss',
     content:
       'Safe rich text. <style>@keyframes x { to { opacity: 0.5 } }</style><script>window.__xssRich = true</script><img src=x onerror="window.__xssRich = true">',
     meta: aiMeta,

@@ -51,7 +51,7 @@ because its placeholder estimates settle to real sizes as rows
 first render, shifting content under the user's finger
 (device-observed, worst on rich rows). One implementation serves
 all platforms; the reader's `@tanstack/react-virtual` usage and
-both `EntryWindow` branches retire (the tanstack dependency
+both `EntryWindow` branches are retired (the tanstack dependency
 remains for non-reader surfaces; [`lists.md`](./lists.md) still
 governs those).
 
@@ -230,15 +230,22 @@ Cost: scroll position within the window is lost on recovery
 (reload-to-bottom). Accepted for v1; revisit only if renderer kills
 are observed outside memory-pressure extremes.
 
-## What this retires
+## What this retired
 
-Once the host integration lands, the per-entry native tail is
-deleted: `rich-entry-content.native.tsx`, `rich-entry-dom.tsx`,
-`rich-entry-visibility.ts`, the boot-slot scheduler, and
+Deleted with the validated host integration (2026-07-19):
+`rich-entry-content.native.tsx`, `rich-entry-dom.tsx`,
+`rich-entry-visibility.ts`, the boot-slot scheduler,
 `entry-window.tsx` (both platform branches, replaced by the shared
-flow list). Reader RNRH usage retires with them; the juice/cheerio
-native sanitize path and its Metro pin are deletion candidates
-pending an audit that no Hermes code still renders entry HTML.
+flow list), the `/dev/reader-webview` spike, and all reader RNRH
+usage with the `react-native-render-html` dependency. The audit
+confirmed no Hermes code renders entry HTML, so the juice/cheerio
+native sanitize path and its Metro cheerio pin went too —
+`sanitize.native.ts` is now a passthrough resolution stub that
+exists only so the `lib/markdown` root resolves on native (the
+host route imports the stream buffer from it). The
+[detection oracle](./rich-entry-rendering.md#detection-the-engine-is-the-oracle)'s
+`@native-html/*` packages stay — they are the translatability
+boundary, independent of the retired renderer.
 
 ## Validation record
 

@@ -10,14 +10,13 @@ import {
   X,
 } from 'lucide-react-native'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Platform, useWindowDimensions, View } from 'react-native'
+import { View } from 'react-native'
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withTiming,
 } from 'react-native-reanimated'
-import { RenderHTML } from 'react-native-render-html'
 
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
@@ -25,14 +24,7 @@ import { IconAction } from '@/components/ui/icon-action'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
-import {
-  detectRichEntryHtml,
-  narrativeCustomHTMLElementModels,
-  narrativeTagsStyles,
-  parseMarkdownToHtml,
-  sanitizeHtml,
-} from '@/lib/markdown'
-import { useTheme } from '@/lib/themes'
+import { detectRichEntryHtml, parseMarkdownToHtml, sanitizeHtml } from '@/lib/markdown'
 import { cn } from '@/lib/utils'
 
 import { RichEntryContent } from './rich-entry-content'
@@ -47,8 +39,6 @@ type EntryMeta = Pick<EntryMetadata, 'tokens'>
 type EntryCardProps = {
   kind: EntryKind
   content: string
-  /** Stable id for the native rich-card height cache; omit for streaming. */
-  entryId?: string
   /** Pre-formatted by the host's calendar renderer; opaque to the compound. */
   worldTimeLabel?: string
 
@@ -111,36 +101,11 @@ function Pulsing({ children }: { children: ReactNode }) {
 }
 
 function PlainNarrative({ marked, muted }: { marked: string; muted?: boolean }) {
-  const { width } = useWindowDimensions()
-  const { theme } = useTheme()
   const html = useMemo(() => sanitizeHtml(marked), [marked])
-  // RenderHTML has no theme inheritance (web's body-color baseline doesn't
-  // exist on native), so the base color is always passed explicitly — without
-  // it, non-muted text is default-black on dark themes.
-  const baseStyle = useMemo(
-    () => ({
-      color: theme.colors[muted ? '--fg-muted' : '--fg-primary'],
-      ...(muted ? { fontStyle: 'italic' as const } : {}),
-    }),
-    [muted, theme],
-  )
-
-  if (Platform.OS === 'web') {
-    return (
-      <div
-        className={cn('narrative-html', muted && 'italic text-fg-muted')}
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    )
-  }
-
   return (
-    <RenderHTML
-      contentWidth={width}
-      source={{ html }}
-      tagsStyles={narrativeTagsStyles}
-      customHTMLElementModels={narrativeCustomHTMLElementModels}
-      baseStyle={baseStyle}
+    <div
+      className={cn('narrative-html', muted && 'italic text-fg-muted')}
+      dangerouslySetInnerHTML={{ __html: html }}
     />
   )
 }
@@ -149,12 +114,10 @@ function NarrativeContent({
   text,
   muted,
   allowRich,
-  entryId,
 }: {
   text: string
   muted?: boolean
   allowRich?: boolean
-  entryId?: string
 }) {
   const marked = useMemo(() => parseMarkdownToHtml(text), [text])
   // Verdict is per-render, memoized alongside the HTML memo — never persisted,
@@ -162,19 +125,12 @@ function NarrativeContent({
   const rich = useMemo(() => allowRich === true && detectRichEntryHtml(marked), [allowRich, marked])
 
   if (!rich) return <PlainNarrative marked={marked} muted={muted} />
-  return (
-    <RichEntryContent
-      markedHtml={marked}
-      entryId={entryId}
-      underlay={<PlainNarrative marked={marked} />}
-    />
-  )
+  return <RichEntryContent markedHtml={marked} />
 }
 
 export function EntryCard({
   kind,
   content,
-  entryId,
   worldTimeLabel,
   onEdit,
   onDelete,
@@ -331,7 +287,6 @@ export function EntryCard({
         <NarrativeContent
           text={content}
           allowRich={kind === 'user_action' || kind === 'ai_reply' || kind === 'opening'}
-          entryId={entryId}
         />
       )}
 

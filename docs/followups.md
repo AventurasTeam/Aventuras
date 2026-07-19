@@ -11,23 +11,5 @@ the two files is normal as scope clarifies; see
 [`conventions.md → Followups vs parked`](./conventions.md#followups-vs-parked)
 for the placement rule.
 
-## UX
-
-- **Single-document reader — close out validation, then retire
-  the per-entry tail.** Implementation landed 2026-07-19 per
-  [`ui/patterns/reader-document.md`](./ui/patterns/reader-document.md):
-  shared fully-rendered flow list on all platforms, the
-  `'use dom'` reader document, native host integration with
-  handshake and recovery — device-verified for landing, scroll,
-  boundary loads, inline edit with IME (go: no native-edit-sheet
-  fallback needed), delete/rollback, security probes, and
-  renderer-kill recovery. Remaining from the
-  [validation record](./ui/patterns/reader-document.md#validation-record):
-  none — all ten items passed 2026-07-19 (streaming, fonts under
-  CSP, release-build memory, TalkBack, `expo export`, and the
-  uncompensated anchor scenarios observed acceptable). What
-  remains is deleting the dormant per-entry tail:
-  `rich-entry-content.native.tsx`, `rich-entry-dom.tsx`,
-  `rich-entry-visibility.ts`, `entry-window.tsx`, reader RNRH
-  usage, and — audit-gated — the juice/cheerio native sanitize
-  path with its Metro pin.
+No active items. The ledger empties as milestones close; new
+deferrals land here per the placement rule above.

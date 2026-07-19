@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-// Deep imports, deliberately: the lib/markdown root also exports the RNRH
-// style maps, and react-native-render-html doesn't parse under vitest's node
-// pipeline. The two modules needed here are pure.
-import { parseMarkdownToHtml } from '@/lib/markdown/parse'
-import { detectRichEntryHtml } from '@/lib/markdown/rich-detect'
+import { detectRichEntryHtml, parseMarkdownToHtml } from '@/lib/markdown'
 
 import { buildSeedSteps } from './seed-dataset'
 
