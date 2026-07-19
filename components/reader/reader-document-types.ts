@@ -18,6 +18,12 @@ export type ReaderSurfaceProps = {
   streaming: StreamingPayload | null
   /** Branch identity: switch resets edit state and re-lands at bottom. */
   branchKey: string
+  /**
+   * Older entries may exist above the loaded window. Drives the boundary
+   * shimmer and gates near-top load requests; host-derived from window-size
+   * math (a short load proves the branch top is in the window).
+   */
+  hasOlder: boolean
   editBlocked: boolean
   jumpButtonEnabled: boolean
   /** Present when the system entry has a kind-specific fix route (host-derived label). */

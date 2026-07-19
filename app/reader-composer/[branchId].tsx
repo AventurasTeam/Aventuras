@@ -142,11 +142,23 @@ export default function ReaderComposerRoute() {
   const [syncNonce, setSyncNonce] = useState(0)
   const [documentPainted, setDocumentPainted] = useState(false)
 
+  // A full first window means older entries may exist; any shorter load
+  // proves the branch top is already inside the window.
+  const [hasOlder, setHasOlder] = useState(false)
+  const hasOlderSeededRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!hydrationSucceeded || hasOlderSeededRef.current === branchId || entries.length === 0)
+      return
+    hasOlderSeededRef.current = branchId
+    setHasOlder(entries.length >= ENTRIES_WINDOW_SIZE)
+  }, [hydrationSucceeded, branchId, entries.length])
+
   // A branch switch must drop any in-flight buffer from the prior branch —
   // it belongs to a different entry list and would otherwise leak forward.
   useEffect(() => {
     streamBufferRef.current = null
     setStreaming(null)
+    setHasOlder(false)
   }, [branchId])
 
   useEffect(
@@ -220,6 +232,7 @@ export default function ReaderComposerRoute() {
     for (const row of older) {
       entriesStore.patch(branchId, { op: 'create', id: row.id, row })
     }
+    setHasOlder(older.length >= ENTRIES_WINDOW_SIZE)
   }, [branchId])
 
   useEffect(() => {
@@ -521,6 +534,7 @@ export default function ReaderComposerRoute() {
     rows: entries,
     streaming: streamingPayload,
     branchKey: branchId,
+    hasOlder,
     editBlocked,
     jumpButtonEnabled,
     systemFixLabel: fixAction?.label,

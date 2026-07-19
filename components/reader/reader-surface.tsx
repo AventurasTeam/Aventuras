@@ -15,6 +15,7 @@ import {
 
 import { EntryCard } from '@/components/compounds/entry-card'
 import { JumpButtons } from '@/components/reader/jump-buttons'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { StoryEntry } from '@/lib/db'
 import {
   computePrependCompensation,
@@ -40,6 +41,7 @@ export function ReaderSurface({
   rows,
   streaming,
   branchKey,
+  hasOlder,
   editBlocked,
   jumpButtonEnabled,
   systemFixLabel,
@@ -122,9 +124,14 @@ export function ReaderSurface({
     if (el == null || prevFirstId == null || nextFirstId == null || nextFirstId === prevFirstId)
       return
     const anchorRow = el.querySelector(`[data-entry-row="${CSS.escape(prevFirstId)}"]`)
-    if (!(anchorRow instanceof HTMLElement) || anchorRow.offsetTop <= 0) return
+    if (!(anchorRow instanceof HTMLElement)) return
+    // Offset difference, not absolute offsetTop: the boundary shimmer sits
+    // above the rows, so the new first row's offset is the zero point.
+    const newFirstRow = el.querySelector(`[data-entry-row="${CSS.escape(nextFirstId)}"]`)
+    const baseOffsetPx = newFirstRow instanceof HTMLElement ? newFirstRow.offsetTop : 0
+    if (anchorRow.offsetTop - baseOffsetPx <= 0) return
     const { scrollTopDeltaPx } = computePrependCompensation({
-      prependedBlockHeightPx: anchorRow.offsetTop,
+      prependedBlockHeightPx: anchorRow.offsetTop - baseOffsetPx,
     })
     el.scrollTop += scrollTopDeltaPx
     const targetTop = anchorRow.getBoundingClientRect().top
@@ -157,6 +164,23 @@ export function ReaderSurface({
     }
   }, [rows])
 
+  // The boundary shimmer occupies its space permanently while older entries
+  // may exist — mounting it mid-scroll would itself shift content. Its
+  // one-time unmount (branch top proven) is compensated here so the resting
+  // viewport doesn't move; the height is remembered across the unmount.
+  const shimmerRef = useRef<HTMLDivElement>(null)
+  const shimmerHeightRef = useRef(0)
+  const prevHasOlderRef = useRef(hasOlder)
+  useLayoutEffect(() => {
+    if (shimmerRef.current != null) shimmerHeightRef.current = shimmerRef.current.offsetHeight
+    const wasShowing = prevHasOlderRef.current
+    prevHasOlderRef.current = hasOlder
+    if (!wasShowing || hasOlder) return
+    nearTopPendingRef.current = false
+    const el = scrollRef.current
+    if (el != null) el.scrollTop = Math.max(0, el.scrollTop - shimmerHeightRef.current)
+  })
+
   // The near-top load fires only at scroll rest: prepending (and the
   // compensating scrollTop write) mid-drag or mid-fling fights the
   // compositor-owned scroll and reads as a jump — the same pathology that
@@ -187,12 +211,13 @@ export function ReaderSurface({
       const metrics = computeScrollMetrics(event.currentTarget)
       lastDistanceRef.current = metrics.distanceFromBottomPx
       autoscrollRef.current.userScrolled({ distanceFromBottomPx: metrics.distanceFromBottomPx })
-      if (metrics.withinTopViewport && !nearTopRef.current) nearTopPendingRef.current = true
+      if (hasOlder && metrics.withinTopViewport && !nearTopRef.current)
+        nearTopPendingRef.current = true
       nearTopRef.current = metrics.withinTopViewport
       if (nearTopPendingRef.current) armNearTopIdleTimer()
       setShowJumpToBottom(metrics.distanceFromBottomPx > NEAR_BOTTOM_THRESHOLD_PX)
     },
-    [armNearTopIdleTimer],
+    [armNearTopIdleTimer, hasOlder],
   )
 
   // Upward only: wheel-down toward the live edge should let the positional
@@ -322,6 +347,15 @@ export function ReaderSurface({
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
       >
+        {hasOlder && rows.length > 0 ? (
+          <div ref={shimmerRef} aria-hidden className={ROW_FRAME_CLASS}>
+            <div className="rounded-lg border border-border bg-bg-raised p-4">
+              <Skeleton className="mb-3 h-4 w-24" />
+              <Skeleton className="mb-2 h-3 w-full" />
+              <Skeleton className="h-3 w-2/3" />
+            </div>
+          </div>
+        ) : null}
         {rows.map((row) => (
           <div key={row.id} data-entry-row={row.id} className={ROW_FRAME_CLASS}>
             {renderCard(row)}

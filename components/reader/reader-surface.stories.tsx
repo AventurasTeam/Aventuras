@@ -81,6 +81,7 @@ const meta = {
     rows: ROWS,
     streaming: null,
     branchKey: 'branch_story',
+    hasOlder: false,
     editBlocked: false,
     jumpButtonEnabled: true,
     ...noopHandlers,
@@ -91,6 +92,10 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const Default: Story = {}
+
+export const OlderBoundaryShimmer: Story = {
+  args: { hasOlder: true },
+}
 
 export const Streaming: Story = {
   args: {
