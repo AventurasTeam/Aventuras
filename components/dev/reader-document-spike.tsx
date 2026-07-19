@@ -43,8 +43,11 @@ export default function ReaderDocumentSpike({
   return (
     <ThemeProvider initialThemeId={themeId}>
       <style>{RESET_CSS}</style>
+      {/* fixed inset-0: expo-dom's root is a flex container in which a plain
+          block div shrinks to zero width — the document owns the viewport,
+          so claim it outright. */}
       {/* eslint-disable-next-line react-native/no-inline-styles -- plain DOM div in a 'use dom' document, not an RN view */}
-      <div style={{ height: '100vh' }}>
+      <div style={{ position: 'fixed', inset: 0 }}>
         <EntryWindow
           rows={rows}
           renderRow={(row: StoryEntry) => (
