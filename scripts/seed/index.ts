@@ -8,7 +8,7 @@ import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { getLoadablePath } from 'sqlite-vec'
 
-import { buildSeedSteps } from './dataset'
+import { buildSeedSteps } from '../../lib/db/devtools/seed-dataset'
 import { dbSchema } from '../../lib/db/schema'
 
 // Default mirrors drizzle.studio.config.ts: the Linux Electron dev userData DB.

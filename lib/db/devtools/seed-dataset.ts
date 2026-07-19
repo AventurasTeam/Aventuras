@@ -6,9 +6,9 @@ import {
   appearanceSchema,
   modelProfileSchema,
   providerInstanceSchema,
-} from '../../lib/db/app-settings/app-settings-schema'
-import type { EntityState } from '../../lib/db/entities/entities-types'
-import { entityStateSchemaForKind } from '../../lib/db/entities/entity-state-schema'
+} from '../app-settings/app-settings-schema'
+import type { EntityState } from '../entities/entities-types'
+import { entityStateSchemaForKind } from '../entities/entity-state-schema'
 import {
   appSettings,
   assets,
@@ -29,14 +29,11 @@ import {
   threads,
   translations,
   vaultCalendars,
-} from '../../lib/db/schema'
-import {
-  storyDefinitionSchema,
-  storySettingsSchema,
-} from '../../lib/db/stories/story-config-schema'
-import type { StoryDefinition, StorySettings } from '../../lib/db/stories/story-config-schema'
-import { entryMetadataSchema } from '../../lib/db/story-entries/entry-metadata'
-import type { EntryMetadata } from '../../lib/db/story-entries/entry-metadata'
+} from '../schema'
+import { storyDefinitionSchema, storySettingsSchema } from '../stories/story-config-schema'
+import type { StoryDefinition, StorySettings } from '../stories/story-config-schema'
+import { entryMetadataSchema } from '../story-entries/entry-metadata'
+import type { EntryMetadata } from '../story-entries/entry-metadata'
 import type {
   NewAppSettings,
   NewAsset,
@@ -57,7 +54,7 @@ import type {
   NewThread,
   NewTranslation,
   NewVaultCalendar,
-} from '../../lib/db/types'
+} from '../types'
 
 // A seed step is one table's worth of rows; the runner inserts steps in array
 // order (FK-correct) and wipes beforehand. Rows are type-checked per table at
