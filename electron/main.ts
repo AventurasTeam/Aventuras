@@ -1,7 +1,7 @@
 import { join, normalize } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { app, BrowserWindow, ipcMain, net, protocol, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, net, protocol, session, shell } from 'electron'
 
 import {
   exec as dbExec,
@@ -55,6 +55,39 @@ function registerBundleProtocol(): void {
   })
 }
 
+// Shell CSP backstop for the sanitize-time exfiltration policy. connect-src
+// stays open: provider calls go to arbitrary user-configured endpoints. The
+// passive-fetch directives (img/font/media/object/frame) are locked so a
+// sanitizer regression can't beacon out via background-image/@font-face/etc.
+// Dev additionally needs unsafe-eval + inline for Metro fast refresh.
+function contentSecurityPolicy(): string {
+  const scriptSrc = isDev ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self'"
+  return [
+    "default-src 'self'",
+    scriptSrc,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "media-src 'self' data: blob:",
+    'connect-src *',
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "frame-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'none'",
+  ].join('; ')
+}
+
+function applyContentSecurityPolicy(): void {
+  const policy = contentSecurityPolicy()
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [policy] },
+    })
+  })
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
@@ -98,6 +131,7 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   await initDb()
+  applyContentSecurityPolicy()
   registerBundleProtocol()
 
   // electron-context-menu v4 is ESM-only; dynamic import loads it cleanly from
