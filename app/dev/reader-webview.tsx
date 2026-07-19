@@ -60,9 +60,12 @@ export default function ReaderWebviewSpikeRoute() {
         </Text>
       </View>
       <View className="flex-1">
+        {/* One long-lived document, branch switches ride the $$props emission:
+            expo-dom reuses the WebView per source file, and remount-time prop
+            delivery races the booting document's listener (spike finding —
+            the update is silently lost, the document keeps stale props). */}
         {rows != null ? (
           <ReaderDocumentSpike
-            key={branchId}
             rows={rows}
             themeId={theme.id}
             onFirstPaint={handleFirstPaint}
