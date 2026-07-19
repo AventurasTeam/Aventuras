@@ -67,17 +67,28 @@ export function RichEntryContent({ markedHtml, entryId, underlay }: RichEntryCon
     [ready, entryId, width, markedHtml],
   )
 
-  // Provider-authored <a href> must never navigate the card's document away:
-  // block everything after the initial bundle load, route http(s) to the
-  // system browser.
-  const initialLoadDoneRef = useRef(false)
-  const handleLoadEnd = useCallback(() => {
-    initialLoadDoneRef.current = true
-  }, [])
+  // Provider-authored <a href> must never navigate the card's document away.
+  // The card's own document URL stays allowed — Android WebViews reload their
+  // document after surface loss (e.g. list clipping detach), and blocking
+  // that recovery load would freeze the card blank. Everything else is
+  // foreign: http(s) routes to the system browser, the rest is dropped.
+  const documentUrlRef = useRef<string | null>(null)
   const handleShouldStartLoad = useCallback((request: { url: string }) => {
-    if (!initialLoadDoneRef.current) return true
+    if (documentUrlRef.current == null || request.url === documentUrlRef.current) {
+      documentUrlRef.current = request.url
+      return true
+    }
     if (/^https?:/i.test(request.url)) void Linking.openURL(request.url)
     return false
+  }, [])
+
+  // A load finishing after the swap means the WebView reloaded (surface loss
+  // recovery): its fresh document repaints from scratch, so drop back to the
+  // underlay and let the new onReady swap again.
+  const loadCountRef = useRef(0)
+  const handleLoadEnd = useCallback(() => {
+    loadCountRef.current += 1
+    if (loadCountRef.current > 1) setReady(false)
   }, [])
 
   return (

@@ -283,6 +283,12 @@ function EntryWindowNativeInner<T extends { id: string }>(
       maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
       onStartReached={onNearTop}
       onStartReachedThreshold={EDGE_THRESHOLD_VIEWPORTS}
+      // Android's VirtualizedList default (true) detaches clipped rows'
+      // native views; a detached WebView loses its surface and comes back
+      // blank / mid-reload (rich entry cards). Keeping subviews attached
+      // trades memory for surface stability — the rich-entry validation
+      // checklist watches that cost.
+      removeClippedSubviews={false}
       style={landed ? styles.list : styles.listLanding}
     />
   )
