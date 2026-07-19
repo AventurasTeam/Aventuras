@@ -7,6 +7,7 @@ import { Text } from '@/components/ui/text'
 const ROUTES = [
   { href: '/dev/db-check', label: 'DB check (M1.2 smoke)' },
   { href: '/dev/reseed', label: 'Reseed database (wipe + seed dataset)' },
+  { href: '/dev/reader-webview', label: 'Reader single-document spike' },
   { href: '/dev/foundations', label: 'Foundations explorer' },
   { href: '/dev/button', label: 'Button' },
   { href: '/dev/text', label: 'Text' },

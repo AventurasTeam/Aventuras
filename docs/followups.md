@@ -13,6 +13,18 @@ for the placement rule.
 
 ## UX
 
+- **Single-document reader spike — evaluate, then design pass.**
+  Per-entry WebView cards shift on swap-in and cost ~50MB each;
+  the candidate endgame hosts the existing web reader surface
+  (EntryWindow web branch + EntryCard) in **one** DOM component
+  on native. Read-only spike at dev route `/dev/reader-webview`
+  (seeded DB required). If the spike holds on device (boot
+  latency, scroll feel, memory, rich rendering), the pivot needs
+  a full design pass revising
+  [`ui/patterns/rich-entry-rendering.md`](./ui/patterns/rich-entry-rendering.md)
+  (it supersedes the per-entry native tail and the "chrome stays
+  native" scope gate). User-endorsed direction 2026-07-19.
+
 - **Rich-entry rendering — on-device validation.** Implementation
   landed 2026-07-19 per
   [`ui/patterns/rich-entry-rendering.md`](./ui/patterns/rich-entry-rendering.md).
