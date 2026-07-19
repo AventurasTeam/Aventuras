@@ -149,10 +149,6 @@ Async function props out (document → native):
   as `rows` updates.
 - `onNearTop` — boundary auto-load request (older entries). Fired
   only at scroll rest and only while `hasOlder` holds.
-- `onLinkTap(url)` — foreign `http(s)` URLs route to the system
-  browser via native `Linking`. The in-document interceptor walks
-  the click's **composed path** — shadow-root retargeting hides
-  anchors inside rich entries from `target`-based lookup.
 - `onReady` — the readiness handshake (below).
 - `onFirstPaint` — once per boot, after the first non-empty rows
   paint (double-rAF); the host drops the loading veil on it.
@@ -209,11 +205,17 @@ and every other behavior stay in-document.
   otherwise): Android fires no request callback for the initial
   `loadUrl`, so an unguarded latch records the first foreign
   navigation as "own URL" and allows it (device-caught: a
-  shadow-root PROBE anchor navigated the WebView). Foreign
-  `http(s)` navigations route to the system browser; everything
-  else is dropped. The wider anchor `href` policy across platforms
-  (desktop web still navigates the Electron window) remains the
-  pre-existing triage item.
+  shadow-root PROBE anchor navigated the WebView). All foreign
+  navigation is dropped.
+- **Anchor policy: stripped at sanitize.** Entry HTML never
+  carries a navigation vector — `href`, `target`,
+  `action`/`formaction`, and `ping` are forbidden on both sanitize
+  paths, so links render as plain text on every platform. The
+  document's `composedPath` click interceptor and the navigation
+  locks (this WebView lock on native; `will-navigate` +
+  `setWindowOpenHandler: deny` in the Electron main process on
+  desktop) stay as regression backstops behind the strip, not as
+  the policy.
 
 ## Failure and recovery
 

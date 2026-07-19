@@ -1,7 +1,7 @@
 import { type Root } from 'postcss'
 import safeParser from 'postcss-safe-parser'
 
-import { createDomPurify } from './purify-instance'
+import { createDomPurify, NAVIGATION_FORBID_ATTRS } from './purify-instance'
 
 // The plain path's attribute-level exfiltration policy, applied uniformly to
 // stylesheet content: no external fetches, no legacy executable CSS. Checked
@@ -77,5 +77,9 @@ purify.addHook('uponSanitizeAttribute', (_node, data) => {
 export function sanitizeRichHtml(html: string): string {
   // FORCE_BODY: a leading <style> is otherwise hoisted into <head> by the
   // parser and silently dropped from the body-only output.
-  return purify.sanitize(html, { ADD_TAGS: ['style'], FORCE_BODY: true })
+  return purify.sanitize(html, {
+    ADD_TAGS: ['style'],
+    FORBID_ATTR: NAVIGATION_FORBID_ATTRS,
+    FORCE_BODY: true,
+  })
 }

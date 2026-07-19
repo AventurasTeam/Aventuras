@@ -47,6 +47,24 @@ describe('sanitizeHtml', () => {
     expect(clean).toBe('<font color="red">text</font>')
   })
 
+  it('strips navigation attributes — anchors render as plain text', () => {
+    const clean = sanitizeHtml(
+      '<p><a href="https://example.com" target="_blank" ping="https://evil.example/p">a link</a></p>',
+    )
+    expect(clean).not.toContain('href')
+    expect(clean).not.toContain('target')
+    expect(clean).not.toContain('ping')
+    expect(clean).toContain('a link')
+  })
+
+  it('strips form navigation vectors (action, formaction)', () => {
+    const clean = sanitizeHtml(
+      '<form action="https://evil.example/f"><button formaction="https://evil.example/b">go</button></form>',
+    )
+    expect(clean).not.toContain('action')
+    expect(clean).toContain('go')
+  })
+
   it('allows rich safe HTML tags (div, table, tr, td) and custom layout CSS styles (margin, padding, background-color)', () => {
     const dirty =
       '<div style="margin: 10px; padding: 20px; background-color: blue;"><table><tr><td>cell</td></tr></table></div>'

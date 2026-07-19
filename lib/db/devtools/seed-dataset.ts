@@ -1343,7 +1343,7 @@ const RICH_PAYLOADS: readonly { label: string; md: string }[] = [
     label: 'probe: navigation lock',
     // The gradient wrapper is load-bearing: bare anchors are RNRH-modeled and
     // would stay on the plain path, never reaching the WebView this probes.
-    md: 'PROBE links: tapping these must never navigate the card.\n\n<div style="background: linear-gradient(90deg, #312e81, #111827); color: #e0e7ff; padding: 10px; border-radius: 8px"><p><a href="https://example.com">http link — should open the system browser</a></p><p><a href="javascript:console.error(\'js-href\')">javascript: link — should do nothing</a></p></div>',
+    md: 'PROBE links: hrefs are stripped at sanitize — these must render as plain text and tapping them must do nothing.\n\n<div style="background: linear-gradient(90deg, #312e81, #111827); color: #e0e7ff; padding: 10px; border-radius: 8px"><p><a href="https://example.com" target="_blank">http link — plain text, no navigation</a></p><p><a href="javascript:console.error(\'js-href\')">javascript: link — plain text, no navigation</a></p></div>',
   },
   {
     label: 'probe: script',

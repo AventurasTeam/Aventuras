@@ -94,7 +94,13 @@ and style attributes:
   fetch vectors), and any at-rule not explicitly kept
   (default-deny; `@media` and `@keyframes` are the kept set);
 - keep `@media`, `@keyframes`, and pseudo-selectors — the payload
-  this pattern exists for.
+  this pattern exists for;
+- strip navigation attributes (`href`, `xlink:href`, `target`,
+  `action`/`formaction`, `ping`) — shared policy with the plain
+  path: entry links render as plain text everywhere, and the
+  document/Electron navigation locks are regression backstops, not
+  the policy (see
+  [`reader-document.md → Isolation and security`](./reader-document.md#isolation-and-security)).
 
 The scrub uses a real CSS parser (postcss, juice's own parser
 dependency), not regex filtering — comment-obfuscated forms like
@@ -137,8 +143,5 @@ on native.
 
 ## What this design defers
 
-- **Anchor `href` policy across render paths** — triage item;
-  the document navigation lock covers native, desktop web still
-  navigates the Electron window.
 - **Persisted rich-verdict or height caches** — nothing is
   persisted; the document architecture removed the need.

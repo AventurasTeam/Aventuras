@@ -1,5 +1,19 @@
 import DOMPurify from 'dompurify'
 
+// Anchor policy: entry HTML never carries a navigation vector — links render
+// as plain text on every path. Stripping at sanitize is the single
+// enforcement point; the document click interceptor and both nav locks stay
+// as regression backstops. xlink:href covers SVG anchors; action/formaction
+// cover form submits; target and ping die with href.
+export const NAVIGATION_FORBID_ATTRS = [
+  'href',
+  'xlink:href',
+  'target',
+  'action',
+  'formaction',
+  'ping',
+]
+
 // DOMPurify needs a DOM window. During Expo Router's static pre-rendering
 // (Node), `window` is undefined — fall back to JSDOM, or a pass-through mock
 // where jsdom isn't installed. Each caller gets its own instance: hooks are

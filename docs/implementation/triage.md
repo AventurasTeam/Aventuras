@@ -19,21 +19,4 @@ slice-planning gate forces its resolution before that slice is planned.
 
 ## Inbox
 
-- **RNRH text not selectable on native** (2026-07-19, rich-entry
-  design pass). Plain-entry prose on Android can't be long-press
-  selected — RNRH renders RN `Text` without `selectable`.
-  **Resolves structurally with the
-  [reader document](../ui/patterns/reader-document.md)**: every
-  entry renders as web content with native browser selection, and
-  RNRH retires from the reader. Only act on this item if the
-  pivot slips and the per-entry floor needs to live long.
-- **Anchor `href` policy across entry render paths** (2026-07-19,
-  rich-entry design pass). `<a href>` survives sanitize on every
-  path: web DOMPurify scheme-filters it (`javascript:` blocked,
-  `http(s)`/`mailto` kept) and a click **navigates the Electron
-  window today**; native RNRH renders anchors inert; the rich
-  card adds its own
-  [navigation lock](../ui/patterns/reader-document.md#isolation-and-security).
-  Decide one policy for all paths — strip `href` entirely, or
-  keep-and-intercept via the system browser — and close the live
-  web/plain exposure.
+Empty.

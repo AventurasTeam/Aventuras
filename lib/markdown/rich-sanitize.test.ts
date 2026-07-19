@@ -49,6 +49,15 @@ describe('sanitizeRichHtml', () => {
     expect(clean).not.toContain('<script')
   })
 
+  it('strips navigation attributes — anchors render as plain text', () => {
+    const clean = sanitizeRichHtml(
+      '<a href="https://example.com" target="_blank">a link</a><svg><a href="https://evil.example"><text>svg link</text></a></svg>',
+    )
+    expect(clean).not.toContain('href')
+    expect(clean).not.toContain('target')
+    expect(clean).toContain('a link')
+  })
+
   it('neutralizes </style> breakout attempts inside CSS text', () => {
     const clean = sanitizeRichHtml(
       '<style>p::before { content: "</style><img src=x onerror=alert(1)>" }</style>',

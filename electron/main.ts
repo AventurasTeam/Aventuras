@@ -71,6 +71,23 @@ function createWindow(): void {
 
   win.once('ready-to-show', () => win.show())
 
+  // Navigation floor, mirroring the native document's nav lock: entry hrefs
+  // are stripped at sanitize, so any renderer navigation away from the app's
+  // own origin is hostile or a sanitize regression — block it. window.open is
+  // denied outright: Electron's default child window would inherit this
+  // window's webPreferences, preload (and its DB bridge) included.
+  // Prefix match with a slash guard, not URL.origin: Node's URL reports the
+  // origin of the custom app scheme as the literal string "null".
+  const ownOrigins = [
+    new URL(process.env.EXPO_WEB_URL ?? 'http://localhost:8081').origin,
+    `${APP_SCHEME}://${APP_HOST}`,
+  ]
+  win.webContents.on('will-navigate', (event, url) => {
+    const own = ownOrigins.some((origin) => url === origin || url.startsWith(`${origin}/`))
+    if (!own) event.preventDefault()
+  })
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+
   if (isDev) {
     win.loadURL(process.env.EXPO_WEB_URL ?? 'http://localhost:8081')
     win.webContents.openDevTools({ mode: 'detach' })

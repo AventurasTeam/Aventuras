@@ -1,7 +1,7 @@
 import { and, desc, eq, lt } from 'drizzle-orm'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Linking, Platform, View } from 'react-native'
+import { Platform, View } from 'react-native'
 
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
@@ -425,13 +425,10 @@ export default function ReaderComposerRoute() {
     setDocumentPainted(true)
   }, [])
 
-  const handleLinkTap = useCallback(async (url: string) => {
-    if (/^https?:/i.test(url)) await Linking.openURL(url)
-  }, [])
-
   // Recovery reloads re-request the document's own URL; blocking that freezes
-  // the surface. Everything else is dropped — foreign links arrive via
-  // onLinkTap instead of navigation. The latch must only ever accept a
+  // the surface. Everything else is dropped — entry hrefs are stripped at
+  // sanitize, so any foreign navigation is hostile or a sanitize regression.
+  // The latch must only ever accept a
   // document-shaped URL (Metro in dev, bundled file/about otherwise): Android
   // fires no request callback for the initial loadUrl, so an unguarded latch
   // would record the first foreign navigation as "own URL" and allow it.
@@ -594,7 +591,6 @@ export default function ReaderComposerRoute() {
                   syncNonce={syncNonce}
                   onReady={handleReady}
                   onFirstPaint={handleFirstPaint}
-                  onLinkTap={handleLinkTap}
                   dom={{
                     scrollEnabled: false,
                     style: { flex: 1 },

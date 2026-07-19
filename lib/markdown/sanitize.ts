@@ -1,6 +1,6 @@
 import juice from 'juice'
 
-import { createDomPurify } from './purify-instance'
+import { createDomPurify, NAVIGATION_FORBID_ATTRS } from './purify-instance'
 
 const purifyInstance = createDomPurify()
 
@@ -36,5 +36,5 @@ export function sanitizeHtml(html: string): string {
   const inlined = juice(html)
   // We do not restrict ALLOWED_TAGS or ALLOWED_ATTR to let DOMPurify's default safe allowlist
   // handle the elements (allowing divs, tables, spans, custom margins/padding via style, etc.).
-  return purifyInstance.sanitize(inlined)
+  return purifyInstance.sanitize(inlined, { FORBID_ATTR: NAVIGATION_FORBID_ATTRS })
 }

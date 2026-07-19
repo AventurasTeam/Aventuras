@@ -118,20 +118,25 @@ Mobile/touch UX doesn't serve prompt authoring well; tablets would benefit but d
 
 ### 9. Markdown rendering + HTML sanitization
 
-LLM replies arrive as markdown with inline HTML. Unified pipeline, platform-specific render tails.
+LLM replies arrive as markdown with inline HTML. Unified pipeline, one render tail everywhere.
 
 ```
 markdown + inline HTML string
   → marked / markdown-it       (md → HTML)
   → juice                      (inline <style> blocks into element style attrs)
-  → DOMPurify                  (tight allowlist sanitization)
+  → DOMPurify                  (tight allowlist sanitization; navigation
+                                attributes — href, target, action — stripped)
   → sanitized HTML string
 ```
 
-- **RN Web / Electron:** `dangerouslySetInnerHTML` on a themed container — native browser rendering, exact CSS fidelity
-- **Expo native:** `react-native-render-html`, with custom renderers for deprecated tags (`<font>`) and themed `tagsStyles` keyed to the NativeWind color tokens
-
-**Expected fidelity:** ~80-90% between platforms for typical LLM output. The `juice` pre-pass closes the biggest gap (inline `<style>` blocks don't cascade on native by default). Entries exceeding the native-translatable subset render through the isolated rich path instead — see [`ui/patterns/rich-entry-rendering.md`](./ui/patterns/rich-entry-rendering.md).
+Every platform renders the sanitized HTML in a real DOM
+(`dangerouslySetInnerHTML` on a themed container): directly in the
+page on web/desktop, inside the
+[reader document](./ui/patterns/reader-document.md) on native.
+Entry links are policy-stripped — anchors render as plain text on
+every path. Entries exceeding the plainly-translatable subset render
+through the isolated rich path instead — see
+[`ui/patterns/rich-entry-rendering.md`](./ui/patterns/rich-entry-rendering.md).
 
 **Streaming rendering:** port the `htmlStreaming` pattern from the old app (`src/lib/utils/htmlStreaming.ts` / `htmlSanitize.ts`). Buffer mid-stream chunks until tag boundaries, sanitize the completed fragment, then append — prevents half-tags reaching either renderer.
 

@@ -23,7 +23,6 @@ type ReaderDocumentProps = ReaderSurfaceProps & {
   syncNonce: number
   onReady: () => Promise<void>
   onFirstPaint: () => Promise<void>
-  onLinkTap: (url: string) => Promise<void>
   ref: Ref<ReaderDocumentRef>
   dom?: DOMProps
 }
@@ -49,7 +48,6 @@ export default function ReaderDocument({
   syncNonce: _syncNonce,
   onReady,
   onFirstPaint,
-  onLinkTap,
   ref,
   ...surfaceProps
 }: ReaderDocumentProps) {
@@ -95,26 +93,21 @@ export default function ReaderDocument({
     })
   }, [rowCount, onFirstPaint])
 
-  // Anchor clicks route to the host (system browser); the WebView must never
-  // navigate. composedPath, not target.closest: rich entries live in shadow
-  // roots, and retargeting rewrites event.target to the shadow host — the
-  // anchor is only reachable through the composed path. The host-side nav
-  // lock is the backstop for anything that slips past preventDefault.
-  const handleClickCapture = useCallback(
-    (event: MouseEvent<HTMLDivElement>) => {
-      const anchor = event.nativeEvent
-        .composedPath()
-        .find(
-          (node): node is HTMLAnchorElement =>
-            node instanceof HTMLAnchorElement && node.hasAttribute('href'),
-        )
-      if (anchor == null) return
-      event.preventDefault()
-      const href = anchor.getAttribute('href') ?? ''
-      if (/^https?:/i.test(href)) void onLinkTap(href)
-    },
-    [onLinkTap],
-  )
+  // Entry hrefs are stripped at sanitize; an anchor with one is a sanitize
+  // regression, so the click is swallowed — the WebView must never navigate.
+  // composedPath, not target.closest: rich entries live in shadow roots, and
+  // retargeting rewrites event.target to the shadow host — the anchor is only
+  // reachable through the composed path. The host-side nav lock is the
+  // backstop for anything that slips past preventDefault.
+  const handleClickCapture = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    const anchor = event.nativeEvent
+      .composedPath()
+      .find(
+        (node): node is HTMLAnchorElement =>
+          node instanceof HTMLAnchorElement && node.hasAttribute('href'),
+      )
+    if (anchor != null) event.preventDefault()
+  }, [])
 
   return (
     <ThemeProvider initialThemeId={themeId}>
