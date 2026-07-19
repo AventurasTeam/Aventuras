@@ -27,12 +27,13 @@ import type { ReaderSurfaceHandle, ReaderSurfaceProps } from './reader-document-
 const NEAR_BOTTOM_THRESHOLD_PX = 20
 const JUMP_TO_BOTTOM_SETTLE_MS = 500
 
+// No content-visibility culling on rows: placeholder-height settle shifted
+// content under the user's finger on every first upward pass (device-observed,
+// worst on rich rows), and browser scroll anchoring doesn't fire for this
+// tree. The loaded-set window (~50, far-end trim cap as the growth lever) is
+// small enough to keep fully laid out — real heights make landing, prepend
+// compensation, and scrolling exact.
 const ROW_FRAME_CLASS = 'mx-auto w-full max-w-[860px] px-7 py-2'
-// contain-intrinsic-size matches the retired virtualizer's row estimate so
-// scrollbar geometry stays plausible before a row first renders. The streaming
-// row must NOT get these: it has to lay out on every chunk so the pin's
-// scrollHeight write reflects the newest content.
-const ROW_CULL_CLASS = '[content-visibility:auto] [contain-intrinsic-size:auto_160px]'
 
 export function ReaderSurface({
   rows,
@@ -69,11 +70,11 @@ export function ReaderSurface({
     setEditingId(null)
     setEditDraft('')
   }, [branchKey])
-  // Open-at-bottom is a pin, not a one-shot: content-visibility rows swap
-  // estimated → real heights over the first frames, so a single scrollTop
-  // write lands short of the true bottom. Re-assert per frame until the
-  // scroll height settles; the user's first gesture breaks the pin. Keyed
-  // on hasRows (not rows) so prepends don't cancel a running pin.
+  // Open-at-bottom is a pin, not a one-shot: late layout (font swaps, image
+  // decode) can still grow content after the first scrollTop write. Re-assert
+  // per frame until the scroll height settles; the user's first gesture
+  // breaks the pin. Keyed on hasRows (not rows) so prepends don't cancel a
+  // running pin.
   const hasRows = rows.length > 0
   useLayoutEffect(() => {
     if (!hasRows || landedBranchRef.current === branchKey) return
@@ -106,10 +107,8 @@ export function ReaderSurface({
   // anchoring skips the adjustment for this tree (desktop-observed), so the
   // scroller opts out entirely via overflow-anchor:none — an engine that did
   // anchor would otherwise double-adjust. In static flow the old first row's
-  // offsetTop after the commit IS the prepended block height — but that
-  // height is partly content-visibility placeholders that settle to real
-  // sizes over the next frames, so after the initial jump the old first row
-  // is *held* at its viewport position until layout stabilizes (same
+  // offsetTop after the commit IS the prepended block height; the short hold
+  // loop afterwards absorbs any late layout of the inserted block (same
   // frame-loop shape as the landing pin). A branch switch never matches the
   // previous first id, so this stays out of the landing pin's way.
   const prevFirstIdRef = useRef<string | undefined>(undefined)
@@ -289,11 +288,7 @@ export function ReaderSurface({
         onTouchCancel={handleTouchEnd}
       >
         {rows.map((row) => (
-          <div
-            key={row.id}
-            data-entry-row={row.id}
-            className={`${ROW_FRAME_CLASS} ${ROW_CULL_CLASS}`}
-          >
+          <div key={row.id} data-entry-row={row.id} className={ROW_FRAME_CLASS}>
             {renderCard(row)}
           </div>
         ))}
