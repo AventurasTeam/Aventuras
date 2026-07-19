@@ -149,7 +149,15 @@ export async function generateStructured<T>(
   const resolved = prepareGeneration(target, config)
   if (!resolved.ok) return { status: 'not-configured', kind: resolved.kind }
 
-  const jsonSchema = z.toJSONSchema(schema) as JsonSchema
+  // z.toJSONSchema throws on unrepresentable schemas (transforms, refinements);
+  // surface it as a typed failure rather than a raw rejection past the caller's
+  // runAction wrapper.
+  let jsonSchema: JsonSchema
+  try {
+    jsonSchema = z.toJSONSchema(schema) as JsonSchema
+  } catch (err) {
+    return { status: 'failed', detail: err instanceof Error ? err.message : String(err) }
+  }
   // 'auto' takes the prompt-injection path: there is no provider capability
   // signal yet, so native responseFormat stays opt-in via 'force-on'.
   const model = wrapLanguageModel({

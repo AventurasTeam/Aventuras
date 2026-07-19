@@ -225,4 +225,16 @@ describe('generateStructured', () => {
     )
     expect(res.status).toBe('failed')
   })
+
+  it('returns failed (not a raw throw) for a schema JSON Schema cannot represent', async () => {
+    const unrepresentable = z.object({ description: z.string() }).transform((v) => v.description)
+    const res = await generateStructured(
+      'wizard-assist',
+      'x',
+      unrepresentable as never,
+      STRUCTURED_CFG,
+      new AbortController().signal,
+    )
+    expect(res.status).toBe('failed')
+  })
 })
