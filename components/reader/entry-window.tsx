@@ -6,6 +6,7 @@ import {
   useImperativeHandle,
   useLayoutEffect,
   useRef,
+  useState,
   type CSSProperties,
   type ForwardedRef,
   type ReactNode,
@@ -51,6 +52,7 @@ const MAINTAIN_VISIBLE_CONTENT_POSITION = { minIndexForVisible: 0 } as const
 
 const styles = StyleSheet.create({
   list: { flex: 1 },
+  listLanding: { flex: 1, opacity: 0 },
 })
 
 function trackStyle(totalSizePx: number): CSSProperties {
@@ -213,17 +215,25 @@ function EntryWindowNativeInner<T extends { id: string }>(
     [],
   )
 
-  // Land at the tail on first open — as a pin, not a one-shot: FlatList lays
-  // out progressively, so the first onContentSizeChange sees only the initial
-  // batch and a single scrollToEnd strands the viewport mid-list once later
-  // batches grow the content. Re-asserting on every size change stays correct
-  // pre-gesture (growth is initial layout or a streaming tail, both want
-  // bottom); the user's first drag breaks the pin, same as the host's
-  // autoscroll pin.
+  // The mount-time row count: rendering the whole hydrated window in the first
+  // pass (instead of the default 10-row batches) turns open-at-end into a
+  // single layout + single scrollToEnd instead of a visible batch-by-batch
+  // crawl. Bounded by ENTRIES_WINDOW_SIZE upstream; later paging renders
+  // through normal virtualization.
+  const initialRenderCountRef = useRef(rows.length > 0 ? rows.length : undefined)
+
+  // Land at the tail on first open — as a pin, not a one-shot: content can
+  // still grow before the user's first gesture (late row measurement, a
+  // streaming tail, rich-card underlay→WebView swaps), and all of it wants
+  // bottom. The user's first drag breaks the pin, same as the host's
+  // autoscroll pin. The list stays invisible until the first pin assertion has
+  // taken effect, so the pre-scroll frame at the top never flashes.
   const initialPinRef = useRef(true)
+  const [landed, setLanded] = useState(rows.length === 0)
   const handleContentSizeChange = useCallback(() => {
     if (!initialPinRef.current || rows.length === 0) return
     listRef.current?.scrollToEnd({ animated: false })
+    requestAnimationFrame(() => setLanded(true))
   }, [rows.length])
 
   const handleScrollBeginDrag = useCallback(() => {
@@ -250,6 +260,7 @@ function EntryWindowNativeInner<T extends { id: string }>(
       data={rows}
       keyExtractor={(row) => row.id}
       renderItem={({ item }) => <>{renderRow(item)}</>}
+      initialNumToRender={initialRenderCountRef.current}
       onContentSizeChange={handleContentSizeChange}
       onScroll={handleScroll}
       onScrollBeginDrag={handleScrollBeginDrag}
@@ -257,7 +268,7 @@ function EntryWindowNativeInner<T extends { id: string }>(
       maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
       onStartReached={onNearTop}
       onStartReachedThreshold={EDGE_THRESHOLD_VIEWPORTS}
-      style={styles.list}
+      style={landed ? styles.list : styles.listLanding}
     />
   )
 }
