@@ -48,6 +48,11 @@ const OVERSCAN = 6
 // matching the web branch's one-clientHeight top boundary check below.
 const EDGE_THRESHOLD_VIEWPORTS = 1
 const NEAR_BOTTOM_THRESHOLD_PX = 20
+// Native hysteresis band (see applyScrollMetrics). Web keeps the single
+// threshold: wheel scrolling is precise and its contentSize doesn't
+// re-estimate mid-scroll.
+const NEAR_BOTTOM_ENTER_PX = 48
+const NEAR_BOTTOM_EXIT_PX = 160
 const MAINTAIN_VISIBLE_CONTENT_POSITION = { minIndexForVisible: 0 } as const
 
 const styles = StyleSheet.create({
@@ -241,12 +246,18 @@ function EntryWindowNativeInner<T extends { id: string }>(
     onUserScrollGesture?.()
   }, [onUserScrollGesture])
 
+  // Hysteresis, not a single threshold: contentSize re-estimates as
+  // virtualized rows remount during scrolling, so the computed distance
+  // oscillates by tens of px — one tight cutoff makes the near-bottom state
+  // (and the jump button) flicker. Enter close, leave only when clearly away.
   const nearBottomRef = useRef(false)
-  const handleScroll = useCallback(
+  const applyScrollMetrics = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
       const distanceFromBottomPx = contentSize.height - contentOffset.y - layoutMeasurement.height
-      const withinBottom = distanceFromBottomPx <= NEAR_BOTTOM_THRESHOLD_PX
+      const withinBottom = nearBottomRef.current
+        ? distanceFromBottomPx <= NEAR_BOTTOM_EXIT_PX
+        : distanceFromBottomPx <= NEAR_BOTTOM_ENTER_PX
       if (withinBottom !== nearBottomRef.current) onNearBottomChange(withinBottom)
       nearBottomRef.current = withinBottom
       onScrollPositionChange({ distanceFromBottomPx })
@@ -262,9 +273,13 @@ function EntryWindowNativeInner<T extends { id: string }>(
       renderItem={({ item }) => <>{renderRow(item)}</>}
       initialNumToRender={initialRenderCountRef.current}
       onContentSizeChange={handleContentSizeChange}
-      onScroll={handleScroll}
+      onScroll={applyScrollMetrics}
+      // Throttled onScroll can miss the resting position — the end events
+      // carry it, so the near-bottom verdict is always settled at rest.
+      onScrollEndDrag={applyScrollMetrics}
+      onMomentumScrollEnd={applyScrollMetrics}
       onScrollBeginDrag={handleScrollBeginDrag}
-      scrollEventThrottle={100}
+      scrollEventThrottle={16}
       maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
       onStartReached={onNearTop}
       onStartReachedThreshold={EDGE_THRESHOLD_VIEWPORTS}
