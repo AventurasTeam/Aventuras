@@ -24,6 +24,7 @@ export const APP_SETTINGS_DEFAULTS = {
   appearance: {
     themeId: 'system',
     readerFontScale: 1,
+    showJumpToBottom: true,
     density: 'default',
   } as Appearance,
   uiLanguage: 'en',

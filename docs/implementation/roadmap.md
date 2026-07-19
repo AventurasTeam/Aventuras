@@ -615,7 +615,9 @@ independent; M7.6 finishes once M7.1 is in.
 
 **Slice-authoring notes.** M7.1 as sketched is several weeks of
 work — split it per tab (sizing rule: days, not weeks), which also
-load-balances the milestone. The per-tab slices have different true
+load-balances the milestone. The appearance tab exposes
+`appearance.showJumpToBottom` (landed DB-only post-M2; the reader
+already consumes it). The per-tab slices have different true
 gates: appearance and data tabs need nothing newer than
 foundations; the providers tab needs M2.1's config mutators and
 capability detection; the models tab needs M3.7's suggestion slot;

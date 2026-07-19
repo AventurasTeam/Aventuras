@@ -762,7 +762,9 @@ user is not near-bottom of the window (~20px tolerance — the
 button appears as soon as the user leaves the live edge;
 deliberately decoupled from the auto-load boundary's
 ~viewport-height tolerance). Slides in / out on threshold cross.
-Hidden near-bottom.
+Hidden near-bottom. `app_settings.appearance.showJumpToBottom`
+(default true) hides the button entirely; DB-only until the M7.1
+appearance tab exposes the toggle.
 
 **Click behavior.** Smooth scroll (~150ms) to bottom — always a
 same-window scroll (see [No window swap](#loaded-set-model); the

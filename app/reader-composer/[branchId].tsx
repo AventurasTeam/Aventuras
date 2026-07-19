@@ -47,6 +47,7 @@ import {
 } from '@/lib/pipeline'
 import { createAutoscrollMachine } from '@/lib/reader-scroll'
 import {
+  appSettingsStore,
   currentStoryStore,
   entitiesStore,
   entriesStore,
@@ -489,7 +490,8 @@ export default function ReaderComposerRoute() {
     )
   }
 
-  const showJump = entries.length > 0
+  const jumpButtonEnabled = appSettingsStore.useAppSettings((s) => s.appearance.showJumpToBottom)
+  const showJump = jumpButtonEnabled && entries.length > 0
 
   return (
     <ScreenShell

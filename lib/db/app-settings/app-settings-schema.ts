@@ -5,6 +5,8 @@ import { storySettingsSchema, suggestionCategorySchema } from '../stories/story-
 export const appearanceSchema = z.object({
   themeId: z.string().default('system'),
   readerFontScale: z.number().default(1),
+  // DB-only until the M7.1 appearance tab exposes it (reader note 2026-07-19).
+  showJumpToBottom: z.boolean().default(true),
   accentOverride: z.string().optional(),
   density: z.enum(['default', 'compact', 'regular', 'comfortable']).default('default'),
 })
