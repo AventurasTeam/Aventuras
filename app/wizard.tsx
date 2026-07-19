@@ -103,6 +103,18 @@ export default function WizardRoute() {
     autosaveSuppressedRef.current = true
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
   }
+  // A failed Finish / Save-as-draft already cancelled the pending autosave
+  // debounce via suppressAutosave but committed nothing, so the user's last
+  // edit would be lost. Re-enable and persist the current state now — the
+  // failure path ran no clearLiveSession, so there's no race with it.
+  const flushAutosave = () => {
+    autosaveSuppressedRef.current = false
+    if (JSON.stringify(wizardStore.getWizard().state) === EMPTY_STATE_JSON) return
+    runAction(
+      saveLiveSession(wizardStore.getWizard().state, ctx, undefined, sourceDraftId ?? undefined),
+      { event: 'action_layer.wizard_autosave_failed' },
+    )
+  }
 
   const selectedCalendar = getCalendar(calendarSystemId) ?? getCalendar(DEFAULT_CALENDAR_ID)
   const validityParams: StepValidityParams = {
@@ -139,19 +151,23 @@ export default function WizardRoute() {
         .then((result) => {
           if (result.status === 'ok') {
             wizardStore.reset()
+            // Route unmounts (subscriber gone) and the store is pristine.
+            autosaveSuppressedRef.current = false
             return
           }
           const fields = result.reasons
             .map((reason) => t(FINISH_REASON_KEY[reason as keyof typeof FINISH_REASON_KEY]))
             .join(', ')
           toast.error(t('wizard:finish.invalidList', { fields }))
+          flushAutosave()
+        })
+        .catch((err) => {
+          flushAutosave()
+          throw err
         })
         .finally(() => {
           finishingRef.current = false
           setIsFinishing(false)
-          // Safe unconditionally: on success the route unmounts (subscriber
-          // gone) and the store is pristine, so nothing re-schedules.
-          autosaveSuppressedRef.current = false
         }),
       {
         event: 'action_layer.wizard_finish_failed',
@@ -166,10 +182,12 @@ export default function WizardRoute() {
       saveStoryDraft(wizardStore.getWizard().state, ctx, undefined, sourceDraftId ?? undefined)
         .then(() => {
           wizardStore.reset()
+          autosaveSuppressedRef.current = false
           router.back()
         })
-        .finally(() => {
-          autosaveSuppressedRef.current = false
+        .catch((err) => {
+          flushAutosave()
+          throw err
         }),
       {
         event: 'action_layer.wizard_save_draft_failed',
