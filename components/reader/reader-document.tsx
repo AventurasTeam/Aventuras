@@ -95,11 +95,18 @@ export default function ReaderDocument({
   }, [rowCount, onFirstPaint])
 
   // Anchor clicks route to the host (system browser); the WebView must never
-  // navigate. The host-side nav lock is the backstop for anything that slips
-  // past preventDefault.
+  // navigate. composedPath, not target.closest: rich entries live in shadow
+  // roots, and retargeting rewrites event.target to the shadow host — the
+  // anchor is only reachable through the composed path. The host-side nav
+  // lock is the backstop for anything that slips past preventDefault.
   const handleClickCapture = useCallback(
     (event: MouseEvent<HTMLDivElement>) => {
-      const anchor = (event.target as HTMLElement).closest?.('a[href]')
+      const anchor = event.nativeEvent
+        .composedPath()
+        .find(
+          (node): node is HTMLAnchorElement =>
+            node instanceof HTMLAnchorElement && node.hasAttribute('href'),
+        )
       if (anchor == null) return
       event.preventDefault()
       const href = anchor.getAttribute('href') ?? ''

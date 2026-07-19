@@ -414,10 +414,14 @@ export default function ReaderComposerRoute() {
 
   // Recovery reloads re-request the document's own URL; blocking that freezes
   // the surface. Everything else is dropped — foreign links arrive via
-  // onLinkTap instead of navigation.
+  // onLinkTap instead of navigation. The latch must only ever accept a
+  // document-shaped URL (Metro in dev, bundled file/about otherwise): Android
+  // fires no request callback for the initial loadUrl, so an unguarded latch
+  // would record the first foreign navigation as "own URL" and allow it.
   const documentUrlRef = useRef<string | null>(null)
   const handleShouldStartLoad = useCallback((request: { url: string }) => {
-    if (documentUrlRef.current == null || request.url === documentUrlRef.current) {
+    if (documentUrlRef.current != null) return request.url === documentUrlRef.current
+    if (/^(file:|about:|https?:\/\/localhost[:/])/i.test(request.url)) {
       documentUrlRef.current = request.url
       return true
     }
