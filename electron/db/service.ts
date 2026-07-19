@@ -1,4 +1,5 @@
-import { join } from 'node:path'
+import { existsSync } from 'node:fs'
+import { join, sep } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
@@ -20,6 +21,17 @@ function resolveMigrationsDir(): string {
   return app.isPackaged
     ? join(process.resourcesPath, 'migrations')
     : join(__dirname, '..', '..', '..', 'lib', 'db', 'migrations')
+}
+
+function resolveVecExtensionPath(): string {
+  const loadable = getLoadablePath()
+  if (!app.isPackaged) return loadable
+  // The native .so can't be dlopen'd from inside app.asar (it reads as a file,
+  // not a directory). electron-builder unpacks it via asarUnpack, but
+  // getLoadablePath still returns the app.asar path and loadExtension's dlopen
+  // bypasses Electron's asar->unpacked fs redirection — repoint it by hand.
+  const unpacked = loadable.replace(`${sep}app.asar${sep}`, `${sep}app.asar.unpacked${sep}`)
+  return existsSync(unpacked) ? unpacked : loadable
 }
 
 // node:sqlite returns row objects; sqlite-proxy needs positional arrays. For
@@ -68,7 +80,7 @@ export async function initDb(): Promise<void> {
   const file = getDbFilePath()
   sqlite = new DatabaseSync(file, { allowExtension: true })
   sqlite.enableLoadExtension(true)
-  sqlite.loadExtension(getLoadablePath())
+  sqlite.loadExtension(resolveVecExtensionPath())
   sqlite.enableLoadExtension(false) // re-close the surface after loading
   sqlite.exec('PRAGMA foreign_keys = ON;')
   // drizzle-orm 0.45.2 has no node-sqlite migrator; run migrations through the
