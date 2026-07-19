@@ -24,7 +24,8 @@
     "storySettings": "Story Settings",
     "actions": "Actions",
     "back": "Back",
-    "chapterProgress": "Chapter progress"
+    "chapterProgress": "Chapter progress",
+    "onThisScreen": "On this screen"
   },
   "modelPicker": {
     "placeholder": "Pick a model",

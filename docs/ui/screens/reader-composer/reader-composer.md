@@ -27,8 +27,9 @@ Cross-cutting principles that govern this screen are in
   (entry list at scale: virtualization layered on a loaded window
   per [Scroll behavior](#scroll-behavior) below)
 - [Actions menu (contextual zone)](../../patterns/actions-menu.md#contextual-zone)
-  (Reader contributes per-entry / chapter / branch commands to the
-  universal `⚲` directory)
+  (Reader contributes `Undo last action` / `Redo` / `Jump to
+bottom` to the universal `⚲` directory — the touch-tier path to
+  the CTRL-Z pair)
 - [Generation status pill](../../patterns/generation-status-pill.md)
   (top-bar status surface, click-to-cancel popover, sticky memory
   error variant)

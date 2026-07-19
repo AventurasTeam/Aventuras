@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { View } from 'react-native'
 
+import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { EntryCard } from '@/components/compounds/entry-card'
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
@@ -55,6 +56,7 @@ import {
   isUserEditBlocked,
   rehydrateStories,
   storiesStore,
+  undoRedoStore,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
@@ -437,6 +439,68 @@ export default function ReaderComposerRoute() {
   )
   useGlobalHotkey(matchesUndoRedoShortcut, handleUndoRedoShortcut, { ignoreEditableTargets: true })
 
+  // Touch-tier path to undo/redo (the shortcut is keyboard-only). A tapped menu
+  // item silently doing nothing reads as broken, so rejections toast — unlike
+  // the keyboard path, which stays silent per native undo convention.
+  const hasRedo = undoRedoStore.useUndoRedo((s) => s.redoStack.length > 0)
+  const menuUndo = useCallback(async () => {
+    const result = await undoLastAction(branchId, ctx)
+    if (result.status === 'rejected') toast.info(t('reader:actions.nothingToUndo'))
+  }, [branchId])
+  const menuRedo = useCallback(async () => {
+    const result = await redoLastAction(branchId, ctx)
+    if (result.status === 'rejected') toast.info(t('reader:actions.nothingToRedo'))
+  }, [branchId])
+  const jumpToBottom = useCallback(() => {
+    entryWindowRef.current?.scrollToBottom({ smooth: true })
+    lastDistanceRef.current = 0
+    if (isGenerating) {
+      // Today's single-phase per-turn pipeline streams exactly one
+      // entryId per run, so this forced engage already covers the
+      // rest of it — nothing later reads pendingJumpToBottomAtRef
+      // for this run. Revisit if a phase ever streams a second
+      // entryId under the same run.
+      autoscrollRef.current.streamStarted({ distanceFromBottomPx: 0 })
+    } else {
+      autoscrollRef.current.autoscrollApplied({ distanceFromBottomPx: 0 })
+      pendingJumpToBottomAtRef.current = Date.now()
+    }
+  }, [isGenerating])
+  const contextualActions: ActionGroup = useMemo(() => {
+    const blocked = {
+      disabled: isGenerating,
+      disabledReason: t('reader:actions.blockedWhileGenerating'),
+    }
+    return {
+      id: 'reader',
+      header: t('chrome.onThisScreen'),
+      entries: [
+        {
+          id: 'undo',
+          label: t('reader:actions.undo'),
+          ...blocked,
+          onActivate: () => void menuUndo(),
+        },
+        // Absent, not disabled, when the stack is empty — the menu doesn't
+        // surface dead commands (actions-menu spec); emptiness is store-derived
+        // and cheap, unlike undo's DB-backed target lookup.
+        ...(hasRedo
+          ? [
+              {
+                id: 'redo',
+                label: t('reader:actions.redo'),
+                ...blocked,
+                onActivate: () => void menuRedo(),
+              },
+            ]
+          : []),
+        ...(entries.length > 0
+          ? [{ id: 'jump-to-bottom', label: t('reader:jumpToBottom'), onActivate: jumpToBottom }]
+          : []),
+      ],
+    }
+  }, [hasRedo, isGenerating, menuUndo, menuRedo, entries.length, jumpToBottom])
+
   const windowRows: WindowRow[] = useMemo(() => {
     if (!streamingVisible) return entries
     // Stable synthetic id: the row must not remount when the first chunk
@@ -505,7 +569,7 @@ export default function ReaderComposerRoute() {
       title={<Text className="font-semibold">{storyTitle ?? t('reader:placeholderTitle')}</Text>}
       chapterProgress={0}
       onBack={() => router.back()}
-      actions={<AppActionsMenu />}
+      actions={<AppActionsMenu contextual={contextualActions} />}
       statusSlot={
         <GenerationStatusPill
           activePhase={isGenerating ? 'generating-narrative' : undefined}
@@ -549,21 +613,7 @@ export default function ReaderComposerRoute() {
             )}
             <JumpButtons
               showJumpToBottom={showJump && showJumpToBottom}
-              onJumpToBottom={() => {
-                entryWindowRef.current?.scrollToBottom({ smooth: true })
-                lastDistanceRef.current = 0
-                if (isGenerating) {
-                  // Today's single-phase per-turn pipeline streams exactly one
-                  // entryId per run, so this forced engage already covers the
-                  // rest of it — nothing later reads pendingJumpToBottomAtRef
-                  // for this run. Revisit if a phase ever streams a second
-                  // entryId under the same run.
-                  autoscrollRef.current.streamStarted({ distanceFromBottomPx: 0 })
-                } else {
-                  autoscrollRef.current.autoscrollApplied({ distanceFromBottomPx: 0 })
-                  pendingJumpToBottomAtRef.current = Date.now()
-                }
-              }}
+              onJumpToBottom={jumpToBottom}
             />
           </View>
           <View className="border-t border-border px-6 pb-3.5 pt-3">

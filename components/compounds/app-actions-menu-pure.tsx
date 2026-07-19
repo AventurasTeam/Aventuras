@@ -4,6 +4,8 @@ import { t } from '@/lib/i18n'
 type AppActionsMenuPureProps = {
   diagnosticsEnabled: boolean
   onOpenDiagnosticsHub: () => void
+  /** Screen-contributed "ON THIS SCREEN" group; omitted → zone hidden. */
+  contextual?: ActionGroup
 }
 
 // Presentational variant — props in, no store/navigation coupling — so stories
@@ -12,6 +14,7 @@ type AppActionsMenuPureProps = {
 export function AppActionsMenuPure({
   diagnosticsEnabled,
   onOpenDiagnosticsHub,
+  contextual,
 }: AppActionsMenuPureProps) {
   // Capability-gated entries are absent from the array, not disabled — the menu
   // doesn't surface dead commands (per actions-menu spec).
@@ -29,7 +32,14 @@ export function AppActionsMenuPure({
       : [],
   }
   // Chrome bar trigger — lg to match the top-bar IconActions.
-  return <ActionsMenu coreGroups={[appGroup]} triggerLabel={t('chrome.actions')} triggerSize="lg" />
+  return (
+    <ActionsMenu
+      contextual={contextual}
+      coreGroups={[appGroup]}
+      triggerLabel={t('chrome.actions')}
+      triggerSize="lg"
+    />
+  )
 }
 
 export type { AppActionsMenuPureProps }

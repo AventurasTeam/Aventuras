@@ -51,5 +51,12 @@
       "profileMissing": "The narrative agent's assigned profile is missing.",
       "providerMissing": "The narrative model's provider is missing."
     }
+  },
+  "actions": {
+    "undo": "Undo last action",
+    "redo": "Redo",
+    "nothingToUndo": "Nothing to undo.",
+    "nothingToRedo": "Nothing to redo.",
+    "blockedWhileGenerating": "Unavailable while generating."
   }
 }

@@ -142,7 +142,7 @@ not reader-contextual.
 
 | Surface                                                             | `ON THIS SCREEN` entries                            |
 | ------------------------------------------------------------------- | --------------------------------------------------- |
-| [Reader / composer](../screens/reader-composer/reader-composer.md)  | Jump to bottom                                      |
+| [Reader / composer](../screens/reader-composer/reader-composer.md)  | Undo last action · Redo · Jump to bottom            |
 | [World](../screens/world/world.md)                                  | Add entity… · Add lore…                             |
 | [Plot](../screens/plot/plot.md)                                     | Add thread… · Add happening…                        |
 | [Story List](../screens/story-list/story-list.md)                   | New story… · Import story…                          |
@@ -160,6 +160,14 @@ Settings' contextual zone gains them.
 The `…` suffix marks an entry that opens a further surface
 (picker, modal, flow). Plain navigation and immediate commands
 (`Jump to bottom`) carry no suffix.
+
+Reader's undo/redo entries are the touch-tier path to CTRL-Z /
+CTRL-Shift-Z (keyboard remains the desktop fast path). `Redo` is
+absent — not disabled — when the redo stack is empty (store-derived,
+cheap); `Undo last action` stays present because its availability
+needs a delta-log query, and a rejected activation surfaces a
+"Nothing to undo" toast instead. Both disable during generation;
+`Jump to bottom` is absent on an empty entry list.
 
 ## Surface coverage
 
