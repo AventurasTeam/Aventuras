@@ -245,7 +245,7 @@ a floor, not a cliff.
 `react-native-webview` install plus a dev-client rebuild before
 first import
 ([native-dep lesson](../../implementation/lessons-learned/native-dep-expo-link.md)).
-Not yet installed.
+Installed 2026-07-19; the dev-client rebuild is per-machine.
 
 ## What this design defers
 
