@@ -15,6 +15,11 @@ Sister patterns:
   `onCommitEdit / onCancelEdit` for the host to bind.
 - [`forms.md → Textarea primitive`](./forms.md#textarea-primitive) —
   the in-place edit textarea.
+- [`rich-entry-rendering.md`](./rich-entry-rendering.md) — the
+  main content slot's rendering fork: entries exceeding the
+  native RNRH subset render through an isolated rich renderer.
+  The fork lives entirely inside the content slot; all chrome in
+  this pattern stays native.
 
 Used by:
 

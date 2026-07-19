@@ -131,7 +131,7 @@ markdown + inline HTML string
 - **RN Web / Electron:** `dangerouslySetInnerHTML` on a themed container — native browser rendering, exact CSS fidelity
 - **Expo native:** `react-native-render-html`, with custom renderers for deprecated tags (`<font>`) and themed `tagsStyles` keyed to the NativeWind color tokens
 
-**Expected fidelity:** ~80-90% between platforms for typical LLM output. The `juice` pre-pass closes the biggest gap (inline `<style>` blocks don't cascade on native by default). Complex layout CSS may render approximately; iterate on specific divergences as they surface.
+**Expected fidelity:** ~80-90% between platforms for typical LLM output. The `juice` pre-pass closes the biggest gap (inline `<style>` blocks don't cascade on native by default). Entries exceeding the native-translatable subset render through the isolated rich path instead — see [`ui/patterns/rich-entry-rendering.md`](./ui/patterns/rich-entry-rendering.md).
 
 **Streaming rendering:** port the `htmlStreaming` pattern from the old app (`src/lib/utils/htmlStreaming.ts` / `htmlSanitize.ts`). Buffer mid-stream chunks until tag boundaries, sanitize the completed fragment, then append — prevents half-tags reaching either renderer.
 

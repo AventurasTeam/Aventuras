@@ -130,3 +130,10 @@ The split heuristic + when-to-add rules live in
   core, screen-specific contextual zone), self-contained-command
   inclusion test, per-tier Popover/Sheet via
   `SearchableOverlayList`, combobox/listbox semantics.
+- [`rich-entry-rendering.md`](./rich-entry-rendering.md) — hybrid
+  narrative-content rendering: engine-as-oracle detection of
+  entries exceeding the native RNRH subset, isolated rich
+  renderers (Shadow DOM host on web, Expo DOM component on
+  native), rich sanitize path with stylesheet-level CSS scrub,
+  underlay-plus-single-swap card lifecycle, on-device validation
+  checklist.
