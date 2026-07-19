@@ -5,6 +5,7 @@ import { useTheme } from '@/lib/themes'
 
 import type { RichEntryContentProps } from './rich-entry-content.types'
 import RichEntryDocument from './rich-entry-dom'
+import { useRichEntryActive } from './rich-entry-visibility'
 
 type CachedHeight = { content: string; height: number }
 
@@ -75,27 +76,66 @@ const styles = StyleSheet.create({
   webview: { backgroundColor: 'transparent' },
 })
 
+// Scroll-past-and-back must not thrash WebViews: a card leaving the active
+// band keeps its WebView briefly before downgrading to the underlay.
+const TEARDOWN_DELAY_MS = 2000
+
 export function RichEntryContent({ markedHtml, entryId, underlay }: RichEntryContentProps) {
   const { theme } = useTheme()
   const [ready, setReady] = useState(false)
   const [width, setWidth] = useState(0)
-  const [bootGranted, setBootGranted] = useState(false)
+  const [webViewMounted, setWebViewMounted] = useState(false)
+  const active = useRichEntryActive(entryId)
 
   const slotHeldRef = useRef(false)
+  const cancelSlotRequestRef = useRef<(() => void) | null>(null)
+  const teardownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const loadCountRef = useRef(0)
+
   useEffect(() => {
-    const cancel = requestBootSlot(() => {
-      slotHeldRef.current = true
-      setBootGranted(true)
-    })
-    return () => {
+    if (active) {
+      if (teardownTimerRef.current != null) {
+        clearTimeout(teardownTimerRef.current)
+        teardownTimerRef.current = null
+      }
+      if (!webViewMounted && cancelSlotRequestRef.current == null && !slotHeldRef.current) {
+        let grantedSync = false
+        const cancel = requestBootSlot(() => {
+          grantedSync = true
+          cancelSlotRequestRef.current = null
+          slotHeldRef.current = true
+          setWebViewMounted(true)
+        })
+        if (!grantedSync) cancelSlotRequestRef.current = cancel
+      }
+      return
+    }
+    if (!webViewMounted && cancelSlotRequestRef.current == null) return
+    teardownTimerRef.current = setTimeout(() => {
+      teardownTimerRef.current = null
+      cancelSlotRequestRef.current?.()
+      cancelSlotRequestRef.current = null
       if (slotHeldRef.current) {
         slotHeldRef.current = false
         releaseBootSlot()
-      } else {
-        cancel()
       }
-    }
-  }, [])
+      loadCountRef.current = 0
+      setReady(false)
+      setWebViewMounted(false)
+    }, TEARDOWN_DELAY_MS)
+  }, [active, webViewMounted])
+
+  useEffect(
+    () => () => {
+      if (teardownTimerRef.current != null) clearTimeout(teardownTimerRef.current)
+      cancelSlotRequestRef.current?.()
+      if (slotHeldRef.current) {
+        slotHeldRef.current = false
+        releaseBootSlot()
+      }
+    },
+    [],
+  )
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     setWidth(event.nativeEvent.layout.width)
@@ -138,7 +178,6 @@ export function RichEntryContent({ markedHtml, entryId, underlay }: RichEntryCon
   // A load finishing after the swap means the WebView reloaded (surface loss
   // recovery): its fresh document repaints from scratch, so drop back to the
   // underlay and let the new onReady swap again.
-  const loadCountRef = useRef(0)
   const handleLoadEnd = useCallback(() => {
     loadCountRef.current += 1
     if (loadCountRef.current > 1) setReady(false)
@@ -161,7 +200,7 @@ export function RichEntryContent({ markedHtml, entryId, underlay }: RichEntryCon
       style={!ready && cachedHeight != null ? { height: cachedHeight, overflow: 'hidden' } : null}
     >
       {ready ? null : underlay}
-      {bootGranted ? (
+      {webViewMounted ? (
         <View
           style={ready ? null : styles.booting}
           pointerEvents={ready ? 'auto' : 'none'}

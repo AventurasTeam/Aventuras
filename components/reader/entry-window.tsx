@@ -19,6 +19,7 @@ import {
   StyleSheet,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type ViewToken,
 } from 'react-native'
 
 import { computePrependCompensation } from '@/lib/reader-scroll'
@@ -35,6 +36,11 @@ type EntryWindowProps<T extends { id: string }> = {
    * autoscroll pins — hosts use this to break the autoscroll pin loop.
    */
   onUserScrollGesture?: () => void
+  /**
+   * Native only: ids of rows in or near the viewport (± a small buffer),
+   * re-published when membership changes. Drives rich-card WebView residency.
+   */
+  onActiveRowsChange?: (ids: ReadonlySet<string>) => void
 }
 
 type EntryWindowHandle = {
@@ -197,6 +203,9 @@ const EntryWindowWeb = forwardRef(EntryWindowWebInner) as <T extends { id: strin
   props: EntryWindowProps<T> & { ref?: ForwardedRef<EntryWindowHandle> },
 ) => ReturnType<typeof EntryWindowWebInner>
 
+const ACTIVE_ROW_BUFFER = 2
+const VIEWABILITY_CONFIG = { itemVisiblePercentThreshold: 1 } as const
+
 function EntryWindowNativeInner<T extends { id: string }>(
   {
     rows,
@@ -205,10 +214,35 @@ function EntryWindowNativeInner<T extends { id: string }>(
     onNearBottomChange,
     onScrollPositionChange,
     onUserScrollGesture,
+    onActiveRowsChange,
   }: EntryWindowProps<T>,
   ref: ForwardedRef<EntryWindowHandle>,
 ) {
   const listRef = useRef<FlatList<T>>(null)
+
+  // FlatList forbids changing onViewableItemsChanged identity, so the handler
+  // is a stable ref reading rows/callback through refs.
+  const rowsRef = useRef(rows)
+  rowsRef.current = rows
+  const onActiveRowsChangeRef = useRef(onActiveRowsChange)
+  onActiveRowsChangeRef.current = onActiveRowsChange
+  const handleViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    const publish = onActiveRowsChangeRef.current
+    if (publish == null) return
+    const indices = viewableItems
+      .map((token) => token.index)
+      .filter((index): index is number => index != null)
+    if (indices.length === 0) {
+      publish(new Set())
+      return
+    }
+    const currentRows = rowsRef.current
+    const lo = Math.max(0, Math.min(...indices) - ACTIVE_ROW_BUFFER)
+    const hi = Math.min(currentRows.length - 1, Math.max(...indices) + ACTIVE_ROW_BUFFER)
+    const ids = new Set<string>()
+    for (let i = lo; i <= hi; i++) ids.add(currentRows[i]!.id)
+    publish(ids)
+  }).current
 
   useImperativeHandle(
     ref,
@@ -283,11 +317,13 @@ function EntryWindowNativeInner<T extends { id: string }>(
       maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
       onStartReached={onNearTop}
       onStartReachedThreshold={EDGE_THRESHOLD_VIEWPORTS}
+      onViewableItemsChanged={handleViewableItemsChanged}
+      viewabilityConfig={VIEWABILITY_CONFIG}
       // Android's VirtualizedList default (true) detaches clipped rows'
       // native views; a detached WebView loses its surface and comes back
       // blank / mid-reload (rich entry cards). Keeping subviews attached
-      // trades memory for surface stability — the rich-entry validation
-      // checklist watches that cost.
+      // trades memory for surface stability — WebView residency is bounded
+      // separately by onActiveRowsChange-driven teardown.
       removeClippedSubviews={false}
       style={landed ? styles.list : styles.listLanding}
     />

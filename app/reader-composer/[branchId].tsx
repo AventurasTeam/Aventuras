@@ -7,6 +7,10 @@ import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { EntryCard } from '@/components/compounds/entry-card'
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
+import {
+  createRichEntryVisibilityStore,
+  RichEntryVisibilityContext,
+} from '@/components/compounds/rich-entry-visibility'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { EntryWindow, type EntryWindowHandle } from '@/components/reader/entry-window'
 import { JumpButtons } from '@/components/reader/jump-buttons'
@@ -143,6 +147,7 @@ export default function ReaderComposerRoute() {
   const composerRef = useRef<ComposerHandle>(null)
   const autoscrollRef = useRef(createAutoscrollMachine())
   const lastDistanceRef = useRef(0)
+  const richVisibilityRef = useRef(createRichEntryVisibilityStore())
   // Timestamp of the last jump-to-bottom click while idle. The smooth-scroll
   // it triggers reports several intermediate, non-zero distanceFromBottomPx
   // values before settling, so a bounded time window — not a plain flag —
@@ -601,19 +606,22 @@ export default function ReaderComposerRoute() {
                 <EmptyState title={t('reader:emptyTitle')} subtext={t('reader:emptyBody')} />
               </View>
             ) : (
-              <EntryWindow
-                ref={entryWindowRef}
-                key={branchId}
-                rows={windowRows}
-                renderRow={renderRow}
-                onNearTop={() => void loadOlderEntries()}
-                onNearBottomChange={(isNearBottom) => setShowJumpToBottom(!isNearBottom)}
-                onScrollPositionChange={(pos) => {
-                  lastDistanceRef.current = pos.distanceFromBottomPx
-                  autoscrollRef.current.userScrolled(pos)
-                }}
-                onUserScrollGesture={() => autoscrollRef.current.userInterrupted()}
-              />
+              <RichEntryVisibilityContext.Provider value={richVisibilityRef.current}>
+                <EntryWindow
+                  ref={entryWindowRef}
+                  key={branchId}
+                  rows={windowRows}
+                  renderRow={renderRow}
+                  onNearTop={() => void loadOlderEntries()}
+                  onNearBottomChange={(isNearBottom) => setShowJumpToBottom(!isNearBottom)}
+                  onScrollPositionChange={(pos) => {
+                    lastDistanceRef.current = pos.distanceFromBottomPx
+                    autoscrollRef.current.userScrolled(pos)
+                  }}
+                  onUserScrollGesture={() => autoscrollRef.current.userInterrupted()}
+                  onActiveRowsChange={richVisibilityRef.current.setActiveIds}
+                />
+              </RichEntryVisibilityContext.Provider>
             )}
             <JumpButtons
               showJumpToBottom={showJump && showJumpToBottom}
