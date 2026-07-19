@@ -340,7 +340,10 @@ on selected rows so the selection signal isn't muddled by hover.
 Distinct from highlight: highlight is the keyboard cursor, selected
 is the committed value. Consumers without a selection concept
 (Autocomplete, ActionsMenu) omit the prop and the substrate stays in
-highlight-only mode.
+highlight-only mode. Enabled rows also carry the pointer twin —
+`hover:bg-tint-hover`, same tint, same suppress-on-selected rule —
+so mouse users get row feedback without the keyboard cursor moving;
+hover and cursor may momentarily tint two rows, which is accepted.
 
 **In-flight gating.** A consumer can flip `Row.disabled` reactively
 while the overlay is open — disabled rows render non-interactive and

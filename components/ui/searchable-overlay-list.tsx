@@ -334,6 +334,9 @@ function RowListNative<T>({
           rowClass,
           selected && 'bg-bg-sunken',
           highlighted && !selected && 'bg-tint-hover',
+          // Pointer twin of the keyboard-cursor tint; same suppress-on-selected
+          // rule so the selection signal isn't muddled.
+          !selected && !item.disabled && 'hover:bg-tint-hover',
           item.disabled && 'opacity-50',
         )}
       >
@@ -626,6 +629,7 @@ function VirtualizedRowList<T>({
                   !item.isLastInSection && 'border-b border-border',
                   selected && 'bg-bg-sunken',
                   highlighted && !selected && 'bg-tint-hover',
+                  !selected && !row.disabled && 'hover:bg-tint-hover',
                   row.disabled && 'opacity-50',
                 )}
               >
