@@ -41,32 +41,63 @@ architecture: exploration record `2026-07-19-single-document-reader`
   confirmation, alert dialogs) and toasts. Entry actions inside the
   document **request**; native chrome **confirms and executes**.
 
-## Entry list: flow layout + engine culling
+## Entry list: fully rendered flow layout
 
-The list is plain document flow — no JS virtualizer. Rows carry
-`content-visibility: auto` with a `contain-intrinsic-size`
-placeholder, so the engine skips layout/paint for off-screen rows
-and preserves scrollbar geometry. One implementation serves all
-platforms; the reader's `@tanstack/react-virtual` usage and both
-`EntryWindow` branches retire (the tanstack dependency remains for
-non-reader surfaces; [`lists.md`](./lists.md) still governs those).
+The list is plain document flow — no JS virtualizer, and no engine
+culling: every row in the loaded window is fully laid out. Real
+heights are what keep open-at-bottom, prepend compensation, and
+scrolling exact — validation retired `content-visibility` culling
+because its placeholder estimates settle to real sizes as rows
+first render, shifting content under the user's finger
+(device-observed, worst on rich rows). One implementation serves
+all platforms; the reader's `@tanstack/react-virtual` usage and
+both `EntryWindow` branches retire (the tanstack dependency
+remains for non-reader surfaces; [`lists.md`](./lists.md) still
+governs those).
 
 Why not a JS virtualizer: its estimate corrections write scroll
 position mid-gesture — imperceptible on wheel input, visible
-stutter on touch flings (device-verified). Engine culling does the
-same rendering elision natively and cooperates with browser scroll
-anchoring instead of fighting it.
+stutter on touch flings (device-verified). The same rule governs
+the whole surface: **no programmatic scroll write may land
+mid-gesture.**
 
 DOM residency is bounded by the
 [loaded-set window](../screens/reader-composer/reader-composer.md#loaded-set-model),
 not the viewport: ~50 entries at open, growing by boundary
-auto-load. If a long backwards-reading session makes window growth
-measurable (React commit time or document memory), the designed
-lever is a **far-end trim cap** on the loaded set — windowing at
-the data layer, never in the scroll layer.
+auto-load — fired **only at scroll rest**. The boundary signal
+latches during the gesture and fires once scroll events quiesce
+with no finger down, so the prepend and its compensating scroll
+write never fight compositor-owned scrolling. While older entries
+may exist (`hasOlder`), a **boundary skeleton** permanently
+occupies the slot above the oldest loaded row — an indicator that
+mounted mid-scroll would itself shift content — and unmounts once,
+compensated, when a short load proves the branch top. If a long
+backwards-reading session makes window growth measurable (React
+commit time or document memory), the designed lever is a **far-end
+trim cap** on the loaded set — windowing at the data layer, never
+in the scroll layer.
 
-Open-at-bottom is a document concern: land on the last entry before
-first paint (no visible pre-scroll frame), then reveal.
+**Anchor preservation is deterministic, not engine-delegated.**
+Chrome's scroll anchoring does not fire for this tree (measured;
+synthetic DOM anchors fine), so the scroller opts out via
+`overflow-anchor: none` and one rule is the sole authority: each
+commit the surface memoizes the leading row's content offset, and
+the next commit applies that same row's offset delta to the scroll
+position — covering a prepended block, the boundary skeleton
+mounting or unmounting, or both in one commit. A short frame-loop
+hold absorbs late layout; split per-cause compensations are
+forbidden (they fought each other — a hold target captured before
+a sibling compensation re-asserted the stale position). Height
+changes _between_ the leading row and the viewport (reasoning
+expansion, footer re-wrap above the fold) are not yet covered —
+they remain [validation items](#validation-checklist); the rule
+extends naturally (anchor to the topmost in-viewport row instead)
+if they measure.
+
+Open-at-bottom is a document concern: land on the last entry
+before first paint and re-assert per frame until layout settles —
+late layout lands a one-shot write short of the true bottom. The
+user's first gesture breaks the pin.
 
 ## Native hosting
 
@@ -101,6 +132,10 @@ Serializable props in (native → document):
 - `streaming` — the live stream row (`content`, `reasoning`,
   `phase`) or null. Buffer throttling stays native; cadence
   variance is accepted.
+- `hasOlder` — older entries may exist above the loaded window.
+  Host-derived from window-size math (a full first window means
+  maybe-more; any short load proves the branch top is in the
+  window). Drives the boundary skeleton and gates `onNearTop`.
 - `editBlocked`, `showJumpToBottom`, theme id + token values, and
   other settings-derived flags.
 - `syncNonce` — bumped by the host whenever it must force a full
@@ -112,10 +147,15 @@ Async function props out (document → native):
   system-entry retry/dismiss/fix. The document requests; native
   confirms (modals) and executes (action layer); results flow back
   as `rows` updates.
-- `onNearTop` — boundary auto-load request (older entries).
+- `onNearTop` — boundary auto-load request (older entries). Fired
+  only at scroll rest and only while `hasOlder` holds.
 - `onLinkTap(url)` — foreign `http(s)` URLs route to the system
-  browser via native `Linking`.
+  browser via native `Linking`. The in-document interceptor walks
+  the click's **composed path** — shadow-root retargeting hides
+  anchors inside rich entries from `target`-based lookup.
 - `onReady` — the readiness handshake (below).
+- `onFirstPaint` — once per boot, after the first non-empty rows
+  paint (double-rAF); the host drops the loading veil on it.
 
 Imperative native → document: `jumpToBottom` (End key, actions-menu
 entry). Carried via the DOM imperative handle, not a prop.
@@ -164,10 +204,16 @@ and every other behavior stay in-document.
 - **Navigation lock.** The document's own URL is always allowed —
   Android WebViews reload their document after surface loss, and
   blocking the recovery load freezes the surface (learned on the
-  per-entry path). Foreign `http(s)` navigations route to the
-  system browser; everything else is dropped. The wider anchor
-  `href` policy across platforms (desktop web still navigates the
-  Electron window) remains the pre-existing triage item.
+  per-entry path). The own-URL latch only ever accepts a
+  document-shaped URL (Metro in dev, bundled `file:`/`about:`
+  otherwise): Android fires no request callback for the initial
+  `loadUrl`, so an unguarded latch records the first foreign
+  navigation as "own URL" and allows it (device-caught: a
+  shadow-root PROBE anchor navigated the WebView). Foreign
+  `http(s)` navigations route to the system browser; everything
+  else is dropped. The wider anchor `href` policy across platforms
+  (desktop web still navigates the Electron window) remains the
+  pre-existing triage item.
 
 ## Failure and recovery
 
@@ -206,9 +252,11 @@ story (`/dev/reseed`):
    cadence; commit swap without reframe; autoscroll pin holds.
 3. **Boot + loading treatment** — cold reader open, loading state
    visible, no flash; time-to-content on low-end hardware.
-4. **Prepend anchoring** — browser scroll anchoring holds for all
-   three
-   [shift scenarios](../screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts),
+4. **Anchor preservation** — the deterministic anchor rule holds
+   for boundary loads (device-verified: prepend + skeleton swap,
+   leading row pixel-stable at the hard stop); the uncovered
+   [shift scenarios](../screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts)
+   (reasoning expansion, footer re-wrap above the fold) observed
    on Android and desktop.
 5. **Renderer-kill recovery** — kill the WebView renderer under
    memory pressure; surface recovers to bottom with current data.

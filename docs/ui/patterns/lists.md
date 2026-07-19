@@ -100,12 +100,12 @@ Resolved: **`@tanstack/react-virtual`** on web (validated inside
 Autocomplete's portaled popover via Electron's RN-Web build) +
 **`FlatList`** on native. Variable-height rows are handled by
 `measureElement` on web and FlatList's native layout pass. The
-**scroll-anchoring on above-viewport mutations** constraint that
-the reader narrative needs (auto-load-older + reasoning-body
-expansion) is a separate problem — `@tanstack/react-virtual` does
-not preserve native browser scroll-anchoring on prepend out of the
-box, and the recipe to keep the viewport stable lands when reader
-narrative is built. Implementation contract:
+**scroll-anchoring on above-viewport mutations** constraint the
+reader narrative needs (auto-load-older + reasoning-body
+expansion) resolved outside the virtualizer entirely: the reader
+renders as fully laid-out flow inside the
+[reader document](./reader-document.md) and compensates
+deterministically. Implementation contract:
 [`reader-composer.md → Anchor preservation under shifts`](../screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts).
 
 ---

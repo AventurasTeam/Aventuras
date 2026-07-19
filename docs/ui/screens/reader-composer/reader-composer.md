@@ -640,8 +640,8 @@ fetching + virtualization pattern is documented at
 this section covers the reader-specific behaviors layered on top.
 The reader's list deviates from that pattern's JS-virtualizer
 substrate: it renders in the
-[reader document](../../patterns/reader-document.md) as plain flow
-with engine culling, and scroll policy lives inside the document.
+[reader document](../../patterns/reader-document.md) as fully
+rendered plain flow, and scroll policy lives inside the document.
 
 ### Loaded-set model
 
@@ -649,21 +649,26 @@ At any moment the reader holds a **single contiguous window** of
 entries — never two disconnected windows.
 
 **Window.** The contiguous range in memory + DOM. On branch open:
-~50 most recent entries. Every window row exists in the document;
-off-screen rows are skipped for layout/paint by engine culling
-(`content-visibility` — see
-[`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-flow-layout--engine-culling)).
-If long backwards-reading sessions make window growth measurable,
-the designed lever is a far-end trim cap on the loaded set — the
-window stays contiguous, bounded at the edge opposite the load.
+~50 most recent entries. Every window row exists in the document
+**fully laid out** (see
+[`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout)
+— real heights are what keep landing and prepend compensation
+exact). If long backwards-reading sessions make window growth
+measurable, the designed lever is a far-end trim cap on the loaded
+set — the window stays contiguous, bounded at the edge opposite
+the load.
 
 **Auto-load on scroll boundary.** As the user scrolls within the
 window:
 
 - Approaching the top of the loaded range (within ~one
   viewport-height of the topmost loaded entry) → auto-fetch the
-  next older chunk (~50 entries). Content prepends; the user's
-  apparent scroll position must stay anchored (see
+  next older chunk (~50 entries). The fetch fires **at scroll
+  rest** — the boundary signal latches during the gesture and
+  fires once scrolling quiesces, so the prepend never lands
+  mid-fling (a mid-gesture insert plus its compensating scroll
+  write reads as a jump). Content prepends; the user's apparent
+  scroll position must stay anchored (see
   [Anchor preservation under shifts](#anchor-preservation-under-shifts)
   for the cross-platform implementation requirement).
 - Approaching the bottom of the loaded range (within ~one
@@ -671,8 +676,13 @@ window:
   the live edge) → auto-fetch the next forward chunk. Content
   appends.
 
-Loading shimmer at the boundary edge during fetch — fast scrollers
-don't hit empty space. This is the reader's deviation from
+A boundary skeleton occupies the edge above the oldest loaded row
+whenever older entries may exist — permanent rather than
+fetch-scoped, so it never mounts mid-scroll (an appearing
+indicator would itself shift content). A fast fling can rest at
+the edge for a beat before rows replace the skeleton in place;
+when a short load proves the branch top, the skeleton unmounts
+once, compensated. This is the reader's deviation from
 [`lists.md → Load-older`](../../patterns/lists.md#load-older--log-shaped-unbounded-lists)'s
 explicit-click rule. The existing rule applies to History-tab-shaped
 surfaces where auto-loading older content while glancing at recent
@@ -730,10 +740,9 @@ re-evaluates the engage condition fresh.
 **Layout shifts during a stream.**
 
 - **Reasoning body expansion on an earlier entry** — document grows
-  above viewport; native browser scroll-anchoring keeps visible
-  content stable. The chosen virtualization library MUST preserve
-  scroll-anchoring on above-viewport mutations (per
-  [`lists.md → Library choice`](../../patterns/lists.md#library-choice)).
+  above the viewport; the visible content must stay stable. See
+  [Anchor preservation under shifts](#anchor-preservation-under-shifts)
+  for the mechanism and its current coverage.
 - **Suggestion panel appearing at stream end** — adds ~80px between
   last entry and composer. Engaged: viewport stays at the new
   bottom (engagement carries through the layout shift). Disengaged
@@ -808,18 +817,23 @@ shift, but what's in front of the user must not jump.
   on an entry above the fold can change the footer label's pixel
   width, wrapping or de-wrapping the footer row.
 
-All three ride **browser scroll anchoring**: the reader document
-renders rows in normal flow
-([`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-flow-layout--engine-culling)),
-which is the layout browser anchoring is built for — in-flow
-content above the viewport can change height without moving what
-the user is reading, with no compensation code on any platform.
-This replaces the earlier per-platform machinery (FlatList
-`maintainVisibleContentPosition` on native; a measured
-padding-and-scroll dance under the web virtualizer). Anchoring
-behavior across all three scenarios is a
+The mechanism is the reader document's **deterministic anchor
+rule**
+([`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout)):
+browser scroll anchoring measurably does not fire for this tree,
+so the scroller opts out (`overflow-anchor: none`) and the surface
+itself applies the leading row's content-offset delta to the
+scroll position each commit. This replaces the earlier
+per-platform machinery (FlatList `maintainVisibleContentPosition`
+on native; a measured padding-and-scroll dance under the web
+virtualizer). Coverage today: scenario 1 is device-verified
+(prepend + boundary-skeleton swap, leading row pixel-stable);
+scenarios 2 and 3 change heights _below_ the leading row and are
+not yet compensated — they remain a
 [reader-document validation item](../../patterns/reader-document.md#validation-checklist)
-on both Android and desktop.
+on both Android and desktop, with the designed extension being an
+anchor on the topmost in-viewport row instead of the window's
+first.
 
 ## Browse rail — collapse / expand
 

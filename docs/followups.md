@@ -13,19 +13,21 @@ for the placement rule.
 
 ## UX
 
-- **Single-document reader — implement per pattern doc.** Design
-  pass resolved 2026-07-19 (spike device-verified; exploration
-  record `2026-07-19-single-document-reader`); canonical spec in
-  [`ui/patterns/reader-document.md`](./ui/patterns/reader-document.md).
-  Work, in dependency order per the exploration's integration
-  plan: shared flow-and-engine-culling entry list (retires both
-  `EntryWindow` branches, desktop included), the `'use dom'`
-  reader document (in-document scroll policy, inline edit,
-  streaming), native host integration (loading treatment, bridge
-  and handshake, recovery), then the per-entry tail retirements
-  and the
-  [on-device validation checklist](./ui/patterns/reader-document.md#validation-checklist)
-  (IME is the go/no-go for the native-edit-sheet fallback). The
-  seeded Gallery story + PROBE entries (`/dev/reseed`) feed
-  validation; the shipped per-entry path remains the floor until
-  host integration lands.
+- **Single-document reader — close out validation, then retire
+  the per-entry tail.** Implementation landed 2026-07-19 per
+  [`ui/patterns/reader-document.md`](./ui/patterns/reader-document.md):
+  shared fully-rendered flow list on all platforms, the
+  `'use dom'` reader document, native host integration with
+  handshake and recovery — device-verified for landing, scroll,
+  boundary loads, inline edit with IME (go: no native-edit-sheet
+  fallback needed), delete/rollback, security probes, and
+  renderer-kill recovery. Remaining from the
+  [validation checklist](./ui/patterns/reader-document.md#validation-checklist):
+  streaming feel on device, fonts under CSP, release-build
+  memory, TalkBack, `expo export`, and the uncovered anchor
+  scenarios (reasoning expansion and footer re-wrap above the
+  fold). Once those pass, delete the dormant per-entry tail:
+  `rich-entry-content.native.tsx`, `rich-entry-dom.tsx`,
+  `rich-entry-visibility.ts`, `entry-window.tsx`, reader RNRH
+  usage, and — audit-gated — the juice/cheerio native sanitize
+  path with its Metro pin.

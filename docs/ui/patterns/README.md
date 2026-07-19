@@ -136,8 +136,8 @@ The split heuristic + when-to-add rules live in
   rich sanitize path with stylesheet-level CSS scrub, shadow-root
   isolation with theme-variable inheritance.
 - [`reader-document.md`](./reader-document.md) — the reader's
-  narrative surface as one web document on every platform: flow
-  layout + engine culling instead of JS virtualization, native
+  narrative surface as one web document on every platform: fully
+  rendered flow layout instead of JS virtualization, native
   hosting in a single long-lived `'use dom'` WebView, bridge
   contract with readiness handshake, in-document scroll policy and
   inline edit (native-sheet fallback), document-level CSP +

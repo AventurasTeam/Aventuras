@@ -65,10 +65,10 @@ _Empty — no primitives currently blocked on a design decision._
 Virtualization library choice is resolved (`@tanstack/react-virtual`
 on web, `FlatList` on native) and validated inside Autocomplete's
 suggestion list. A standalone `VirtualList` primitive isn't built:
-the second consumer with materially different requirements
-(reader narrative, with scroll-anchoring on above-viewport
-mutations) will inform whether one shared primitive makes sense or
-whether `NarrativeStream` should own its own virtualized shape.
+the candidate second consumer — the reader narrative — resolved to
+no virtualization at all (fully rendered flow inside the
+[reader document](./patterns/reader-document.md)), so a shared
+primitive waits for a consumer that actually needs one.
 
 ## Compounds
 
