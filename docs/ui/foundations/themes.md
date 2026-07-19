@@ -30,13 +30,18 @@ fantasy, stark-aesthetic, and a brand-keyed signature.
 
 ### First-launch default
 
-`themeId: 'default-light'`. Safe cross-platform first impression
-— a light theme on first boot doesn't presume a preference the
-user hasn't expressed. Despite the gallery's 3:7 light:dark
-ratio, the first-launch should not assume the user wants dark
-immediately. After first launch, the choice persists in
+`themeId: 'system'` — a sentinel, not a registry id: boot seeds
+the active theme from the OS scheme (`prefers-color-scheme`),
+picking the first registry entry of the matching mode
+(`default-light` / `default-dark`). The OS preference **is** an
+expressed preference, so honoring it beats forcing light on
+dark-mode users; it is read once per launch — live mid-session
+following stays parked (see
+[`parked.md → OS dark/light follow`](../../parked.md#os-darklight-follow)).
+A user-picked theme persists as a concrete id in
 `app_settings.appearance.themeId` per
-[`theming.md → Persistence`](./theming.md#persistence).
+[`theming.md → Persistence`](./theming.md#persistence) and is
+never overridden by the OS.
 
 ### Cascade — theme and density compose orthogonally
 

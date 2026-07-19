@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { storySettingsSchema, suggestionCategorySchema } from '../stories/story-config-schema'
 
 export const appearanceSchema = z.object({
+  // 'system' = seed from the OS scheme at boot; a concrete registry id is a
+  // user pick and is never overridden by the OS.
   themeId: z.string().default('system'),
   readerFontScale: z.number().default(1),
   // DB-only until the M7.1 appearance tab exposes it (reader note 2026-07-19).

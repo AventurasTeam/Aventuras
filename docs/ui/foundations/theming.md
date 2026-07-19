@@ -140,27 +140,40 @@ carries:
 
 ```ts
 app_settings.appearance: {
-  themeId: string                                 // into the theme registry
+  themeId: string                                 // registry id, or 'system' = seed from the OS scheme at boot
   readerFontScale: 'sm' | 'md' | 'lg' | 'xl'      // user-orthogonal reader prose scale — see typography.md
   density: 'default' | 'compact' | 'regular' | 'comfortable' // 'default' selects per-tier defaults — see spacing.md
   accentOverride?: string                         // hex; honored only when active theme has accentOverridable: true
 }
 ```
 
-App boot reads `appearance`, applies tokens on first render. User
-changes in
+App boot reads `appearance.themeId` and hands it to `ThemeProvider`
+(`initialThemeId`). `'system'` — the first-launch default — and any
+unknown id seed from the OS scheme, read **once per launch** (no live
+OS following; that's parked, see
+[`parked.md → OS dark/light follow`](../../parked.md#os-darklight-follow)).
+A concrete registry id is a user pick and always wins over the OS.
+
+The provider is the **single writer** of the theme cascade onto the
+root element (`data-theme` + `class="dark"`), applied at provider
+mount — application never waits on a `useTheme` consumer mounting,
+so every screen renders the active theme from first paint. Theme
+picks flow back through `setTheme → onThemeChange →
+setAppearanceThemeId` (`lib/actions/settings/appearance.ts`), which
+writes the column and rehydrates the settings store; the mount seed
+itself is never written back, so a persisted `'system'` keeps
+tracking the OS across launches. User changes in
 [`App Settings · Appearance`](../screens/app-settings/app-settings.md#app--appearance)
-write through immediately.
+write through immediately (tab lands with M7.1).
 
 ### First-launch defaults
 
-Default `themeId` is `'default-light'` (per
-[`themes.md → First-launch default`](./themes.md#first-launch-default)).
-Safest cross-platform first impression — light theme on first
-boot doesn't presume a preference the user hasn't expressed.
-Default `readerFontScale` is `'md'` (multiplier `1.0`). The
-implementation seeds `appearance` to these defaults on first
-boot or after a wipe.
+Default `themeId` is `'system'` (per
+[`themes.md → First-launch default`](./themes.md#first-launch-default)):
+boot resolves it against the OS scheme, once per launch, until the
+user picks a concrete theme. Default `readerFontScale` is `'md'`
+(multiplier `1.0`). The implementation seeds `appearance` to these
+defaults on first boot or after a wipe.
 
 ### Backup / restore + invalid `themeId`
 

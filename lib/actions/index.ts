@@ -10,6 +10,7 @@ export {
   normalizeAppSettingsRow,
   quickWireModel,
   resetAppSettings,
+  setAppearanceThemeId,
   setAssignments,
   setDebugLevelEnabled,
   setDefaultProvider,

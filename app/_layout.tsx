@@ -13,11 +13,13 @@ import '@/global.css'
 import { SettingsRecoveryScreen } from '@/components/shells/settings-recovery-screen'
 import { CrashRecoveryModalHost } from '@/components/story/crash-recovery-modal-host'
 import { Toaster } from '@/components/ui/toast'
+import { setAppearanceThemeId } from '@/lib/actions'
 import { useBootstrap } from '@/lib/boot'
 import { queryClient } from '@/lib/cache'
 import { DrizzleStudioDevTools, db, ensureAppSettingsSingleton, useDbMigrations } from '@/lib/db'
 import { DensityProvider } from '@/lib/density'
 import { i18n } from '@/lib/i18n'
+import { appSettingsStore } from '@/lib/stores'
 import { ThemeProvider } from '@/lib/themes'
 
 export default function RootLayout() {
@@ -56,7 +58,14 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider initialMetrics={initialWindowMetrics}>
           <KeyboardProvider>
-            <ThemeProvider>
+            {/* Mount-only, deliberately non-reactive read: the seed applies once
+                at provider mount and a later settings write must not re-seed
+                the active theme. Hydration is complete before this branch
+                renders (phase === 'ready'). */}
+            <ThemeProvider
+              initialThemeId={appSettingsStore.getAppSettings().appearance.themeId}
+              onThemeChange={(id) => void setAppearanceThemeId(id, { db })}
+            >
               <DensityProvider>
                 <I18nextProvider i18n={i18n}>
                   <BottomSheetModalProvider>

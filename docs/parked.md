@@ -1097,7 +1097,12 @@ becomes optional. Speculative until users ask.
 The visual identity foundations ship explicit-pick only — user
 selects one theme and that's what they get all day. Auto-following
 OS preference (switch from light theme to dark theme when the
-system goes dark) is not in v1.
+system goes dark) is not in v1. What v1 does ship is a
+**boot-time-only** OS seed: `themeId: 'system'` (the first-launch
+default) resolves against the OS scheme once per launch (see
+[`ui/foundations/theming.md → Persistence`](./ui/foundations/theming.md#persistence));
+this entry covers live mid-session following with per-mode
+preferred themes.
 
 Rationale: previous version of the app didn't have it and users
 didn't ask. The "Linux desktop required" project constraint plus

@@ -38,19 +38,6 @@ scrollEnabled: false }}`) embedded as an EntryWindow row, running
   Until it lands, the floor is the juice-inlined RNRH subset
   (see [lessons-learned → Metro browser builds](./implementation/lessons-learned/metro-native-ignores-browser-builds.md)).
   Wanted earlier rather than later (user-confirmed 2026-07-18).
-- **Theme is never persisted/restored, and Generate can flip it.**
-  `ThemeProvider` seeds its active theme once from `useColorScheme()` into
-  local state and never reads or writes `app_settings.themeId` — the column
-  is effectively dead (schema default `'system'`, yet a runtime value such as
-  `'aventuras'` can exist with no write path from settings). Nothing calls
-  `setTheme` at runtime outside the Storybook theme-picker, yet pressing
-  Generate in the wizard AI-assist popover was observed flipping light→dark.
-  The assist code touches nothing theme-related, so a provider remount
-  re-seeding from `useColorScheme()` is the likely trigger — needs a live
-  desktop repro to confirm. Fix: wire the provider to persisted `themeId`
-  (restore on boot, persist on change) and identify the remount. Pre-existing
-  (the theme system predates M2.3); the M7.1 appearance tab builds on the
-  persistence wiring, so land it before then. Surfaced by Slice 2.3.
 
 ## Tooling
 

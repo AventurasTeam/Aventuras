@@ -1,3 +1,4 @@
+export { setAppearanceThemeId } from './appearance'
 export { setDebugLevelEnabled, setDiagnosticsEnabled } from './diagnostics'
 export {
   addProvider,
