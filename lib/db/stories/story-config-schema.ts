@@ -97,6 +97,23 @@ export const storySettingsSchema = z.object({
   packVariables: z.record(z.string(), z.unknown()),
 })
 
+// Zod's .partial() still fires inner .default()s, which would expand a stored
+// partial to a full object and silently freeze today's defaults as if
+// user-chosen. Deriving the partial variant with the defaults unwrapped keeps
+// "absent key = track the current code default" intact for
+// app_settings.default_story_settings; the mechanical map can't carry per-key
+// types, hence the cast.
+export const storySettingsPartialSchema = z
+  .object(
+    Object.fromEntries(
+      Object.entries(storySettingsSchema.shape).map(([key, field]) => [
+        key,
+        field instanceof z.ZodDefault ? field.removeDefault() : field,
+      ]),
+    ),
+  )
+  .partial() as unknown as z.ZodType<Partial<z.infer<typeof storySettingsSchema>>>
+
 export type SuggestionCategory = z.infer<typeof suggestionCategorySchema>
 export type StoryDefinition = z.infer<typeof storyDefinitionSchema>
 export type StorySettings = z.infer<typeof storySettingsSchema>

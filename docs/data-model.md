@@ -1291,7 +1291,14 @@ disentangles them and matches the UI's two-section structure.
    Defaults"). On story creation the current globals are copied into
    the new story's `settings`. After creation, the story owns its
    values; changing the global default does NOT propagate to existing
-   stories.
+   stories. The stored column is a **true partial**: only
+   explicitly-written keys persist, and an absent key falls back to
+   the current code default (`STORY_SETTINGS_DEFAULTS`) at copy
+   time — so an app upgrade that changes a default reaches the
+   untouched keys of future stories. The parse must preserve that
+   partiality (`storySettingsPartialSchema`; a plain `.partial()`
+   fires the inner `.default()`s and would freeze today's values as
+   if user-chosen).
 2. **Override-at-render** (`settings.models` only). Fields are
    optional; absent means "resolve the agent through the App Settings
    profile chain at render time" — `assignments[agentId] → profile.modelRef`.

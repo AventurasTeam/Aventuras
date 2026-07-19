@@ -9,12 +9,6 @@ import {
 
 import type { SettingsActionCtx } from './types'
 
-// Intentionally-partial columns: an absent key means "track the current
-// default across versions", so materializing the parse-time expansion would
-// freeze today's defaults as if user-chosen. (Zod v4 .partial() still fires
-// inner .default()s, so the parsed shape is expanded even for these.)
-const NORMALIZE_SKIP_COLUMNS: ReadonlySet<string> = new Set(['defaultStorySettings'])
-
 export type NormalizeAppSettingsResult =
   | { status: 'normalized'; columns: string[] }
   | { status: 'noop' }
@@ -58,8 +52,10 @@ export async function normalizeAppSettingsRow(
   if (!config.success) return { status: 'skipped-corrupt' }
 
   const patch: Record<string, unknown> = {}
+  // defaultStorySettings stays partial through the parse (see
+  // storySettingsPartialSchema) — materializing defaults here would freeze
+  // them as if user-chosen; the diff below must stay a natural noop for it.
   for (const [key, parsedValue] of Object.entries(config.data)) {
-    if (NORMALIZE_SKIP_COLUMNS.has(key)) continue
     if (!jsonEqual(parsedValue, (row as Record<string, unknown>)[key])) patch[key] = parsedValue
   }
   const diag = appSettingsDiagnosticsSchema.safeParse(row.diagnostics)

@@ -1,6 +1,9 @@
 import { z } from 'zod'
 
-import { storySettingsSchema, suggestionCategorySchema } from '../stories/story-config-schema'
+import {
+  storySettingsPartialSchema,
+  suggestionCategorySchema,
+} from '../stories/story-config-schema'
 
 export const appearanceSchema = z.object({
   // 'system' = seed from the OS scheme at boot; a concrete registry id is a
@@ -75,7 +78,7 @@ export const appSettingsConfigSchema = z.object({
   defaultProviderId: z.string().nullable(),
   embeddingModelId: z.string().nullable().default(null),
   embeddingProviderId: z.string().nullable().default(null),
-  defaultStorySettings: storySettingsSchema.partial().default({}),
+  defaultStorySettings: storySettingsPartialSchema.default({}),
   defaultCalendarId: z.string().nullable().default(null),
   defaultSuggestionCategories: defaultSuggestionCategoriesSchema.default({
     adventure: [],

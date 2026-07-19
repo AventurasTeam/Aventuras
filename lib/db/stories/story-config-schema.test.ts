@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { storyDefinitionSchema, storySettingsSchema } from './story-config-schema'
+import {
+  storyDefinitionSchema,
+  storySettingsPartialSchema,
+  storySettingsSchema,
+} from './story-config-schema'
 
 const BASE_DEFINITION = {
   mode: 'creative' as const,
@@ -191,5 +195,25 @@ describe('storySettingsSchema spec-pinned defaults', () => {
       retrievalBudgets: { entities: 100 },
     })
     expect(r.success).toBe(false)
+  })
+})
+
+describe('storySettingsPartialSchema', () => {
+  it('never materializes defaults — parse output equals the stored partial', () => {
+    expect(storySettingsPartialSchema.parse({})).toEqual({})
+    expect(storySettingsPartialSchema.parse({ activePackId: 'pack_x' })).toEqual({
+      activePackId: 'pack_x',
+    })
+  })
+
+  it('still validates present keys', () => {
+    expect(storySettingsPartialSchema.safeParse({ chapterTokenThreshold: 'nope' }).success).toBe(
+      false,
+    )
+    expect(storySettingsPartialSchema.safeParse({ suggestionCount: 7 }).success).toBe(false)
+  })
+
+  it('accepts a fully-populated settings object', () => {
+    expect(storySettingsPartialSchema.safeParse(VALID_SETTINGS).success).toBe(true)
   })
 })

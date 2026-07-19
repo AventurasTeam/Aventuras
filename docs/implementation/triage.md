@@ -19,16 +19,4 @@ slice-planning gate forces its resolution before that slice is planned.
 
 ## Inbox
 
-- **Zod v4 `.partial()` still fires inner `.default()`s** (2026-07-19,
-  surfaced by `normalizeAppSettingsRow`): parsing
-  `app_settings.defaultStorySettings` (`storySettingsSchema.partial()`)
-  expands the stored partial to a fully-populated object, so the
-  in-memory value silently loses partial-override semantics ("absent
-  key = track the current default"). Harmless today because the fills
-  equal the story-defaults fallback, but any consumer that diffs or
-  persists the parsed value would freeze defaults —
-  boot normalization skip-lists the column for exactly this reason
-  (`lib/actions/settings/normalize.ts`). Decide whether the config
-  schema should parse truly-partial (defaults-free variant of
-  `storySettingsSchema`) or whether expansion is acceptable and the
-  column type should stop claiming `Partial<>`.
+_(empty)_
