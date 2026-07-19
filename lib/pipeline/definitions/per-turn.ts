@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm'
 
-import { streamAgentCall } from '@/lib/ai'
+import { streamText } from '@/lib/ai'
 import { storyEntries, type EntryMetadata } from '@/lib/db'
 import { generateId, IdBiMap } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
@@ -55,7 +55,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // streamText (ai@6) does NOT throw from textStream on a network/connection failure —
   // it terminates iteration silently and surfaces the error only via onError. Capture it
   // there and gate the commit on it.
-  const call = streamAgentCall('narrative', {
+  const call = streamText('narrative', {
     prompt,
     config: {
       providers: cfg.providers,

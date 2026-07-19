@@ -1,13 +1,19 @@
-export {
-  streamAgentCall,
-  type ProviderCallOptions,
-  type StreamAgentCallOptions,
-  type StreamAgentCallResult,
-} from './agent-call'
 export { AGENT_IDS, type AgentId, type ResolveTarget } from './agents'
 export { fetchModelCatalog } from './catalog'
+export {
+  generateStructured,
+  parseStructured,
+  streamText,
+  type GenerateStructuredResult,
+  type StreamTextOptions,
+  type StreamTextResult,
+} from './generate'
+// getModel + the retry/timeout trio are public for cross-module tests
+// (pipeline fault injection) and lib/pipeline's CallRetryError mapping —
+// production call paths go through streamText / generateStructured.
 export { getModel } from './model'
-export { createProviderModel } from './providers'
+export { callWithRetry, type CallRetryError } from './transport/call-with-retry'
+export { ProviderTimeoutError } from './transport/classify-provider-error'
 export {
   resolveModel,
   type ResolveModelConfig,
@@ -15,12 +21,3 @@ export {
   type ResolveFailureKind,
   type ResolvedParams,
 } from './resolve-model'
-export { parseStructured, generateStructured, type GenerateStructuredResult } from './structured'
-export {
-  callWithRetry,
-  type CallRetryError,
-  type CallWithRetryResult,
-} from './transport/call-with-retry'
-export { classifyProviderError, ProviderTimeoutError } from './transport/classify-provider-error'
-export { runProviderCall, streamProviderCall } from './transport/provider-call'
-export type { ProviderInstanceWithStub } from './types'

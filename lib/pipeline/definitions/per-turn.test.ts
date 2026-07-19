@@ -7,15 +7,15 @@ import { appSettingsStore, currentStoryStore, entriesStore, resetAllStores } fro
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './per-turn'
 import { getPipeline } from '../authoring/registry'
 
-const { streamAgentCallMock } = vi.hoisted(() => ({
-  streamAgentCallMock: vi.fn(),
+const { streamTextMock } = vi.hoisted(() => ({
+  streamTextMock: vi.fn(),
 }))
 
 vi.mock('@/lib/ai', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return {
     ...actual,
-    streamAgentCall: streamAgentCallMock,
+    streamText: streamTextMock,
   }
 })
 
@@ -69,7 +69,7 @@ async function runNarrativePhase(abortSignal = new AbortController().signal) {
 
 beforeEach(() => {
   vi.restoreAllMocks()
-  streamAgentCallMock.mockReset().mockReturnValue(failingStreamCall())
+  streamTextMock.mockReset().mockReturnValue(failingStreamCall())
   resetAllStores()
 })
 
@@ -128,7 +128,7 @@ describe('per-turn pipeline declaration', () => {
 
     await runNarrativePhase()
 
-    expect(streamAgentCallMock).toHaveBeenCalledWith(
+    expect(streamTextMock).toHaveBeenCalledWith(
       'narrative',
       expect.objectContaining({
         actionId: 'act_1',
@@ -154,7 +154,7 @@ describe('per-turn pipeline declaration', () => {
         error: { kind: 'orchestrator', detail: 'per-turn: no open story for branch' },
       },
     })
-    expect(streamAgentCallMock).not.toHaveBeenCalled()
+    expect(streamTextMock).not.toHaveBeenCalled()
   })
 
   it('fails when the entries store is loaded for another branch', async () => {
@@ -178,7 +178,7 @@ describe('per-turn pipeline declaration', () => {
         },
       },
     })
-    expect(streamAgentCallMock).not.toHaveBeenCalled()
+    expect(streamTextMock).not.toHaveBeenCalled()
   })
 
   it('returns aborted, committing nothing, when a cancel ends the stream gracefully', async () => {
@@ -192,7 +192,7 @@ describe('per-turn pipeline declaration', () => {
     const controller = new AbortController()
     // ai@6 fullStream ends without throwing on abort (an 'abort' part, no
     // onError) — the phase must classify via the signal, not a stream error.
-    streamAgentCallMock.mockReturnValue({
+    streamTextMock.mockReturnValue({
       ok: true,
       modelId: 'model-1',
       stream: {
@@ -217,7 +217,7 @@ describe('per-turn pipeline declaration', () => {
       settings: { partialChapterBuffer: 3, models: {} } as never,
     })
     entriesStore.hydrate('b1', [])
-    streamAgentCallMock.mockReturnValue({
+    streamTextMock.mockReturnValue({
       ok: false,
       kind: 'no-profile-assigned',
       target: 'narrative',
