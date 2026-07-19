@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useState, type ForwardedRef } from 'react'
 import { View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,11 @@ type ComposerProps = {
   disabledReason?: string
   onSend: (rawText: string, mode: ComposerMode) => void
   onCancel: () => void
+}
+
+type ComposerHandle = {
+  /** Refill the input (e.g. after a cancelled turn) so the user can edit/re-send. */
+  restoreDraft: (text: string, mode: ComposerMode) => void
 }
 
 function getModeOptions(): SelectOption[] {
@@ -51,17 +56,24 @@ function getModeOptions(): SelectOption[] {
 // once the user has actually paused, not between keystrokes.
 const LINT_DEBOUNCE_MS = 2000
 
-export function Composer({
-  modesEnabled,
-  isGenerating,
-  disabled = false,
-  disabledReason,
-  onSend,
-  onCancel,
-}: ComposerProps) {
+export const Composer = forwardRef(function Composer(
+  { modesEnabled, isGenerating, disabled = false, disabledReason, onSend, onCancel }: ComposerProps,
+  ref: ForwardedRef<ComposerHandle>,
+) {
   const [text, setText] = useState('')
   const [mode, setMode] = useState<ComposerMode>('free')
   const [lints, setLints] = useState<Lint[]>([])
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      restoreDraft: (nextText, nextMode) => {
+        setText(nextText)
+        setMode(nextMode)
+      },
+    }),
+    [],
+  )
 
   useEffect(() => {
     if (text.trim().length === 0) {
@@ -164,6 +176,6 @@ export function Composer({
       ) : null}
     </View>
   )
-}
+})
 
-export type { ComposerProps }
+export type { ComposerProps, ComposerHandle }

@@ -6,7 +6,7 @@ import { View } from 'react-native'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { EntryCard } from '@/components/compounds/entry-card'
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
-import { Composer } from '@/components/reader/composer'
+import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { EntryWindow, type EntryWindowHandle } from '@/components/reader/entry-window'
 import { JumpButtons } from '@/components/reader/jump-buttons'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
@@ -35,7 +35,7 @@ import {
   type LoadOpenStoryResult,
   type RollbackCounts,
 } from '@/lib/actions'
-import { wrapComposerText } from '@/lib/composer-wrap'
+import { wrapComposerText, type ComposerMode } from '@/lib/composer-wrap'
 import { branches, db, runInTransaction, storyEntries, type StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
@@ -138,6 +138,7 @@ export default function ReaderComposerRoute() {
     reasoning: string
   } | null>(null)
   const entryWindowRef = useRef<EntryWindowHandle>(null)
+  const composerRef = useRef<ComposerHandle>(null)
   const autoscrollRef = useRef(createAutoscrollMachine())
   const lastDistanceRef = useRef(0)
   // Timestamp of the last jump-to-bottom click while idle. The smooth-scroll
@@ -317,7 +318,7 @@ export default function ReaderComposerRoute() {
   )
 
   const runSubmit = useCallback(
-    async (content: string, composerMode: string) => {
+    async (content: string, composerMode: string, raw?: { text: string; mode: ComposerMode }) => {
       if (!storyId || !hydrationSucceeded) return
       // A prior failure leaves a system entry as the branch tail; drop it (and
       // resync the store) before the turn so the pipeline's prompt/position
@@ -339,6 +340,11 @@ export default function ReaderComposerRoute() {
             { kind: 'orchestrator', detail: `blocked by ${result.blockedBy}` },
             submission,
           )
+        else if (result.outcome === 'aborted')
+          // Cancel reverses the whole turn (user_action included, C6) — hand
+          // the text back for edit/re-send. A retry has no raw pre-wrap text,
+          // so the wrapped content returns under 'free' (no re-wrap on send).
+          composerRef.current?.restoreDraft(raw?.text ?? content, raw?.mode ?? 'free')
       } catch (err) {
         // submitTurn throws on a rejected user_action write — treat a thrown
         // failure like a structured 'failed' outcome so the UI surfaces an
@@ -563,6 +569,7 @@ export default function ReaderComposerRoute() {
           <View className="border-t border-border px-6 pb-3.5 pt-3">
             <View className="mx-auto w-full max-w-[860px]">
               <Composer
+                ref={composerRef}
                 modesEnabled={modesEnabled}
                 isGenerating={isGenerating}
                 disabled={editBlocked || !hydrationSucceeded}
@@ -575,7 +582,7 @@ export default function ReaderComposerRoute() {
                 }
                 onSend={(rawText, mode) => {
                   const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
-                  void runSubmit(wrapped, mode)
+                  void runSubmit(wrapped, mode, { text: rawText, mode })
                 }}
                 onCancel={() => void awaitRunTerminal(PER_TURN_KIND, 'cancel')}
               />
