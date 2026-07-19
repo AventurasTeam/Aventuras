@@ -22,11 +22,11 @@ for the placement rule.
   boundary loads, inline edit with IME (go: no native-edit-sheet
   fallback needed), delete/rollback, security probes, and
   renderer-kill recovery. Remaining from the
-  [validation checklist](./ui/patterns/reader-document.md#validation-checklist):
-  streaming feel on device, fonts under CSP, release-build
-  memory, TalkBack, `expo export`, and the uncovered anchor
-  scenarios (reasoning expansion and footer re-wrap above the
-  fold). Once those pass, delete the dormant per-entry tail:
+  [validation record](./ui/patterns/reader-document.md#validation-record):
+  none — all ten items passed 2026-07-19 (streaming, fonts under
+  CSP, release-build memory, TalkBack, `expo export`, and the
+  uncompensated anchor scenarios observed acceptable). What
+  remains is deleting the dormant per-entry tail:
   `rich-entry-content.native.tsx`, `rich-entry-dom.tsx`,
   `rich-entry-visibility.ts`, `entry-window.tsx`, reader RNRH
   usage, and — audit-gated — the juice/cheerio native sanitize

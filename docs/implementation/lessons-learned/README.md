@@ -47,6 +47,10 @@ slice plans when relevant.
 - [Wide-table scroll containment](./table-scroll-containment.md)
   — wide tables wrap in their own `overflow-x: auto`; horizontal
   scroll must not bubble.
+- [Chrome scroll anchoring doesn't fire for RN-Web trees](./scroll-anchoring-rnweb-tree.md)
+  — engine anchoring silently skips RN-Web wrapper trees; opt out
+  with `overflow-anchor: none` and compensate deterministically,
+  never mid-gesture.
 
 ### rn-primitives substrate
 

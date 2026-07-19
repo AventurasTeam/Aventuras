@@ -89,10 +89,10 @@ hold absorbs late layout; split per-cause compensations are
 forbidden (they fought each other — a hold target captured before
 a sibling compensation re-asserted the stale position). Height
 changes _between_ the leading row and the viewport (reasoning
-expansion, footer re-wrap above the fold) are not yet covered —
-they remain [validation items](#validation-checklist); the rule
-extends naturally (anchor to the topmost in-viewport row instead)
-if they measure.
+expansion, footer re-wrap above the fold) are deliberately
+uncompensated — [validated acceptable](#validation-record) as
+felt on device; the rule extends naturally (anchor to the topmost
+in-viewport row instead) if they ever measure.
 
 Open-at-bottom is a document concern: land on the last entry
 before first paint and re-assert per frame until layout settles —
@@ -240,31 +240,48 @@ flow list). Reader RNRH usage retires with them; the juice/cheerio
 native sanitize path and its Metro pin are deletion candidates
 pending an audit that no Hermes code still renders entry HTML.
 
-## Validation checklist
+## Validation record
 
-Empirical pass on real low-end Android hardware, seeded rich-heavy
-story (`/dev/reseed`):
+Empirical pass completed 2026-07-19 on real Android hardware
+(SM-F966B), seeded rich-heavy story (`/dev/reseed`), dev build plus
+a release (`--variant release`) install:
 
-1. **Inline edit + IME** — focus, keyboard, cursor, selection,
-   commit/cancel; coexistence with the native composer's keyboard
-   handling. Go/no-go for the native-edit-sheet fallback.
-2. **Streaming** — live stream renders in-document at acceptable
-   cadence; commit swap without reframe; autoscroll pin holds.
-3. **Boot + loading treatment** — cold reader open, loading state
-   visible, no flash; time-to-content on low-end hardware.
+1. **Inline edit + IME** — verified: focus, keyboard, cursor,
+   selection, commit/cancel through the bridge to SQLite.
+   **Go: no native-edit-sheet fallback.**
+2. **Streaming** — verified on a live provider turn: in-document
+   cadence, commit swap without reframe, autoscroll pin.
+3. **Boot + loading treatment** — verified: veil-covered cold open
+   lands at bottom; ~4s end-to-end warm dev boot; release boot
+   from the embedded bundle.
 4. **Anchor preservation** — the deterministic anchor rule holds
-   for boundary loads (device-verified: prepend + skeleton swap,
-   leading row pixel-stable at the hard stop); the uncovered
+   for boundary loads (prepend + skeleton swap, leading row
+   pixel-stable at the hard stop). The uncompensated
    [shift scenarios](../screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts)
-   (reasoning expansion, footer re-wrap above the fold) observed
-   on Android and desktop.
-5. **Renderer-kill recovery** — kill the WebView renderer under
-   memory pressure; surface recovers to bottom with current data.
-6. **Security probes** — the seeded PROBE entries render inert
-   in-document: no fetches, no navigation, no script execution.
-7. **Fonts** — reading font renders in-document under the CSP.
-8. **Memory (release build)** — the honest number the dev-build
-   measurements couldn't give.
-9. **Accessibility** — TalkBack pass over the document surface.
-10. **`expo export --platform android` passes** — the DOM bundle
-    ships and boots from the exported bundle, not just Metro dev.
+   (reasoning expansion, footer re-wrap above the fold) were
+   observed acceptable without compensation; the topmost-in-viewport
+   anchor extension stays parked unless they start to measure.
+5. **Renderer-kill recovery** — verified: forced renderer crash
+   auto-reloads through the handshake back to bottom.
+6. **Security probes** — verified: seeded PROBE entries inert (no
+   fetches, no navigation, no script execution); the anchor-tap
+   escape found mid-validation drove the `composedPath()` +
+   nav-lock-latch fixes now in the contract.
+7. **Fonts** — verified in release with the CSP meta active: the
+   reading serif and rich styling render in-document. Structural
+   note: every font stack is system fonts — no `@font-face` ships,
+   so `font-src` is never consulted.
+8. **Memory (release build)** — app process 253–268 MB PSS plus
+   WebView renderer 114–142 MB PSS (plain story at open → rich
+   story with a boundary-load-grown window); ~370–410 MB combined
+   vs ~610 MB in the dev build. Window growth cost ~9 MB per six
+   boundary loads in the renderer.
+9. **Accessibility** — with TalkBack bound, the full web document
+   materializes in the accessibility tree (~600 nodes): narrative
+   text in reading order, labeled entry controls, table content
+   cell-by-cell. Gesture traversal walks chrome into the surface;
+   explore-by-touch and double-tap activation work. Spoken output
+   itself was not audited (needs ears on device).
+10. **`expo export --platform android`** — verified: the DOM
+    bundle ships in `www.bundle/` and the release build boots the
+    reader from the exported bundle with no Metro.

@@ -826,14 +826,14 @@ itself applies the leading row's content-offset delta to the
 scroll position each commit. This replaces the earlier
 per-platform machinery (FlatList `maintainVisibleContentPosition`
 on native; a measured padding-and-scroll dance under the web
-virtualizer). Coverage today: scenario 1 is device-verified
+virtualizer). Coverage: scenario 1 is device-verified
 (prepend + boundary-skeleton swap, leading row pixel-stable);
-scenarios 2 and 3 change heights _below_ the leading row and are
-not yet compensated — they remain a
-[reader-document validation item](../../patterns/reader-document.md#validation-checklist)
-on both Android and desktop, with the designed extension being an
-anchor on the topmost in-viewport row instead of the window's
-first.
+scenarios 2 and 3 change heights _below_ the leading row and stay
+deliberately uncompensated — validated acceptable as felt (see the
+[reader-document validation record](../../patterns/reader-document.md#validation-record)).
+The designed extension — anchor on the topmost in-viewport row
+instead of the window's first — stays parked unless they ever
+measure.
 
 ## Browse rail — collapse / expand
 
