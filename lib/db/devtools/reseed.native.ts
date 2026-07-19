@@ -11,6 +11,10 @@ export type ReseedSummary = { tables: number; rows: number }
 // dataset fails loudly. Migrations are not run here — the boot hook already
 // migrated the live connection.
 export async function reseedDevDatabase(): Promise<ReseedSummary> {
+  // Hard floor on the destructive wipe: every app/** route ships in the
+  // production bundle, so gating only the Settings entry link isn't enough.
+  if (!__DEV__) throw new Error('On-device reseed is a dev-only tool.')
+
   const steps = buildSeedSteps()
 
   expoDb.execSync('PRAGMA foreign_keys = OFF;')
