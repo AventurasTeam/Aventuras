@@ -68,6 +68,7 @@
     "dompurify": "^3.4.11",
     "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.8.3",
+    "electron-context-menu": "^4.1.2",
     "expo": "~55.0.17",
     "expo-clipboard": "~55.0.13",
     "expo-constants": "~55.0.15",

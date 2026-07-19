@@ -82,6 +82,15 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   await initDb()
   registerBundleProtocol()
+
+  // electron-context-menu v4 is ESM-only; dynamic import loads it cleanly from
+  // this CJS main. Attaches to all current + future windows: standard text
+  // editing, copy-on-selection, and Chromium spellcheck suggestions.
+  const { default: contextMenu } = await import('electron-context-menu')
+  contextMenu({
+    showSearchWithGoogle: false,
+    showInspectElement: isDev,
+  })
   ipcMain.handle('native:reveal-db-file', () => {
     shell.showItemInFolder(getDbFilePath())
   })
