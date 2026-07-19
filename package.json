@@ -99,6 +99,7 @@
     "nativewind": "^4.2.3",
     "postcss": "^8.5.10",
     "postcss-safe-parser": "^7.0.1",
+    "postcss-value-parser": "^4.2.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-hook-form": "^7.80.0",

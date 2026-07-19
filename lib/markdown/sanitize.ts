@@ -1,23 +1,23 @@
 import juice from 'juice'
 
+import { declarationHasBannedValue } from './css-policy'
 import { createDomPurify, NAVIGATION_FORBID_ATTRS } from './purify-instance'
 
 const purifyInstance = createDomPurify()
 
-// Allow any CSS property, but strip any declaration containing url() to prevent external data exfiltration/tracking,
-// or other browser-specific executable expressions.
+// Allow any CSS property, but strip declarations that fetch an external
+// resource or execute legacy CSS (see css-policy: url()/image-set()/
+// expression()/behavior, including escape-obfuscated forms).
 function sanitizeStyleValue(value: string): string {
   return value
     .split(';')
     .map((decl) => decl.trim())
     .filter((decl) => {
-      const lowerDecl = decl.toLowerCase()
-      return (
-        lowerDecl.length > 0 &&
-        !lowerDecl.includes('url(') &&
-        !lowerDecl.includes('expression(') &&
-        !lowerDecl.includes('behavior')
-      )
+      if (decl.length === 0) return false
+      const colon = decl.indexOf(':')
+      const prop = colon >= 0 ? decl.slice(0, colon) : ''
+      const val = colon >= 0 ? decl.slice(colon + 1) : decl
+      return !declarationHasBannedValue(prop, val)
     })
     .join('; ')
 }

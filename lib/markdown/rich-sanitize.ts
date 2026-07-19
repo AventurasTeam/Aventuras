@@ -1,17 +1,10 @@
 import { type Root } from 'postcss'
 import safeParser from 'postcss-safe-parser'
 
+import { declarationHasBannedValue } from './css-policy'
 import { createDomPurify, NAVIGATION_FORBID_ATTRS } from './purify-instance'
 
-// The plain path's attribute-level exfiltration policy, applied uniformly to
-// stylesheet content: no external fetches, no legacy executable CSS. Checked
-// after comment-stripping so url(/**/…) can't slip through.
-const BANNED_VALUE = /url\(|expression\(|behavior/i
 const KEPT_AT_RULES = new Set(['media', 'keyframes'])
-
-function stripComments(value: string): string {
-  return value.replace(/\/\*[\s\S]*?\*\//g, ' ')
-}
 
 function scrubRoot(root: Root): void {
   root.walkAtRules((atRule) => {
@@ -19,7 +12,7 @@ function scrubRoot(root: Root): void {
     if (!KEPT_AT_RULES.has(name)) atRule.remove()
   })
   root.walkDecls((decl) => {
-    if (BANNED_VALUE.test(stripComments(`${decl.prop}:${decl.value}`))) decl.remove()
+    if (declarationHasBannedValue(decl.prop, decl.value)) decl.remove()
   })
 }
 

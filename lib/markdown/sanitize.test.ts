@@ -42,6 +42,20 @@ describe('sanitizeHtml', () => {
     expect(clean).not.toContain('url(')
   })
 
+  it('drops escape-obfuscated and image-set() exfiltration in inline style', () => {
+    const escaped = sanitizeHtml(
+      '<p style="color: red; background: \\75rl(https://evil.example/x)">t</p>',
+    )
+    expect(escaped).toContain('style="color: red"')
+    expect(escaped).not.toContain('evil.example')
+
+    const imageSet = sanitizeHtml(
+      '<p style="color: red; background-image: image-set(&quot;https://evil.example/x&quot; 1x)">t</p>',
+    )
+    expect(imageSet).toContain('style="color: red"')
+    expect(imageSet).not.toContain('evil.example')
+  })
+
   it('keeps font/color for legacy AI output presets', () => {
     const clean = sanitizeHtml('<font color="red">text</font>')
     expect(clean).toBe('<font color="red">text</font>')

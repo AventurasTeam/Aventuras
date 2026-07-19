@@ -29,6 +29,14 @@ describe('sanitizeRichHtml', () => {
     expect(clean).toContain('color: blue')
   })
 
+  it('strips escape-obfuscated and image-set() external fetches (no raw-token bypass)', () => {
+    const html =
+      '<style>a { background: \\75rl(https://evil.example/x); color: red } b { background: u\\72 l(https://evil.example/y) } c { background-image: image-set("https://evil.example/z" 1x) } d { background: -webkit-image-set("https://evil.example/w" 1x) }</style>'
+    const clean = sanitizeRichHtml(html)
+    expect(clean).not.toContain('evil.example')
+    expect(clean).toContain('color: red')
+  })
+
   it('strips @import and @font-face at-rules entirely', () => {
     const clean = sanitizeRichHtml(
       '<style>@import "x.css"; @font-face { font-family: X; src: local(Y) } p { color: red }</style>',
