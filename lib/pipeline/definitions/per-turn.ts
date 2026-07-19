@@ -103,10 +103,12 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   } catch (e) {
     streamError = e
   }
+  // Checked unconditionally, not only under streamError: fullStream ends
+  // GRACEFULLY on abort (an 'abort' part, no throw, no onError), so gating on
+  // an error would fall through and commit the partial entry a cancel was
+  // supposed to discard.
+  if (ctx.abortSignal.aborted) return { status: 'aborted' }
   if (streamError !== undefined) {
-    // A cancel rides the same error path; classify it as abort, not provider failure,
-    // so CTRL-Z semantics stay distinct from a real fault.
-    if (ctx.abortSignal.aborted) return { status: 'aborted' }
     return {
       status: 'failed',
       error: {

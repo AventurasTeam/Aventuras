@@ -50,14 +50,14 @@ function failingStreamCall() {
   }
 }
 
-async function runNarrativePhase() {
+async function runNarrativePhase(abortSignal = new AbortController().signal) {
   ensurePerTurnPipelineRegistered()
   const phase = getPipeline(PER_TURN_KIND).phases[1]
   if (!phase || !('run' in phase)) throw new Error('expected a single-run narrative phase node')
   return phase
     .run({
       actionId: 'act_1',
-      abortSignal: new AbortController().signal,
+      abortSignal,
       intermediates: {},
       log: makeLogger('act_1'),
       db: {} as never,
@@ -179,6 +179,34 @@ describe('per-turn pipeline declaration', () => {
       },
     })
     expect(streamAgentCallMock).not.toHaveBeenCalled()
+  })
+
+  it('returns aborted, committing nothing, when a cancel ends the stream gracefully', async () => {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: { partialChapterBuffer: 3, models: {} } as never,
+    })
+    entriesStore.hydrate('b1', [])
+    const controller = new AbortController()
+    // ai@6 fullStream ends without throwing on abort (an 'abort' part, no
+    // onError) — the phase must classify via the signal, not a stream error.
+    streamAgentCallMock.mockReturnValue({
+      ok: true,
+      modelId: 'model-1',
+      stream: {
+        fullStream: (async function* () {
+          controller.abort()
+        })(),
+      },
+    })
+
+    const result = await runNarrativePhase(controller.signal)
+
+    // done:true on the FIRST next() proves no delta_emitted was yielded — the
+    // partial entry is discarded, not committed.
+    expect(result).toEqual({ done: true, value: { status: 'aborted' } })
   })
 
   it('surfaces a resolve failure as a config-resolver phase error', async () => {
