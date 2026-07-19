@@ -212,7 +212,13 @@ export default function ReaderComposerRoute() {
     isGenerating && !(streaming != null && entries.some((e) => e.id === streaming.entryId))
 
   const reload = useCallback(async () => {
-    entriesStore.hydrate(branchId, await readRecentEntries(branchId, db))
+    const recent = await readRecentEntries(branchId, db)
+    entriesStore.hydrate(branchId, recent)
+    // A recent-window reload drops any older entries a scroll-up had loaded, so
+    // recompute the boundary: a full window means older may exist, a short one
+    // proves the branch top is in the window. The seed guard won't do this.
+    hasOlderSeededRef.current = branchId
+    setHasOlder(recent.length >= ENTRIES_WINDOW_SIZE)
   }, [branchId])
 
   const loadOlderEntries = useCallback(async () => {
