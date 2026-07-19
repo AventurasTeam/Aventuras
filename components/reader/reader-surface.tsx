@@ -2,6 +2,7 @@
 // Plain web React: renders on the web page and inside the reader document's
 // DOM bundle — never on Hermes.
 import {
+  memo,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -33,6 +34,69 @@ const NEAR_TOP_IDLE_MS = 150
 // compensation, and scrolling exact.
 const ROW_FRAME_CLASS = 'mx-auto w-full max-w-[860px] px-7 py-2'
 
+type ReaderRowProps = {
+  row: StoryEntry
+  editing: boolean
+  editContent: string | null
+  editBlocked: boolean
+  systemFixLabel?: string
+  onStartEdit: (row: StoryEntry) => void
+  onContentChange: (text: string) => void
+  onCommitEdit: () => void | Promise<void>
+  onCancelEdit: () => void
+  onRequestRollback: (entryId: string) => Promise<void>
+  onFixSystemEntry: () => Promise<void>
+  onRetrySystemEntry: () => Promise<void>
+  onDismissSystemEntry: () => Promise<void>
+}
+
+// Memoized so a stream chunk (which re-renders the surface) doesn't reconcile
+// the whole loaded window: a committed row's props are all referentially stable
+// (row identity, stable callbacks, null editContent), so only the editing row
+// and the live streaming card re-render.
+const ReaderRow = memo(function ReaderRow({
+  row,
+  editing,
+  editContent,
+  editBlocked,
+  systemFixLabel,
+  onStartEdit,
+  onContentChange,
+  onCommitEdit,
+  onCancelEdit,
+  onRequestRollback,
+  onFixSystemEntry,
+  onRetrySystemEntry,
+  onDismissSystemEntry,
+}: ReaderRowProps) {
+  const isSystem = row.kind === 'system'
+  return (
+    <EntryCard
+      kind={row.kind}
+      content={editing ? (editContent ?? '') : row.content}
+      meta={row.metadata ?? undefined}
+      reasoning={row.metadata?.reasoning}
+      disabled={editBlocked}
+      editing={editing}
+      onEdit={isSystem ? undefined : () => onStartEdit(row)}
+      onContentChange={onContentChange}
+      onCommitEdit={() => void onCommitEdit()}
+      onCancelEdit={onCancelEdit}
+      onDelete={
+        isSystem || row.kind === 'opening' ? undefined : () => void onRequestRollback(row.id)
+      }
+      detail={isSystem ? row.metadata?.systemFailure?.detail : undefined}
+      fixAction={
+        isSystem && systemFixLabel != null
+          ? { label: systemFixLabel, onPress: () => void onFixSystemEntry() }
+          : undefined
+      }
+      onRetry={isSystem ? () => void onRetrySystemEntry() : undefined}
+      onDismiss={isSystem ? () => void onDismissSystemEntry() : undefined}
+    />
+  )
+})
+
 export function ReaderSurface({
   rows,
   streaming,
@@ -60,6 +124,12 @@ export function ReaderSurface({
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
+  // Mirror edit state into refs so commitEdit stays referentially stable across
+  // keystrokes — a changing commit callback would defeat the row memo.
+  const editingIdRef = useRef<string | null>(null)
+  const editDraftRef = useRef('')
+  editingIdRef.current = editingId
+  editDraftRef.current = editDraft
 
   // Branch switch: new window, scrolled to bottom, edit state dropped
   // (reader-composer.md → Loaded-set model → Branch switch).
@@ -268,6 +338,11 @@ export function ReaderSurface({
   }, [streaming])
 
   const jumpToBottom = useCallback(() => {
+    // Cancel any active landing pin / anchor-hold loop first: otherwise a hold
+    // spawned by a just-fired boundary prepend keeps yanking scrollTop toward
+    // the top anchor while this animates to the bottom, and they fight.
+    pinActiveRef.current = false
+    anchorHoldActiveRef.current = false
     const el = scrollRef.current
     if (el != null) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
     lastDistanceRef.current = 0
@@ -285,47 +360,20 @@ export function ReaderSurface({
     setEditDraft(row.content)
   }, [])
   const commitEdit = useCallback(async () => {
-    if (editingId == null) return
+    const id = editingIdRef.current
+    if (id == null) return
     // A rejected commit keeps the draft open so typing isn't silently lost;
     // the host owns the error toast.
-    const result = await onCommitEdit(editingId, editDraft)
+    const result = await onCommitEdit(id, editDraftRef.current)
     if (result?.ok) {
       setEditingId(null)
       setEditDraft('')
     }
-  }, [editingId, editDraft, onCommitEdit])
+  }, [onCommitEdit])
   const cancelEdit = useCallback(() => {
     setEditingId(null)
     setEditDraft('')
   }, [])
-
-  const renderCard = (e: StoryEntry) => {
-    const isEditing = editingId === e.id
-    const isSystem = e.kind === 'system'
-    return (
-      <EntryCard
-        kind={e.kind}
-        content={isEditing ? editDraft : e.content}
-        meta={e.metadata ?? undefined}
-        reasoning={e.metadata?.reasoning}
-        disabled={editBlocked}
-        editing={isEditing}
-        onEdit={isSystem ? undefined : () => startEdit(e)}
-        onContentChange={setEditDraft}
-        onCommitEdit={() => void commitEdit()}
-        onCancelEdit={cancelEdit}
-        onDelete={isSystem || e.kind === 'opening' ? undefined : () => void onRequestRollback(e.id)}
-        detail={isSystem ? e.metadata?.systemFailure?.detail : undefined}
-        fixAction={
-          isSystem && systemFixLabel != null
-            ? { label: systemFixLabel, onPress: () => void onFixSystemEntry() }
-            : undefined
-        }
-        onRetry={isSystem ? () => void onRetrySystemEntry() : undefined}
-        onDismiss={isSystem ? () => void onDismissSystemEntry() : undefined}
-      />
-    )
-  }
 
   return (
     <div className="relative h-full">
@@ -350,7 +398,21 @@ export function ReaderSurface({
         ) : null}
         {rows.map((row) => (
           <div key={row.id} data-entry-row={row.id} className={ROW_FRAME_CLASS}>
-            {renderCard(row)}
+            <ReaderRow
+              row={row}
+              editing={editingId === row.id}
+              editContent={editingId === row.id ? editDraft : null}
+              editBlocked={editBlocked}
+              systemFixLabel={systemFixLabel}
+              onStartEdit={startEdit}
+              onContentChange={setEditDraft}
+              onCommitEdit={commitEdit}
+              onCancelEdit={cancelEdit}
+              onRequestRollback={onRequestRollback}
+              onFixSystemEntry={onFixSystemEntry}
+              onRetrySystemEntry={onRetrySystemEntry}
+              onDismissSystemEntry={onDismissSystemEntry}
+            />
           </div>
         ))}
         {streaming != null ? (
