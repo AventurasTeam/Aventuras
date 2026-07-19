@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Linking, StyleSheet, View, type LayoutChangeEvent } from 'react-native'
 
 import { useTheme } from '@/lib/themes'
@@ -37,6 +37,38 @@ function writeCachedHeight(entryId: string, width: number, content: string, heig
   heightCache.set(cacheKey(entryId, width), { content, height })
 }
 
+// Boot-slot scheduler: a story-open renders the whole hydrated window, and
+// letting every rich card spin up its WebView at once slows each boot and
+// pressures Android's renderer (surface loss, process kills). Cards without a
+// slot simply keep their underlay — the designed placeholder. LIFO grant
+// order: the most recently mounted rows are the ones nearest the viewport,
+// both at open (bottom rows mount last) and while scrolling.
+const BOOT_CONCURRENCY = 3
+let activeBoots = 0
+const bootQueue: (() => void)[] = []
+
+function requestBootSlot(grant: () => void): () => void {
+  if (activeBoots < BOOT_CONCURRENCY) {
+    activeBoots += 1
+    grant()
+    return () => {}
+  }
+  bootQueue.push(grant)
+  return () => {
+    const index = bootQueue.indexOf(grant)
+    if (index >= 0) bootQueue.splice(index, 1)
+  }
+}
+
+function releaseBootSlot(): void {
+  const next = bootQueue.pop()
+  if (next != null) {
+    next()
+    return
+  }
+  activeBoots -= 1
+}
+
 const styles = StyleSheet.create({
   booting: { position: 'absolute', left: 0, right: 0, top: 0, opacity: 0 },
   // eslint-disable-next-line react-native/no-color-literals -- 'transparent' keeps the card bubble visible behind the WebView document; it is not a theme token.
@@ -47,6 +79,23 @@ export function RichEntryContent({ markedHtml, entryId, underlay }: RichEntryCon
   const { theme } = useTheme()
   const [ready, setReady] = useState(false)
   const [width, setWidth] = useState(0)
+  const [bootGranted, setBootGranted] = useState(false)
+
+  const slotHeldRef = useRef(false)
+  useEffect(() => {
+    const cancel = requestBootSlot(() => {
+      slotHeldRef.current = true
+      setBootGranted(true)
+    })
+    return () => {
+      if (slotHeldRef.current) {
+        slotHeldRef.current = false
+        releaseBootSlot()
+      } else {
+        cancel()
+      }
+    }
+  }, [])
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     setWidth(event.nativeEvent.layout.width)
@@ -56,6 +105,10 @@ export function RichEntryContent({ markedHtml, entryId, underlay }: RichEntryCon
 
   const handleReady = useCallback(async () => {
     setReady(true)
+    if (slotHeldRef.current) {
+      slotHeldRef.current = false
+      releaseBootSlot()
+    }
   }, [])
 
   const handleWebViewLayout = useCallback(
@@ -91,6 +144,16 @@ export function RichEntryContent({ markedHtml, entryId, underlay }: RichEntryCon
     if (loadCountRef.current > 1) setReady(false)
   }, [])
 
+  // Android can kill a WebView's renderer under memory pressure with no load
+  // or ready signal — the card would sit blank forever. Remounting under a new
+  // key boots a fresh WebView behind the re-bridged underlay.
+  const [webViewEpoch, setWebViewEpoch] = useState(0)
+  const handleRenderProcessGone = useCallback(() => {
+    loadCountRef.current = 0
+    setReady(false)
+    setWebViewEpoch((epoch) => epoch + 1)
+  }, [])
+
   return (
     <View
       onLayout={handleLayout}
@@ -98,25 +161,29 @@ export function RichEntryContent({ markedHtml, entryId, underlay }: RichEntryCon
       style={!ready && cachedHeight != null ? { height: cachedHeight, overflow: 'hidden' } : null}
     >
       {ready ? null : underlay}
-      <View
-        style={ready ? null : styles.booting}
-        pointerEvents={ready ? 'auto' : 'none'}
-        onLayout={handleWebViewLayout}
-      >
-        <RichEntryDocument
-          markedHtml={markedHtml}
-          themeVars={theme.colors}
-          mode={theme.mode}
-          onReady={handleReady}
-          dom={{
-            matchContents: true,
-            scrollEnabled: false,
-            onLoadEnd: handleLoadEnd,
-            onShouldStartLoadWithRequest: handleShouldStartLoad,
-            style: styles.webview,
-          }}
-        />
-      </View>
+      {bootGranted ? (
+        <View
+          style={ready ? null : styles.booting}
+          pointerEvents={ready ? 'auto' : 'none'}
+          onLayout={handleWebViewLayout}
+        >
+          <RichEntryDocument
+            key={webViewEpoch}
+            markedHtml={markedHtml}
+            themeVars={theme.colors}
+            mode={theme.mode}
+            onReady={handleReady}
+            dom={{
+              matchContents: true,
+              scrollEnabled: false,
+              onLoadEnd: handleLoadEnd,
+              onShouldStartLoadWithRequest: handleShouldStartLoad,
+              onRenderProcessGone: handleRenderProcessGone,
+              style: styles.webview,
+            }}
+          />
+        </View>
+      ) : null}
     </View>
   )
 }
