@@ -51,8 +51,8 @@ const NEAR_BOTTOM_THRESHOLD_PX = 20
 // Native hysteresis band (see applyScrollMetrics). Web keeps the single
 // threshold: wheel scrolling is precise and its contentSize doesn't
 // re-estimate mid-scroll.
-const NEAR_BOTTOM_ENTER_PX = 48
-const NEAR_BOTTOM_EXIT_PX = 160
+const NEAR_BOTTOM_ENTER_PX = 32
+const NEAR_BOTTOM_EXIT_PX = 48
 const MAINTAIN_VISIBLE_CONTENT_POSITION = { minIndexForVisible: 0 } as const
 
 const styles = StyleSheet.create({
