@@ -1,19 +1,18 @@
 import { and, desc, eq, lt } from 'drizzle-orm'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { View } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Linking, Platform, View } from 'react-native'
 
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
-import { EntryCard } from '@/components/compounds/entry-card'
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
-import {
-  createRichEntryVisibilityStore,
-  RichEntryVisibilityContext,
-} from '@/components/compounds/rich-entry-visibility'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
-import { EntryWindow, type EntryWindowHandle } from '@/components/reader/entry-window'
-import { JumpButtons } from '@/components/reader/jump-buttons'
+import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
+import {
+  type EditResult,
+  type ReaderSurfaceHandle,
+} from '@/components/reader/reader-document-types'
+import { ReaderSurface } from '@/components/reader/reader-surface'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
 import {
   describeTurnFailure,
@@ -50,7 +49,6 @@ import {
   pipelineEventBus,
   type PipelineError,
 } from '@/lib/pipeline'
-import { createAutoscrollMachine } from '@/lib/reader-scroll'
 import {
   appSettingsStore,
   currentStoryStore,
@@ -62,13 +60,12 @@ import {
   storiesStore,
   undoRedoStore,
 } from '@/lib/stores'
+import { useTheme } from '@/lib/themes'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
 
 type RollbackState = { targetId: string; targetNumber: number; counts: RollbackCounts }
-type StreamingRow = { id: string; kind: 'streaming'; content: string; reasoning: string }
-type WindowRow = StoryEntry | StreamingRow
 type BranchHydrationState =
   | { branchId: string; status: 'loading' }
   | {
@@ -78,8 +75,6 @@ type BranchHydrationState =
     }
   | { branchId: string; status: 'failure'; result: LoadOpenStoryResult | null }
 
-const JUMP_TO_BOTTOM_SETTLE_MS = 500
-
 export default function ReaderComposerRoute() {
   const router = useRouter()
   const tier = useTier()
@@ -87,8 +82,6 @@ export default function ReaderComposerRoute() {
   const { branchId } = useLocalSearchParams<{ branchId: string }>()
 
   const [storyId, setStoryId] = useState<string | null>(null)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editDraft, setEditDraft] = useState('')
   const [rollback, setRollback] = useState<RollbackState | null>(null)
   const [lastSubmission, setLastSubmission] = useState<{
     content: string
@@ -143,19 +136,11 @@ export default function ReaderComposerRoute() {
     content: string
     reasoning: string
   } | null>(null)
-  const entryWindowRef = useRef<EntryWindowHandle>(null)
   const composerRef = useRef<ComposerHandle>(null)
-  const autoscrollRef = useRef(createAutoscrollMachine())
-  const lastDistanceRef = useRef(0)
-  const richVisibilityRef = useRef(createRichEntryVisibilityStore())
-  // Timestamp of the last jump-to-bottom click while idle. The smooth-scroll
-  // it triggers reports several intermediate, non-zero distanceFromBottomPx
-  // values before settling, so a bounded time window — not a plain flag —
-  // is what lets a fast-following stream still treat it as "at bottom"
-  // without also capturing an unrelated, much-later stream after the user
-  // has genuinely scrolled away in between.
-  const pendingJumpToBottomAtRef = useRef(0)
-  const [showJumpToBottom, setShowJumpToBottom] = useState(false)
+  const surfaceRef = useRef<ReaderSurfaceHandle>(null)
+  const documentRef = useRef<ReaderDocumentRef>(null)
+  const [syncNonce, setSyncNonce] = useState(0)
+  const [documentPainted, setDocumentPainted] = useState(false)
 
   // A branch switch must drop any in-flight buffer from the prior branch —
   // it belongs to a different entry list and would otherwise leak forward.
@@ -179,11 +164,6 @@ export default function ReaderComposerRoute() {
             content: createHtmlStreamBuffer(),
             reasoning: createHtmlStreamBuffer(),
           }
-          const jumpedRecently =
-            Date.now() - pendingJumpToBottomAtRef.current < JUMP_TO_BOTTOM_SETTLE_MS
-          autoscrollRef.current.streamStarted({
-            distanceFromBottomPx: jumpedRecently ? 0 : lastDistanceRef.current,
-          })
         }
         const buffers = streamBufferRef.current
         const safe = (event.channel === 'reasoning' ? buffers.reasoning : buffers.content).push(
@@ -202,21 +182,12 @@ export default function ReaderComposerRoute() {
     [branchId],
   )
 
-  // Runs after React commits the streaming state, so the scroll targets the
-  // row height the just-arrived chunk actually produced.
-  useLayoutEffect(() => {
-    if (streaming == null || autoscrollRef.current.state !== 'engaged') return
-    entryWindowRef.current?.scrollToBottom()
-    autoscrollRef.current.autoscrollApplied({ distanceFromBottomPx: 0 })
-  }, [streaming])
-
   // Covers the abort/failure paths where no committed row ever lands to
   // trigger the entries.some(...) hide check below.
   useEffect(() => {
     if (!isGenerating) {
       streamBufferRef.current = null
       setStreaming(null)
-      autoscrollRef.current.streamEnded()
     }
   }, [isGenerating])
 
@@ -406,26 +377,51 @@ export default function ReaderComposerRoute() {
     setRollback(null)
   }, [branchId, rollback])
 
-  const startEdit = useCallback((id: string) => {
-    setEditingId(id)
-    setEditDraft(entriesStore.getById(id)?.content ?? '')
+  const handleCommitEdit = useCallback(
+    async (entryId: string, content: string): Promise<EditResult> => {
+      const result = await updateStoryEntryContent(branchId, entryId, content, ctx)
+      if (result.status === 'rejected') {
+        // The draft stays open in the document; the host owns the toast.
+        toast.error(t('reader:editFailed'))
+        return { ok: false }
+      }
+      return { ok: true }
+    },
+    [branchId],
+  )
+
+  const handleRequestRollback = useCallback(
+    async (entryId: string) => {
+      await openRollback(entryId)
+    },
+    [openRollback],
+  )
+
+  const handleReady = useCallback(async () => {
+    // Boot/reload handshake: emissions before onReady are lost, so bump the
+    // nonce to force a fresh full-prop emission, and re-arm the loading veil.
+    setDocumentPainted(false)
+    setSyncNonce((n) => n + 1)
   }, [])
 
-  const commitEdit = useCallback(async () => {
-    if (!editingId) return
-    const result = await updateStoryEntryContent(branchId, editingId, editDraft, ctx)
-    if (result.status === 'rejected') {
-      // Keep the draft open so a rejected edit doesn't silently discard typing.
-      toast.error(t('reader:editFailed'))
-      return
-    }
-    setEditingId(null)
-    setEditDraft('')
-  }, [branchId, editingId, editDraft])
+  const handleFirstPaint = useCallback(async () => {
+    setDocumentPainted(true)
+  }, [])
 
-  const cancelEdit = useCallback(() => {
-    setEditingId(null)
-    setEditDraft('')
+  const handleLinkTap = useCallback(async (url: string) => {
+    if (/^https?:/i.test(url)) await Linking.openURL(url)
+  }, [])
+
+  // Recovery reloads re-request the document's own URL; blocking that freezes
+  // the surface. Everything else is dropped — foreign links arrive via
+  // onLinkTap instead of navigation.
+  const documentUrlRef = useRef<string | null>(null)
+  const handleShouldStartLoad = useCallback((request: { url: string }) => {
+    if (documentUrlRef.current == null || request.url === documentUrlRef.current) {
+      documentUrlRef.current = request.url
+      return true
+    }
+    return false
   }, [])
 
   const matchesUndoRedoShortcut = useCallback(
@@ -456,21 +452,18 @@ export default function ReaderComposerRoute() {
     const result = await redoLastAction(branchId, ctx)
     if (result.status === 'rejected') toast.info(t('reader:actions.nothingToRedo'))
   }, [branchId])
+  // Engage/settle semantics live in the surface's own jumpToBottom; the host
+  // only routes the request to whichever mount is live on this platform.
   const jumpToBottom = useCallback(() => {
-    entryWindowRef.current?.scrollToBottom({ smooth: true })
-    lastDistanceRef.current = 0
-    if (isGenerating) {
-      // Today's single-phase per-turn pipeline streams exactly one
-      // entryId per run, so this forced engage already covers the
-      // rest of it — nothing later reads pendingJumpToBottomAtRef
-      // for this run. Revisit if a phase ever streams a second
-      // entryId under the same run.
-      autoscrollRef.current.streamStarted({ distanceFromBottomPx: 0 })
-    } else {
-      autoscrollRef.current.autoscrollApplied({ distanceFromBottomPx: 0 })
-      pendingJumpToBottomAtRef.current = Date.now()
-    }
-  }, [isGenerating])
+    if (Platform.OS === 'web') surfaceRef.current?.jumpToBottom()
+    else documentRef.current?.jumpToBottom()
+  }, [])
+
+  const handleRetrySystemEntry = useCallback(async () => retrySystemEntry(), [retrySystemEntry])
+  const handleDismissSystemEntry = useCallback(async () => {
+    await dismissSystemEntry()
+  }, [dismissSystemEntry])
+  const handleFixSystemEntry = useCallback(async () => fixAction?.onPress(), [fixAction])
   const matchesJumpToBottomShortcut = useCallback((ev: KeyboardEvent) => ev.key === 'End', [])
   // Editable-target exclusion keeps End moving the caret inside the composer.
   useGlobalHotkey(matchesJumpToBottomShortcut, jumpToBottom, { ignoreEditableTargets: true })
@@ -509,68 +502,31 @@ export default function ReaderComposerRoute() {
     }
   }, [hasRedo, isGenerating, menuUndo, menuRedo, entries.length, jumpToBottom])
 
-  const windowRows: WindowRow[] = useMemo(() => {
-    if (!streamingVisible) return entries
-    // Stable synthetic id: the row must not remount when the first chunk
-    // brings the real target entryId (the commit-hide check above uses it).
-    return [
-      ...entries,
-      {
-        id: 'streaming-row',
-        kind: 'streaming',
-        content: streaming?.content ?? '',
-        reasoning: streaming?.reasoning ?? '',
-      },
-    ]
-  }, [entries, streamingVisible, streaming])
-
-  // Spacing must be padding on the measured wrapper, not margin: the web
-  // virtualizer's measureElement height excludes margins, which would overlap
-  // rows. Values approximate the wireframe's 860px centered measure.
-  const renderRow = (row: WindowRow) => (
-    <View className="mx-auto w-full max-w-[860px] px-7 py-2">{renderRowCard(row)}</View>
+  const streamingPayload = useMemo(
+    () =>
+      streamingVisible
+        ? { content: streaming?.content ?? '', reasoning: streaming?.reasoning ?? '' }
+        : null,
+    [streamingVisible, streaming],
   )
 
-  const renderRowCard = (row: WindowRow) => {
-    if (row.kind === 'streaming') {
-      return (
-        <EntryCard
-          kind="streaming"
-          content={row.content}
-          reasoning={row.reasoning.length > 0 ? row.reasoning : undefined}
-          streamingPhase={
-            row.reasoning.length > 0 && row.content.length === 0 ? 'reasoning' : 'reply'
-          }
-        />
-      )
-    }
-    const e = row
-    const isEditing = editingId === e.id
-    const isSystem = e.kind === 'system'
-    return (
-      <EntryCard
-        kind={e.kind}
-        content={isEditing ? editDraft : e.content}
-        entryId={e.id}
-        meta={e.metadata ?? undefined}
-        reasoning={e.metadata?.reasoning}
-        disabled={editBlocked}
-        editing={isEditing}
-        onEdit={isSystem ? undefined : () => startEdit(e.id)}
-        onContentChange={setEditDraft}
-        onCommitEdit={() => void commitEdit()}
-        onCancelEdit={cancelEdit}
-        onDelete={isSystem || e.kind === 'opening' ? undefined : () => void openRollback(e.id)}
-        detail={isSystem ? e.metadata?.systemFailure?.detail : undefined}
-        fixAction={isSystem ? fixAction : undefined}
-        onRetry={isSystem ? retrySystemEntry : undefined}
-        onDismiss={isSystem ? () => void dismissSystemEntry() : undefined}
-      />
-    )
-  }
-
   const jumpButtonEnabled = appSettingsStore.useAppSettings((s) => s.appearance.showJumpToBottom)
-  const showJump = jumpButtonEnabled && entries.length > 0
+  const { theme } = useTheme()
+
+  const surfaceProps = {
+    rows: entries,
+    streaming: streamingPayload,
+    branchKey: branchId,
+    editBlocked,
+    jumpButtonEnabled,
+    systemFixLabel: fixAction?.label,
+    onNearTop: loadOlderEntries,
+    onCommitEdit: handleCommitEdit,
+    onRequestRollback: handleRequestRollback,
+    onRetrySystemEntry: handleRetrySystemEntry,
+    onDismissSystemEntry: handleDismissSystemEntry,
+    onFixSystemEntry: handleFixSystemEntry,
+  }
 
   return (
     <ScreenShell
@@ -605,28 +561,32 @@ export default function ReaderComposerRoute() {
               <View className="flex-1 items-center justify-center">
                 <EmptyState title={t('reader:emptyTitle')} subtext={t('reader:emptyBody')} />
               </View>
+            ) : Platform.OS === 'web' ? (
+              <ReaderSurface {...surfaceProps} ref={surfaceRef} />
             ) : (
-              <RichEntryVisibilityContext.Provider value={richVisibilityRef.current}>
-                <EntryWindow
-                  ref={entryWindowRef}
-                  key={branchId}
-                  rows={windowRows}
-                  renderRow={renderRow}
-                  onNearTop={() => void loadOlderEntries()}
-                  onNearBottomChange={(isNearBottom) => setShowJumpToBottom(!isNearBottom)}
-                  onScrollPositionChange={(pos) => {
-                    lastDistanceRef.current = pos.distanceFromBottomPx
-                    autoscrollRef.current.userScrolled(pos)
+              <View className="flex-1">
+                <ReaderDocument
+                  {...surfaceProps}
+                  ref={documentRef}
+                  themeId={theme.id}
+                  syncNonce={syncNonce}
+                  onReady={handleReady}
+                  onFirstPaint={handleFirstPaint}
+                  onLinkTap={handleLinkTap}
+                  dom={{
+                    scrollEnabled: false,
+                    style: { flex: 1 },
+                    webviewDebuggingEnabled: __DEV__,
+                    onShouldStartLoadWithRequest: handleShouldStartLoad,
                   }}
-                  onUserScrollGesture={() => autoscrollRef.current.userInterrupted()}
-                  onActiveRowsChange={richVisibilityRef.current.setActiveIds}
                 />
-              </RichEntryVisibilityContext.Provider>
+                {!documentPainted ? (
+                  <View className="absolute inset-0 items-center justify-center bg-bg-base">
+                    <EmptyState title={t('reader:hydrationLoading')} />
+                  </View>
+                ) : null}
+              </View>
             )}
-            <JumpButtons
-              showJumpToBottom={showJump && showJumpToBottom}
-              onJumpToBottom={jumpToBottom}
-            />
           </View>
           <View className="border-t border-border px-6 pb-3.5 pt-3">
             <View className="mx-auto w-full max-w-[860px]">
