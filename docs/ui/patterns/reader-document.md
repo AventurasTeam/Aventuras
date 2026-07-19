@@ -102,10 +102,14 @@ user's first gesture breaks the pin.
 ## Native hosting
 
 - One `'use dom'` component instance per reader screen,
-  **long-lived**: branch switches, entry updates, and streaming all
-  arrive as prop updates. The component is never remounted to force
-  state — expo-dom reuses the WebView per source file and
-  boot-racing prop emissions are silently lost (device-verified).
+  **long-lived within a branch**: entry updates and streaming
+  arrive as prop updates into the mounted instance. Opening a
+  different branch is a screen navigation — a fresh instance and
+  boot, which is the correct treatment (the new branch lands at its
+  own bottom). Within a branch the component is never remounted to
+  force state — expo-dom reuses the WebView per source file and
+  boot-racing prop emissions are silently lost (device-verified);
+  the host bumps `syncNonce` instead.
 - The document claims its viewport explicitly (`position: fixed;
 inset: 0` root) — expo-dom's mount root is a flex container in
   which plain block elements collapse to zero width.
