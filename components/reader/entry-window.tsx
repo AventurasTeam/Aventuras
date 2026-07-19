@@ -213,15 +213,23 @@ function EntryWindowNativeInner<T extends { id: string }>(
     [],
   )
 
-  // Land at the tail on first open. onContentSizeChange fires once the initial
-  // rows have laid out (firmer than a rows-keyed effect); the one-shot flag
-  // keeps later size changes off the user's scrolling.
-  const didInitialScrollRef = useRef(false)
+  // Land at the tail on first open — as a pin, not a one-shot: FlatList lays
+  // out progressively, so the first onContentSizeChange sees only the initial
+  // batch and a single scrollToEnd strands the viewport mid-list once later
+  // batches grow the content. Re-asserting on every size change stays correct
+  // pre-gesture (growth is initial layout or a streaming tail, both want
+  // bottom); the user's first drag breaks the pin, same as the host's
+  // autoscroll pin.
+  const initialPinRef = useRef(true)
   const handleContentSizeChange = useCallback(() => {
-    if (didInitialScrollRef.current || rows.length === 0) return
-    didInitialScrollRef.current = true
+    if (!initialPinRef.current || rows.length === 0) return
     listRef.current?.scrollToEnd({ animated: false })
   }, [rows.length])
+
+  const handleScrollBeginDrag = useCallback(() => {
+    initialPinRef.current = false
+    onUserScrollGesture?.()
+  }, [onUserScrollGesture])
 
   const nearBottomRef = useRef(false)
   const handleScroll = useCallback(
@@ -244,7 +252,7 @@ function EntryWindowNativeInner<T extends { id: string }>(
       renderItem={({ item }) => <>{renderRow(item)}</>}
       onContentSizeChange={handleContentSizeChange}
       onScroll={handleScroll}
-      onScrollBeginDrag={onUserScrollGesture}
+      onScrollBeginDrag={handleScrollBeginDrag}
       scrollEventThrottle={100}
       maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
       onStartReached={onNearTop}
