@@ -22,6 +22,8 @@ type SmokeResult = { ok: true; dim: number } | { ok: false; error: EmbedderError
 // makes an acceptance criterion ("no embedder code runs before first call").
 const pipelines = new Map<string, Promise<FeaturePipeline>>()
 
+let pipelineFactory: (modelDir: string) => Promise<FeaturePipeline> = buildPipeline
+
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -29,13 +31,26 @@ function messageOf(error: unknown): string {
 function getPipeline(modelDir: string): Promise<FeaturePipeline> {
   let pipe = pipelines.get(modelDir)
   if (!pipe) {
-    pipe = buildPipeline(modelDir)
+    pipe = pipelineFactory(modelDir)
     pipelines.set(modelDir, pipe)
     // A failed init must not poison the cache — drop it so a later call can retry
     // once the user fixes the model dir.
     pipe.catch(() => pipelines.delete(modelDir))
   }
   return pipe
+}
+
+// A removed/re-downloaded model reuses its dir path; without eviction the cache
+// would keep serving vectors from the deleted model. main.ts evicts before deletePartial.
+export function evictPipeline(modelDir: string): void {
+  pipelines.delete(modelDir)
+}
+
+export function __setPipelineFactoryForTest(
+  factory: ((modelDir: string) => Promise<FeaturePipeline>) | null,
+): void {
+  pipelineFactory = factory ?? buildPipeline
+  pipelines.clear()
 }
 
 async function buildPipeline(modelDir: string): Promise<FeaturePipeline> {
@@ -102,11 +117,20 @@ export function listInstalled(): EmbedderInstalled[] {
     if (!entry.isDirectory()) continue
     const dir = join(root, entry.name)
     if (!existsSync(join(dir, 'model.onnx')) || !existsSync(join(dir, 'meta.json'))) continue
-    const meta = JSON.parse(readFileSync(join(dir, 'meta.json'), 'utf8')) as {
-      id: string
-      installedAt: number
+    // A corrupt meta.json in one folder must not sink the whole list — skip it.
+    try {
+      const meta = JSON.parse(readFileSync(join(dir, 'meta.json'), 'utf8')) as {
+        id: string
+        installedAt: number
+      }
+      installed.push({
+        id: meta.id,
+        installedAt: meta.installedAt,
+        sizeBytes: folderSizeBytes(dir),
+      })
+    } catch {
+      continue
     }
-    installed.push({ id: meta.id, installedAt: meta.installedAt, sizeBytes: folderSizeBytes(dir) })
   }
   return installed
 }

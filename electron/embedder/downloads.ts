@@ -19,6 +19,9 @@ type DownloadArgs = {
 
 const DISK_ERROR_CODES = new Set(['ENOSPC', 'EDQUOT', 'EACCES', 'EROFS', 'EMFILE', 'ENFILE'])
 
+// Emit progress at most every 256KB (plus a terminal emit) to bound IPC chatter.
+const PROGRESS_INTERVAL_BYTES = 256 * 1024
+
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -36,6 +39,10 @@ async function hashExistingBytes(hash: ReturnType<typeof createHash>, path: stri
   for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer)
 }
 
+// Assumes one in-flight download per file: the download dialog serializes the
+// catalog's files, so a single .part per fileName is never contended. A future
+// caller (e.g. M7.1's null-hash path) must preserve that — concurrent writers to
+// the same .part would corrupt both the file and its running hash.
 export async function downloadFile(args: DownloadArgs): Promise<DownloadResult> {
   const { url, destDir, fileName, expectedSha256, onProgress } = args
   const finalPath = join(destDir, fileName)
@@ -57,6 +64,26 @@ export async function downloadFile(args: DownloadArgs): Promise<DownloadResult> 
     )
   } catch (error) {
     return { ok: false, reason: 'network', message: messageOf(error) }
+  }
+
+  if (response.status === 416) {
+    // The .part is already >= the server's file size. If it verifies, it's a
+    // complete download that never got renamed; otherwise it's stale — discard
+    // and restart from scratch (the removed .part means the retry can't 416 again).
+    if (expectedSha256 !== null) {
+      const existingHash = createHash('sha256')
+      await hashExistingBytes(existingHash, partPath)
+      if (existingHash.digest('hex') === expectedSha256.toLowerCase()) {
+        try {
+          await rename(partPath, finalPath)
+        } catch (error) {
+          return { ok: false, reason: 'disk', message: messageOf(error) }
+        }
+        return { ok: true }
+      }
+    }
+    await rm(partPath, { force: true })
+    return downloadFile(args)
   }
 
   if (response.status !== 200 && response.status !== 206) {
@@ -90,6 +117,7 @@ export async function downloadFile(args: DownloadArgs): Promise<DownloadResult> 
     return { ok: false, reason: 'disk', message: messageOf(error) }
   }
 
+  let lastEmitted = 0
   try {
     const reader = response.body.getReader()
     for (;;) {
@@ -98,7 +126,10 @@ export async function downloadFile(args: DownloadArgs): Promise<DownloadResult> 
       hash.update(value)
       await handle.write(value)
       received += value.byteLength
-      onProgress?.(received, total)
+      if (received - lastEmitted >= PROGRESS_INTERVAL_BYTES) {
+        onProgress?.(received, total)
+        lastEmitted = received
+      }
     }
   } catch (error) {
     // A dropped connection leaves the .part in place so a later call can resume;
@@ -109,6 +140,8 @@ export async function downloadFile(args: DownloadArgs): Promise<DownloadResult> 
   }
 
   await handle.close()
+
+  if (received !== lastEmitted) onProgress?.(received, total)
 
   if (expectedSha256 !== null && hash.digest('hex') !== expectedSha256.toLowerCase()) {
     await rm(partPath, { force: true })

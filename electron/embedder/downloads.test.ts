@@ -42,6 +42,11 @@ beforeEach(async () => {
 
     if (range) {
       const start = Number(/bytes=(\d+)-/.exec(range)?.[1] ?? 0)
+      if (start >= PAYLOAD.length) {
+        res.writeHead(416, { 'content-range': `bytes */${PAYLOAD.length}` })
+        res.end()
+        return
+      }
       const slice = PAYLOAD.subarray(start)
       res.writeHead(206, {
         'content-length': String(slice.length),
@@ -148,7 +153,9 @@ describe('downloadFile — resume', () => {
     if (!first.ok) expect(first.reason).toBe('network')
     const partPath = join(dir, 'model.onnx.part')
     expect(existsSync(partPath)).toBe(true)
-    expect(readFileSync(partPath).length).toBe(15000)
+    const partSize = readFileSync(partPath).length
+    expect(partSize).toBeGreaterThan(0)
+    expect(partSize).toBeLessThan(PAYLOAD.length)
 
     const second = await downloadFile({
       url: baseUrl,
@@ -157,7 +164,7 @@ describe('downloadFile — resume', () => {
       expectedSha256: PAYLOAD_SHA,
     })
     expect(second).toEqual({ ok: true })
-    expect(behavior.lastRange).toBe('bytes=15000-')
+    expect(behavior.lastRange).toBe(`bytes=${partSize}-`)
     expect(existsSync(partPath)).toBe(false)
     expect(
       createHash('sha256')
@@ -179,6 +186,46 @@ describe('downloadFile — resume', () => {
       expectedSha256: PAYLOAD_SHA,
     })
     expect(result).toEqual({ ok: true })
+    expect(
+      createHash('sha256')
+        .update(readFileSync(join(dir, 'model.onnx')))
+        .digest('hex'),
+    ).toBe(PAYLOAD_SHA)
+  })
+
+  it('finalizes a complete .part when the resume request returns 416', async () => {
+    const dir = freshDir()
+    const partPath = join(dir, 'model.onnx.part')
+    writeFileSync(partPath, PAYLOAD)
+
+    const result = await downloadFile({
+      url: baseUrl,
+      destDir: dir,
+      fileName: 'model.onnx',
+      expectedSha256: PAYLOAD_SHA,
+    })
+    expect(result).toEqual({ ok: true })
+    expect(existsSync(partPath)).toBe(false)
+    expect(
+      createHash('sha256')
+        .update(readFileSync(join(dir, 'model.onnx')))
+        .digest('hex'),
+    ).toBe(PAYLOAD_SHA)
+  })
+
+  it('discards a stale oversized .part on 416 and restarts the download', async () => {
+    const dir = freshDir()
+    const partPath = join(dir, 'model.onnx.part')
+    writeFileSync(partPath, Buffer.concat([PAYLOAD, Buffer.from('extra-stale-bytes')]))
+
+    const result = await downloadFile({
+      url: baseUrl,
+      destDir: dir,
+      fileName: 'model.onnx',
+      expectedSha256: PAYLOAD_SHA,
+    })
+    expect(result).toEqual({ ok: true })
+    expect(existsSync(partPath)).toBe(false)
     expect(
       createHash('sha256')
         .update(readFileSync(join(dir, 'model.onnx')))

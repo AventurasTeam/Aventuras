@@ -13,7 +13,7 @@ import {
 import type { DbProxyMethod } from './db/types'
 import { deletePartial, downloadFile, persistInstall } from './embedder/downloads'
 import { embeddersRoot, modelDir } from './embedder/paths'
-import { embed as embedderEmbed, listInstalled, smokeTest } from './embedder/service'
+import { embed as embedderEmbed, evictPipeline, listInstalled, smokeTest } from './embedder/service'
 import type { EmbedderAttestation } from './embedder/types'
 
 const isDev = !app.isPackaged
@@ -133,6 +133,16 @@ function createWindow(): void {
   }
 }
 
+function requireModelDir(modelId: string): string {
+  try {
+    return modelDir(modelId)
+  } catch (error) {
+    throw new Error(
+      `Invalid model id "${modelId}": ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+}
+
 app.whenReady().then(async () => {
   await initDb()
   applyContentSecurityPolicy()
@@ -183,13 +193,15 @@ app.whenReady().then(async () => {
         destDir,
         fileName: args.fileName,
         expectedSha256: args.expectedSha256,
-        onProgress: (bytesReceived, bytesTotal) =>
+        onProgress: (bytesReceived, bytesTotal) => {
+          if (event.sender.isDestroyed()) return
           event.sender.send('embedder:download-progress', {
             modelId: args.modelId,
             fileName: args.fileName,
             bytesReceived,
             bytesTotal,
-          }),
+          })
+        },
       })
     },
   )
@@ -197,15 +209,17 @@ app.whenReady().then(async () => {
     'embedder:persist-install',
     (_e, args: { modelId: string; licenseText: string; attestation: EmbedderAttestation }) =>
       persistInstall({
-        destDir: modelDir(args.modelId),
+        destDir: requireModelDir(args.modelId),
         modelId: args.modelId,
         licenseText: args.licenseText,
         attestation: args.attestation,
       }),
   )
-  ipcMain.handle('embedder:delete-partial', (_e, args: { modelId: string }) =>
-    deletePartial(modelDir(args.modelId)),
-  )
+  ipcMain.handle('embedder:delete-partial', (_e, args: { modelId: string }) => {
+    const dir = requireModelDir(args.modelId)
+    evictPipeline(dir)
+    return deletePartial(dir)
+  })
   ipcMain.handle('embedder:root', () => embeddersRoot())
 
   createWindow()
