@@ -13,12 +13,19 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+// AbortSignal.timeout is a static Hermes has historically lacked; build the
+// same behavior from AbortController + setTimeout so this (shared,
+// first-call-in-flow) module doesn't depend on it.
+function fetchWithTimeout(url: string): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer))
+}
+
 async function fetchLicenseName(id: string, revision: string): Promise<string> {
   let res: Response
   try {
-    res = await fetch(`${HF_ORIGIN}/api/models/${id}/revision/${revision}`, {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    })
+    res = await fetchWithTimeout(`${HF_ORIGIN}/api/models/${id}/revision/${revision}`)
   } catch (error) {
     throw new Error(`Couldn't reach the model source: ${messageOf(error)}`)
   }
@@ -44,9 +51,7 @@ function stripFrontmatter(markdown: string): string {
 async function fetchLicenseText(id: string, revision: string): Promise<string> {
   let res: Response
   try {
-    res = await fetch(`${HF_ORIGIN}/${id}/raw/${revision}/README.md`, {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    })
+    res = await fetchWithTimeout(`${HF_ORIGIN}/${id}/raw/${revision}/README.md`)
   } catch (error) {
     throw new Error(`Couldn't reach the model source: ${messageOf(error)}`)
   }

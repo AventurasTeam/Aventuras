@@ -65,11 +65,18 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
       const row = findPlanRow(plan, { url, targetPath })
       const dir = modelDir(entry.id)
       if (!dir.exists) dir.create({ intermediates: true })
-      const destination = new File(dir, row.fileName)
+
+      // Stage to `<fileName>.part` and rename into place only once the
+      // transfer completes, so an interrupted download never leaves a
+      // partial file sitting at the canonical install path. Not a resume
+      // across attempts (pending decision) — any leftover `.part` from a
+      // prior attempt is discarded and this one starts clean.
+      const partFile = new File(dir, `${row.fileName}.part`)
+      if (partFile.exists) partFile.delete()
 
       const resumable = createDownloadResumable(
         row.url,
-        destination.uri,
+        partFile.uri,
         {},
         ({ totalBytesWritten, totalBytesExpectedToWrite }) => {
           onProgress(totalBytesWritten, totalBytesExpectedToWrite)
@@ -83,6 +90,8 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
       if (result.status < 200 || result.status >= 300) {
         throw new Error(`Unexpected status ${result.status} downloading ${row.fileName}`)
       }
+
+      partFile.rename(row.fileName)
     },
 
     // Native has no separate stream-time verification (unlike desktop, which
@@ -93,7 +102,10 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
     async computeSha256(filePath) {
       const row = findPlanRow(plan, { url: filePath, targetPath: filePath })
       const dir = modelDir(entry.id)
-      return hashFile(new File(dir, row.fileName))
+      // Mirrors desktop's `expectedSha256.toLowerCase()` tolerance (electron/
+      // embedder/downloads.ts) — the container compares this against the
+      // catalog's expected hash with a strict `!==`.
+      return hashFile(new File(dir, row.fileName)).toLowerCase()
     },
 
     // `ep` isn't forwarded: this driver is created for the catalog install

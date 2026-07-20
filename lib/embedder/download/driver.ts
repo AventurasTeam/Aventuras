@@ -46,6 +46,9 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
 
     async downloadFile({ url, targetPath, onProgress }) {
       const row = findPlanRow(plan, { url, targetPath })
+      // A retry must not inherit a stale mismatch flag from a prior attempt
+      // at this same file.
+      mismatchedRepoPaths.delete(row.repoPath)
       const bridge = resolveBridge()
 
       // Subscribe before invoking the download so no early progress event is
