@@ -240,7 +240,7 @@ erDiagram
     }
     %% UNIQUE(branch_id, target_kind, target_id, field, model_id)
     %% Not delta-logged — embeddings are deterministic from source content. See docs/memory/retrieval.md → Storage
-    %% Physical storage: per-(type, dim) sqlite-vec `vec0` virtual tables (entities_vec_384, lore_vec_768, ...) — vec0 vector columns are fixed-dim, so each dim gets its own table family. branch_id is a partition key, model_id a metadata column, source_hash an auxiliary column; dim is encoded in the table name, not stored per row. The polymorphic shape above is the logical view. See docs/memory/retrieval.md → Storage
+    %% Physical storage: per-(type, dim) sqlite-vec `vec0` virtual tables (entities_vec_384, lore_vec_768, ...) — vec0 vector columns are fixed-dim, so each dim gets its own table family. The primary key is a synthetic `pk` (`<branch_id>:<id>` composite) since vec0 enforces primary keys globally across partitions, not scoped by partition key, so a bare source-row id would collide when branch forks copy rows; branch_id is a partition key, model_id and id are metadata columns, source_hash an auxiliary column; dim is encoded in the table name, not stored per row. The polymorphic shape above is the logical view. See docs/memory/retrieval.md → Storage
 
     probe_captures {
         text id PK
