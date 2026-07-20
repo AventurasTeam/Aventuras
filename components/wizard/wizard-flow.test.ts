@@ -20,6 +20,16 @@ import { openingOutputSchema } from '@/lib/wizard'
 
 import { finishWizard } from './finish'
 
+// The embed helper has its own suite; here it's stubbed so the seam-integration
+// path never reaches a real local model load.
+vi.mock('@/lib/embedder', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return { ...actual, embedAndBuildVecOps: vi.fn(async () => []) }
+})
+
+const LOCAL_MODEL = 'Xenova/all-MiniLM-L6-v2'
+const EMBED_CTX = { exec: async () => {}, resolveProvider: () => undefined }
+
 // Consolidated full-flow integration test for Slice M2.3. Each unit (finish.ts,
 // createStoryWithBranch, session/draft actions, the structured-output parse
 // path, IdBiMap/substitution) already has its own suite — this file proves the
@@ -29,7 +39,13 @@ import { finishWizard } from './finish'
 // live provider call anywhere; "AI output" is a literal fixture string fed
 // through the same parseStructured/parseAndSubstitute path the real call uses.
 
-const APP_DEFAULTS = { defaultStorySettings: {}, embeddingModelId: null }
+const APP_DEFAULTS = {
+  defaultStorySettings: {},
+  embeddingModelId: LOCAL_MODEL,
+  embeddingProviderId: null,
+  providers: [],
+  installedLocalIds: [LOCAL_MODEL],
+}
 
 type MakeStateInput = {
   mode?: WizardWorkingState['definition']['mode']
@@ -77,6 +93,7 @@ describe('wizard full-flow integration', () => {
       ctx,
       navigate,
       APP_DEFAULTS,
+      EMBED_CTX,
       1000,
     )
 
@@ -118,6 +135,7 @@ describe('wizard full-flow integration', () => {
       ctx,
       vi.fn(),
       APP_DEFAULTS,
+      EMBED_CTX,
       2000,
     )
 
@@ -173,6 +191,7 @@ describe('wizard full-flow integration', () => {
         ctx,
         vi.fn(),
         APP_DEFAULTS,
+        EMBED_CTX,
         3000,
       )
 
@@ -213,6 +232,7 @@ describe('wizard full-flow integration', () => {
         ctx,
         vi.fn(),
         APP_DEFAULTS,
+        EMBED_CTX,
         4000,
       )
 
@@ -278,7 +298,15 @@ describe('wizard full-flow integration', () => {
     expect(preFinishStory.status).toBe('draft')
 
     const navigate = vi.fn()
-    const result = await finishWizard(loaded!, ctx, navigate, APP_DEFAULTS, 2000, storyId)
+    const result = await finishWizard(
+      loaded!,
+      ctx,
+      navigate,
+      APP_DEFAULTS,
+      EMBED_CTX,
+      2000,
+      storyId,
+    )
 
     expect(result).toEqual({ status: 'ok', storyId })
     const [storyRow] = await db.select().from(stories).where(eq(stories.id, storyId))

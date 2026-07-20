@@ -1,8 +1,12 @@
-import { useLocalSearchParams, useRouter, type Href } from 'expo-router'
-import { useEffect, useRef, useState } from 'react'
-import { BackHandler, Platform } from 'react-native'
+import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { BackHandler, Platform, View } from 'react-native'
 
-import { finishWizard } from '@/components/wizard/finish'
+import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
+import { Text } from '@/components/ui/text'
+import { EmbedderGateBlocked } from '@/components/wizard/embedder-gate-blocked'
+import { finishWizard, type EmbedderGateBlockedReason } from '@/components/wizard/finish'
 import { StepCalendar } from '@/components/wizard/step-calendar'
 import { StepFrame } from '@/components/wizard/step-frame'
 import { StepOpening } from '@/components/wizard/step-opening'
@@ -12,15 +16,25 @@ import {
   type StepValidityParams,
 } from '@/components/wizard/wizard-nav-logic'
 import { WizardShell } from '@/components/wizard/wizard-shell'
-import { saveLiveSession, saveStoryDraft } from '@/lib/actions'
+import { clearLiveSession, saveLiveSession, saveStoryDraft } from '@/lib/actions'
 import { DEFAULT_CALENDAR_ID, getCalendar } from '@/lib/calendar'
-import { db, emptyWorkingState, runInTransaction } from '@/lib/db'
+import { db, emptyWorkingState, execRaw, runInTransaction } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
+import { listInstalledLocal, resolveEmbedderGate } from '@/lib/embedder'
 import { t } from '@/lib/i18n'
 import { appSettingsStore, wizardStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 import { runAction } from '@/lib/utils'
 
 const ctx = { db, runInTransaction }
+
+// The embed step's store-coupled seams (finish.ts stays store-free): raw DDL exec
+// and provider-instance lookup from the live app-settings snapshot.
+const embedCtx = {
+  exec: execRaw,
+  resolveProvider: (providerId: string) =>
+    appSettingsStore.getAppSettings().providers.find((p) => p.id === providerId),
+}
 
 const AUTOSAVE_DEBOUNCE_MS = 500
 const EMPTY_STATE_JSON = JSON.stringify(emptyWorkingState())
@@ -30,6 +44,29 @@ const FINISH_REASON_KEY = {
   opening: 'wizard:finish.missing.opening',
   lead: 'wizard:finish.missing.lead',
 } as const
+
+type GateState =
+  | { status: 'pending' }
+  | { status: 'ok' }
+  | { status: 'blocked'; reason: EmbedderGateBlockedReason }
+
+async function resolveEntryGate(): Promise<GateState> {
+  const { embeddingModelId, embeddingProviderId, defaultStorySettings, providers } =
+    appSettingsStore.getAppSettings()
+  let installedIds: string[] = []
+  try {
+    installedIds = (await listInstalledLocal()).map((model) => model.id)
+  } catch (err) {
+    logger.warn('embedder.list_installed_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+  const result = resolveEmbedderGate(
+    { embeddingModelId, embeddingProviderId, defaultStorySettings, providers },
+    installedIds,
+  )
+  return result.usable ? { status: 'ok' } : { status: 'blocked', reason: result.reason }
+}
 
 export default function WizardRoute() {
   const router = useRouter()
@@ -48,6 +85,23 @@ export default function WizardRoute() {
 
   const goNext = () => wizardStore.setStep(step === 2 ? 5 : step + 1)
   const goBack = () => wizardStore.setStep(step === 5 ? 2 : step - 1)
+
+  // Entry hard gate (wizard.md → Embedder-unavailable): no usable embedder blocks
+  // the wizard outright. Focus-aware so returning from Settings (having fixed the
+  // embedder) re-checks; the `cancelled` guard drops a stale in-flight resolve.
+  const [gate, setGate] = useState<GateState>({ status: 'pending' })
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false
+      setGate({ status: 'pending' })
+      void resolveEntryGate().then((next) => {
+        if (!cancelled) setGate(next)
+      })
+      return () => {
+        cancelled = true
+      }
+    }, []),
+  )
 
   // OS back = Cancel (platform.md → OS back integration): Android hardware
   // back fires the same preserve-session-and-return-to-story-list semantics
@@ -132,22 +186,35 @@ export default function WizardRoute() {
   // late); `isFinishing` drives the button's disabled state for feedback.
   const finishingRef = useRef(false)
   const [isFinishing, setIsFinishing] = useState(false)
+  const [embedFailure, setEmbedFailure] = useState<{ message: string } | null>(null)
 
   const finish = () => {
     if (finishingRef.current) return
     finishingRef.current = true
     setIsFinishing(true)
+    setEmbedFailure(null)
     suppressAutosave()
-    const { defaultStorySettings, embeddingModelId } = appSettingsStore.getAppSettings()
+    const { defaultStorySettings, embeddingModelId, embeddingProviderId, providers } =
+      appSettingsStore.getAppSettings()
     runAction(
-      finishWizard(
-        wizardStore.getWizard().state,
-        ctx,
-        (branchId) => router.replace(`/reader-composer/${branchId}` as Href),
-        { defaultStorySettings, embeddingModelId },
-        undefined,
-        sourceDraftId ?? undefined,
-      )
+      listInstalledLocal()
+        .then((installed) =>
+          finishWizard(
+            wizardStore.getWizard().state,
+            ctx,
+            (branchId) => router.replace(`/reader-composer/${branchId}` as Href),
+            {
+              defaultStorySettings,
+              embeddingModelId,
+              embeddingProviderId,
+              providers,
+              installedLocalIds: installed.map((model) => model.id),
+            },
+            embedCtx,
+            undefined,
+            sourceDraftId ?? undefined,
+          ),
+        )
         .then((result) => {
           if (result.status === 'ok') {
             wizardStore.reset()
@@ -155,10 +222,22 @@ export default function WizardRoute() {
             autosaveSuppressedRef.current = false
             return
           }
-          const fields = result.reasons
-            .map((reason) => t(FINISH_REASON_KEY[reason as keyof typeof FINISH_REASON_KEY]))
-            .join(', ')
-          toast.error(t('wizard:finish.invalidList', { fields }))
+          if (result.status === 'invalid') {
+            const fields = result.reasons
+              .map((reason) => t(FINISH_REASON_KEY[reason as keyof typeof FINISH_REASON_KEY]))
+              .join(', ')
+            toast.error(t('wizard:finish.invalidList', { fields }))
+            flushAutosave()
+            return
+          }
+          if (result.status === 'embed-blocked') {
+            // The embedder was removed mid-session; drop back to the entry-gate
+            // surface (same rendering) so the fix path is the settings route.
+            setGate({ status: 'blocked', reason: result.reason })
+            flushAutosave()
+            return
+          }
+          setEmbedFailure({ message: result.message })
           flushAutosave()
         })
         .catch((err) => {
@@ -171,6 +250,25 @@ export default function WizardRoute() {
         }),
       {
         event: 'action_layer.wizard_finish_failed',
+        toastMessage: t('wizard:finish.failed'),
+      },
+    )
+  }
+
+  // Embed-failure Cancel (wizard.md → Embedder-unavailable): abandons the wizard
+  // and clears the auto-saved session — unlike the chrome ← Cancel, which
+  // preserves it. Uses the existing clear-session action; a resumed draft's
+  // stories row is left intact (no draft-delete action exists yet).
+  const cancelAfterEmbedFailure = () => {
+    suppressAutosave()
+    runAction(
+      clearLiveSession(ctx).then(() => {
+        wizardStore.reset()
+        autosaveSuppressedRef.current = false
+        router.back()
+      }),
+      {
+        event: 'action_layer.wizard_live_session_cleanup_failed',
         toastMessage: t('wizard:finish.failed'),
       },
     )
@@ -196,6 +294,17 @@ export default function WizardRoute() {
     )
   }
 
+  if (gate.status === 'pending') {
+    return (
+      <View className="flex-1 items-center justify-center">
+        <Spinner />
+      </View>
+    )
+  }
+  if (gate.status === 'blocked') {
+    return <EmbedderGateBlocked reason={gate.reason} />
+  }
+
   return (
     <WizardShell
       step={step}
@@ -214,7 +323,32 @@ export default function WizardRoute() {
       ) : step === 2 ? (
         <StepCalendar />
       ) : (
-        <StepOpening onSetupAssist={() => router.push('/settings' as Href)} />
+        <>
+          <StepOpening onSetupAssist={() => router.push('/settings' as Href)} />
+          {embedFailure && (
+            <View className="mt-4 gap-3 rounded-md border border-danger bg-bg-base p-4">
+              <Text className="text-sm font-medium text-danger">
+                {t('wizard:finish.embedFailed.title')}
+              </Text>
+              <Text className="text-sm text-fg-secondary">{embedFailure.message}</Text>
+              <View className="flex-row flex-wrap gap-2">
+                <Button size="sm" onPress={finish} loading={isFinishing}>
+                  <Text>{t('wizard:finish.embedFailed.retry')}</Text>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onPress={() => router.push('/settings?tab=memory' as Href)}
+                >
+                  <Text>{t('wizard:finish.embedFailed.openSettings')}</Text>
+                </Button>
+                <Button size="sm" variant="ghost" onPress={cancelAfterEmbedFailure}>
+                  <Text>{t('wizard:finish.embedFailed.cancel')}</Text>
+                </Button>
+              </View>
+            </View>
+          )}
+        </>
       )}
     </WizardShell>
   )

@@ -47,7 +47,24 @@
       "opening": "an opening",
       "lead": "a lead character name"
     },
-    "failed": "Couldn't create the story."
+    "failed": "Couldn't create the story.",
+    "embedFailed": {
+      "title": "Couldn't initialize the embedder",
+      "retry": "Retry",
+      "openSettings": "Open Memory settings",
+      "cancel": "Cancel"
+    }
+  },
+  "embedGate": {
+    "title": "Set up an embedder to create stories",
+    "openSettings": "Open Memory settings",
+    "back": "← Back",
+    "body": {
+      "no-model": "Choose an embedding model before creating a story. Memory retrieval needs one to index your cast and world.",
+      "unknown-model": "The selected embedding model isn't recognized. Pick a supported model to continue.",
+      "model-not-installed": "The selected embedding model isn't downloaded yet. Install it to continue.",
+      "no-provider": "The embedding provider isn't configured. Select or re-add a provider to continue."
+    }
   },
   "errors": {
     "saveDraftFailed": "Couldn't save the draft. Please try again."
