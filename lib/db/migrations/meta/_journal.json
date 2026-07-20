@@ -36,6 +36,13 @@
       "when": 1783082881326,
       "tag": "0004_nice_micromacro",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1784565339813,
+      "tag": "0005_embedder_vec0",
+      "breakpoints": true
     }
   ]
 }

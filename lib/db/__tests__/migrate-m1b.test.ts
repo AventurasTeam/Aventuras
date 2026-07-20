@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 
+import { getLoadablePath } from 'sqlite-vec'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -188,7 +189,8 @@ describe('M1.5 migration', () => {
   // its singleton, which is the state of every real incremental upgrade.
   it('applies later migrations onto an already-seeded app_settings', () => {
     const tags = migrationTags()
-    const sqlite = new DatabaseSync(':memory:')
+    const sqlite = new DatabaseSync(':memory:', { allowExtension: true })
+    sqlite.loadExtension(getLoadablePath())
     sqlite.exec('PRAGMA foreign_keys = ON;')
 
     applyMigration(sqlite, tags[0]) // creates app_settings

@@ -46,7 +46,8 @@ async function main() {
     sqlite.enableLoadExtension(true)
     sqlite.loadExtension(getLoadablePath())
   } catch (err) {
-    // Non-fatal: no current migration needs sqlite-vec (test-db migrates without it).
+    // Non-fatal here — migrate() below will throw its own error if a vec0
+    // statement actually needs the extension and it failed to load.
     console.warn('[seed] sqlite-vec load skipped:', (err as Error).message)
   } finally {
     sqlite.enableLoadExtension(false) // re-close the surface after loading
