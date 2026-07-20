@@ -13,7 +13,9 @@ function resolveBridge() {
   return bridge
 }
 
-function envelopeToError(envelope: EmbedderErrorEnvelope): EmbedderInitError | EmbedderCallError {
+export function envelopeToError(
+  envelope: EmbedderErrorEnvelope,
+): EmbedderInitError | EmbedderCallError {
   // instanceof can't survive the IPC boundary — the {kind} tag is the contract.
   return envelope.kind === 'init'
     ? new EmbedderInitError(envelope.message)

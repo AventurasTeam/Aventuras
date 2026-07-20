@@ -1,5 +1,5 @@
 import { Directory, File } from 'expo-file-system'
-import { InferenceSession, Tensor } from 'onnxruntime-react-native'
+import type { InferenceSession, Tensor } from 'onnxruntime-react-native'
 
 import { embeddersRoot, modelDir } from './paths.native'
 import { meanPoolAndNormalize } from './pooling'
@@ -18,7 +18,24 @@ type TokenizerFn = (
   options: { add_special_tokens: boolean; return_token_type_ids: boolean; truncation: boolean },
 ) => Encoded
 
-type SessionBundle = { session: InferenceSession; tokenizer: TokenizerFn }
+// The slice of onnxruntime-react-native this runtime touches. A structural surface
+// (rather than `typeof import(...)`, which the type-import lint forbids, or a banned
+// namespace import) keeps the module off the top-level import graph entirely.
+type OrtRuntime = {
+  InferenceSession: { create(path: string): Promise<InferenceSession> }
+  Tensor: new (type: 'int64', data: BigInt64Array, dims: readonly number[]) => Tensor
+}
+type SessionBundle = { session: InferenceSession; tokenizer: TokenizerFn; ort: OrtRuntime }
+
+// onnxruntime-react-native's module-eval performs a native JSI install, so it must
+// never be imported at the top level — the lib/embedder barrel is reachable from
+// config-presence checks that run before the model is loaded (and before the
+// dev-client is rebuilt). Load it lazily, only inside the session-building path.
+let ortModulePromise: Promise<OrtRuntime> | undefined
+function loadOrt(): Promise<OrtRuntime> {
+  ortModulePromise ??= import('onnxruntime-react-native') as unknown as Promise<OrtRuntime>
+  return ortModulePromise
+}
 
 // Lazy per-model session+tokenizer cache. A model isn't loaded until first embed;
 // a failed load evicts itself so a later call can retry after the user reinstalls.
@@ -55,21 +72,19 @@ async function buildBundle(modelId: string): Promise<SessionBundle> {
   // (e.g. Gemma's model_quantized.onnx_data) load automatically from alongside.
   const modelPath = new File(dir, 'model.onnx').uri.replace(/^file:\/\//, '')
 
+  const ort = await loadOrt()
   const [session, tokenizer] = await Promise.all([
-    InferenceSession.create(modelPath),
+    ort.InferenceSession.create(modelPath),
     loadTokenizer(dir),
   ])
-  return { session, tokenizer }
-}
-
-function toIdTensor(encoded: EncodedTensor): Tensor {
-  return new Tensor('int64', encoded.data, encoded.dims)
+  return { session, tokenizer, ort }
 }
 
 async function embedOne(
   bundle: SessionBundle,
   text: string,
 ): Promise<{ vector: Float32Array; dim: number }> {
+  const { Tensor } = bundle.ort
   const encoded = bundle.tokenizer(text, {
     add_special_tokens: true,
     return_token_type_ids: true,
@@ -80,7 +95,7 @@ async function embedOne(
   for (const name of bundle.session.inputNames) {
     const source = encoded[name as keyof Encoded]
     if (source) {
-      feeds[name] = toIdTensor(source)
+      feeds[name] = new Tensor('int64', source.data, source.dims)
     } else if (name === 'token_type_ids') {
       // A tokenizer that suppresses type ids still satisfies a model that wants
       // them: a single segment is all-zero type ids.

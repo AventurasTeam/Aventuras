@@ -29,3 +29,11 @@ slice-planning gate forces its resolution before that slice is planned.
   id-allocation mechanic the section describes is correct either way; the
   fix is dropping or rewording the parenthetical. Canonical edit — route
   through a design / cleanup pass, not a planning commit.
+- **Native embedder session cache needs eviction on model removal.**
+  `lib/embedder/local/runtime.native.ts` holds a lazy `bundles`
+  `Map<modelId, SessionBundle>`; a removed then re-downloaded model reuses
+  its dir, so without eviction the cache keeps serving inferences from the
+  deleted model. Desktop already wires `evictPipeline` into
+  `delete-partial` (Task 6); the native map needs a symmetric evict hook
+  when the M7.1 model-remove flow lands. Surfaced by M3.1a Task 7
+  (2026-07-20).
