@@ -53,10 +53,22 @@ describe('EMBEDDER_CATALOG', () => {
     const gemma = getCatalogEntry('onnx-community/embeddinggemma-300m-ONNX')
     expect(gemma).toBeDefined()
     expect(gemma?.files['model_quantized.onnx_data']).toBe('onnx/model_quantized.onnx_data')
-    expect(Object.keys(gemma?.expectedSha256 ?? {})).toHaveLength(4)
+    expect(Object.keys(gemma?.expectedSha256 ?? {})).toHaveLength(5)
     for (const hash of Object.values(gemma?.expectedSha256 ?? {})) {
       expect(hash).toMatch(SHA256_RE)
     }
+  })
+
+  it('every catalog entry includes config.json in its files map', () => {
+    for (const model of EMBEDDER_CATALOG.models) {
+      expect(model.files['config.json']).toBe('config.json')
+      expect(model.expectedSha256['config.json']).toMatch(SHA256_RE)
+    }
+  })
+
+  it('MiniLM entry has exactly four expectedSha256 entries', () => {
+    const minilm = getCatalogEntry('Xenova/all-MiniLM-L6-v2')
+    expect(Object.keys(minilm?.expectedSha256 ?? {})).toHaveLength(4)
   })
 
   it('getCatalogEntry returns undefined for an unknown id', () => {
