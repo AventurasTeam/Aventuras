@@ -202,3 +202,13 @@ doc-amendment before Slice 2.5.
   [Slice 2.10](./milestones/02-first-user-loop/slices/10-recovery-ui.md) owns the
   parse-failure badge that renders this; confirm 2.10 also covers the tap-with-no-feedback
   interim (or accept silent-until-badge). Surfaced by Slice 2.7.
+- **`generation-pipeline.md → New-entity emission` "(or piggyback)"
+  parenthetical contradicts the memory write-set canon.** The section
+  opens "The classifier (or piggyback) creating a brand-new entity…", but
+  [`cadence.md → Concurrency`](../memory/cadence.md#concurrency) and
+  [`piggyback.md`](../memory/piggyback.md) give piggyback zero creation
+  rights — creation is classifier-only (disambiguation lives there by
+  design). Surfaced by the M3 promotion audit (2026-07-20). The
+  id-allocation mechanic the section describes is correct either way; the
+  fix is dropping or rewording the parenthetical. Canonical edit — route
+  through a design / cleanup pass, not a planning commit.

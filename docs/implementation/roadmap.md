@@ -15,8 +15,9 @@ defined `milestone.md`.
 - **Defined milestones** with full `milestone.md` files live under
   [`milestones/`](./milestones/README.md). Defined today: M1 (Spine),
   [M1.5 — Data foundation](./milestones/01b-data-foundation/milestone.md)
-  (inserted between M1 and M2; no renumber), and
-  [M2 — First user loop](./milestones/02-first-user-loop/milestone.md).
+  (inserted between M1 and M2; no renumber),
+  [M2 — First user loop](./milestones/02-first-user-loop/milestone.md),
+  and [M3 — Memory floor](./milestones/03-memory-floor/milestone.md).
   M1.5 front-loads
   the full relational schema, typed working-set stores, and Tier-1 CRUD
   arms, so the planned milestones below **no longer carry their own
@@ -138,161 +139,9 @@ M9.3.
 
 ### M3 — Memory floor
 
-**Goal.** The memory pipeline is online: piggyback writes scene
-metadata + structured tool calls during main generation; periodic
-classifier reconciles entities + lore + happenings + awareness in
-the background; retrieval surfaces relevant context into each
-turn's prompt. Stories made in M3 are coherent across a session.
-
-**Why now.** Real story data exists from M2; this milestone is
-where classifier prompt engineering and retrieval ranking get
-their first contact with real inputs. Lands before the rich UX
-because UX needs **populated** entity / awareness / happening data
-to render against (the tables + stores exist from M1.5; M3 fills them).
-
-**Likely slices.**
-
-- M3.1 — Embedder integration + the hard onboarding gate (story
-  creation requires embedder per
-  [`memory/model-management.md`](../memory/model-management.md));
-  lands the per-type vec0 `embeddings` virtual tables — the one
-  schema piece M1.5 deliberately excluded (the sqlite-vec
-  extension itself loads since M1.2);
-  embedder configuration in app settings;
-  `embedding_stale` opportunistic drain worker (makes "retry"
-  meaningful after embedder failure per
-  [`memory/retrieval.md → Compute lifecycle`](../memory/retrieval.md#compute-lifecycle));
-  `embedding_swap_target` two-phase stage-then-flip pipeline +
-  crash-recovery resume / cancel prompt on story-open (per
-  [`memory/retrieval.md → Model swap UX`](../memory/retrieval.md#model-swap-ux)).
-  Adds the Matryoshka effective-dim machinery — `effectiveDim`
-  resolution plus truncation + renorm at every embed-write; the
-  `matryoshkaSupported` / `matryoshkaDims` capability flags
-  already ship in the M1.5 app-settings Zod — per
-  [`memory/retrieval.md → Matryoshka effective dim`](../memory/retrieval.md#matryoshka-effective-dim)
-  and the top-bar staleness pill + Settings · Memory per-story
-  resolution panel per
-  [`memory/model-management.md → Staleness UI`](../memory/model-management.md#staleness-ui).
-  Embedder management UI extends in M7.1.
-- M3.2 — Piggyback layer: inline structured tool calls during
-  main generation; scene metadata writes;
-  entities + lore + happenings stub creation.
-- M3.3 — Periodic classifier: background pipeline; entity
-  reconciliation; awareness graph; happenings extraction. Drives the
-  `character_relationships` UPSERT-merge / canonical-ordering write
-  primitive landed in M1.5 per
-  [`data-model.md → Character-to-character relationships`](../data-model.md#character-to-character-relationships).
-  Classifier writes `metadata.worldTime` to each new entry —
-  first non-zero values flow through the calendar renderer
-  shipped in M2.5. Auto-retry policy (30s → 2m → 5m backoff,
-  3-strike failed-persistent state per
-  [`memory/classifier.md → Auto-retry policy`](../memory/classifier.md#auto-retry-policy))
-  - per-branch `classifier_status` persistence (the column landed in
-    M1.5; this slice writes lifecycle into it). Sets
-    `entities.name_collision_flag` on collision (the column landed in
-    M1.5; drives the M4 collision-review surface) per
-    [`memory/classifier.md → Disambiguation`](../memory/classifier.md#disambiguation-on-new-character-mentions).
-  - Survival-anchor logic (makes the classifier reversible-correct):
-    stamps `periodic_classifier` source + per-fact provenance into
-    `deltas.entry_id` (the `source` value landed in M1.5); maintains
-    `processedThrough` in `classifier_status` plus its reversal clamp;
-    and the reversal predicate that refines M2.5's naive suffix sweep
-    so a lagging fact about a surviving turn isn't over-reversed, per
-    [`data-model.md → Survival anchor`](../data-model.md#survival-anchor).
-  - In-flight classifier barrier for prose reversals (rollback,
-    regenerate, CTRL-Z). M2.2 brackets the rollback sweep with
-    `reversalInProgress` (selection runs inside the barrier), but the
-    `awaitRunTerminal` classifier-cancel drain lands here — it needs
-    `awaitRunTerminal` relocated from `lib/pipeline` into the
-    generation store (mirroring M2.2's gate move) so `lib/actions`
-    stays cycle-free, per
-    [`generation-pipeline.md → Prose reversals and the classifier barrier`](../generation-pipeline.md#prose-reversals-and-the-classifier-barrier).
-  - Happening reconcile cascades to the FK-less link tables: deleting
-    or merging a happening must also drop / reattach its
-    `happening_involvements` and `happening_awareness` rows. The M1.5
-    `deleteHappening` arm removes only the `happenings` row, orphaning
-    them — cascade lands with whichever consumes it first (this
-    reconcile or the M4 Plot delete-flow).
-- M3.4 — Retrieval: embedding queries; ranker; budgets;
-  context-bundle assembly into the per-turn prompt. Memory pack
-  templates extend the Liquid engine to inject retrieved bundles.
-  Per-injection `retrieval_count` increment on awareness rows
-  (the delta-logged column landed in M1.5; load-bearing for
-  chapter-close phase 3d in M5.2 per
-  [`memory/chapter-close.md → 3d awareness pin tuning`](../memory/chapter-close.md#3d--awareness-pin-tuning)).
-  Drives the `lore.keywords` column (distinct from `lore.tags`; landed
-  in M1.5) through the keyword-retrieval pathway per
-  [`memory/retrieval.md → Keywords schema`](../memory/retrieval.md#keywords-schema).
-  `js-tiktoken` install lands here as the first budget-accounting
-  consumer (per [`tech-stack.md`](../tech-stack.md)).
-- M3.5 — Minimal developer-only retrieval probe: log / inspect
-  retrieval scores during impl. User-facing probe surface
-  deferred to M7. Consumes the `probe_captures` table +
-  `app_settings.diagnostics.enabled` + `stories.settings.probe_mode_active`
-  (all landed in M1.5) and writes the first captures per
-  [`memory/probe.md → Schema delta`](../memory/probe.md#schema-delta).
-  Simulator-vs-prod-pass parity test ships alongside.
-- M3.6 — Wizard step 3 (lore editor) + step 4 (full bespoke cast
-  editor — all 4 per-kind editors with `▼ Visual` / `▼ More
-options` disclosures, status / lead / staged logic,
-  pick-from-cast pickers): pre-author opening's lore + entities
-  at story creation; opening generation consumes seeded context.
-  Refine / regenerate affordances on opening land here. The
-  wizard editor is bespoke (its own tier shape, excludes
-  classifier-managed fields per the authorship contract); not a
-  precursor to the world panel.
-- M3.7 — Next-turn suggestions: pipeline emission (sibling
-  `<suggestions>` block alongside narrative in piggyback mode
-  and/or alongside `<state>` in classifier mode per
-  [`reader-composer.md → Next-turn suggestions`](../ui/screens/reader-composer/reader-composer.md#next-turn-suggestions)),
-  reader-composer suggestions panel between AI replies and the
-  next composer input, `suggestionsEnabled` story setting toggle.
-  Adds the Story Settings · Composer categories editor (consuming
-  the shipped `SuggestionCategoriesEditor`) over
-  `app_settings.default_suggestion_categories` — the column and
-  its seed default landed in the M1.5 gate — plus a
-  `kind: 'suggestion-refresh'` pipeline declaration per
-  [`next-turn-suggestions exploration`](../explorations/2026-05-19-next-turn-suggestions.md).
-  Suggestion agent profile slot in app-settings extends M7.1.
-- M3.8 — Per-entry worldTime click-to-edit overlay (TierTupleInput)
-  - monotonicity-break flag (O(N) walk feeding
-    `worldTimeMonotonicityBreak` into EntryCard per
-    [`reader-composer.md → Per-entry world-time footer`](../ui/screens/reader-composer/reader-composer.md#per-entry-world-time-footer)).
-    Needs classifier writes from M3.3 to be useful.
-- M3.9 — CTRL-Z action-batched extension: extends M2.5's basic
-  single-action undo so undoing a prose turn reverses the positional
-  suffix from the turn's start — carrying its piggyback deltas, skipping
-  `periodic_classifier` deltas (never undo targets), and sparing
-  surviving turns' facts via the survival anchor — per
-  [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback).
-  Redo stack semantics unchanged.
-
-**Parallel paths.** Day-one startable: {M3.1} || {M3.2} || {M3.6} —
-M3.6's editor build needs only the M1.5 lore / entity layer and
-M2.3's wizard shell; the earlier "after M3.2" gate was about the
-classifier consuming seeded cast, which is verification, not a
-build dependency. M3.3 runs in parallel with M3.4 once M3.2's stub
-writes populate retrievable rows (M3.4 also needs M3.1's
-embeddings); M3.5 follows M3.4; M3.7 gates on M3.2 + M3.3; M3.8
-gates on M3.3; M3.9 gates on M3.3 (needs the survival-anchor
-reversal substrate).
-
-**Slice-authoring notes.** M3.3 as sketched exceeds the
-days-not-weeks sizing rule. First split to take: the reversal
-predicate and `processedThrough` clamp are undo-side code — move
-them to M3.9 (which owns undo semantics), leaving M3.3 the
-stamp / provenance side, and pin that seam explicitly since both
-slices touch the survival anchor. If M3.3 still stretches, its
-output processors (entity reconciliation vs awareness /
-happenings / cascade) can split against a pinned classifier
-structured-output shape.
-
-**Gates.** M2 (entries + real provider needed before classifier
-has anything to classify).
-
-**Scope: out.** Chapter-close, rich world panel, rich plot panel,
-multi-axis salience, pinning policy refinements, rich
-user-facing memory probe (M7).
+**Promoted** — defined in
+[`milestones/03-memory-floor/`](./milestones/03-memory-floor/milestone.md)
+(milestone + twelve slice docs).
 
 ---
 
@@ -787,11 +636,13 @@ the screen its goal requires; later milestones extend.
     basic edit / delete entry actions, rollback-confirm modal
     compound (single-entry cascade), markdown rendering pipeline,
     Harper.js spellcheck, CTRL-Z basic single-action undo.
-  - **M3** — Refine / regenerate affordances on entries (consume
-    memory context); next-turn suggestions panel between AI
-    replies and the composer (M3.7); per-entry worldTime
-    click-to-edit + monotonicity flag (M3.8); CTRL-Z
-    action-batched extension across classifier writes (M3.9).
+  - **M3** — Regenerate affordance on entries (M3.10; the earlier
+    "refine on entries" phrase was dropped at promotion — canon
+    defines refine only on the wizard opening); next-turn
+    suggestions panel between AI replies and the composer (M3.7);
+    per-entry worldTime click-to-edit + monotonicity flag (M3.8);
+    CTRL-Z action-batched extension across classifier writes
+    (M3.9).
   - **M4** — Peek drawer + awareness chips on entries.
   - **M5** — Chapter management affordances (insert break,
     navigate by chapter, chapter context badge); deep-rollback
@@ -853,9 +704,11 @@ explicit.
   - **M2.5** — Renderer (`worldTime + worldTimeOrigin → tier-tuple
 → Liquid render`) for reader chrome. Exercised meaningfully
     only after M3.3 begins writing non-zero `worldTime` values.
-  - **M3.3** — Classifier writes `metadata.worldTime` on each new
-    entry; first non-zero worldTime values flow through the
-    renderer.
+  - **M3.2** — the per-turn piggyback / fallback-classifier layer
+    writes `metadata.worldTime` on each new entry (entry metadata
+    is per-turn-owned per the cadence write-set table; an earlier
+    M3.3 attribution was corrected at M3 promotion); first
+    non-zero worldTime values flow through the renderer.
   - **M3.6** — Wizard's calendar-summary preview samples the
     renderer to show how dates will format.
   - **M5.3** — Chapter timeline time column consumes the renderer.
@@ -958,10 +811,11 @@ only.
 
 ### Milestones that may merge or split
 
-- **M3 + M4 might merge** if memory-pipeline implementation reveals
-  that the world / plot surfaces are needed mid-correctness-check
-  (e.g., human inspection of classifier output is faster than log
-  reads). Defer the decision until M3 is authored.
+- **M3 + M4 did not merge** — M3 was authored standalone
+  (2026-07-20). The mid-correctness-check inspection need is served
+  by M3.5's developer probe and by building M4 read surfaces early
+  against seeded rows per the look-ahead rule; M4 remains a
+  separate roadmap entry.
 - **M9 might split** if Storybook + per-surface audit + backup +
   ship gate are too much for one milestone. Natural split: M9a
   (Storybook + VI audit) → M9b (backup + ship).
