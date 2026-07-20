@@ -37,22 +37,13 @@ function buildEmbeddingModel(
       })
       return openaiCompatible.textEmbeddingModel(modelId)
     }
-    case 'stub': {
-      if (typeof __DEV__ !== 'undefined' && !__DEV__) {
-        throw new EmbedderInitError("Provider type 'stub' is not available in production builds")
-      }
-      const openaiCompatible = createOpenAICompatible({
-        name: provider.displayName,
-        apiKey: provider.apiKey || 'stub-key',
-        baseURL: provider.endpoint?.trim() || 'http://stub.local/v1',
-        fetch: fetchImpl,
-      })
-      return openaiCompatible.textEmbeddingModel(modelId)
-    }
     case 'anthropic':
       throw new EmbedderInitError('provider has no embedding endpoint')
     default:
-      // v1 provider embedding is openai-compatible endpoints only.
+      // v1 provider embedding is openai-compatible endpoints only; 'stub' has
+      // no embedding-shaped scenario fetch (lib/ai/stub/scenarios.ts is
+      // chat-shaped) so it falls through here too rather than attempting a
+      // real network call against a fake endpoint.
       throw new EmbedderInitError(
         `Provider type "${provider.type}" does not support an embedding endpoint`,
       )
@@ -77,7 +68,12 @@ export async function embedViaProvider(
     embeddings = (await embedMany({ model, values: texts })).embeddings
   } catch (err) {
     const { error } = classifyProviderError(err)
-    throw new EmbedderCallError(error.detail ?? error.reason, err)
+    const message = error.detail ?? error.reason
+    // Auth failure is a config problem, not a transient call failure — the
+    // session can't embed at all until the key is fixed, so it surfaces at
+    // Test Embedder like any other init error (see lib/embedder/types.ts).
+    if (error.reason === 'auth') throw new EmbedderInitError(message, err)
+    throw new EmbedderCallError(message, err)
   }
 
   const vectors = embeddings.map((values) => new Float32Array(values))

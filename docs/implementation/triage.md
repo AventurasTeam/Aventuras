@@ -37,3 +37,11 @@ slice-planning gate forces its resolution before that slice is planned.
   `delete-partial` (Task 6); the native map needs a symmetric evict hook
   when the M7.1 model-remove flow lands. Surfaced by M3.1a Task 7
   (2026-07-20).
+- **Ranker must convert vec0's L2 distance to cosine similarity.** The
+  `0005_embedder_vec0.sql` `vec0` tables declare no `distance_metric`, so
+  KNN ranks by raw L2; that's only equivalent to cosine ranking because
+  every stored and query vector is unit-norm — an invariant the C1 facade
+  (Task 9, landing next) enforces at write and query time, not the vec0
+  layer itself. Slice 3.4's ranker must convert each `distance` column back
+  to a similarity via `cos = 1 − d²/2` before building its trace, not treat
+  distance as already-cosine. Surfaced by M3.1a Task 8 (2026-07-20).

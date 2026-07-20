@@ -82,6 +82,24 @@ describe('embedViaProvider', () => {
     expect((caught as EmbedderInitError).kind).toBe('init')
   })
 
+  it('maps a 401 response to an init error, not a call error', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: { message: 'Invalid API key' } }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      }),
+    )
+
+    let caught: unknown
+    try {
+      await embedViaProvider(provider, 'text-embedding-3-small', ['a'])
+    } catch (err) {
+      caught = err
+    }
+    expect(caught).toBeInstanceOf(EmbedderInitError)
+    expect((caught as EmbedderInitError).kind).toBe('init')
+  })
+
   it('maps a network failure during embedMany to a call error', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network down'))
 
