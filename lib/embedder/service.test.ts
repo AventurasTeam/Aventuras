@@ -110,6 +110,20 @@ describe('embedTexts dim verification', () => {
     await expect(embedTexts(config, ['a'])).rejects.toThrow('expected 384, got 2')
   })
 
+  it('throws EmbedderCallError when the backend returns fewer vectors than texts', async () => {
+    vi.mocked(embedViaProvider).mockResolvedValue({ vectors: [new Float32Array([1, 0])], dim: 2 })
+    const config: EmbedderConfig = {
+      backend: 'provider',
+      providerId: 'prov-1',
+      modelId: 'm1',
+      dim: 2,
+    }
+
+    await expect(embedTexts(config, ['a', 'b'], 'document', provider)).rejects.toThrow(
+      'embedding count mismatch: expected 2 vectors, got 1',
+    )
+  })
+
   it('accepts the returned dim when config.dim is the 0 not-yet-probed sentinel', async () => {
     vi.mocked(embedViaProvider).mockResolvedValue({ vectors: [new Float32Array([3, 4])], dim: 2 })
     const config: EmbedderConfig = {
@@ -224,6 +238,29 @@ describe('embedAndBuildVecOps integration', () => {
       embedding_stale: number
     }
     expect(stale.embedding_stale).toBe(0)
+  })
+
+  it('rethrows a failing vec-table ensure as EmbedderCallError', async () => {
+    vi.mocked(embedLocal).mockResolvedValue({ vectors: [oneHot(384, 0)], dim: 384 })
+    const config: EmbedderConfig = { backend: 'local', modelId: MINILM, dim: 384 }
+
+    const failingExec = async () => {
+      throw new Error('disk full')
+    }
+    await expect(
+      embedAndBuildVecOps(
+        config,
+        [{ kind: 'entity', id: 'e1', branchId: 'b1', fields: ['Kara'] }],
+        failingExec,
+      ),
+    ).rejects.toThrow('vec table ensure failed: disk full')
+    await expect(
+      embedAndBuildVecOps(
+        config,
+        [{ kind: 'entity', id: 'e1', branchId: 'b1', fields: ['Kara'] }],
+        failingExec,
+      ),
+    ).rejects.toBeInstanceOf(EmbedderCallError)
   })
 
   it('returns no ops for an empty row set', async () => {

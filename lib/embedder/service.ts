@@ -71,6 +71,14 @@ export async function embedTexts(
 
   const raw = await embedRaw(config, texts, intent, provider)
 
+  // A malformed provider response with the wrong vector count would silently
+  // misalign vectors onto rows downstream — reject it before that can happen.
+  if (raw.vectors.length !== texts.length) {
+    throw new EmbedderCallError(
+      `embedding count mismatch: expected ${texts.length} vectors, got ${raw.vectors.length}`,
+    )
+  }
+
   // Single funnel for every vector — the post-embed transform point where 3.1b's
   // Matryoshka truncation composes ahead of normalization.
   const vectors = raw.vectors.map((vector) => l2Normalize(vector))
@@ -89,6 +97,10 @@ export async function embedTexts(
  * dim drives both the ensure and the ops, so an unprobed provider (config.dim 0)
  * still targets the correct dim family.
  *
+ * The returned per-row `embedding_stale = 0` UPDATE assumes the source row
+ * already exists — either it pre-exists, or the caller splices these ops AFTER
+ * the source-row INSERTs in the same atomic batch.
+ *
  * `provider` is required for provider-backend configs (see embedTexts).
  */
 export async function embedAndBuildVecOps(
@@ -102,7 +114,14 @@ export async function embedAndBuildVecOps(
   const composites = rows.map((row) => compositeText(row.fields))
   const { vectors, dim } = await embedTexts(config, composites, 'document', provider)
 
-  await ensureVecTables(dim, exec)
+  try {
+    await ensureVecTables(dim, exec)
+  } catch (error) {
+    // Surface DDL failures as a typed call error so Task 13's catch renders the
+    // graceful failure surface instead of crashing on a raw exec rejection.
+    const message = error instanceof Error ? error.message : String(error)
+    throw new EmbedderCallError(`vec table ensure failed: ${message}`, error)
+  }
 
   const ops: SqlOp[] = []
   for (let i = 0; i < rows.length; i++) {
