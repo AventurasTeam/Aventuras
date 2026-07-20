@@ -1,5 +1,5 @@
 import { Check } from 'lucide-react-native'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { View } from 'react-native'
 
 import {
@@ -12,10 +12,10 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
+import { useInstalledModels, type InstalledModelInfo } from '@/hooks/use-installed-models'
 import {
   EMBEDDER_CATALOG,
   createEmbedderDownloadDriver,
-  listInstalledLocal,
   sanitizeModelDirName,
   testEmbedder,
   toDialogCatalogEntry,
@@ -25,8 +25,6 @@ import { t } from '@/lib/i18n'
 
 import { EmbedderDownloadDialog } from './embedder-download-dialog'
 import type { DialogDriver, DialogInit, DialogResolution } from './embedder-download-dialog-machine'
-
-type InstalledInfo = { id: string; sizeBytes: number }
 
 type LocalTestResult =
   | { ok: true; dim: number; ms: number }
@@ -47,7 +45,7 @@ function formatModelSize(bytes: number): string {
 
 type EmbeddingModelsPanelProps = {
   /** Injectable seam for stories/tests — defaults to lib/embedder's listInstalledLocal. */
-  listInstalled?: () => Promise<InstalledInfo[]>
+  listInstalled?: () => Promise<InstalledModelInfo[]>
   /** Injectable seam for stories/tests — defaults to lib/embedder's testEmbedder. */
   runTest?: RunTestFn
   /** Injectable seam for stories/tests — defaults to lib/embedder's createEmbedderDownloadDriver. */
@@ -55,22 +53,14 @@ type EmbeddingModelsPanelProps = {
 }
 
 export function EmbeddingModelsPanel({
-  listInstalled = listInstalledLocal,
+  listInstalled,
   runTest = testEmbedder,
   createDriver = createEmbedderDownloadDriver,
 }: EmbeddingModelsPanelProps) {
-  const [installed, setInstalled] = useState<InstalledInfo[] | null>(null)
-
-  const refresh = useCallback(() => {
-    void listInstalled().then(setInstalled)
-  }, [listInstalled])
-
-  useEffect(() => {
-    refresh()
-  }, [refresh])
+  const { installed, refresh } = useInstalledModels(listInstalled)
 
   const installedById = useMemo(() => {
-    const map = new Map<string, InstalledInfo>()
+    const map = new Map<string, InstalledModelInfo>()
     for (const row of installed ?? []) map.set(row.id, row)
     return map
   }, [installed])
@@ -107,7 +97,7 @@ function CatalogEntryRow({
   onInstalled,
 }: {
   entry: CatalogModelEntry
-  installedInfo: InstalledInfo | undefined
+  installedInfo: InstalledModelInfo | undefined
   runTest: RunTestFn
   createDriver: CreateDriverFn
   onInstalled: () => void

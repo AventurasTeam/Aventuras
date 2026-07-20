@@ -117,7 +117,7 @@ export type DialogDriver = {
   }): Promise<void>
   computeSha256(filePath: string): Promise<string>
   smokeTestEmbed(args: { modelDir: string; ep: ExecutionProvider }): Promise<void>
-  persistInstall(args: { meta: ModelMeta; files: string[]; licenseText: string }): Promise<void>
+  persistInstall(args: { meta: ModelMeta; licenseText: string }): Promise<void>
   deletePartial(modelDir: string): Promise<void>
 }
 

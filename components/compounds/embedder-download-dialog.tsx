@@ -779,11 +779,11 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
       try {
         await driver.persistInstall({
           meta,
-          files: [...files],
           licenseText: licenseTextRef.current,
         })
       } catch (err: unknown) {
         if (cancelled) return
+        void driver.deletePartial(entry.id).catch(() => {})
         const message = err instanceof Error ? err.message : String(err)
         dispatch({ type: 'persist-failed', message })
         return

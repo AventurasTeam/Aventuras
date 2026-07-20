@@ -5,19 +5,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
+import { useInstalledModels, type InstalledModelInfo } from '@/hooks/use-installed-models'
 import { setEmbedderDefaults } from '@/lib/actions'
 import { db } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import {
-  getCatalogEntry,
-  listInstalledLocal,
-  testEmbedder,
-  type EmbedderConfig,
-} from '@/lib/embedder'
+import { getCatalogEntry, testEmbedder, type EmbedderConfig } from '@/lib/embedder'
 import { t } from '@/lib/i18n'
 import { appSettingsStore } from '@/lib/stores'
-
-type InstalledInfo = { id: string; sizeBytes: number }
 
 type TestResult =
   | { ok: true; dim: number; ms: number }
@@ -32,7 +26,7 @@ type EmbedderDefaultCardProps = {
   /** Switches App Settings to the Embedding models tab (host-owned nav). */
   onManage?: () => void
   /** Injectable seam for stories/tests — defaults to lib/embedder's listInstalledLocal. */
-  listInstalled?: () => Promise<InstalledInfo[]>
+  listInstalled?: () => Promise<InstalledModelInfo[]>
   /** Injectable seam for stories/tests — defaults to lib/embedder's testEmbedder. */
   runTest?: RunTestFn
 }
@@ -72,7 +66,7 @@ function TestRow({
 
 export function EmbedderDefaultCard({
   onManage,
-  listInstalled = listInstalledLocal,
+  listInstalled,
   runTest = testEmbedder,
 }: EmbedderDefaultCardProps) {
   const backend = appSettingsStore.useAppSettings(
@@ -82,10 +76,7 @@ export function EmbedderDefaultCard({
   const embeddingProviderId = appSettingsStore.useAppSettings((s) => s.embeddingProviderId)
   const providers = appSettingsStore.useAppSettings((s) => s.providers)
 
-  const [installed, setInstalled] = useState<InstalledInfo[] | null>(null)
-  useEffect(() => {
-    void listInstalled().then(setInstalled)
-  }, [listInstalled])
+  const { installed } = useInstalledModels(listInstalled)
 
   const [providerIdDraft, setProviderIdDraft] = useState(embeddingProviderId ?? '')
   const [modelIdDraft, setModelIdDraft] = useState(embeddingModelId ?? '')
