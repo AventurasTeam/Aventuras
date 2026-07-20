@@ -157,10 +157,12 @@ export { useDbMigrations } from './runtime/use-db-migrations'
 export type { EmbeddedFieldRow, VecTargetKind, VecWrite } from './embeddings'
 export {
   VEC_FAMILIES,
+  clearEmbeddingStaleOp,
   compositeText,
   deleteVecOps,
   ensureVecTables,
   ensureVecTablesSql,
+  packFloat32,
   recomputeStaleOp,
   sourceHash,
   upsertVecOps,

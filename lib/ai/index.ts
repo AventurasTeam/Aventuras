@@ -1,6 +1,7 @@
 export { AGENT_IDS, type AgentId, type ResolveTarget } from './agents'
 export { fetchModelCatalog, normalizeModelCatalog } from './catalog'
 export { embedViaProvider } from './embedding'
+export type { ProviderInstanceWithStub } from './types'
 export {
   generateStructured,
   parseStructured,

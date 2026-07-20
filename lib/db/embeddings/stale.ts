@@ -17,6 +17,16 @@ const SOURCE_TABLES: Record<VecTargetKind, string> = {
   chapter: 'chapters',
 }
 
+// After a successful (re)embed the row is fresh by construction, so this clears
+// the flag unconditionally — unlike recomputeStaleOp, which re-derives staleness
+// from a hash comparison for content edits that have no fresh vector yet.
+export function clearEmbeddingStaleOp(kind: VecTargetKind, id: string, branchId: string): SqlOp {
+  return {
+    sql: `UPDATE ${SOURCE_TABLES[kind]} SET embedding_stale = 0 WHERE id = ? AND branch_id = ?`,
+    params: [id, branchId],
+  }
+}
+
 export async function recomputeStaleOp(
   row: EmbeddedFieldRow,
   dim: number,

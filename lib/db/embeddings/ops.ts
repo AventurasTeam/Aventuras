@@ -11,6 +11,13 @@ export type VecWrite = {
   vector: Uint8Array
 }
 
+// vec0 stores embeddings as little-endian float32 blobs; every platform we target
+// is little-endian, so the Float32Array's backing bytes are the on-disk format.
+// A view (not a copy) is safe because callers hand the vector off and don't mutate.
+export function packFloat32(vec: Float32Array): Uint8Array {
+  return new Uint8Array(vec.buffer, vec.byteOffset, vec.byteLength)
+}
+
 export function upsertVecOps(w: VecWrite): SqlOp[] {
   const table = vecTableName(w.kind, w.dim)
   return [
