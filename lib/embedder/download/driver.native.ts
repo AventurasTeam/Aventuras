@@ -10,7 +10,6 @@
 // Directory/File classes for everything else.
 import { File } from 'expo-file-system'
 import { createDownloadResumable } from 'expo-file-system/legacy'
-import { createHash } from 'react-native-quick-crypto'
 
 import type { DialogDriver } from '@/components/compounds/embedder-download-dialog-machine'
 import type { EmbedderAttestation } from '@/types/embedder-bridge'
@@ -23,9 +22,33 @@ import { smokeTestLocal } from '../local/runtime.native'
 
 const HASH_CHUNK_BYTES = 1024 * 1024
 
+// The slice of react-native-quick-crypto this driver touches. A structural
+// surface (rather than `typeof import(...)`, which the type-import lint
+// forbids, or a banned namespace import) keeps the module off the top-level
+// import graph entirely — mirrors local/runtime.native.ts's OrtRuntime. The
+// package doesn't export its `Hash` class type, so this is hand-written
+// rather than imported.
+type QuickCryptoHash = {
+  update(data: Uint8Array | string, inputEncoding?: string): unknown
+  digest(encoding: 'hex'): string
+}
+type QuickCrypto = { createHash: (algorithm: 'sha256') => QuickCryptoHash }
+
+// react-native-quick-crypto's module-eval performs a native JSI install, so it
+// must never be imported at the top level — the lib/embedder barrel is
+// reachable from config-presence checks that run before a model is installed
+// (and before the dev-client is rebuilt). Load it lazily, only inside the
+// hashing call sites.
+let quickCryptoPromise: Promise<QuickCrypto> | undefined
+function loadQuickCrypto(): Promise<QuickCrypto> {
+  quickCryptoPromise ??= import('react-native-quick-crypto') as unknown as Promise<QuickCrypto>
+  return quickCryptoPromise
+}
+
 // Reads the file in fixed-size chunks so a large model.onnx never has to sit
 // fully in memory at once, per the task's streaming-hash requirement.
-function hashFile(file: File): string {
+async function hashFile(file: File): Promise<string> {
+  const { createHash } = await loadQuickCrypto()
   const hash = createHash('sha256')
   const handle = file.open()
   try {
@@ -42,7 +65,8 @@ function hashFile(file: File): string {
   return hash.digest('hex') as string
 }
 
-function sha256HexSync(text: string): string {
+async function sha256Hex(text: string): Promise<string> {
+  const { createHash } = await loadQuickCrypto()
   // update()'s two-arg overload (data + inputEncoding) returns a Buffer, not
   // the Hash instance, so it can't chain into digest() — call them separately.
   const hash = createHash('sha256')
@@ -68,9 +92,10 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
 
       // Stage to `<fileName>.part` and rename into place only once the
       // transfer completes, so an interrupted download never leaves a
-      // partial file sitting at the canonical install path. Not a resume
-      // across attempts (pending decision) — any leftover `.part` from a
-      // prior attempt is discarded and this one starts clean.
+      // partial file sitting at the canonical install path. Cross-launch
+      // resume is descoped for v1 — any leftover `.part` from a prior
+      // attempt is discarded and this one starts clean rather than
+      // resuming from it.
       const partFile = new File(dir, `${row.fileName}.part`)
       if (partFile.exists) partFile.delete()
 
@@ -105,7 +130,7 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
       // Mirrors desktop's `expectedSha256.toLowerCase()` tolerance (electron/
       // embedder/downloads.ts) — the container compares this against the
       // catalog's expected hash with a strict `!==`.
-      return hashFile(new File(dir, row.fileName)).toLowerCase()
+      return (await hashFile(new File(dir, row.fileName))).toLowerCase()
     },
 
     // `ep` isn't forwarded: this driver is created for the catalog install
@@ -121,7 +146,7 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
       if (!dir.exists) dir.create({ intermediates: true })
       const attestation: EmbedderAttestation = {
         timestamp: Date.now(),
-        licenseSha256: sha256HexSync(licenseText),
+        licenseSha256: await sha256Hex(licenseText),
         sourceUrl: meta.source,
         revision: meta.revision,
       }
