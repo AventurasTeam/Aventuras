@@ -3,9 +3,10 @@ import { join, resolve, sep } from 'node:path'
 
 import { app } from 'electron'
 
-// userData already carries dev/prod separation (dev sets app.setName('aventuras-dev')
-// in main.ts), so a userData-relative embedders root inherits it for free — matching
-// the per-platform table in docs/memory/model-management.md → Storage layout.
+// Canon roots the embedders dir at Electron's per-app userData on every desktop
+// platform (docs/memory/model-management.md → Storage layout), so models sit next
+// to the SQLite DB. userData already carries dev/prod separation (dev sets
+// app.setName('aventuras-dev') in main.ts), so this root inherits it for free.
 export function embeddersRoot(): string {
   return join(app.getPath('userData'), 'embedders')
 }

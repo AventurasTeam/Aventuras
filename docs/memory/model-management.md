@@ -172,9 +172,13 @@ Per-platform `<embedders-root>`:
 | -------- | ---------------------------------------------------- |
 | Android  | `<internal>/files/embedders/`                        |
 | iOS      | `<documents>/embedders/`                             |
-| Linux    | `~/.local/share/Aventuras/embedders/`                |
+| Linux    | `~/.config/Aventuras/embedders/`                     |
 | macOS    | `~/Library/Application Support/Aventuras/embedders/` |
 | Windows  | `%APPDATA%\Aventuras\embedders\`                     |
+
+On desktop all three paths are Electron's per-app userData directory
+(models live next to the SQLite DB); dev builds use the
+`aventuras-dev` userData dir, giving dev/prod separation for free.
 
 The folder is self-contained — removal is a recursive delete, and
 copying a folder to a new device transports the agreed-to license
