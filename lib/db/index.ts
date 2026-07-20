@@ -154,5 +154,17 @@ export type {
 export { runInTransaction } from './runtime/transaction'
 export type { DbCtx, SqlOp } from './types'
 export { useDbMigrations } from './runtime/use-db-migrations'
+export type { EmbeddedFieldRow, VecTargetKind, VecWrite } from './embeddings'
+export {
+  VEC_FAMILIES,
+  compositeText,
+  deleteVecOps,
+  ensureVecTables,
+  ensureVecTablesSql,
+  recomputeStaleOp,
+  sourceHash,
+  upsertVecOps,
+  vecTableName,
+} from './embeddings'
 export { emptyWorkingState, wizardWorkingStateSchema } from './wizard-sessions/working-state'
 export type { WizardWorkingState } from './wizard-sessions/working-state'

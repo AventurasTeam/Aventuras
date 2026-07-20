@@ -1,0 +1,7 @@
+export type { VecTargetKind } from './vec-tables'
+export { VEC_FAMILIES, ensureVecTables, ensureVecTablesSql, vecTableName } from './vec-tables'
+export type { VecWrite } from './ops'
+export { deleteVecOps, upsertVecOps } from './ops'
+export type { EmbeddedFieldRow } from './stale'
+export { recomputeStaleOp } from './stale'
+export { compositeText, sourceHash } from './source-hash'
