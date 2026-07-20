@@ -22,6 +22,9 @@ function jsonEqual(a: unknown, b: unknown): boolean {
   if (Array.isArray(a) && Array.isArray(b)) {
     return a.length === b.length && a.every((v, i) => jsonEqual(v, b[i]))
   }
+  // An array and a plain object both report typeof 'object' and can share an
+  // empty key set, so guard the mismatch before the key-wise comparison below.
+  if (Array.isArray(a) || Array.isArray(b)) return false
   if (typeof a === 'object' && typeof b === 'object' && a !== null && b !== null) {
     const keys = new Set([...Object.keys(a), ...Object.keys(b)])
     return [...keys].every((k) =>
@@ -40,6 +43,12 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 // stored key. Keeps a downgrade (older build, unknown newer key) from
 // permanently pruning that key — the row is the only settings store until M7.
 function addMissingDefaults(stored: unknown, parsed: unknown): unknown {
+  // Recurse element-wise so array-typed columns (providers[], profiles[]) still
+  // backfill schema-added fields; map over stored so no phantom default entries
+  // are invented for a stored value that's shorter than the parsed default.
+  if (Array.isArray(stored) && Array.isArray(parsed)) {
+    return stored.map((item, i) => addMissingDefaults(item, parsed[i]))
+  }
   if (!isPlainObject(stored) || !isPlainObject(parsed)) return stored
   const merged: Record<string, unknown> = { ...stored }
   for (const [key, parsedValue] of Object.entries(parsed)) {

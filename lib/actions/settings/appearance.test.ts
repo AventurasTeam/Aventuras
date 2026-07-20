@@ -31,4 +31,22 @@ describe('setAppearanceThemeId', () => {
     })
     expect(appSettingsStore.getAppSettings().appearance.themeId).toBe('tokyo-night')
   })
+
+  it('merges off the DB row, not a stale store cache', async () => {
+    // Mutate a sibling appearance key directly in the DB without rehydrating —
+    // the store is now stale. A store-based read-modify-write would revert it.
+    const staleFree = { ...APP_SETTINGS_DEFAULTS.appearance, showJumpToBottom: false }
+    await db
+      .update(appSettings)
+      .set({ appearance: staleFree })
+      .where(eq(appSettings.id, APP_SETTINGS_SINGLETON_ID))
+
+    await setAppearanceThemeId('tokyo-night', { db })
+
+    const rows = await db
+      .select()
+      .from(appSettings)
+      .where(eq(appSettings.id, APP_SETTINGS_SINGLETON_ID))
+    expect(rows[0]?.appearance).toEqual({ ...staleFree, themeId: 'tokyo-night' })
+  })
 })
