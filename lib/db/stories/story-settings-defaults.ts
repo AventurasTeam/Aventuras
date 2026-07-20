@@ -11,7 +11,7 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   classifierCadence: 5,
   piggybackMode: 'off',
   embeddingBackend: 'local',
-  embedding_model_id: 'bge-small-en',
+  embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
   retrievalBudgets: { entities: 8, lore: 6, happenings: 6, threads: 4, chapters: 3 },
   probe_mode_active: false,
   composerModesEnabled: false,

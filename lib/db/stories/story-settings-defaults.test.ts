@@ -18,7 +18,7 @@ describe('STORY_SETTINGS_DEFAULTS', () => {
 describe('buildStorySettings', () => {
   it('produces a complete settings from an empty app default', () => {
     const s = buildStorySettings({}, null)
-    expect(s.embedding_model_id).toBe('bge-small-en')
+    expect(s.embedding_model_id).toBe('Xenova/all-MiniLM-L6-v2')
     expect(s.retrievalBudgets.entities).toBe(8)
   })
   it('lets the app embedding model id win', () => {
