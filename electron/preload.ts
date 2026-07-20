@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 import type { DbBridge } from './db/types'
+import type { EmbedderBridge, EmbedderDownloadProgress } from './embedder/types'
 
 const api = {
   platform: process.platform,
@@ -16,5 +17,24 @@ const dbBridge: DbBridge = {
 }
 
 contextBridge.exposeInMainWorld('aventurasDb', dbBridge)
+
+const embedderBridge: EmbedderBridge & {
+  onDownloadProgress(cb: (progress: EmbedderDownloadProgress) => void): () => void
+} = {
+  embed: (args) => ipcRenderer.invoke('embedder:embed', args),
+  smokeTest: (args) => ipcRenderer.invoke('embedder:smoke-test', args),
+  listInstalled: () => ipcRenderer.invoke('embedder:list-installed'),
+  downloadFile: (args) => ipcRenderer.invoke('embedder:download-file', args),
+  persistInstall: (args) => ipcRenderer.invoke('embedder:persist-install', args),
+  deletePartial: (args) => ipcRenderer.invoke('embedder:delete-partial', args),
+  embeddersRoot: () => ipcRenderer.invoke('embedder:root'),
+  onDownloadProgress: (cb) => {
+    const listener = (_e: unknown, progress: EmbedderDownloadProgress): void => cb(progress)
+    ipcRenderer.on('embedder:download-progress', listener)
+    return () => ipcRenderer.removeListener('embedder:download-progress', listener)
+  },
+}
+
+contextBridge.exposeInMainWorld('aventurasEmbedder', embedderBridge)
 
 export type NativeApi = typeof api

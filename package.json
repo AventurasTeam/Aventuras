@@ -41,6 +41,7 @@
     "@ai-sdk/anthropic": "^3.0.81",
     "@ai-sdk/openai-compatible": "^2.0.49",
     "@dnd-kit/core": "^6.3.1",
+    "@huggingface/transformers": "^3.8.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@expo/vector-icons": "^15.1.1",
@@ -186,7 +187,8 @@
       "package.json"
     ],
     "asarUnpack": [
-      "**/node_modules/sqlite-vec-*/**"
+      "**/node_modules/sqlite-vec-*/**",
+      "**/node_modules/onnxruntime-node/**"
     ],
     "extraResources": [
       {
