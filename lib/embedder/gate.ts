@@ -3,6 +3,14 @@ import type { StorySettings } from '@/lib/db'
 import { resolveEmbedderConfig } from './resolve-config'
 import type { EmbedderConfig } from './types'
 
+// Consumer notes for UI copy (wizard entry, settings surfaces):
+// - 'no-model' is backend-dependent: local means no model selected, provider
+//   means no model name entered.
+// - 'no-provider' covers both never-selected and selected-but-instance-deleted
+//   (the providerId points at an entry no longer in app.providers).
+// - 'unknown-model' is local-only. Provider model ids are never
+//   catalog-validated (dim resolves via the 0 sentinel), so a bad provider
+//   model id still resolves usable here and only fails later at embed time.
 export type EmbedderGateResult =
   | { usable: true; config: EmbedderConfig }
   | { usable: false; reason: 'no-model' | 'unknown-model' | 'model-not-installed' | 'no-provider' }
