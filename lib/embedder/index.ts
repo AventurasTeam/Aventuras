@@ -22,3 +22,15 @@ export type { LocalEmbedResult } from './local/runtime'
 
 export { embedAndBuildVecOps, embedTexts, testEmbedder } from './service'
 export type { EmbedIntent } from './service'
+
+export { createEmbedderDownloadDriver } from './download/driver'
+
+export {
+  buildDownloadPlan,
+  findPlanRow,
+  modelMetaFromCatalogEntry,
+  toDialogCatalogEntry,
+} from './download/catalog-files'
+export type { DownloadPlanRow } from './download/catalog-files'
+
+export { fetchModelCard, resolveHfModel } from './download/model-card'
