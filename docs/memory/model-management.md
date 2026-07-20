@@ -204,8 +204,11 @@ source. Check your connection and try again.` No cached-license
 4. **Decline** — no download, no state change. User stays on the
    previous selection. Pre-download state.
 5. **Accept** — download begins with progress bar, resumable on
-   network blip. Each of the three required files is fetched and
-   SHA256-verified against the catalog entry's expected hashes.
+   network blip. Each required file is fetched and SHA256-verified
+   against the catalog entry's expected hashes — three files for a
+   typical model; a sharded ONNX export adds a weights sidecar
+   (`*.onnx_data`) fetched and verified the same way, keyed in the
+   catalog's `files` map by the basename the graph references.
 6. **Cancel mid-download** — distinct from Decline. The download
    stops, partial files are deleted, and no license-acceptance is
    recorded. License acceptance is contingent on completion (see
