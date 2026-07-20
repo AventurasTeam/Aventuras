@@ -23,10 +23,14 @@ function detectCapabilities(modelId: string): ProviderCapabilities {
 
 /**
  * Normalize a /models id list into `cachedModels` entries, merging
- * best-effort detection with any previously cached entry. User-set
- * capability overrides (surfaced in App Settings · Providers · Models) always
- * win over a fresh detection pass — detection only fills gaps the user
- * hasn't touched.
+ * best-effort detection with any previously cached entry.
+ *
+ * Merge is `{ ...detected, ...existing?.capabilities }` per model: any key
+ * already present on the existing entry — including an explicit `false` —
+ * wins over a fresh detection pass. A key *absent* from the existing entry
+ * re-detects on every fetch, so a future capability editor that lets users
+ * turn a flag off must persist an explicit `false` there, not delete the
+ * key — deleting it just lets detection turn the flag back on next refresh.
  */
 export function normalizeModelCatalog(ids: string[], existing?: CachedModel[]): CachedModel[] {
   const existingById = new Map((existing ?? []).map((model) => [model.id, model]))

@@ -214,7 +214,7 @@ describe('createEmbedderDownloadDriver — persistInstall', () => {
     const expectedHash = await sha256Hex(licenseText)
 
     const before = Date.now()
-    await driver.persistInstall({ meta, files: [], licenseText })
+    await driver.persistInstall({ meta, licenseText })
     const after = Date.now()
 
     expect(bridge.persistInstall).toHaveBeenCalledTimes(1)
