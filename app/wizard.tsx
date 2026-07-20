@@ -50,17 +50,23 @@ type GateState =
   | { status: 'ok' }
   | { status: 'blocked'; reason: EmbedderGateBlockedReason }
 
-async function resolveEntryGate(): Promise<GateState> {
-  const { embeddingModelId, embeddingProviderId, defaultStorySettings, providers } =
-    appSettingsStore.getAppSettings()
-  let installedIds: string[] = []
+// A listing blip must degrade to "nothing installed" so it surfaces through the
+// embedder gate (model-not-installed), not a generic finish-failed toast.
+async function listInstalledLocalIds(): Promise<string[]> {
   try {
-    installedIds = (await listInstalledLocal()).map((model) => model.id)
+    return (await listInstalledLocal()).map((model) => model.id)
   } catch (err) {
     logger.warn('embedder.list_installed_failed', {
       error: err instanceof Error ? err.message : String(err),
     })
+    return []
   }
+}
+
+async function resolveEntryGate(): Promise<GateState> {
+  const { embeddingModelId, embeddingProviderId, defaultStorySettings, providers } =
+    appSettingsStore.getAppSettings()
+  const installedIds = await listInstalledLocalIds()
   const result = resolveEmbedderGate(
     { embeddingModelId, embeddingProviderId, defaultStorySettings, providers },
     installedIds,
@@ -90,9 +96,12 @@ export default function WizardRoute() {
   // the wizard outright. Focus-aware so returning from Settings (having fixed the
   // embedder) re-checks; the `cancelled` guard drops a stale in-flight resolve.
   const [gate, setGate] = useState<GateState>({ status: 'pending' })
+  const [embedFailure, setEmbedFailure] = useState<{ message: string } | null>(null)
   useFocusEffect(
     useCallback(() => {
       let cancelled = false
+      // A fixed embedder must not leave a stale Finish-failure card on step 5.
+      setEmbedFailure(null)
       setGate({ status: 'pending' })
       void resolveEntryGate().then((next) => {
         if (!cancelled) setGate(next)
@@ -186,7 +195,6 @@ export default function WizardRoute() {
   // late); `isFinishing` drives the button's disabled state for feedback.
   const finishingRef = useRef(false)
   const [isFinishing, setIsFinishing] = useState(false)
-  const [embedFailure, setEmbedFailure] = useState<{ message: string } | null>(null)
 
   const finish = () => {
     if (finishingRef.current) return
@@ -197,8 +205,8 @@ export default function WizardRoute() {
     const { defaultStorySettings, embeddingModelId, embeddingProviderId, providers } =
       appSettingsStore.getAppSettings()
     runAction(
-      listInstalledLocal()
-        .then((installed) =>
+      listInstalledLocalIds()
+        .then((installedLocalIds) =>
           finishWizard(
             wizardStore.getWizard().state,
             ctx,
@@ -208,7 +216,7 @@ export default function WizardRoute() {
               embeddingModelId,
               embeddingProviderId,
               providers,
-              installedLocalIds: installed.map((model) => model.id),
+              installedLocalIds,
             },
             embedCtx,
             undefined,
