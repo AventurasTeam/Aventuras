@@ -46,32 +46,42 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
 
     async downloadFile({ url, targetPath, onProgress }) {
       const row = findPlanRow(plan, { url, targetPath })
-      const result = await resolveBridge().downloadFile({
-        url: row.url,
-        modelId: entry.id,
-        fileName: row.fileName,
-        expectedSha256: row.expectedSha256,
+      const bridge = resolveBridge()
+
+      // Subscribe before invoking the download so no early progress event is
+      // missed. Progress arrives over one shared IPC channel for every
+      // in-flight file, so filter to the file this call is actually for.
+      const unsubscribe = bridge.onDownloadProgress((progress) => {
+        if (progress.modelId !== entry.id || progress.fileName !== row.fileName) return
+        onProgress(progress.bytesReceived, progress.bytesTotal)
       })
-      if (result.ok) {
-        onProgress(1, 1)
-        return
+
+      try {
+        const result = await bridge.downloadFile({
+          url: row.url,
+          modelId: entry.id,
+          fileName: row.fileName,
+          expectedSha256: row.expectedSha256,
+        })
+        if (result.ok) return
+        if (result.reason === 'hash-mismatch') {
+          // Resolve rather than throw: throwing here would route the failure
+          // through the 'downloading' state's generic download-failed action
+          // (network/disk framing, per the machine's reducer). The pattern doc
+          // wants sha256 mismatches to surface as their own 'hash-mismatch'
+          // failure, which only the 'verifying' state's computeSha256 path
+          // produces — so let this file "complete" and let computeSha256 below
+          // report the mismatch when the dialog gets there.
+          mismatchedRepoPaths.add(row.repoPath)
+          return
+        }
+        // Network/disk failures are genuine download failures — no verification
+        // step to defer to, so surface them immediately via the normal
+        // download-failed path.
+        throw new Error(result.message)
+      } finally {
+        unsubscribe()
       }
-      if (result.reason === 'hash-mismatch') {
-        // Resolve rather than throw: throwing here would route the failure
-        // through the 'downloading' state's generic download-failed action
-        // (network/disk framing, per the machine's reducer). The pattern doc
-        // wants sha256 mismatches to surface as their own 'hash-mismatch'
-        // failure, which only the 'verifying' state's computeSha256 path
-        // produces — so let this file "complete" and let computeSha256 below
-        // report the mismatch when the dialog gets there.
-        mismatchedRepoPaths.add(row.repoPath)
-        onProgress(1, 1)
-        return
-      }
-      // Network/disk failures are genuine download failures — no verification
-      // step to defer to, so surface them immediately via the normal
-      // download-failed path.
-      throw new Error(result.message)
     },
 
     async computeSha256(filePath) {

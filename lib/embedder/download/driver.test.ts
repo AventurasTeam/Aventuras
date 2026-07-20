@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { EmbedderBridge } from '@/types/embedder-bridge'
+import type { EmbedderBridge, EmbedderDownloadProgress } from '@/types/embedder-bridge'
 
 import { getCatalogEntry } from '../catalog'
 import { buildDownloadPlan } from './catalog-files'
@@ -22,6 +22,7 @@ function makeBridge(overrides: Partial<EmbedderBridge> = {}): EmbedderBridge {
     persistInstall: vi.fn(async () => undefined),
     deletePartial: vi.fn(async () => undefined),
     embeddersRoot: vi.fn(async () => '/tmp/embedders'),
+    onDownloadProgress: vi.fn(() => () => {}),
     ...overrides,
   }
 }
@@ -105,6 +106,36 @@ describe('createEmbedderDownloadDriver — downloadFile', () => {
         onProgress: vi.fn(),
       }),
     ).resolves.toBeUndefined()
+  })
+
+  it('subscribes before calling the bridge, filters by modelId+fileName, forwards bytes, and unsubscribes', async () => {
+    let emit: ((progress: EmbedderDownloadProgress) => void) | undefined
+    const unsubscribe = vi.fn()
+
+    const bridge = makeBridge({
+      onDownloadProgress: vi.fn((cb) => {
+        emit = cb
+        return unsubscribe
+      }),
+      downloadFile: vi.fn(async () => {
+        // A second file's events (different fileName) must be filtered out.
+        emit?.({ modelId: entry.id, fileName: 'tokenizer.json', bytesReceived: 5, bytesTotal: 5 })
+        emit?.({ modelId: entry.id, fileName: 'model.onnx', bytesReceived: 10, bytesTotal: 100 })
+        emit?.({ modelId: entry.id, fileName: 'model.onnx', bytesReceived: 100, bytesTotal: 100 })
+        return { ok: true } as const
+      }),
+    })
+    vi.stubGlobal('window', { aventurasEmbedder: bridge })
+    const driver = createEmbedderDownloadDriver(entry)
+    const onProgress = vi.fn()
+
+    await driver.downloadFile({ url: modelRow.url, targetPath: modelRow.repoPath, onProgress })
+
+    expect(onProgress).toHaveBeenCalledTimes(2)
+    expect(onProgress).toHaveBeenNthCalledWith(1, 10, 100)
+    expect(onProgress).toHaveBeenNthCalledWith(2, 100, 100)
+    expect(bridge.onDownloadProgress).toHaveBeenCalledTimes(1)
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
   })
 })
 

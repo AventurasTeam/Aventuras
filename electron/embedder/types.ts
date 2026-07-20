@@ -42,4 +42,5 @@ export type EmbedderBridge = {
   }): Promise<void>
   deletePartial(args: { modelId: string }): Promise<void>
   embeddersRoot(): Promise<string>
+  onDownloadProgress(cb: (progress: EmbedderDownloadProgress) => void): () => void
 }
