@@ -1,21 +1,45 @@
 import { eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   branches,
+  clearEmbeddingStaleOp,
+  compositeText,
   deltas,
   emptyEntityState,
   emptyWorkingState,
+  ensureVecTables,
   entities,
+  packFloat32,
+  sourceHash,
   stories,
   storyEntries,
+  upsertVecOps,
   wizardSessions,
+  type SqlOp,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import type { StoryDefinition } from '@/lib/db/stories/story-config-schema'
 import { buildStorySettings } from '@/lib/db/stories/story-settings-defaults'
+import { EmbedderInitError, type EmbedderConfig } from '@/lib/embedder'
 
 import { createStoryWithBranch } from './create-story'
+
+// Mock only the embed helper at the module boundary; the real ops builders
+// (upsertVecOps / clearEmbeddingStaleOp from @/lib/db) run against the harness.
+vi.mock('@/lib/embedder', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return { ...actual, embedAndBuildVecOps: vi.fn() }
+})
+
+const { embedAndBuildVecOps } = await import('@/lib/embedder')
+const mockedEmbed = vi.mocked(embedAndBuildVecOps)
+
+const LOCAL_CONFIG: EmbedderConfig = {
+  backend: 'local',
+  modelId: 'Xenova/all-MiniLM-L6-v2',
+  dim: 384,
+}
 
 const LEAD_ID = 'char_11111111-1111-1111-1111-111111111111'
 
@@ -36,9 +60,14 @@ function makeDefinition(overrides: Partial<StoryDefinition> = {}): StoryDefiniti
 const metadata = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
 
 async function setup() {
-  const { db, runInTransaction } = await createTestDb()
-  return { db, ctx: { db, runInTransaction } }
+  const { db, sqlite, runInTransaction } = await createTestDb()
+  return { db, sqlite, ctx: { db, runInTransaction } }
 }
+
+beforeEach(() => {
+  mockedEmbed.mockReset()
+  mockedEmbed.mockResolvedValue([])
+})
 
 describe('createStoryWithBranch', () => {
   it('creative+third: atomic story+branch+opening with zero deltas', async () => {
@@ -286,5 +315,129 @@ describe('createStoryWithBranch', () => {
     expect(branchRows).toHaveLength(1)
     expect(branchRows[0].id).toBe('br_orphan')
     expect(await db.select().from(storyEntries)).toHaveLength(0)
+  })
+})
+
+describe('createStoryWithBranch — embed step', () => {
+  const DIM = 384
+
+  function realVecOps() {
+    mockedEmbed.mockImplementation(async (config, rows, exec) => {
+      await ensureVecTables(DIM, exec)
+      const ops: SqlOp[] = []
+      for (const row of rows) {
+        const text = compositeText(row.fields)
+        ops.push(
+          ...upsertVecOps({
+            kind: row.kind,
+            id: row.id,
+            branchId: row.branchId,
+            modelId: config.modelId,
+            dim: DIM,
+            sourceHash: sourceHash(text),
+            vector: packFloat32(new Float32Array(DIM).fill(0.1)),
+          }),
+          clearEmbeddingStaleOp(row.kind, row.id, row.branchId),
+        )
+      }
+      return ops
+    })
+  }
+
+  it('embeds the lead: vec ops land after the entity insert and clear its stale flag', async () => {
+    const { db, sqlite, ctx } = await setup()
+    realVecOps()
+
+    const captured: SqlOp[] = []
+    const capturingCtx = {
+      db,
+      runInTransaction: async (ops: SqlOp[]) => {
+        captured.push(...ops)
+        return ctx.runInTransaction(ops)
+      },
+    }
+
+    const { branchId } = await createStoryWithBranch(
+      {
+        title: 'Embedded',
+        definition: makeDefinition({
+          mode: 'adventure',
+          narration: 'first',
+          leadEntityId: LEAD_ID,
+        }),
+        settings: buildStorySettings({}, null),
+        openingContent: 'You wake.',
+        openingMetadata: metadata,
+        lead: { id: LEAD_ID, name: 'Aria' },
+        embed: { config: LOCAL_CONFIG, exec: async (sql) => sqlite.exec(sql) },
+      },
+      capturingCtx,
+      2000,
+    )
+
+    expect(mockedEmbed).toHaveBeenCalledTimes(1)
+    const entityInsertIdx = captured.findIndex((op) => /insert into "entities"/i.test(op.sql))
+    const vecInsertIdx = captured.findIndex((op) => /entities_vec_384/i.test(op.sql))
+    expect(entityInsertIdx).toBeGreaterThanOrEqual(0)
+    expect(vecInsertIdx).toBeGreaterThan(entityInsertIdx)
+
+    const vecRows = sqlite
+      .prepare('select id from entities_vec_384 where branch_id = ?')
+      .all(branchId) as { id: string }[]
+    expect(vecRows).toHaveLength(1)
+    expect(vecRows[0].id).toBe(LEAD_ID)
+
+    const entityRow = sqlite
+      .prepare('select embedding_stale from entities where id = ?')
+      .get(LEAD_ID) as { embedding_stale: number }
+    expect(entityRow.embedding_stale).toBe(0)
+  })
+
+  it('rolls back everything when the embed throws: no rows persist', async () => {
+    const { db, ctx } = await setup()
+    mockedEmbed.mockRejectedValue(new EmbedderInitError('embedder down'))
+
+    await expect(
+      createStoryWithBranch(
+        {
+          title: 'Doomed',
+          definition: makeDefinition({
+            mode: 'adventure',
+            narration: 'first',
+            leadEntityId: LEAD_ID,
+          }),
+          settings: buildStorySettings({}, null),
+          openingContent: 'You wake.',
+          openingMetadata: metadata,
+          lead: { id: LEAD_ID, name: 'Aria' },
+          embed: { config: LOCAL_CONFIG, exec: async () => {} },
+        },
+        ctx,
+        3000,
+      ),
+    ).rejects.toBeInstanceOf(EmbedderInitError)
+
+    expect(await db.select().from(stories)).toHaveLength(0)
+    expect(await db.select().from(branches)).toHaveLength(0)
+    expect(await db.select().from(entities)).toHaveLength(0)
+    expect(await db.select().from(storyEntries)).toHaveLength(0)
+  })
+
+  it('skips the embed helper entirely when no embed input is supplied', async () => {
+    const { ctx } = await setup()
+
+    await createStoryWithBranch(
+      {
+        title: 'No embed',
+        definition: makeDefinition(),
+        settings: buildStorySettings({}, null),
+        openingContent: 'Once.',
+        openingMetadata: metadata,
+      },
+      ctx,
+      4000,
+    )
+
+    expect(mockedEmbed).not.toHaveBeenCalled()
   })
 })

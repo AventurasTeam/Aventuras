@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm'
 
+import type { ProviderInstanceWithStub } from '@/lib/ai'
 import {
   branches,
   emptyEntityState,
@@ -15,6 +16,7 @@ import {
   type StoryDefinition,
   type StorySettings,
 } from '@/lib/db'
+import { embedAndBuildVecOps, type EmbedderConfig } from '@/lib/embedder'
 import { generateId } from '@/lib/ids'
 
 import type { DbCtx } from '../types'
@@ -33,6 +35,15 @@ export type CreateStoryInput = {
   openingContent: string
   openingMetadata: EntryMetadata
   lead?: { id: string; name: string }
+  // Embed step (wizard Finish hard gate): when present with a lead, the lead's
+  // vec ops are spliced into the atomic batch. An embed failure throws OUT of
+  // here before runInTransaction runs, so the batch never executes and nothing
+  // persists — that IS the rollback (the transaction is one single-RPC batch).
+  embed?: {
+    config: EmbedderConfig
+    exec: (sql: string) => Promise<void>
+    provider?: ProviderInstanceWithStub
+  }
 }
 
 export async function createStoryWithBranch(
@@ -119,6 +130,18 @@ export async function createStoryWithBranch(
       })
       .toSQL(),
   )
+
+  // Splice AFTER the entities INSERT: embedAndBuildVecOps's per-row stale-clear
+  // UPDATE assumes its source row already sits earlier in the same batch.
+  if (input.embed && input.lead) {
+    const vecOps = await embedAndBuildVecOps(
+      input.embed.config,
+      [{ kind: 'entity', id: input.lead.id, branchId, fields: [input.lead.name, null] }],
+      input.embed.exec,
+      input.embed.provider,
+    )
+    ops.push(...vecOps)
+  }
 
   await ctx.runInTransaction(ops)
   return { storyId, branchId }
