@@ -1,5 +1,5 @@
 import type { SqlOp } from '../types'
-import { vecTableName, type VecTargetKind } from './vec-tables'
+import { vecRowPk, vecTableName, type VecTargetKind } from './vec-tables'
 
 export type VecWrite = {
   kind: VecTargetKind
@@ -16,8 +16,8 @@ export function upsertVecOps(w: VecWrite): SqlOp[] {
   return [
     ...deleteVecOps(w.kind, w.dim, w.id, w.branchId),
     {
-      sql: `INSERT INTO ${table} (id, branch_id, model_id, source_hash, embedding) VALUES (?, ?, ?, ?, ?)`,
-      params: [w.id, w.branchId, w.modelId, w.sourceHash, w.vector],
+      sql: `INSERT INTO ${table} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
+      params: [vecRowPk(w.branchId, w.id), w.branchId, w.modelId, w.id, w.sourceHash, w.vector],
     },
   ]
 }
@@ -29,5 +29,5 @@ export function deleteVecOps(
   branchId: string,
 ): SqlOp[] {
   const table = vecTableName(kind, dim)
-  return [{ sql: `DELETE FROM ${table} WHERE id = ? AND branch_id = ?`, params: [id, branchId] }]
+  return [{ sql: `DELETE FROM ${table} WHERE pk = ?`, params: [vecRowPk(branchId, id)] }]
 }

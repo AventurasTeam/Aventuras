@@ -54,10 +54,10 @@ describe('0005_embedder_vec0', () => {
 
   it('round-trips insert + KNN with branch partition and aux source_hash', () => {
     const ins = db.prepare(
-      'insert into entities_vec_384(id, branch_id, model_id, source_hash, embedding) values (?,?,?,?,?)',
+      'insert into entities_vec_384(pk, branch_id, model_id, id, source_hash, embedding) values (?,?,?,?,?,?)',
     )
-    ins.run('e1', 'b1', 'm1', 'h1', vec(384, 0))
-    ins.run('e2', 'b2', 'm1', 'h2', vec(384, 1))
+    ins.run('b1:e1', 'b1', 'm1', 'e1', 'h1', vec(384, 0))
+    ins.run('b2:e2', 'b2', 'm1', 'e2', 'h2', vec(384, 1))
     const rows = db
       .prepare(
         'select id, source_hash, distance from entities_vec_384 where embedding match ? and k = 5 and branch_id = ?',
@@ -66,6 +66,18 @@ describe('0005_embedder_vec0', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0].id).toBe('e1')
     expect(rows[0].source_hash).toBe('h1')
+  })
+
+  it('accepts the same source id copied into a different branch partition (fork-copy shape)', () => {
+    const ins = db.prepare(
+      'insert into lore_vec_384(pk, branch_id, model_id, id, source_hash, embedding) values (?,?,?,?,?,?)',
+    )
+    expect(() => {
+      ins.run('b1:lo1', 'b1', 'm1', 'lo1', 'h1', vec(384, 0))
+      ins.run('b2:lo1', 'b2', 'm1', 'lo1', 'h1', vec(384, 0))
+    }).not.toThrow()
+    const rows = db.prepare('select pk from lore_vec_384 order by pk').all() as { pk: string }[]
+    expect(rows.map((r) => r.pk)).toEqual(['b1:lo1', 'b2:lo1'])
   })
 
   it('is idempotent — re-running the DDL does not throw', () => {

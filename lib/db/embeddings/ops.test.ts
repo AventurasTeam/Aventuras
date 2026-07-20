@@ -90,6 +90,51 @@ describe('upsertVecOps / deleteVecOps', () => {
     expect(rows.map((r) => r.id)).toEqual(['e1', 'e2'])
   })
 
+  it('inserts cleanly when the same source id exists in a different branch, and branch_id-scoped KNN returns only that branch row', () => {
+    runOps(
+      db,
+      upsertVecOps({
+        kind: 'entity',
+        id: 'e1',
+        branchId: 'b1',
+        modelId: 'm1',
+        dim: 384,
+        sourceHash: 'h1',
+        vector: vec(384, 0),
+      }),
+    )
+    expect(() =>
+      runOps(
+        db,
+        upsertVecOps({
+          kind: 'entity',
+          id: 'e1',
+          branchId: 'b2',
+          modelId: 'm1',
+          dim: 384,
+          sourceHash: 'h2',
+          vector: vec(384, 1),
+        }),
+      ),
+    ).not.toThrow()
+
+    const rows = db
+      .prepare('select pk, branch_id, id, source_hash from entities_vec_384 order by branch_id')
+      .all() as { pk: string; branch_id: string; id: string; source_hash: string }[]
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.pk)).toEqual(['b1:e1', 'b2:e1'])
+    expect(rows.every((r) => r.id === 'e1')).toBe(true)
+
+    const knnRows = db
+      .prepare(
+        'select id, source_hash, distance from entities_vec_384 where embedding match ? and k = 5 and branch_id = ?',
+      )
+      .all(vec(384, 0), 'b1') as { id: string; source_hash: string; distance: number }[]
+    expect(knnRows).toHaveLength(1)
+    expect(knnRows[0].id).toBe('e1')
+    expect(knnRows[0].source_hash).toBe('h1')
+  })
+
   it('deletes the row for (kind, id, branchId)', () => {
     runOps(
       db,

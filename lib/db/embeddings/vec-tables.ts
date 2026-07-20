@@ -19,13 +19,21 @@ export function vecTableName(kind: VecTargetKind, dim: number): string {
   return `${VEC_FAMILIES[kind]}_${dim}`
 }
 
+// vec0 enforces its primary key globally across partitions (not scoped by the
+// partition key), so a bare source-row id collides once a branch fork copies rows —
+// the composite pk keeps identity unique while branch_id still partitions storage.
+export function vecRowPk(branchId: string, id: string): string {
+  return `${branchId}:${id}`
+}
+
 export function ensureVecTablesSql(dim: number): string[] {
   assertValidDim(dim)
   return (Object.keys(VEC_FAMILIES) as VecTargetKind[]).map(
     (kind) => `CREATE VIRTUAL TABLE IF NOT EXISTS ${vecTableName(kind, dim)} USING vec0(
-	id text primary key,
+	pk text primary key,
 	branch_id text partition key,
 	model_id text,
+	id text,
 	+source_hash text,
 	embedding float[${dim}]
 );`,

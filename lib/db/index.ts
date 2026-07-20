@@ -164,6 +164,7 @@ export {
   recomputeStaleOp,
   sourceHash,
   upsertVecOps,
+  vecRowPk,
   vecTableName,
 } from './embeddings'
 export { emptyWorkingState, wizardWorkingStateSchema } from './wizard-sessions/working-state'

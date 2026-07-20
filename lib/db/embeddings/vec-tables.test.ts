@@ -3,7 +3,13 @@ import { DatabaseSync } from 'node:sqlite'
 import { getLoadablePath } from 'sqlite-vec'
 import { describe, expect, it } from 'vitest'
 
-import { VEC_FAMILIES, ensureVecTables, ensureVecTablesSql, vecTableName } from './vec-tables'
+import {
+  VEC_FAMILIES,
+  ensureVecTables,
+  ensureVecTablesSql,
+  vecRowPk,
+  vecTableName,
+} from './vec-tables'
 import type { VecTargetKind } from './vec-tables'
 
 function makeDb(): DatabaseSync {
@@ -32,6 +38,12 @@ describe('vecTableName', () => {
   })
 })
 
+describe('vecRowPk', () => {
+  it('joins branchId and id with a colon separator', () => {
+    expect(vecRowPk('b1', 'e1')).toBe('b1:e1')
+  })
+})
+
 describe('ensureVecTablesSql', () => {
   it('emits one CREATE VIRTUAL TABLE IF NOT EXISTS per family, at the given dim', () => {
     const statements = ensureVecTablesSql(768)
@@ -44,6 +56,16 @@ describe('ensureVecTablesSql', () => {
       expect(matching[0]).toContain('USING vec0')
       expect(matching[0]).toContain('float[768]')
     }
+  })
+
+  it('declares pk as the primary key and id as plain metadata', () => {
+    const [statement] = ensureVecTablesSql(768)
+    expect(statement).toContain('pk text primary key')
+    expect(statement).toContain('branch_id text partition key')
+    expect(statement).toContain('model_id text')
+    expect(statement).toContain('id text')
+    expect(statement).toContain('+source_hash text')
+    expect(statement).not.toContain('id text primary key')
   })
 })
 

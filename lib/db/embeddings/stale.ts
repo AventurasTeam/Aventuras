@@ -1,6 +1,6 @@
 import type { SqlOp } from '../types'
 import { compositeText, sourceHash } from './source-hash'
-import { vecTableName, type VecTargetKind } from './vec-tables'
+import { vecRowPk, vecTableName, type VecTargetKind } from './vec-tables'
 
 export type EmbeddedFieldRow = {
   kind: VecTargetKind
@@ -23,10 +23,9 @@ export async function recomputeStaleOp(
   queryOne: (sql: string, params: unknown[]) => Promise<Record<string, unknown> | undefined>,
 ): Promise<SqlOp> {
   const vecTable = vecTableName(row.kind, dim)
-  const vecRow = await queryOne(
-    `SELECT source_hash FROM ${vecTable} WHERE id = ? AND branch_id = ?`,
-    [row.id, row.branchId],
-  )
+  const vecRow = await queryOne(`SELECT source_hash FROM ${vecTable} WHERE pk = ?`, [
+    vecRowPk(row.branchId, row.id),
+  ])
   const currentHash = sourceHash(compositeText(row.fields))
   const stale = vecRow?.source_hash === currentHash ? 0 : 1
 
