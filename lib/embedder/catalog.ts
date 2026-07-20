@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import catalogData from './catalog.json'
+import catalogData from './catalog-data.json'
 
 const executionProviderSchema = z.string()
 
