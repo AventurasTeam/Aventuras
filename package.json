@@ -98,6 +98,7 @@
     "lucide-react-native": "^0.577.0",
     "marked": "^18.0.5",
     "nativewind": "^4.2.3",
+    "onnxruntime-react-native": "^1.24.3",
     "postcss": "^8.5.10",
     "postcss-safe-parser": "^7.0.1",
     "postcss-value-parser": "^4.2.0",
