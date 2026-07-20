@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { fetchModelCatalog } from './catalog'
+import { fetchModelCatalog, normalizeModelCatalog } from './catalog'
 import type { ProviderInstanceWithStub } from './types'
 
 const provider: ProviderInstanceWithStub = {
@@ -55,5 +55,32 @@ describe('fetchModelCatalog', () => {
     await expect(fetchModelCatalog({ ...provider, endpoint: undefined })).rejects.toThrow(
       /endpoint/,
     )
+  })
+})
+
+describe('normalizeModelCatalog', () => {
+  it('marks an embedding-shaped id detected, leaves a chat model bare', () => {
+    expect(normalizeModelCatalog(['text-embedding-3-small', 'gpt-4o'])).toEqual([
+      { id: 'text-embedding-3-small', capabilities: { embedding: true } },
+      { id: 'gpt-4o' },
+    ])
+  })
+
+  it('preserves a user-set override over a fresh detection pass', () => {
+    const result = normalizeModelCatalog(
+      ['text-embedding-3-small'],
+      [{ id: 'text-embedding-3-small', capabilities: { embedding: false } }],
+    )
+    expect(result).toEqual([{ id: 'text-embedding-3-small', capabilities: { embedding: false } }])
+  })
+
+  it('keeps other user-set capabilities while filling in the detected one', () => {
+    const result = normalizeModelCatalog(
+      ['text-embedding-3-small'],
+      [{ id: 'text-embedding-3-small', capabilities: { reasoning: true } }],
+    )
+    expect(result).toEqual([
+      { id: 'text-embedding-3-small', capabilities: { reasoning: true, embedding: true } },
+    ])
   })
 })

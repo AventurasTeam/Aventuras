@@ -21,6 +21,7 @@ const providerCapabilitiesSchema = z.object({
   structuredOutput: z.boolean().optional(),
   matryoshkaSupported: z.boolean().optional(),
   matryoshkaDims: z.array(z.number()).optional(),
+  embedding: z.boolean().optional(),
 })
 
 export const providerInstanceSchema = z.object({
