@@ -19,10 +19,13 @@ const BANNED_PROPERTIES = new Set(['behavior', 'binding'])
 
 // CSS escapes survive postcss serialization raw, and the browser decodes them
 // at parse time — so `\75rl(…)` and `u\72 l(…)` both resolve to `url(`. Decode
-// before inspecting so an escape-obfuscated name can't dodge detection.
+// before inspecting so an escape-obfuscated name can't dodge detection. The
+// browser normalizes CRLF to LF before tokenizing, so a hex escape's single
+// optional trailing whitespace swallows a whole `\r\n`; match it as one unit or
+// the stray `\n` splits the name and lets the reference through.
 function cssUnescape(input: string): string {
   return input.replace(
-    /\\([0-9a-fA-F]{1,6})[ \t\r\n\f]?|\\([^\n\r\f0-9a-fA-F])/g,
+    /\\([0-9a-fA-F]{1,6})(?:\r\n|[ \t\r\n\f])?|\\([^\n\r\f0-9a-fA-F])/g,
     (_match, hex: string | undefined, char: string | undefined) => {
       if (hex !== undefined) {
         try {

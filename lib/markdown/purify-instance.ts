@@ -25,9 +25,12 @@ export function createDomPurify(): typeof DOMPurify {
     const { JSDOM } = require('jsdom')
     return DOMPurify(new JSDOM('').window)
   } catch {
+    // Fail closed: with no real sanitizer available, never emit untrusted markup
+    // unmodified. Only reachable during Node prerender without jsdom, never at
+    // device/Electron runtime where `window` exists.
     const mock = (() => {}) as any
     mock.addHook = () => {}
-    mock.sanitize = (html: string) => html
+    mock.sanitize = () => ''
     return mock
   }
 }

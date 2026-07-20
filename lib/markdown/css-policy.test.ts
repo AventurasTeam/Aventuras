@@ -13,6 +13,14 @@ describe('declarationHasBannedValue', () => {
     expect(declarationHasBannedValue('background', 'u\\72 l(https://evil.example/x)')).toBe(true)
   })
 
+  it('consumes a CRLF as the single trailing whitespace of a hex escape', () => {
+    // The browser preprocesses \r\n to \n before tokenizing, so the hex
+    // escape's optional trailing whitespace swallows the whole CRLF and the
+    // name resolves to url(. Matching only \r would leave a stray \n and let
+    // the reference through.
+    expect(declarationHasBannedValue('background', '\\75\r\nrl(https://evil.example/x)')).toBe(true)
+  })
+
   it('flags resource functions that carry no url() token', () => {
     expect(
       declarationHasBannedValue('background-image', 'image-set("https://evil.example/x" 1x)'),

@@ -78,4 +78,16 @@ describe('sanitizeRichHtml', () => {
     const clean = sanitizeRichHtml('<style>@}{ garbage</style><p>x</p>')
     expect(clean).toContain('<p>x</p>')
   })
+
+  it('does not let a style attribute smuggle overlay decls via a kept at-rule', () => {
+    // At-rules are meaningless in an inline style attribute. A value that closes
+    // the synthetic `*{}` wrapper and opens `@media` would otherwise have its
+    // nested declarations flattened straight into the "sanitized" attribute — a
+    // full-viewport overlay (UI-redressing) vector.
+    const clean = sanitizeRichHtml(
+      '<p style="color: red } @media all { div { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black } }">x</p>',
+    )
+    expect(clean).not.toContain('position: fixed')
+    expect(clean).not.toContain('@media')
+  })
 })

@@ -5,11 +5,12 @@ import { declarationHasBannedValue } from './css-policy'
 import { createDomPurify, NAVIGATION_FORBID_ATTRS } from './purify-instance'
 
 const KEPT_AT_RULES = new Set(['media', 'keyframes'])
+const NO_AT_RULES: ReadonlySet<string> = new Set()
 
-function scrubRoot(root: Root): void {
+function scrubRoot(root: Root, keptAtRules: ReadonlySet<string> = KEPT_AT_RULES): void {
   root.walkAtRules((atRule) => {
     const name = atRule.name.toLowerCase().replace(/^-\w+-/, '')
-    if (!KEPT_AT_RULES.has(name)) atRule.remove()
+    if (!keptAtRules.has(name)) atRule.remove()
   })
   root.walkDecls((decl) => {
     if (declarationHasBannedValue(decl.prop, decl.value)) decl.remove()
@@ -35,7 +36,10 @@ function scrubStylesheet(css: string): string {
 function scrubDeclarationList(style: string): string {
   try {
     const root = safeParser(`*{${style}}`)
-    scrubRoot(root)
+    // At-rules are meaningless in an inline style attribute; keeping any lets a
+    // value break out of the synthetic wrapper and smuggle nested declarations
+    // (e.g. a full-viewport overlay) back into the flattened attribute output.
+    scrubRoot(root, NO_AT_RULES)
     const decls: string[] = []
     root.walkDecls((decl) => {
       decls.push(`${decl.prop}: ${decl.value}`)
