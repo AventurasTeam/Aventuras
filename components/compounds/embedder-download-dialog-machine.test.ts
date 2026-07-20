@@ -332,6 +332,22 @@ describe('reducer — verifying state', () => {
       }
     }
   })
+
+  it('persist-failed transitions to failed with persist-failed reason (persistInstall rejection)', () => {
+    const before: DialogState = {
+      kind: 'verifying',
+      meta: sampleMeta,
+      verifyByFile: { 'model.onnx': 'ok', 'tokenizer.json': 'ok' },
+    }
+    const after = reducer(before, { type: 'persist-failed', message: 'disk full' })
+    expect(after.kind).toBe('failed')
+    if (after.kind === 'failed') {
+      expect(after.reason.kind).toBe('persist-failed')
+      if (after.reason.kind === 'persist-failed') {
+        expect(after.reason.message).toBe('disk full')
+      }
+    }
+  })
 })
 
 describe('reducer — failed state', () => {

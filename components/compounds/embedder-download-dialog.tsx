@@ -140,6 +140,8 @@ function failedTitle(reason: FailReason): string {
       return '⚠ Verification failed'
     case 'smoke-test-failed':
       return '⚠ Execution provider not supported'
+    case 'persist-failed':
+      return '⚠ Couldn’t save the installed model'
   }
 }
 
@@ -532,6 +534,18 @@ function FailedBody({ reason }: { reason: FailReason }) {
           </Text>
         </View>
       )
+    case 'persist-failed':
+      return (
+        <View className="gap-2">
+          <Text>The model downloaded and verified, but couldn’t be saved to disk:</Text>
+          <Text className="font-mono" size="sm">
+            {reason.message}
+          </Text>
+          <Text variant="muted" size="sm">
+            Check available disk space and try again.
+          </Text>
+        </View>
+      )
   }
 }
 
@@ -634,6 +648,14 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
   const [state, dispatch] = useReducer(reducer, init, initialState)
   const resolvedRef = useRef(false)
   const lastUserActionRef = useRef<'declined' | 'cancelled' | null>(null)
+  // Persisted separately from DialogState — 'downloading'/'verifying' don't
+  // carry licenseText, but persistInstall (fired from the verifying effect)
+  // needs the exact text the user accepted in the 'license' state.
+  const licenseTextRef = useRef('')
+
+  useEffect(() => {
+    if (state.kind === 'license') licenseTextRef.current = state.licenseText
+  }, [state])
 
   useEffect(() => {
     if (state.kind !== 'card-fetch') return
@@ -726,8 +748,10 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
     if (state.kind !== 'verifying') return
     if (init.kind !== 'catalog') return
     let cancelled = false
-    const files = init.entry.files
-    const expected = init.entry.expectedSha256
+    const meta = state.meta
+    const entry = init.entry
+    const files = entry.files
+    const expected = entry.expectedSha256
     void (async () => {
       for (const file of files) {
         if (cancelled) return
@@ -736,15 +760,33 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
           if (cancelled) return
           const expectedHash = expected[file]
           if (expectedHash && hash !== expectedHash) {
+            void driver.deletePartial(entry.id).catch(() => {})
             dispatch({ type: 'verify-failed', file })
             return
           }
           dispatch({ type: 'verify-progress', file, result: 'ok' })
         } catch {
           if (cancelled) return
+          void driver.deletePartial(entry.id).catch(() => {})
           dispatch({ type: 'verify-failed', file })
           return
         }
+      }
+      if (cancelled) return
+      // 'installed' (per model-management.md → Storage layout) means files +
+      // LICENSE.txt + .attestation on disk — persist before leaving
+      // 'verifying' so a resolve to 'done' always reflects a real install.
+      try {
+        await driver.persistInstall({
+          meta,
+          files: [...files],
+          licenseText: licenseTextRef.current,
+        })
+      } catch (err: unknown) {
+        if (cancelled) return
+        const message = err instanceof Error ? err.message : String(err)
+        dispatch({ type: 'persist-failed', message })
+        return
       }
       if (cancelled) return
       dispatch({ type: 'all-verified' })
@@ -752,6 +794,11 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
     return () => {
       cancelled = true
     }
+    // state.meta is intentionally omitted: it's constant for the lifetime of
+    // a single 'verifying' state (only verifyByFile changes per progress
+    // tick), and including it would re-run this effect — restarting the
+    // verify/persist loop — on every per-file verify-progress dispatch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.kind, driver, init])
 
   const computeResolution = (s: DialogState): DialogResolution | null => {
@@ -795,6 +842,16 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
         dispatch({ type: 'license-declined' })
       } else if (state.kind !== 'done') {
         lastUserActionRef.current = 'cancelled'
+        // Partial files can only exist once a download has started — earlier
+        // states (card-fetch, resolving, ep-picker…) never wrote to disk.
+        // Fire-and-forget: cleanup must not block the dialog closing, and a
+        // failure here is re-covered by the next download's clean-slate guard.
+        if (
+          (state.kind === 'downloading' || state.kind === 'verifying') &&
+          init.kind === 'catalog'
+        ) {
+          void driver.deletePartial(init.entry.id).catch(() => {})
+        }
         dispatch({ type: 'cancel' })
       }
     }

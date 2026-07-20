@@ -182,6 +182,10 @@ export const Failed_SmokeTest = failed({
   kind: 'smoke-test-failed',
   ep: 'webgpu',
 })
+export const Failed_Persist = failed({
+  kind: 'persist-failed',
+  message: 'ENOSPC: no space left on device',
+})
 
 // ThemeMatrix routes each row's modal through a per-row PortalHost
 // named after the theme id. The Dialog primitive normally portals
