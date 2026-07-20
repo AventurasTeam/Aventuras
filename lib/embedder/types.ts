@@ -2,7 +2,13 @@ export type EmbedderBackend = 'local' | 'provider'
 
 export type EmbedderConfig =
   | { backend: 'local'; modelId: string; dim: number }
-  | { backend: 'provider'; providerId: string; modelId: string; dim: number }
+  | {
+      backend: 'provider'
+      providerId: string
+      modelId: string
+      /** 0 = dimensionality not yet probed; resolved at first embed call. */
+      dim: number
+    }
 
 // Init-vs-call split lets consumers distinguish "session never came up"
 // (surface at Test Embedder / retry) from "this specific call failed"
