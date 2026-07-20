@@ -94,9 +94,12 @@
   const displayScenarioData = $derived(vaultEditor.viewMode ? viewScenarioData : scenarioData)
 
   // Initialize local $state from the current source when switching modes
-  // or when the underlying data changes. In view mode, skip syncing if
-  // the user is actively editing (formDirty) to avoid overwriting edits
-  // when a new AI tool response arrives.
+  // or when the underlying data changes. In both view and edit mode, skip
+  // syncing if the user is actively editing (formDirty) to avoid overwriting
+  // edits when a new AI tool response arrives — without this guard, a sibling
+  // pending change arriving mid-edit (e.g. the agent proposing another update
+  // to the same character) silently discards whatever the user just changed,
+  // including tag/trait removals via the X button.
   $effect(() => {
     if (isViewMode) {
       if (formDirty) return
@@ -107,6 +110,8 @@
       } else if (viewScenarioData) {
         scenarioData = { ...viewScenarioData }
       }
+    } else if (formDirty) {
+      return
     } else if (change.entityType === 'character' && 'data' in change && change.data) {
       const source =
         composedData ??

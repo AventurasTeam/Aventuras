@@ -11,6 +11,7 @@ import {
   type StopCondition,
   type ToolSet,
   type StepResult,
+  type PrepareStepFunction,
 } from 'ai'
 import type { LanguageModelV3 } from '@ai-sdk/provider'
 import type { ProviderOptions } from '@ai-sdk/provider-utils'
@@ -161,6 +162,8 @@ export interface CreateAssistantOptions<TTools extends ToolSet> {
   stopWhen: StopCondition<TTools>
   /** Optional abort signal for cancellation - passed to generate() calls */
   signal?: AbortSignal
+  /** Optional per-step hook to dynamically filter active tools */
+  prepareStep?: PrepareStepFunction<TTools>
 }
 
 /**
@@ -176,7 +179,7 @@ export function createStreamingAgenticAssistant<TTools extends ToolSet>(
   options: CreateAssistantOptions<TTools>,
   serviceId: string,
 ): AssistantWithSignal<TTools> {
-  const { presetId, instructions, tools, stopWhen, signal } = options
+  const { presetId, instructions, tools, stopWhen, signal, prepareStep } = options
   const { preset, providerType, model, providerOptions } = resolveAgentConfig(presetId, serviceId)
 
   log('createStreamingAgenticAssistant', {
@@ -191,6 +194,7 @@ export function createStreamingAgenticAssistant<TTools extends ToolSet>(
     instructions,
     tools,
     stopWhen,
+    prepareStep,
     temperature: !settings.advancedRequestSettings.manualMode ? preset.temperature : undefined,
     maxOutputTokens: !settings.advancedRequestSettings.manualMode ? preset.maxTokens : undefined,
     providerOptions,

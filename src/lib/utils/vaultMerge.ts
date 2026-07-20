@@ -61,10 +61,42 @@ export function mergeArrayLists(
     }
   }
 
-  // 2. Detect appended items (beyond previous length)
+  // 2. Detect appended items (beyond previous length), skipping any that were
+  // already added to baseArr by an earlier sibling change in this same
+  // composition pass. Without this, composing multiple sibling pending
+  // changes for the same entity (e.g. two update_character calls proposed
+  // back-to-back, before either is approved) re-appends the same "new" items
+  // every time: each change independently diffs against the same stale,
+  // not-yet-approved `previous`, so from its own perspective the item is
+  // genuinely new even though an earlier sibling already added it to baseArr.
+  //
+  // baseArr can contain a value for two different reasons: it was already
+  // there (accounted for by prevArr) or an earlier sibling appended it. Only
+  // the latter should suppress a duplicate appended item — so prevArr's own
+  // counts are subtracted out first, leaving only the "extra" copies a
+  // sibling is responsible for. Otherwise a genuinely-intended duplicate in
+  // `data` (already present once in `previous`, intentionally added again)
+  // would be silently dropped.
+  const baseValueCounts = new Map<string, number>()
+  for (const b of baseArr) {
+    const s = JSON.stringify(b)
+    baseValueCounts.set(s, (baseValueCounts.get(s) ?? 0) + 1)
+  }
+  for (const p of prevArr) {
+    const s = JSON.stringify(p)
+    const count = baseValueCounts.get(s)
+    if (count) baseValueCounts.set(s, count - 1)
+  }
   const appended: unknown[] = []
   for (let i = prevArr.length; i < dataArr.length; i++) {
-    appended.push(dataArr[i])
+    const item = dataArr[i]
+    const s = JSON.stringify(item)
+    const remaining = baseValueCounts.get(s) ?? 0
+    if (remaining > 0) {
+      baseValueCounts.set(s, remaining - 1)
+      continue
+    }
+    appended.push(item)
   }
 
   // 3. Compute removals using count-based multiset

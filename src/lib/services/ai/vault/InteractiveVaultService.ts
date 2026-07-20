@@ -7,7 +7,8 @@
  */
 
 import type { VaultCharacter, VaultLorebook, VaultLorebookEntry, VaultScenario } from '$lib/types'
-import type { ModelMessage, TextPart, ToolSet } from 'ai'
+import { tool, type ModelMessage, type ToolSet } from 'ai'
+import { z } from 'zod'
 import { settings } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { characterVault } from '$lib/stores/characterVault.svelte'
@@ -15,7 +16,7 @@ import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
 import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
 import { createLogger } from '$lib/log'
 import { FandomService } from '../../fandom'
-import { stopWhenDone } from '../sdk/agents'
+import { stopWhenDone } from '../sdk/agents/stopConditions'
 import {
   createCharacterTools,
   createScenarioTools,
@@ -38,6 +39,55 @@ import { createStreamingAgenticAssistant } from '../sdk/agents/factory'
 import { mergeIntent, scenarioToRecord, characterToRecord } from '$lib/utils/vaultMerge'
 
 const log = createLogger('InteractiveVault')
+
+// ============================================================================
+// Dynamic Tool Loading
+// ============================================================================
+
+export type ToolCategory = 'characters' | 'scenarios' | 'lorebooks' | 'images' | 'fandom'
+
+export const TOOL_CATEGORIES: Record<ToolCategory, string[]> = {
+  characters: [
+    'list_characters',
+    'read_character',
+    'create_character',
+    'update_character',
+    'delete_character',
+  ],
+  scenarios: [
+    'list_scenarios',
+    'read_scenario',
+    'create_scenario',
+    'update_scenario',
+    'delete_scenario',
+    'add_scenario_npc',
+    'update_scenario_npc',
+    'remove_scenario_npc',
+  ],
+  lorebooks: [
+    'list_lorebooks',
+    'read_lorebook_summary',
+    'create_lorebook',
+    'list_entries',
+    'read_entry',
+    'create_entry',
+    'update_entry',
+    'delete_entry',
+    'merge_entries',
+    'link_character_to_lorebook',
+    'create_lorebook_entry_from_character',
+  ],
+  images: ['generate_standard_image', 'generate_portrait', 'set_portrait'],
+  fandom: ['search_fandom', 'get_fandom_article_info', 'fetch_fandom_section'],
+}
+
+export const ALWAYS_ACTIVE_TOOLS = ['load_toolset', 'show_entity']
+
+const toolCategorySchema = z.enum(['characters', 'scenarios', 'lorebooks', 'images', 'fandom'])
+
+export function getActiveToolNames(loaded: Set<ToolCategory>): string[] {
+  return [...ALWAYS_ACTIVE_TOOLS, ...[...loaded].flatMap((c) => TOOL_CATEGORIES[c])]
+}
 
 // ============================================================================
 // Types
@@ -77,8 +127,11 @@ export type StreamEvent =
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: Record<string, unknown> }
   | { type: 'tool_end'; toolCall: ToolCallDisplay }
   | { type: 'thinking' }
+  | { type: 'text_delta'; text: string }
+  | { type: 'reasoning_delta'; text: string }
   | { type: 'message'; message: ChatMessage }
   | { type: 'done'; result: SendMessageResult }
+  | { type: 'aborted' }
   | { type: 'error'; error: string }
   | {
       type: 'show_entity'
@@ -135,6 +188,9 @@ export class InteractiveVaultService extends BaseAIService {
   /** Per-lorebook known entry version at last interaction — used to detect external changes */
   private _knownEntryVersions = new Map<string, number>()
 
+  /** Currently loaded tool categories — persists across messages in a session */
+  readonly loadedCategories: Set<ToolCategory> = new Set()
+
   /** Session-level map of generated images: imageId → base64 data URL */
   readonly generatedImages: Map<string, string> = new Map()
 
@@ -164,6 +220,18 @@ export class InteractiveVaultService extends BaseAIService {
   async initialize(vaultSummary: VaultSummary, focusedEntity?: FocusedEntity): Promise<void> {
     this.conversationHistory = []
 
+    // Seed loaded categories from focused entity context
+    this.loadedCategories.clear()
+    if (focusedEntity) {
+      const categoryMap: Record<string, ToolCategory> = {
+        character: 'characters',
+        lorebook: 'lorebooks',
+        scenario: 'scenarios',
+      }
+      const seeded = categoryMap[focusedEntity.entityType]
+      if (seeded) this.loadedCategories.add(seeded)
+    }
+
     const template = await database.getPackTemplate('default-pack', 'interactive-lorebook')
 
     let content = template?.content ?? ''
@@ -175,11 +243,15 @@ export class InteractiveVaultService extends BaseAIService {
     this.systemPrompt = content
 
     if (focusedEntity) {
-      this.systemPrompt += `\n\n## Active Context\nThe user opened this assistant from the ${focusedEntity.entityType} editor for "${focusedEntity.entityName}" (ID: \`${focusedEntity.entityId}\`). When the user refers to "this character", "this lorebook", "this scenario", or uses pronouns referencing an entity without naming it, assume they mean this one.`
+      this.systemPrompt += `\n\n## Active Context\nThe user opened this assistant from the ${focusedEntity.entityType} editor for "${focusedEntity.entityName}" (ID: \`${focusedEntity.entityId}\`). The \`${focusedEntity.entityType}s\` toolset is pre-loaded. When the user refers to "this character", "this lorebook", "this scenario", or uses pronouns referencing an entity without naming it, assume they mean this one.`
     }
 
     this.initialized = true
-    log('Initialized conversation', { ...vaultSummary, model: this.preset.model })
+    log('Initialized conversation', {
+      ...vaultSummary,
+      model: this.preset.model,
+      loadedCategories: [...this.loadedCategories],
+    })
   }
 
   /**
@@ -400,8 +472,40 @@ export class InteractiveVaultService extends BaseAIService {
     }
     const imageTools = createImageTools(imageContext)
 
-    // Combine all tools
+    // Dynamic tool loading tool
+    const loadToolsetTool = {
+      load_toolset: tool({
+        description:
+          'Load tool categories to enable their tools. This REPLACES the current set — include all categories you need. Available: characters, scenarios, lorebooks, images, fandom.',
+        inputSchema: z.object({
+          categories: z
+            .array(toolCategorySchema)
+            .describe('Categories to load. Replaces any previously loaded categories.'),
+        }),
+        execute: async ({ categories }: { categories: ToolCategory[] }) => {
+          const previous = [...this.loadedCategories]
+          this.loadedCategories.clear()
+          for (const cat of categories) {
+            this.loadedCategories.add(cat)
+          }
+          const loaded = [...this.loadedCategories]
+          log('Tool categories updated', { previous, loaded })
+          return {
+            success: true,
+            loaded,
+            toolCount: loaded.reduce((sum, c) => sum + TOOL_CATEGORIES[c].length, 0),
+            message:
+              loaded.length > 0
+                ? `Loaded: ${loaded.join(', ')}. You now have access to those tools.`
+                : 'All categories unloaded. Only base tools available.',
+          }
+        },
+      }),
+    }
+
+    // Combine all tools (all registered, activeTools controls visibility)
     const tools: Record<string, unknown> = {
+      ...loadToolsetTool,
       ...characterTools,
       ...scenarioTools,
       ...lorebookTools,
@@ -427,6 +531,9 @@ export class InteractiveVaultService extends BaseAIService {
           tools: tools as ToolSet,
           stopWhen: stopWhenDone(50),
           signal,
+          prepareStep: () => ({
+            activeTools: getActiveToolNames(this.loadedCategories) as Array<keyof typeof tools>,
+          }),
         },
         'interactive-vault',
       )
@@ -481,15 +588,16 @@ export class InteractiveVaultService extends BaseAIService {
             break
 
           case 'reasoning-start':
-          case 'reasoning-delta':
-            if (event.type === 'reasoning-delta') {
-              stepReasoning = (stepReasoning || '') + event.text
-            }
             yield { type: 'thinking' }
+            break
+          case 'reasoning-delta':
+            stepReasoning = (stepReasoning || '') + event.text
+            yield { type: 'reasoning_delta', text: event.text }
             break
 
           case 'text-delta':
             stepContent += event.text
+            yield { type: 'text_delta', text: event.text }
             break
 
           case 'tool-call':
@@ -560,6 +668,15 @@ export class InteractiveVaultService extends BaseAIService {
           case 'error':
             yield { type: 'error', error: String(event.error) }
             return
+
+          case 'abort':
+            // The AI SDK can signal a cancelled stream as a native fullStream
+            // part instead of (or in addition to) throwing — without this,
+            // that part would fall through unhandled, the loop would end
+            // normally, and the caller would see a 'done' event as if the
+            // response had actually completed.
+            yield { type: 'aborted' }
+            return
         }
       }
 
@@ -577,6 +694,19 @@ export class InteractiveVaultService extends BaseAIService {
         },
       }
     } catch (error) {
+      // Prefer the signal as the source of truth for "was this a user-initiated
+      // stop": some runtimes (e.g. Tauri's WebKit-based webview) reject an
+      // aborted fetch with a value that isn't `instanceof Error` at all, so
+      // `error.name === 'AbortError'` alone can miss it and fall through to
+      // the generic error path below.
+      const errorName =
+        error && typeof error === 'object' && 'name' in error
+          ? (error as { name?: unknown }).name
+          : undefined
+      if (signal?.aborted || errorName === 'AbortError') {
+        yield { type: 'aborted' }
+        return
+      }
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       log('Error in sendMessageStreaming', { error: errorMessage })
       yield { type: 'error', error: errorMessage }
@@ -874,7 +1004,7 @@ export class InteractiveVaultService extends BaseAIService {
 
     // Create new conversation with auto-generated title
     const id = `vc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const title = this.generateTitle()
+    const title = this.generateTitle(chatMessages)
     const now = new Date().toISOString()
 
     await database.createVaultConversation({
@@ -958,17 +1088,9 @@ export class InteractiveVaultService extends BaseAIService {
    * Auto-generate a conversation title from the first user message.
    * Truncates to ~50 characters at a word boundary.
    */
-  private generateTitle(): string {
-    const firstUserMessage = this.conversationHistory.find((m) => m.role === 'user')
-    if (!firstUserMessage) return 'New Conversation'
-
-    const content =
-      typeof firstUserMessage.content === 'string'
-        ? firstUserMessage.content
-        : firstUserMessage.content
-            .filter((p): p is TextPart => p.type === 'text')
-            .map((p) => p.text)
-            .join(' ')
+  private generateTitle(chatMessages: ChatMessage[]): string {
+    const firstUser = chatMessages.find((m) => m.role === 'user')
+    const content = firstUser?.content
 
     if (!content) return 'New Conversation'
 
@@ -992,6 +1114,7 @@ export class InteractiveVaultService extends BaseAIService {
     this.systemPrompt = ''
     this.initialized = false
     this.conversationId = null
+    this.loadedCategories.clear()
     this.generatedImages.clear()
     this._knownEntryVersions.clear()
   }

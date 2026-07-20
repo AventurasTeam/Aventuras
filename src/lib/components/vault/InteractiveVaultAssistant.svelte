@@ -36,6 +36,7 @@
     ImageIcon,
     CornerDownLeft,
     CircleUser,
+    Pencil,
   } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
   import VaultDiffView from './VaultDiffView.svelte'
@@ -64,6 +65,14 @@
   // AbortController for cancelling ongoing requests
   let abortController: AbortController | null = null
 
+  // Identifies which handleSend() invocation currently "owns" generation
+  // state. Bumped by handleAbort() and by each new handleSend() call so that
+  // a superseded invocation's finally block (which can still be resolving
+  // asynchronously well after the user moved on) can detect it's stale and
+  // skip finalizing/saving — otherwise it could clobber a newer generation's
+  // in-progress state or abortController, or write a stale save.
+  let activeGenerationId = 0
+
   // Service instance
   let service: InteractiveVaultService | null = $state(null)
 
@@ -87,10 +96,52 @@
   // In-flight pending changes (shown in chat before step message arrives)
   let streamingChanges = $state<VaultPendingChange[]>([])
 
+  // ID of the message currently being streamed into
+  let streamingMessageId = $state<string | null>(null)
+
+  // RAF-throttled scroll for frequent text deltas
+  let scrollRAF: number | null = null
+  function scrollToBottomThrottled() {
+    if (scrollRAF) return
+    scrollRAF = requestAnimationFrame(() => {
+      scrollToBottom()
+      scrollRAF = null
+    })
+  }
+
+  // Serializes conversation saves so a slower-resolving earlier write can never
+  // overwrite a more complete later one (e.g. eager save vs. final save).
+  //
+  // pendingSave itself always resolves (even when a save fails) so one failed
+  // save can never block saves queued after it. The promise *returned* to the
+  // caller reflects the real outcome instead, so callers can avoid a
+  // destructive transition (new conversation / switch) when their own save
+  // just failed rather than silently discarding it.
+  let pendingSave: Promise<unknown> = Promise.resolve()
+  function queueSave(): Promise<boolean> {
+    if (!service) return Promise.resolve(false)
+    const attempt = pendingSave.then(() =>
+      service!
+        .saveConversation(messages, vaultEditor.pendingChanges)
+        .then(() => loadConversationsList()),
+    )
+    pendingSave = attempt.catch((e) => {
+      console.error('[VaultAssistant] Save failed:', e)
+    })
+    return attempt.then(
+      () => true,
+      () => false,
+    )
+  }
+
   // Conversation history selector
   let conversations = $state<VaultConversation[]>([])
   let conversationSelectorOpen = $state(false)
   const MAX_CONVERSATIONS = 10
+
+  // Rename conversation
+  let renamingConversationId = $state<string | null>(null)
+  let renameValue = $state('')
 
   // Pending changes quick list
   let pendingListOpen = $state(false)
@@ -178,9 +229,9 @@
   }
 
   // Initialize service on mount
-  onMount(() => {
+  onMount(async () => {
     mounted = true
-    initializeService()
+    await initializeService()
     loadConversationsList().catch(() => {})
 
     // Auto-open focused entity if provided
@@ -221,12 +272,12 @@
     vaultEditor.reset()
   })
 
-  function initializeService(focused: FocusedEntity | null = null) {
+  async function initializeService(focused: FocusedEntity | null = null) {
     try {
       service = new InteractiveVaultService('interactiveVault')
 
       const allLorebooks = lorebookVault.items
-      service.initialize(
+      await service.initialize(
         {
           characterCount: characterVault.items.length,
           lorebookCount: allLorebooks.length,
@@ -265,23 +316,38 @@
 
   async function handleNewConversation() {
     if (!service) return
-    // Auto-save current conversation before starting new one
+    handleAbort()
+    // Auto-save current conversation before starting new one. Routed through the
+    // pendingSave queue (not a direct call) so it can't race a still-in-flight
+    // save from handleSend and can't run against the service instance we're about
+    // to replace below. Bail out on failure instead of silently discarding the
+    // conversation the user was just in.
     if (messages.some((m) => !m.isGreeting)) {
-      await service.saveConversation(messages, vaultEditor.pendingChanges).catch(() => {})
+      const saved = await queueSave()
+      if (!saved) {
+        error = 'Failed to save the current conversation. Try again before starting a new one.'
+        return
+      }
     }
     service.reset()
     vaultEditor.reset()
     activeTab = 'chat'
     prevPendingCount = 0
-    initializeService()
+    await initializeService()
     await loadConversationsList()
   }
 
   async function handleSwitchConversation(id: string) {
     if (!service) return
-    // Auto-save current before switching
+    handleAbort()
+    // Auto-save current before switching. Routed through the pendingSave queue —
+    // see handleNewConversation for why a direct call here would be unsafe.
     if (messages.some((m) => !m.isGreeting)) {
-      await service.saveConversation(messages, vaultEditor.pendingChanges).catch(() => {})
+      const saved = await queueSave()
+      if (!saved) {
+        error = 'Failed to save the current conversation. Try again before switching.'
+        return
+      }
     }
     const loaded = await service.loadConversation(id)
     if (loaded) {
@@ -321,16 +387,49 @@
     try {
       await database.deleteVaultConversation(id)
       if (service?.getConversationId() === id) {
+        // Abort any in-flight generation before replacing the service — same
+        // reasoning as handleNewConversation/handleSwitchConversation, this is
+        // the conversation currently being generated into.
+        handleAbort()
         service.reset()
         vaultEditor.reset()
         activeTab = 'chat'
         prevPendingCount = 0
-        initializeService()
+        await initializeService()
       }
       await loadConversationsList()
     } catch {
       // Ignore
     }
+  }
+
+  function startRename(conv: VaultConversation) {
+    renamingConversationId = conv.id
+    renameValue = conv.title || ''
+  }
+
+  async function commitRename() {
+    if (!renamingConversationId) return
+    const id = renamingConversationId
+    const trimmed = renameValue.trim()
+    renamingConversationId = null
+    renameValue = ''
+    if (!trimmed) return
+    try {
+      await database.saveVaultConversation(id, { title: trimmed })
+      await loadConversationsList()
+    } catch (e) {
+      console.error('[VaultAssistant] Rename failed:', e)
+    }
+  }
+
+  function cancelRename() {
+    renamingConversationId = null
+    renameValue = ''
+  }
+
+  function focus(node: HTMLElement) {
+    node.focus()
   }
 
   function handleReferenceImage(imageId: string) {
@@ -366,6 +465,9 @@
         timestamp: Date.now(),
       }
       messages = [...messages, userMsg]
+
+      // Eagerly save so the conversation appears in history immediately
+      queueSave()
     }
     await tick()
     scrollToBottom()
@@ -375,6 +477,7 @@
     activeToolCalls = []
 
     abortController = new AbortController()
+    const myGenerationId = ++activeGenerationId
 
     try {
       // Check for external lorebook edits before streaming
@@ -413,14 +516,62 @@
         userMessage,
         abortController.signal,
       )) {
+        // Ensure a streaming placeholder message exists in the messages array
+        function ensureStreamingMessage() {
+          if (!streamingMessageId) {
+            const id = `streaming-${Date.now()}`
+            streamingMessageId = id
+            messages = [
+              ...messages,
+              {
+                id,
+                role: 'assistant',
+                content: '',
+                timestamp: Date.now(),
+              },
+            ]
+          }
+        }
+
+        // Update the last message (the streaming placeholder) in place
+        function updateStreamingMessage(updater: (msg: ChatMessage) => ChatMessage) {
+          const idx = messages.findIndex((m) => m.id === streamingMessageId)
+          if (idx === -1) return
+          const updated = updater(messages[idx])
+          messages = [...messages.slice(0, idx), updated, ...messages.slice(idx + 1)]
+        }
+
         switch (event.type) {
           case 'thinking':
             isThinking = true
             activeToolCalls = []
+            ensureStreamingMessage()
+            break
+
+          case 'text_delta':
+            isThinking = false
+            ensureStreamingMessage()
+            updateStreamingMessage((msg) => ({
+              ...msg,
+              content: msg.content + event.text,
+            }))
+            scrollToBottomThrottled()
+            break
+
+          case 'reasoning_delta':
+            isThinking = false
+            ensureStreamingMessage()
+            updateStreamingMessage((msg) => ({
+              ...msg,
+              reasoning: (msg.reasoning || '') + event.text,
+            }))
             break
 
           case 'tool_start':
             isThinking = false
+            // Ensure a placeholder exists even when the model calls a tool with no
+            // preceding text/reasoning, so the tool chip has somewhere to render.
+            ensureStreamingMessage()
             activeToolCalls = [
               ...activeToolCalls,
               {
@@ -465,7 +616,18 @@
             // Clear streaming changes that are now attached to this message
             const msgChangeIds = new Set(event.message.pendingChanges?.map((c) => c.id) ?? [])
             streamingChanges = streamingChanges.filter((c) => !msgChangeIds.has(c.id))
-            messages = [...messages, event.message]
+            // Replace the streaming placeholder with the final message
+            if (streamingMessageId) {
+              const idx = messages.findIndex((m) => m.id === streamingMessageId)
+              if (idx !== -1) {
+                messages = [...messages.slice(0, idx), event.message, ...messages.slice(idx + 1)]
+              } else {
+                messages = [...messages, event.message]
+              }
+            } else {
+              messages = [...messages, event.message]
+            }
+            streamingMessageId = null
             activeToolCalls = []
             isThinking = true
             await tick()
@@ -489,11 +651,11 @@
             break
 
           case 'done':
-            // Save full UI state so user can continue exactly where they left off
-            service
-              .saveConversation(messages, vaultEditor.pendingChanges)
-              .then(() => loadConversationsList())
-              .catch(() => {})
+            break
+
+          case 'aborted':
+            // User-initiated stop (button or Escape) — handleAbort() already reset
+            // the UI state; nothing else to do here, and no error should be shown.
             break
 
           case 'error':
@@ -521,11 +683,22 @@
       }
       messages = [...messages, errorMsg]
     } finally {
-      isGenerating = false
-      isThinking = false
-      activeToolCalls = []
-      streamingChanges = []
-      abortController = null
+      // A newer generation (or an explicit abort) has already taken over —
+      // let it own the shared state instead of clobbering it out from under
+      // whoever's active now (their abortController, their isGenerating, or
+      // worse, a stale save of this stale generation's messages).
+      if (myGenerationId === activeGenerationId) {
+        isGenerating = false
+        isThinking = false
+        activeToolCalls = []
+        streamingChanges = []
+        streamingMessageId = null
+        abortController = null
+        // Always save conversation (success, error, or abort)
+        if (messages.some((m) => !m.isGreeting)) {
+          queueSave()
+        }
+      }
     }
   }
 
@@ -566,7 +739,7 @@
     if (!target) return
     try {
       await vaultEditor.approve(target, service)
-      await service.saveConversation(messages, vaultEditor.pendingChanges).catch(() => {})
+      await queueSave()
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to apply change'
     }
@@ -575,7 +748,7 @@
   async function handleReject(change: VaultPendingChange) {
     if (!service) return
     vaultEditor.reject(change, service)
-    await service.saveConversation(messages, vaultEditor.pendingChanges).catch(() => {})
+    await queueSave()
   }
 
   function handleEdit(change: VaultPendingChange) {
@@ -593,9 +766,35 @@
     const err = await vaultEditor.approveAll(service)
     if (err) error = err
     if (!err) {
-      await service.saveConversation(messages, vaultEditor.pendingChanges).catch(() => {})
+      await queueSave()
     }
     return err
+  }
+
+  /**
+   * Abort the in-flight request (if any) and reset generation UI state.
+   * Shared by the Escape handler, the dialog-close handler, and the
+   * stop button in VaultAssistantInput.
+   */
+  function handleAbort() {
+    // Invalidate any in-flight handleSend() so its finally block, whenever it
+    // gets around to resolving, recognizes it's stale and skips finalizing.
+    activeGenerationId++
+    if (abortController) {
+      abortController.abort()
+      abortController = null
+    }
+    isGenerating = false
+    isThinking = false
+    activeToolCalls = []
+    streamingChanges = []
+    // Drop the in-progress assistant message entirely rather than leaving a
+    // frozen partial response behind — it never finished, so there's nothing
+    // worth keeping.
+    if (streamingMessageId) {
+      messages = messages.filter((m) => m.id !== streamingMessageId)
+      streamingMessageId = null
+    }
   }
 
   /**
@@ -606,15 +805,7 @@
   function handleEscapeKeydown(e: KeyboardEvent) {
     if (isGenerating) {
       e.preventDefault()
-      // Abort the ongoing request
-      if (abortController) {
-        abortController.abort()
-        abortController = null
-      }
-      isGenerating = false
-      isThinking = false
-      activeToolCalls = []
-      streamingChanges = []
+      handleAbort()
       error = 'Generation stopped'
     }
   }
@@ -629,14 +820,7 @@
     if (open) return
     if (!mounted) return
     if (isGenerating) {
-      if (abortController) {
-        abortController.abort()
-        abortController = null
-      }
-      isGenerating = false
-      isThinking = false
-      activeToolCalls = []
-      streamingChanges = []
+      handleAbort()
     }
     onClose()
   }
@@ -770,45 +954,82 @@
                     <div
                       class="group bg-surface-800 hover:bg-foreground/5 flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors"
                     >
-                      <button
-                        class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                        onclick={() => {
-                          conversationSelectorOpen = false
-                          handleSwitchConversation(conv.id)
-                        }}
-                      >
+                      {#if renamingConversationId === conv.id}
+                        <!-- Inline rename input -->
                         <div
                           class="bg-surface-700 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md"
                         >
                           <History class="text-surface-400 h-3.5 w-3.5" />
                         </div>
-                        <div class="min-w-0 flex-1">
-                          <div class="text-surface-200 truncate text-xs font-medium">
-                            {conv.title || 'Untitled'}
+                        <form
+                          class="flex min-w-0 flex-1 items-center gap-1.5"
+                          onsubmit={(e) => {
+                            e.preventDefault()
+                            commitRename()
+                          }}
+                        >
+                          <input
+                            class="bg-surface-700 text-surface-200 border-surface-600 focus:border-accent-500 min-w-0 flex-1 rounded-md border px-2 py-1 text-xs focus:outline-none"
+                            type="text"
+                            bind:value={renameValue}
+                            onkeydown={(e) => {
+                              if (e.key === 'Escape') cancelRename()
+                            }}
+                            onblur={() => commitRename()}
+                            use:focus
+                          />
+                        </form>
+                      {:else}
+                        <button
+                          class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                          onclick={() => {
+                            conversationSelectorOpen = false
+                            handleSwitchConversation(conv.id)
+                          }}
+                        >
+                          <div
+                            class="bg-surface-700 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md"
+                          >
+                            <History class="text-surface-400 h-3.5 w-3.5" />
                           </div>
-                          <div class="text-surface-500 mt-0.5 text-[10px]">
-                            {new Date(conv.updatedAt).toLocaleString(undefined, {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: 'numeric',
-                              minute: '2-digit',
-                            })}
-                            {#if i === conversations.length - 1 && conversations.length >= MAX_CONVERSATIONS}
-                              <span class="text-surface-600 ml-1">· oldest</span>
-                            {/if}
+                          <div class="min-w-0 flex-1">
+                            <div class="text-surface-200 truncate text-xs font-medium">
+                              {conv.title || 'Untitled'}
+                            </div>
+                            <div class="text-surface-500 mt-0.5 text-[10px]">
+                              {new Date(conv.updatedAt).toLocaleString(undefined, {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                              })}
+                              {#if i === conversations.length - 1 && conversations.length >= MAX_CONVERSATIONS}
+                                <span class="text-surface-600 ml-1">· oldest</span>
+                              {/if}
+                            </div>
                           </div>
-                        </div>
-                      </button>
-                      <button
-                        class="text-surface-500 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md opacity-0 transition-all group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400"
-                        onclick={(e) => {
-                          e.stopPropagation()
-                          handleDeleteConversation(conv.id)
-                        }}
-                        title="Delete conversation"
-                      >
-                        <Trash2 class="h-3 w-3" />
-                      </button>
+                        </button>
+                        <button
+                          class="text-surface-500 hover:bg-surface-600 hover:text-surface-200 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-all focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                          onclick={(e) => {
+                            e.stopPropagation()
+                            startRename(conv)
+                          }}
+                          title="Rename conversation"
+                        >
+                          <Pencil class="h-3 w-3" />
+                        </button>
+                        <button
+                          class="text-surface-500 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-all hover:bg-red-500/20 hover:text-red-400 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                          onclick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteConversation(conv.id)
+                          }}
+                          title="Delete conversation"
+                        >
+                          <Trash2 class="h-3 w-3" />
+                        </button>
+                      {/if}
                     </div>
                   {/each}
                 {/if}
@@ -956,6 +1177,7 @@
         {#if !isCompact.current || activeTab === 'chat'}
           <div class="flex-1 space-y-3 overflow-y-auto px-4 py-3" bind:this={messagesContainer}>
             {#each messages as message (message.id)}
+              {@const isStreaming = message.id === streamingMessageId}
               <div in:fade={{ duration: 150 }}>
                 <div
                   class={cn(
@@ -989,9 +1211,46 @@
                           </div>
                         {/if}
                         <div class="min-w-0 flex-1">
-                          <div class="chat-markdown prose-content break-words">
-                            {@html parseMarkdown(message.content)}
-                          </div>
+                          {#if message.content}
+                            <div
+                              class={cn(
+                                'chat-markdown prose-content break-words',
+                                isStreaming && 'streaming-content',
+                              )}
+                            >
+                              {@html parseMarkdown(message.content)}{#if isStreaming}<span
+                                  class="streaming-cursor"
+                                ></span>{/if}
+                            </div>
+                          {:else if isStreaming && isThinking && !message.reasoning}
+                            <div class="text-surface-400 flex items-center gap-2 text-sm">
+                              <Loader2 class="text-accent-400 h-3.5 w-3.5 animate-spin" />
+                              <span>Thinking...</span>
+                            </div>
+                          {/if}
+
+                          <!-- Active tool calls (only on the streaming message) -->
+                          {#if isStreaming && activeToolCalls.length > 0}
+                            <div class={message.content ? 'mt-2 space-y-1' : 'space-y-1'}>
+                              {#each activeToolCalls as toolCall (toolCall.id)}
+                                <div
+                                  class="border-surface-700 bg-surface-900 flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs"
+                                  in:fade
+                                >
+                                  {#if toolCall.result === '...'}
+                                    <Loader2
+                                      class="text-accent-400 h-3 w-3 flex-shrink-0 animate-spin"
+                                    />
+                                  {:else}
+                                    <Wrench class="text-surface-500 h-3 w-3 flex-shrink-0" />
+                                  {/if}
+                                  <span class="text-surface-300 font-medium"
+                                    >{formatToolCallName(toolCall.name)}</span
+                                  >
+                                </div>
+                              {/each}
+                            </div>
+                          {/if}
                         </div>
                       </div>
 
@@ -1114,64 +1373,19 @@
               </div>
             {/each}
 
-            <!-- Progress indicator -->
-            {#if isGenerating}
-              <div class="flex justify-start" in:fade>
-                <div class="max-w-[85%]">
-                  <div class="border-surface-700 bg-surface-800 rounded-xl border px-3.5 py-2.5">
-                    <div class="flex items-start gap-2.5">
-                      <div
-                        class="bg-accent-500/15 mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md"
-                      >
-                        <Bot class="text-accent-400 h-3 w-3" />
-                      </div>
-                      <div class="min-w-0 flex-1">
-                        {#if activeToolCalls.length > 0}
-                          <div class="space-y-1">
-                            {#each activeToolCalls as toolCall (toolCall.id)}
-                              <div
-                                class="border-surface-700 bg-surface-900 flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs"
-                                in:fade
-                              >
-                                {#if toolCall.result === '...'}
-                                  <Loader2
-                                    class="text-accent-400 h-3 w-3 flex-shrink-0 animate-spin"
-                                  />
-                                {:else}
-                                  <Wrench class="text-surface-500 h-3 w-3 flex-shrink-0" />
-                                {/if}
-                                <span class="text-surface-300 font-medium"
-                                  >{formatToolCallName(toolCall.name)}</span
-                                >
-                              </div>
-                            {/each}
-                          </div>
-                        {:else if isThinking}
-                          <div class="text-surface-400 flex items-center gap-2 text-sm">
-                            <Loader2 class="text-accent-400 h-3.5 w-3.5 animate-spin" />
-                            <span>Thinking...</span>
-                          </div>
-                        {/if}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            <!-- Streaming diff cards (shown before step message arrives) -->
+            {#if streamingChanges.length > 0}
+              <div class="mt-3 space-y-2">
+                {#each streamingChanges as change (change.id)}
+                  {@const liveChange = vaultEditor.getLiveChange(change.id) ?? change}
+                  <VaultDiffView
+                    change={liveChange}
+                    onApprove={() => handleApprove(liveChange)}
+                    onReject={() => handleReject(liveChange)}
+                    onEdit={() => handleEdit(liveChange)}
+                  />
+                {/each}
               </div>
-
-              <!-- Streaming diff cards (shown before step message arrives) -->
-              {#if streamingChanges.length > 0}
-                <div class="mt-3 space-y-2">
-                  {#each streamingChanges as change (change.id)}
-                    {@const liveChange = vaultEditor.getLiveChange(change.id) ?? change}
-                    <VaultDiffView
-                      change={liveChange}
-                      onApprove={() => handleApprove(liveChange)}
-                      onReject={() => handleReject(liveChange)}
-                      onEdit={() => handleEdit(liveChange)}
-                    />
-                  {/each}
-                </div>
-              {/if}
             {/if}
           </div>
 
@@ -1189,6 +1403,7 @@
           <VaultAssistantInput
             bind:this={assistantInputRef}
             onSend={handleSend}
+            onAbort={handleAbort}
             disabled={!service}
             {isGenerating}
           />
@@ -1276,5 +1491,30 @@
     100% {
       box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
     }
+  }
+
+  @keyframes blink {
+    0%,
+    50% {
+      opacity: 1;
+    }
+    51%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  .streaming-cursor {
+    display: inline-block;
+    width: 0.5rem;
+    height: 1rem;
+    margin-left: 0.125rem;
+    background-color: var(--color-accent-400, #60a5fa);
+    animation: blink 1s infinite;
+    vertical-align: text-bottom;
+  }
+
+  :global(.streaming-content > *:last-child) {
+    display: inline;
   }
 </style>

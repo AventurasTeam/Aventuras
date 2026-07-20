@@ -2,15 +2,16 @@
   import { isTouchDevice } from '$lib/utils/swipe'
   import { Textarea } from '$lib/components/ui/textarea'
   import { Button } from '$lib/components/ui/button'
-  import { cn } from '$lib/utils/cn'
-  import { Loader2, Send } from 'lucide-svelte'
+  import { Send, Square } from 'lucide-svelte'
 
   let {
     onSend,
+    onAbort,
     disabled = false,
     isGenerating = false,
   }: {
     onSend: (message: string) => void
+    onAbort?: () => void
     disabled?: boolean
     isGenerating?: boolean
   } = $props()
@@ -58,16 +59,13 @@
     />
     <Button
       size="icon"
-      class={cn(
-        'h-10 w-10 shrink-0 rounded-xl',
-        isGenerating ? 'opacity-70' : 'bg-accent-600 hover:bg-accent-500',
-      )}
-      onclick={handleSend}
-      disabled={!inputValue.trim() || disabled || isGenerating}
-      title="Send message"
+      class="bg-accent-600 hover:bg-accent-500 h-10 w-10 shrink-0 rounded-xl"
+      onclick={() => (isGenerating ? onAbort?.() : handleSend())}
+      disabled={disabled || (!isGenerating && !inputValue.trim())}
+      title={isGenerating ? 'Stop generating' : 'Send message'}
     >
       {#if isGenerating}
-        <Loader2 class="h-5 w-5 animate-spin" />
+        <Square class="h-4 w-4 fill-current" />
       {:else}
         <Send class="h-5 w-5" />
       {/if}
