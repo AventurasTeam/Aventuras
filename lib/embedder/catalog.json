@@ -1,0 +1,31 @@
+{
+  "version": "2026-07-20",
+  "models": [
+    {
+      "id": "Xenova/all-MiniLM-L6-v2",
+      "displayName": "MiniLM-L6 (lightweight)",
+      "shortDescription": "Small, fast, English-focused. Default for mobile.",
+      "size_bytes": 23684397,
+      "dim": 384,
+      "huggingfaceRevision": "751bff37182d3f1213fa05d7196b954e230abad9",
+      "files": {
+        "model.onnx": "onnx/model_quantized.onnx",
+        "tokenizer.json": "tokenizer.json",
+        "tokenizer_config.json": "tokenizer_config.json"
+      },
+      "expectedSha256": {
+        "model.onnx": "afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1",
+        "tokenizer.json": "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
+        "tokenizer_config.json": "9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3"
+      },
+      "default_ep": {
+        "android": "cpu",
+        "ios": "cpu",
+        "linux": "cpu",
+        "macos": "cpu",
+        "windows": "cpu"
+      },
+      "tags": ["mobile", "lightweight", "english", "default"]
+    }
+  ]
+}
