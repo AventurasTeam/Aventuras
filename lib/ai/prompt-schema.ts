@@ -57,7 +57,10 @@ function jsonSchemaToTypeScript(schema: JsonSchemaNode, indent = 0): string {
 
     case 'array': {
       const itemType = schema.items ? jsonSchemaToTypeScript(schema.items, indent) : 'unknown'
-      return withNullable(`${itemType}[]`)
+      // Parenthesize a union item type so `[]` binds to the whole union:
+      // `(string | null)[]`, not the ambiguous `string | null[]`.
+      const wrapped = itemType.includes(' | ') ? `(${itemType})` : itemType
+      return withNullable(`${wrapped}[]`)
     }
 
     case 'object': {

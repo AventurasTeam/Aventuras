@@ -55,6 +55,13 @@ describe('schemaToTypeScriptBlock', () => {
     )
     expect(block).toContain('mood: "dark" | "light";')
   })
+
+  it('parenthesizes a union item type so [] binds to the whole union', () => {
+    const block = schemaToTypeScriptBlock(
+      z.toJSONSchema(z.object({ tags: z.array(z.string().nullable()) })) as JsonSchema,
+    )
+    expect(block).toContain('tags: (string | null)[];')
+  })
 })
 
 describe('promptSchemaMiddleware', () => {
