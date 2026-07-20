@@ -155,6 +155,7 @@ canonical `id` with `/` replaced by `--` to be filesystem-safe.
 <embedders-root>/
   xenova--all-minilm-l6-v2-q8/
     model.onnx
+    config.json
     tokenizer.json
     tokenizer_config.json
     meta.json
@@ -205,7 +206,8 @@ source. Check your connection and try again.` No cached-license
    previous selection. Pre-download state.
 5. **Accept** — download begins with progress bar, resumable on
    network blip. Each required file is fetched and SHA256-verified
-   against the catalog entry's expected hashes — three files for a
+   against the catalog entry's expected hashes — `model.onnx`,
+   `config.json`, `tokenizer.json`, `tokenizer_config.json` for a
    typical model; a sharded ONNX export adds a weights sidecar
    (`*.onnx_data`) fetched and verified the same way, keyed in the
    catalog's `files` map by the basename the graph references.
