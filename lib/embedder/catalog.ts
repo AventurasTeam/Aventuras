@@ -10,7 +10,7 @@ const catalogFilesSchema = z
     'tokenizer.json': z.string(),
     'tokenizer_config.json': z.string(),
   })
-  .strict()
+  .catchall(z.string())
 
 const catalogSha256Schema = z
   .object({
@@ -18,7 +18,7 @@ const catalogSha256Schema = z
     'tokenizer.json': z.string(),
     'tokenizer_config.json': z.string(),
   })
-  .strict()
+  .catchall(z.string())
 
 const catalogDefaultEpSchema = z
   .object({

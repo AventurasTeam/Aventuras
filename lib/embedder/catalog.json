@@ -26,6 +26,34 @@
         "windows": "cpu"
       },
       "tags": ["mobile", "lightweight", "english", "default"]
+    },
+    {
+      "id": "onnx-community/embeddinggemma-300m-ONNX",
+      "displayName": "EmbeddingGemma 300m (multilingual)",
+      "shortDescription": "Google's on-device model. 100+ languages, best quality at this size.",
+      "size_bytes": 330938640,
+      "dim": 768,
+      "huggingfaceRevision": "5090578d9565bb06545b4552f76e6bc2c93e4a66",
+      "files": {
+        "model.onnx": "onnx/model_quantized.onnx",
+        "model_quantized.onnx_data": "onnx/model_quantized.onnx_data",
+        "tokenizer.json": "tokenizer.json",
+        "tokenizer_config.json": "tokenizer_config.json"
+      },
+      "expectedSha256": {
+        "model.onnx": "172efde319fe1542dc41f31be6154910b05b78f7a861c265c4600eec906bd6d8",
+        "model_quantized.onnx_data": "705626e28e4c23c82ade34566b4197d97f534c12275fa406dfb71e9937d388c0",
+        "tokenizer.json": "4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47",
+        "tokenizer_config.json": "3ca953eea6c3c9fcda9cf3df22949ff18b216f7c74bd6459230f3f1013953f3a"
+      },
+      "default_ep": {
+        "android": "cpu",
+        "ios": "cpu",
+        "linux": "cpu",
+        "macos": "cpu",
+        "windows": "cpu"
+      },
+      "tags": ["multilingual", "quality"]
     }
   ]
 }

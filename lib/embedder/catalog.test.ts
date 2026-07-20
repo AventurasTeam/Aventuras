@@ -41,8 +41,22 @@ describe('EMBEDDER_CATALOG', () => {
     expect(localModelDim('Xenova/all-MiniLM-L6-v2')).toBe(384)
   })
 
+  it('localModelDim returns the known dim for EmbeddingGemma', () => {
+    expect(localModelDim('onnx-community/embeddinggemma-300m-ONNX')).toBe(768)
+  })
+
   it('localModelDim returns undefined for an unknown id', () => {
     expect(localModelDim('nonexistent/model')).toBeUndefined()
+  })
+
+  it('EmbeddingGemma entry carries a weights-sidecar files entry', () => {
+    const gemma = getCatalogEntry('onnx-community/embeddinggemma-300m-ONNX')
+    expect(gemma).toBeDefined()
+    expect(gemma?.files['model_quantized.onnx_data']).toBe('onnx/model_quantized.onnx_data')
+    expect(Object.keys(gemma?.expectedSha256 ?? {})).toHaveLength(4)
+    for (const hash of Object.values(gemma?.expectedSha256 ?? {})) {
+      expect(hash).toMatch(SHA256_RE)
+    }
   })
 
   it('getCatalogEntry returns undefined for an unknown id', () => {
