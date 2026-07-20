@@ -152,6 +152,7 @@ export type {
   WizardSession,
 } from './types'
 export { runInTransaction } from './runtime/transaction'
+export { execRaw } from './runtime/exec'
 export type { DbCtx, SqlOp } from './types'
 export { useDbMigrations } from './runtime/use-db-migrations'
 export type { EmbeddedFieldRow, VecTargetKind, VecWrite } from './embeddings'
