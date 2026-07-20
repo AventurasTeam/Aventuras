@@ -54,4 +54,17 @@ describe('buildTextSegments', () => {
       { kind: 'lint', text: 'cd', key: '2-4', index: 1 },
     ])
   })
+
+  it('drops a span overlapping an earlier one rather than duplicating text', () => {
+    const result = buildTextSegments('abcdef', [
+      { start: 0, end: 4 },
+      { start: 2, end: 6 },
+    ])
+    // The overlapping span is skipped; segments still partition the text exactly.
+    expect(result).toEqual([
+      { kind: 'lint', text: 'abcd', key: '0-4', index: 0 },
+      { kind: 'plain', text: 'ef' },
+    ])
+    expect(result.map((s) => s.text).join('')).toBe('abcdef')
+  })
 })

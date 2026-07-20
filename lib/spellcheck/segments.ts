@@ -18,6 +18,9 @@ export function buildTextSegments(text: string, spans: readonly LintSpan[]): Tex
   const segments: TextSegment[] = []
   let cursor = 0
   for (const { span, index } of ordered) {
+    // Skip a span that starts inside an already-emitted one; overlapping lints
+    // would otherwise duplicate the shared characters in the rendered output.
+    if (span.start < cursor) continue
     if (span.start > cursor) segments.push({ kind: 'plain', text: text.slice(cursor, span.start) })
     segments.push({
       kind: 'lint',
