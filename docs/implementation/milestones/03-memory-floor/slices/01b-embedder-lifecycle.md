@@ -89,8 +89,8 @@ Zod, and `stories.settings.effectiveDim` is locked at creation.
 - **Matryoshka machinery:** `effectiveDim` resolution inside the C1
   service — truncate to N + re-normalize on every stored vector and
   every query embed; server-side `dimensions` parameter where the
-  provider supports it; dim recorded per row; re-index reuses the
-  story's stored dim.
+  provider supports it; dim encoded in the target vec0 table
+  family; re-index reuses the story's stored dim.
 - **Wizard step-5 memory-cost disclosure:** conditional visibility
   (provider backend + `matryoshkaSupported`), curated-ladder radios
   with platform-aware suggestion, `Custom…` input with validation

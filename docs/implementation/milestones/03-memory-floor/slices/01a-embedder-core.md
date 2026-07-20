@@ -69,11 +69,14 @@ M7.1; only the gate-required minimum ships here.
 
 ## Scope: in
 
-- **vec0 migration:** `entities_vec`, `lore_vec`, `happenings_vec`,
-  `threads_vec`, `chapter_summaries_vec` with `branch_id` (and
-  `model_id`, `dim`) filtering columns; `source_hash` placement
-  resolved at planning (auxiliary column vs sidecar). Creation via
-  Drizzle's `sql` escape hatch per the PoC finding.
+- **vec0 migration:** the five per-type table families at the
+  bundled default's 384 dim (`entities_vec_384`, …) with `branch_id`
+  partition key, `model_id` metadata column, and `source_hash`
+  auxiliary column; other dims created lazily by the write helper
+  (per-`(type, dim)` layout per
+  [`retrieval.md → Storage`](../../../../memory/retrieval.md#storage),
+  amended at planning). Creation via Drizzle's `sql` escape hatch
+  per the PoC finding.
 - **Embedder service module (C1):** lazy init; batched embed entry
   point resolving backend + model from story settings with app
   default; local backend via ONNX Runtime against the installed
@@ -118,9 +121,10 @@ M7.1; only the gate-required minimum ships here.
 ## Acceptance criteria
 
 - Migration applies idempotently on Expo (Android) and Electron
-  desktop; all five `*_vec` tables exist and accept an
-  insert + KNN round-trip (vitest against the desktop runtime;
-  manual smoke on Android).
+  desktop; the five 384-dim `*_vec` tables exist and accept an
+  insert and KNN round-trip; the write helper lazily creates a
+  non-default dim family (768) on first write (vitest against the
+  desktop runtime; manual smoke on Android).
 - With no embedder configured, opening the wizard surfaces the
   blocked state and routes to settings; after a curated download
   completes (license dialog shown, SHA256 verified, `.attestation`

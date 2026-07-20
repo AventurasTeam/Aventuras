@@ -240,7 +240,7 @@ erDiagram
     }
     %% UNIQUE(branch_id, target_kind, target_id, field, model_id)
     %% Not delta-logged — embeddings are deterministic from source content. See docs/memory/retrieval.md → Storage
-    %% Physical storage: per-type sqlite-vec `vec0` virtual tables (entities_vec, lore_vec, happenings_vec, threads_vec, chapter_summaries_vec) joined to metadata by id, scoped per row by branch_id auxiliary column. The polymorphic shape above is the logical view; vec0 doesn't filter efficiently across mixed-type rows. See docs/memory/retrieval.md → Storage
+    %% Physical storage: per-(type, dim) sqlite-vec `vec0` virtual tables (entities_vec_384, lore_vec_768, ...) — vec0 vector columns are fixed-dim, so each dim gets its own table family. branch_id is a partition key, model_id a metadata column, source_hash an auxiliary column; dim is encoded in the table name, not stored per row. The polymorphic shape above is the logical view. See docs/memory/retrieval.md → Storage
 
     probe_captures {
         text id PK
@@ -1358,6 +1358,7 @@ app_settings.providers: Array<{
     capabilities?: {
       reasoning?: boolean
       structuredOutput?: boolean
+      embedding?: boolean                    // model serves the provider's embedding endpoint; drives the Providers-tab Embedding models split and the Memory-tab embedder picker. Detected from /models metadata where reported; user-overridable like every capability flag
       matryoshkaSupported?: boolean          // NEW: model supports Matryoshka representation truncation. See docs/memory/retrieval.md → Matryoshka effective dim
       matryoshkaDims?: number[]              // NEW: curated dim ladder declared by the model card (e.g., [256, 512, 1024, 1536, 2048, 3072]). Picker surfaces these first; Custom… accepts any N up to native.
     }

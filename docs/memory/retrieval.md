@@ -48,19 +48,32 @@ embeddings {
 }
 ```
 
-**Physical storage — per-type `vec0` virtual tables.** Production
-uses one [`sqlite-vec`](https://github.com/asg017/sqlite-vec) `vec0`
-virtual table per target kind: `entities_vec`, `lore_vec`,
-`happenings_vec`, `threads_vec`, `chapter_summaries_vec` — each
-joined to its metadata sibling by id, scoped per row by `branch_id`
-in an auxiliary column so retrieval queries can filter to a single
-story / branch. The polymorphic schema above is the logical view;
-vec0 doesn't filter efficiently across mixed-type rows, so per-type
-physical layout is the production shape. Validated in PoC; per-query
-KNN at ~11 / 43 / 61 / 122 ms at 1k / 10k / 50k / 100k rows on a
-flagship Android device. `source_hash` placement (auxiliary vec0
-column or per-type sidecar metadata table) is a production-
-integration detail, not pinned here.
+**Physical storage — per-`(type, dim)` `vec0` virtual tables.** A
+`vec0` vector column is fixed-dimension at CREATE time (verified
+against sqlite-vec v0.1.9 — inserting a vector of any other
+dimension is rejected), so a single per-type table cannot hold rows
+produced by models with different dims. Production therefore uses
+one [`sqlite-vec`](https://github.com/asg017/sqlite-vec) `vec0`
+virtual table per (target kind, dimension) pair, named with a dim
+suffix: `entities_vec_384`, `lore_vec_768`, and so on. Prose
+elsewhere refers to a family by its bare name (`entities_vec`); the
+physical table is always dim-suffixed. Each table carries
+`id TEXT PRIMARY KEY` (joining to the source row), `branch_id` as a
+TEXT partition key, `model_id` as a TEXT metadata column,
+`source_hash` as a TEXT auxiliary column, and the vector column at
+the family's dim. There is no per-row dim column — the dimension is
+encoded in the table name. The base migration creates the five
+384-dim tables (the bundled default model's dim); any other dim's
+family is created lazily by the vec0 write helper via
+`CREATE VIRTUAL TABLE IF NOT EXISTS`, ensured outside the atomic
+write batch (idempotent, so a crash between DDL and insert is
+harmless). A retrieval pass resolves branch → model → dim → exactly
+one table per type, so no KNN ever spans tables. The polymorphic
+schema above is the logical view; vec0 doesn't filter efficiently
+across mixed-type rows, so the per-type split is the production
+shape, and the fixed-dim constraint adds the per-dim split.
+Validated in PoC; per-query KNN at ~11 / 43 / 61 / 122 ms at
+1k / 10k / 50k / 100k rows on a flagship Android device.
 
 **Per-branch single-model invariant.** A retrieval pass is always
 scoped to one branch, and all vectors compared in that pass share
@@ -349,14 +362,16 @@ surfaces three options:
   2. **Phase 1 — re-embed non-destructively.** Foreground job
      (re-index runs in the user's view, not a background queue)
      embeds each row under the new model and INSERTs alongside
-     existing rows (`model_id = NEW` next to `model_id = OLD`).
+     existing rows (`model_id = NEW` next to `model_id = OLD`;
+     into the NEW dim's table family when the new model's dim
+     differs).
      Each row's insert is its own small SQLite write. Old vectors
      stay intact throughout; retrieval keeps working under the
      old model. Vec tables temporarily ~2x size for swap-affected
      rows. Progress indicator: "re-indexing X / N — retrieval
      limited."
   3. **Phase 2 — atomic flip (transaction).** Single SQLite txn:
-     - `DELETE FROM *_vec WHERE branch_id IN (...) AND model_id = OLD`
+     - `DELETE FROM *_vec_<old dim> WHERE branch_id IN (...) AND model_id = OLD`
      - `UPDATE stories SET settings = jsonb_set(settings, '$.embedding_model_id', NEW_MODEL_ID)`
      - `UPDATE stories SET settings = jsonb_remove(settings, '$.embedding_swap_target')`
 
@@ -368,7 +383,7 @@ surfaces three options:
     continue Phase 1 (skip rows that already have one). Then run
     Phase 2.
   - **Cancel.**
-    `DELETE FROM *_vec WHERE branch_id IN (...) AND model_id = NEW; clear embedding_swap_target;`
+    `DELETE FROM *_vec_<new dim> WHERE branch_id IN (...) AND model_id = NEW; clear embedding_swap_target;`
     Story stays on old model.
 
   **Cancel during a live swap (not a crash)** follows the same
@@ -479,12 +494,12 @@ When `stories.settings.effectiveDim = N` is non-null:
 2. **Query vectors.** The same truncation + re-normalization
    applies to the three per-turn query vectors (Q1 / Q2 / Q3) so
    query and stored vectors live in the same N-dim space.
-3. **vec0 partitioning.** The per-type `*_vec` virtual tables
-   store vectors at the dim of the stories that created them;
-   different stories can run different effective dims in the same
-   physical table, partitioned by `branch_id` per the
-   [Storage](#storage) section. Within one branch, all rows share
-   one dim — the same single-model invariant extended to dim.
+3. **vec0 partitioning.** Vectors land in the `*_vec_<dim>` table
+   matching the story's effective dim per the [Storage](#storage)
+   section — stories at different dims occupy different physical
+   tables of the same family, and `branch_id` partitions rows
+   within each. Within one branch, all rows share one dim — the
+   same single-model invariant extended to dim.
 4. **Source-hash tripwire.** `source_hash` continues to compare
    content hashes, not vectors. Truncation is deterministic from
    the native vector; `source_hash` mismatch still indicates a
