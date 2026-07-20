@@ -23,6 +23,8 @@ export type { EmbedderBackend, EmbedderConfig } from './types'
 export { embedLocal, listInstalledLocal, smokeTestLocal } from './local/runtime'
 export type { LocalEmbedResult } from './local/runtime'
 
+export { sanitizeModelDirName } from './local/sanitize'
+
 export { embedAndBuildVecOps, embedTexts, testEmbedder } from './service'
 export type { EmbedIntent } from './service'
 
