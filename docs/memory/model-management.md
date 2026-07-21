@@ -70,8 +70,8 @@ Per-entry shape:
 - **`huggingfaceRevision`** — a pinned commit hash. The model card
   and files are fetched at this revision. Defends against post-
   curation edits to the model card or weights.
-- **`expectedSha256`** — known hashes for the three required files.
-  Verified after download completion.
+- **`expectedSha256`** — known hashes for every file in the entry's
+  `files` map. Verified after download completion.
 - **`default_ep`** — per-platform execution provider, set at
   curation time based on our pre-release testing. v1 default
   posture is `cpu` everywhere unless we have explicit test evidence
@@ -229,7 +229,7 @@ source. Check your connection and try again.` No cached-license
    stops, partial files are deleted, and no license-acceptance is
    recorded. License acceptance is contingent on completion (see
    [License attestation](#license-attestation)).
-7. **All three files verified** — `LICENSE.txt` is written from the
+7. **All files verified** — `LICENSE.txt` is written from the
    dialog text, `.attestation` is written with timestamp + license
    SHA256 + source URL + revision. The model is now usable.
 

@@ -45,3 +45,14 @@ slice-planning gate forces its resolution before that slice is planned.
   layer itself. Slice 3.4's ranker must convert each `distance` column back
   to a similarity via `cos = 1 − d²/2` before building its trace, not treat
   distance as already-cosine. Surfaced by M3.1a Task 8 (2026-07-20).
+- **Custom-import file set may need `config.json` on desktop.**
+  [`model-management.md → Custom file import`](../memory/model-management.md#custom-file-import)
+  specifies three files (`model.onnx`, `tokenizer.json`,
+  `tokenizer_config.json`), but M3.1a found transformers.js fatally
+  requires `config.json` to build a pipeline, which is why the curated
+  catalog entries carry it. The native runtime constructs its tokenizer
+  directly and does its own pooling, so it may not need the file at all —
+  making the required set platform-dependent, which the custom-import
+  spec doesn't model. Resolve when M7.1 plans the import flow; verify the
+  native requirement rather than assuming symmetry. Surfaced by M3.1a
+  device review (2026-07-21).
