@@ -12,6 +12,7 @@ import { File } from 'expo-file-system'
 import { createDownloadResumable } from 'expo-file-system/legacy'
 
 import type { DialogDriver } from '@/components/compounds/embedder-download-dialog-machine'
+import { logger } from '@/lib/diagnostics'
 import type { EmbedderAttestation } from '@/types/embedder-bridge'
 
 import { buildDownloadPlan, findPlanRow } from './catalog-files'
@@ -149,6 +150,14 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
             break
           } catch (error) {
             if (cancelled) throw new DownloadCancelledError()
+            // Only the last error escapes, so log each attempt — otherwise a
+            // disk-full followed by a transient blip reports the wrong cause.
+            logger.warn('embedder.download_attempt_failed', {
+              modelId: entry.id,
+              fileName: row.fileName,
+              attempt,
+              error: error instanceof Error ? error.message : String(error),
+            })
             if (attempt >= BLIP_BACKOFF_MS.length) throw error
             await new Promise((resolve) => setTimeout(resolve, BLIP_BACKOFF_MS[attempt]))
             if (cancelled) throw new DownloadCancelledError()
