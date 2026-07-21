@@ -861,8 +861,10 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
         try {
           const hash = await driver.computeSha256(file)
           if (cancelled) return
+          // Fail closed: an absent expected hash means the file cannot be
+          // verified, which is a verification failure, not a pass.
           const expectedHash = expected[file]
-          if (expectedHash && hash !== expectedHash) {
+          if (!expectedHash || hash !== expectedHash) {
             void driver.deletePartial().catch(() => {})
             dispatch({ type: 'verify-failed', file })
             return
@@ -876,9 +878,8 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
         }
       }
       if (cancelled) return
-      // 'installed' (per model-management.md → Storage layout) means files +
-      // LICENSE.txt + .attestation on disk — persist before leaving
-      // 'verifying' so a resolve to 'done' always reflects a real install.
+      // persistInstall writes meta.json, which is what listInstalled keys on —
+      // write it before resolving to 'done' so a listed model is a real install.
       try {
         await driver.persistInstall({
           meta,

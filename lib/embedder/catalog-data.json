@@ -9,16 +9,22 @@
       "dim": 384,
       "huggingfaceRevision": "751bff37182d3f1213fa05d7196b954e230abad9",
       "files": {
-        "model.onnx": "onnx/model_quantized.onnx",
-        "config.json": "config.json",
-        "tokenizer.json": "tokenizer.json",
-        "tokenizer_config.json": "tokenizer_config.json"
-      },
-      "expectedSha256": {
-        "model.onnx": "afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1",
-        "config.json": "7135149f7cffa1a573466c6e4d8423ed73b62fd2332c575bf738a0d033f70df7",
-        "tokenizer.json": "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
-        "tokenizer_config.json": "9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3"
+        "model.onnx": {
+          "repoPath": "onnx/model_quantized.onnx",
+          "sha256": "afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1"
+        },
+        "config.json": {
+          "repoPath": "config.json",
+          "sha256": "7135149f7cffa1a573466c6e4d8423ed73b62fd2332c575bf738a0d033f70df7"
+        },
+        "tokenizer.json": {
+          "repoPath": "tokenizer.json",
+          "sha256": "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0"
+        },
+        "tokenizer_config.json": {
+          "repoPath": "tokenizer_config.json",
+          "sha256": "9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3"
+        }
       },
       "default_ep": {
         "android": "cpu",
@@ -37,18 +43,26 @@
       "dim": 768,
       "huggingfaceRevision": "5090578d9565bb06545b4552f76e6bc2c93e4a66",
       "files": {
-        "model.onnx": "onnx/model_quantized.onnx",
-        "model_quantized.onnx_data": "onnx/model_quantized.onnx_data",
-        "config.json": "config.json",
-        "tokenizer.json": "tokenizer.json",
-        "tokenizer_config.json": "tokenizer_config.json"
-      },
-      "expectedSha256": {
-        "model.onnx": "172efde319fe1542dc41f31be6154910b05b78f7a861c265c4600eec906bd6d8",
-        "model_quantized.onnx_data": "705626e28e4c23c82ade34566b4197d97f534c12275fa406dfb71e9937d388c0",
-        "config.json": "6e1f06404b7163e0325ed2ea3e6781cde50f4a50b31780a95ad0d30e8404d77b",
-        "tokenizer.json": "4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47",
-        "tokenizer_config.json": "3ca953eea6c3c9fcda9cf3df22949ff18b216f7c74bd6459230f3f1013953f3a"
+        "model.onnx": {
+          "repoPath": "onnx/model_quantized.onnx",
+          "sha256": "172efde319fe1542dc41f31be6154910b05b78f7a861c265c4600eec906bd6d8"
+        },
+        "model_quantized.onnx_data": {
+          "repoPath": "onnx/model_quantized.onnx_data",
+          "sha256": "705626e28e4c23c82ade34566b4197d97f534c12275fa406dfb71e9937d388c0"
+        },
+        "config.json": {
+          "repoPath": "config.json",
+          "sha256": "6e1f06404b7163e0325ed2ea3e6781cde50f4a50b31780a95ad0d30e8404d77b"
+        },
+        "tokenizer.json": {
+          "repoPath": "tokenizer.json",
+          "sha256": "4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47"
+        },
+        "tokenizer_config.json": {
+          "repoPath": "tokenizer_config.json",
+          "sha256": "3ca953eea6c3c9fcda9cf3df22949ff18b216f7c74bd6459230f3f1013953f3a"
+        }
       },
       "default_ep": {
         "android": "cpu",
