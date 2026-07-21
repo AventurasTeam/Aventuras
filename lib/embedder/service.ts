@@ -84,8 +84,8 @@ export async function embedTexts(
     )
   }
 
-  // Single funnel for every vector — the post-embed transform point where 3.1b's
-  // Matryoshka truncation composes ahead of normalization.
+  // Single funnel for every vector — the one place a post-embed transform
+  // (e.g. Matryoshka truncation) composes ahead of normalization.
   const vectors = raw.vectors.map((vector) => l2Normalize(vector))
 
   // A local config always knows its dim, so this can't be skipped for local.

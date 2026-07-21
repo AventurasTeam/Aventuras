@@ -249,9 +249,62 @@ isn't a meaningful state.
 └─────────────────────────────────────────────────────────────┘
 ```
 
-No auto-retry. Per model-management.md → Failure modes: SHA256
-mismatch may indicate corruption or rotated upstream; we don't
-silently retry. Close resolves with `error(hash-mismatch)`.
+No auto-retry, and no Retry affordance: the bytes on disk are known
+bad, so retrying them cannot help. Per model-management.md →
+Failure modes, a mismatch may indicate corruption or a rotated
+upstream. Close resolves with `error(hash-mismatch)`.
+
+### Download failed
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ⚠ Download failed                                            │
+│ ─────────────────────────────────────────────────────       │
+│ A file failed to download:                                   │
+│                                                               │
+│   model.onnx: network request failed                         │
+│                                                               │
+│ Downloaded files are kept so a retry resumes where this      │
+│ left off. Retry when the network is back, or cancel to       │
+│ discard them.                                                │
+│                                                               │
+│                                   [ Cancel ]  [ Retry ]      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Retryable. Retry restarts the manifest, but files already complete
+on disk are re-hashed and skipped, so only the unfinished ones
+transfer again. Disk-full is the exception to keeping the bytes —
+see model-management.md → Failure modes.
+
+### Verification couldn't run
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ⚠ Couldn't verify the download                               │
+│ ─────────────────────────────────────────────────────       │
+│ A downloaded file couldn't be checked:                       │
+│                                                               │
+│   model.onnx: crypto module unavailable                      │
+│                                                               │
+│ The file itself may be fine — the check couldn't run.        │
+│ Retrying resumes from what's already downloaded.             │
+│                                                               │
+│                                   [ Cancel ]  [ Retry ]      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Distinct from the mismatch above, and retryable where that one is
+not: a digest that was never computed says nothing about the bytes.
+Collapsing the two would tell a user with a missing platform module
+that their download is corrupt.
+
+### Persist failed
+
+Reachable when the files verify but writing `LICENSE.txt` /
+`.attestation` / `meta.json` fails. Terminal, with Close — the
+partial install is removed, since a half-written install must never
+read as complete.
 
 ### Done
 
