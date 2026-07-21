@@ -309,10 +309,6 @@ export default function WizardRoute() {
       </View>
     )
   }
-  if (gate.status === 'blocked') {
-    return <EmbedderGateBlocked reason={gate.reason} />
-  }
-
   return (
     <WizardShell
       step={step}
@@ -358,6 +354,7 @@ export default function WizardRoute() {
           )}
         </>
       )}
+      {gate.status === 'blocked' ? <EmbedderGateBlocked reason={gate.reason} /> : null}
     </WizardShell>
   )
 }
