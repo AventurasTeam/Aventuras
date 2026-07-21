@@ -21,7 +21,12 @@ type RawEmbedding = { vectors: Float32Array[]; dim: number }
 
 function localPrefix(modelId: string, intent: EmbedIntent): string {
   const integration = EMBEDDER_INTEGRATIONS[modelId]
-  if (integration === undefined) return ''
+  // Falling back to '' would embed a prefix-sensitive model prefix-free: the
+  // vectors look valid, land with a fresh source_hash, and quietly degrade
+  // retrieval forever. Refuse instead.
+  if (integration === undefined) {
+    throw new EmbedderInitError(`No embedder integration registered for model "${modelId}"`)
+  }
   return intent === 'query' ? integration.queryPrefix : integration.documentPrefix
 }
 
@@ -95,8 +100,8 @@ export async function embedTexts(
  * Embed each row's composite text and return ready-to-batch SqlOps: a vec0 upsert
  * plus an `embedding_stale = 0` clear per row. The dim's vec tables are ensured
  * first through `exec` (DDL can't run inside the atomic ops batch); the RETURNED
- * dim drives both the ensure and the ops, so an unprobed provider (config.dim 0)
- * still targets the correct dim family.
+ * dim drives both the ensure and the ops, so an unprobed provider still targets
+ * the correct dim family.
  *
  * The returned per-row `embedding_stale = 0` UPDATE assumes the source row
  * already exists — either it pre-exists, or the caller splices these ops AFTER
@@ -118,8 +123,8 @@ export async function embedAndBuildVecOps(
   try {
     await ensureVecTables(dim, exec)
   } catch (error) {
-    // Surface DDL failures as a typed call error so Task 13's catch renders the
-    // graceful failure surface instead of crashing on a raw exec rejection.
+    // Surface DDL failures as a typed call error so the wizard's Finish catch
+    // renders the graceful failure surface instead of a raw exec rejection.
     const message = error instanceof Error ? error.message : String(error)
     throw new EmbedderCallError(`vec table ensure failed: ${message}`, error)
   }

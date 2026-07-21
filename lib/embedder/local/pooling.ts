@@ -21,6 +21,16 @@ export function meanPoolAndNormalize(
   attentionMask: ArrayLike<number>,
   dim: number,
 ): Float32Array {
+  // A mask longer than the tensor reads past the end as undefined, which pools
+  // to NaN. vec0 stores the bytes without complaint and the stale flag is
+  // cleared, so a poisoned row would never re-embed itself.
+  const requiredLength = attentionMask.length * dim
+  if (tokenEmbeddings.length < requiredLength) {
+    throw new Error(
+      `hidden-state tensor too small: need ${requiredLength} floats for ${attentionMask.length} tokens × ${dim}, got ${tokenEmbeddings.length}`,
+    )
+  }
+
   const pooled = new Float32Array(dim)
   let attended = 0
 
@@ -34,5 +44,14 @@ export function meanPoolAndNormalize(
   if (attended === 0) return pooled
 
   for (let d = 0; d < dim; d++) pooled[d] /= attended
+
+  // NaN/Infinity survives normalization (norm === 0 is false for NaN, so the
+  // divide runs anyway) and nothing downstream inspects finiteness.
+  for (let d = 0; d < dim; d++) {
+    if (!Number.isFinite(pooled[d])) {
+      throw new Error('pooled embedding contains a non-finite value')
+    }
+  }
+
   return l2Normalize(pooled)
 }

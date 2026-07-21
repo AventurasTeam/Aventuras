@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { embedViaProvider } from '@/lib/ai'
 import type { ProviderInstanceWithStub } from '@/lib/ai'
-import type { SqlOp } from '@/lib/db'
+import { compositeText, sourceHash, type EmbeddedFieldRow, type SqlOp } from '@/lib/db'
 
 import { embedLocal } from './local/runtime'
 import { embedAndBuildVecOps, embedTexts, testEmbedder } from './service'
@@ -303,5 +303,64 @@ describe('testEmbedder', () => {
 
     const result = await testEmbedder(config)
     expect(result).toEqual({ ok: false, kind: 'init', message: 'session never came up' })
+  })
+})
+
+describe('embedAndBuildVecOps — vector/row alignment', () => {
+  // The builder correlates rows[i], vectors[i] and composites[i] by index. A
+  // transposition attaches the wrong embedding to the wrong entity, clears its
+  // stale flag, and never self-heals — and one-row fixtures cannot detect it.
+  it('pairs each row with its own vector and its own composite hash', async () => {
+    const rows: EmbeddedFieldRow[] = [
+      { kind: 'entity', id: 'e1', branchId: 'b1', fields: ['Kara', 'a scout'] },
+      { kind: 'entity', id: 'e2', branchId: 'b1', fields: ['Bram', 'a smith'] },
+      { kind: 'lore', id: 'l1', branchId: 'b1', fields: ['The Reach', 'cold north'] },
+    ]
+    // Distinguishable one-hot vectors, in row order.
+    const vectors = [
+      new Float32Array([1, 0, 0]),
+      new Float32Array([0, 1, 0]),
+      new Float32Array([0, 0, 1]),
+    ]
+    vi.mocked(embedLocal).mockResolvedValue({ vectors, dim: 3 })
+
+    const ops = await embedAndBuildVecOps(
+      { backend: 'local', modelId: 'Xenova/all-MiniLM-L6-v2', dim: 3 },
+      rows,
+      async () => {},
+    )
+
+    // Each row contributes an upsert (params: pk, branchId, modelId, id, hash,
+    // vector) followed by its stale-clear.
+    const upserts = ops.filter((op) => op.sql.includes('INSERT INTO'))
+    expect(upserts).toHaveLength(3)
+
+    for (const [i, row] of rows.entries()) {
+      const params = upserts[i].params
+      expect(params).toContain(row.id)
+      expect(params).toContain(sourceHash(compositeText(row.fields)))
+      const packed = params.find((p) => p instanceof Uint8Array) as Uint8Array
+      expect(new Float32Array(packed.buffer, packed.byteOffset, 3)).toEqual(vectors[i])
+    }
+  })
+
+  it('embeds the composites in row order, so the model sees each row once', async () => {
+    const rows: EmbeddedFieldRow[] = [
+      { kind: 'entity', id: 'e1', branchId: 'b1', fields: ['Kara', 'a scout'] },
+      { kind: 'entity', id: 'e2', branchId: 'b1', fields: ['Bram', 'a smith'] },
+    ]
+    vi.mocked(embedLocal).mockResolvedValue({
+      vectors: [new Float32Array([1, 0]), new Float32Array([0, 1])],
+      dim: 2,
+    })
+
+    await embedAndBuildVecOps(
+      { backend: 'local', modelId: 'Xenova/all-MiniLM-L6-v2', dim: 2 },
+      rows,
+      async () => {},
+    )
+
+    const texts = vi.mocked(embedLocal).mock.calls.at(-1)?.[1]
+    expect(texts).toEqual(['Kara a scout', 'Bram a smith'])
   })
 })
