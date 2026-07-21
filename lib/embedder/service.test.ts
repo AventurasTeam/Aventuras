@@ -12,8 +12,12 @@ import { embedLocal } from './local/runtime'
 import { embedAndBuildVecOps, embedTexts, testEmbedder } from './service'
 import { EmbedderCallError, EmbedderInitError, type EmbedderConfig } from './types'
 
-vi.mock('./local/runtime', () => ({ embedLocal: vi.fn() }))
-vi.mock('@/lib/ai', () => ({ embedViaProvider: vi.fn() }))
+// Hoisted so the mock identities survive vi.resetModules() — the lazy-init test
+// re-evaluates ./service, and a factory-local vi.fn() would hand the fresh module
+// a different spy than the one asserted on here.
+const mocks = vi.hoisted(() => ({ embedLocal: vi.fn(), embedViaProvider: vi.fn() }))
+vi.mock('./local/runtime', () => ({ embedLocal: mocks.embedLocal }))
+vi.mock('@/lib/ai', () => ({ embedViaProvider: mocks.embedViaProvider }))
 
 const MINILM = 'Xenova/all-MiniLM-L6-v2'
 const GEMMA = 'onnx-community/embeddinggemma-300m-ONNX'
@@ -153,6 +157,11 @@ describe('embedTexts dim verification', () => {
 
 describe('lazy init', () => {
   it('does not invoke the runtime factories on import (only on first embed call)', async () => {
+    // resetModules, not a bare import: ./service is statically imported above,
+    // so a plain dynamic import would hand back the cached module without
+    // re-running its top-level code — and any violation would have fired during
+    // that first import, before clearAllMocks could observe it.
+    vi.resetModules()
     vi.clearAllMocks()
     await import('./service')
     expect(embedLocal).not.toHaveBeenCalled()
