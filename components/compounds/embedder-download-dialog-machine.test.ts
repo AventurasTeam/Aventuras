@@ -231,7 +231,7 @@ describe('reducer — downloading state', () => {
     }
   })
 
-  it('download-complete marks file done', () => {
+  it('download-complete marks file done, preserving bytesTotal for the running total', () => {
     const before: DialogState = {
       kind: 'downloading',
       meta: sampleMeta,
@@ -241,7 +241,30 @@ describe('reducer — downloading state', () => {
     }
     const after = reducer(before, { type: 'download-complete', file: 'model.onnx' })
     if (after.kind === 'downloading') {
-      expect(after.progressByFile['model.onnx']).toEqual({ kind: 'done' })
+      expect(after.progressByFile['model.onnx']).toEqual({ kind: 'done', bytesTotal: 25_000_000 })
+    }
+  })
+
+  it('files-planned seeds every file as waiting without clobbering in-flight progress', () => {
+    const before: DialogState = {
+      kind: 'downloading',
+      meta: sampleMeta,
+      progressByFile: {
+        'model.onnx': { kind: 'downloading', bytesReceived: 1_000, bytesTotal: 25_000_000 },
+      },
+    }
+    const after = reducer(before, {
+      type: 'files-planned',
+      files: ['model.onnx', 'tokenizer.json', 'tokenizer_config.json'],
+    })
+    if (after.kind === 'downloading') {
+      expect(after.progressByFile['model.onnx']).toEqual({
+        kind: 'downloading',
+        bytesReceived: 1_000,
+        bytesTotal: 25_000_000,
+      })
+      expect(after.progressByFile['tokenizer.json']).toEqual({ kind: 'waiting' })
+      expect(after.progressByFile['tokenizer_config.json']).toEqual({ kind: 'waiting' })
     }
   })
 

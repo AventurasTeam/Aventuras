@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { Linking, Platform, Pressable, View } from 'react-native'
+import { Linking, Platform, View } from 'react-native'
 // RN's ScrollView can't scroll inside @rn-primitives/dialog on Android: the
 // primitive's native Content claims the JS responder for every touch
 // (onStartShouldSetResponder → true), which blocks native scroll interception.
@@ -77,7 +77,7 @@ export function EmbedderDownloadDialogView(props: EmbedderDownloadDialogViewProp
       {/* 560px overrides the primitive's sm:max-w-lg (≈512px) per
           the design spec: "560px-capped centered shape." */}
       <DialogContent className="sm:max-w-[560px]" portalHost={portalHost}>
-        <Header state={state} onCancel={props.onCancel} />
+        <Header state={state} />
         <Body {...props} hfInputValue={hfInputValue} onHfInputChange={setHfInputValue} />
         <Footer {...props} hfInputValue={hfInputValue} />
       </DialogContent>
@@ -87,21 +87,10 @@ export function EmbedderDownloadDialogView(props: EmbedderDownloadDialogViewProp
 
 export type { EmbedderDownloadDialogViewProps }
 
-function Header({ state, onCancel }: { state: DialogState; onCancel: () => void }) {
-  const title = titleFor(state)
-  const downloadingCancel = state.kind === 'downloading'
+function Header({ state }: { state: DialogState }) {
   return (
     <DialogHeader>
-      <View className="flex-row items-center justify-between gap-2">
-        <DialogTitle>{title}</DialogTitle>
-        {downloadingCancel ? (
-          <Pressable onPress={onCancel} hitSlop={8}>
-            <Text variant="secondary" size="sm">
-              Cancel
-            </Text>
-          </Pressable>
-        ) : null}
-      </View>
+      <DialogTitle>{titleFor(state)}</DialogTitle>
     </DialogHeader>
   )
 }
@@ -201,7 +190,9 @@ function Body(
         />
       )
     case 'downloading':
-      return <DownloadingBody progressByFile={state.progressByFile} />
+      return (
+        <DownloadingBody progressByFile={state.progressByFile} totalBytes={state.meta.sizeBytes} />
+      )
     case 'verifying':
       return <VerifyingBody verifyByFile={state.verifyByFile} />
     case 'done':
@@ -477,16 +468,21 @@ function ImportConfirmBody({
   )
 }
 
-function DownloadingBody({ progressByFile }: { progressByFile: Record<string, FileProgress> }) {
+function DownloadingBody({
+  progressByFile,
+  totalBytes,
+}: {
+  progressByFile: Record<string, FileProgress>
+  totalBytes: number
+}) {
   const entries = Object.entries(progressByFile)
-  const total = entries.reduce(
-    (acc, [, p]) => {
-      if (p.kind === 'downloading')
-        return { received: acc.received + p.bytesReceived, total: acc.total + p.bytesTotal }
-      return acc
-    },
-    { received: 0, total: 0 },
-  )
+  // Done files keep counting via their preserved bytesTotal; the denominator
+  // is the catalog's total so the line is stable from the first render.
+  const received = entries.reduce((acc, [, p]) => {
+    if (p.kind === 'downloading') return acc + p.bytesReceived
+    if (p.kind === 'done') return acc + (p.bytesTotal ?? 0)
+    return acc
+  }, 0)
   return (
     <View className="gap-3">
       {entries.map(([file, progress]) => (
@@ -515,12 +511,9 @@ function DownloadingBody({ progressByFile }: { progressByFile: Record<string, Fi
           </View>
         </View>
       ))}
-      {total.total > 0 ? (
-        <Text size="sm" variant="muted">
-          Total: {(total.received / 1_000_000).toFixed(1)} / {(total.total / 1_000_000).toFixed(1)}{' '}
-          MB
-        </Text>
-      ) : null}
+      <Text size="sm" variant="muted">
+        Total: {(received / 1_000_000).toFixed(1)} / {(totalBytes / 1_000_000).toFixed(1)} MB
+      </Text>
     </View>
   )
 }
@@ -705,6 +698,13 @@ function Footer(props: EmbedderDownloadDialogViewProps & { hfInputValue: string 
         </DialogFooter>
       )
     case 'downloading':
+      return (
+        <DialogFooter>
+          <Button variant="secondary" onPress={props.onCancel}>
+            <Text>Cancel download</Text>
+          </Button>
+        </DialogFooter>
+      )
     case 'verifying':
     case 'done':
       return null
@@ -817,6 +817,7 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
     if (init.kind !== 'catalog') return
     let cancelled = false
     const files = init.entry.files
+    dispatch({ type: 'files-planned', files })
     void (async () => {
       let currentFile = ''
       try {
