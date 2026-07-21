@@ -148,9 +148,11 @@ export type DialogDriver = {
     onProgress: (bytesReceived: number, bytesTotal: number) => void
   }): Promise<void>
   computeSha256(filePath: string): Promise<string>
-  smokeTestEmbed(args: { modelDir: string; ep: ExecutionProvider }): Promise<void>
+  // No path/id argument on either: a driver instance is created per dialog open
+  // and closes over the catalog entry it was opened for.
+  smokeTestEmbed(args: { ep: ExecutionProvider }): Promise<void>
   persistInstall(args: { meta: ModelMeta; licenseText: string }): Promise<void>
-  deletePartial(modelDir: string): Promise<void>
+  deletePartial(): Promise<void>
 }
 
 export function initialState(init: DialogInit): DialogState {

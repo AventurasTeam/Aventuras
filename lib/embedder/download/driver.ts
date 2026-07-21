@@ -97,11 +97,10 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
       return row.expectedSha256
     },
 
-    async smokeTestEmbed({ modelDir }) {
-      // `ep` isn't threaded to the bridge: desktop's catalog default_ep is
-      // always 'cpu' (transformers.js picks its own WASM/CPU backend) — there's
-      // no EP choice to forward at this layer, unlike mobile's ORT-RN EPs.
-      const result = await resolveBridge().smokeTest({ modelDir })
+    async smokeTestEmbed() {
+      // `ep` isn't threaded to the bridge: transformers.js picks its own
+      // WASM/CPU backend, so there's no EP choice to forward at this layer.
+      const result = await resolveBridge().smokeTest({ modelId: entry.id })
       if (!result.ok) throw new Error(result.error.message)
     },
 

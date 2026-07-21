@@ -863,14 +863,14 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
           if (cancelled) return
           const expectedHash = expected[file]
           if (expectedHash && hash !== expectedHash) {
-            void driver.deletePartial(entry.id).catch(() => {})
+            void driver.deletePartial().catch(() => {})
             dispatch({ type: 'verify-failed', file })
             return
           }
           dispatch({ type: 'verify-progress', file, result: 'ok' })
         } catch {
           if (cancelled) return
-          void driver.deletePartial(entry.id).catch(() => {})
+          void driver.deletePartial().catch(() => {})
           dispatch({ type: 'verify-failed', file })
           return
         }
@@ -886,7 +886,7 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
         })
       } catch (err: unknown) {
         if (cancelled) return
-        void driver.deletePartial(entry.id).catch(() => {})
+        void driver.deletePartial().catch(() => {})
         const message = err instanceof Error ? err.message : String(err)
         dispatch({ type: 'persist-failed', message })
         return
@@ -953,7 +953,7 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
           (state.kind === 'downloading' || state.kind === 'verifying') &&
           init.kind === 'catalog'
         ) {
-          void driver.deletePartial(init.entry.id).catch(() => {})
+          void driver.deletePartial().catch(() => {})
         }
         dispatch({ type: 'cancel' })
       }

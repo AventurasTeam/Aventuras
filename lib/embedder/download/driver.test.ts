@@ -21,7 +21,6 @@ function makeBridge(overrides: Partial<EmbedderBridge> = {}): EmbedderBridge {
     downloadFile: vi.fn(async () => ({ ok: true }) as const),
     persistInstall: vi.fn(async () => undefined),
     deletePartial: vi.fn(async () => undefined),
-    embeddersRoot: vi.fn(async () => '/tmp/embedders'),
     onDownloadProgress: vi.fn(() => () => {}),
     ...overrides,
   }
@@ -177,9 +176,7 @@ describe('createEmbedderDownloadDriver — smokeTestEmbed', () => {
     vi.stubGlobal('window', { aventurasEmbedder: bridge })
     const driver = createEmbedderDownloadDriver(entry)
 
-    await expect(
-      driver.smokeTestEmbed({ modelDir: '/tmp/model', ep: 'cpu' }),
-    ).resolves.toBeUndefined()
+    await expect(driver.smokeTestEmbed({ ep: 'cpu' })).resolves.toBeUndefined()
   })
 
   it('throws with the bridge error message on smoke-test failure', async () => {
@@ -191,9 +188,7 @@ describe('createEmbedderDownloadDriver — smokeTestEmbed', () => {
     vi.stubGlobal('window', { aventurasEmbedder: bridge })
     const driver = createEmbedderDownloadDriver(entry)
 
-    await expect(driver.smokeTestEmbed({ modelDir: '/tmp/model', ep: 'cpu' })).rejects.toThrow(
-      'crashed',
-    )
+    await expect(driver.smokeTestEmbed({ ep: 'cpu' })).rejects.toThrow('crashed')
   })
 })
 
@@ -235,7 +230,7 @@ describe('createEmbedderDownloadDriver — deletePartial', () => {
     vi.stubGlobal('window', { aventurasEmbedder: bridge })
     const driver = createEmbedderDownloadDriver(entry)
 
-    await driver.deletePartial('/some/unrelated/path')
+    await driver.deletePartial()
 
     expect(bridge.deletePartial).toHaveBeenCalledWith({ modelId: entry.id })
   })
@@ -256,6 +251,6 @@ describe('createEmbedderDownloadDriver — bridge unavailable', () => {
     vi.stubGlobal('window', {})
     const driver = createEmbedderDownloadDriver(entry)
 
-    await expect(driver.deletePartial('/x')).rejects.toThrow(/bridge/i)
+    await expect(driver.deletePartial()).rejects.toThrow(/bridge/i)
   })
 })
