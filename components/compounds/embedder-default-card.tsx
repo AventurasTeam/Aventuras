@@ -76,7 +76,7 @@ export function EmbedderDefaultCard({
   const embeddingProviderId = appSettingsStore.useAppSettings((s) => s.embeddingProviderId)
   const providers = appSettingsStore.useAppSettings((s) => s.providers)
 
-  const { installed } = useInstalledModels(listInstalled)
+  const { installed, state: installedState } = useInstalledModels(listInstalled)
 
   const [providerIdDraft, setProviderIdDraft] = useState(embeddingProviderId ?? '')
   const [modelIdDraft, setModelIdDraft] = useState(embeddingModelId ?? '')
@@ -230,6 +230,14 @@ export function EmbedderDefaultCard({
               onValueChange={persistLocal}
               label={t('settings:embedderDefault.localModelLabel')}
             />
+          ) : installedState.status === 'error' ? (
+            <Text size="sm" className="text-danger">
+              {t('settings:embedderDefault.localListFailed')}
+            </Text>
+          ) : installedState.status === 'loading' ? (
+            <Text size="sm" variant="muted">
+              {t('settings:embedderDefault.localLoading')}
+            </Text>
           ) : (
             <Text size="sm" variant="muted">
               {t('settings:embedderDefault.localEmptyState')}

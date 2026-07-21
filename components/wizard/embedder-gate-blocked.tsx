@@ -75,3 +75,42 @@ export function EmbedderGateBlocked({ reason, backend }: EmbedderGateBlockedProp
 }
 
 export type { EmbedderGateBlockedProps }
+
+type EmbedderGateUnresolvedProps = {
+  message: string
+  onRetry: () => void
+}
+
+// Distinct from EmbedderGateBlocked: the embedder may well be fine and we
+// simply couldn't read the installed list, so the affordance is Retry rather
+// than a settings route that wouldn't fix the underlying cause.
+export function EmbedderGateUnresolved({ message, onRetry }: EmbedderGateUnresolvedProps) {
+  const router = useRouter()
+  return (
+    <AlertDialog
+      open
+      onOpenChange={(next) => {
+        if (!next) router.back()
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t('wizard:embedGate.unresolved.title')}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t('wizard:embedGate.unresolved.body', { error: message })}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <Button variant="secondary" onPress={() => router.back()}>
+            <Text>{t('wizard:embedGate.back')}</Text>
+          </Button>
+          <Button onPress={onRetry}>
+            <Text>{t('wizard:embedGate.unresolved.retry')}</Text>
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+export type { EmbedderGateUnresolvedProps }

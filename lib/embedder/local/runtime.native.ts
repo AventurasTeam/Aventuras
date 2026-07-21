@@ -41,6 +41,14 @@ function loadOrt(): Promise<OrtRuntime> {
 // a failed load evicts itself so a later call can retry after the user reinstalls.
 const bundles = new Map<string, Promise<SessionBundle>>()
 
+// A successfully-built session outlives the files it was built from, so a
+// remove/reinstall in the same session would keep embedding through the deleted
+// model and write vectors tagged with the new id. Desktop evicts via
+// evictPipeline; this is the native counterpart.
+export function evictBundle(modelId: string): void {
+  bundles.delete(modelId)
+}
+
 function getBundle(modelId: string): Promise<SessionBundle> {
   let bundle = bundles.get(modelId)
   if (!bundle) {

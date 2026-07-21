@@ -50,7 +50,9 @@
     "sizeDim": "{{size}} · dim {{dim}}",
     "testButton": "Test embedder",
     "testing": "Testing…",
-    "testOk": "OK · dim {{dim}} · {{ms}} ms"
+    "testOk": "OK · dim {{dim}} · {{ms}} ms",
+    "listFailed": "Couldn't read your installed models: {{error}}",
+    "listRetry": "Retry"
   },
   "embedderDefault": {
     "heading": "Embedder default",
@@ -70,7 +72,9 @@
     "providerHint": "Provider embedding works with OpenAI-compatible endpoints only in v1.",
     "testButton": "Test embedder",
     "testing": "Testing…",
-    "testOk": "OK · dim {{dim}} · {{ms}} ms"
+    "testOk": "OK · dim {{dim}} · {{ms}} ms",
+    "localListFailed": "Couldn't read your installed models. Open Embedding models to retry.",
+    "localLoading": "Checking installed models…"
   },
   "diagnostics": {
     "enableLabel": "Enable diagnostics capture",
