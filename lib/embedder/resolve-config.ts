@@ -47,7 +47,7 @@ export function resolveEmbedderConfig(
   if (!nonEmpty(modelId)) {
     return { ok: false, reason: 'no-model' }
   }
-  // dim 0 = unknown until first embed; the service facade treats 0 as to-be-verified.
-  const dim = opts?.providerDim ?? 0
+  // null = unknown until first embed; the facade skips the dim check for it.
+  const dim = opts?.providerDim ?? null
   return { ok: true, config: { backend: 'provider', providerId, modelId, dim } }
 }

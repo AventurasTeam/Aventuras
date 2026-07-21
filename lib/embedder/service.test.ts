@@ -124,17 +124,30 @@ describe('embedTexts dim verification', () => {
     )
   })
 
-  it('accepts the returned dim when config.dim is the 0 not-yet-probed sentinel', async () => {
+  it('accepts the returned dim when a provider dim is not yet probed', async () => {
     vi.mocked(embedViaProvider).mockResolvedValue({ vectors: [new Float32Array([3, 4])], dim: 2 })
     const config: EmbedderConfig = {
       backend: 'provider',
       providerId: 'prov-1',
       modelId: 'm1',
-      dim: 0,
+      dim: null,
     }
 
     const result = await embedTexts(config, ['a'], 'document', provider)
     expect(result.dim).toBe(2)
+  })
+
+  it('still checks the dim for a local config — no unprobed escape hatch', async () => {
+    vi.mocked(embedLocal).mockResolvedValue({ vectors: [new Float32Array([1, 0, 0])], dim: 3 })
+    const config: EmbedderConfig = {
+      backend: 'local',
+      modelId: 'Xenova/all-MiniLM-L6-v2',
+      dim: 384,
+    }
+
+    await expect(embedTexts(config, ['a'])).rejects.toThrow(
+      'embedding dim mismatch: expected 384, got 3',
+    )
   })
 })
 
