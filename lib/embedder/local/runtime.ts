@@ -1,6 +1,5 @@
 import type { EmbedderErrorEnvelope } from '@/types/embedder-bridge'
 
-import { sanitizeModelDirName } from './sanitize'
 import { EmbedderCallError, EmbedderInitError } from '../types'
 
 export type LocalEmbedResult = { vectors: Float32Array[]; dim: number }
@@ -22,21 +21,14 @@ export function envelopeToError(
     : new EmbedderCallError(envelope.message)
 }
 
-async function resolveModelDir(modelId: string): Promise<string> {
-  const root = (await resolveBridge().embeddersRoot()).replace(/[/\\]+$/, '')
-  return `${root}/${sanitizeModelDirName(modelId)}`
-}
-
 export async function embedLocal(modelId: string, texts: string[]): Promise<LocalEmbedResult> {
-  const modelDir = await resolveModelDir(modelId)
-  const result = await resolveBridge().embed({ modelDir, texts })
+  const result = await resolveBridge().embed({ modelId, texts })
   if (!result.ok) throw envelopeToError(result.error)
   return { vectors: result.vectors.map((v) => Float32Array.from(v)), dim: result.dim }
 }
 
 export async function smokeTestLocal(modelId: string): Promise<{ dim: number }> {
-  const modelDir = await resolveModelDir(modelId)
-  const result = await resolveBridge().smokeTest({ modelDir })
+  const result = await resolveBridge().smokeTest({ modelId })
   if (!result.ok) throw envelopeToError(result.error)
   return { dim: result.dim }
 }

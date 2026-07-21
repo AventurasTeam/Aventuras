@@ -45,3 +45,40 @@ export function resolveModelDir(root: string, id: string): string {
 export function modelDir(id: string): string {
   return resolveModelDir(embeddersRoot(), id)
 }
+
+// Leading char excludes '.', so '.' / '..' / dotfiles can't be written, and the
+// class excludes both separators — join() can then never escape the model dir.
+const SAFE_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+
+export function assertSafeFileName(fileName: string): string {
+  if (!SAFE_FILE_NAME.test(fileName)) {
+    throw new Error(`Invalid file name: ${fileName}`)
+  }
+  return fileName
+}
+
+// The renderer is not a trusted principal: it renders remote model-card HTML, so
+// a sanitizer bypass must not become "main fetches any origin on demand".
+const ALLOWED_DOWNLOAD_ORIGIN = 'https://huggingface.co'
+
+export function assertAllowedDownloadUrl(url: string): string {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error(`Invalid download URL: ${url}`)
+  }
+  if (parsed.origin !== ALLOWED_DOWNLOAD_ORIGIN) {
+    throw new Error(`Download URL origin not allowed: ${parsed.origin}`)
+  }
+  return url
+}
+
+const SHA256_HEX = /^[0-9a-f]{64}$/i
+
+export function assertSha256(value: unknown, fileName: string): string {
+  if (typeof value !== 'string' || !SHA256_HEX.test(value)) {
+    throw new Error(`Missing or malformed expected SHA-256 for ${fileName}`)
+  }
+  return value
+}

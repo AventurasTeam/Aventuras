@@ -12,7 +12,12 @@ import {
 } from './db/service'
 import type { DbProxyMethod } from './db/types'
 import { deletePartial, downloadFile, persistInstall } from './embedder/downloads'
-import { embeddersRoot, modelDir } from './embedder/paths'
+import {
+  assertAllowedDownloadUrl,
+  assertSafeFileName,
+  assertSha256,
+  modelDir,
+} from './embedder/paths'
 import { embed as embedderEmbed, evictPipeline, listInstalled, smokeTest } from './embedder/service'
 import type { EmbedderAttestation } from './embedder/types'
 
@@ -172,37 +177,42 @@ app.whenReady().then(async () => {
     dbTransaction(ops),
   )
 
-  ipcMain.handle('embedder:embed', (_e, args: { modelDir: string; texts: string[] }) =>
-    embedderEmbed(args),
+  ipcMain.handle('embedder:embed', (_e, args: { modelId: string; texts: string[] }) =>
+    embedderEmbed({ modelDir: requireModelDir(args.modelId), texts: args.texts }),
   )
-  ipcMain.handle('embedder:smoke-test', (_e, args: { modelDir: string }) => smokeTest(args))
+  ipcMain.handle('embedder:smoke-test', (_e, args: { modelId: string }) =>
+    smokeTest({ modelDir: requireModelDir(args.modelId) }),
+  )
   ipcMain.handle('embedder:list-installed', () => listInstalled())
   ipcMain.handle(
     'embedder:download-file',
-    (
-      event,
-      args: { url: string; modelId: string; fileName: string; expectedSha256: string | null },
-    ) => {
+    (event, args: { url: string; modelId: string; fileName: string; expectedSha256: string }) => {
       let destDir: string
+      let fileName: string
+      let url: string
+      let expectedSha256: string
       try {
         destDir = modelDir(args.modelId)
+        fileName = assertSafeFileName(args.fileName)
+        url = assertAllowedDownloadUrl(args.url)
+        expectedSha256 = assertSha256(args.expectedSha256, args.fileName)
       } catch (error) {
         return {
           ok: false as const,
-          reason: 'disk' as const,
+          reason: 'invalid-request' as const,
           message: error instanceof Error ? error.message : String(error),
         }
       }
       return downloadFile({
-        url: args.url,
+        url,
         destDir,
-        fileName: args.fileName,
-        expectedSha256: args.expectedSha256,
+        fileName,
+        expectedSha256,
         onProgress: (bytesReceived, bytesTotal) => {
           if (event.sender.isDestroyed()) return
           event.sender.send('embedder:download-progress', {
             modelId: args.modelId,
-            fileName: args.fileName,
+            fileName,
             bytesReceived,
             bytesTotal,
           })
@@ -225,7 +235,6 @@ app.whenReady().then(async () => {
     evictPipeline(dir)
     return deletePartial(dir)
   })
-  ipcMain.handle('embedder:root', () => embeddersRoot())
 
   createWindow()
 

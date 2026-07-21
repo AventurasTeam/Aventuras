@@ -40,10 +40,16 @@ async function hashExistingBytes(hash: ReturnType<typeof createHash>, path: stri
 }
 
 // Assumes one in-flight download per file: the download dialog serializes the
-// catalog's files, so a single .part per fileName is never contended. A future
-// caller (e.g. M7.1's null-hash path) must preserve that — concurrent writers to
-// the same .part would corrupt both the file and its running hash.
+// catalog's files, so a single .part per fileName is never contended. Concurrent
+// writers to the same .part would corrupt both the file and its running hash.
 export async function downloadFile(args: DownloadArgs): Promise<DownloadResult> {
+  return downloadAttempt(args, false)
+}
+
+async function downloadAttempt(
+  args: DownloadArgs,
+  retriedAfter416: boolean,
+): Promise<DownloadResult> {
   const { url, destDir, fileName, expectedSha256, onProgress } = args
   const finalPath = join(destDir, fileName)
   const partPath = `${finalPath}.part`
@@ -69,21 +75,30 @@ export async function downloadFile(args: DownloadArgs): Promise<DownloadResult> 
   if (response.status === 416) {
     // The .part is already >= the server's file size. If it verifies, it's a
     // complete download that never got renamed; otherwise it's stale — discard
-    // and restart from scratch (the removed .part means the retry can't 416 again).
-    if (expectedSha256 !== null) {
-      const existingHash = createHash('sha256')
-      await hashExistingBytes(existingHash, partPath)
-      if (existingHash.digest('hex') === expectedSha256.toLowerCase()) {
-        try {
+    // and restart from scratch.
+    if (expectedSha256 !== null && existsSync(partPath)) {
+      try {
+        const existingHash = createHash('sha256')
+        await hashExistingBytes(existingHash, partPath)
+        if (existingHash.digest('hex') === expectedSha256.toLowerCase()) {
           await rename(partPath, finalPath)
-        } catch (error) {
-          return { ok: false, reason: 'disk', message: messageOf(error) }
+          return { ok: true }
         }
-        return { ok: true }
+      } catch (error) {
+        return { ok: false, reason: 'disk', message: messageOf(error) }
+      }
+    }
+    // A second 416 with no partial left to resume means the server rejects the
+    // bare request too — recursing again would spin without bound.
+    if (retriedAfter416) {
+      return {
+        ok: false,
+        reason: 'network',
+        message: 'Server rejected the range request and no resumable partial remains',
       }
     }
     await rm(partPath, { force: true })
-    return downloadFile(args)
+    return downloadAttempt(args, true)
   }
 
   if (response.status !== 200 && response.status !== 206) {
@@ -93,9 +108,18 @@ export async function downloadFile(args: DownloadArgs): Promise<DownloadResult> 
     return { ok: false, reason: 'network', message: 'Response had no body' }
   }
 
-  const resuming = existingSize > 0 && response.status === 206
+  // A 206 whose range doesn't actually start where our .part ends would splice
+  // mismatched bytes onto it, so treat that as a fresh download instead.
+  const rangeStart = Number(
+    /^bytes\s+(\d+)-/.exec(response.headers.get('content-range') ?? '')?.[1],
+  )
+  const resuming = existingSize > 0 && response.status === 206 && rangeStart === existingSize
   const hash = createHash('sha256')
-  const contentLength = Number(response.headers.get('content-length') ?? 0)
+  // A missing content-length (chunked transfer) means the total is unknown; -1
+  // signals that to the progress UI rather than a 0 that reads as "no bytes".
+  const contentLength = response.headers.has('content-length')
+    ? Number(response.headers.get('content-length'))
+    : -1
 
   let received = 0
   let total = 0
@@ -105,7 +129,7 @@ export async function downloadFile(args: DownloadArgs): Promise<DownloadResult> 
     if (resuming) {
       await hashExistingBytes(hash, partPath)
       received = existingSize
-      total = existingSize + contentLength
+      total = contentLength < 0 ? -1 : existingSize + contentLength
       handle = await open(partPath, 'a')
     } else {
       // Fresh download, or the server ignored our Range header (200) — start clean.
@@ -133,13 +157,18 @@ export async function downloadFile(args: DownloadArgs): Promise<DownloadResult> 
     }
   } catch (error) {
     // A dropped connection leaves the .part in place so a later call can resume;
-    // deletePartial is the cleanup path for an abandoned install.
-    await handle.close()
+    // deletePartial is the cleanup path for an abandoned install. Swallow a close
+    // failure so it can't replace the error that actually caused the abort.
+    await handle.close().catch(() => {})
     if (isDiskError(error)) return { ok: false, reason: 'disk', message: messageOf(error) }
     return { ok: false, reason: 'network', message: messageOf(error) }
   }
 
-  await handle.close()
+  try {
+    await handle.close()
+  } catch (error) {
+    return { ok: false, reason: 'disk', message: messageOf(error) }
+  }
 
   if (received !== lastEmitted) onProgress?.(received, total)
 

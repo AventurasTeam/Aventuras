@@ -155,10 +155,8 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
       return (await hashFile(new File(dir, row.fileName))).toLowerCase()
     },
 
-    // `ep` isn't forwarded: this driver is created for the catalog install
-    // path, and the model being smoke-tested is always the entry the driver
-    // was opened for — `args.modelDir` (if supplied) names the same
-    // directory `modelDir(entry.id)` already resolves.
+    // `ep` isn't forwarded: the ORT session is built from the entry's own
+    // default_ep when the bundle is first created.
     async smokeTestEmbed() {
       await smokeTestLocal(entry.id)
     },
