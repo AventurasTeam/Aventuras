@@ -71,8 +71,9 @@ slice plans when relevant.
   — native `Content` blocks ScrollView scroll interception on
   Android; scrolling is flaky to start, fine once moving.
 - [Layout props on a compound trigger](./compound-trigger-flex-reach.md)
-  — `flex-1` lands on the inner Pressable, not the Header that
-  sits in your row; browsers forgive it, Yoga collapses it.
+  — `flex-1` lands on the inner element, not the Header that sits in
+  your row; the web tree survives only because the wrapper adds its
+  own web-only `flex-1`, and Yoga collapses the native one.
 - [Portaled overlays outlive screen focus](./portaled-overlay-outlives-screen-focus.md)
   — a Stack keeps pushed-under screens mounted, so their portaled
   modals float over the new screen; gate on `useIsFocused()`.
@@ -131,9 +132,12 @@ slice plans when relevant.
   file list and hand-append new-file hunks.
 - [Metro's native resolution ignores browser-targeted builds](./metro-native-ignores-browser-builds.md)
   — the `browser` main field and `browser` exports condition are
-  web-only; a dep can work on web and break every Android bundle.
-  Deep-import the client build or pin it via `resolveRequest`, and
-  verify with a real `expo export --platform android`.
+  web-only, and a map that keys on `node` drops native onto its web
+  `default`; a dep can work on web and break every Android bundle.
+  Deep-import the client build or pin it via `resolveRequest`; if the
+  web dist then trips Hermes on `import.meta`, reach for the
+  babel-preset-expo polyfill, not a redirect. Verify with a real
+  `expo export --platform android`.
 
 ### Doc authoring
 

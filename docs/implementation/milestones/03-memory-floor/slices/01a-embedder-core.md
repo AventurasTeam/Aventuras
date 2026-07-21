@@ -164,13 +164,19 @@ M7.1; only the gate-required minimum ships here.
 
 ## Open questions
 
-- **Catalog v1 contents** — which models beyond
-  `Xenova/all-MiniLM-L6-v2-q8`; sizes and tags per entry.
-- **`source_hash` physical placement** — auxiliary vec0 column vs
-  per-type sidecar; explicitly left open by canon.
-- **ORT packaging on Electron** — whether the desktop path runs
-  onnxruntime in the main process (alongside sqlite-vec) or the
-  renderer; decide at planning with the M1.2 IPC layout in view.
+All three closed during implementation; resolutions are in
+[Implementation notes](#implementation-notes) below.
+
+- **Catalog v1 contents** — **resolved:** two entries, see
+  [Catalog](#catalog). The question's original
+  `Xenova/all-MiniLM-L6-v2-q8` id was wrong — quantization is a file
+  choice inside the repo, not part of the model id.
+- **`source_hash` physical placement** — **resolved:** vec0
+  auxiliary column, see
+  [Storage and schema](#storage-and-schema).
+- **ORT packaging on Electron** — **resolved:** main process,
+  behind an `embedder:*` IPC namespace mirroring the M1.2 DB
+  service; see [Runtimes](#runtimes).
 
 ## Implementation notes
 
@@ -214,6 +220,10 @@ Traps that generalize beyond this slice landed in
 
 ### Catalog
 
+- **Two entries ship in v1**: `Xenova/all-MiniLM-L6-v2` at 384 dim
+  (the mobile default) and `onnx-community/embeddinggemma-300m-ONNX`
+  at 768 dim. Size, tags, pinned revision, and per-file SHA256s live
+  in `catalog-data.json`.
 - **EmbeddingGemma-300m survived on-device curation** on both
   desktop and Android at 768 dim, so the named fallback
   (`multilingual-e5-small`) was not needed and the entry is no

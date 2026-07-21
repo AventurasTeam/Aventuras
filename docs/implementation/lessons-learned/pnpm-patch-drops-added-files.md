@@ -11,7 +11,7 @@ are correct, and the file you added is simply absent from
 `node_modules`. Because everything else worked, the natural
 conclusion is that the added file was never needed.
 
-## The fix
+## Fix
 
 Verify the patch's file list before trusting it:
 
@@ -33,8 +33,10 @@ new file mode 100644
 +}
 ```
 
-Note this in a comment near the patch entry: a later regeneration
-of the patch will drop the hunk again.
+Leave a comment next to the patch entry, which under pnpm 10 lives
+in `pnpm-workspace.yaml` under `patchedDependencies` and not in
+`package.json`: a later regeneration of the patch will drop the hunk
+again.
 
 ## Worked example
 

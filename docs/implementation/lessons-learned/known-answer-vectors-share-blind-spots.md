@@ -61,8 +61,12 @@ misbehaves.
 ## Why it matters more when the value is persisted
 
 This hash is stored in vec0 rows as a staleness tripwire. Correcting
-the format changes every previously written hash, so every row
-mismatches and re-embeds. That is the tripwire working as designed,
-but it means the cost of finding this class of bug rises sharply
-after ship: pre-merge it cost one re-embed of a dev database.
-Audit persisted derived values before they reach users.
+the format changes every previously written hash, so every already
+written row now mismatches — and will re-embed the moment anything
+runs the staleness recompute against it. Nothing in production calls
+that helper yet (the pre-retrieval sync stage that drives it lands in
+Slice 3.4), which is the only reason the blast radius is currently
+zero. That is the tripwire working as designed, but it means the cost
+of finding this class of bug rises sharply after ship: pre-merge it
+cost one re-embed of a dev database. Audit persisted derived values
+before they reach users.
