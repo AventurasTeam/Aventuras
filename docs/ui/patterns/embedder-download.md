@@ -178,21 +178,25 @@ Cancel resolves with `error(card-fetch-failed)`.
 
 ### Downloading
 
-Three files (`model.onnx`, `tokenizer.json`, `tokenizer_config.json`)
-download in sequence. Per-file progress + overall progress.
-Resumable on network blip (continuation, not restart).
+The catalog entry's files download in sequence. The full manifest
+renders as `waiting…` rows before the first byte arrives, and the
+running total (against the catalog's total size) stays visible for
+the whole phase. Resumable on network blip (continuation, not
+restart). Cancel is a dedicated footer button, not header chrome
+(amended at M3.1a device review).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Downloading MiniLM-L6 (lightweight)                  Cancel │
+│ Downloading MiniLM-L6 (lightweight)                          │
 │ ─────────────────────────────────────────────────────       │
 │                                                               │
-│   model.onnx              ████████████░░░░░  72%   18 / 25 MB │
+│   model.onnx              ████████████░░░░░  72%              │
 │   tokenizer.json          waiting…                            │
 │   tokenizer_config.json   waiting…                            │
 │                                                               │
-│   Total: 18 / 25 MB · ~12 s remaining                        │
+│   Total: 18 / 25 MB                                           │
 │                                                               │
+│                                       [ Cancel download ]    │
 └─────────────────────────────────────────────────────────────┘
 ```
 

@@ -33,7 +33,9 @@ export type LicenseKind = 'license' | 'model-card'
 export type FileProgress =
   | { kind: 'waiting' }
   | { kind: 'downloading'; bytesReceived: number; bytesTotal: number }
-  | { kind: 'done' }
+  // bytesTotal is preserved from the downloading entry so completed files keep
+  // counting toward the persistent received/total line.
+  | { kind: 'done'; bytesTotal?: number }
 
 export type FailReason =
   | { kind: 'cancelled' }
@@ -103,6 +105,9 @@ export type DialogAction =
   // (For 'import-confirm' the Import button fires 'license-accepted'.)
   | { type: 'ep-picked'; ep: ExecutionProvider }
   | { type: 'ep-confirmed' }
+  // Seeds every planned file as 'waiting' when the download phase starts, so
+  // the dialog lists the full manifest before the first byte arrives.
+  | { type: 'files-planned'; files: readonly string[] }
   | {
       type: 'download-progress'
       file: string
@@ -260,6 +265,11 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
       return state
     }
     case 'downloading': {
+      if (action.type === 'files-planned') {
+        const progressByFile = { ...state.progressByFile }
+        for (const file of action.files) progressByFile[file] ??= { kind: 'waiting' }
+        return { ...state, progressByFile }
+      }
       if (action.type === 'download-progress') {
         return {
           ...state,
@@ -274,11 +284,15 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
         }
       }
       if (action.type === 'download-complete') {
+        const prior = state.progressByFile[action.file]
         return {
           ...state,
           progressByFile: {
             ...state.progressByFile,
-            [action.file]: { kind: 'done' },
+            [action.file]: {
+              kind: 'done',
+              bytesTotal: prior?.kind === 'downloading' ? prior.bytesTotal : undefined,
+            },
           },
         }
       }
