@@ -70,12 +70,14 @@ export function sourceHash(text: string): string {
     offset += 1
   }
 
-  // Final avalanche
+  // Final avalanche. The trailing `>>> 0` is load-bearing: `^` yields a signed
+  // int32, so without it every hash with the high bit set formats as a negative
+  // 9-char string ('-77e5d848') instead of its unsigned hex.
   h32 = h32 ^ (h32 >>> 15)
   h32 = Math.imul(h32, PRIME2) >>> 0
   h32 = h32 ^ (h32 >>> 13)
   h32 = Math.imul(h32, PRIME3) >>> 0
-  h32 = h32 ^ (h32 >>> 16)
+  h32 = (h32 ^ (h32 >>> 16)) >>> 0
 
   return h32.toString(16).padStart(8, '0')
 }
