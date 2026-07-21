@@ -110,9 +110,11 @@ function createWindow(): void {
 
   // Navigation floor, mirroring the native document's nav lock: entry hrefs
   // are stripped at sanitize, so any renderer navigation away from the app's
-  // own origin is hostile or a sanitize regression — block it. window.open is
-  // denied outright: Electron's default child window would inherit this
-  // window's webPreferences, preload (and its DB bridge) included.
+  // own origin is hostile or a sanitize regression — block it. window.open
+  // never creates a child window (it would inherit this window's
+  // webPreferences, preload and DB bridge included) — but https targets route
+  // to the system browser: legitimate surfaces (model-card links) open
+  // externally via Linking.openURL, which is window.open on react-native-web.
   // Prefix match with a slash guard, not URL.origin: Node's URL reports the
   // origin of the custom app scheme as the literal string "null".
   const ownOrigins = [
@@ -123,7 +125,10 @@ function createWindow(): void {
     const own = ownOrigins.some((origin) => url === origin || url.startsWith(`${origin}/`))
     if (!own) event.preventDefault()
   })
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
 
   if (isDev) {
     win.loadURL(process.env.EXPO_WEB_URL ?? 'http://localhost:8081')
